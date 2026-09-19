@@ -73,11 +73,15 @@ function diasEntre(desde: string, hasta: string): number {
  * vieja, y el plazo corría desde ella en vez de desde la reinstalación.
  * Comparación de cadenas `YYYY-MM-DD`, válida porque son ISO.
  */
-function disparoYPlazo(
+/**
+ * La parte de `disparoYPlazo` que no depende de «hoy»: desde cuándo cuenta el
+ * plazo y cuántos días dura. Extraída para que `proximaRevisionDe` —Tarea 9,
+ * spec §4.2— pueda calcular la fecha límite sin repetir esta rama.
+ */
+function plazoDeLaTrampa(
   trampa: TrampaParaAviso,
   regla: ReglaParaAviso,
-  hoy: string,
-): { disparo: boolean; lectura: NivelDeBroca | null; diasDeRetraso: number | null } {
+): { desde: string | null; plazo: number; disparo: boolean; lectura: NivelDeBroca | null } {
   const disparador = ESCALA.indexOf(regla.triggerLevel);
   const revisionVigente =
     trampa.ultimaRevision != null &&
@@ -93,8 +97,40 @@ function disparoYPlazo(
   // instalación registrada no hay desde dónde contar, y no se inventa uno.
   const desde = revisionVigente?.dia ?? trampa.instaladaEl;
   const plazo = disparo ? regla.alertDays : regla.normalDays;
+  return { desde, plazo, disparo, lectura };
+}
+
+function disparoYPlazo(
+  trampa: TrampaParaAviso,
+  regla: ReglaParaAviso,
+  hoy: string,
+): { disparo: boolean; lectura: NivelDeBroca | null; diasDeRetraso: number | null } {
+  const { desde, plazo, disparo, lectura } = plazoDeLaTrampa(trampa, regla);
   const diasDeRetraso = desde == null ? null : diasEntre(desde, hoy) - plazo;
   return { disparo, lectura, diasDeRetraso };
+}
+
+/**
+ * Ida y vuelta de `diasEntre`: el día, `dias` después. Mismo truco de
+ * `Date.UTC`, para que un día sea un día sin que el horario de verano reste
+ * una hora.
+ */
+function sumarDias(desde: string, dias: number): string {
+  const utc = Date.UTC(Number(desde.slice(0, 4)), Number(desde.slice(5, 7)) - 1, Number(desde.slice(8, 10)));
+  return new Date(utc + dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * «próxima revisión: <fecha>» de la tarjeta de la ronda — spec §4.2. Comparte
+ * `plazoDeLaTrampa` con `disparoYPlazo`: el mismo `desde` y el mismo plazo (el
+ * de alerta si la última lectura disparó, si no el normal). **Sin regla no
+ * hay valor por defecto** (ADR-080): se devuelve `null` y la pantalla no
+ * muestra la línea, en vez de inventar un plazo.
+ */
+export function proximaRevisionDe(trampa: TrampaParaAviso, regla: ReglaParaAviso | null): string | null {
+  if (regla == null) return null;
+  const { desde, plazo } = plazoDeLaTrampa(trampa, regla);
+  return desde == null ? null : sumarDias(desde, plazo);
 }
 
 export function avisosDeTrampas(e: {
@@ -204,4 +240,26 @@ export function trampasParaAviso(
     ultimaRevision:
       t.ultimaRevision == null ? null : { dia: dia(t.ultimaRevision.observedAt), brocaLevel: t.ultimaRevision.brocaLevel },
   }));
+}
+
+/**
+ * El orden de las tarjetas de la ronda, spec §4.2: primero las que tocan revisar
+ * —vencidas y luego las de hoy—, después el resto, y dentro de cada grupo por número
+ * de trampa. `lectura_alta` cuenta como «toca revisar» para este orden: las dos son
+ * la misma urgencia, sólo cambia el texto.
+ */
+export function ordenDeRonda<
+  T extends { trapNumber: number | null; estadoActual: { estado: EstadoDeTrampa; diasDeRetraso: number | null } },
+>(trampas: readonly T[]): T[] {
+  const urgente = (e: EstadoDeTrampa) => e === "toca_revisar" || e === "lectura_alta";
+  return [...trampas].sort((a, b) => {
+    const aUrgente = urgente(a.estadoActual.estado);
+    const bUrgente = urgente(b.estadoActual.estado);
+    if (aUrgente !== bUrgente) return aUrgente ? -1 : 1;
+    if (aUrgente) {
+      const diff = (b.estadoActual.diasDeRetraso ?? 0) - (a.estadoActual.diasDeRetraso ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return (a.trapNumber ?? 0) - (b.trapNumber ?? 0);
+  });
 }

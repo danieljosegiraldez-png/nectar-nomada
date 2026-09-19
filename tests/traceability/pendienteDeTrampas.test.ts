@@ -6,8 +6,11 @@ import { describe, expect, it } from "vitest";
 import {
   avisosDeTrampas,
   estadoDeTrampa,
+  ordenDeRonda,
+  proximaRevisionDe,
   trampasFiltradas,
   trampasParaAviso,
+  type EstadoDeTrampa,
   type ReglaParaAviso,
   type TrampaParaAviso,
 } from "../../lib/traceability/pendienteDeTrampas";
@@ -198,5 +201,78 @@ describe("trampasFiltradas", () => {
 
   it("null también cuenta como ausente", () => {
     expect(ids(trampasFiltradas(filas, null))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+});
+
+/**
+ * El orden de la ronda — Tarea 9, spec §4.2. Pura: recibe la lista ya con su
+ * `estadoActual` calculado (por `estadoDeTrampa`), como `ordenDeRonda` la
+ * consume en `/finca/trampas/ronda`.
+ */
+describe("ordenDeRonda", () => {
+  const trampa = (n: number, estado: EstadoDeTrampa, dias: number | null) => ({
+    id: `t${n}`, trapNumber: n, plotId: "p", plotName: "P", bloque: null,
+    status: "active" as const, ultimaRevision: null, instaladaEl: null,
+    estadoActual: { estado, diasDeRetraso: dias },
+  });
+
+  it("las vencidas van primero, ordenadas por más días de retraso", () => {
+    const orden = ordenDeRonda([
+      trampa(1, "al_dia", null),
+      trampa(2, "toca_revisar", 2),
+      trampa(3, "toca_revisar", 5),
+      trampa(4, "lectura_alta", 0),
+    ]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([3, 2, 4, 1]);
+  });
+
+  it("dentro de un mismo grupo, por número de trampa", () => {
+    const orden = ordenDeRonda([trampa(5, "al_dia", null), trampa(2, "al_dia", null)]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([2, 5]);
+  });
+});
+
+/**
+ * «próxima revisión» — Tarea 9, spec §4.2: «calculada con la regla. Sin
+ * regla, la próxima revisión no se muestra, porque no hay valor por
+ * defecto» (ADR-080). Comparte `plazoDeLaTrampa` con `disparoYPlazo`, así
+ * que hereda el mismo `desde` (última revisión vigente o instalación) y el
+ * mismo plazo (de alerta si la última lectura disparó).
+ */
+describe("proximaRevisionDe", () => {
+  const trampaBase: TrampaParaAviso = {
+    id: "t1", trapNumber: 1, bloque: null, status: "active",
+    ultimaRevision: null, instaladaEl: "2026-09-01",
+  };
+  const regla: ReglaParaAviso = {
+    triggerLevel: "algunos", normalDays: 15, alertDays: 7, suggestedAction: "aplicar cebo",
+  };
+
+  it("sin regla no hay próxima revisión: no hay valor por defecto", () => {
+    expect(proximaRevisionDe(trampaBase, null)).toBeNull();
+  });
+
+  it("nunca revisada: el plazo normal cuenta desde la instalación", () => {
+    expect(proximaRevisionDe(trampaBase, regla)).toBe("2026-09-16");
+  });
+
+  it("revisada: el plazo normal cuenta desde la última revisión", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { dia: "2026-09-10", brocaLevel: "pocos" },
+    };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-09-25");
+  });
+
+  it("una lectura que dispara usa el plazo de alerta, más corto", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { dia: "2026-09-10", brocaLevel: "muchos" },
+    };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-09-17");
+  });
+
+  it("sin revisión y sin instalación registrada no inventa una fecha", () => {
+    expect(proximaRevisionDe({ ...trampaBase, instaladaEl: null }, regla)).toBeNull();
   });
 });

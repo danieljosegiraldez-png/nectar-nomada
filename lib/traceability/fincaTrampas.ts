@@ -17,6 +17,21 @@ export function puedeVerTrampasDeFinca(granted: ReadonlySet<string>): boolean {
   return granted.has("specimen:view") || granted.has("specimen:manage");
 }
 
+/**
+ * La elección de finca que resuelven `/finca/trampas` y `/finca/trampas/ronda` —
+ * mismo criterio en las dos pantallas: una sola finca entra directo, varias
+ * ofrecen un selector por `?finca=`. El valor crudo de la URL se manda tal cual a
+ * `getFincaTrampas`, que es la autoridad y lo revalida (Fix round 1, Tarea 8) — así
+ * que aquí NO se comprueba contra `fincas`. Extraída para que la ronda no repita la
+ * lógica en vez de copiarla.
+ */
+export function elegirFincaDeTrampas(
+  fincas: readonly { id: string; name: string }[],
+  fincaElegida: string | undefined,
+): string | null {
+  return fincaElegida ?? (fincas.length === 1 ? fincas[0]!.id : null);
+}
+
 async function puedeVerTrampasDelLote(
   userAccountId: string,
   plot: { id: string; classification: import("../../generated/prisma/client").ClassificationLevel },

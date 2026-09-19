@@ -83,6 +83,11 @@ describe("buildNavigation", () => {
     expect(seAlcanzaDesdeElMenu("/finca/trampas", ["/my-nectar", "/beneficio"])).toBe(false);
   });
 
+  it("la ronda de trampas se alcanza desde Finca, y no desde Beneficio (Tarea 9)", () => {
+    expect(seAlcanzaDesdeElMenu("/finca/trampas/ronda", ["/my-nectar", "/finca"])).toBe(true);
+    expect(seAlcanzaDesdeElMenu("/finca/trampas/ronda", ["/my-nectar", "/beneficio"])).toBe(false);
+  });
+
   it("la sección Beneficio hereda EXACTAMENTE la regla que tenía Lotes", () => {
     // Si la regla se ensanchara, alguien vería una sección que después le niega
     // lo que hay dentro. Si se estrechara, un operario perdería su entrada.

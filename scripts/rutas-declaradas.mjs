@@ -94,6 +94,7 @@ export const RUTAS = {
   "/partner/[projectId]": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/finca": { clase: "requiere-sesion", razon: "Índice de la sección Finca, sin formularios: exige location:manage_attributes, lot:view o lot:manage, la misma regla que su entrada del menú, y cada enlace sólo se ofrece a quien puede usar su destino." },
   "/finca/trampas": { clase: "requiere-sesion", razon: "Todas las trampas de una finca, filtradas a los lotes que el visor puede ver (specimen:view o specimen:manage); sin ningún lote accesible, getFincaTrampas lanza y la pantalla dice explícitamente que no hay acceso." },
+  "/finca/trampas/ronda": { clase: "requiere-sesion", razon: "La ronda de trampas en tarjetas, spec §4.2: misma comprobación de acceso que /finca/trampas (specimen:view o specimen:manage sobre alguno de los lotes de la finca)." },
   "/plots": { clase: "requiere-sesion", razon: "Parcelas de finca." },
   "/plots/[id]": { clase: "requiere-sesion", razon: "Lo sembrado en una parcela." },
   "/plots/[id]/ajustes": { clase: "requiere-sesion", razon: "Gestionar una parcela: siembras, condiciones y calicatas." },

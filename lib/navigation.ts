@@ -283,6 +283,8 @@ export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
   "/plots": "/finca",
   // 2026-09-18 (Tarea 8): las trampas de la finca, también.
   "/finca/trampas": "/finca",
+  // 2026-09-18 (Tarea 9): la ronda de trampas, también.
+  "/finca/trampas/ronda": "/finca",
 };
 
 /**

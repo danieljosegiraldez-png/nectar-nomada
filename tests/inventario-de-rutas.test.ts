@@ -137,7 +137,9 @@ describe("el inventario del router", () => {
     // 90 → 91 el mismo día (Tarea 8): /finca/trampas — la tabla de todas las
     // trampas de la finca, filtrada a los lotes que cada persona puede ver.
     // 80 páginas y 11 handlers.
-    expect(salida).toContain("91 entradas");
+    // 91 → 92 el mismo día (Tarea 9): /finca/trampas/ronda — la lista de
+    // tarjetas de la ronda, spec §4.2. 81 páginas y 11 handlers.
+    expect(salida).toContain("92 entradas");
     expect(codigo, salida).toBe(0);
   });
 
