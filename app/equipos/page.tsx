@@ -49,7 +49,8 @@ export default async function EquiposPage() {
       <p style={{ marginTop: "1rem" }}>
         <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
           {t("botonNuevo")}
-        </Link>
+        </Link>{" "}
+        <Link href="/equipos/modelos">{t("verCatalogo")}</Link>
       </p>
 
       {equipos.length === 0 ? (

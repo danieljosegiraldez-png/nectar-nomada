@@ -881,14 +881,21 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
 export async function sitiosParaRegistrar(userAccountId: string) {
   const sitios = await prisma.location.findMany({
     where: { organizationId: { not: null } },
-    select: { id: true, name: true, organizationId: true },
+    select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
   const permitidos = [];
   for (const s of sitios) {
     if (!s.organizationId) continue;
     const ok = await puedeConfigurar(userAccountId, { scopeType: "location", scopeRefId: s.id }, "internal");
-    if (ok) permitidos.push({ id: s.id, name: s.name, organizationId: s.organizationId });
+    if (ok) {
+      permitidos.push({
+        id: s.id,
+        name: s.name,
+        organizationId: s.organizationId,
+        organizationName: s.organization?.name ?? null,
+      });
+    }
   }
   return permitidos;
 }
