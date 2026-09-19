@@ -915,7 +915,14 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
  */
 export async function sitiosParaRegistrar(userAccountId: string) {
   const sitios = await prisma.location.findMany({
-    where: { organizationId: { not: null } },
+    where: {
+      organizationId: { not: null },
+      // A4 (revisión final del plan 2a): un estante de secado o una de sus
+      // posiciones no es un lugar donde se REGISTRA equipo — es donde algo ya
+      // registrado se coloca. Sin este filtro el selector de "Sitio" ofrecía
+      // estantes y posiciones junto a fincas y beneficios de verdad.
+      NOT: [{ locationType: "drying_rack" }, { AND: [{ locationType: "drying_bed" }, { rackSlot: { not: null } }] }],
+    },
     select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
     orderBy: { name: "asc" },
   });

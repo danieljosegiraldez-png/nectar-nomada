@@ -3,7 +3,7 @@ import { bandejasDeLaFinca, tiposDeBandeja } from "../equipos/bandejas";
 import { puedeConfigurarEn, sitiosParaRegistrar } from "../equipos/equipos";
 import { capacidadDeTipo, pesajesDeTipo } from "../traceability/capacidadDeBandeja";
 import { puedeEditarBeneficioEnOrganizacion } from "../traceability/locations";
-import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
+import { lotWhereFromVisibility, puedeGestionarLote, resolveLotVisibility } from "../traceability/lots";
 
 /**
  * El modelo de vista de `/beneficio/bandejas` (Tarea 5 del plan 2a): una
@@ -31,7 +31,14 @@ export async function vistaDeBandejas(userAccountId: string) {
   const visibilidadDeLotes = await resolveLotVisibility(userAccountId, "manage");
   const loteWhere = lotWhereFromVisibility(visibilidadDeLotes);
 
-  const organizaciones = await prisma.organization.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
+  // A5 (revisión final del plan 2a): sólo organizaciones con al menos un
+  // `site` — sin esto un Platform Admin ve una sección por cada
+  // roaster/cliente, que nunca va a tener bandejas.
+  const organizaciones = await prisma.organization.findMany({
+    where: { locations: { some: { locationType: "site" } } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 
   const secciones = [];
   for (const org of organizaciones) {
@@ -57,17 +64,28 @@ export async function vistaDeBandejas(userAccountId: string) {
     const sitiosDisponibles = [];
     for (const s of candidatos) if (await puedeConfigurarEn(userAccountId, s.id)) sitiosDisponibles.push(s);
 
-    const lotesGestionables =
+    // A1 (revisión final del plan 2a): el selector no puede enseñar id y código
+    // de un lote que esta cuenta no gestiona (`lotWhereFromVisibility` sólo
+    // acota ÁMBITO — proyecto o ubicación —, no clasificación). Se filtra cada
+    // candidato con el mismo guardia que usa `registrarPesaje`
+    // (`puedeGestionarLote`, que llama a `requireLotAccess`). `resolveLotVisibility`
+    // NO se toca: es compartido y está fuera de este alcance.
+    const candidatosDeLote =
       tipos.length && loteWhere
         ? await prisma.lot.findMany({
             where: { ...loteWhere, organizationId: org.id },
-            select: { id: true, lotCode: true },
+            select: { id: true, lotCode: true, projectId: true, locationId: true, classification: true },
             orderBy: { createdAt: "desc" },
-            take: 100,
+            take: 101,
           })
         : [];
+    const lotesRecortados = candidatosDeLote.length > 100;
+    const lotesGestionables: { id: string; lotCode: string }[] = [];
+    for (const lote of candidatosDeLote.slice(0, 100)) {
+      if (await puedeGestionarLote(userAccountId, lote)) lotesGestionables.push({ id: lote.id, lotCode: lote.lotCode });
+    }
 
-    secciones.push({ org, tipos: tiposConCapacidad, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables });
+    secciones.push({ org, tipos: tiposConCapacidad, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables, lotesRecortados });
   }
   return secciones;
 }

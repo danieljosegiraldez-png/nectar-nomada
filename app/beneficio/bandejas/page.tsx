@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { vistaDeBandejas } from "../../../lib/beneficio/vistaDeBandejas";
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
-import { medidaEnUnidad } from "./utilidades";
+import { formatearNumero, medidaEnUnidad } from "./utilidades";
 import { FormularioNuevoTipo, FormularioPesaje, FormularioRegistrarBandejas } from "./Formularios";
 
 export const dynamic = "force-dynamic";
-
-/** Un decimal, para kg/m²/cm; sin decimales, para densidad. */
-const unDecimal = (n: number) => (Math.round(n * 10) / 10).toString();
-const sinDecimales = (n: number) => Math.round(n).toString();
 
 /**
  * Las bandejas y su capacidad, agrupadas por organización, más los tres
@@ -23,6 +19,12 @@ export default async function BandejasPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Bandejas");
+  // A6 (revisión final del plan 2a): los números se formatean con el
+  // separador decimal del idioma de la PETICIÓN, no el del proceso del
+  // servidor — `Intl.NumberFormat(undefined, …)` daría el mismo resultado
+  // sin importar qué idioma esté leyendo la persona.
+  const locale = await getLocale();
+  const num = (n: number, decimales: number) => formatearNumero(n, decimales, locale);
 
   const secciones = await vistaDeBandejas(user.userAccountId);
 
@@ -34,7 +36,7 @@ export default async function BandejasPage() {
       <h1>{t("titulo")}</h1>
       <p className="nn-muted">{t("intro")}</p>
       {!secciones.length && <p>{t("sinOrganizaciones")}</p>}
-      {secciones.map(({ org, tipos, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables }) => (
+      {secciones.map(({ org, tipos, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables, lotesRecortados }) => (
         <section key={org.id}>
           <h2>{org.name}</h2>
 
@@ -48,7 +50,9 @@ export default async function BandejasPage() {
                 <p className="nn-muted">
                   {t("medida", { ancho: medida.ancho, largo: medida.largo, unidad: t(`unidadCorta_${medida.unidad}`) })}
                   {" · "}
-                  {t("area", { area: unDecimal(tipo.areaM2) })}
+                  {/* A6: tres decimales (0,744 / 0,372), no uno — con el área
+                      guardada de la 4×2 esto es lo que la distingue de la 2×2. */}
+                  {t("area", { area: num(tipo.areaM2, 3) })}
                 </p>
                 <ul>
                   {tipo.estados.map((linea) => (
@@ -57,7 +61,7 @@ export default async function BandejasPage() {
                       {": "}
                       {linea.fuente === "medido" && linea.capacidadKg != null && (
                         <>
-                          {t("capacidadMedida", { kg: unDecimal(linea.capacidadKg), n: linea.pesajes })}
+                          {t("capacidadMedida", { kg: num(linea.capacidadKg, 1), n: linea.pesajes, profundidad: num(linea.profundidadCm!, 1) })}
                           {linea.detalle && linea.detalle.visibles.length > 0 && (
                             <details>
                               <summary>{t("verPesajes")}</summary>
@@ -67,9 +71,9 @@ export default async function BandejasPage() {
                                     {t("pesajeLinea", {
                                       fecha: mostrarFecha(p.occurredAt, null),
                                       lote: p.lote,
-                                      kg: unDecimal(p.netKg),
-                                      profundidades: p.profundidadesCm.map((v) => unDecimal(v)).join(", "),
-                                      densidad: sinDecimales(p.densidadKgM3),
+                                      kg: num(p.netKg, 1),
+                                      profundidades: p.profundidadesCm.map((v) => num(v, 1)).join(", "),
+                                      densidad: num(p.densidadKgM3, 0),
                                     })}
                                   </li>
                                 ))}
@@ -80,9 +84,20 @@ export default async function BandejasPage() {
                         </>
                       )}
                       {linea.fuente === "estimado" && linea.capacidadKg != null && (
-                        <>{t("capacidadEstimada", { kg: unDecimal(linea.capacidadKg), fuente: linea.fuenteDelEstimado ?? "" })}</>
+                        <>
+                          {t("capacidadEstimada", {
+                            kg: num(linea.capacidadKg, 1),
+                            densidad: num(linea.densidadKgM3!, 0),
+                            profundidad: num(linea.profundidadCm!, 1),
+                            fuente: linea.fuenteDelEstimado ?? "",
+                          })}
+                        </>
                       )}
                       {linea.fuente === "sin_medir" && <>{t("capacidadSinMedir")}</>}
+                      {/* A2 (RULING): con todo pesaje oculto no hay número —ni
+                          medido ni estimado— pero SÍ el aviso de por qué,
+                          fuera de cualquier condición de "hay visibles". */}
+                      {linea.fuente === "sin_acceso" && <>{t("capacidadSinAcceso", { n: linea.ocultos })}</>}
                     </li>
                   ))}
                 </ul>
@@ -106,6 +121,8 @@ export default async function BandejasPage() {
           {lotesGestionables.length > 0 && tipos.length > 0 && (
             <>
               <h3>{t("registrarPesajeTitulo")}</h3>
+              {/* A1: el corte silencioso de `take: 100` se dice, no se calla. */}
+              {lotesRecortados && <p className="nn-muted">{t("lotesRecortados")}</p>}
               <FormularioPesaje tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} lotes={lotesGestionables} />
             </>
           )}
@@ -126,7 +143,10 @@ export default async function BandejasPage() {
                   <tr key={b.id}>
                     <td>{b.numero}</td>
                     <td>{b.tipo}</td>
-                    <td>{b.donde ?? t("sinTraslado")}</td>
+                    {/* A3: `donde` es null por dos razones distintas — nunca se trasladó,
+                        o el lugar no lo autoriza `manage_attributes` a esta cuenta — y no
+                        se dicen igual: la segunda no es "sin traslado". */}
+                    <td>{b.donde ?? (b.dondeOculto ? t("dondeOculto") : t("sinTraslado"))}</td>
                   </tr>
                 ))}
               </tbody>

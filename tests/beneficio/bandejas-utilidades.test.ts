@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { leerProfundidades, medidaEnUnidad, mensajeDeBandeja } from "../../app/beneficio/bandejas/utilidades";
+import { formatearNumero, leerProfundidades, medidaEnUnidad, mensajeDeBandeja } from "../../app/beneficio/bandejas/utilidades";
 import { BandejaConfigError, PIE_EN_CM } from "../../lib/equipos/bandejas";
 import { PesajeError } from "../../lib/traceability/capacidadDeBandeja";
 import { LocationAccessError } from "../../lib/traceability/locations";
@@ -95,6 +95,25 @@ describe("medidaEnUnidad: cm guardados de vuelta a la unidad tecleada", () => {
     const enPies = medidaEnUnidad(PIE_EN_CM, PIE_EN_CM, "ft").ancho;
     const enCm = medidaEnUnidad(PIE_EN_CM, PIE_EN_CM, "cm").ancho;
     expect(enPies).not.toBe(enCm);
+  });
+});
+
+describe("formatearNumero: separador decimal por idioma (A6)", () => {
+  it("área del plan de secado a 3 decimales: coma en es, punto en en", () => {
+    // Control contra la fuente independiente: el plan de secado §6 dice
+    // «0,743 m²» para la 4×2; 0.74359 redondea a 0,744 con 3 decimales.
+    expect(formatearNumero(0.74359, 3, "es")).toBe("0,744");
+    expect(formatearNumero(0.74359, 3, "en")).toBe("0.744");
+    expect(formatearNumero(0.3721, 3, "es")).toBe("0,372");
+  });
+
+  it("mantiene los decimales pedidos aunque el número sea exacto", () => {
+    expect(formatearNumero(8, 1, "es")).toBe("8,0");
+    expect(formatearNumero(8, 1, "en")).toBe("8.0");
+  });
+
+  it("control: el mismo número con otros decimales da otra cadena", () => {
+    expect(formatearNumero(403.45, 0, "es")).not.toBe(formatearNumero(403.45, 1, "es"));
   });
 });
 

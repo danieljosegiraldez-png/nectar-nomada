@@ -189,13 +189,32 @@ describe("capacidad", () => {
     expect((await registrarPesaje(operario, { ...base, supersedesId: original.id, correctionReason: "Profundidad mal leída" })).id).toBeTruthy();
   });
 
+  it("A7: rechaza un redondeo silencioso de un HECHO medido — más decimales de los que la columna guarda", async () => {
+    const base = { trayTypeId: tipo4x2, lotId, materialState: "CHERRY" as const, occurredAt: new Date() };
+    // Profundidad: DECIMAL(5,1) — un decimal cabe, dos no. 2,85 truncaría en
+    // silencio a 2,8 o 2,9 sin que nadie lo supiera; 0,04 (dos decimales) igual.
+    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [2.85, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [0.04, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    // Control: 2,8 (un decimal) sí entra.
+    expect((await registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [2.8, 2.8, 2.8] })).id).toBeTruthy();
+    // netKg: DECIMAL(10,3) — tres decimales caben, cuatro no.
+    await expect(registrarPesaje(operario, { ...base, netKg: 8.1234, profundidadesCm: [2.8, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    expect((await registrarPesaje(operario, { ...base, netKg: 8.123, profundidadesCm: [2.8, 2.8, 2.8] })).id).toBeTruthy(); // control
+    // Rangos: DECIMAL(5,1) tope < 1000; DECIMAL(10,3) tope < 10^7.
+    await expect(registrarPesaje(operario, { ...base, netKg: 8, profundidadesCm: [1000, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+    await expect(registrarPesaje(operario, { ...base, netKg: 10_000_000, profundidadesCm: [2.8, 2.8, 2.8] })).rejects.toThrow("datos_invalidos");
+  });
+
   it("quien no gestiona el lote no pesa, ni corrige el pesaje de un lote que no gestiona", async () => {
+    // B4 (revisión final del plan 2a): el error concreto, no un
+    // `.rejects.toThrow()` desnudo — que pasaría igual con cualquier rechazo,
+    // incluido uno por una razón completamente distinta.
     await expect(registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() }))
-      .rejects.toThrow();
+      .rejects.toThrow(/no_lot_access/);
     // El vecino pesa SU lote; el operario intenta supersederlo presentando el suyo.
     const delVecino = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
     await expect(registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 7, profundidadesCm: [3, 3, 3], occurredAt: new Date(), supersedesId: delVecino.id, correctionReason: "x" }))
-      .rejects.toThrow();
+      .rejects.toThrow(/no_lot_access/);
     expect((await prisma.dryingTrayWeighing.findUniqueOrThrow({ where: { id: delVecino.id } })).supersededAt).toBeNull();
   });
 
@@ -207,8 +226,50 @@ describe("capacidad", () => {
     expect(visibles[0]!.lote).not.toBeNull();
     expect(ocultos).toBe(1); // pero cuenta, y la pantalla lo dice
     expect(suyo.id).toBeTruthy();
-    // La capacidad (la media) sí los incluye a los dos, y lo dice con su contador.
-    expect((await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "CHERRY")!.pesajes).toBe(2);
+    // RULING A2 (revisión final del plan 2a): la capacidad se agrega SÓLO de lo
+    // visible. Antes esta prueba esperaba `pesajes: 2` — contando el oculto en
+    // la media —, que es justo la fuga que la revisión encontró: con UNA sola
+    // lectura oculta, la "capacidad" salía igual a su `netKg` exacto.
+    const cereza = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "CHERRY")!;
+    expect(cereza).toMatchObject({ fuente: "medido", pesajes: 1, pesajeIds: [mio.id], ocultos: 1 });
+    expect(cereza.capacidadKg!).toBeCloseTo(8, 1); // el del operario, no la media con el del vecino
+  });
+
+  it("RULING A2: un único pesaje oculto no da número — sin_acceso, no medido", async () => {
+    const suyo = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "PARCHMENT", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    const lavado = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "PARCHMENT")!;
+    expect(lavado).toMatchObject({ fuente: "sin_acceso", pesajes: 0, pesajeIds: [], capacidadKg: null, densidadKgM3: null, ocultos: 1 });
+    expect(suyo.id).toBeTruthy();
+  });
+
+  it("RULING A2 + B2: un visible y un oculto — la capacidad es la del visible, numéricamente, no una cuenta de dos", async () => {
+    const mio = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "MUCILAGE_HONEY", netKg: 7.5, profundidadesCm: [4, 4, 4], occurredAt: new Date() });
+    await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "MUCILAGE_HONEY", netKg: 99, profundidadesCm: [4, 4, 4], occurredAt: new Date() });
+    const miel = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "MUCILAGE_HONEY")!;
+    expect(miel).toMatchObject({ fuente: "medido", pesajes: 1, pesajeIds: [mio.id], ocultos: 1 });
+    // Si el oculto contaminara la media, 99 kg la dispararía muy por encima de 7,5.
+    expect(miel.capacidadKg!).toBeCloseTo(7.5, 1);
+  });
+
+  it("B2: capacidad con dos pesajes visibles de peso y profundidad distintos — el número de la fórmula, no sólo el contador", async () => {
+    // 0,74359 m² de área guardada (control ya usado arriba).
+    const a = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
+    const b = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 10, profundidadesCm: [4, 4, 4], occurredAt: new Date() });
+    const cereza = (await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "CHERRY")!;
+    expect(cereza.pesajes).toBe(2);
+    expect(new Set(cereza.pesajeIds)).toEqual(new Set([a.id, b.id]));
+    // Densidad de cada uno: 8/(0.74359*0.03)=358.62..; 10/(0.74359*0.04)=336.24..
+    // Densidad media = 347.43..; profundidad media = 3.5 cm.
+    // capacidadKg = area * (profundidadMedia/100) * densidadMedia.
+    const area = 0.74359;
+    const densidadEsperada = (8 / (area * 0.03) + 10 / (area * 0.04)) / 2;
+    const esperado = area * (3.5 / 100) * densidadEsperada;
+    expect(cereza.densidadKgM3!).toBeCloseTo(densidadEsperada, 1);
+    expect(cereza.profundidadCm!).toBeCloseTo(3.5, 5);
+    expect(cereza.capacidadKg!).toBeCloseTo(esperado, 3);
+    // Control: una implementación que sólo mirara la PRIMERA lectura como la
+    // media daría 8, no el número de la fórmula — que aquí es distinto.
+    expect(cereza.capacidadKg!).not.toBeCloseTo(8, 1);
   });
 });
 

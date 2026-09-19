@@ -108,7 +108,12 @@ export async function listRoleProfiles() {
 export async function listScopeChoices() {
   const [projects, locations] = await Promise.all([
     prisma.project.findMany({ select: { id: true, name: true } }),
-    prisma.location.findMany({ select: { id: true, name: true } }),
+    // A4 (revisión final del plan 2a): un estante de secado o una de sus
+    // posiciones no es un ámbito de asignación válido — no se ofrece aquí.
+    prisma.location.findMany({
+      where: { NOT: [{ locationType: "drying_rack" }, { AND: [{ locationType: "drying_bed" }, { rackSlot: { not: null } }] }] },
+      select: { id: true, name: true },
+    }),
   ]);
   // Same natural order as /plots (ADR-078) — a scope picker listing
   // "Lote 1, Lote 10, Lote 2" is the same hazard as a page doing it.

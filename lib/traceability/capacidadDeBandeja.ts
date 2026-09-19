@@ -16,13 +16,36 @@ export class PesajeError extends Error {}
 
 const media = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
+/**
+ * Cuántos decimales tiene `n` tal como se escribió — no cuenta el error de
+ * redondeo binario de por ejemplo `0.1 + 0.2`, porque `n` aquí siempre viene
+ * de un solo literal tecleado (form o test), nunca de una suma.
+ */
+function decimales(n: number): number {
+  const s = n.toString();
+  const i = s.indexOf(".");
+  return i === -1 ? 0 : s.length - i - 1;
+}
+
+// A7 (revisión final del plan 2a): un redondeo silencioso de un HECHO medido
+// (00_conventions/21_rubrica_veracidad) no se detecta con "> 0": una
+// profundidad de 2,85 cm entra igual que 2,8 y la base la guarda truncada a
+// DECIMAL(5,1) sin decirlo. Los límites son los del propio rango de la
+// columna: DECIMAL(5,1) y DECIMAL(10,3).
+const PROFUNDIDAD_MAX_CM = 1000;
+const NET_KG_MAX = 10_000_000;
+
 export async function registrarPesaje(userAccountId: string, input: {
   trayTypeId: string; lotId: string; materialState: EstadoDeCarga; netKg: number; profundidadesCm: number[];
   occurredAt: Date; operatorPersonId?: string | null; supersedesId?: string | null; correctionReason?: string | null;
 }) {
   if (!ESTADOS.includes(input.materialState)) throw new PesajeError("estado_invalido");
   const n = input.profundidadesCm.length;
-  if (!(Number.isFinite(input.netKg) && input.netKg > 0) || n < 3 || n > 4 || !input.profundidadesCm.every((p) => Number.isFinite(p) && p > 0)) {
+  if (
+    !(Number.isFinite(input.netKg) && input.netKg > 0 && input.netKg < NET_KG_MAX && decimales(input.netKg) <= 3) ||
+    n < 3 || n > 4 ||
+    !input.profundidadesCm.every((p) => Number.isFinite(p) && p > 0 && p < PROFUNDIDAD_MAX_CM && decimales(p) <= 1)
+  ) {
     throw new PesajeError("datos_invalidos");
   }
   if (input.supersedesId && !input.correctionReason?.trim()) throw new PesajeError("datos_invalidos");
@@ -57,29 +80,70 @@ export async function registrarPesaje(userAccountId: string, input: {
   });
 }
 
+/**
+ * Separa las filas que esta cuenta puede VER de las que no, contando las
+ * ocultas sin exponer nada de ellas. Compartida por `capacidadDeTipo` (RULING
+ * de la revisión final del plan 2a: la capacidad se agrega SÓLO de lo visible)
+ * y `pesajesDeTipo` (el camino de vuelta) para que las dos apliquen la misma regla.
+ */
+async function separarVisibles<T extends { lot: { projectId: string | null; locationId: string | null; classification: import("../../generated/prisma/client").ClassificationLevel } }>(
+  userAccountId: string,
+  filas: T[],
+): Promise<{ visibles: T[]; ocultos: number }> {
+  const visibles: T[] = [];
+  let ocultos = 0;
+  for (const p of filas) {
+    try {
+      await requireLotAccess(userAccountId, "view", [{ projectId: p.lot.projectId, locationId: p.lot.locationId, classification: p.lot.classification }]);
+      visibles.push(p);
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+      ocultos++;
+    }
+  }
+  return { visibles, ocultos };
+}
+
 export async function capacidadDeTipo(userAccountId: string, trayTypeId: string) {
   const tipo = await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: trayTypeId } });
   // Mismo permiso de lectura que la lista de tipos: quien no ve ninguno, no ve éste.
   if (!(await tiposDeBandeja(userAccountId, tipo.organizationId)).some((t) => t.id === tipo.id)) throw new PesajeError("tipo_no_encontrado");
   const area = areaM2(tipo);
-  const pesajes = await prisma.dryingTrayWeighing.findMany({ where: { trayTypeId, supersededAt: null } });
-  const estados = ESTADOS.map((estado) => {
-    const suyos = pesajes.filter((p) => p.materialState === estado);
+  const pesajes = await prisma.dryingTrayWeighing.findMany({ where: { trayTypeId, supersededAt: null }, include: { lot: true } });
+  const estados = [];
+  for (const estado of ESTADOS) {
+    const todos = pesajes.filter((p) => p.materialState === estado);
+    // RULING (revisión final del plan 2a, A2): la capacidad se calcula SÓLO de
+    // los pesajes que esta cuenta puede ver. Con una única lectura oculta, la
+    // "capacidad" salía igual a su `netKg` exacto — una fuga de un dato
+    // restringido disfrazada de agregado. `pesajes`/`pesajeIds` cuentan y
+    // listan sólo lo visible; `ocultos` es el conteo de lo que no.
+    const { visibles: suyos, ocultos } = await separarVisibles(userAccountId, todos);
     if (suyos.length > 0) {
       const profundidades = suyos.map((p) => media(p.depthPointsCm.map(Number)));
       const densidades = suyos.map((p, i) => Number(p.netKg) / (area * (profundidades[i]! / 100)));
       const profundidadCm = media(profundidades);
       const densidadKgM3 = media(densidades);
-      return { estado, fuente: "medido" as const, pesajes: suyos.length, pesajeIds: suyos.map((p) => p.id), densidadKgM3, profundidadCm,
-        capacidadKg: area * (profundidadCm / 100) * densidadKgM3, fuenteDelEstimado: null };
+      estados.push({ estado, fuente: "medido" as const, pesajes: suyos.length, pesajeIds: suyos.map((p) => p.id), densidadKgM3, profundidadCm,
+        capacidadKg: area * (profundidadCm / 100) * densidadKgM3, fuenteDelEstimado: null, ocultos });
+      continue;
     }
+    if (ocultos > 0) {
+      // Hay pesajes de ese estado, pero ninguno visible: ni número ni estimado
+      // — un estimado aquí escondería que SÍ hay una medida, sólo que esta
+      // cuenta no la ve.
+      estados.push({ estado, fuente: "sin_acceso" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos });
+      continue;
+    }
+    // Sin ningún pesaje en absoluto (visible u oculto) — el estimado aplica aquí, y sólo aquí.
     const sup = (CAPACIDAD_SUPUESTA as Partial<Record<EstadoDeCarga, { densidadKgM3: number; profundidadCm: number; fuente: string }>>)[estado];
     if (sup) {
-      return { estado, fuente: "estimado" as const, pesajes: 0, pesajeIds: [], densidadKgM3: sup.densidadKgM3, profundidadCm: sup.profundidadCm,
-        capacidadKg: area * (sup.profundidadCm / 100) * sup.densidadKgM3, fuenteDelEstimado: sup.fuente };
+      estados.push({ estado, fuente: "estimado" as const, pesajes: 0, pesajeIds: [], densidadKgM3: sup.densidadKgM3, profundidadCm: sup.profundidadCm,
+        capacidadKg: area * (sup.profundidadCm / 100) * sup.densidadKgM3, fuenteDelEstimado: sup.fuente, ocultos: 0 });
+      continue;
     }
-    return { estado, fuente: "sin_medir" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null };
-  });
+    estados.push({ estado, fuente: "sin_medir" as const, pesajes: 0, pesajeIds: [], densidadKgM3: null, profundidadCm: null, capacidadKg: null, fuenteDelEstimado: null, ocultos: 0 });
+  }
   return { areaM2: area, estados };
 }
 
@@ -100,21 +164,13 @@ export async function pesajesDeTipo(userAccountId: string, trayTypeId: string, e
   // no se enseña en absoluto: ni su lote, ni su peso, ni sus profundidades. Se
   // CUENTA, para que la media que ve diga de cuántas lecturas sale (segunda pasada
   // de Codex: ver la media no da derecho a cada lectura).
-  const visibles = [];
-  let ocultos = 0;
-  for (const p of filas) {
-    try {
-      await requireLotAccess(userAccountId, "view", [{ projectId: p.lot.projectId, locationId: p.lot.locationId, classification: p.lot.classification }]);
-    } catch (error) {
-      if (!(error instanceof TraceabilityAccessError)) throw error;
-      ocultos++;
-      continue;
-    }
+  const { visibles: suyos, ocultos } = await separarVisibles(userAccountId, filas);
+  const visibles = suyos.map((p) => {
     const profundidadCm = media(p.depthPointsCm.map(Number));
-    visibles.push({
+    return {
       id: p.id, occurredAt: p.occurredAt, lote: p.lot.lotCode, netKg: Number(p.netKg),
       profundidadesCm: p.depthPointsCm.map(Number), densidadKgM3: Number(p.netKg) / (area * (profundidadCm / 100)),
-    });
-  }
+    };
+  });
   return { visibles, ocultos };
 }

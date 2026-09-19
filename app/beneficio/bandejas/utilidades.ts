@@ -60,6 +60,16 @@ export function medidaEnUnidad(widthCm: number, lengthCm: number, entryUnit: "ft
 }
 
 /**
+ * Un número con el separador decimal del idioma que pide la petición
+ * (revisión final del plan 2a, A6: coma en `es`, punto en `en`), a un número
+ * fijo de decimales. Pura y hermética — no toca la sesión ni la base, así que
+ * se prueba sola.
+ */
+export function formatearNumero(n: number, decimales: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: decimales, maximumFractionDigits: decimales }).format(n);
+}
+
+/**
  * De 3 a 4 profundidades en cm del formulario de pesaje. La cuarta es
  * opcional: un campo vacío se omite, nunca se manda como cero. La validación
  * de cuántas hacen falta y si son números positivos la hace `registrarPesaje`

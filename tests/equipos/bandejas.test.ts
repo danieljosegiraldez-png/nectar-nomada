@@ -9,7 +9,7 @@ import {
   registrarBandejas,
   tiposDeBandeja,
 } from "../../lib/equipos/bandejas";
-import { puedeVerEquipo } from "../../lib/equipos/equipos";
+import { puedeVerEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 
 /**
  * Tipos de bandeja y bandejas numeradas por finca (spec §4.2; Daniel,
@@ -132,9 +132,11 @@ describe("tipos de bandeja", () => {
     await expect(
       crearTipoDeBandeja(gerente, { organizationId: org, nombre: repetido, ancho: 1, largo: 1, unidad: "ft" }),
     ).rejects.toThrow("nombre_repetido");
+    // B4 (revisión final del plan 2a): la clase y el mensaje concretos, no un
+    // `.rejects.toThrow()` desnudo que pasaría igual con cualquier rechazo.
     await expect(
       crearTipoDeBandeja(operario, { organizationId: org, nombre: nombre("Del operario"), ancho: 1, largo: 1, unidad: "ft" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/no_beneficio_edit_access/);
   });
 });
 
@@ -203,6 +205,59 @@ describe("reglas de la bandeja en la base", () => {
 });
 
 /**
+ * A4 (revisión final del plan 2a): una bandeja se registra "al sitio" o "en
+ * el beneficio", nunca directamente en una posición de estante.
+ */
+describe("A4: las bandejas no se registran en una posición de estante", () => {
+  it("rechaza un estante como destino; un sitio (control) se acepta", async () => {
+    const { org, sitio, gerente } = await finca("estante-a4");
+    const instalacion = await prisma.location.create({
+      data: { locationType: "drying_facility", name: nombre("instalacion-a4"), parentLocationId: sitio, organizationId: org, classification: "internal" },
+    });
+    locationIds.push(instalacion.id);
+    const estante = await prisma.location.create({
+      data: { locationType: "drying_rack", name: nombre("estante-a4"), parentLocationId: instalacion.id, organizationId: org, classification: "internal" },
+    });
+    locationIds.push(estante.id);
+    const posicion = await prisma.location.create({
+      data: { locationType: "drying_bed", name: nombre("posicion-a4"), parentLocationId: estante.id, organizationId: org, classification: "internal", rackLevel: 1, rackSlot: 1 },
+    });
+    locationIds.push(posicion.id);
+
+    const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("A4"), ancho: 1, largo: 1, unidad: "ft" });
+    // El ámbito de `gerente` está en `sitio`, y un estante colgando de él queda
+    // dentro de ese ámbito (sube por el árbol) — así que sin el guardia de A4,
+    // `puedeConfigurarEn` ya lo dejaría pasar: el rechazo es por TIPO de lugar.
+    await expect(registrarBandejas(gerente, { siteId: estante.id, trayTypeId: tipo.id, cantidad: 1 })).rejects.toThrow("datos_invalidos");
+    await expect(registrarBandejas(gerente, { siteId: posicion.id, trayTypeId: tipo.id, cantidad: 1 })).rejects.toThrow("datos_invalidos");
+    const control = await registrarBandejas(gerente, { siteId: sitio, trayTypeId: tipo.id, cantidad: 1 }); // control: el sitio sí
+    expect(control.numeros).toHaveLength(1);
+  });
+
+  it("sitiosParaRegistrar no ofrece un estante ni una posición con puesto; sí el sitio", async () => {
+    const { org, sitio, gerente } = await finca("estante-lista-a4");
+    const instalacion = await prisma.location.create({
+      data: { locationType: "drying_facility", name: nombre("instalacion-lista-a4"), parentLocationId: sitio, organizationId: org, classification: "internal" },
+    });
+    locationIds.push(instalacion.id);
+    const estante = await prisma.location.create({
+      data: { locationType: "drying_rack", name: nombre("estante-lista-a4"), parentLocationId: instalacion.id, organizationId: org, classification: "internal" },
+    });
+    locationIds.push(estante.id);
+    const posicion = await prisma.location.create({
+      data: { locationType: "drying_bed", name: nombre("posicion-lista-a4"), parentLocationId: estante.id, organizationId: org, classification: "internal", rackLevel: 1, rackSlot: 1 },
+    });
+    locationIds.push(posicion.id);
+
+    const sitios = await sitiosParaRegistrar(gerente);
+    const ids = sitios.map((s) => s.id);
+    expect(ids).not.toContain(estante.id);
+    expect(ids).not.toContain(posicion.id);
+    expect(ids).toContain(sitio); // control: el propio sitio sí sale
+  });
+});
+
+/**
  * Hallazgo de la revisión del controlador: `bandejasDeLaFinca` no tenía
  * prueba propia. Cubre lo que hace por construcción —el `where` de
  * `bandejasVisibles` filtra `trayNumber: { not: null }`, así que una vasija
@@ -217,10 +272,14 @@ describe("bandejasDeLaFinca", () => {
     const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombreTipo, ancho: 1, largo: 1, unidad: "ft" });
     const { numeros } = await registrarBandejas(gerente, { siteId: sitio, trayTypeId: tipo.id, cantidad: 2 });
 
-    // Un segundo sitio, con el mismo gerente asignado ahí también: sin esto,
-    // `can()` no lo dejaría ver una bandeja movida fuera de su lugar de
-    // siempre (el ámbito de un ROLE de location es de identidad exacta, no
-    // hereda del árbol).
+    // Un segundo sitio, con el mismo gerente asignado ahí también. B5
+    // (revisión final del plan 2a): el comentario que estaba aquí decía que
+    // el ámbito de un ROLE de location "es de identidad exacta, no hereda del
+    // árbol" — falso desde el 2026-09-16 (`conAncestros`, lib/rbac/service.ts):
+    // un ámbito SÍ alcanza a sus DESCENDIENTES. Lo que hace falta la
+    // asignación extra es otra cosa: `otroSitio` es un HERMANO de `sitio`, no
+    // su descendiente, y la herencia sólo baja por el árbol — un ámbito en
+    // `sitio` no alcanza a un sitio distinto.
     const otroSitio = await prisma.location.create({
       data: { locationType: "site", name: nombre("otro-sitio-lista"), organizationId: org, status: "approved", classification: "internal" },
     });
@@ -280,6 +339,37 @@ describe("bandejasDeLaFinca", () => {
     const listaDelOperario = await bandejasDeLaFinca(operario, org);
     expect(listaDelOperario.map((b) => b.numero)).not.toContain(numeros[0]);
     expect(listaDelOperario.map((b) => b.numero)).toContain(numeros[1]);
+  });
+
+  /**
+   * A3 (revisión final del plan 2a): el nombre del LUGAR lo autoriza el
+   * lugar (`manage_attributes`), no el permiso del equipo. Una bandeja
+   * `internal` movida a un lugar `confidential` sigue siendo visible —Farm
+   * Manager ve equipo interno—, pero su lugar no se nombra.
+   */
+  it("una bandeja internal en un lugar confidential: la bandeja se ve, el lugar no se nombra (`dondeOculto`)", async () => {
+    const { org, sitio, gerente } = await finca("lugar-confidencial-a3");
+    const tipo = await crearTipoDeBandeja(gerente, { organizationId: org, nombre: nombre("A3"), ancho: 1, largo: 1, unidad: "ft" });
+    const { numeros } = await registrarBandejas(gerente, { siteId: sitio, trayTypeId: tipo.id, cantidad: 1 });
+
+    // Descendiente de `sitio` (el ámbito de `gerente` sube el árbol y lo
+    // alcanza) pero con SU PROPIA clasificación `confidential`, que Farm
+    // Manager no tiene concedida (`clear_confidential`).
+    const lugarConfidencial = await prisma.location.create({
+      data: { locationType: "plot", name: nombre("confidencial-a3"), parentLocationId: sitio, classification: "confidential" },
+    });
+    locationIds.push(lugarConfidencial.id);
+
+    const bandeja = await prisma.equipment.findFirstOrThrow({ where: { organizationId: org, name: numeros[0] } });
+    await prisma.equipmentTransfer.create({
+      data: { equipmentId: bandeja.id, fromLocationId: sitio, toLocationId: lugarConfidencial.id, occurredAt: new Date(), createdBy: gerente },
+    });
+
+    const lista = await bandejasDeLaFinca(gerente, org);
+    const fila = lista.find((b) => b.numero === numeros[0]);
+    // Control: la bandeja SIGUE apareciendo (equipo `internal`, Farm Manager sí lo ve).
+    expect(fila).toBeDefined();
+    expect(fila).toMatchObject({ dondeId: lugarConfidencial.id, donde: null, dondeOculto: true });
   });
 });
 

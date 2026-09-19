@@ -8,7 +8,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
 import { exigeEditarBeneficioEnOrganizacion, lugaresDeOrganizacion, puedeEditarBeneficioEnOrganizacion, resolveOrganizationForLocation } from "../traceability/locations";
-import { puedeConfigurarEn, puedeVerEquipo } from "./equipos";
+import { puedeConfigurarEn } from "./equipos";
 
 export class BandejaConfigError extends Error {}
 export const PIE_EN_CM = 30.48;
@@ -72,6 +72,10 @@ export async function registrarBandejas(userAccountId: string, input: { siteId: 
   if (!Number.isInteger(input.cantidad) || input.cantidad < 1 || input.cantidad > MAX_TANDA) throw new BandejaConfigError("datos_invalidos");
   if (!(await puedeConfigurarEn(userAccountId, input.siteId))) throw new BandejaConfigError("sin_acceso");
   const sitio = await prisma.location.findUniqueOrThrow({ where: { id: input.siteId } });
+  // A4 (revisión final del plan 2a): una bandeja se registra "al sitio" o "en
+  // el beneficio" (spec §4.2) — nunca directamente en una posición de estante,
+  // que no es un lugar donde algo se REGISTRA sino donde algo cargado se COLOCA.
+  if (sitio.locationType !== "site" && sitio.locationType !== "beneficio") throw new BandejaConfigError("datos_invalidos");
   const tipo = await prisma.dryingTrayType.findUniqueOrThrow({ where: { id: input.trayTypeId } });
   // Resuelta subiendo por el árbol: un sitio puede heredar su organización.
   const org = await resolveOrganizationForLocation(sitio.id);
@@ -100,6 +104,21 @@ export async function registrarBandejas(userAccountId: string, input: { siteId: 
   }, { timeout: 60_000 });
 }
 
+/**
+ * A3 (revisión final del plan 2a): el ÚNICO traslado resuelto aquí —mismo
+ * desempate `[occurredAt desc, createdAt desc]` que usa la pantalla— sirve
+ * para autorizar la bandeja Y para nombrar su lugar. Antes, la autorización
+ * pasaba por `puedeVerEquipo`, que resuelve el último traslado con una
+ * consulta PROPIA y un desempate distinto (sólo `occurredAt desc`): con dos
+ * traslados en el mismo instante, autorización y pantalla podían mirar dos
+ * filas distintas.
+ */
+async function objetivoDelTraslado(e: { projectId: string | null }, ultimo: { toLocationId: string } | null) {
+  if (ultimo) return { scopeType: "location", scopeRefId: ultimo.toLocationId } as const;
+  if (e.projectId) return { scopeType: "project", scopeRefId: e.projectId } as const;
+  return { scopeType: "platform", scopeRefId: null } as const;
+}
+
 async function bandejasVisibles(userAccountId: string, organizationId: string) {
   const filas = await prisma.equipment.findMany({
     where: { organizationId, trayNumber: { not: null } },
@@ -107,13 +126,32 @@ async function bandejasVisibles(userAccountId: string, organizationId: string) {
     include: { trayType: true, transfers: { orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], take: 1, include: { toLocation: true } } },
   });
   const visibles = [];
-  for (const e of filas) if (await puedeVerEquipo(userAccountId, e)) visibles.push(e);
+  for (const e of filas) {
+    const ultimo = e.transfers[0] ?? null;
+    const objetivo = await objetivoDelTraslado(e, ultimo);
+    if (await can(userAccountId, "view", "equipment", objetivo, e.classification)) visibles.push({ ...e, ultimoTraslado: ultimo });
+  }
   return visibles;
 }
 
 export async function bandejasDeLaFinca(userAccountId: string, organizationId: string) {
-  return (await bandejasVisibles(userAccountId, organizationId)).map((e) => ({
-    id: e.id, numero: numeroDeBandeja(e.trayNumber!), tipo: e.trayType!.name,
-    dondeId: e.transfers[0]?.toLocationId ?? null, donde: e.transfers[0]?.toLocation.name ?? null,
-  }));
+  const filas = await bandejasVisibles(userAccountId, organizationId);
+  const resultado = [];
+  for (const e of filas) {
+    const t = e.ultimoTraslado;
+    let donde: string | null = null;
+    let dondeOculto = false;
+    if (t) {
+      // El nombre del lugar lo autoriza EL LUGAR, no el permiso del equipo
+      // (hallazgo de Codex: una bandeja `internal` en un lugar `confidential`
+      // pasaba la guardia del equipo y publicaba igual el nombre confidencial).
+      // Mismo permiso que usan las demás listas de lugares (`manage_attributes`
+      // — `location` no tiene una acción `view` propia en el catálogo).
+      const puedeVerLugar = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: t.toLocationId }, t.toLocation.classification);
+      if (puedeVerLugar) donde = t.toLocation.name;
+      else dondeOculto = true;
+    }
+    resultado.push({ id: e.id, numero: numeroDeBandeja(e.trayNumber!), tipo: e.trayType!.name, dondeId: t?.toLocationId ?? null, donde, dondeOculto });
+  }
+  return resultado;
 }

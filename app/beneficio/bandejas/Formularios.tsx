@@ -171,19 +171,19 @@ export function FormularioPesaje({
       </label>
       <label>
         {t("profundidad", { numero: 1 })}
-        <CampoNumerico name="profundidad1" min={0.1} step="any" required />
+        <CampoNumerico name="profundidad1" min={0.1} step="0.1" required />
       </label>
       <label>
         {t("profundidad", { numero: 2 })}
-        <CampoNumerico name="profundidad2" min={0.1} step="any" required />
+        <CampoNumerico name="profundidad2" min={0.1} step="0.1" required />
       </label>
       <label>
         {t("profundidad", { numero: 3 })}
-        <CampoNumerico name="profundidad3" min={0.1} step="any" required />
+        <CampoNumerico name="profundidad3" min={0.1} step="0.1" required />
       </label>
       <label>
         {t("profundidad4Opcional")}
-        <CampoNumerico name="profundidad4" min={0.1} step="any" />
+        <CampoNumerico name="profundidad4" min={0.1} step="0.1" />
       </label>
       <label>
         {t("cuando")}

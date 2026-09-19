@@ -272,3 +272,11 @@ Son de persistencia, no de motor: los motores de §6 no cambian.
 | `DryingTrayType` | `core.drying_tray_type` | tipo de bandeja de la organización, en cm, con su unidad tecleada |
 | `Equipment.trayTypeId`, `Equipment.trayNumber` | `core.equipment` | tipo y número consecutivo de una bandeja en su finca; se enseña «B-001» |
 | `DryingTrayWeighing` | `traceability.drying_tray_weighing` | pesaje de una bandeja cargada: estado, kg netos y 3–4 profundidades; inmutable, se corrige superseding |
+
+Revisión final del plan 2a (2026-09-19), RULING A2 y hallazgos de la misma revisión:
+
+| nombre | dónde | qué es |
+|---|---|---|
+| `fuente: "sin_acceso"` | `capacidadDeTipo` (`lib/traceability/capacidadDeBandeja.ts`) | hay pesajes de ese estado pero ninguno visible para quien mira: sin número, ni medido ni estimado — un estimado escondería que SÍ hay una medida |
+| `ocultos` | `capacidadDeTipo`, cada línea de estado | cuántos pesajes de ese estado existen y esta cuenta no ve; antes sólo lo traía `pesajesDeTipo` |
+| `dondeOculto` | `bandejasDeLaFinca` (`lib/equipos/bandejas.ts`) | la bandeja está en un lugar cuyo nombre esta cuenta no puede ver (`location:manage_attributes`); distinto de "sin traslado" |
