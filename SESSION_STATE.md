@@ -44,7 +44,7 @@ Daniel pidió revisar **toda** la literatura de fermentación antes de responder
 decisivas comprobadas contra la fuente, Codex de segundo asiento:
 `docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. En lo revisado, ninguna banda universal validada; ni
 Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores no la leen. **Sus respuestas,
-una por pregunta, quedan en 18 apartados** (ADR-177): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
+una por pregunta, quedan en 19 apartados** (ADR-177): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
 los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
 del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 

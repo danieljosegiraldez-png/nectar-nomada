@@ -11740,31 +11740,36 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
    debe tener uno o dos tratamientos propios —**secado directo** o **un rescate con intención de sabor**,
    según el lote— para «homogenizar y estabilizar» y no ser pérdida total. Y todo proceso que salga del
    rango aceptable **se señala, se marca y se notifica**, aunque termine o se interrumpa a secado.
-8. **Correlación entre lotes** —levadura y dosis, peso, temperatura, pH y Brix inicial/intermedios/final—
+8. **«De primera»** exige las cinco: **95 % de cereza madura** en la selección, **pH de recepción por
+   encima de 4,5**, **°Brix por encima de 13**, **sin flotadores** y **sin defectos visibles**. Lo que
+   no cumple **va a otro lote** —no se mezcla— y el de primera **se procesa primero** tras la selección.
+   (Su umbral de Brix de cereza es 13; el 18–24 del paquete no tiene fuente. El 80 % de pureza y el
+   aviso al 70 % de `12` §6 son del paquete, no suyos.)
+9. **Correlación entre lotes** —levadura y dosis, peso, temperatura, pH y Brix inicial/intermedios/final—
    contra **taza, defectos, rendimiento y cumplimiento de la receta**, para **reproducibilidad**.
-9. **Hora obligatoria** desde ahora en lecturas de fermentación. Las viejas quedan «sólo fecha» y su
+10. **Hora obligatoria** desde ahora en lecturas de fermentación. Las viejas quedan «sólo fecha» y su
    «24hr / mosto inicial / final» se recupera como tiempo declarado, nunca como hora medida.
-10. **Los cinco perfiles del paquete pasan a ser plantillas** para crear recetas, con la literatura al
+11. **Los cinco perfiles del paquete pasan a ser plantillas** para crear recetas, con la literatura al
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
-11. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
+12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
-12. **Agua**: opción en el beneficio de **medir el pH del agua** cada día o con una frecuencia ligada a
+13. **Agua**: opción en el beneficio de **medir el pH del agua** cada día o con una frecuencia ligada a
     los procesos, «especialmente si se van a lavar y o sumergir en esa agua». Hay aguas de 7–8 que
     cambian con lluvias y temporadas. (Cómo se usa esa medida contra el mosto: ver propuestas abajo.)
-13. **Levaduras con ficha de fabricante** (especie, dosis, rango de temperatura, duración por tramo) y
+14. **Levaduras con ficha de fabricante** (especie, dosis, rango de temperatura, duración por tramo) y
     fuente; la receta la propone y lo que ajusta Daniel manda. MP-72 y HD A54 son de enología: su uso en
     café sale de su experiencia. (Encaja con la tabla de levaduras de ADR-172.)
-14. **Temperatura de masa y ambiente**, por separado; la receta compara contra la de la masa.
-15. **Sensorial de proceso**: quien procesa marca buena, neutra o negativa, y negativa avisa; hay una
+15. **Temperatura de masa y ambiente**, por separado; la receta compara contra la de la masa.
+16. **Sensorial de proceso**: quien procesa marca buena, neutra o negativa, y negativa avisa; hay una
     lista de descriptores negativos, y **cada receta declara qué es atributo y qué es defecto**.
-16. **Secado en ambiente compartido.** La receta fija objetivos, sujetos a la capacidad del beneficio y
+17. **Secado en ambiente compartido.** La receta fija objetivos, sujetos a la capacidad del beneficio y
     al clima; ante retrasos, primero acciones sobre el lote (mover bandeja, abanico); si se propone
     tocar el cuarto (deshumidificar), se muestra el efecto en cada lote antes —«por uno no podemos
     sacrificar los demás»—. Decide una persona; queda quién y por qué.
-17. **Fin de secado con el AgraTronix Coffee Tester 08150** (escala pergamino): por humedad, marcado
+18. **Fin de secado con el AgraTronix Coffee Tester 08150** (escala pergamino): por humedad, marcado
     «sin actividad de agua medida». Avisar al beneficio y al procesador si el instrumento está **cerca o
     fuera** de su calibración; foto opcional al tomar la muestra.
-18. **Cáscara.** No se usa 75–80 °C durante 12 h: deshidratador por bandejas, pocas capas, horas a días,
+19. **Cáscara.** No se usa 75–80 °C durante 12 h: deshidratador por bandejas, pocas capas, horas a días,
     secar y reposar con temperatura y abanico ajustables «sin ser muy rápido y volatilizar». Terminada
     por humedad, con tacto y sensorial opcionales. Es **secundaria al café**. Queda abierto estudiar el
     trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
