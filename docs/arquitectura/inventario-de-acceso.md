@@ -164,14 +164,22 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `app/actions/rutinas.ts` no puede importar `lib/db` directamente (guardia
 > `no-restricted-imports`, `docs/arquitectura/acceso-a-datos.allowlist.json`), así
 > que `volverA()` —a dónde redirige cada acción, equipo o lugar— pasó a apoyarse
-> en `lugarParaVolver`, nueva en `lib/rutinas/lugares.ts`. No recibe principal a
-> propósito, igual que su vecina `lugarParaRutina`: sólo lee `id`, `locationType`
-> y `parentLocationId` para calcular una ruta, nunca para decidir permiso — la
-> autorización de la acción la resuelve el servicio (`crearRutina`,
-> `registrarRealizada`, …) por su cuenta, y el `locationId` viene siempre del
-> propio formulario del llamador, nunca de un id adivinado. Sube la fila de
-> **depende del llamador** — mirada a mano y explicada en el allowlist.
-> Cifras exactas de esta fusión, regeneradas al final de la Tarea 8 más abajo.
+> en `lugarParaVolver`, nueva en `lib/rutinas/lugares.ts`. Como se escribió
+> entonces, no recibía principal a propósito y subía la fila de **depende del
+> llamador**.
+>
+> **CORREGIDO en la ola de arreglos de revisión final (2026-09-19, Hallazgo A
+> de la revisión independiente de Codex): era exactamente el riesgo que el
+> párrafo de arriba minimizaba.** El `locationId` viene del formulario, sí,
+> pero un formulario lo rellena el NAVEGADOR de quien sea, así que un llamador
+> AUTENTICADO sin ningún permiso podía mandar el id de un lugar ajeno y
+> aprender su existencia y su tipo/padre por la URL de redirección misma,
+> incluso cuando la acción terminaba en `forbidden` — la autorización de la
+> ACCIÓN no protegía la RUTA de vuelta. `lugarParaVolver` ahora exige
+> `userAccountId` y comprueba `puedeSobreLugar(…, "view")` antes de leer nada;
+> sin permiso, `null`, igual que un id que no existe. Pasó de **depende del
+> llamador** a **guardia directo** (comprobado con
+> `node scripts/inventario-de-acceso.mjs --json`).
 
 > **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
 > `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro
