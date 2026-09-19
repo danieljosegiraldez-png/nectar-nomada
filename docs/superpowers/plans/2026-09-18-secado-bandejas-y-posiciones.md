@@ -16,6 +16,7 @@
   - ambientes: `african_bed_outdoor` (cama africana a la intemperie) y `floor_tarp` (piso con lona);
   - la fila: `rackRow` / `rack_row`;
   - la tabla: `DryingRunTray` / `traceability.drying_run_tray`, con `desde` y `hasta` como dice la tabla de §4.3.
+  - la nota de sombra: `shadeDescription` / `shade_description`, al lado de `shadePercentage`, que ya existe. La pidió Daniel el mismo día, después de ver el plan, con la sombra en la instalación **y** en la cama;
   - **Ningún otro nombre nuevo de dominio** sin preguntar.
 - **Decisiones de Daniel que este plan aplica** (spec §2):
   - un lote se reparte en varias bandejas y **cada bandeja lleva un solo lote a la vez**;
@@ -84,6 +85,13 @@
 - Produce `Location.rackRow: number | null` y `DryingEnvironment` con `african_bed_outdoor` y `floor_tarp`.
 - `leerUbicacionDeSecado(form)` devuelve además `rackRow: number | null`, y lanza `SecadoFormError("fila_invalida")`.
 - `detalleInstalacion(...).camas[]` gana `rackRow`.
+- **La sombra de arriba** (decisión de Daniel, 2026-09-18, añadida al plan después de su revisión):
+  - `Location.shadeDescription: string | null` es nueva;
+  - `Location.shadePercentage` es la columna que **ya existe** y ya usan las parcelas, con la escala `pct_20 … pct_90`. Se reutiliza, y no se inventa otra escala.
+  - Van **en la instalación y en la cama**: la instalación dice su sombra general, y una cama la suya si es distinta.
+  - `leerUbicacionDeSecado` devuelve además `shadePercentage` y `shadeDescription`, y lanza `SecadoFormError("sombra_invalida")`.
+  - `detalleInstalacion` devuelve la sombra de la instalación y la de cada cama.
+  - **No se hereda en la base:** una cama sin sombra propia se enseña con la de su instalación y **marcada como de la instalación**, sin copiar el valor.
 
 - [ ] **Paso 1: las pruebas que fallan**
 
@@ -97,6 +105,15 @@ En `tests/traceability/secadoForm.test.ts`, al lado de la prueba del rack:
     for (const value of ["0", "-1", "1.5", "NaN", "2147483648"]) {
       form.set("rackRow", value); expect(() => leerUbicacionDeSecado(form)).toThrow("fila_invalida");
     }
+  });
+  it("la sombra: grado de la escala de las parcelas y nota libre; vacías quedan nulas", () => {
+    const form = new FormData(); form.set("name", "Cama bajo la guaba");
+    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: null, shadeDescription: null });
+    form.set("shadePercentage", "pct_50"); form.set("shadeDescription", "  Árbol de guaba, copa rala  ");
+    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: "pct_50", shadeDescription: "Árbol de guaba, copa rala" });
+    form.set("shadePercentage", "pct_45"); expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
+    form.set("shadePercentage", ""); form.set("shadeDescription", "x".repeat(301));
+    expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
   });
   it("acepta los dos ambientes nuevos", () => {
     const form = new FormData(); form.set("name", "Patio");
@@ -119,6 +136,19 @@ En `tests/traceability/instalaciones.test.ts`, dentro de «valida los tipos de p
     expect((await actualizarUbicacionDeSecado(actor, { locationId: conFila.id, name: conFila.name, rackLevel: 2, rackRow: 5 })).rackRow).toBe(5);
     // Una instalación no tiene fila: la fila es de la posición.
     await expect(crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility", rackRow: 1 })).rejects.toThrow("tipo_invalido");
+
+    // La sombra va en las dos: la instalación la general, la cama la suya si difiere.
+    const patio = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility",
+      dryingEnvironment: "african_bed_outdoor", shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
+    const bajoArbol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed",
+      shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
+    const alSol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed" });
+    const detalle = await detalleInstalacion(actor, patio.id);
+    expect(detalle).toMatchObject({ shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
+    expect(detalle.camas.find((c) => c.id === bajoArbol.id)).toMatchObject({ shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
+    // No se copia la de la instalación: la cama sin sombra propia la tiene nula en la base.
+    expect(detalle.camas.find((c) => c.id === alSol.id)).toMatchObject({ shadePercentage: null, shadeDescription: null });
+    expect((await actualizarUbicacionDeSecado(actor, { locationId: alSol.id, name: alSol.name, shadePercentage: "pct_20", shadeDescription: null })).shadePercentage).toBe("pct_20");
 ```
 
 En `tests/traceability/topologiaDeSecado.test.ts`, una sonda nueva con su control positivo:
@@ -166,6 +196,12 @@ ALTER TABLE "core"."location" ADD COLUMN "rack_row" INTEGER;
 ALTER TABLE "core"."location"
   ADD CONSTRAINT "location_rack_row_positivo"
     CHECK ("rack_row" IS NULL OR "rack_row" > 0);
+
+-- La sombra de arriba de una instalación o una cama de secado (Daniel,
+-- 2026-09-18): QUÉ la da —un árbol, una enredadera, una lona, un techo con
+-- cierta opacidad—, en texto libre al lado del grado. El grado es la columna
+-- `shade_percentage` que ya existe y ya usan las parcelas: no se crea otra escala.
+ALTER TABLE "core"."location" ADD COLUMN "shade_description" TEXT;
 ```
 
 En `prisma/schema.prisma`, dentro de `enum DryingEnvironment`, después de `mechanical_dryer`:
@@ -184,6 +220,11 @@ y debajo de `rackLevel`:
   /// de invernadero o cuarto es nivel + fila; lleva una bandeja a la vez (spec
   /// de secado por bandeja §4.2, decisión de Daniel del 2026-09-18).
   rackRow           Int?               @map("rack_row")
+  /// Instalación o cama de secado: QUÉ da la sombra de arriba —árbol, enredadera,
+  /// lona, techo con cierta opacidad—, en texto libre al lado de `shadePercentage`,
+  /// nunca en su lugar. Una cama sin la suya se ENSEÑA con la de su instalación,
+  /// marcada como tal; no se copia aquí.
+  shadeDescription  String?            @map("shade_description")
 ```
 
 Correr `npx prisma migrate deploy` y después `npm run prisma:generate`. Leer que imprime `20260918190000_ambientes_y_fila_de_secado`.
@@ -256,6 +297,85 @@ En `messages/en.json`, las mismas claves:
     "ambiente_floor_tarp": "Floor on tarp",
     "error_fila_invalida": "The row must be a positive whole number.",
 ```
+
+- [ ] **Paso 4b: la sombra de arriba**
+
+En `lib/traceability/secadoForm.ts`:
+- el import: `import { DryingEnvironment, ShadePercentageBracket } from "../../generated/prisma/client";`, con la misma forma que ya importa `DryingEnvironment`;
+- la constante: `export const GRADOS_DE_SOMBRA = Object.values(ShadePercentageBracket);`
+- dentro de `leerUbicacionDeSecado`, antes del `return`:
+
+```ts
+  // La sombra de arriba (Daniel, 2026-09-18): el grado es la escala que ya usan
+  // las parcelas; la nota dice QUÉ la da. Vacías quedan nulas: no declarado.
+  const grado = texto(form, "shadePercentage");
+  if (grado && !(GRADOS_DE_SOMBRA as string[]).includes(grado)) throw new SecadoFormError("sombra_invalida");
+  const shadeDescription = texto(form, "shadeDescription") || null;
+  if (shadeDescription && shadeDescription.length > 300) throw new SecadoFormError("sombra_invalida");
+```
+
+y añadir `shadePercentage: (grado || null) as ShadePercentageBracket | null, shadeDescription,` al objeto devuelto. `texto()` ya recorta los espacios; comprobarlo leyendo su definición, y si no los recorta, usar `.trim()` aquí.
+
+En `lib/traceability/instalaciones.ts`:
+- `Datos` gana `shadePercentage?: ShadePercentageBracket | null; shadeDescription?: string | null`.
+- En `validar`, **para los dos tipos**:
+
+```ts
+  if (input.shadePercentage != null && !GRADOS_DE_SOMBRA.includes(input.shadePercentage)) throw new SecadoFormError("sombra_invalida");
+  if (input.shadeDescription != null && input.shadeDescription.trim().length > 300) throw new SecadoFormError("sombra_invalida");
+```
+
+- En el `data` de crear y de actualizar: `shadePercentage: input.shadePercentage ?? null, shadeDescription: input.shadeDescription?.trim() || null`.
+- `detalleInstalacion` devuelve también `shadePercentage: row.shadePercentage, shadeDescription: row.shadeDescription`, y cada cama `shadePercentage: bed.shadePercentage, shadeDescription: bed.shadeDescription`.
+
+En `app/instalaciones/FormularioUbicacion.tsx`, **para los dos tipos**, después del ambiente o de la fila:
+
+```tsx
+    <label>{t("sombra")}<select name="shadePercentage" defaultValue={existente?.shadePercentage ?? ""}>
+      <option value="">{t("noDeclarado")}</option>
+      {GRADOS_DE_SOMBRA.map((g) => <option key={g} value={g}>{t(`sombra_${g}`)}</option>)}
+    </select></label>
+    <label>{t("sombraNota")}<input name="shadeDescription" maxLength={300} defaultValue={existente?.shadeDescription ?? ""} />
+      <span className="nn-muted">{t(tipo === "drying_bed" ? "sombraAyudaCama" : "sombraAyuda")}</span></label>
+```
+
+El tipo `existente` gana `shadePercentage?: string | null; shadeDescription?: string | null`.
+
+En `app/instalaciones/page.tsx`:
+- la instalación enseña su sombra: `{i.shadePercentage || i.shadeDescription ? t("sombraValor", { grado: i.shadePercentage ? t(`sombra_${i.shadePercentage}`) : t("noDeclarado"), nota: i.shadeDescription ?? "" }) : null}`;
+- cada cama enseña **la suya** si la tiene; si no, la de la instalación **con la etiqueta `sombraDeLaInstalacion`**, nunca como si fuera propia.
+
+**Qué no se hace:**
+- **No se restringe la sombra a los ambientes de intemperie.** Un invernadero también puede llevar malla de sombra, y Daniel no pidió excluirlo.
+- **No se calcula nada** con la sombra, ni se la relaciona con la velocidad de secado. Es un dato declarado.
+
+Mensajes, espacio `Secado`, en `messages/es.json`:
+
+```json
+    "sombra": "Sombra de arriba (opcional)",
+    "sombraNota": "Qué da la sombra (opcional)",
+    "sombraAyuda": "Árbol, enredadera, lona, techo con cierta opacidad… Vale para toda la instalación.",
+    "sombraAyudaCama": "Sólo si esta cama tiene una sombra distinta a la de su instalación.",
+    "sombraValor": "Sombra {grado} {nota}",
+    "sombraDeLaInstalacion": "sombra de la instalación",
+    "sombra_pct_20": "20 %", "sombra_pct_30": "30 %", "sombra_pct_50": "50 %", "sombra_pct_70": "70 %", "sombra_pct_90": "90 %",
+    "error_sombra_invalida": "El grado de sombra no es de la lista, o la nota pasa de 300 caracteres.",
+```
+
+y en `messages/en.json`:
+
+```json
+    "sombra": "Overhead shade (optional)",
+    "sombraNota": "What gives the shade (optional)",
+    "sombraAyuda": "Tree, vine, tarp, a roof with some opacity… Applies to the whole facility.",
+    "sombraAyudaCama": "Only if this bed has a different shade from its facility.",
+    "sombraValor": "Shade {grado} {nota}",
+    "sombraDeLaInstalacion": "facility shade",
+    "sombra_pct_20": "20 %", "sombra_pct_30": "30 %", "sombra_pct_50": "50 %", "sombra_pct_70": "70 %", "sombra_pct_90": "90 %",
+    "error_sombra_invalida": "The shade level is not on the list, or the note is longer than 300 characters.",
+```
+
+Añadir `"sombra_invalida"` a la lista de la prueba de claves de mensaje de `tests/traceability/secadoForm.test.ts`.
 
 - [ ] **Paso 5: comprobar que pasan**
 
