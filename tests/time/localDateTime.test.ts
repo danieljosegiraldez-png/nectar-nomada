@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseLocalDateTime,
   parseOptionalLocalDateTime,
+  instanteAPrecargar,
   LocalDateTimeError,
 } from "../../lib/time/localDateTime";
 
@@ -50,5 +51,31 @@ describe("parseLocalDateTime", () => {
   it("la variante opcional acepta el vacío y devuelve null", () => {
     expect(parseOptionalLocalDateTime("", "300")).toBeNull();
     expect(parseOptionalLocalDateTime("2026-03-12T07:30", "300")?.toISOString()).toBe("2026-03-12T12:30:00.000Z");
+  });
+});
+
+/**
+ * Ronda final, hallazgo 1: qué instante precarga un formulario que puede
+ * "registrar" (sin valor previo) o "corregir" (con uno). Puro — recibe "ahora"
+ * en vez de leerlo, así que no depende de cuándo corre la prueba.
+ *
+ * Lo que esto NO prueba, y por qué no se puede aquí: que `IntervencionForm`
+ * escriba el resultado en el DOM en un efecto, y que lo haga con el desfase
+ * del DISPOSITIVO y no el del servidor. Eso exige un navegador de verdad —dos
+ * "zonas" distintas para servidor y cliente— y no hay arnés de componentes en
+ * este repositorio (`grep` de `app/components` en `tests/` no da resultados).
+ * Esta función es la parte que SÍ se puede aislar del fallo; el resto quedó
+ * verificado por lectura contra el patrón ya probado de
+ * `MeasurementCorrectionForm`/`TimezoneOffsetField`.
+ */
+describe("instanteAPrecargar", () => {
+  const ahora = new Date("2026-09-18T12:00:00.000Z");
+
+  it("con un instante existente, lo respeta tal cual — nunca lo reemplaza por «ahora»", () => {
+    expect(instanteAPrecargar("2026-01-01T07:30:00.000Z", ahora)).toEqual(new Date("2026-01-01T07:30:00.000Z"));
+  });
+
+  it("sin instante (nulo), precarga con «ahora»", () => {
+    expect(instanteAPrecargar(null, ahora)).toEqual(ahora);
   });
 });

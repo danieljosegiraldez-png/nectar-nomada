@@ -9,7 +9,6 @@ import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { mostrarFecha, mostrarInstante } from "../../../../../lib/time/mostrarInstante";
-import { paraCampoLocal } from "../../../../../lib/time/localDateTime";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
 import {
   textoDeTipoDeManejo,
@@ -216,7 +215,10 @@ export default async function ManejoDetailPage({
                 method: intervencion.method,
                 mixVolume: intervencion.mixVolume == null ? null : Number(intervencion.mixVolume),
                 mixUnit: intervencion.mixUnit,
-                occurredAt: paraCampoLocal(intervencion.occurredAt),
+                // Ronda final, hallazgo 1: ISO crudo. `IntervencionForm` lo
+                // convierte al reloj de pared en el NAVEGADOR — precargarlo
+                // aquí con `paraCampoLocal` horneaba la zona del SERVIDOR.
+                occurredAt: intervencion.occurredAt.toISOString(),
                 operatorPersonId: intervencion.operatorPersonId,
                 motivoObservationId: intervencion.motivoObservationId,
                 specimenIds: intervencion.areas.map((a) => a.specimenId),

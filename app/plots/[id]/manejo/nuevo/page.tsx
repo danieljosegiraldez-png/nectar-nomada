@@ -7,7 +7,6 @@ import { LocationAccessError } from "../../../../../lib/traceability/locations";
 import { productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { listPlantSpecimens } from "../../../../../lib/traceability/specimens";
-import { paraCampoLocal } from "../../../../../lib/time/localDateTime";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +53,10 @@ export default async function NuevoManejoPage({
     method: null,
     mixVolume: null,
     mixUnit: null,
-    occurredAt: paraCampoLocal(new Date()),
+    // Ronda final, hallazgo 1: `null` = «ahora», calculado en el NAVEGADOR por
+    // `IntervencionForm`. Calcularlo aquí, en el servidor, horneaba la zona
+    // del servidor en el valor precargado.
+    occurredAt: null,
     operatorPersonId: null,
     motivoObservationId: motivo ?? null,
     specimenIds: [],

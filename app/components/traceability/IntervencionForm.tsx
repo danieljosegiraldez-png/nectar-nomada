@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { registrarIntervencionFormAction, corregirIntervencionFormAction } from "../../actions/manejo";
 import type { TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
+import { paraCampoLocal, instanteAPrecargar } from "../../../lib/time/localDateTime";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { LineaDeIntervencion, type ProductoOption, type ValoresDeLinea } from "./LineaDeIntervencion";
 import { textoDeTipoDeManejo, textoDeObjetivoDeManejo, textoDeMetodoDeManejo } from "./etiquetasDeManejo";
@@ -49,8 +50,14 @@ export interface IntervencionFormValues {
   method: PlotInterventionMethod | null;
   mixVolume: number | null;
   mixUnit: string | null;
-  /** En formato de `datetime-local`, ya en hora local — `paraCampoLocal`. */
-  occurredAt: string;
+  /**
+   * El instante en ISO, o `null` para «ahora» — ronda final, hallazgo 1.
+   * **Nunca** ya formateado para `datetime-local`: esa conversión depende de
+   * la zona del DISPOSITIVO (`paraCampoLocal`), y precargarla en el servidor
+   * horneaba ahí la zona del servidor. Este componente la hace en un efecto,
+   * igual que `MeasurementCorrectionForm`.
+   */
+  occurredAt: string | null;
   operatorPersonId: string | null;
   motivoObservationId: string | null;
   specimenIds: readonly string[];
@@ -104,6 +111,21 @@ export function IntervencionForm({
   const [lineas, setLineas] = useState<readonly ValoresDeLinea[]>(valores.lineas.length > 0 ? valores.lineas : [lineaVacia()]);
   const [areaModo, setAreaModo] = useState<"parcela" | "plantas">(valores.specimenIds.length > 0 ? "plantas" : "parcela");
 
+  /**
+   * Ronda final, hallazgo 1: el reloj de pared se escribe en el DOM al
+   * montar, nunca se renderiza en el servidor — mismo motivo que
+   * `TimezoneOffsetField` y `MeasurementCorrectionForm`. Antes esta pantalla
+   * recibía `valores.occurredAt` ya formateado por `paraCampoLocal` en el
+   * SERVIDOR: con el servidor en UTC y el dispositivo en Panamá, corregir sin
+   * tocar la hora desplazaba el instante cinco horas.
+   */
+  const refOccurredAt = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (refOccurredAt.current) {
+      refOccurredAt.current.value = paraCampoLocal(instanteAPrecargar(valores.occurredAt, new Date()));
+    }
+  }, [valores.occurredAt]);
+
   // Tarea 8, ronda de arreglos 1 (menor #1): las tres tablas salen de
   // `etiquetasDeManejo.ts`, compartida con las otras pantallas que las usan.
   const textoDeTipo = textoDeTipoDeManejo(t);
@@ -122,7 +144,15 @@ export function IntervencionForm({
         <legend>{t("manejoKindLegend")}</legend>
         {KINDS.map((k) => (
           <label key={k} style={{ display: "block" }}>
-            <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} /> {textoDeTipo[k]}
+            <input
+              type="radio"
+              name="kind"
+              value={k}
+              checked={kind === k}
+              onChange={() => setKind(k)}
+              aria-label={textoDeTipo[k]}
+            />{" "}
+            {textoDeTipo[k]}
           </label>
         ))}
       </fieldset>
@@ -213,7 +243,7 @@ export function IntervencionForm({
 
       <div className="nn-field">
         <label htmlFor="manejo-occurred-at">{t("manejoOccurredAtLabel")}</label>
-        <input id="manejo-occurred-at" name="occurredAt" type="datetime-local" required defaultValue={valores.occurredAt} />
+        <input id="manejo-occurred-at" name="occurredAt" type="datetime-local" required ref={refOccurredAt} defaultValue="" />
       </div>
 
       <div className="nn-field">
