@@ -4,8 +4,14 @@
 revisión.
 
 Pieza 2 de 3 del flujo finca → beneficio. La pieza 1 (`2026-09-18-jornada-y-entrega-de-cosecha-design.md`,
-PR #431) deja cada entrega `enviada`, sin lote. Esta la recibe. La pieza 3 arma los lotes
-eligiendo recepciones, y hace flotación, selección, categorización y repesado.
+PR #431) deja cada entrega `enviada`, sin lote. Esta la recibe. En la pieza 3, de cada recepción
+salen los procesos —cada uno, un lote— con flotación, selección, categorización y repesado.
+
+**El propósito es la trazabilidad** (Daniel, 2026-09-19: «la idea es trazabilidad, y de una
+recepción se pueden correr muchos diferentes procesos, y cada uno se ve como un lote»). La
+recepción es el **origen**: qué llegó, de dónde, cuánto pesó en cada lado y quién firmó cada
+lado. Desde cualquier lote se tiene que poder volver a su recepción, y de ahí a su entrega,
+jornada, parcela, bloque o planta y recolector, o a su proveedor.
 
 ## 1. Lo que dijo Daniel
 
@@ -37,6 +43,8 @@ Del 2026-09-19:
 | ¿se rechaza al recibir? | **sí, con motivo y foto** |
 | ¿muestra al recibir? | **sí, opcional: Brix** |
 | cómo se construye | **una sola recepción**, venga de donde venga (enfoque A) |
+| ¿en qué estado se pesa? | **siempre igual, no se anota**: fresca, tal cual, en los dos lados |
+| ¿de una recepción salen varios lotes? | **sí**: «de una recepción se pueden correr muchos diferentes procesos, y cada uno se ve como un lote»; y un lote puede juntar varias recepciones |
 
 ## 2. Lo que hay hoy (medido sobre `origin/main`, 2026-09-19)
 
@@ -70,6 +78,9 @@ Del 2026-09-19:
   - **Anulable en la base**, por las jornadas abiertas antes de esta pieza. A una sin destino se
     le puede poner uno después (el Farm Manager o el capataz de la finca, con AuditEvent), y
     hasta entonces sus entregas no salen como pendientes en ningún beneficio.
+  - **Se puede cambiar sólo mientras ninguna entrega de la jornada tenga recepción vigente.**
+    Después queda fijo: una recepción anulada devuelve su entrega a pendiente **en el mismo
+    beneficio**, no en otro.
 
 ### 3.2 El proveedor de fuera
 
@@ -93,8 +104,23 @@ Del 2026-09-19:
   recepción (lo comprueba el servicio). Una jornada no apunta a un pedido: son sus entregas las
   que, al recibirse, se atan a él si quien recibe lo elige.
 - **La cantidad:** lo recibido del pedido (la suma de los netos de sus recepciones `recibida`)
-  contra `kgPedidos`: «+20 kg sobre lo pedido (+4 %)». Pasado el margen, la recepción que lo
-  cruza lleva nota obligatoria. **No bloquea.**
+  contra `kgPedidos`: «+20 kg sobre lo pedido (+4 %)».
+  - **Exceso:** la recepción que deja lo recibido por encima de `kgPedidos × (1 + margen)` lleva
+    nota obligatoria. Para que dos recepciones simultáneas no crucen el margen sin nota, recibir
+    contra un pedido **bloquea la fila del pedido** (`SELECT … FOR UPDATE`) en la misma
+    transacción.
+  - **Falta:** se juzga **al cerrar** el pedido: si lo recibido queda por debajo de
+    `kgPedidos × (1 − margen)`, cerrar exige nota. Mientras está abierto, lo que falta no es una
+    discrepancia: pueden llegar más entregas.
+  - Una recepción anulada después del cierre recalcula las cifras del pedido; el cierre y su
+    nota quedan como estaban, con su AuditEvent.
+  - **No bloquea** en ningún caso.
+- **La calidad pedida se define ya, para que la pieza 3 la mida igual:** `minMaduroPct`,
+  `maxVerdePct` y `maxFlotesPct` son porcentajes sobre el total de la selección de la Etapa A,
+  con las categorías `prime_ripe`, `underripe` y `floaters` de `lib/beneficio/balanceDeMasas.ts`.
+  **Sólo es atribuible a un pedido en un lote hecho únicamente con cereza de ese pedido**; un lote
+  que mezcla pedidos sale «no atribuible», en vez de dejar que uno oculte el incumplimiento del
+  otro.
 
 ### 3.4 La recepción
 
@@ -110,34 +136,70 @@ Del 2026-09-19:
       confía en quien lo manda);
   - **el segundo peso:** el de finca, si viene de una entrega (se lee de la entrega, no se
     copia a mano); o `pesoDeclaradoKg`, si el productor de fuera lo trajo. Anulable.
-  - **la comparación**, calculada con `POLITICA_POR_DEFECTO` al recibir y **guardada** con la
-    política que se usó: diferencia en kg y %, y el estado (`BALANCED`, `DISCREPANCY_FLAGGED` o
-    `GROSS_IMBALANCE`). Sin segundo peso: sin comparación, y se dice así.
+  - **la comparación de básculas** (`comparacionDePesos`), calculada al recibir con
+    `POLITICA_POR_DEFECTO` y **guardada** con la política que se usó:
+    - la **referencia** es el peso de origen (el de finca o el declarado);
+    - diferencia = neto − referencia; % = diferencia / referencia;
+    - tolerancia = máx(referencia × 0,5 %, 0,5 kg);
+    - estado `BALANCED`, `DISCREPANCY_FLAGGED` o `GROSS_IMBALANCE`.
+    - **No es una compuerta de etapa.** Compara dos básculas, y nunca bloquea nada. El balance
+      de la selección (pieza 3) es otra evaluación, con sus propias consecuencias normativas.
+    - Sin segundo peso: sin comparación, y se dice así.
+    - **La condición de pesaje no se anota** (decisión de Daniel, 2026-09-19): la cereza se pesa
+      siempre fresca, tal cual, en los dos lados, y las dos pesadas se consideran comparables.
+      Se aparta de `12_mass_balance_byproducts.md` §2, que pide `weighing_condition` en cada
+      peso; la decisión queda anotada allí. Si un día cambia, se añade el campo.
   - `nota`: **obligatoria** si el estado no es `BALANCED` o si se cruza el margen del pedido.
     Nunca bloquea.
-  - `brixDeRecepcion` (opcional, 0–40 °Bx) y su veredicto: `INTAKE_OPTIMAL`, `INTAKE_UNDERRIPE`
-    o **sin veredicto** para el tramo que el documento normativo no cubre. **No se inventa un
-    umbral.**
+  - `brixDeRecepcion` (opcional) con **su punto de muestreo** (`SamplePoint` del contrato:
+    `CHERRY_PULP`, `MUCILAGE_PRESSED`…, obligatorio si hay Brix), el instrumento si se sabe, y su
+    veredicto: `INTAKE_OPTIMAL`, `INTAKE_UNDERRIPE`, **sin veredicto** para el tramo que el
+    documento normativo no cubre, o `SENSOR_FAULT` fuera del rango físico 0–32 °Bx
+    (`11_brix_kinetics.md` §1). Fuera de rango **se guarda** con `SENSOR_FAULT`, no se rechaza.
+    **No se inventa un umbral.**
   - fotos: `Asset` atados a la recepción.
   - estado: `recibida`, `rechazada` o `anulada`.
 - **Rechazar:** con motivo (obligatorio) y foto. Se guarda el peso igual. Una recepción
   rechazada **no puede entrar a ningún lote** (lo impondrá la pieza 3 contra el estado, y una
   prueba de esta pieza fija el estado).
 - **Anular** una recepción: con motivo, sólo con `lot:manage` sobre el beneficio, y **sólo
-  mientras no esté en ningún lote**. La entrega vuelve a pendiente y se puede recibir otra vez:
-  por eso el `entregaId` es único **entre las no anuladas** (índice parcial), no en toda la tabla.
+  mientras no haya salido de ella ningún lote**. La entrega vuelve a pendiente y se puede
+  recibir otra vez: por eso el `entregaId` es único **entre las no anuladas** (índice parcial),
+  no en toda la tabla.
+- **Anular la entrega** desde la finca ya no se puede si tiene una recepción vigente (servicio y
+  disparador). Antes, `anularEntrega` sólo miraba que estuviera `enviada`.
+- **Recibir exige, dentro de la transacción y con la fila de la entrega bloqueada**
+  (`SELECT … FOR UPDATE`): que siga `enviada`, que su jornada vaya a **este** beneficio y que no
+  tenga otra recepción vigente. La lista de pendientes es una comodidad, no la regla.
+- **Idempotencia:** cada formulario lleva una `claveDeEnvio` única (generada al abrirlo). Un
+  reintento con la misma clave devuelve la recepción ya guardada en vez de crear otra: cubre la
+  cereza de fuera, que no tiene entrega que la haga única.
+- **De una recepción salen uno o varios lotes, cada uno un proceso**, y un lote puede juntar
+  varias recepciones (decisión de Daniel). Es genealogía, la de `20_modelo_ciclo_completo.md`
+  —la identidad del lote a través de divisiones y fusiones—, no inventario. Lo que esta pieza
+  fija para que la pieza 3 lo cumpla:
+  - cada lote dice **de qué recepciones sale y cuántos kg toma de cada una**; ese vínculo es el
+    que permite volver del lote al origen;
+  - **los kilos no se inventan:** la suma de lo que toman los lotes de una recepción no pasa de
+    su neto. Es el balance de masas, al servicio de la trazabilidad;
+  - para que dos lotes creados a la vez no tomen los mismos kilos, crear un lote bloquea las
+    filas de sus recepciones;
+  - sólo de una recepción `recibida` sale cereza; de una `rechazada` o `anulada`, ninguna.
 - **La regla de dos personas** (servicio **y** base):
-  - quien recibe no es quien anotó la entrega (`recibidaPor ≠ entrega.anotadaPor`), ni la
+  - quien recibe, rechaza o anula no es quien anotó la entrega (`entrega.anotadaPor`) ni la
     cuenta de su recolector;
-  - en la base, un disparador lo comprueba contra la entrega al insertar. Un CHECK no puede
-    mirar otra tabla.
+  - en la base, un disparador lo comprueba contra la entrega **al insertar y al actualizar**. Un
+    CHECK no puede mirar otra tabla;
+  - las columnas de la recepción son **inmutables** salvo el estado y los campos de su
+    anulación, y el mismo disparador lo impone.
   - La cereza de fuera no tiene anotador en el sistema: la regla no aplica, y se dice así.
 - **Cada escritura**, con su `AuditEvent` en la misma transacción.
 
 ### 3.5 La regla de Brix, como módulo puro
 
-- `lib/beneficio/brixDeRecepcion.ts`: `evaluarBrixDeRecepcion(bx)` → `INTAKE_OPTIMAL` |
-  `INTAKE_UNDERRIPE` | `SIN_VEREDICTO`, con los umbrales citados de `11_brix_kinetics.md`.
+- `lib/beneficio/brixDeRecepcion.ts`: `evaluarBrixDeRecepcion(bx)` → `SENSOR_FAULT` (fuera de
+  0–32) | `INTAKE_OPTIMAL` | `INTAKE_UNDERRIPE` | `SIN_VEREDICTO`, con los umbrales citados de
+  `11_brix_kinetics.md`.
   Nombres de estado del contrato (`03_public_api.md`); `SIN_VEREDICTO` **no** es un estado del
   contrato y no se presenta como tal: es la ausencia de uno.
 
@@ -165,11 +227,11 @@ Del 2026-09-19:
 
 | acto | exige |
 |---|---|
-| recibir, rechazar, anular una recepción | `lot:manage` sobre **ese** beneficio, y la regla de dos personas |
+| recibir, rechazar, anular una recepción | `lot:manage` sobre **ese** beneficio, y la regla de dos personas en los tres actos |
 | crear y cerrar pedidos | `lot:manage` sobre ese beneficio |
 | dar de alta un proveedor de fuera | `cherry_supplier:create` (nuevo) |
 | ver pendientes y recepciones | `lot:view` sobre ese beneficio |
-| poner el destino a una jornada | `lot:manage` sobre la finca de la jornada |
+| poner o cambiar el destino de una jornada | `lot:manage` sobre la finca de la jornada, y ninguna entrega recibida |
 
 ## 6. Fuera de esta pieza
 
@@ -186,8 +248,17 @@ Del 2026-09-19:
   - un neto que no cuadra con bruto − recipientes × tara se rechaza;
   - dos recepciones vigentes de la misma entrega se rechazan; anulada la primera, la segunda
     entra (control positivo);
-  - la regla de dos personas se rechaza **en la base** con SQL directo, y otra persona entra.
+  - la regla de dos personas se rechaza **en la base** con SQL directo, al insertar y al cambiar
+    `recibidaPor`, y otra persona entra;
+  - cambiar el neto o el origen de una recepción guardada se rechaza en la base;
+  - anular una entrega con recepción vigente se rechaza en la base.
 - **Servicio:**
+  - una entrega de una jornada con destino a OTRO beneficio no se puede recibir aquí, aunque se
+    mande su id a mano;
+  - el mismo envío repetido con la misma `claveDeEnvio` guarda una sola recepción;
+  - dos recepciones simultáneas contra un pedido: la que cruza el margen exige nota;
+  - cerrar un pedido con 300 de 500 kg y margen 2 % exige nota;
+  - el destino de una jornada no se cambia si ya hay una entrega recibida;
   - quien anotó la entrega no puede recibirla; el recolector con cuenta tampoco; otra persona
     del beneficio sí;
   - el Farm Manager de OTRA finca, sin `lot:manage` sobre el beneficio, no recibe;
@@ -203,6 +274,18 @@ Del 2026-09-19:
   - rechazar sin motivo se rechaza; rechazada, su estado lo dice;
   - anular devuelve la entrega a pendiente.
 - **Brix:** 18 y 24 son `INTAKE_OPTIMAL`; 15,9 es `INTAKE_UNDERRIPE`; 17 y 25 son sin
-  veredicto; fuera de 0–40, error de esquema.
+  veredicto; −1 y 32,1 son `SENSOR_FAULT` y se guardan; con Brix y sin punto de muestreo, se
+  rechaza.
 - **El otro lado:** la jornada y «Mis entregas» muestran el neto y la diferencia de lo
   recibido.
+
+## 8. Revisión independiente (Codex, 2026-09-19)
+
+Codex revisó el primer borrador y devolvió 15 hallazgos. Todos quedan resueltos arriba; dos
+los decidió Daniel (la condición de pesaje, y que de una recepción salgan varios lotes), y el resto
+son reglas técnicas: bloquear la entrega y el pedido al recibir, idempotencia por clave de
+envío, disparador también al actualizar, destino fijo tras la primera recepción, lo que falta
+se juzga al cerrar, rango físico de Brix 0–32 y su punto de muestreo, la comparación de
+básculas separada del balance de etapa, su fórmula, y la regla de dos personas en los tres
+actos. Dos afirmaciones suyas se comprobaron contra el repositorio antes de aceptarlas: el
+rango 0–32 (`11_brix_kinetics.md` §1) y que `anularEntrega` sólo miraba el estado.
