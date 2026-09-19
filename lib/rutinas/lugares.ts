@@ -58,8 +58,22 @@ export async function lugarConRutinasOVacio(locationId: string): Promise<LugarCo
   }
 }
 
-/** El lugar mínimo para decidir a dónde vuelve una acción (spec 2026-09-19 §5); `null` si no existe. */
-export async function lugarParaVolver(locationId: string): Promise<{ id: string; locationType: LocationType; parentLocationId: string | null } | null> {
+/**
+ * El lugar mínimo para decidir a dónde vuelve una acción (spec 2026-09-19 §5);
+ * `null` si no existe O si quien pregunta no puede verlo.
+ *
+ * **Antes no recibía principal a propósito** (razón documentada en
+ * docs/arquitectura/acceso-a-datos.allowlist.json), y por eso `volverA()` en
+ * `app/actions/rutinas.ts` podía usarla con cualquier `locationId` que
+ * mandara el cliente: un llamador SIN NINGÚN permiso aprendía la existencia y
+ * el tipo/padre de un lugar ajeno por la URL de redirección misma, aunque la
+ * acción de verdad terminara en `forbidden` (Hallazgo A, revisión
+ * independiente de Codex, ola de arreglos de revisión final, 2026-09-19).
+ * Ahora exige `puedeSobreLugar(…, "view")` antes de leer nada: sin permiso,
+ * `null` — idéntico a un id que no existe.
+ */
+export async function lugarParaVolver(userAccountId: string, locationId: string): Promise<{ id: string; locationType: LocationType; parentLocationId: string | null } | null> {
+  if (!(await puedeSobreLugar(userAccountId, locationId, "view"))) return null;
   return prisma.location.findUnique({ where: { id: locationId }, select: { id: true, locationType: true, parentLocationId: true } });
 }
 

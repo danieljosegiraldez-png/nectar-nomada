@@ -132,13 +132,20 @@ export async function registrarRealizada(userAccountId: string, r: NuevoRegistro
     const org = ru.locationId
       ? (await prisma.location.findUniqueOrThrow({ where: { id: ru.locationId }, select: { organizationId: true } })).organizationId
       : (await prisma.equipment.findUniqueOrThrow({ where: { id: ru.equipmentId! }, select: { organizationId: true } })).organizationId;
-    lotes = await prisma.consumableLot.findMany({
-      where: { id: { in: insumos.map((i) => i.consumableLotId) } },
-      select: { id: true, batchLabel: true, material: { select: { name: true, organizationId: true } } },
-    });
+    // Hallazgo B (revisión independiente de Codex, ola de arreglos de revisión
+    // final, 2026-09-19): la organización va en el WHERE, no comparada
+    // DESPUÉS de leer — así un lote ajeno nunca sale de la base, no sólo del
+    // resultado. Sin organización (bodega de plataforma) no hay con qué
+    // filtrar: ningún lote entra, igual que antes.
+    lotes = org
+      ? await prisma.consumableLot.findMany({
+          where: { id: { in: insumos.map((i) => i.consumableLotId) }, material: { organizationId: org } },
+          select: { id: true, batchLabel: true, material: { select: { name: true, organizationId: true } } },
+        })
+      : [];
     for (const i of insumos) {
       const lote = lotes.find((l) => l.id === i.consumableLotId);
-      if (!lote || lote.material.organizationId !== org) throw new RutinaError("insumo_ajeno");
+      if (!lote) throw new RutinaError("insumo_ajeno");
     }
   }
 

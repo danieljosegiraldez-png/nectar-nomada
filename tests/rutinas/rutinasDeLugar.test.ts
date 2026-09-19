@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { crearRutina, registrarRealizada, RutinaError, rutinasDeLugar, vencidasPorLugar } from "../../lib/rutinas/rutinas";
-import { equiposAqui, lugarConRutinasOVacio, rutaDeLugar } from "../../lib/rutinas/lugares";
+import { equiposAqui, lugarConRutinasOVacio, lugarParaVolver, rutaDeLugar } from "../../lib/rutinas/lugares";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
@@ -223,5 +223,16 @@ describe("a dónde vuelve cada lugar", () => {
     expect(rutaDeLugar({ id: "i", locationType: "drying_facility", parentLocationId: "x" })).toBe("/instalaciones/i");
     expect(rutaDeLugar({ id: "c", locationType: "drying_bed", parentLocationId: "i" })).toBe("/instalaciones/i");
     expect(rutaDeLugar({ id: "z", locationType: "beneficio", parentLocationId: "x" })).toBe("/beneficio");
+  });
+});
+
+describe("lugarParaVolver: exige permiso (Hallazgo A, revisión de Codex)", () => {
+  it("un lugar propio resuelve; el ajeno recibe null, igual que uno inexistente", async () => {
+    const propio = await lugarParaVolver(f.jefeA, L.beneficio!);
+    expect(propio?.id).toBe(L.beneficio);
+    // El hallazgo: antes, cualquiera con sesión aprendía existencia+tipo/padre
+    // de un lugar ajeno por esta función, sin pasar por ningún permiso.
+    await expect(lugarParaVolver(f.ajeno, L.beneficio!)).resolves.toBeNull();
+    await expect(lugarParaVolver(f.ajeno, randomUUID())).resolves.toBeNull();
   });
 });

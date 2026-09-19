@@ -37,12 +37,17 @@ function diasOFalla(f: FormData, campo: string): number {
   return Number(texto);
 }
 
-/** A dónde vuelve: la ficha del equipo, o la pantalla del lugar (spec 2026-09-19 §5). */
-async function volverA(f: FormData): Promise<string> {
+/**
+ * A dónde vuelve: la ficha del equipo, o la pantalla del lugar (spec 2026-09-19
+ * §5). `lugarParaVolver` exige permiso (Hallazgo A, ola de arreglos de revisión
+ * final): sin él, cae a `/instalaciones` en vez de revelar el tipo/padre del
+ * lugar por la URL.
+ */
+async function volverA(userAccountId: string, f: FormData): Promise<string> {
   const equipmentId = String(f.get("equipmentId") ?? "");
   if (equipmentId) return `/equipos/${equipmentId}`;
   const locationId = String(f.get("locationId") ?? "");
-  const l = await lugarParaVolver(locationId);
+  const l = await lugarParaVolver(userAccountId, locationId);
   return l ? rutaDeLugar(l) : "/instalaciones";
 }
 
@@ -50,7 +55,7 @@ export async function crearRutinaFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
-  const base = await volverA(formData);
+  const base = await volverA(user.userAccountId, formData);
 
   let destino: string;
   try {
@@ -79,7 +84,7 @@ export async function registrarRealizadaFormAction(formData: FormData): Promise<
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
-  const base = await volverA(formData);
+  const base = await volverA(user.userAccountId, formData);
 
   let destino: string;
   try {
@@ -113,7 +118,7 @@ export async function anularRegistroFormAction(formData: FormData): Promise<void
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
-  const base = await volverA(formData);
+  const base = await volverA(user.userAccountId, formData);
 
   let destino: string;
   try {
@@ -137,7 +142,7 @@ export async function cambiarIntervaloFormAction(formData: FormData): Promise<vo
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
-  const base = await volverA(formData);
+  const base = await volverA(user.userAccountId, formData);
 
   let destino: string;
   try {
@@ -157,7 +162,7 @@ export async function retirarRutinaFormAction(formData: FormData): Promise<void>
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const equipmentId = String(formData.get("equipmentId") ?? "");
-  const base = await volverA(formData);
+  const base = await volverA(user.userAccountId, formData);
 
   let destino: string;
   try {
