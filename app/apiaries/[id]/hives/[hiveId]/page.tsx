@@ -166,9 +166,6 @@ export default async function HiveDetailPage({
   const [estadoReina, historiaReinas] = colony
     ? await Promise.all([estadoDeReina(user.userAccountId, colony.id), historiaDeReinas(user.userAccountId, colony.id)])
     : [null, []];
-  // Los años que se ofrecen para el nacimiento de una reina: éste y los cinco anteriores, con su
-  // color. Una reina de más de cinco años es rara, y si hace falta, se deja en «no se sabe».
-  const añosDeNacimiento = Array.from({ length: 6 }, (_, i) => new Date().getUTCFullYear() - i);
   // «Criada aquí»: cualquier colonia activa del apiario, esta incluida.
   const coloniasDeOrigen = cajasDelApiario.flatMap((h) =>
     h.colonies.filter((c) => c.status === "active").map((c) => ({ colonyId: c.id, identifier: h.identifier })),
@@ -761,15 +758,10 @@ export default async function HiveDetailPage({
                     </div>
                     <div className="nn-field">
                       <label htmlFor="cambiar-nacimiento">{t("reinaAnoDeNacimiento")}</label>
-                      {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se sabe. */}
-                      <select id="cambiar-nacimiento" name="anoDeNacimiento" defaultValue="">
-                        <option value="" />
-                        {añosDeNacimiento.map((a) => (
-                          <option key={a} value={a}>
-                            {a} · {t(`reinaColor_${colorDelAño(a)}`)}
-                          </option>
-                        ))}
-                      </select>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="cambiar-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="cambiar-nueva-notas">{t("reinaNotas")}</label>
@@ -841,15 +833,10 @@ export default async function HiveDetailPage({
                     </div>
                     <div className="nn-field">
                       <label htmlFor="introducir-nacimiento">{t("reinaAnoDeNacimiento")}</label>
-                      {/* El vacío no se ofrece como opción (Anexo E §6): sin elegir, no se sabe. */}
-                      <select id="introducir-nacimiento" name="anoDeNacimiento" defaultValue="">
-                        <option value="" />
-                        {añosDeNacimiento.map((a) => (
-                          <option key={a} value={a}>
-                            {a} · {t(`reinaColor_${colorDelAño(a)}`)}
-                          </option>
-                        ))}
-                      </select>
+                      {/* Un campo de año y no una lista corta (Codex, PR #441): pasar al sistema una
+                          reina de 2020 nacida en 2019 no debe obligar a dejarla en «no se sabe». Vacío =
+                          no se sabe; el servicio valida el número. */}
+                      <CampoNumerico id="introducir-nacimiento" name="anoDeNacimiento" inputMode="numeric" min={1990} step={1} />
                     </div>
                     <div className="nn-field">
                       <label htmlFor="introducir-notas">{t("reinaNotas")}</label>

@@ -217,6 +217,19 @@ describe("el año en que nació la reina", () => {
     ).rejects.toThrow(/nacio_despues_de_llegar/);
   });
 
+  it("EL AÑO ES EL DEL SITIO, NO EL DE UTC: el 31 de diciembre a las 19:00 en Panamá todavía es ese año", async () => {
+    // Codex, revisión del PR #441: en UTC ese instante ya es el año siguiente, y una reina «nacida»
+    // el año que viene pasaba la regla durante las últimas cinco horas del año.
+    await prisma.location.update({ where: { id: apiarioId }, data: { timezone: "America/Panama" } });
+    const nochevieja = new Date("2026-12-31T19:00:00-05:00");
+    expect(nochevieja.getUTCFullYear()).toBe(2027); // el control: el caso sólo existe si UTC ya cambió de año
+    const colonyId = await colonia();
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: nochevieja, añoDeNacimiento: 2027 })).rejects.toThrow(
+      /nacio_despues_de_llegar/,
+    );
+    await expect(introducirReina(operario, { colonyId, origen: "comprada", desde: nochevieja, añoDeNacimiento: 2026 })).resolves.toBeTruthy();
+  });
+
   it("LA BASE tampoco acepta un año imposible — y lo válido entra", async () => {
     const sonda = async (año: string) => {
       try {
