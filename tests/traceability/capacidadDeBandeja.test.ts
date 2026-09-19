@@ -284,6 +284,26 @@ describe("reglas del pesaje en la base", () => {
     expect((await prisma.dryingTrayWeighing.update({ where: { id: ok.id }, data: { supersededAt: new Date() } })).supersededAt).toBeTruthy();
   });
 
+  it("B1: la única transición permitida es marcar superseded UNA vez, sola — no junto a otro cambio, no dos veces, no deshecha", async () => {
+    const d = { trayTypeId: tipo4x2, lotId, materialState: "CHERRY" as const, netKg: 8, depthPointsCm: [3, 3, 3], occurredAt: new Date(), provenanceClass: "measured_fact" as const };
+    // C-8 (revisión final del plan 2a): quitar la comparación `to_jsonb` de
+    // `pesaje_inmutable` seguiría rechazando "sólo el peso" y aceptando "sólo
+    // supersededAt" — hacía falta la combinación de los dos para distinguirlo.
+    const junto = await prisma.dryingTrayWeighing.create({ data: d });
+    await expect(prisma.dryingTrayWeighing.update({ where: { id: junto.id }, data: { netKg: 9, supersededAt: new Date() } })).rejects.toThrow(/pesaje no se edita/);
+    expect((await prisma.dryingTrayWeighing.findUniqueOrThrow({ where: { id: junto.id } })).supersededAt).toBeNull(); // sigue vigente
+
+    // Volver a marcar un pesaje YA superseded: rechazado.
+    const dosVeces = await prisma.dryingTrayWeighing.create({ data: d });
+    await prisma.dryingTrayWeighing.update({ where: { id: dosVeces.id }, data: { supersededAt: new Date() } }); // control: la primera vez sí entra
+    await expect(prisma.dryingTrayWeighing.update({ where: { id: dosVeces.id }, data: { supersededAt: new Date() } })).rejects.toThrow(/pesaje no se edita/);
+
+    // Deshacer un superseded (volver a NULL): rechazado.
+    const deshacer = await prisma.dryingTrayWeighing.create({ data: d });
+    await prisma.dryingTrayWeighing.update({ where: { id: deshacer.id }, data: { supersededAt: new Date() } });
+    await expect(prisma.dryingTrayWeighing.update({ where: { id: deshacer.id }, data: { supersededAt: null } })).rejects.toThrow(/pesaje no se edita/);
+  });
+
   it("los CHECK no dejan pasar un NULL: profundidad nula y corrección sin razón", async () => {
     // Por SQL directo: el cliente tipado no deja escribir un NULL dentro del array.
     const insertar = (profundidades: string, supersedes: string | null, razon: string | null) => prisma.$executeRawUnsafe(
