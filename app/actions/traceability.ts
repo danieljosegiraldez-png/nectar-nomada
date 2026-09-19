@@ -1,6 +1,7 @@
 "use server";
 
 import { CondicionDelSitioInvalida } from "../../lib/apiary/condicionDelSitio";
+import { PropositoInvalido } from "../../lib/apiary/propositoDeVisita";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -123,6 +124,13 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof CondicionDelSitioInvalida) {
     const [clave, ...resto] = error.message.split(":");
     return t(`error_condicion_${clave}` as "error_condicion_otro_sin_decir_cual", { value: resto.join(":") });
+  }
+  if (error instanceof PropositoInvalido) {
+    // `proposito_desconocido: trasiego` trae los valores tras los dos puntos;
+    // `proposito_requerido` no trae nada. Sin esta rama la clase caía al
+    // `throw` final y abrir una jornada sin propósito era un 500.
+    const [clave, ...resto] = error.message.split(":");
+    return t(`error_${clave}` as "error_proposito_requerido", { value: resto.join(":").trim() });
   }
   if (error instanceof ProcedenciaInvalida) {
     // `provenance_not_offered:ai_suggestion` trae el valor pegado con dos
@@ -1421,8 +1429,9 @@ export async function startFieldSessionFormAction(
       startedAt: fechaLocal(formData, "startedAt"),
       start: parseCoordinates(formData),
       notes: emptyToNull(formData.get("notes")),
-      // Las casillas marcadas. `getAll` devuelve [] cuando no hay ninguna, y el servicio
-      // distingue eso —«sin registrar»— de una lista con valores, que sí valida.
+      // Las casillas marcadas. `getAll` devuelve [] cuando no hay ninguna, y [] NO es
+      // «sin registrar» —eso es sólo `null`, de la cola offline vieja—: el servicio lo
+      // rechaza con `proposito_requerido`, que `friendlyError` convierte en mensaje.
       purposes: formData.getAll("purposes").map((v) => String(v)),
       // Una jornada la abre quien está en el sitio: es observación directa de
       // que la visita ocurrió, no un registro transcrito de otra fuente.

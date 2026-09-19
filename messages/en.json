@@ -1412,7 +1412,9 @@
     "error_condicion_condicion_desconocida": "Unknown site condition: {value}.",
     "error_condicion_sin_novedad_va_sola": "«Nothing to report» cannot go with another condition.",
     "error_condicion_otro_sin_decir_cual": "You ticked «other» in site condition: say which.",
-    "error_condicion_nota_sin_otro": "You wrote which «other» site condition, but did not tick it."
+    "error_condicion_nota_sin_otro": "You wrote which «other» site condition, but did not tick it.",
+    "error_proposito_requerido": "Choose at least one purpose for the visit.",
+    "error_proposito_desconocido": "Unknown visit purpose: {value}."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",
