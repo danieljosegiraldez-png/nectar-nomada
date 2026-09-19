@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "../../lib/auth/session";
+import { insumosDelFormulario } from "../../lib/rutinas/insumosDelFormulario";
 import { lugarParaVolver, rutaDeLugar } from "../../lib/rutinas/lugares";
 import {
   RutinaError,
@@ -43,22 +44,6 @@ async function volverA(f: FormData): Promise<string> {
   const locationId = String(f.get("locationId") ?? "");
   const l = await lugarParaVolver(locationId);
   return l ? rutaDeLugar(l) : "/instalaciones";
-}
-
-/** Filas `insumo_i_lote`, `insumo_i_cantidad`, `insumo_i_unidad`; vacío = sin cantidad, nunca 0. */
-function insumosDelFormulario(f: FormData) {
-  const salida: { consumableLotId: string; quantity: number | null; unit: string | null }[] = [];
-  for (let i = 0; i < 3; i++) {
-    const lote = String(f.get(`insumo_${i}_lote`) ?? "");
-    if (!lote) continue;
-    const texto = String(f.get(`insumo_${i}_cantidad`) ?? "").trim();
-    const quantity = texto === "" ? null : Number(texto);
-    if (quantity !== null && (!Number.isFinite(quantity) || quantity <= 0)) throw new RutinaError("cantidad_invalida");
-    const unit = String(f.get(`insumo_${i}_unidad`) ?? "").trim() || null;
-    if (quantity !== null && unit === null) throw new RutinaError("unidad_obligatoria");
-    salida.push({ consumableLotId: lote, quantity, unit });
-  }
-  return salida;
 }
 
 export async function crearRutinaFormAction(formData: FormData): Promise<void> {

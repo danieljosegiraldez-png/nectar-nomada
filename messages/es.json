@@ -2740,7 +2740,8 @@
     "errorLugarSinRutinas": "Este lugar no admite rutinas de cuidado.",
     "errorInsumoAjeno": "Ese lote de insumo no pertenece a esta organización.",
     "errorUnidadDistinta": "La unidad no coincide con la del lote.",
-    "errorCantidadInvalida": "La cantidad tiene que ser un número mayor que cero."
+    "errorCantidadInvalida": "La cantidad tiene que ser un número mayor que cero.",
+    "errorUnidadObligatoria": "Si escribes una cantidad, escribe también su unidad."
   },
   "Secado": {
     "instalaciones": "Instalaciones de secado",

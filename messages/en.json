@@ -2740,7 +2740,8 @@
     "errorLugarSinRutinas": "This place doesn't support care routines.",
     "errorInsumoAjeno": "That consumable lot doesn't belong to this organization.",
     "errorUnidadDistinta": "The unit doesn't match the lot's unit.",
-    "errorCantidadInvalida": "The quantity must be a number greater than zero."
+    "errorCantidadInvalida": "The quantity must be a number greater than zero.",
+    "errorUnidadObligatoria": "If you enter a quantity, enter its unit too."
   },
   "Secado": {
     "instalaciones": "Drying facilities",
