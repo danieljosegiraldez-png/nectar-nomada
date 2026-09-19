@@ -42,8 +42,10 @@ function kilos(valor: number, codigo: string) {
 /**
  * Suma los netos que quedan y, si queda alguno, fija con ellos el peso de la cosecha y asienta la
  * diferencia en el libro. Devuelve el total, o `null` si no quedan recipientes (el peso se queda).
+ * Devuelve un cierre `async (tx) => …`, la forma que `tests/arquitectura/audit-atomico.test.ts`
+ * reconoce como «dentro de una transacción» — se usa así: `await recalcularEn(…)(tx)`.
  */
-async function recalcular(tx: Tx, apiaryHarvestEventId: string, userAccountId: string, motivo: string | null) {
+const recalcularEn = (apiaryHarvestEventId: string, userAccountId: string, motivo: string | null) => async (tx: Tx) => {
   const antes = await tx.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: apiaryHarvestEventId } });
   const recipientes = await tx.harvestContainer.findMany({ where: { apiaryHarvestEventId }, select: { grossKg: true, tareKg: true } });
   if (recipientes.length === 0) return null;
@@ -66,7 +68,7 @@ async function recalcular(tx: Tx, apiaryHarvestEventId: string, userAccountId: s
     tx,
   );
   return totalKg;
-}
+};
 
 export async function anotarRecipiente(
   userAccountId: string,
@@ -96,7 +98,7 @@ export async function anotarRecipiente(
           },
           tx,
         );
-        const totalKg = (await recalcular(tx, cosecha.id, userAccountId, null)) as number;
+        const totalKg = (await recalcularEn(cosecha.id, userAccountId, null)(tx)) as number;
         return { recipiente, totalKg };
       },
       { isolationLevel: "Serializable" },
@@ -130,7 +132,7 @@ export async function quitarRecipiente(userAccountId: string, input: { container
         },
         tx,
       );
-      const totalKg = await recalcular(tx, antes.apiaryHarvestEventId, userAccountId, motivo);
+      const totalKg = await recalcularEn(antes.apiaryHarvestEventId, userAccountId, motivo)(tx);
       return { totalKg };
     },
     { isolationLevel: "Serializable" },

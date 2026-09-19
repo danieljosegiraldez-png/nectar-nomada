@@ -118,6 +118,10 @@
       "razon": "Módulo de dominio: el nodo de sensores. Registrar, instalar y mover exigen `requireHiveNodeAccess` (hive_node:manage, que el Farm Operator no tiene) sobre el sitio o la colmena ANTES de escribir; el nodo tiene que ser de la finca de la colmena. Los cruces de intervalos se comprueban dentro de la transaccion y los abiertos los sostiene la base con indices parciales. Escritura y AuditEvent en la MISMA transaccion."
     },
     {
+      "archivo": "lib/apiary/recipientes.ts",
+      "razon": "Módulo de dominio: la pesada por recipiente (spec 2026-09-19 §3). Anotar y quitar exigen `requireApiaryAccess` manage sobre la caja de la cosecha ANTES de escribir, en transacción Serializable; el peso de la cosecha y su asiento en el libro del lote van por `asentarPesoDeCosechaEn`, con AuditEvent de recipiente y de cosecha en la MISMA transacción."
+    },
+    {
       "archivo": "lib/apiary/cera.ts",
       "razon": "Módulo de dominio: la cera con el color de su año (spec 2026-09-18 §5). Anotar exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir; la leyenda, view. La colmena de una entrada tiene que ser de la misma finca. Escritura y AuditEvent en la MISMA transacción. El color no se guarda: lo calcula `colorDelAño`. `marcosNegrosDelApiario` (ADR-176) exige view sobre el apiario y sólo lee inspecciones de sus cajas."
     },
@@ -630,6 +634,14 @@
     {
       "archivo": "lib/traceability/concesiones.ts",
       "razon": "ADR-168, corrección del 2026-09-18 (hallazgo 2 de la revisión independiente de Codex) — `escribirGrant` recibe el `tx` de `concederEditarBeneficio` para escribir el override CONDICIONALMENTE (UPDATE con WHERE effect:\"grant\", o INSERT con catch de P2002) dentro de la misma transacción serializable que decide si un `deny` de administración manda. Leer y escribir fuera de una única transacción es exactamente la carrera que el hallazgo señaló: el `upsert` anterior escribía `grant` sin condición. No abre su propia conexión ni amplía qué puede consultar: sólo opera sobre `assignment_permission_override`."
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "razon": "Spec 2026-09-19 §3: `asentarPesoDeCosechaEn(tx, cosecha, nuevoKg, usuario)` recibe el `tx` de quien fija el peso de una cosecha —`completarCierreDeCosecha` aquí mismo y `recipientes.ts`— para asentar la diferencia en el libro del lote DENTRO de la transacción que cambia el peso. Sólo crea un QuantityEvent del lote de esa cosecha; los dos llamadores ya comprobaron `apiary:manage` sobre su caja."
+    },
+    {
+      "archivo": "lib/apiary/recipientes.ts",
+      "razon": "Spec 2026-09-19 §3: `recalcularEn(cosecha, usuario, motivo)(tx)` recibe el `tx` Serializable de `anotarRecipiente`/`quitarRecipiente`, que ya comprobaron `apiary:manage` sobre la caja de la cosecha. Suma los netos, fija el peso por `asentarPesoDeCosechaEn` y audita la cosecha en esa misma transacción."
     }
   ],
   "operaciones_sin_patron": [

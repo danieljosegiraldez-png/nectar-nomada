@@ -4088,3 +4088,26 @@ de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos v
 (CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
 #396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
 mata el script cuando falla una función aunque esté a la izquierda de un `||`.
+
+### 2026-09-18 · El despacho dice de qué lote sale cada frasco
+
+ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
+`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
+cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
+libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
+
+### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
+
+Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
+parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
+- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
+  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
+- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
+  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
+  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
+- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
+- **Sin ver en navegador.**
+
+**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
+es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
+él decida.

@@ -11701,3 +11701,21 @@ inspeccion que no conto no borra el conteo anterior.
 
 **Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
 cada marco negro, y no se inventa.
+
+## ADR-177 -- La miel se pesa por recipiente, y el peso de la cosecha es la suma de sus netos
+
+**Contexto.** Q28 esta decidida en el paquete de Daniel (Fase 1): la cadena de la miel tiene que
+ser trazable con «gross/tare/net». Daniel, el 2026-09-19: se pesa **por recipiente**, cada balde o
+tambor lleno y su peso vacio. Spec `docs/superpowers/specs/2026-09-19-cera-y-pesada-por-recipiente-design.md`
+§3, plan `docs/superpowers/plans/2026-09-19-pesada-por-recipiente.md`.
+
+**Decision.** `harvest_container`: cosecha, etiqueta (unica por cosecha, no en blanco), bruto y
+tara (CHECK: tara >= 0, bruto > tara). El neto no se guarda. **Si la cosecha tiene recipientes, su
+peso es la suma de los netos**: anotar o quitar uno recalcula el peso en una transaccion
+`Serializable` y asienta solo la diferencia en el libro del lote, por **el mismo camino** que el
+peso a mano (`asentarPesoDeCosechaEn`, extraido de `completarCierreDeCosecha`). Mientras haya
+recipientes, el peso a mano se rechaza. Sobre un peso escrito a mano, el primer recipiente lo
+sustituye (pesar mejor no es corregir; el peso anterior queda en el `before`). Quitar el ultimo
+recipiente no borra el peso.
+
+**Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.
