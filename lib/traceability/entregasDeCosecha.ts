@@ -66,14 +66,19 @@ async function exigeOrigenAsignado(tx: Prisma.TransactionClient, jornadaId: stri
     (await tx.asignacionDeJornada.findMany({ where: { jornadaId, personId: recolectorId }, select: { locationId: true } })).map((a) => a.locationId),
   );
   if (!asignadas.size) throw new EntregaError("no_asignado_en_la_jornada");
-  let parcela: string | null = null;
-  if ("locationId" in origen) parcela = origen.locationId;
-  else if ("plotBlockId" in origen) parcela = (await tx.plotBlock.findUnique({ where: { id: origen.plotBlockId }, select: { locationId: true } }))?.locationId ?? null;
-  else {
-    const planta = await tx.specimen.findUnique({ where: { id: origen.specimenId }, select: { locationId: true, plotBlock: { select: { locationId: true } } } });
-    parcela = planta?.plotBlock?.locationId ?? planta?.locationId ?? null;
-  }
+  const parcela = await parcelaDeOrigen(tx, origen);
   if (!parcela || !asignadas.has(parcela)) throw new EntregaError("origen_no_asignado");
+}
+
+/**
+ * La parcela de un origen: ella misma, la de un bloque, o la de una planta (directa o por su
+ * bloque). `null` si el bloque o la planta no existen. La usan también las situaciones de campo.
+ */
+export async function parcelaDeOrigen(db: Prisma.TransactionClient, origen: OrigenDeEntrega): Promise<string | null> {
+  if ("locationId" in origen) return origen.locationId;
+  if ("plotBlockId" in origen) return (await db.plotBlock.findUnique({ where: { id: origen.plotBlockId }, select: { locationId: true } }))?.locationId ?? null;
+  const planta = await db.specimen.findUnique({ where: { id: origen.specimenId }, select: { locationId: true, plotBlock: { select: { locationId: true } } } });
+  return planta?.plotBlock?.locationId ?? planta?.locationId ?? null;
 }
 
 export interface AnotarEntregaInput {

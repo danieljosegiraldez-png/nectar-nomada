@@ -18,6 +18,10 @@
   ],
   "importan_cliente_total": [
     {
+      "archivo": "lib/traceability/situacionesDeCampo.ts",
+      "razon": "Módulo de dominio: las situaciones de campo del recolector en su jornada de cosecha (spec 2026-09-18 jornada y entrega §3.5). Reportar exige, ANTES de escribir, `field_report:create_own` sobre el sitio de la finca y estar asignado en esa jornada abierta, y sólo sobre lo asignado; la FieldSession, el FieldEvent y sus AuditEvent van en la misma transacción. Compuerta propia a propósito: no pasa por `requireLocationAttributeAccess` porque esa es la autoridad sobre sol, sombra y suelo. Leer: todo con `field_report:view` sobre la finca; si no, sólo los eventos de la Person de la cuenta."
+    },
+    {
       "archivo": "lib/traceability/entregasDeCosecha.ts",
       "razon": "Módulo de dominio: la entrega de cosecha de la finca al beneficio (spec 2026-09-18 jornada y entrega §3.3–3.4). Anotar exige, ANTES de escribir, `harvest_delivery:create_own` sobre el sitio si la entrega es del propio recolector de la cuenta, y si no `requireLotAccess(manage)`; anular exige `requireLotAccess(manage)`. Cada escritura lleva su AuditEvent en la misma transacción. `misEntregas` sólo lee filas de la Person de la propia cuenta."
     },
