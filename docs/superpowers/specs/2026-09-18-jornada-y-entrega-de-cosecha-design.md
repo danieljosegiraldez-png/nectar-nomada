@@ -24,6 +24,8 @@ Respuestas del mismo día:
 | «listo para cosechar» y asignar | **una jornada de cosecha**: fecha, parcelas listas y qué recolectores van a cada una |
 | cómo se juntan las entregas en lotes | **al crear el lote**, eligiendo qué entregas recibidas entran |
 | flotación, selección, repesado: sobre qué | **depende del día**: sobre una entrega sola o sobre una tanda |
+| el recolector también reporta | «recolector puede hacer un registro de jornada que puedan ver sus superiores y demás que deben reportar o trabajan ese lote, si se les da autorización: ver situaciones de campo de parcelas, microparcelas, bloques, specimen y/o algún lote» |
+| con qué forma | **las dos**: un tipo del catálogo si aplica, o «otro» con nota libre; y foto |
 | cómo se construye | **tres piezas**, en este orden: (1) jornada y entrega en finca, (2) recepción con doble peso en el beneficio, (3) de la recepción al lote |
 
 **Este documento es la pieza 1.** Las piezas 2 y 3 tendrán su propio spec.
@@ -102,12 +104,34 @@ Una fila por viaje de un recolector al beneficio.
 - Lo que cada persona entrega es **dato personal** (Ley 81 de 2019, aviso del spec de Finca, §3).
   Quién ve los datos con nombre sigue siendo el permiso de §5.5 de ese spec.
 
-### 3.5 Pantallas
+### 3.5 Las situaciones de campo que reporta el recolector
+
+- **Ya existe casi todo.** La jornada de campo (`FieldSession`, sobre una ubicación y con su
+  operador) lleva eventos de campo (`FieldEvent`). Cada evento tiene su tipo de un catálogo,
+  nota, foto (`Asset`), GPS y enlaces opcionales a una planta, una medición o una cosecha.
+  **No se crea un modelo nuevo:** se usa ése.
+- **Lo que cambia:**
+  - el recolector con cuenta, durante su jornada de cosecha, puede anotar situaciones de campo
+    sobre lo que tiene asignado: parcela, microparcela, bloque o planta. También sobre un lote,
+    si su jornada lo toca;
+  - cada situación lleva un tipo del catálogo o **«otro» con nota obligatoria**, más la foto.
+- **Quién lo ve:**
+  - **sus superiores** en esa finca (Farm Manager y capataz), siempre;
+  - **los demás** que trabajan esa parcela o ese lote, **sólo si se les concede** un permiso
+    nuevo de ver situaciones de campo en ese ámbito (el nombre se fija en el plan contra
+    `lib/rbac/catalog.ts`);
+  - nadie más.
+- **Hoy abrir una jornada de campo exige `location:manage_attributes`**, que el recolector no
+  tiene ni debe tener: es la autoridad para reescribir sol, sombra y suelo. Se hace como el
+  apiario (`requireFieldSessionAccess`): una compuerta propia para registrar sin ensanchar ese
+  permiso.
+
+### 3.6 Pantallas
 
 - **Finca → Jornadas:** la lista de jornadas de la finca elegida, y abrir una.
 - **La jornada:** sus parcelas, quién va a cada una, las entregas que lleva, y «Anotar entrega».
-- **Mis entregas** (perfil Recolector): la jornada de hoy donde está asignado y el botón para
-  anotar la suya. Pensada para celular.
+- **Mis entregas** (perfil Recolector): la jornada de hoy donde está asignado, el botón para
+  anotar la suya y el de «Reportar algo del campo». Pensada para celular.
 
 ## 4. Lo que cambia del spec de Finca
 
@@ -138,3 +162,9 @@ Una fila por viaje de un recolector al beneficio.
 - Un Farm Operator de OTRA finca no abre jornadas aquí.
 - Una jornada cerrada no admite entregas nuevas.
 - Anular una entrega exige motivo y la deja visible como anulada.
+- **Situaciones de campo:**
+  - el recolector reporta sobre lo que tiene asignado y no sobre otra parcela;
+  - su superior la ve;
+  - un compañero **sin** el permiso no la ve, y **con** el permiso sí (control positivo);
+  - reportarla no le da `location:manage_attributes`;
+  - «otro» sin nota se rechaza.
