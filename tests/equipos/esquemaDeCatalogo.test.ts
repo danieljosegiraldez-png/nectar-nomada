@@ -18,6 +18,11 @@ async function rechaza(p: Promise<unknown>) {
   await expect(p).rejects.toThrow();
 }
 
+/** Rechazo que además dice POR QUÉ: el nombre de la restricción o del disparador. */
+async function rechazaCon(p: Promise<unknown>, motivo: RegExp) {
+  await expect(p).rejects.toThrow(motivo);
+}
+
 beforeAll(async () => {
   const org = (n: string) =>
     prisma.organization.create({ data: { organizationType: "farm", name: `TEST ${n} ${RUN}`, status: "approved", classification: "internal" } });
@@ -159,5 +164,57 @@ describe("rutinas: forma en la base", () => {
     await prisma.careRoutineEvent.create({
       data: { routineId: r.id, performedOn: new Date("2026-09-01T00:00:00Z"), provenanceClass: "original_record", voidedAt: new Date(), voidReason: "fecha equivocada" },
     });
+  });
+});
+
+describe("restricciones de la revisión final (catalogos_restricciones)", () => {
+  it("el dueño y el tipo de un modelo no cambian; sus notas sí", async () => {
+    const m = await modelo({ manufacturer: `INM ${RUN}`, modelName: "fijo", organizationId: orgA });
+    await rechazaCon(prisma.equipmentModel.update({ where: { id: m.id }, data: { organizationId: orgB } as never }), /equipment_model_dueno_inmutable/);
+    await rechazaCon(prisma.equipmentModel.update({ where: { id: m.id }, data: { organizationId: null } as never }), /equipment_model_dueno_inmutable/);
+    await rechazaCon(prisma.equipmentModel.update({ where: { id: m.id }, data: { kind: "tool" } }), /equipment_model_tipo_inmutable/);
+    // Control positivo: editar las notas del mismo modelo SÍ entra.
+    await prisma.equipmentModel.update({ where: { id: m.id }, data: { notes: "calibrado de fábrica" } });
+    const fila = await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } });
+    expect([fila.organizationId, fila.kind, fila.notes]).toEqual([orgA, "instrument", "calibrado de fábrica"]);
+  });
+
+  it("dos «limpieza» activas chocan aunque sus notas difieran; dos «otra» con notas distintas conviven", async () => {
+    const e = await equipo(orgA, "instrument", null);
+    const l1 = await prisma.careRoutine.create({ data: { kind: "limpieza", kindNote: "con agua", intervalDays: 7, equipmentId: e.id } });
+    rutinas.push(l1.id);
+    await rechazaCon(
+      prisma.careRoutine.create({ data: { kind: "limpieza", kindNote: "con alcohol", intervalDays: 7, equipmentId: e.id } }),
+      /Unique constraint/,
+    );
+    const o1 = await prisma.careRoutine.create({ data: { kind: "otra", kindNote: "engrase", intervalDays: 7, equipmentId: e.id } });
+    rutinas.push(o1.id);
+    const o2 = await prisma.careRoutine.create({ data: { kind: "otra", kindNote: "desinfección", intervalDays: 7, equipmentId: e.id } });
+    rutinas.push(o2.id);
+    // Y lo mismo para las rutinas de sitio.
+    const s1 = await prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "a", intervalDays: 30, locationId: sitioA } });
+    rutinas.push(s1.id);
+    await rechazaCon(prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "b", intervalDays: 30, locationId: sitioA } }), /Unique constraint/);
+  });
+
+  it("motivo de anulación, nota de tipo y nota de material no pueden ser sólo espacios", async () => {
+    const e = await equipo(orgA, "instrument", null);
+    const r = await prisma.careRoutine.create({ data: { kind: "mantenimiento", intervalDays: 30, equipmentId: e.id } });
+    rutinas.push(r.id);
+    const evento = (voidReason: string) =>
+      prisma.careRoutineEvent.create({
+        data: { routineId: r.id, performedOn: new Date("2026-09-01T00:00:00Z"), provenanceClass: "original_record", voidedAt: new Date(), voidReason },
+      });
+    await rechazaCon(evento("   "), /care_routine_event_motivo_no_vacio/);
+    await evento("fecha equivocada");
+    await rechazaCon(
+      prisma.careRoutine.create({ data: { kind: "otra", kindNote: "  ", intervalDays: 7, equipmentId: e.id } }),
+      /care_routine_nota_no_vacia/,
+    );
+    await rechazaCon(
+      modelo({ manufacturer: `NOTA ${RUN}`, modelName: "blanca", kind: "vessel", contactMaterial: "otro", contactMaterialNote: " " }),
+      /equipment_model_nota_de_material_no_vacia/,
+    );
+    await modelo({ manufacturer: `NOTA ${RUN}`, modelName: "con-nota", kind: "vessel", contactMaterial: "otro", contactMaterialNote: "cobre" });
   });
 });

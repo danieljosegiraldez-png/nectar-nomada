@@ -4953,7 +4953,9 @@ enum CareRoutineKind {
 
 /// Catálogo de referencia (spec §2): nulo en `organizationId` = compartido.
 /// Unicidad, CHECK y la exclusión de capacidad fuera de vaso/máquina viven en la
-/// migración `catalogos_y_rutinas`: Prisma no sabe escribirlos.
+/// migración `catalogos_y_rutinas`; que dueño y tipo no cambien (disparador) y
+/// que la nota de material no sea sólo espacios, en `catalogos_restricciones`.
+/// Prisma no sabe escribirlos.
 model EquipmentModel {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -5013,8 +5015,9 @@ model EquipmentModelSpec {
 }
 
 /// Qué toca y cada cuánto, sobre UNA cosa: un equipo o un sitio (CHECK en la
-/// migración). Avisa, nunca bloquea (D1). Una activa por (cosa, tipo): índice
-/// parcial en la migración.
+/// migración). Avisa, nunca bloquea (D1). Una activa por (cosa, tipo), y sólo
+/// `otra` distingue además por su nota: índice parcial de expresión en
+/// `catalogos_restricciones`, como el CHECK de nota no vacía.
 model CareRoutine {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
