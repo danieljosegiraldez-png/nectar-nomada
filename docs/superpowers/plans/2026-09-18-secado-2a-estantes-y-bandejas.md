@@ -619,7 +619,7 @@ En `lib/traceability/instalaciones.ts`, `detalleInstalacion` añade:
     if (!(await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: r.id }, r.classification))) continue;
     const todas = await prisma.location.findMany({
       where: { parentLocationId: r.id }, orderBy: [{ rackLevel: "asc" }, { rackSlot: "asc" }],
-      select: { id: true, rackLevel: true, rackSlot: true, classification: true, shadePercentage: true, shadeDescription: true },
+      select: { id: true, name: true, rackLevel: true, rackSlot: true, classification: true, shadePercentage: true, shadeDescription: true },
     });
     const posiciones = [];
     for (const p of todas) {
@@ -632,7 +632,7 @@ En `lib/traceability/instalaciones.ts`, `detalleInstalacion` añade:
       puestos: Math.max(0, ...todas.map((p) => p.rackSlot ?? 0)),
       shadePercentage: r.shadePercentage, shadeDescription: r.shadeDescription,
       posiciones: posiciones.map((p) => ({
-        id: p.id, nivel: p.rackLevel!, puesto: p.rackSlot!,
+        id: p.id, name: p.name, nivel: p.rackLevel!, puesto: p.rackSlot!,
         shadePercentage: p.shadePercentage, shadeDescription: p.shadeDescription,
       })),
     });
@@ -645,7 +645,30 @@ y `estantes` en el `return`. La página calcula `puedeEditarBeneficioEn(user, es
 - en la rejilla, cada celda es un enlace a `?posicion=<id>`, y con ese parámetro la página pinta, debajo de la rejilla, `FormularioUbicacion` con `tipo="drying_bed"` y `existente` de esa posición;
 - **`actualizarUbicacionDeSecado` conserva el nivel y el puesto de una posición:** si `before.rackSlot != null`, escribe `rackLevel: before.rackLevel` y deja `rackSlot` sin tocar, ignore lo que traiga el formulario;
 - la celda enseña su sombra si la tiene, y si no, **nada**: la de la instalación ya está arriba, marcada;
-- una prueba en `estantes.test.ts`: actualizar la sombra de una posición deja `rackLevel` y `rackSlot` intactos.
+- una prueba en `estantes.test.ts`: actualizar la sombra de una posición deja `rackLevel` y `rackSlot` intactos;
+- **al guardar, `guardarInstalacionFormAction` vuelve a la INSTALACIÓN**, no al padre inmediato: el padre de una posición es el estante, y `/instalaciones/<estante>` da 404 porque `detalleInstalacion` sólo acepta `drying_facility` (segunda pasada de Codex). La línea del destino pasa a:
+
+  ```ts
+  destination = row.locationType === "drying_facility" ? row.id : await instalacionDe(row.id);
+  ```
+
+  con esta función, en `lib/traceability/instalaciones.ts`:
+
+  ```ts
+  /** La instalación de una cama o posición: sube hasta el primer `drying_facility`. */
+  export async function instalacionDe(locationId: string): Promise<string> {
+    let actual = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { id: true, locationType: true, parentLocationId: true } });
+    for (let i = 0; i < 4 && actual.locationType !== "drying_facility"; i++) {
+      if (!actual.parentLocationId) break;
+      actual = await prisma.location.findUniqueOrThrow({ where: { id: actual.parentLocationId }, select: { id: true, locationType: true, parentLocationId: true } });
+    }
+    if (actual.locationType !== "drying_facility") throw new SecadoFormError("tipo_invalido");
+    return actual.id;
+  }
+  ```
+
+  El `4` es el alto máximo del árbol (posición → estante → instalación → sitio): **no es un umbral de dominio**. Impide el bucle infinito si alguna vez hubiera un ciclo;
+- `FormularioUbicacion` recibe la posición **con su `name`**: el DTO de arriba ya lo lleva, porque el tipo `existente` lo exige.
 
 En `lib/traceability/samplingEvents.ts`, `opcionesParaInspeccion`: la consulta de camas pasa a `where: { locationType: "drying_bed", parentLocation: { locationType: { not: "drying_rack" } } }`. **Por qué:** la inspección por bandeja es el paso 3. Hasta entonces, ofrecer 72 o 300 posiciones en un desplegable no sirve para nada.
 
@@ -1164,8 +1187,9 @@ export interface CapacidadPorEstado {
 }
 export async function capacidadDeTipo(userAccountId: string, trayTypeId: string): Promise<{ areaM2: number; estados: CapacidadPorEstado[] }>;
 export async function pesajesDeTipo(userAccountId: string, trayTypeId: string, estado: EstadoDeCarga): Promise<{
-  id: string; occurredAt: Date; lote: string | null; netKg: number; profundidadesCm: number[]; densidadKgM3: number;
-}[]>;
+  visibles: { id: string; occurredAt: Date; lote: string; netKg: number; profundidadesCm: number[]; densidadKgM3: number }[];
+  ocultos: number; // lecturas de lotes que esta persona no ve: se cuentan, no se enseñan
+}>;
 ```
 
 - [ ] **Paso 1: las pruebas que fallan**
@@ -1243,10 +1267,13 @@ describe("capacidad", () => {
   it("cada capacidad medida lleva a sus pesajes, y cada pesaje dice su lote sólo a quien lo ve", async () => {
     const mio = await registrarPesaje(operario, { trayTypeId: tipo4x2, lotId, materialState: "CHERRY", netKg: 8, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
     const suyo = await registrarPesaje(vecino, { trayTypeId: tipo4x2, lotId: loteB, materialState: "CHERRY", netKg: 8.4, profundidadesCm: [3, 3, 3], occurredAt: new Date() });
-    const lista = await pesajesDeTipo(operario, tipo4x2, "CHERRY");
-    expect(lista.map((x) => x.id).sort()).toEqual([mio.id, suyo.id].sort());
-    expect(lista.find((x) => x.id === mio.id)!.lote).not.toBeNull();
-    expect(lista.find((x) => x.id === suyo.id)!.lote).toBeNull(); // el número cuenta; el lote ajeno no se nombra
+    const { visibles, ocultos } = await pesajesDeTipo(operario, tipo4x2, "CHERRY");
+    expect(visibles.map((x) => x.id)).toEqual([mio.id]);       // el suyo no sale: ni peso ni profundidades
+    expect(visibles[0]!.lote).not.toBeNull();
+    expect(ocultos).toBe(1);                                    // pero cuenta, y la pantalla lo dice
+    expect(suyo.id).toBeTruthy();
+    // La capacidad (la media) sí los incluye a los dos, y lo dice con su contador.
+    expect((await capacidadDeTipo(operario, tipo4x2)).estados.find((x) => x.estado === "CHERRY")!.pesajes).toBe(2);
   });
 });
 
@@ -1318,8 +1345,11 @@ CREATE TABLE "traceability"."drying_tray_weighing" (
   -- (revisión de Codex del plan 2a): [3, NULL, 3] pasaba cardinalidad y el ALL,
   -- y una corrección con razón NULL pasaba la razón.
   CONSTRAINT "drying_tray_weighing_tres_o_cuatro_puntos" CHECK (
-    array_ndims("depth_points_cm") = 1 AND cardinality("depth_points_cm") BETWEEN 3 AND 4
-    AND array_position("depth_points_cm", NULL) IS NULL
+    -- CASE y no AND: array_position exige una dimensión, y el orden de evaluación
+    -- de un AND no está garantizado (segunda pasada de Codex).
+    CASE WHEN array_ndims("depth_points_cm") = 1
+      THEN cardinality("depth_points_cm") BETWEEN 3 AND 4 AND array_position("depth_points_cm", NULL) IS NULL
+      ELSE false END
   ),
   CONSTRAINT "drying_tray_weighing_profundidad_positiva" CHECK (0 < ALL("depth_points_cm")),
   CONSTRAINT "drying_tray_weighing_correccion_con_razon" CHECK (
@@ -1360,7 +1390,13 @@ CREATE TRIGGER "drying_tray_weighing_inmutable"
 CREATE OR REPLACE FUNCTION "traceability"."pesaje_no_se_borra"()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF current_setting('nn.limpieza_de_pruebas', true) = 'on' THEN RETURN OLD; END IF;
+  -- La puerta exige DOS cosas: el ajuste de sesión Y una base de PRUEBAS por su
+  -- nombre (nectar_test, nectar_ci…, o la desechable nn_flip_…). En producción la
+  -- base no se llama así, y el ajuste solo no abre nada (segunda pasada de Codex).
+  IF current_setting('nn.limpieza_de_pruebas', true) = 'on'
+     AND current_database() ~ '^(nectar_test|nectar_ci|nn_flip_)' THEN
+    RETURN OLD;
+  END IF;
   RAISE EXCEPTION 'Un pesaje no se borra: se corrige con un registro nuevo que lo supersede';
 END;
 $$ LANGUAGE plpgsql;
@@ -1426,11 +1462,14 @@ await prisma.$transaction(async (tx) => {
 });
 ```
 
-Y un **guardia de fuente**, en `tests/arquitectura/limpieza-de-pruebas-solo-en-pruebas.test.ts` (hermético, sin base):
-- recorre `lib/` y `app/` y exige **cero** apariciones de `nn.limpieza_de_pruebas`;
-- **control positivo:** la misma búsqueda sobre `tests/` encuentra al menos una.
+**Antes de fusionar hay que confirmar el nombre de la base de producción**, porque no puede empezar por `nectar_test`, `nectar_ci` ni `nn_flip_`. **Leer producción está prohibido** (`SESSION_STATE.md`): se mira el **nombre** en la URL de `DATABASE_URL` del proyecto de Vercel, sin conectarse, o se le pregunta a Daniel. Hasta saberlo, la puerta se da por no verificada, y así se dice en el PR.
 
-Sin el control, un guardia que no lee nada pasaría igual.
+Y un **guardia de fuente**, en `tests/arquitectura/limpieza-de-pruebas-solo-en-pruebas.test.ts` (hermético, sin base). Tiene tres partes, y cada una cierra la puerta por la que la anterior podría pasar vacía (segunda pasada de Codex):
+- la **función detectora**, `apariciones(texto)`, se prueba primero sobre un texto sintético que contiene `nn.limpieza_de_pruebas` y **tiene que encontrarlo**;
+- se recorren `lib/` y `app/` y se afirma **cuántos archivos se leyeron** (`> 100`: hoy son varios cientos). Un recorrido que no leyó nada no puede decir «cero»;
+- sobre esos archivos, **cero** apariciones.
+
+No se usa `tests/` como control: el propio guardia contiene la cadena y se encontraría a sí mismo.
 
 Las tablas `traceability.lot` y `core.person` están comprobadas en `prisma/schema.prisma` al escribir este plan: `@@map("lot")` va con `@@schema("traceability")`, y `@@map("person")` con `@@schema("core")`.
 
@@ -1452,7 +1491,7 @@ model DryingTrayWeighing {
   occurredAt       DateTime        @map("occurred_at")
   recordedAt       DateTime        @default(now()) @map("recorded_at")
   operatorPersonId String?         @map("operator_person_id") @db.Uuid
-  operator         Person?         @relation("DryingTrayWeighingOperator", fields: [operatorPersonId], references: [id])
+  operator         Person?         @relation("DryingTrayWeighingOperator", fields: [operatorPersonId], references: [id], onDelete: Restrict)
   provenanceClass  ProvenanceClass @map("provenance_class")
   supersedesId     String?         @map("supersedes_id") @db.Uuid
   supersedes       DryingTrayWeighing?  @relation("DryingTrayWeighingSupersedes", fields: [supersedesId], references: [id], onDelete: Restrict)
@@ -1460,7 +1499,10 @@ model DryingTrayWeighing {
   supersededAt     DateTime?       @map("superseded_at")
   correctionReason String?         @map("correction_reason")
   createdBy        String?         @map("created_by") @db.Uuid
-  creator          UserAccount?    @relation("DryingTrayWeighingCreatedBy", fields: [createdBy], references: [id])
+  creator          UserAccount?    @relation("DryingTrayWeighingCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  // Los dos `onDelete: Restrict`, explícitos: sin ellos Prisma supone SetNull en
+  // una relación opcional y el esquema diverge de la migración
+  // (tests/derivaDeMigraciones.test.ts lo caza; segunda pasada de Codex).
 
   @@index([trayTypeId])
   @@map("drying_tray_weighing")
@@ -1598,22 +1640,27 @@ export async function pesajesDeTipo(userAccountId: string, trayTypeId: string, e
   const filas = await prisma.dryingTrayWeighing.findMany({
     where: { trayTypeId, materialState: estado, supersededAt: null }, orderBy: { occurredAt: "desc" }, include: { lot: true },
   });
-  const salida = [];
+  // Una lectura de un lote que esta persona NO ve —por ámbito o por clasificación—
+  // no se enseña en absoluto: ni su lote, ni su peso, ni sus profundidades. Se
+  // CUENTA, para que la media que ve diga de cuántas lecturas sale (segunda pasada
+  // de Codex: ver la media no da derecho a cada lectura).
+  const visibles = [];
+  let ocultos = 0;
   for (const p of filas) {
-    let lote: string | null = null;
     try {
       await requireLotAccess(userAccountId, "view", [{ projectId: p.lot.projectId, locationId: p.lot.locationId, classification: p.lot.classification }]);
-      lote = p.lot.lotCode;
     } catch (error) {
       if (!(error instanceof TraceabilityAccessError)) throw error;
+      ocultos++;
+      continue;
     }
     const profundidadCm = media(p.depthPointsCm.map(Number));
-    salida.push({
-      id: p.id, occurredAt: p.occurredAt, lote, netKg: Number(p.netKg),
+    visibles.push({
+      id: p.id, occurredAt: p.occurredAt, lote: p.lot.lotCode, netKg: Number(p.netKg),
       profundidadesCm: p.depthPointsCm.map(Number), densidadKgM3: Number(p.netKg) / (area * (profundidadCm / 100)),
     });
   }
-  return salida;
+  return { visibles, ocultos };
 }
 ```
 
@@ -1641,7 +1688,7 @@ Import: `TraceabilityAccessError`, junto a `requireLotAccess`, de `./lots`.
 
 **Qué enseña `/beneficio/bandejas`, de arriba abajo, para cada organización donde quien mira ve algún tipo o alguna bandeja:**
 1. **Tipos de bandeja**, cada uno con su medida en la unidad tecleada, su área en m² y su **capacidad por estado**:
-   - `medido`: «8,9 kg · medido con 2 pesajes», y **«ver pesajes»** despliega, con un `<details>`, la lista de `pesajesDeTipo`: fecha, lote (o «lote sin acceso»), kg, profundidades y densidad de cada uno. Es el camino de vuelta de la cifra;
+   - `medido`: «8,9 kg · medido con 2 pesajes», y **«ver pesajes»** despliega, con un `<details>`, la lista de `pesajesDeTipo`: fecha, lote, kg, profundidades y densidad de cada lectura **que quien mira puede ver**. Si hay `ocultos`, una línea: «y N pesajes de lotes que tu cuenta no ve». Es el camino de vuelta de la cifra;
    - `estimado`: «≈ 8,3 kg · estimado, sin medir», con la fuente al lado;
    - `sin_medir`: «sin medir».
 
@@ -1736,7 +1783,9 @@ Si falla una prueba fuera de estos archivos, se compara con `main` antes de atri
   15. En `tiposDeBandeja`, cambiar `lugaresDeOrganizacion` por las ubicaciones propias sin descendientes → cae una prueba nueva de `bandejas.test.ts`: un operario asignado en un hijo con `organizationId` nulo ve los tipos.
   16. En `pesajesDeTipo`, nombrar el lote sin comprobar acceso → cae «cada capacidad medida lleva a sus pesajes…» en su última línea.
 
-Las dos pruebas nuevas de los flips 14 y 15 se escriben **en su tarea** (T2 y T3), con su control positivo al lado: la instalación `internal` sí sale, y el operario de la ubicación propia también ve los tipos.
+Las dos pruebas nuevas de los flips 14 y 15 se escriben **en su tarea** (T2 y T3), cada una con su control positivo al lado:
+- **Flip 14:** en la misma instalación `internal` hay **un estante `internal` que SÍ sale**, con sus posiciones, junto al `confidential` que no sale. Si no, una implementación que devolviera siempre `estantes: []` pasaría las dos mitades (segunda pasada de Codex).
+- **Flip 15:** el operario de la ubicación propia también ve los tipos.
 
 - [ ] **Paso 6: PR.**
   - Contar los archivos con `git diff --name-only origin/main...HEAD`, con **tres** puntos. Deben salir los de este plan.
