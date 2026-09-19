@@ -101,8 +101,28 @@ medición no cuelga de una parcela.
     - Cada registro pasa por el mismo `ingerirObservacion`, con origen «descarga».
     - **La idempotencia es la de siempre** (dispositivo, época, secuencia): si una lectura llegó
       por la red y otra vez en el archivo, cuenta una, y se ve que llegó por las dos.
-- **El formato del archivo no se inventa.** El importador se escribe contra **un archivo real
-  descargado de una consola**. Hasta tenerlo, la subida no se construye: ver §4.
+- **El formato ya lo define el diseño de la consola** (`docs/architecture/fuentes/smart-hive-v1/`,
+  comprobado el 2026-09-18):
+  - la consola guarda cada lectura en su flash (LittleFS) como un `.rec` con CRC;
+  - sin nube, «los registros quedan para exportar por USB»;
+  - en el sitio se copian por el puerto USB y `tools/export_logs.py` los convierte en un
+    **NDJSON** (una línea por lectura), sin tocar los originales;
+  - **cada línea es el mismo sobre `nn.hive.observation/1`** que ya ingiere la ruta de Notehub
+    (`schemas/telemetry.schema.json`; ejemplo `schemas/example-offline.json`, con `ts` nulo y
+    `time_quality: unknown`).
+
+  Así que el importador **sube ese NDJSON** y pasa cada línea por `ingerirObservacion`, que ya
+  valida el sobre, la idempotencia y los conflictos. Una línea mala no tumba el archivo: se
+  informa cuántas entraron, cuántas eran duplicadas y cuáles se rechazaron y por qué.
+- **Las pruebas usan líneas sintéticas** construidas desde `telemetry.schema.json` y
+  `example-offline.json`, marcadas TEST. No son lecturas reales y no se presentan como tales.
+- **La energía la decide el firmware, no la app:** una captura por hora, hasta 8 registros
+  pendientes por despertar hacia la red, y sueño por el ATTN de la Notecard. La descarga por USB
+  no gasta datos celulares.
+- **Foto y video no van por aquí.** En el diseño no los toma el nodo, sino una extensión aparte:
+  una Raspberry Pi 5 con cámaras y su propia microSD. Su manifiesto
+  (`schemas/video-manifest.schema.json`: sha256, bytes, duración, calidad) es otra pieza, porque
+  el diseño calcula ~720 MB por día y no deben ir por la red celular.
 
 ### 3.4 Qué se ve
 
@@ -130,8 +150,9 @@ medición no cuelga de una parcela.
 
 ## 4. Fuera de esto, y lo que le toca a Daniel
 
-- **Un archivo real descargado por USB-C de una consola.** Sin él, la subida por cable no se
-  construye.
+- **La extensión de video** (manifiesto, subida con sha256 y reanudable): pieza aparte.
+- Probar con un archivo exportado de una consola real, cuando exista. El formato ya está
+  definido, así que esto confirma, no desbloquea.
 - Gráficas y alertas (por ejemplo, «lleva 3 días sin lluvia»).
 - Instrumentos en el beneficio: ya existen, con su traslado; no cambian.
 
@@ -157,5 +178,7 @@ medición no cuelga de una parcela.
   - sin intervalo no hay aviso;
   - con intervalo de 7 días y la última recarga hace 9, sale con 2 días de atraso;
   - recargar hoy lo quita (control positivo).
-- **Idempotencia:** la misma observación por la ruta y por el archivo cuenta una. Esta prueba
-  se escribe cuando exista el importador.
+- **Idempotencia:** la misma observación por la ruta y por el archivo cuenta una.
+- **Importador:** un NDJSON de tres líneas sintéticas, con una duplicada y una con `seq`
+  inválido, da 1 nueva, 1 duplicada y 1 rechazada con su motivo, y el archivo original queda
+  guardado.
