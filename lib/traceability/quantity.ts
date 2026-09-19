@@ -56,6 +56,15 @@ export async function recordQuantityEvent(userAccountId: string, input: RecordQu
 
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
+  // ADR-177, segunda revisión de Codex: el «recibido» de un lote de miel de cosecha ES el peso de
+  // esa cosecha, y sólo lo asientan los caminos del peso (cosechar, el cierre, los recipientes, la
+  // recuperación de `cosechasSinSaldo`), que lo miden para asentar diferencias. Uno genérico aquí
+  // se contaría como peso de la cosecha y la siguiente pesada lo absorbería. Los ajustes sí pasan:
+  // sin la etiqueta de la cosecha no cuentan como su peso.
+  if (input.eventType === "received" && (await prisma.apiaryHarvestEvent.count({ where: { resultingLotId: lot.id } })) > 0) {
+    throw new QuantityValidationError("recibido_de_cosecha_solo_por_su_peso");
+  }
+
   const quantityEvent = await prisma.$transaction(async (tx) => {
     const quantityEvent = await tx.quantityEvent.create({
       data: {

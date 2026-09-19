@@ -18,6 +18,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
+import { bloquearCosechaEn } from "./cierreDeCosecha";
 
 export class SaldoDeCosechaInvalido extends Error {}
 
@@ -70,9 +71,10 @@ export async function cosechasSinSaldo(apiaryId: string): Promise<CosechaSinSald
  * número**: se asienta el que está, así que no puede introducir uno distinto.
  *
  * El asiento es `received`, con la fecha de la COSECHA —cuando entró la miel— y la procedencia de
- * la cosecha, igual que el que ADR-161 escribe al cerrar. La comprobación de «sin asientos» se
- * repite DENTRO de la transacción, en `Serializable`: dos pulsaciones a la vez no asientan dos
- * veces.
+ * la cosecha, igual que el que ADR-161 escribe al cerrar. La comprobación de «sin asientos» y el
+ * peso se leen DENTRO de la transacción, con la cosecha bloqueada (`bloquearCosechaEn`, el mismo
+ * bloqueo que el cierre y los recipientes): dos pulsaciones a la vez no asientan dos veces, y un
+ * recipiente anotado a la vez no suma encima (segunda revisión de Codex, ADR-177).
  */
 export async function asentarPesoDeCosecha(userAccountId: string, apiaryHarvestEventId: string) {
   const cosecha = await prisma.apiaryHarvestEvent.findUnique({
@@ -83,17 +85,19 @@ export async function asentarPesoDeCosecha(userAccountId: string, apiaryHarvestE
   await requireApiaryAccess(userAccountId, "manage", [
     { projectId: cosecha.colony.hive.projectId, locationId: cosecha.colony.hive.locationId },
   ]);
-  if (cosecha.extractedWeightKg === null) throw new SaldoDeCosechaInvalido("cosecha_sin_peso");
 
   return prisma.$transaction(
     async (tx) => {
+      await bloquearCosechaEn(tx, cosecha.id);
+      const actual = await tx.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: cosecha.id } });
+      if (actual.extractedWeightKg === null) throw new SaldoDeCosechaInvalido("cosecha_sin_peso");
       const asientos = await tx.quantityEvent.count({ where: { lotId: cosecha.resultingLotId } });
       if (asientos > 0) throw new SaldoDeCosechaInvalido("el_lote_ya_tiene_saldo");
       const asiento = await tx.quantityEvent.create({
         data: {
           lotId: cosecha.resultingLotId,
           eventType: "received",
-          quantity: cosecha.extractedWeightKg!,
+          quantity: actual.extractedWeightKg,
           unit: "kg",
           occurredAt: cosecha.occurredAt,
           createdBy: userAccountId,
@@ -115,6 +119,5 @@ export async function asentarPesoDeCosecha(userAccountId: string, apiaryHarvestE
       );
       return asiento;
     },
-    { isolationLevel: "Serializable" },
   );
 }

@@ -11728,4 +11728,12 @@ recipiente no borra el peso.
    primero: con la lectura del libro abortaba transacciones ajenas que solo compartian la tabla.
 3. **`Number("")` es 0**: una tara o un bruto en blanco entraban como cero kilos. Ahora faltan.
 
+**Segunda vuelta de Codex, dos huecos del arreglo, cerrados igual.** Contar todos los `received`
+exige que **nadie mas** los escriba sobre un lote de cosecha: `recordQuantityEvent` ya no acepta un
+`received` generico ahi (los ajustes si, y sin la etiqueta de la cosecha no cuentan como su peso).
+Y la recuperacion de `cosechasSinSaldo` toma el mismo bloqueo y relee el peso dentro. **Lo que no se
+puede cerrar desde aqui:** un `received` generico que ya exista en produccion sobre un lote de
+cosecha seguiria contando como peso de esa cosecha. En la base local no hay cosechas, asi que no
+se pudo medir; si aparece, se ve como un saldo mayor que el peso.
+
 **Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.

@@ -675,7 +675,7 @@
     {
       "archivo": "lib/apiary/cierreDeCosecha.ts",
       "operacion": "bloquearCosechaEn",
-      "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus tres llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), y `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`), los tres con `requireApiaryAccess` manage sobre la caja de la cosecha.",
+      "razon": "Revisión de Codex de la pesada por recipiente (ADR-177): toma la fila de la cosecha con FOR UPDATE al principio de la transacción que cambia su peso, para que el cierre a mano y anotar/quitar un recipiente sobre la MISMA cosecha no se crucen. No lee ni devuelve datos. Sus cuatro llamadores autorizan ANTES: `completarCierreDeCosecha` (mismo archivo), `anotarRecipiente`/`quitarRecipiente` (recipientes.ts, vía `cosechaGestionable`) y `asentarPesoDeCosecha` (cosechasSinSaldo.ts), los cuatro con `requireApiaryAccess` manage sobre la caja de la cosecha.",
       "verificado": "2026-09-19"
     },
     {

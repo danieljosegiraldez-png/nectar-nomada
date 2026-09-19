@@ -10,7 +10,8 @@ import { crearApiario, createColony, createHive } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { anotarRecipiente, quitarRecipiente } from "../../lib/apiary/recipientes";
-import { computeCurrentQuantity } from "../../lib/traceability/quantity";
+import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
+import { asentarPesoDeCosecha } from "../../lib/apiary/cosechasSinSaldo";
 
 const RUN = `rcp-${Date.now()}`;
 const dia = (s: string) => new Date(`${s}T09:00:00Z`);
@@ -249,3 +250,33 @@ describe("a la vez sobre la misma cosecha (Codex)", () => {
   });
 });
 
+// Segunda revisión de Codex: lo aportado cuenta TODOS los «recibido» del lote, así que uno genérico
+// se tomaba por peso de la cosecha; y la recuperación de `cosechasSinSaldo` escribía sin el bloqueo.
+describe("nadie más escribe el peso de la cosecha por su cuenta (Codex, segunda vuelta)", () => {
+  it("UN «RECIBIDO» GENÉRICO SOBRE UN LOTE DE COSECHA se rechaza; un ajuste sí entra", async () => {
+    const h = await cosecha();
+    const base = { lotId: h.resultingLotId, quantity: 10, unit: "kg", occurredAt: dia("2026-05-04"), provenanceClass: "direct_observation" as const };
+    await expect(recordQuantityEvent(adminId, { ...base, eventType: "received" })).rejects.toThrow(/recibido_de_cosecha_solo_por_su_peso/);
+    // el control: el mismo usuario, el mismo lote, otro tipo — el rechazo no es de permiso
+    await recordQuantityEvent(adminId, { ...base, eventType: "adjustment_increase" });
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(10, 3);
+    // y ese ajuste sin etiqueta no se toma por peso de la cosecha
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: 1 });
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(35, 3);
+  });
+
+  it("LA RECUPERACIÓN HISTÓRICA CRUZADA CON UN RECIPIENTE: peso y libro coinciden", async () => {
+    for (let vuelta = 0; vuelta < 4; vuelta++) {
+      const h = await cosecha();
+      await prisma.apiaryHarvestEvent.update({ where: { id: h.id }, data: { extractedWeightKg: 30 } }); // como antes de ADR-161
+      await Promise.allSettled([
+        asentarPesoDeCosecha(adminId, h.id),
+        anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: 1 }),
+      ]);
+      const fila = await prisma.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: h.id }, include: { containers: true } });
+      expect(fila.containers.length).toBe(1); // el recipiente entra siempre; la recuperación puede perder
+      expect(Number(fila.extractedWeightKg)).toBeCloseTo(25, 3);
+      expect(await saldo(h.resultingLotId)).toBeCloseTo(25, 3);
+    }
+  });
+});
