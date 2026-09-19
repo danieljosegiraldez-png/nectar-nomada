@@ -138,6 +138,13 @@ describe("capacidad", () => {
   it("sin pesajes: cereza sale ESTIMADA con la fuente del plan de secado (≈ 8,3 kg en 4×2); mucílago y lavado, SIN MEDIR y sin número", async () => {
     const cap = await capacidadDeTipo(operario, tipo4x2);
     const por = (e: string) => cap.estados.find((x) => x.estado === e)!;
+    // Control del área (revisión de fix round 1): (1) el área de lo GUARDADO,
+    // exacta — 121,9 × 61,0 cm / 10.000 = 0,74359 m² (bandeja 4×2 pies, redondeada
+    // a un decimal por `crearTipoDeBandeja`); (2) contra la fuente independiente,
+    // el plan de secado §6 dice «0,743 m²», con la tolerancia de su redondeo a tres
+    // decimales. Mismo par de comprobaciones que `tests/equipos/bandejas.test.ts`.
+    expect(cap.areaM2).toBeCloseTo(0.74359, 5);
+    expect(Math.abs(cap.areaM2 - 0.743)).toBeLessThan(0.001);
     // Control contra la fuente independiente: el plan de secado §6 dice 8,3 kg por
     // bandeja 4×2 a 2,8 cm y 400 kg/m³.
     expect(por("CHERRY")).toMatchObject({ fuente: "estimado", pesajes: 0, densidadKgM3: 400, profundidadCm: 2.8 });
@@ -237,5 +244,18 @@ describe("reglas del pesaje en la base", () => {
     await expect(prisma.dryingTrayWeighing.delete({ where: { id: p.id } })).rejects.toThrow(/pesaje no se borra/);
     await expect(prisma.dryingTrayType.update({ where: { id: tipo4x2 }, data: { organizationId: otraOrg } })).rejects.toThrow(/no cambia de organizacion/);
     await expect(prisma.lot.update({ where: { id: lotId }, data: { organizationId: otraOrg } })).rejects.toThrow(/lote con pesajes de bandeja no cambia/);
+
+    // Control positivo (revisión de fix round 1): un tipo y un lote SIN pesajes SÍ
+    // se mudan de organización. Sin este control, un disparador que rechazara
+    // SIEMPRE —tuviera pesajes el padre o no— pasaría las dos comprobaciones de
+    // arriba igual de verde. Los ids se registran para la limpieza ANTES de la
+    // mutación, así que quedan cubiertos por el `afterAll` aunque una aserción de
+    // aquí abajo fallara.
+    const tipoSinPesajes = (await crearTipoDeBandeja(gerente, { organizationId: org, nombre: `sin-pesajes ${randomUUID()}`, ancho: 1, largo: 1, unidad: "ft" })).id;
+    tipos.push(tipoSinPesajes);
+    const loteSinPesajes = (await createLot(operario, { lotCode: nombre("lote-sin-pesajes"), lotType: "drying", organizationId: org, locationId: sitioA })).id;
+    lotIds.push(loteSinPesajes);
+    expect((await prisma.dryingTrayType.update({ where: { id: tipoSinPesajes }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
+    expect((await prisma.lot.update({ where: { id: loteSinPesajes }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
   });
 });
