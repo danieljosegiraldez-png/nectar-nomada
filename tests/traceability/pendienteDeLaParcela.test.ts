@@ -11,7 +11,7 @@ import {
   type EntradaDePendiente,
 } from "../../lib/traceability/pendienteDeLaParcela";
 import type { EstadoDeProduccion } from "../../lib/traceability/estadoDeProduccion";
-import type { IntervencionParaCarencia } from "../../lib/traceability/carenciaDeIntervencion";
+import type { IntervencionParaAviso } from "../../lib/traceability/pendienteDeLaParcela";
 
 const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   hoy: "2026-09-16",
@@ -29,8 +29,11 @@ const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   ...over,
 });
 
-const aplic = (lineas: IntervencionParaCarencia["lineas"], occurredAt = new Date("2026-09-16T10:00:00Z")): IntervencionParaCarencia =>
-  ({ id: "i1", kind: "aplicacion", occurredAt, lineas });
+const aplic = (
+  lineas: IntervencionParaAviso["lineas"],
+  occurredAt = new Date("2026-09-16T10:00:00Z"),
+  locationId = "L",
+): IntervencionParaAviso => ({ id: "i1", kind: "aplicacion", occurredAt, lineas, locationId });
 
 describe("venceElMuestreo", () => {
   it("vence el mismo día y mes del año siguiente", () => {
@@ -136,15 +139,15 @@ describe("pendienteDeLaParcela", () => {
   it("reentrada y carencia vigentes: dos avisos en «toca hacer»", () => {
     const r = pendienteDeLaParcela(base({ intervenciones: [aplic([{ withdrawalDays: 7, reentryHours: 12 }])] }));
     expect(r.tocaHacer).toEqual([
-      { tipo: "reentrada_vigente", interventionId: "i1", hasta: new Date("2026-09-16T22:00:00Z") },
-      { tipo: "carencia_vigente", interventionId: "i1", hasta: new Date("2026-09-23T10:00:00Z"), dias: 7 },
+      { tipo: "reentrada_vigente", interventionId: "i1", locationId: "L", hasta: new Date("2026-09-16T22:00:00Z") },
+      { tipo: "carencia_vigente", interventionId: "i1", locationId: "L", hasta: new Date("2026-09-23T10:00:00Z"), dias: 7 },
     ]);
   });
   it("no declaradas: van a «falta un dato», NUNCA desaparecen", () => {
     const r = pendienteDeLaParcela(base({ ahora: new Date("2030-01-01T00:00:00Z"), intervenciones: [aplic([{ withdrawalDays: null, reentryHours: null }])] }));
     expect(r.faltaUnDato).toEqual(expect.arrayContaining([
-      { tipo: "carencia_no_declarada", interventionId: "i1", alMenosHasta: null },
-      { tipo: "reentrada_no_declarada", interventionId: "i1", alMenosHasta: null },
+      { tipo: "carencia_no_declarada", interventionId: "i1", locationId: "L", alMenosHasta: null },
+      { tipo: "reentrada_no_declarada", interventionId: "i1", locationId: "L", alMenosHasta: null },
     ]));
   });
   it("cumplidas: nada", () => {
@@ -152,8 +155,20 @@ describe("pendienteDeLaParcela", () => {
     expect(r.tocaHacer).toEqual([]);
   });
   it("manejo cultural: nada", () => {
-    const r = pendienteDeLaParcela(base({ intervenciones: [{ id: "c", kind: "manejo_cultural", occurredAt: new Date("2026-09-16T10:00:00Z"), lineas: [] }] }));
+    const r = pendienteDeLaParcela(base({ intervenciones: [{ id: "c", kind: "manejo_cultural", occurredAt: new Date("2026-09-16T10:00:00Z"), lineas: [], locationId: "L" }] }));
     expect(r).toEqual({ tocaHacer: [], faltaUnDato: [] });
+  });
+
+  // Ronda final, hallazgo 6: una intervención heredada de la parcela MADRE
+  // lleva su PROPIO locationId, distinto del de la parcela que pide el
+  // tablero — así es como llega desde `intervencionesVigentes`, que reúne las
+  // de `ubicacionesEmparentadas`.
+  it("una intervención heredada lleva su propio locationId, no el de la parcela que avisa", () => {
+    const r = pendienteDeLaParcela(base({ intervenciones: [aplic([{ withdrawalDays: 7, reentryHours: 12 }], undefined, "MADRE")] }));
+    expect(r.tocaHacer).toEqual([
+      { tipo: "reentrada_vigente", interventionId: "i1", locationId: "MADRE", hasta: new Date("2026-09-16T22:00:00Z") },
+      { tipo: "carencia_vigente", interventionId: "i1", locationId: "MADRE", hasta: new Date("2026-09-23T10:00:00Z"), dias: 7 },
+    ]);
   });
 });
 
@@ -166,5 +181,23 @@ describe("enlaceDelAviso", () => {
     expect(enlaceDelAviso({ tipo: "area_no_valida" }, "L")).toBe("/plots/L/ajustes#areaHectares");
     expect(enlaceDelAviso({ tipo: "siembras_sin_conteo", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
     expect(enlaceDelAviso({ tipo: "siembras_sin_marcar", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
+    expect(
+      enlaceDelAviso({ tipo: "reentrada_vigente", interventionId: "i1", locationId: "L", hasta: new Date() }, "L"),
+    ).toBe("/plots/L/manejo/i1");
+  });
+
+  // Ronda final, hallazgo 6: el enlace usa la ubicación DE LA INTERVENCIÓN,
+  // no el segundo argumento — que aquí es a propósito la parcela HIJA que
+  // está mostrando el aviso, para demostrar que no se cuela por ahí.
+  it("una intervención heredada enlaza a SU PROPIA parcela, no a la que muestra el aviso", () => {
+    expect(
+      enlaceDelAviso({ tipo: "carencia_vigente", interventionId: "i1", locationId: "MADRE", hasta: new Date(), dias: 3 }, "HIJA"),
+    ).toBe("/plots/MADRE/manejo/i1");
+    expect(
+      enlaceDelAviso({ tipo: "reentrada_no_declarada", interventionId: "i1", locationId: "MADRE", alMenosHasta: null }, "HIJA"),
+    ).toBe("/plots/MADRE/manejo/i1");
+    expect(
+      enlaceDelAviso({ tipo: "carencia_no_declarada", interventionId: "i1", locationId: "MADRE", alMenosHasta: null }, "HIJA"),
+    ).toBe("/plots/MADRE/manejo/i1");
   });
 });

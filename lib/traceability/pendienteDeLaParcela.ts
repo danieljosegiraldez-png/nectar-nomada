@@ -13,6 +13,18 @@ import { carenciaDeIntervencion, reentradaDeIntervencion, type IntervencionParaC
  * qué, está en el spec §4.4. Lo que más tienta añadir: un plazo para los
  * resultados de laboratorio. No hay un plazo acordado, y no se inventa.
  */
+/**
+ * Ronda final, hallazgo 6: la intervención trae su PROPIO `locationId`, que no
+ * siempre es el de la parcela que pide el tablero — `intervencionesVigentes`
+ * reúne las de `ubicacionesEmparentadas`, así que una de la parcela MADRE
+ * puede llegar aquí. El aviso lo conserva para que `enlaceDelAviso` enlace a
+ * la ficha real (`/plots/<dueña>/manejo/<id>`), no a una búsqueda en la
+ * parcela equivocada.
+ */
+export interface IntervencionParaAviso extends IntervencionParaCarencia {
+  readonly locationId: string;
+}
+
 export interface EntradaDePendiente {
   /** Hoy como `YYYY-MM-DD`, de `diaDeHoy(ahora, location.timezone)`. */
   hoy: string;
@@ -32,7 +44,7 @@ export interface EntradaDePendiente {
   /** El instante contra el que se mide la reentrada (spec §3.5) y la carencia. */
   ahora: Date;
   /** Ya reducidas por `ubicacionesEmparentadas` + `intervencionesVigentes`, spec §3.3/§4.1. */
-  intervenciones: readonly IntervencionParaCarencia[];
+  intervenciones: readonly IntervencionParaAviso[];
 }
 
 export type Aviso =
@@ -43,10 +55,10 @@ export type Aviso =
   | { tipo: "area_no_valida" }
   | { tipo: "siembras_sin_conteo"; n: number }
   | { tipo: "siembras_sin_marcar"; n: number }
-  | { tipo: "reentrada_vigente"; interventionId: string; hasta: Date }
-  | { tipo: "carencia_vigente"; interventionId: string; hasta: Date; dias: number }
-  | { tipo: "carencia_no_declarada"; interventionId: string; alMenosHasta: Date | null }
-  | { tipo: "reentrada_no_declarada"; interventionId: string; alMenosHasta: Date | null };
+  | { tipo: "reentrada_vigente"; interventionId: string; locationId: string; hasta: Date }
+  | { tipo: "carencia_vigente"; interventionId: string; locationId: string; hasta: Date; dias: number }
+  | { tipo: "carencia_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
+  | { tipo: "reentrada_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -98,11 +110,11 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
 
   for (const i of e.intervenciones) {
     const re = reentradaDeIntervencion(i, e.ahora);
-    if (re.estado === "vigente") tocaHacer.push({ tipo: "reentrada_vigente", interventionId: i.id, hasta: re.libreDesde });
-    if (re.estado === "desconocida") faltaUnDato.push({ tipo: "reentrada_no_declarada", interventionId: i.id, alMenosHasta: re.alMenosHasta });
+    if (re.estado === "vigente") tocaHacer.push({ tipo: "reentrada_vigente", interventionId: i.id, locationId: i.locationId, hasta: re.libreDesde });
+    if (re.estado === "desconocida") faltaUnDato.push({ tipo: "reentrada_no_declarada", interventionId: i.id, locationId: i.locationId, alMenosHasta: re.alMenosHasta });
     const ca = carenciaDeIntervencion(i, e.ahora);
-    if (ca.estado === "conocida") tocaHacer.push({ tipo: "carencia_vigente", interventionId: i.id, hasta: ca.libreDesde, dias: ca.diasQueFaltan });
-    if (ca.estado === "desconocida") faltaUnDato.push({ tipo: "carencia_no_declarada", interventionId: i.id, alMenosHasta: ca.alMenosHasta });
+    if (ca.estado === "conocida") tocaHacer.push({ tipo: "carencia_vigente", interventionId: i.id, locationId: i.locationId, hasta: ca.libreDesde, dias: ca.diasQueFaltan });
+    if (ca.estado === "desconocida") faltaUnDato.push({ tipo: "carencia_no_declarada", interventionId: i.id, locationId: i.locationId, alMenosHasta: ca.alMenosHasta });
   }
 
   return { tocaHacer, faltaUnDato };
@@ -125,6 +137,10 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
     case "carencia_vigente":
     case "carencia_no_declarada":
     case "reentrada_no_declarada":
-      return `/plots/${locationId}/manejo/${aviso.interventionId}`;
+      // Ronda final, hallazgo 6: la DUEÑA de la intervención, no la parcela
+      // que muestra el aviso — una intervención heredada de la parcela madre
+      // vive en `/plots/<madre>/manejo/<id>`, y `listarIntervenciones` de una
+      // microparcela nunca la encuentra.
+      return `/plots/${aviso.locationId}/manejo/${aviso.interventionId}`;
   }
 }
