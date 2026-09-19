@@ -410,6 +410,7 @@ describe("lecturaDeTrampaQueMotivo — Tarea 8 fitosanitario, spec §4.3", () =>
       observationType: "trap_check",
       observedAt: new Date("2027-03-01T08:00:00Z"),
       captureCount: 9,
+      brocaLevel: "muchos",
       provenanceClass: "direct_observation",
     });
     lecturaMotivo = r1.id;
@@ -418,6 +419,7 @@ describe("lecturaDeTrampaQueMotivo — Tarea 8 fitosanitario, spec §4.3", () =>
       observationType: "trap_check",
       observedAt: new Date("2027-03-08T08:00:00Z"),
       captureCount: 1,
+      brocaLevel: "pocos",
       provenanceClass: "direct_observation",
     });
     lecturaSiguiente = r2.id;
@@ -428,11 +430,16 @@ describe("lecturaDeTrampaQueMotivo — Tarea 8 fitosanitario, spec §4.3", () =>
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ id: trampa }) });
   });
 
-  it("trae la lectura motivadora y la siguiente", async () => {
+  it("trae la lectura motivadora y la siguiente, con su escala", async () => {
     const r = await lecturaDeTrampaQueMotivo(authorizedUserAccountId, lecturaMotivo);
     expect(r?.motivo.id).toBe(lecturaMotivo);
     expect(r?.motivo.captureCount).toBe(9);
+    expect(r?.motivo.brocaLevel).toBe("muchos");
     expect(r?.siguiente?.id).toBe(lecturaSiguiente);
+    expect(r?.siguiente?.brocaLevel).toBe("pocos");
+    // Control: no es el mismo valor en las dos — si lo fuera, un error que
+    // devolviera siempre `motivo.brocaLevel` para ambas pasaría igual.
+    expect(r?.siguiente?.brocaLevel).not.toBe(r?.motivo.brocaLevel);
   });
 
   it("sin lectura posterior: siguiente es null", async () => {

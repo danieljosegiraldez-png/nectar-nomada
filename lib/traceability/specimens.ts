@@ -234,6 +234,9 @@ export interface LecturaDeTrampa {
   readonly id: string;
   readonly observedAt: Date;
   readonly captureCount: number | null;
+  // F2 §4: la escala es la lectura principal ahora; el número queda como
+  // dato adicional, cuando alguien contó.
+  readonly brocaLevel: TrapCaptureLevel | null;
 }
 
 /**
@@ -251,6 +254,7 @@ export async function lecturaDeTrampaQueMotivo(
       id: true,
       observedAt: true,
       captureCount: true,
+      brocaLevel: true,
       specimenId: true,
       observationType: true,
       specimen: { select: { locationId: true } },
@@ -263,11 +267,11 @@ export async function lecturaDeTrampaQueMotivo(
   const siguiente = await prisma.specimenObservation.findFirst({
     where: { specimenId: motivo.specimenId, observationType: motivo.observationType, observedAt: { gt: motivo.observedAt } },
     orderBy: { observedAt: "asc" },
-    select: { id: true, observedAt: true, captureCount: true },
+    select: { id: true, observedAt: true, captureCount: true, brocaLevel: true },
   });
 
   return {
-    motivo: { id: motivo.id, observedAt: motivo.observedAt, captureCount: motivo.captureCount },
+    motivo: { id: motivo.id, observedAt: motivo.observedAt, captureCount: motivo.captureCount, brocaLevel: motivo.brocaLevel },
     siguiente,
   };
 }

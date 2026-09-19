@@ -943,6 +943,7 @@
     "manejoTrapHeading": "La trampa que la motivó",
     "manejoTrapReading": "Lectura del {fecha}: {n} capturas",
     "manejoTrapReadingUnknownCount": "Lectura del {fecha}: sin conteo",
+    "manejoTrapReadingLevel": "Lectura del {fecha}: {nivel}",
     "manejoNoFollowUpReading": "Todavía no hay revisión después de esta aplicación.",
     "harvestWithdrawalHeading": "Carencia al cosechar",
     "harvestWithdrawalKnown": "Cosechado dentro de la carencia: faltaban {n} días",

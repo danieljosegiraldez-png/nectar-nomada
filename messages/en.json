@@ -943,6 +943,7 @@
     "manejoTrapHeading": "The trap reading that motivated it",
     "manejoTrapReading": "Reading of {fecha}: {n} captures",
     "manejoTrapReadingUnknownCount": "Reading of {fecha}: no count",
+    "manejoTrapReadingLevel": "Reading of {fecha}: {nivel}",
     "manejoNoFollowUpReading": "There is no check-up reading after this application yet.",
     "harvestWithdrawalHeading": "Withdrawal period at harvest",
     "harvestWithdrawalKnown": "Harvested within the withdrawal period: {n} day(s) still short",

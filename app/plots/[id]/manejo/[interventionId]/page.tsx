@@ -6,7 +6,7 @@ import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../../../lib/traceability/locations";
 import { listarIntervenciones, productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
-import { lecturaDeTrampaQueMotivo, listPlantSpecimens } from "../../../../../lib/traceability/specimens";
+import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { mostrarFecha, mostrarInstante } from "../../../../../lib/time/mostrarInstante";
 import { IntervencionForm, type IntervencionFormValues } from "../../../../components/traceability/IntervencionForm";
@@ -103,10 +103,19 @@ export default async function ManejoDetailPage({
     });
   })();
 
-  const lecturaTexto = (l: { observedAt: Date; captureCount: number | null }) =>
-    l.captureCount != null
-      ? t("manejoTrapReading", { fecha: mostrarFecha(l.observedAt, location.timezone), n: l.captureCount })
-      : t("manejoTrapReadingUnknownCount", { fecha: mostrarFecha(l.observedAt, location.timezone) });
+  // F2 §4: la escala (`brocaLevel`) es la lectura principal ahora — el
+  // número es adicional, y sólo se agrega entre paréntesis si alguien
+  // contó. `manejoTrapReading`/`manejoTrapReadingUnknownCount` quedan como
+  // respaldo defensivo para una lectura anterior a la pieza 2 que no tenga
+  // escala.
+  const lecturaTexto = (l: Pick<LecturaDeTrampa, "observedAt" | "captureCount" | "brocaLevel">) => {
+    const fecha = mostrarFecha(l.observedAt, location.timezone);
+    if (l.brocaLevel == null) {
+      return l.captureCount != null ? t("manejoTrapReading", { fecha, n: l.captureCount }) : t("manejoTrapReadingUnknownCount", { fecha });
+    }
+    const nivel = t(`trapsLevel_${l.brocaLevel}`);
+    return t("manejoTrapReadingLevel", { fecha, nivel: l.captureCount != null ? `${nivel} (${l.captureCount})` : nivel });
+  };
 
   return (
     <div>
