@@ -208,6 +208,15 @@ describe("el año en que nació la reina", () => {
     ).resolves.toBeTruthy();
   });
 
+  it("AL CAMBIAR tampoco: la nueva no nace después del día del cambio", async () => {
+    const colonyId = await colonia();
+    await introducirReina(operario, { colonyId, origen: "comprada", desde: hace(20) });
+    const cuando = hace(5);
+    await expect(
+      cambiarReina(operario, { colonyId, nueva: { origen: "natural", añoDeNacimiento: cuando.getUTCFullYear() + 1 }, cuando, finDeLaVieja: "cambiada" }),
+    ).rejects.toThrow(/nacio_despues_de_llegar/);
+  });
+
   it("LA BASE tampoco acepta un año imposible — y lo válido entra", async () => {
     const sonda = async (año: string) => {
       try {
