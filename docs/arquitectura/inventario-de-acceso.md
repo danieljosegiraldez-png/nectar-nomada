@@ -59,6 +59,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `completarCierreDeCosecha`, entra como **«acotado por construcción»**, 39→40 — **la etiqueta del
 > script no es exacta**: no se autoriza sola, recibe el `tx` de quien la llama, y sus dos llamadores
 > (`completarCierreDeCosecha` y `recipientes.ts`) comprueban `apiary:manage` antes. 490→493, en 141.
+> **La cera como subproducto (ADR-178, 2026-09-19).** `lib/apiary/ceraDeExtraccion.ts` sube
+> **guardia directo**, 384→386: anotar exige `apiary:manage` y leer `apiary:view` sobre el apiario,
+> los dos por `fincaDelApiario`, con los mismos candidatos que `getApiaryDetail` (ubicación y los
+> proyectos de sus colmenas). 510→512, en 145.
+
 > Tras la revisión de Codex, `bloquearCosechaEn` —el `FOR UPDATE` que ordena a quien cambia el peso
 > de una misma cosecha— entra como **«depende del llamador»**, 65→66: sus tres llamadores autorizan
 > antes. 493→494.

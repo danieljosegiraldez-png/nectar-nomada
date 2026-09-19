@@ -44,13 +44,6 @@ crece del orden de **cien líneas al día**, así que archivar es rutina diaria 
 no una limpieza ocasional. El criterio no cambia: sale lo más viejo cuyo
 contenido ya viva en un sitio que se carga.
 
-### 2026-09-18 · Anular una asignación a tienda que no va a llegar
-
-ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
-lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
-recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
-petición de Daniel.
-
 ### 2026-08-28 · Selección de cereza, de operación a pantalla usable
 
 PR #58 `0aa7544` (dominio), #59 `43f97d4` (pantalla), #62 `18c6c26` (paso
