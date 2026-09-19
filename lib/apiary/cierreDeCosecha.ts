@@ -29,7 +29,7 @@
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
-import type { HoneyType, ProvenanceClass } from "../../generated/prisma/client";
+import type { HoneyType, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { recordMeasurement } from "../traceability/measurements";
 import { fueraDeRango } from "../equipos/modos";
 
@@ -43,6 +43,35 @@ export function exigeTipoDeMiel(valor: unknown): HoneyType {
     throw new CierreDeCosechaInvalido("tipo_de_miel_desconocido");
   }
   return valor as HoneyType;
+}
+
+/**
+ * El peso de la extracción entra en el LIBRO del lote — ADR-161. Completar abona lo pesado;
+ * corregir asienta sólo la diferencia, y el asiento original se queda. Lo usan el cierre a mano y
+ * la pesada por recipiente (`recipientes.ts`), para que haya un solo camino al libro. Dentro de la
+ * transacción de quien llama; `cosecha.extractedWeightKg` es el valor ANTES de este cambio.
+ */
+export async function asentarPesoDeCosechaEn(
+  tx: Prisma.TransactionClient,
+  cosecha: { id: string; resultingLotId: string; occurredAt: Date; provenanceClass: ProvenanceClass; extractedWeightKg: Prisma.Decimal | number | null },
+  nuevoKg: number,
+  userAccountId: string,
+) {
+  const antes = cosecha.extractedWeightKg === null ? null : Number(cosecha.extractedWeightKg);
+  const delta = antes === null ? nuevoKg : nuevoKg - antes;
+  if (delta === 0) return;
+  await tx.quantityEvent.create({
+    data: {
+      lotId: cosecha.resultingLotId,
+      eventType: antes === null ? "received" : delta > 0 ? "adjustment_increase" : "adjustment_decrease",
+      quantity: Math.abs(delta),
+      unit: "kg",
+      occurredAt: cosecha.occurredAt,
+      createdBy: userAccountId,
+      provenanceClass: cosecha.provenanceClass,
+      sourceReference: `apiary_harvest_event:${cosecha.id}`,
+    },
+  });
 }
 
 export interface CompletarCierreDeCosechaInput {
@@ -87,6 +116,12 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
     extractedWeightKg = n;
   }
 
+  // Spec 2026-09-19 §3 — con recipientes, el peso ES la suma de sus netos: escribir otro a mano
+  // dejaría dos verdades. El tipo de miel sí se completa.
+  if (tocaPeso && (await prisma.harvestContainer.count({ where: { apiaryHarvestEventId: cosecha.id } })) > 0) {
+    throw new CierreDeCosechaInvalido("peso_lo_dan_los_recipientes");
+  }
+
   const corrige =
     (tocaTipo && cosecha.honeyType !== null) || (tocaPeso && cosecha.extractedWeightKg !== null);
   if (corrige && !input.reason?.trim()) throw new CierreDeCosechaInvalido("razon_requerida_para_corregir");
@@ -104,24 +139,7 @@ export async function completarCierreDeCosecha(userAccountId: string, input: Com
     // miel quedaba sin saldo y nada de lo que se le haga después podía cuadrar su balance.
     // Completar abona lo pesado; corregir asienta sólo la diferencia, y el asiento original
     // se queda. Borrar el peso no asienta nada: «ya no se sabe» no es miel que salió.
-    if (tocaPeso && extractedWeightKg !== null) {
-      const antes = cosecha.extractedWeightKg === null ? null : Number(cosecha.extractedWeightKg);
-      const delta = antes === null ? extractedWeightKg : extractedWeightKg - antes;
-      if (delta !== 0) {
-        await tx.quantityEvent.create({
-          data: {
-            lotId: cosecha.resultingLotId,
-            eventType: antes === null ? "received" : delta > 0 ? "adjustment_increase" : "adjustment_decrease",
-            quantity: Math.abs(delta),
-            unit: "kg",
-            occurredAt: cosecha.occurredAt,
-            createdBy: userAccountId,
-            provenanceClass: cosecha.provenanceClass,
-            sourceReference: `apiary_harvest_event:${cosecha.id}`,
-          },
-        });
-      }
-    }
+    if (tocaPeso && extractedWeightKg !== null) await asentarPesoDeCosechaEn(tx, cosecha, extractedWeightKg, userAccountId);
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
@@ -288,6 +306,8 @@ export interface CosechaDeColonia {
   humedad: HumedadDeMiel[];
   /** Las lecturas de Brix del lote (ADR-160). Misma forma que la humedad. */
   brix: HumedadDeMiel[];
+  /** Los recipientes de la extracción (spec 2026-09-19 §3). Si hay, el peso es la suma de sus netos. */
+  recipientes: { id: string; label: string; grossKg: number; tareKg: number; netoKg: number }[];
 }
 
 /**
@@ -313,6 +333,7 @@ export async function cosechasDeColonia(colonyId: string): Promise<CosechaDeColo
       honeyType: true,
       resultingLotId: true,
       withinWithdrawalDays: true,
+      containers: { orderBy: { createdAt: "asc" }, select: { id: true, label: true, grossKg: true, tareKg: true } },
     },
   });
   // Una consulta por lote y no una por cosecha: `in` sobre los lotes, y se reparte.
@@ -325,9 +346,16 @@ export async function cosechasDeColonia(colonyId: string): Promise<CosechaDeColo
     humedades
       .filter((m) => m.lotId === c.resultingLotId && m.variable === variable)
       .map((m) => ({ measurementId: m.id, valor: Number(m.value), unidad: m.unit, measuredAt: m.occurredAt }));
-  return cosechas.map((c) => ({
+  return cosechas.map(({ containers, ...c }) => ({
     ...c,
     extractedWeightKg: c.extractedWeightKg === null ? null : Number(c.extractedWeightKg),
+    recipientes: containers.map((r) => ({
+      id: r.id,
+      label: r.label,
+      grossKg: Number(r.grossKg),
+      tareKg: Number(r.tareKg),
+      netoKg: (Math.round(Number(r.grossKg) * 1000) - Math.round(Number(r.tareKg) * 1000)) / 1000,
+    })),
     humedad: deLaCosecha(c, "moisture"),
     brix: deLaCosecha(c, "brix"),
   }));

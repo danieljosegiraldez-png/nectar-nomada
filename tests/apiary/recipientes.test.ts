@@ -8,6 +8,9 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearApiario, createColony, createHive } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
+import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
+import { anotarRecipiente, quitarRecipiente } from "../../lib/apiary/recipientes";
+import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 
 const RUN = `rcp-${Date.now()}`;
 const dia = (s: string) => new Date(`${s}T09:00:00Z`);
@@ -120,3 +123,58 @@ describe("las reglas del recipiente viven en la base", () => {
     expect(await sonda(ins("   ", "5", "1"))).toBe("harvest_container_etiqueta_dice_algo");
   });
 });
+
+/** El saldo del libro del lote, en kilos, leído como lo lee cualquiera con permiso. */
+const saldo = async (lotId: string) => Number((await computeCurrentQuantity(operario, lotId)).quantity);
+
+describe("la pesada por recipiente", () => {
+  it("EL PESO DE LA COSECHA ES LA SUMA DE LOS NETOS, y el libro del lote la recibe", async () => {
+    const h = await cosecha();
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "balde 1", grossKg: 21.2, tareKg: 1.2 });
+    const { totalKg } = await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "balde 2", grossKg: 16.5, tareKg: 1.5 });
+    expect(totalKg).toBeCloseTo(35, 3);
+    const fila = await prisma.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: h.id } });
+    expect(Number(fila.extractedWeightKg)).toBeCloseTo(35, 3);
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(35, 3);
+  });
+
+  it("QUITAR MUEVE EL LIBRO POR LA DIFERENCIA, pide motivo, y el último no borra el peso", async () => {
+    const h = await cosecha();
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 11, tareKg: 1 });
+    const { recipiente } = await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b2", grossKg: 6, tareKg: 1 });
+    await expect(quitarRecipiente(operario, { containerId: recipiente.id, reason: " " })).rejects.toThrow(/quitar_sin_motivo/);
+    expect((await quitarRecipiente(operario, { containerId: recipiente.id, reason: "anotado dos veces" })).totalKg).toBeCloseTo(10, 3);
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(10, 3);
+    const [ultimo] = await prisma.harvestContainer.findMany({ where: { apiaryHarvestEventId: h.id } });
+    if (!ultimo) throw new Error("debía quedar un recipiente");
+    await quitarRecipiente(operario, { containerId: ultimo.id, reason: "se vuelve a pesar a mano" });
+    const fila = await prisma.apiaryHarvestEvent.findUniqueOrThrow({ where: { id: h.id } });
+    expect(Number(fila.extractedWeightKg)).toBeCloseTo(10, 3);
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(10, 3);
+  });
+
+  it("CON RECIPIENTES NO SE ESCRIBE OTRO PESO A MANO; el tipo de miel sí", async () => {
+    const h = await cosecha();
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 11, tareKg: 1 });
+    await expect(completarCierreDeCosecha(operario, { apiaryHarvestEventId: h.id, extractedWeightKg: 50, reason: "x" })).rejects.toThrow(
+      /peso_lo_dan_los_recipientes/,
+    );
+    await expect(completarCierreDeCosecha(operario, { apiaryHarvestEventId: h.id, honeyType: "multifloral" })).resolves.toBeTruthy();
+  });
+
+  it("SOBRE UN PESO ESCRITO A MANO, el primer recipiente lo sustituye y el libro se mueve por la diferencia", async () => {
+    const h = await cosecha();
+    await completarCierreDeCosecha(operario, { apiaryHarvestEventId: h.id, extractedWeightKg: 30 });
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 26, tareKg: 1 });
+    expect(await saldo(h.resultingLotId)).toBeCloseTo(25, 3);
+  });
+
+  it("REGLAS: tara mayor que bruto, etiqueta repetida con su nombre, y sin permiso no", async () => {
+    const h = await cosecha();
+    await expect(anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 1, tareKg: 2 })).rejects.toThrow(/pesos_imposibles/);
+    await anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: "b1", grossKg: 5, tareKg: 1 });
+    await expect(anotarRecipiente(operario, { apiaryHarvestEventId: h.id, label: " b1 ", grossKg: 5, tareKg: 1 })).rejects.toThrow(/etiqueta_repetida/);
+    await expect(anotarRecipiente(extrano, { apiaryHarvestEventId: h.id, label: "b9", grossKg: 5, tareKg: 1 })).rejects.toThrow(/no_apiary_access/);
+  });
+});
+
