@@ -16,6 +16,7 @@ import {
   productosFitosanitarios,
   productosFitosanitariosSiPuede,
   intervencionesVigentes,
+  listarIntervenciones,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
@@ -860,5 +861,17 @@ describe("intervenciones sobre bloques — Tarea 2", () => {
     const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia] }));
     const vigentes = await intervencionesVigentes([parcela]);
     expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: false, plotBlockIds: [] });
+  });
+
+  // Tarea 5 PR B: la ficha (`/plots/<id>/manejo/<id>`) enseña el bloque por su
+  // nombre, no un «—». `listarIntervenciones` es lo que se lo trae.
+  it("listarIntervenciones: el área de un bloque trae el NOMBRE del bloque", async () => {
+    const bloqueDeLaBase = await prisma.plotBlock.findUniqueOrThrow({ where: { id: bloque } });
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const lista = await listarIntervenciones(operador, parcela);
+    const encontrada = lista.find((i) => i.id === o.id)!;
+    expect(encontrada.areas).toEqual([
+      expect.objectContaining({ plotBlockId: bloque, specimenId: null, plotBlock: { name: bloqueDeLaBase.name } }),
+    ]);
   });
 });

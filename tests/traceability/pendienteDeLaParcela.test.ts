@@ -8,6 +8,7 @@ import {
   pendienteDeLaParcela,
   venceElMuestreo,
   enlaceDelAviso,
+  enlaceDeRegistrarAplicacion,
   type EntradaDePendiente,
 } from "../../lib/traceability/pendienteDeLaParcela";
 import type { EstadoDeProduccion } from "../../lib/traceability/estadoDeProduccion";
@@ -264,5 +265,42 @@ describe("enlaceDelAviso", () => {
       }),
     );
     expect(r.tocaHacer).toEqual([{ tipo: "trampa_por_revisar", specimenId: "t1", trapNumber: 7, diasDeRetraso: 9 }]);
+  });
+});
+
+// PR B tarea 5, decisión del controlador #4: el botón «Registrar aplicación»
+// de un aviso de lectura alta, distinto de `enlaceDelAviso` (que sigue yendo
+// a `#trampas`).
+describe("enlaceDeRegistrarAplicacion", () => {
+  const avisoBase = {
+    tipo: "trampa_con_lectura_alta" as const,
+    specimenId: "t1",
+    trapNumber: 7,
+    lectura: "muchos",
+    accion: "aplicar Bralic",
+    observationId: "o1",
+  };
+
+  // Control positivo: sin bloque ni material, sólo `motivo` — nunca un
+  // parámetro vacío por un valor nulo.
+  it("sin bloque ni material: sólo motivo", () => {
+    expect(
+      enlaceDeRegistrarAplicacion({ ...avisoBase, plotBlockId: null, materialId: null, materialName: null }, "L"),
+    ).toBe("/plots/L/manejo/nuevo?motivo=o1");
+  });
+
+  it("con bloque y material: los tres parámetros", () => {
+    expect(
+      enlaceDeRegistrarAplicacion(
+        { ...avisoBase, plotBlockId: "b1", materialId: "m1", materialName: "Bralic" },
+        "L",
+      ),
+    ).toBe("/plots/L/manejo/nuevo?motivo=o1&bloque=b1&material=m1");
+  });
+
+  it("con bloque pero sin material: bloque sí, material no", () => {
+    expect(
+      enlaceDeRegistrarAplicacion({ ...avisoBase, plotBlockId: "b1", materialId: null, materialName: null }, "L"),
+    ).toBe("/plots/L/manejo/nuevo?motivo=o1&bloque=b1");
   });
 });

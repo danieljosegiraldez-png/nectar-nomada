@@ -612,7 +612,9 @@ export type IntervencionListada = Prisma.PlotInterventionGetPayload<{
         consumableLot: { select: { batchLabel: true } };
       };
     };
-    areas: { include: { specimen: { select: { commonName: true } } } };
+    // Tarea 5 PR B: el bloque de un área trae su nombre — la ficha ya no lo
+    // enseña como «—».
+    areas: { include: { specimen: { select: { commonName: true } }; plotBlock: { select: { name: true } } } };
     operator: { select: { displayName: true } };
     correcciones: { select: { id: true } };
   };
@@ -635,7 +637,7 @@ export async function listarIntervenciones(userAccountId: string, locationId: st
           consumableLot: { select: { batchLabel: true } },
         },
       },
-      areas: { include: { specimen: { select: { commonName: true } } } },
+      areas: { include: { specimen: { select: { commonName: true } }, plotBlock: { select: { name: true } } } },
       operator: { select: { displayName: true } },
       correcciones: { select: { id: true } },
     },

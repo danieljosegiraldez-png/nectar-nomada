@@ -173,3 +173,21 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
       return `/plots/${locationId}#trampas`;
   }
 }
+
+/**
+ * El botón «Registrar aplicación» de un aviso de lectura alta — PR B tarea 5,
+ * decisión del controlador #4. Distinto de `enlaceDelAviso`, que sigue
+ * llevando a `#trampas`: éste abre el formulario de manejo con lo que ya se
+ * sabe precargado. Sólo `motivo` es seguro (la observación que disparó el
+ * aviso siempre existe); `bloque` y `material` se omiten si son nulos — el
+ * formulario no pinta un parámetro vacío como si fuera una elección.
+ */
+export function enlaceDeRegistrarAplicacion(
+  aviso: Extract<Aviso, { tipo: "trampa_con_lectura_alta" }>,
+  locationId: string,
+): string {
+  const params = new URLSearchParams({ motivo: aviso.observationId });
+  if (aviso.plotBlockId != null) params.set("bloque", aviso.plotBlockId);
+  if (aviso.materialId != null) params.set("material", aviso.materialId);
+  return `/plots/${locationId}/manejo/nuevo?${params.toString()}`;
+}
