@@ -15,6 +15,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { parsearMutaciones } from "../../lib/sync/parsearMutaciones";
 import { pushFieldEvents, type MutacionDeRevisionDeTrampa } from "../../lib/sync/pushFieldEvents";
 import { createTrap } from "../../lib/traceability/traps";
+import { crearUsuarioSinAcceso } from "../helpers/traceability";
 
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
 
@@ -1031,5 +1032,61 @@ describe("ruling del controlador: procedencia y observador NUNCA salen del paylo
     expect(
       await prisma.specimenObservation.count({ where: { specimenId: trampa.id, observationType: "trap_check" } }),
     ).toBe(0);
+  });
+});
+
+/**
+ * Tarea 11, fix round 1 (revisión, hallazgo Importante #2) —
+ * `restricciones-globales.md`: «las pruebas de cada operación de escritura
+ * […] incluyen un caso de denegación». `aplicarRevisionDeTrampa` no tenía
+ * ninguna a nivel de push: sólo "sin cuenta" (`observer_self_missing`), que
+ * es un rechazo distinto —no llega ni a mirar el acceso—.
+ *
+ * `crearUsuarioSinAcceso` (mismo helper que ya usa
+ * `tests/traceability/traps.test.ts`, "rechaza a un usuario sin acceso a
+ * specimen en esa parcela") da una cuenta y una persona REALES, con Farm
+ * Operator, pero escopadas a SU PROPIA parcela — no a la de la trampa. Es
+ * justo el `locationId` cableado mal (o el descuido de autorización) que el
+ * helper existe para ejercer.
+ */
+describe("aplicarRevisionDeTrampa deniega el acceso a quien no tiene specimen:manage ahí", () => {
+  it("una cuenta y persona reales sin acceso a esa parcela: rejected, y ninguna fila", async () => {
+    const trampa = await createTrap(userAccountId, {
+      locationId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    trampaIds.push(trampa.id);
+
+    const ajeno = await crearUsuarioSinAcceso();
+    try {
+      const clientDraftId = `d-sin-acceso-${Date.now()}`;
+      // Se reutiliza el `deviceId` del `beforeAll`: `pushFieldEvents` sólo
+      // comprueba que el APARATO exista y no esté revocado, nunca que sea el
+      // mismo que registró la cuenta — así que no hace falta un segundo.
+      const [r] = await pushFieldEvents(ajeno.userAccountId, deviceId, [
+        {
+          kind: "trap_check",
+          clientDraftId,
+          locationId,
+          specimenId: trampa.id,
+          observedAt: new Date("2026-09-15"),
+          brocaLevel: "pocos",
+        } satisfies MutacionDeRevisionDeTrampa,
+      ]);
+      expect(r).toMatchObject({ status: "rejected" });
+      // La razón exacta que `requireTrapAccess` lanza cuando `can()` niega el
+      // ámbito — no `observer_self_missing`, que es del guardia anterior y
+      // esta prueba no debe poder confundir con éste.
+      expect((r as { reason: string }).reason).toBe("no_specimen_access");
+      // El control que pide CLAUDE.md: contar la fila por su clientDraftId,
+      // no conformarse con el `status` de la respuesta.
+      expect(await prisma.specimenObservation.count({ where: { clientDraftId } })).toBe(0);
+    } finally {
+      await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: ajeno.userAccountId }) });
+      await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: ajeno.scopeId }) });
+      await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: ajeno.userAccountId }) });
+      await prisma.person.deleteMany({ where: assertDefinedWhere({ id: ajeno.personId }) });
+      await prisma.location.deleteMany({ where: assertDefinedWhere({ id: ajeno.locationId }) });
+      await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: ajeno.organizationId }) });
+    }
   });
 });

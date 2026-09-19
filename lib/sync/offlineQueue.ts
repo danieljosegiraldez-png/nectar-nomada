@@ -241,6 +241,35 @@ export async function leerJson<T>(res: Response, contexto: string): Promise<T> {
 type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "rejected"; reason?: string };
 
 /**
+ * Tarea 11, fix round 1 — la mutación que viaja por la red para UN borrador.
+ *
+ * **La clave que manda es la del PAYLOAD, no la del borrador — cuando el
+ * payload trae una.** Los cuatro tipos de captura de parcela que no llevan su
+ * propio `clientDraftId` (`soil_sample`, `foliar_sample`, `soil_profile`,
+ * `planting_cohort`; ver `lib/sync/parcelaPayload.ts`) siguen usando `d.id`
+ * exactamente como antes de este arreglo — es el único id que tienen—.
+ * `trap_check` es el primero que SÍ trae uno propio
+ * (`construirPayloadDeRevisionDeTrampa`), la misma clave que
+ * `RondaDeTrampaForm` pone en el campo oculto y que el camino CON señal
+ * (`recordRoundTrapCheckFormAction`) también usa. Antes de este arreglo, esta
+ * misma línea hacía `{ ...d.payload, clientDraftId: d.id }` — el spread
+ * seguido de la sobreescritura tira SIEMPRE la clave del payload, así que la
+ * fila que el servidor guardaba llevaba la clave de la cola, nunca la del
+ * formulario, y la foto de la Tarea 12 no podía encontrar la revisión que
+ * acababa de crear sin señal. Revisión Task 11, hallazgo Crítico #1.
+ *
+ * Pura y exportada para poder probarla sin IndexedDB — igual que
+ * `clasificarRespuesta` más arriba en este mismo archivo.
+ */
+export function construirMutacionDesdeBorrador(
+  d: FieldEventDraft,
+): Record<string, unknown> & { clientDraftId: string } {
+  const propia = d.payload.clientDraftId;
+  const clientDraftId = typeof propia === "string" && propia !== "" ? propia : d.id;
+  return { ...d.payload, clientDraftId };
+}
+
+/**
  * Vacía la cola en **una sola petición**, y aplica el resultado por mutación.
  *
  * La distinción que sostiene todo esto, heredada de A5/A0: si el `fetch` lanza,
@@ -260,12 +289,18 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   }
 
   const deviceId = await ensureDeviceId();
+  // La clave que se manda es la que decide `construirMutacionDesdeBorrador`
+  // (la del payload si trae una propia, `d.id` si no) — y es la MISMA clave
+  // por la que hay que buscar el borrador cuando vuelva el resultado, más
+  // abajo: el servidor devuelve el `clientDraftId` que recibió, no `d.id`.
+  const mutaciones = drafts.map((d) => ({ draft: d, mutacion: construirMutacionDesdeBorrador(d) }));
+  const porClaveDeEnvio = new Map(mutaciones.map(({ draft, mutacion }) => [mutacion.clientDraftId, draft]));
   const res = await fetch("/api/v1/sync/field-events", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       deviceId,
-      mutations: drafts.map((d) => ({ ...d.payload, clientDraftId: d.id })),
+      mutations: mutaciones.map(({ mutacion }) => mutacion),
     }),
   });
 
@@ -288,7 +323,7 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
 
   for (const r of results) {
-    const draft = drafts.find((d) => d.id === r.clientDraftId);
+    const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
     if (r.status === "rejected") {
       await write((s) => s.put({ ...draft, status: "error", errorMessage: r.reason ?? "rejected" }));

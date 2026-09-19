@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clasificarRespuesta, leerJson } from "../../lib/sync/offlineQueue";
+import { clasificarRespuesta, leerJson, construirMutacionDesdeBorrador, type FieldEventDraft } from "../../lib/sync/offlineQueue";
 
 /**
  * P4 §4 — la frontera entre «el servidor se negó» y «el servidor no pudo».
@@ -110,5 +110,61 @@ describe("leerJson: un 2xx que no es JSON dice qué llegó", () => {
     const r = new Response(null, { status: 204 });
     await expect(leerJson(r, "ctx")).rejects.toThrow(/sin content-type/);
     await expect(leerJson(new Response(null, { status: 204 }), "ctx")).rejects.toThrow(/204/);
+  });
+});
+
+/**
+ * Tarea 11, fix round 1 (revisión, hallazgo Crítico #1) — la clave que
+ * `syncFieldEvents` manda al servidor por cada borrador.
+ *
+ * Antes de este arreglo, `syncFieldEvents` hacía `{ ...d.payload,
+ * clientDraftId: d.id }` directamente en la línea del `fetch`: el spread
+ * seguido de la sobreescritura tira SIEMPRE la clave del payload, aunque el
+ * payload ya traiga una propia. `trap_check` es el primer tipo de mutación
+ * que trae su propia clave (`construirPayloadDeRevisionDeTrampa`), y con el
+ * defecto la revisión guardada por el servidor llevaba la clave de la cola,
+ * nunca la del formulario — la Tarea 12 no podría encontrarla para
+ * engancharle la foto.
+ */
+const borrador = (payload: Record<string, unknown>, id = "draft-id-1"): FieldEventDraft => ({
+  id,
+  payload,
+  createdAt: Date.now(),
+  status: "pending",
+});
+
+describe("construirMutacionDesdeBorrador: qué clientDraftId viaja por cada borrador", () => {
+  it("un borrador de trap_check con clientDraftId propio conserva ESA clave, no la del borrador", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "X", brocaLevel: "pocos" }, "draft-id-1");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("X");
+    expect(m.clientDraftId).not.toBe(d.id);
+  });
+
+  it("un borrador de trap_check sin clientDraftId propio usa el del borrador (d.id)", () => {
+    const d = borrador({ kind: "trap_check", brocaLevel: "pocos" }, "draft-id-2");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("draft-id-2");
+  });
+
+  // Control: los otros cuatro tipos de captura de parcela NUNCA declaran
+  // `clientDraftId` en su payload (ver `lib/sync/parcelaPayload.ts`), así que
+  // este arreglo no puede haberles cambiado nada — siguen usando `d.id`,
+  // exactamente como antes.
+  it("un tipo de parcela existente (soil_sample) sigue usando d.id, sin cambios", () => {
+    const d = borrador({ kind: "soil_sample", sampleCode: "S-01", sampledAt: "2026-09-18T00:00:00.000Z" }, "draft-id-3");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("draft-id-3");
+  });
+
+  it("un clientDraftId vacío en el payload se trata como ausente: usa d.id", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "", brocaLevel: "pocos" }, "draft-id-4");
+    expect(construirMutacionDesdeBorrador(d).clientDraftId).toBe("draft-id-4");
+  });
+
+  it("el resto del payload viaja intacto, la clave es lo único que se decide aquí", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "X", brocaLevel: "muchos", captureCount: 12 });
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m).toMatchObject({ kind: "trap_check", brocaLevel: "muchos", captureCount: 12 });
   });
 });

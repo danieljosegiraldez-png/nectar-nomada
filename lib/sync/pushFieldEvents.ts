@@ -776,8 +776,13 @@ async function aplicarRevisionDeTrampa(
   }
 
   try {
+    // `exigeValorEnumerado` sólo devuelve un valor "falsy" cuando `m.brocaLevel`
+    // llega vacío o nulo — un valor no vacío pero inválido ya lanza DENTRO de
+    // ella. Por eso la razón aquí es "vino vacío", la misma que usa el parseo
+    // (`broca_level_required` en `parsearMutaciones.ts`) y no
+    // `..._not_valid`, que describiría un valor que en este punto no existe.
     const brocaLevel = exigeValorEnumerado(m.brocaLevel, TrapCaptureLevel, "brocaLevel");
-    if (!brocaLevel) throw new ValorEnumeradoInvalido(`brocaLevel_not_valid:${m.brocaLevel}`);
+    if (!brocaLevel) throw new ValorEnumeradoInvalido("broca_level_required");
     const fila = await recordTrapCheck(userAccountId, {
       specimenId: m.specimenId,
       observedAt: m.observedAt,
