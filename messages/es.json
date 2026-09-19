@@ -2625,6 +2625,14 @@
     "error_articulo_ajeno": "Un artículo no es de este pedido.",
     "error_lote_sin_tantos": "De ese lote sólo quedan {valor} frascos en la tienda.",
     "error_lote_no_envasado": "Ese lote no salió de un envasado: no se sabe cuánto pesa cada frasco.",
-    "error_libro_sin_saldo": "El libro de ese lote no tiene tanta miel: revisa su saldo antes de despachar."
+    "error_libro_sin_saldo": "El libro de ese lote no tiene tanta miel: revisa su saldo antes de despachar.",
+    "anular": "Anular",
+    "anularMotivo": "¿Por qué se anula?",
+    "anularAyuda": "Sólo si estos envases no van a llegar a la tienda. Vuelven a quedar libres para asignarse de nuevo. Queda anotado quién, cuándo y por qué.",
+    "anularGuardar": "Anular la asignación",
+    "anulada": "Anulada: sus envases vuelven a estar libres.",
+    "anuladaFila": "anulada el {fecha} — {motivo}",
+    "error_anular_sin_motivo": "Di por qué se anula.",
+    "error_asignacion_anulada": "Esa asignación ya está anulada."
   }
 }

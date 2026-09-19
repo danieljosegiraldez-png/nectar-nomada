@@ -2625,6 +2625,14 @@
     "error_articulo_ajeno": "An item does not belong to this order.",
     "error_lote_sin_tantos": "Only {valor} jars of that lot are left at the store.",
     "error_lote_no_envasado": "That lot did not come from packaging: the weight of each jar is unknown.",
-    "error_libro_sin_saldo": "That lot's ledger does not hold that much honey: check its balance before dispatching."
+    "error_libro_sin_saldo": "That lot's ledger does not hold that much honey: check its balance before dispatching.",
+    "anular": "Cancel",
+    "anularMotivo": "Why is it cancelled?",
+    "anularAyuda": "Only if these containers will not reach the store. They become free to assign again. Who, when and why is recorded.",
+    "anularGuardar": "Cancel the assignment",
+    "anulada": "Cancelled: its containers are free again.",
+    "anuladaFila": "cancelled on {fecha} — {motivo}",
+    "error_anular_sin_motivo": "Say why it is cancelled.",
+    "error_asignacion_anulada": "That assignment is already cancelled."
   }
 }

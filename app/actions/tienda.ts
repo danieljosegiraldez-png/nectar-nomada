@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
-import { asignarATienda, confirmarRecepcion, crearVariante, despacharPedido, TiendaInvalida, TiendaSinPermiso } from "../../lib/commerce/tienda";
+import { anularAsignacion, asignarATienda, confirmarRecepcion, crearVariante, despacharPedido, TiendaInvalida, TiendaSinPermiso } from "../../lib/commerce/tienda";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
@@ -109,5 +109,27 @@ export async function despacharPedidoAction(_prev: Estado, formData: FormData): 
     return rechazo(error);
   }
   revalidatePath("/tienda");
+  return { ok: true };
+}
+
+/** ADR-170 — anular una asignación que nunca se recibió. Sus envases vuelven a libres. */
+export async function anularAsignacionAction(_prev: Estado, formData: FormData): Promise<Estado> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Tienda");
+  const lotId = String(formData.get("lotId") ?? "");
+  try {
+    const dia = fechaDeDia(String(formData.get("cancelledAt") ?? ""), "cancelledAt");
+    if (!dia) return { error: t("error_falta_la_fecha") };
+    await anularAsignacion(user.userAccountId, {
+      allocationId: String(formData.get("allocationId") ?? ""),
+      reason: String(formData.get("reason") ?? ""),
+      cancelledAt: dia,
+    });
+  } catch (error) {
+    return rechazo(error);
+  }
+  revalidatePath("/tienda");
+  if (lotId) revalidatePath(`/lots/${lotId}`);
   return { ok: true };
 }

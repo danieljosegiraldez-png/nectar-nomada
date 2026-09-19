@@ -46,7 +46,7 @@ import { HarvestSourcesForm } from "../../components/traceability/HarvestSources
 import type { LabourEntry } from "../../../generated/prisma/client";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { DividirMielForm, EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
-import { AsignarATiendaForm } from "../../components/commerce/TiendaForms";
+import { AnularAsignacionForm, AsignarATiendaForm } from "../../components/commerce/TiendaForms";
 import { asignacionesDeLote, variantesParaAsignar } from "../../../lib/commerce/tienda";
 
 export const dynamic = "force-dynamic";
@@ -505,10 +505,15 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                         variante: f.productVariant.variantName ?? f.productVariant.sku,
                       })}{" "}
                       ·{" "}
-                      {f.receivedAt
-                        ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
-                          (f.receiptNote ? ` — ${f.receiptNote}` : "")
-                        : tTienda("esperandoRecepcion")}
+                      {f.cancelledAt
+                        ? tTienda("anuladaFila", { fecha: f.cancelledAt.toISOString().slice(0, 10), motivo: f.cancelReason ?? "" })
+                        : f.receivedAt
+                          ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
+                            (f.receiptNote ? ` — ${f.receiptNote}` : "")
+                          : tTienda("esperandoRecepcion")}
+                      {puedeRegistrar && !f.cancelledAt && !f.receivedAt ? (
+                        <AnularAsignacionForm allocationId={f.id} lotId={lot.id} />
+                      ) : null}
                     </li>
                   ))}
                 </ul>

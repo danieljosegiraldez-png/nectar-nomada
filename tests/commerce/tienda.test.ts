@@ -16,7 +16,7 @@ import { createHive, createColony } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
 import { envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
-import { asignacionesDeLote, asignarATienda, confirmarRecepcion, crearVariante, despacharPedido, pedidosPorDespachar, tiendaParaGestionar } from "../../lib/commerce/tienda";
+import { anularAsignacion, asignacionesDeLote, asignarATienda, confirmarRecepcion, crearVariante, despacharPedido, pedidosPorDespachar, tiendaParaGestionar } from "../../lib/commerce/tienda";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -330,6 +330,51 @@ describe("de un lote envasado a la tienda", () => {
     ).rejects.toThrow(/sin_permiso_de_tienda/);
   });
 
+  it("ADR-170 — ANULAR libera los envases, deja quién, cuándo y por qué, y la tienda deja de esperarla", async () => {
+    const { envasado } = await loteEnvasado();
+    const v = await variante();
+    const a = await asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 40, assignedAt: DIA });
+    await expect(
+      asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 1, assignedAt: DIA }),
+    ).rejects.toThrow(/mas_envases_de_los_que_hay:0/);
+
+    await anularAsignacion(operador, { allocationId: a.id, reason: "  el camión no sale  ", cancelledAt: DIA });
+    const fila = await prisma.storeAllocation.findUniqueOrThrow({ where: { id: a.id } });
+    expect([fila.cancelledBy, fila.cancelReason, fila.cancelledAt?.toISOString()]).toEqual([operador, "el camión no sale", DIA.toISOString()]);
+    const resumen = await asignacionesDeLote(envasado.id);
+    expect([resumen?.asignados, resumen?.libres]).toEqual([0, 40]);
+    expect((await tiendaParaGestionar(tendero)).pendientes.some((p) => p.id === a.id)).toBe(false);
+    const auditoria = await prisma.auditEvent.findMany({ where: { entityId: a.id, operation: "store_allocation.cancel" } });
+    expect(auditoria.map((x) => x.actorUserAccountId)).toEqual([operador]);
+
+    // Libres de verdad: se pueden volver a asignar enteros.
+    await asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 40, assignedAt: DIA });
+    expect(await inventario(v)).toBeNull();
+  });
+
+  it("ADR-170 — UNA ANULADA NO SE RECIBE, UNA RECIBIDA NO SE ANULA, y ninguna se anula dos veces", async () => {
+    const { envasado } = await loteEnvasado();
+    const v = await variante();
+    const a = await asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 10, assignedAt: DIA });
+    const b = await asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 10, assignedAt: DIA });
+    await anularAsignacion(tendero, { allocationId: a.id, reason: "no hay sitio en la tienda", cancelledAt: DIA });
+    await expect(confirmarRecepcion(tendero, { allocationId: a.id, unitsReceived: 10, receivedAt: DIA })).rejects.toThrow(/asignacion_anulada/);
+    await expect(anularAsignacion(operador, { allocationId: a.id, reason: "otra vez", cancelledAt: DIA })).rejects.toThrow(/asignacion_anulada/);
+    await confirmarRecepcion(tendero, { allocationId: b.id, unitsReceived: 10, receivedAt: DIA });
+    await expect(anularAsignacion(operador, { allocationId: b.id, reason: "tarde", cancelledAt: DIA })).rejects.toThrow(/ya_recibida/);
+    expect(await inventario(v)).toBe(10);
+  });
+
+  it("ADR-170 — SIN MOTIVO no se anula, y QUIEN NO TIENE NI EL LOTE NI LA TIENDA tampoco", async () => {
+    const { envasado } = await loteEnvasado();
+    const v = await variante();
+    const a = await asignarATienda(operador, { lotId: envasado.id, productVariantId: v, unitsAssigned: 10, assignedAt: DIA });
+    await expect(anularAsignacion(operador, { allocationId: a.id, reason: "   ", cancelledAt: DIA })).rejects.toThrow(/anular_sin_motivo/);
+    await expect(anularAsignacion(otro, { allocationId: a.id, reason: "porque sí", cancelledAt: DIA })).rejects.toThrow(/no_lot_access/);
+    const fila = await prisma.storeAllocation.findUniqueOrThrow({ where: { id: a.id } });
+    expect(fila.cancelledAt).toBeNull();
+  });
+
   it("LAS REGLAS VIVEN EN LA BASE: cada CHECK rechaza lo suyo, y lo válido entra", async () => {
     const { envasado } = await loteEnvasado();
     const v = await variante();
@@ -356,6 +401,18 @@ describe("de un lote envasado a la tienda", () => {
     expect(await sonda(", units_received", ", 10")).toBe("store_allocation_recepcion_completa");
     expect(await sonda(...recep(8, null))).toBe("store_allocation_faltante_dice_por_que");
     expect(await sonda(...recep(11, "x"))).toBe("store_allocation_recibidos_en_rango");
+    const anul = (motivo: string | null) =>
+      [", cancelled_at, cancelled_by, cancel_reason", `, now(), '${operador}', ${motivo === null ? "NULL" : `'${motivo}'`}`] as const;
+    expect(await sonda(...anul("no sale"))).toBe("entra");
+    expect(await sonda(...anul(null))).toBe("store_allocation_anulacion_completa");
+    expect(await sonda(...anul("   "))).toBe("store_allocation_anulacion_completa");
+    expect(await sonda(", cancelled_at", ", now()")).toBe("store_allocation_anulacion_completa");
+    expect(
+      await sonda(
+        ", received_at, received_by, units_received, cancelled_at, cancelled_by, cancel_reason",
+        `, now(), '${tendero}', 10, now(), '${operador}', 'x'`,
+      ),
+    ).toBe("store_allocation_recibida_o_anulada");
     const cero = await sonda("", "").then(() =>
       prisma.$executeRawUnsafe(
         `INSERT INTO commerce.store_allocation (lot_id, product_variant_id, assigned_at, assigned_by, units_assigned) VALUES ('${envasado.id}', '${v}', now(), '${operador}', 0)`,

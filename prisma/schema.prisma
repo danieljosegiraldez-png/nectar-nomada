@@ -310,6 +310,8 @@ model UserAccount {
   storeAllocationsReceived StoreAllocation[] @relation("StoreAllocationReceivedBy")
   /// ADR-169
   orderItemLotsDispatched OrderItemLot[] @relation("OrderItemLotDispatchedBy")
+  /// ADR-170
+  storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -8951,6 +8953,12 @@ model StoreAllocation {
   receiver         UserAccount?   @relation("StoreAllocationReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
   unitsReceived    Int?           @map("units_received")
   receiptNote      String?        @map("receipt_note")
+  /// ADR-170 -- una asignacion que nunca se recibio se ANULA, no se borra: quien, cuando y por
+  /// que (CHECK: las tres o ninguna, y nunca junto a una recepcion). Sus envases vuelven a libres.
+  cancelledAt      DateTime?      @map("cancelled_at")
+  cancelledBy      String?        @map("cancelled_by") @db.Uuid
+  canceller        UserAccount?   @relation("StoreAllocationCancelledBy", fields: [cancelledBy], references: [id], onDelete: Restrict)
+  cancelReason     String?        @map("cancel_reason")
   createdAt        DateTime       @default(now()) @map("created_at")
 
   @@index([lotId])
