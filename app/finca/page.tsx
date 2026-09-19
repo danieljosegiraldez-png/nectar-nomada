@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
  * del beneficio empieza cuando entra la cereza. Diseño en
  * `docs/superpowers/specs/2026-09-18-seccion-finca-design.md`.
  *
- * **Sólo enlaza lo que ya existe.** Recolectores, rendimiento y calidad de la
- * cosecha llegan en piezas posteriores del spec; hasta entonces se nombran en una
+ * **Sólo enlaza lo que ya existe.** Rendimiento y calidad de la cosecha llegan
+ * en piezas posteriores del spec (las jornadas y sus recolectores ya existen); hasta entonces se nombran en una
  * línea, sin enlace, porque un enlace a una pantalla que no existe es un 404 con
  * buena cara.
  *
@@ -46,6 +46,8 @@ export default async function FincaPage() {
     { href: "/plots", titulo: t("parcelas"), ayuda: t("parcelasAyuda"), visible: true },
     // `recordHarvestEvent` exige `lot:manage` (lib/traceability/harvest.ts).
     { href: "/lots/new", titulo: t("cosecha"), ayuda: t("cosechaAyuda"), visible: granted.has("lot:manage") },
+    // `jornadasDeFinca` exige `lot:view` sobre la finca; abrir una, `lot:manage`.
+    { href: "/finca/jornadas", titulo: t("jornadas"), ayuda: t("jornadasAyuda"), visible: granted.has("lot:view") || granted.has("lot:manage") },
   ].filter((d) => d.visible);
 
   return (

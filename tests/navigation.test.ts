@@ -21,6 +21,8 @@ const toolHrefs = (granted: string[]) => buildSensoryTools(new Set(granted)).map
 // Approximate real profiles from lib/rbac/catalog.ts.
 const FARM_OPERATOR = ["lot:view", "lot:manage", "sample:manage", "location:manage_attributes", "apiary:manage"];
 const JUDGE = ["sensory:submit_assessment"];
+// El perfil Recolector de lib/rbac/catalog.ts, entero.
+const RECOLECTOR = ["harvest_delivery:create_own", "field_report:create_own", "classification:clear_internal"];
 const HEAD_JUDGE = ["sensory:submit_assessment", "sensory:manage_session", "competition:manage"];
 const PLATFORM_ADMIN = [
   "lot:view", "lot:manage", "apiary:manage", "research:view",
@@ -232,6 +234,13 @@ describe("landingDestination — ADR-082", () => {
     expect(landing(["platform:manage_permissions", "platform:manage_users"])).toBe(DEFAULT_LANDING);
   });
 
+  it("el recolector entra en sus entregas; quien además gestiona lotes sigue entrando en /lots", () => {
+    expect(landing(RECOLECTOR)).toBe("/mis-entregas");
+    expect(landing([...FARM_OPERATOR, "harvest_delivery:create_own"])).toBe("/lots");
+    // Y el menú no crece por esto: el recolector sólo ve «Mi Néctar», que la enlaza.
+    expect(hrefs(RECOLECTOR)).toEqual(["/my-nectar"]);
+  });
+
   it("falls back to the account page for a viewer with no operational grant", () => {
     // A registered customer: orders and bookings live there and nowhere else.
     expect(landing([])).toBe(DEFAULT_LANDING);
@@ -244,7 +253,7 @@ describe("landingDestination — ADR-082", () => {
     // the first navigation. Since 2026-09-17 "reachable" includes a page that
     // lives inside a section of the menu — /lots inside Beneficio — and that
     // relation is data in lib/navigation.ts, not an exception written here.
-    for (const granted of [FARM_OPERATOR, PARTNER, RESEARCHER, JUDGE, HEAD_JUDGE, APIARY_RECORDER, PLATFORM_ADMIN, []]) {
+    for (const granted of [FARM_OPERATOR, PARTNER, RESEARCHER, JUDGE, HEAD_JUDGE, APIARY_RECORDER, RECOLECTOR, PLATFORM_ADMIN, []]) {
       const nav = buildNavigation(new Set(granted)).map((e) => e.href);
       expect(seAlcanzaDesdeElMenu(landing(granted), nav)).toBe(true);
     }

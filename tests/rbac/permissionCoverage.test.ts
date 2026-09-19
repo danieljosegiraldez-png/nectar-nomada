@@ -32,6 +32,9 @@ import { scanPermissionUsage, isChecked } from "../helpers/permissionUsage";
  * Each needs a reason, and the reason should name what would remove it.
  */
 const UNENFORCED: Record<string, string> = {
+  // Spec jornada y entrega de cosecha: el catálogo los trae en la Tarea 2 y los usan las Tareas 3
+  // (entrega propia) y 4 (situaciones de campo). Cada tarea quita su línea al usarlo; si alguna
+  // queda aquí al cerrar el plan, es que no se construyó.
   "project:view": "/projects is public discovery with no gate. A permissioned project surface — distinct from the partner workspace — does not exist yet.",
   "project:manage_operations": "Same as project:view. Task and assignment management lives inside the Partner Workspace, gated on partner:* instead.",
   "platform:manage_users": "ADR-074 gated /admin/users on manage_permissions specifically, because granting a role IS managing permissions. The softer account operations this covers — deactivating, renaming — have no surface.",

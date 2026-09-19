@@ -127,6 +127,14 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // Decisión de Daniel, 2026-09-18 (spec fincas y parcelas): una finca nueva la da de alta sólo
   // el administrador de plataforma. Crear una organización no es trabajo de una finca, así que
   // ningún perfil acotado lo lista; Platform Admin lo recibe por tener el catálogo entero.
+  // Spec 2026-09-18 jornada y entrega de cosecha §3.4–3.5. El recolector con cuenta anota SU
+  // entrega y reporta lo que ve en lo que tiene asignado; el servicio exige además que la
+  // Person de la cuenta sea el recolector asignado en esa jornada. Ver situaciones de campo es
+  // aparte: de serie para Farm Manager y capataz, concedible a quien trabaje esa parcela o lote.
+  { resourceType: "harvest_delivery", action: "create_own", description: "Anotar la entrega propia de cosecha en una jornada donde se está asignado." },
+  { resourceType: "field_report", action: "create_own", description: "Reportar situaciones de campo y condiciones del día sobre lo asignado en la jornada propia." },
+  { resourceType: "field_report", action: "view", description: "Ver las situaciones de campo que reportan los recolectores en las jornadas de una finca." },
+
   { resourceType: "organization", action: "create_farm", description: "Dar de alta una finca: la organización y su terreno. Sólo en ámbito de plataforma." },
 
   { resourceType: "location", action: "create_site", description: "Crear una ubicación nueva bajo un sitio que ya se gestiona: un beneficio, una instalación o una parcela." },
@@ -353,6 +361,7 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       "Intended scope: the farm's location, which since ADR-144 reaches everything under it — " +
       "parcels, drying facilities and beds — so one Assignment covers the whole farm.",
     permissions: [
+      ["field_report", "view"],
       ["lot", "release"],
       // Artefactos de colmena §7.1: el gestor registra y MUEVE nodos; el operario no.
       ["hive_node", "manage"],
@@ -392,6 +401,7 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       "(docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md §26, decision record). No approval " +
       "permissions.",
     permissions: [
+      ["field_report", "view"],
       ["lot", "manage"],
       ["lot", "view"],
       // A producer taking their own records out is the whole point of the
@@ -424,6 +434,22 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // where the gate is not applied and they can reach `confidential` and
       // `trade_secret` too.
       ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
+    ],
+  },
+  {
+    // Spec 2026-09-18 jornada y entrega de cosecha §3.4. Sólo lo propio: anotar su entrega y
+    // reportar lo que ve. No ve las entregas de otros ni edita parcelas.
+    name: "Recolector",
+    description:
+      "Recolector con cuenta: anota su propia entrega de cosecha y reporta situaciones de campo en la " +
+      "jornada donde está asignado. Intended scope: location (la finca).",
+    permissions: [
+      ["harvest_delivery", "create_own"],
+      ["field_report", "create_own"],
+      // Mismo arreglo que ADR-063/069 para los perfiles estrechos: las fincas son `internal`,
+      // y sin esto el recolector tiene sus dos permisos y no alcanza ninguna. Da la clearance
+      // para llegar a su finca, no más permisos: la frontera real son los dos de arriba.
       ["classification", "clear_internal"],
     ],
   },

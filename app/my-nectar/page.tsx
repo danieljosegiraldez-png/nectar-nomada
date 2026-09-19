@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "../../lib/db";
 import { getCurrentUser } from "../../lib/auth/session";
-import { canManageOwnProfile, resolvedPermissionKeys } from "../../lib/rbac/service";
+import { canManageOwnProfile, permissionKeysAnywhere, resolvedPermissionKeys } from "../../lib/rbac/service";
+import Link from "next/link";
 import { getOrdersForUser } from "../../lib/commerce/orders";
 import { getBookingsForUser } from "../../lib/experiences/bookings";
 import { getAssessmentHistoryForEvaluator } from "../../lib/sensory/service";
@@ -44,12 +45,14 @@ export default async function MyNectarPage() {
   // meaningful target to resolve against right now is the platform scope —
   // this is a live call into the same authorization service every other
   // module will use, not a stub.
-  const [platformPermissions, t, orders, bookings, assessments] = await Promise.all([
+  const [platformPermissions, t, orders, bookings, assessments, enAlgunAmbito] = await Promise.all([
     resolvedPermissionKeys(user.userAccountId, { scopeType: "platform", scopeRefId: null }),
     getTranslations("MyNectar"),
     getOrdersForUser(user.userAccountId),
     getBookingsForUser(user.userAccountId),
     getAssessmentHistoryForEvaluator(user.userAccountId),
+    // El permiso del recolector vive en el ámbito de su finca, no en el de plataforma.
+    permissionKeysAnywhere(user.userAccountId),
   ]);
 
   // Resolve scope references to names. A Scope carries scopeRefId and a
@@ -90,6 +93,13 @@ export default async function MyNectarPage() {
       <span className="nn-badge">{t("badge")}</span>
       <h1>{t("greeting", { name: userAccount.person.displayName })}</h1>
       <p className="nn-muted">{userAccount.person.email}</p>
+      {/* Spec jornada y entrega §3.6: el recolector llega a «Mis entregas» al entrar, y desde aquí,
+          que está en el menú de todos, sin añadir una entrada más al menú. */}
+      {enAlgunAmbito.has("harvest_delivery:create_own") ? (
+        <p>
+          <Link href="/mis-entregas">{t("misEntregasEnlace")}</Link>
+        </p>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("ordersHeading")}</h2>
