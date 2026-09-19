@@ -6,8 +6,9 @@
 
 > **Decisión de Daniel, 2026-09-19 (ADR-177) — manda sobre este documento.** El Brix tiene objetivo
 > de receta pero es **secundario al pH**: con mucílago se liberan azúcares y sólidos y la lectura
-> engaña. **Nunca dice «listo» por sí solo.** Se mide con hidrómetro o refractómetro, configurable; una
-> serie no mezcla instrumentos. El rango de entrada de cada cereza **se aprende del historial**: el
+> engaña («secundaria a pH en casi todos los casos relacionados a fermentación», en sus palabras). Si
+> una fase puede declararlo criterio suficiente, y cómo, queda pendiente. Se mide con hidrómetro o refractómetro, configurable (que una
+> serie no mezcle instrumentos es propuesta, no decisión). El rango de entrada de cada cereza **se aprende del historial**: el
 > 18–24 / <16 de esta tabla no tiene fuente académica y queda como plantilla. Ningún fabricante ni
 > estudio encontrado publica umbrales de °Brix de fermentación.
 

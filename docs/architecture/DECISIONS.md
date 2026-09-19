@@ -11730,7 +11730,7 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
 5. **Brix: objetivo de receta, pero secundario al pH** «en casi todos los casos relacionados a
    fermentación»: con mucílago se liberan azúcares y la degradación enzimática suelta más sólidos, y la
    lectura «puede ser falsa o misleading». Se mide con **hidrómetro o refractómetro**, configurable por
-   beneficio o receta; una serie no mezcla instrumentos.
+   beneficio o receta.
 6. **Brix de cereza para elegir proceso**, según requisitos y capacidades del beneficio: bajo para esa
    cereza → fermentar para dulzores y ésteres; alto → natural o lavado con poca intervención, o
    CryoBloom («para que libere betaglicósidos, más precursores atrapados en la cereza»). **El rango de
@@ -11748,9 +11748,9 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 11. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
-12. **Dilución**: fuera el 6,5 fijo. El mosto se compara contra el pH del **agua de ese lote** y contra el
-    historial; rutina opcional del beneficio para medir el agua, sobre todo si se lava o sumerge en ella.
-    Hay aguas de 7–8 que cambian con lluvias y temporadas.
+12. **Agua**: opción en el beneficio de **medir el pH del agua** cada día o con una frecuencia ligada a
+    los procesos, «especialmente si se van a lavar y o sumergir en esa agua». Hay aguas de 7–8 que
+    cambian con lluvias y temporadas. (Cómo se usa esa medida contra el mosto: ver propuestas abajo.)
 13. **Levaduras con ficha de fabricante** (especie, dosis, rango de temperatura, duración por tramo) y
     fuente; la receta la propone y lo que ajusta Daniel manda. MP-72 y HD A54 son de enología: su uso en
     café sale de su experiencia. (Encaja con la tabla de levaduras de ADR-172.)
@@ -11769,7 +11769,14 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     por humedad, con tacto y sensorial opcionales. Es **secundaria al café**. Queda abierto estudiar el
     trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
 
-**Lo que esto NO decide.** Los números de cada receta (los pone Daniel). La implementación en los
+**Propuestas del agente, NO confirmadas por Daniel** (no se implementan sin su sí):
+- Una serie de Brix no mezcla instrumentos (hidrómetro y refractómetro leen el etanol distinto).
+- La «sospecha de dilución» deja el 6,5 fijo y compara el mosto contra el pH del agua del lote y el
+  historial. Daniel respondió «sí» a una pregunta con varias opciones; queda por confirmar cuál.
+- Sin historial suficiente, el Brix de una cereza no se califica de bajo o alto.
+
+**Lo que esto NO decide.** Qué **versión** de la receta produjo cada evaluación y cómo se conserva esa
+relación al editarla —sin ello un veredicto histórico no se puede reproducir—. Los números de cada receta (los pone Daniel). La implementación en los
 motores, que es trabajo aparte con su diseño. Las guías de Varroa y Meliponini de P-F.
 
 **Consecuencias.** Los normativos `00` §8, `10`, `11`, `12` §5 y `13` quedan anotados donde contradicen

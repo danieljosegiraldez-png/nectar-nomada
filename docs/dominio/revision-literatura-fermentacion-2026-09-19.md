@@ -39,7 +39,7 @@ temperatura, del proceso y de qué se mide.
 ## 2. Lo que dice la literatura de cada parámetro del perfil
 
 **Temperatura.** Gobierna el tiempo: a 15 °C la misma degradación tarda más del doble que a 30 °C
-(✅ Cenicafé). **Ninguna fuente usa una ventana fija en horas sin temperatura**; los fabricantes dan
+(✅ Cenicafé). **En las fuentes revisadas no encontramos ninguna ventana fija en horas sin temperatura**; los fabricantes dan
 duración por tramo de temperatura (✅). Los motores de `lib/beneficio` no leen temperatura. Matiz de
 Codex: eso no refuta una ventana fija **como recordatorio para revisar**; la refuta como diagnóstico
 universal de estancamiento.
@@ -48,9 +48,10 @@ universal de estancamiento.
 pasar sin avanzar. Los fabricantes (◻ Lallemand: 36–96 h natural, 36–48 h despulpado; mínimo 36 h
 para efecto aromático) dan duración **total**, no ventana de alarma.
 
-**Punto de lavado (fin de fermentación de un lavado).** Referencias entre pH **4,4 y 4,8**: 4,5 a las
-16 h (✅ De Bruyn), «cerca de 4,6» (✅ Tirado-Kulieva), ◻ manual preparatorio CQI QP2 (consultor, no
-oficial): «parar antes de 4,0; preferible 4,5–4,6». Son criterios distintos —demucilaginación,
+**Punto de lavado (fin de fermentación de un lavado).** Referencias: «cerca de 4,6» (✅ Tirado-Kulieva,
+citando literatura previa); ◻ manual preparatorio CQI QP2 (consultor, no oficial): «parar antes de 4,0;
+preferible 4,5–4,6». Como **trayectoria**, no como punto de lavado: 4,5 a las 16 h y 4,0 a las 36 h
+(✅ De Bruyn). Son criterios distintos —demucilaginación,
 elección del investigador, sensorial— y no una banda validada.
 
 **pH bajo como daño.** La espontánea de Cenicafé terminó **por debajo de 3,5 sin diferencia
@@ -60,14 +61,15 @@ significativa de calidad** (✅). 3,5 no significa daño por sí solo.
 del beneficio de Daniel mide 6,5–6,9 y algunas aguas llegan a 7–8 (Daniel). La frase del paquete
 «el mucílago fresco no supera ~6,0» **no tiene fuente**.
 
-**Brix.** **Ningún estudio ni fabricante publica umbrales de °Brix de fermentación** (✅ fichas
-Fermentis; ◻ resto). El mosto seco arranca ya en 15–16,5 °Bx (✅ Tirado-Kulieva): un piso de 15 diría
+**Brix.** **En lo revisado no encontramos umbrales de °Brix de fermentación**: ✅ las fichas de
+Fermentis no mencionan pH ni Brix; ◻ lo demás lo reportan los subagentes. El mosto seco arranca ya en 15–16,5 °Bx (✅ Tirado-Kulieva): un piso de 15 diría
 «listo» al empezar. El refractómetro y el hidrómetro no leen azúcar: el etanol y el consumo de azúcar
 mueven el índice de refracción en sentidos opuestos, y la densidad de otra forma (corrección de Codex
 al informe D). ◻ Contradicción sin resolver: el informe B dice que nadie publica series de Brix en
 fermentación inoculada; el C atribuye una a Cassimiro 2023 (*C. canephora*, SIAF). No verificado.
 
-**Pendiente de pH (meseta 0,01 pH/h).** Ninguna fuente de café usa pendiente; todas usan pH absoluto.
+**Pendiente de pH (meseta 0,01 pH/h).** ◻ En las fuentes de café que leyeron los subagentes, ninguna usa
+pendiente; usan pH absoluto. No comprobado aparte.
 La capacidad tampón (◻ Breidt & Skinner 2022, en pepino) aconseja cautela al leer pendientes cerca de
 los pKa del láctico (3,86) y el acético (4,76), pero **no demuestra mesetas en café** (Codex).
 

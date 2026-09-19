@@ -14,7 +14,7 @@ El vacío importa más de lo que parece: el secado es donde se destruye la mayor
 > la capacidad del beneficio y al clima. El secado es un **ambiente compartido**: ante un retraso, primero
 > acciones sobre el lote (mover bandeja, abanico); si se propone tocar el cuarto, se muestra el efecto
 > en cada lote antes de decidir. El fin se mide con el **AgraTronix Coffee Tester 08150** en escala
-> pergamino (±0,5 %); **no mide actividad de agua**, así que `TARGET_REACHED` se da por humedad y queda
+> pergamino (±0,5 % «in normal moisture range for stored grain», según la ficha); **no mide actividad de agua**, así que `TARGET_REACHED` se da por humedad y queda
 > marcado «sin actividad de agua medida» hasta que haya medidor.
 
 

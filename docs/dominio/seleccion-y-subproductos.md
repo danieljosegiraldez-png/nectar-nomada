@@ -3,8 +3,9 @@
 
   estado    : reemplazado · no normativo
   reemplazo : docs/beneficio/12_mass_balance_byproducts.md (v3.1, «Reemplaza: v2.0»). Además, por ADR-177 (2026-09-19) los
-              umbrales salen de la receta de Daniel y los números de este borrador no
-              gobiernan nada. Se conserva como historia del paquete.
+              umbrales salen de la receta de Daniel. Reemplazado NO quiere decir revisado:
+              lo que este borrador trata y ADR-177 no decide sigue abierto en su sucesor —
+              selección, balance y enrutamiento de `12` no se revisaron, sólo la cáscara (§5).
   origen    : redactado por un modelo de lenguaje a partir de indicaciones de
               Daniel; entregado el 2026-09-13 en `coffee_processing_specs_packet`
   revisado  : NO. Daniel aún no lo ha repasado línea a línea.

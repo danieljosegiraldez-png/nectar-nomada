@@ -34,5 +34,6 @@
   (`13_drying_moisture` §4).
 - **No mide actividad de agua**: la expresión no aparece en ningún punto del catálogo. Por eso el
   «terminado» se da por humedad y queda marcado «sin actividad de agua medida».
-- **±0,5 %** es más fino que la banda de objetivo de secado (10–11,5 %): sirve para decidir el corte.
+- **±0,5 % vale «in normal moisture range for stored grain»**, no en todo el rango. Qué incertidumbre
+  se acepta cerca del objetivo de una receta es una definición pendiente, no algo que la ficha resuelva.
 - **No tiene escala para cáscara.** Una humedad de cáscara con este aparato sería de una escala ajena.
