@@ -21,6 +21,7 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
+import { resolveOrganizationForLocation } from "./locations";
 import type { IntervencionParaCarencia } from "./carenciaDeIntervencion";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
 import { diaDeHoy } from "../time/diaDeHoy";
@@ -168,11 +169,24 @@ async function validarReferencias(
   }
 }
 
+/**
+ * Ronda de arreglos 2: `organizationId` es la de la parcela RESUELTA, no la
+ * columna cruda de `Location`. Las parcelas reales («Lote 1 — Finca Rosina»)
+ * la tienen nula: la organización vive en el sitio padre («Finca Rosina»), y
+ * `resolveOrganizationForLocation` (`lib/traceability/locations.ts`) es la
+ * función que ya existe para subir por `parentLocationId` hasta encontrarla.
+ * Antes esta función leía `location.organizationId` a secas, y con eso el
+ * selector de productos salía vacío y ningún material podía pasar la
+ * comprobación «es de la organización de la parcela».
+ */
 async function resolverParcela(locationId: string): Promise<ParcelaResuelta | null> {
-  return prisma.location.findUnique({
+  const location = await prisma.location.findUnique({
     where: { id: locationId },
-    select: { id: true, organizationId: true, timezone: true, locationType: true },
+    select: { id: true, timezone: true, locationType: true },
   });
+  if (!location) return null;
+  const organizationId = await resolveOrganizationForLocation(locationId);
+  return { ...location, organizationId };
 }
 
 /**

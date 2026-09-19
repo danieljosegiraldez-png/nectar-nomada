@@ -50,6 +50,11 @@ let fitoOtraOrg: string;
 let fito2: string;
 let loteDeFito2: string;
 let jornadaOtraParcela: string;
+// Ronda de arreglos 2 (bug real medido en la base): una parcela con la FORMA
+// REAL de Finca Rosina / Lote 1 — la organización vive en el sitio padre, y
+// la parcela hija tiene `organizationId` NULO.
+let finca: string;
+let parcelaHija: string;
 
 async function crearPersona(label: string) {
   const persona = await prisma.person.create({
@@ -199,12 +204,35 @@ beforeAll(async () => {
       provenanceClass: "direct_observation",
     })
   ).id;
+
+  // Ronda de arreglos 2: sitio con organización + parcela hija SIN
+  // organización propia — la forma real que escondía el bug. `fito` (de
+  // `organizationId`) y `fitoOtraOrg` (de `organizacionOtra`) ya existen; no
+  // hace falta un material nuevo.
+  finca = (
+    await prisma.location.create({
+      data: { locationType: "site", name: `TEST Finca (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+    })
+  ).id;
+  parcelaHija = (
+    await prisma.location.create({
+      data: {
+        locationType: "plot",
+        name: `TEST Lote Hijo (${RUN_ID})`,
+        organizationId: null,
+        parentLocationId: finca,
+        status: "approved",
+        classification: "internal",
+      },
+    })
+  ).id;
+  await asignarRol(operador, "Farm Operator", parcelaHija);
 }, 30000);
 
 afterAll(async () => {
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: [jornada, jornadaOtraParcela] } }) });
 
-  const ubicaciones = [parcela, otraParcela, parcelaOtraOrg];
+  const ubicaciones = [parcela, otraParcela, parcelaOtraOrg, finca, parcelaHija];
   const originales = await prisma.plotIntervention.findMany({ where: { locationId: { in: ubicaciones } }, select: { id: true } });
   const idsIntervenciones = originales.map((o) => o.id);
   await prisma.plotInterventionLine.deleteMany({ where: assertDefinedWhere({ interventionId: { in: idsIntervenciones } }) });
@@ -232,6 +260,10 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsCuentas } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: idsPersonas } }) });
 
+  // `parcelaHija` referencia a `finca` por `parentLocationId`: se borra ANTES,
+  // en su propia sentencia, para no depender de que un solo `deleteMany` con
+  // varios ids resuelva el orden de una FK que apunta dentro del mismo lote.
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: parcelaHija }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }) });
   await deleteTestOrganizations(RUN_ID);
 }, 30000);
@@ -424,5 +456,48 @@ describe("productosFitosanitarios — Tarea 8, spec §5", () => {
     const loteIds = fitoEntry.lotes.map((l) => l.id);
     expect(loteIds).toContain(lote);
     expect(loteIds).toContain(loteVencido);
+  });
+});
+
+/**
+ * Ronda de arreglos 2 — bug real, medido en la base contra la copia local:
+ * en `/plots/<Lote 1>/manejo/nuevo` el selector de productos salía VACÍO.
+ * Las parcelas reales («Lote 1 — Finca Rosina») tienen `organizationId`
+ * NULO; la organización vive en su sitio padre («Finca Rosina»). Ninguna de
+ * las pruebas de arriba lo veía porque sus fixtures ponen `organizationId`
+ * directo en la parcela — `parcelaHija` (hija de `finca`) reproduce la
+ * forma real.
+ */
+describe("la organización se resuelve subiendo por parentLocationId (ronda de arreglos 2)", () => {
+  it("productosFitosanitarios sobre la parcela hija trae el material de la organización del sitio padre, no el de otra", async () => {
+    const productos = await productosFitosanitarios(operador, parcelaHija);
+    const ids = productos.map((p) => p.id);
+    // Control positivo: `fito` es de `organizationId`, la del sitio `finca`.
+    expect(ids).toContain(fito);
+    // `fitoOtraOrg` es de OTRA organización.
+    expect(ids).not.toContain(fitoOtraOrg);
+  });
+
+  it("registrarIntervencion sobre la parcela hija con un material de la organización del sitio padre ENTRA", async () => {
+    const r = await registrarIntervencion(operador, {
+      locationId: parcelaHija,
+      kind: "aplicacion",
+      target: "broca",
+      occurredAt: new Date("2026-09-10T15:00:00Z"),
+      lineas: [{ materialId: fito, withdrawalDays: 7 }],
+    });
+    expect(r.locationId).toBe(parcelaHija);
+  });
+
+  it("registrarIntervencion sobre la parcela hija con un material de OTRA organización se rechaza", async () => {
+    await expect(
+      registrarIntervencion(operador, {
+        locationId: parcelaHija,
+        kind: "aplicacion",
+        target: "broca",
+        occurredAt: new Date("2026-09-10T15:00:00Z"),
+        lineas: [{ materialId: fitoOtraOrg, withdrawalDays: 7 }],
+      }),
+    ).rejects.toThrow(IntervencionValidationError);
   });
 });
