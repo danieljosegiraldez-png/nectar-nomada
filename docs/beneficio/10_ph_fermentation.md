@@ -8,9 +8,9 @@
 > umbrales son **de la receta, por fase**. Manda el pH objetivo; al vencer la ventana se puede extender
 > **mientras el pH siga bajando** (bajada mínima y separación, de la receta). Estancado = el pH no baja,
 > salvo que el Brix baje o haya otra señal de actividad; un olor negativo (acético, pasado, rancio)
-> avisa aunque el pH no se mueva. Sobre `SUSPECT_DILUTION` a 6,50: el agua de Daniel mide 6,5–6,9 y
-> hay aguas de 7–8; él pidió medir el pH del agua con rutina. Retirar el 6,5 y comparar contra el agua
-> del lote es **propuesta pendiente de su confirmación** (ADR-177). La «primera lectura» que califica un café es
+> avisa aunque el pH no se mueva. `SUSPECT_DILUTION` a 6,50 fijo **se retira**: el mosto se compara
+> contra el pH del **agua de ese lote** (su agua mide 6,5–6,9, y hay aguas de 7–8 que varían con la
+> temporada), con una rutina del beneficio que mide el agua. Nunca se avisa sobre una lectura de agua. La «primera lectura» que califica un café es
 > la de **recepción, sobre mucílago exprimido sin agua**. Referencias: la revisión de literatura del
 > 2026-09-19 (p. ej. espontánea con pH final <3,5 sin pérdida significativa de calidad, Cenicafé 2023).
 

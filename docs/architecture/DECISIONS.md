@@ -11753,9 +11753,11 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
-13. **Agua**: opción en el beneficio de **medir el pH del agua** cada día o con una frecuencia ligada a
-    los procesos, «especialmente si se van a lavar y o sumergir en esa agua». Hay aguas de 7–8 que
-    cambian con lluvias y temporadas. (Cómo se usa esa medida contra el mosto: ver propuestas abajo.)
+13. **Agua y sospecha de dilución**: fuera el 6,5 fijo. **El mosto se compara contra el pH del agua de
+    ese lote**, y sólo contra eso: si mide casi lo mismo que el agua que se usó, avisa. Nunca se avisa
+    sobre una lectura de agua. Para tenerlo, opción en el beneficio de **medir el pH del agua** cada día
+    o con frecuencia ligada a los procesos, «especialmente si se van a lavar y o sumergir en esa agua».
+    Hay aguas de 7–8 que cambian con lluvias y temporadas.
 14. **Levaduras con ficha de fabricante** (especie, dosis, rango de temperatura, duración por tramo) y
     fuente; la receta la propone y lo que ajusta Daniel manda. MP-72 y HD A54 son de enología: su uso en
     café sale de su experiencia. (Encaja con la tabla de levaduras de ADR-172.)
@@ -11776,8 +11778,6 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
 
 **Propuestas del agente, NO confirmadas por Daniel** (no se implementan sin su sí):
 - Una serie de Brix no mezcla instrumentos (hidrómetro y refractómetro leen el etanol distinto).
-- La «sospecha de dilución» deja el 6,5 fijo y compara el mosto contra el pH del agua del lote y el
-  historial. Daniel respondió «sí» a una pregunta con varias opciones; queda por confirmar cuál.
 - Sin historial suficiente, el Brix de una cereza no se califica de bajo o alto.
 
 **Lo que esto NO decide.** Qué **versión** de la receta produjo cada evaluación y cómo se conserva esa
