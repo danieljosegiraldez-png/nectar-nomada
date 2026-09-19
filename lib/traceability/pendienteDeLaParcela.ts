@@ -30,6 +30,14 @@ export interface EntradaDePendiente {
   /** Hoy como `YYYY-MM-DD`, de `diaDeHoy(ahora, location.timezone)`. */
   hoy: string;
   /**
+   * `location.timezone` tal cual — revisión final del PR B, hallazgos 1 y 3:
+   * `avisosDeTrampas` la necesita para comparar el día de una intervención
+   * contra el día de la lectura que disparó, en la misma zona que calculó
+   * `hoy`. Nunca se inventa un valor por defecto aquí: eso ya lo decide
+   * `diaDeHoy`.
+   */
+  zona: string | null;
+  /**
    * `location.areaHectares`, pasado por `Number()` sólo si no es nulo. El aviso
    * de área sale de aquí y NO de `computePlotDensity`: ésa devuelve
    * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con
@@ -122,7 +130,9 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
 
-  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla, intervenciones: e.intervencionesDeTrampas }));
+  tocaHacer.push(
+    ...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla, intervenciones: e.intervencionesDeTrampas, zona: e.zona }),
+  );
 
   if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
   // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.

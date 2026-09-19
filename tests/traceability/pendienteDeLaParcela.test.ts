@@ -16,6 +16,7 @@ import type { IntervencionParaAviso } from "../../lib/traceability/pendienteDeLa
 
 const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   hoy: "2026-09-16",
+  zona: "UTC",
   areaHectares: 1,
   cohortesActivas: [{ id: "c1", plantCount: 4000 }],
   // Tipo explícito: sin él TypeScript ensancha "en_produccion" a string.

@@ -1,4 +1,5 @@
 import type { Aviso } from "./pendienteDeLaParcela";
+import { diaDeHoy } from "../time/diaDeHoy";
 
 /**
  * Los avisos de las trampas de broca — spec de trampas §6.
@@ -39,10 +40,17 @@ export interface TrampaParaAviso {
    * la trata como si no existiera — es de un ciclo cerrado por un retiro y
    * reinstalación posteriores, y ni cuenta como visita ni puede disparar.
    *
-   * `id` y `observedAt` (el INSTANTE, no el día) son la Tarea 4: hacen falta
-   * para nombrar la observación que motivó el aviso y para comparar contra
-   * `occurredAt` de una intervención con la precisión que pide «atendido»
-   * (spec §4.2) — un `>` de instantes, no de días.
+   * `id` y `observedAt` son la Tarea 4: `id` nombra la observación que motivó
+   * el aviso. `observedAt` se guardaba pensando en compararlo como INSTANTE
+   * contra `occurredAt` de una intervención — revisión final del PR B,
+   * hallazgo 1: la lectura es un campo de DÍA (medianoche UTC, ver arriba),
+   * así que un `>` de instantes compara un día contra una hora de pared que
+   * el dato nunca representó. Una intervención registrada el MISMO día que la
+   * lectura, aunque su hora sea posterior, apagaba el aviso sin que hubiera
+   * pasado un día completo desde que se vio el problema. `avisosDeTrampas`
+   * ahora compara DÍAS, en la zona de la parcela (`avisosDeTrampas.zona`), no
+   * instantes — `observedAt` se conserva porque `dia` ya sale de él
+   * (`trampasParaAviso`), pero la comparación real vive en `dia`.
    */
   ultimaRevision: { id: string; dia: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   /**
@@ -67,6 +75,10 @@ export interface ReglaParaAviso {
  * §4.2. Sólo lo que hace falta para juzgar si «cubre»: nunca el `kind`, porque
  * cualquier tipo cuenta igual, también un manejo cultural (la regla sugiere,
  * no manda).
+ *
+ * `occurredAt` se compara por DÍA, en la zona de la parcela — revisión final
+ * del PR B, hallazgos 1 y 3 — no como instante: ver el docstring de
+ * `TrampaParaAviso.ultimaRevision`.
  */
 export interface IntervencionQueCubre {
   occurredAt: Date;
@@ -89,6 +101,13 @@ export function avisosDeTrampas(e: {
   regla: ReglaParaAviso | null;
   /** Vigentes de la MISMA parcela — spec §4.2. Sin este parámetro nada atiende. */
   intervenciones: readonly IntervencionQueCubre[];
+  /**
+   * La zona de la parcela, para comparar `occurredAt` por día contra
+   * `ultimaRevision.dia` — revisión final del PR B, hallazgos 1 y 3. Se pasa
+   * tal cual (`location.timezone`, puede ser `null`): esta función no inventa
+   * una zona por defecto, esa decisión ya vive en `diaDeHoy`.
+   */
+  zona: string | null;
 }): Aviso[] {
   const { regla } = e;
   if (regla == null) return [];
@@ -126,20 +145,28 @@ export function avisosDeTrampas(e: {
 
     // Spec §4.2: «atendido» apaga SÓLO este aviso, nunca `trampa_por_revisar`
     // (la trampa sigue con su plazo). Cubre cualquier intervención vigente de
-    // ESTA parcela, posterior a la lectura que disparó — estrictamente
-    // posterior: una simultánea no cuenta. Una trampa sin bloque sólo la
-    // cubre una intervención sobre la parcela entera; con bloque, también una
-    // que incluya ese bloque. Nunca una intervención sobre plantas sueltas
-    // (esas no llegan aquí como `parcelaEntera` ni aportan a `plotBlockIds`,
-    // ver `intervencionesVigentes`).
+    // ESTA parcela, de un DÍA estrictamente posterior al día de la lectura
+    // que disparó — el mismo día, aunque su hora sea posterior, no cuenta
+    // (revisión final del PR B, hallazgo 1: la lectura es un campo de día, no
+    // un instante). Y nunca un día futuro respecto a «hoy» — una fecha
+    // introducida por error como mañana no puede atender nada hoy (hallazgo
+    // 3). Los dos comparan como cadena `YYYY-MM-DD` en la MISMA zona que
+    // calculó `e.hoy` (`e.zona`, spec §4.2 + revisión final). Una trampa sin
+    // bloque sólo la cubre una intervención sobre la parcela entera; con
+    // bloque, también una que incluya ese bloque. Nunca una intervención
+    // sobre plantas sueltas (esas no llegan aquí como `parcelaEntera` ni
+    // aportan a `plotBlockIds`, ver `intervencionesVigentes`).
     const atendida =
       disparo &&
       revisionVigente != null &&
-      e.intervenciones.some(
-        (i) =>
-          i.occurredAt.getTime() > revisionVigente.observedAt.getTime() &&
-          (i.parcelaEntera || (t.plotBlockId != null && i.plotBlockIds.includes(t.plotBlockId))),
-      );
+      e.intervenciones.some((i) => {
+        const diaDeLaIntervencion = diaDeHoy(i.occurredAt, e.zona);
+        return (
+          diaDeLaIntervencion > revisionVigente.dia &&
+          diaDeLaIntervencion <= e.hoy &&
+          (i.parcelaEntera || (t.plotBlockId != null && i.plotBlockIds.includes(t.plotBlockId)))
+        );
+      });
 
     if (disparo && !atendida) {
       avisos.push({
