@@ -29,7 +29,7 @@ Las reglas van en la base, no sólo en TypeScript.
   - el secado **termina bandeja a bandeja**: bajar la última **cierra el secado en la misma transacción**, con `endedAt = hasta`, y pide los datos de cierre que ya pide `endDryingRun`. El paso a almacenamiento sigue siendo manual;
   - **una bandeja por posición**: dos a la vez se enseñan como **conflicto**, sin bloquear;
   - la posición es **estante + nivel + puesto**.
-- **Decisión de este plan, que se enseña a Daniel en el PR:** mueve una bandeja quien gestiona el lote que lleva cargado, o quien configura equipos en el destino (Tarea 2, paso 4b).
+- **Decidido por Daniel el 2026-09-18:** mueve una bandeja quien gestiona el lote que lleva cargado, o quien configura equipos en el destino (Tarea 2, paso 4b). Una bandeja vacía, sólo quien configura.
 - **§7 de la spec, resuelto aquí:** al bajar una bandeja se guarda **sólo `hasta`**. La humedad con la que baja es una inspección de esa bandeja, que es el paso 3. Bajar **no afirma** que llegó a meta: `TARGET_REACHED` exige humedad **y** actividad de agua (`13_drying_moisture.md`).
 - **Reglas de la casa:**
   - una regla que mira otra tabla va por **disparador**, con la misma forma que `traceability.exigir_cama_de_secado`;
@@ -1132,7 +1132,7 @@ export async function bandejasDisponibles(userAccountId: string, dryingRunId: st
 
 - [ ] **Paso 4b: mover una bandeja de posición**
 
-**Por qué hace falta aquí y no basta `trasladarEquipo`:** `trasladarEquipo` exige configurar equipos (`equipment:manage` o `edit_beneficio`), y el **capataz no lo tiene**. Quien voltea y cambia las bandejas de nivel cada día no podría registrarlo. **Decisión de este plan, enseñada a Daniel en el PR:** puede mover una bandeja
+**Por qué hace falta aquí y no basta `trasladarEquipo`:** `trasladarEquipo` exige configurar equipos (`equipment:manage` o `edit_beneficio`), y el **capataz no lo tiene**. Quien voltea y cambia las bandejas de nivel cada día no podría registrarlo. **Decidido por Daniel el 2026-09-18:** puede mover una bandeja
 - quien **gestiona el lote que la bandeja lleva cargado** —el mismo permiso que cargarla y bajarla—,
 - o quien puede configurar equipos en la **posición de destino**.
 

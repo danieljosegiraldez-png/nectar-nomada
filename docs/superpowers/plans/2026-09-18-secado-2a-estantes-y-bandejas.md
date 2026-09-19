@@ -1462,7 +1462,7 @@ await prisma.$transaction(async (tx) => {
 });
 ```
 
-**Antes de fusionar hay que confirmar el nombre de la base de producción**, porque no puede empezar por `nectar_test`, `nectar_ci` ni `nn_flip_`. **Leer producción está prohibido** (`SESSION_STATE.md`): se mira el **nombre** en la URL de `DATABASE_URL` del proyecto de Vercel, sin conectarse, o se le pregunta a Daniel. Hasta saberlo, la puerta se da por no verificada, y así se dice en el PR.
+**La base de producción se llama `neondb`, comprobado el 2026-09-18 por dos fuentes sin conectarse:** `docs/architecture/BACKUP_AND_RECOVERY.md` lo dice, y el último respaldo real (`nectar-backups/2026-09-14T141355Z/`) contiene `neondb.dump`, que no se abrió. No casa con `^(nectar_test|nectar_ci|nn_flip_)`, así que en producción la puerta está cerrada aunque alguien ponga el ajuste. **Si algún día cambia el nombre de la base de producción, esta regla se revisa.**
 
 Y un **guardia de fuente**, en `tests/arquitectura/limpieza-de-pruebas-solo-en-pruebas.test.ts` (hermético, sin base). Tiene tres partes, y cada una cierra la puerta por la que la anterior podría pasar vacía (segunda pasada de Codex):
 - la **función detectora**, `apariciones(texto)`, se prueba primero sobre un texto sintético que contiene `nn.limpieza_de_pruebas` y **tiene que encontrarlo**;
