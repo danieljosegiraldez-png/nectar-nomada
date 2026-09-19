@@ -26,11 +26,21 @@ export { DESTINOS_DE_CERA_SUBPRODUCTO } from "./vocabularioDeMiel";
 
 export class CeraDeExtraccionInvalida extends Error {}
 
-/** El apiario con su finca, y el permiso ya comprobado. Igual que `fincaDe` en `cera.ts`. */
+/**
+ * El apiario con su finca, y el permiso ya comprobado.
+ *
+ * **Los candidatos son los de `getApiaryDetail`**, no sólo el sitio: a un apiario se llega por una
+ * asignación de ubicación O por el proyecto de cualquiera de sus colmenas. Con sólo `{ locationId }`
+ * —revisión de Codex de esta rebanada— una cuenta con ámbito de proyecto abría la ficha y esta
+ * sección la rechazaba, tirando la página entera.
+ */
 async function fincaDelApiario(userAccountId: string, locationId: string, accion: "manage" | "view") {
-  const sitio = await prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+  const sitio = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { organizationId: true, hives: { select: { projectId: true, locationId: true } } },
+  });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
-  await requireApiaryAccess(userAccountId, accion, [{ locationId }]);
+  await requireApiaryAccess(userAccountId, accion, [{ locationId }, ...sitio.hives.map((h) => ({ projectId: h.projectId, locationId: h.locationId }))]);
   // La tabla exige organización: es de quién es la cera, no un adorno.
   if (!sitio.organizationId) throw new CeraDeExtraccionInvalida("sitio_sin_finca");
   return sitio.organizationId;
@@ -43,9 +53,9 @@ export async function anotarCeraDeExtraccion(
     /** Kilos. Cero es un dato —se desoperculó y no se recogió nada aprovechable—; negativo no. */
     massKg: number | string;
     destination: ByproductDestination;
-    /** El día en que empezó la extracción y el día en que terminó. */
-    windowStart: Date;
-    windowEnd: Date;
+    /** El día en que empezó la extracción y el día en que terminó. Las dos, o no hay ventana. */
+    windowStart: Date | null;
+    windowEnd: Date | null;
     notes?: string | null;
   },
 ) {
@@ -54,6 +64,9 @@ export async function anotarCeraDeExtraccion(
   // arreglo en la pesada por recipiente (ADR-177, revisión de Codex).
   const massKg = typeof input.massKg === "number" ? input.massKg : Number(String(input.massKg).trim() === "" ? NaN : input.massKg);
   validarMasaDeSubproducto(massKg);
+  // Una ventana a medias no es una ventana, y sustituir el extremo que falta por hoy sería inventar
+  // procedencia (revisión de Codex, ADR-178).
+  if (!input.windowStart || !input.windowEnd) throw new CeraDeExtraccionInvalida("ventana_incompleta");
   if (!(input.windowStart <= input.windowEnd)) throw new CeraDeExtraccionInvalida("ventana_al_reves");
   const notes = input.notes?.trim() || null;
   // La base lo exige también (CHECK `byproduct_batch_otro_dice_por_que`); aquí se dice con nombre.
@@ -115,9 +128,16 @@ export async function ceraDeExtraccionDelApiario(userAccountId: string, apiaryLo
     filas.map(async (f) => {
       const windowStart = f.windowStart!;
       const windowEnd = f.windowEnd!;
+      // El día final ENTERO, no su medianoche: `occurredAt` es un instante y `windowEnd` es un día
+      // (`fechaDeDia`), así que `lte: windowEnd` dejaba fuera una cosecha de ese mismo día a las
+      // 10:00. Mismo idioma que `limpiezaDeCaja.ts`: `gte` el inicio, `lt` el día siguiente.
+      // Revisión de Codex de esta rebanada; las pruebas de antes usaban medianoche y no lo veían.
+      const finExclusivo = new Date(windowEnd.getTime() + 86_400_000);
       const cosechas = await prisma.apiaryHarvestEvent.findMany({
-        // Los dos extremos incluidos: la extracción de un día es de ese día.
-        where: { occurredAt: { gte: windowStart, lte: windowEnd }, colony: { hive: { locationId: apiaryLocationId } } },
+        // **Por el sitio del LOTE, no por el de la colmena de hoy.** `Hive.locationId` lo mueve un
+        // traslado, así que filtrar por él haría que una cosecha cambiara de apiario a posteriori;
+        // `Lot.locationId` es la foto del sitio en que se cosechó (`harvest.ts`).
+        where: { occurredAt: { gte: windowStart, lt: finExclusivo }, resultingLot: { locationId: apiaryLocationId } },
         select: {
           id: true,
           occurredAt: true,

@@ -11766,6 +11766,23 @@ aprovechable—; una masa en blanco o negativa se rechaza.
 Ofrecer el campo seria invitar a inventarlo, y la trazabilidad a **lugar y tiempo** es exactamente
 lo que Daniel pidio.
 
+**Revision de Codex, cuatro hallazgos, los cuatro con su prueba en rojo primero.**
+1. **La ventana perdia casi todo su ultimo dia.** `occurredAt` es un instante y el extremo es un dia
+   a medianoche, asi que una cosecha del dia final a las 15:30 quedaba fuera. Ahora `gte` el inicio
+   y `lt` el dia siguiente, el idioma de `limpiezaDeCaja.ts`. Las pruebas de antes cosechaban a
+   medianoche y no lo veian.
+2. **Un traslado cambiaba de apiario una cosecha vieja**: se filtraba por `Hive.locationId`, que un
+   traslado actualiza. Ahora manda `Lot.locationId`, que es la foto del sitio donde se cosecho.
+3. **Un extremo de ventana ausente se sustituia por hoy**, escribiendo procedencia inventada como
+   `measured_fact`. Ahora una ventana a medias se rechaza.
+4. **`crearSubproducto` aceptaba CERA** sobre una transformacion que ya habia cuadrado su balance,
+   sin reconciliarla: la cera se habria quedado fuera de la masa de salida. Ese servicio ya no
+   acepta CERA; la cascarilla sigue entrando por ahi, que es para lo que existe.
+
+**Lo que queda dicho y no arreglado:** la ventana se compara en dias UTC, como todos los campos de
+dia de la casa, asi que una cosecha de la noche panamena del ultimo dia cae en el dia UTC siguiente.
+Cambiarlo es una decision de zona horaria que afecta a todos los campos de dia, no a esta rebanada.
+
 **Lo que NO entra.** Enlazar la cera fundida con la «cera nueva» de su ano (ADR-173), que la cera
 sea un lote propio —Daniel eligio el subproducto—, y asignar la cera de extraccion a colmenas
 concretas.

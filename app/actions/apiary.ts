@@ -461,8 +461,10 @@ export async function anotarCeraDeExtraccionFormAction(formData: FormData): Prom
     // En crudo: `Number("")` es 0, y un campo vacío es un dato que falta, no cero kilos.
     massKg: String(formData.get("massKg") ?? ""),
     destination: String(formData.get("destination") ?? "") as ByproductDestination,
-    windowStart: fechaDeDia(String(formData.get("windowStart") ?? ""), "windowStart") ?? hoyComoDia(),
-    windowEnd: fechaDeDia(String(formData.get("windowEnd") ?? ""), "windowEnd") ?? hoyComoDia(),
+    // Sin `?? hoyComoDia()`: una ventana que falta no es la de hoy. Poner hoy escribiría una
+    // procedencia inventada como `measured_fact` (revisión de Codex, ADR-178).
+    windowStart: fechaDeDia(String(formData.get("windowStart") ?? ""), "windowStart"),
+    windowEnd: fechaDeDia(String(formData.get("windowEnd") ?? ""), "windowEnd"),
     notes: emptyToNull(formData.get("notes")),
   });
   revalidatePath(`/apiaries/${apiaryId}`);

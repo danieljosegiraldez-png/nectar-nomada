@@ -8,6 +8,9 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearApiario, createColony, createHive } from "../../lib/apiary/hives";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
+import { completarCierreDeCosecha } from "../../lib/apiary/cierreDeCosecha";
+import { procesarMiel } from "../../lib/apiary/mielDelLote";
+import { crearSubproducto } from "../../lib/traceability/subproductos";
 import { anotarCeraDeExtraccion, ceraDeExtraccionDelApiario } from "../../lib/apiary/ceraDeExtraccion";
 
 const RUN = `cerax-${Date.now()}`;
@@ -80,6 +83,23 @@ afterEach(async () => {
   const eventos = await prisma.apiaryHarvestEvent.findMany({ where: assertDefinedWhere({ colony: { hiveId: { in: cajas } } }), select: { id: true, resultingLotId: true } });
   const ids = eventos.map((e) => e.id);
   const lotes = eventos.map((e) => e.resultingLotId);
+  // Colar deja una transformación y un lote hijo: se buscan por la genealogía, no por memoria.
+  for (;;) {
+    const hijos = await prisma.lotTransformationOutput.findMany({
+      where: assertDefinedWhere({ transformation: { inputs: { some: { lotId: { in: lotes } } } }, lotId: { notIn: lotes } }),
+      select: { lotId: true },
+    });
+    if (hijos.length === 0) break;
+    lotes.push(...hijos.map((h) => h.lotId));
+  }
+  const trans = (
+    await prisma.lotTransformationInput.findMany({ where: assertDefinedWhere({ lotId: { in: lotes } }), select: { transformationId: true } })
+  ).map((x) => x.transformationId);
+  await prisma.byproductBatch.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
+  await prisma.deviation.deleteMany({ where: assertDefinedWhere({ lotTransformationId: { in: trans } }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: trans } }) });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: ids } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.apiaryHarvestEvent.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
@@ -184,5 +204,74 @@ describe("la cera de la extracción", () => {
     await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 4, destination: "LAMINA_PROPIA", ...ventana });
     await expect(ceraDeExtraccionDelApiario(extrano, apiarioId)).rejects.toThrow(/no_apiary_access/);
     expect(await ceraDeExtraccionDelApiario(operario, apiarioId)).toHaveLength(1); // el control
+  });
+
+  it("LA CERA DEL COLADO NO SE MEZCLA con la del desopercular: aquí sólo va la del apiario", async () => {
+    // Una cera del colado EN ESTE MISMO APIARIO: su lugar es el del lote, que es este sitio.
+    const cosecha = await cosechaEn(dia("2026-05-04"));
+    await completarCierreDeCosecha(adminId, { apiaryHarvestEventId: cosecha.id, extractedWeightKg: 30 });
+    const colado = await procesarMiel(adminId, {
+      lotId: cosecha.resultingLotId, occurredAt: dia("2026-05-06"), acts: ["colado"], inputKg: 30, outputKg: 26,
+      ceraKg: 4, ceraDestino: "GUARDADA", provenanceClass: "measured_fact",
+    });
+    // El control: esa cera SÍ existe y está en este apiario, sólo que con transformación.
+    expect(
+      await prisma.byproductBatch.count({ where: { transformationId: colado.transformation.id, producedAtLocationId: apiarioId } }),
+    ).toBe(1);
+
+    await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 7, destination: "GUARDADA", ...ventana });
+    const leidas = await ceraDeExtraccionDelApiario(operario, apiarioId);
+    expect(leidas.map((c) => c.massKg)).toEqual([7]); // la del colado no se cuela aquí
+  });
+});
+
+// Segunda revisión de Codex de esta rebanada: cuatro defectos que las pruebas de arriba no veían
+// porque todas cosechaban a medianoche UTC, en un apiario que nunca se movía.
+describe("la ventana dice la verdad sobre lugar y tiempo (Codex)", () => {
+  const ventana = { windowStart: dia("2026-05-03"), windowEnd: dia("2026-05-05") };
+
+  it("UNA COSECHA DE LAS 10 DE LA MAÑANA del último día cuenta: la ventana es de días, no de medianoches", async () => {
+    const tarde = await cosechaEn(new Date("2026-05-05T15:30:00Z"));
+    await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 3, destination: "GUARDADA", ...ventana });
+    const [leida] = await ceraDeExtraccionDelApiario(operario, apiarioId);
+    expect(leida!.cosechas.map((c) => c.id)).toEqual([tarde.id]);
+  });
+
+  it("UN TRASLADO NO CAMBIA DE APIARIO UNA COSECHA VIEJA: manda el sitio donde se cosechó", async () => {
+    const cosecha = await cosechaEn(dia("2026-05-04"));
+    const caja = cajas[cajas.length - 1]!;
+    // Lo que mueve una caja en producción es `trasladarColmenas`; aquí se mueve el campo a mano
+    // porque lo que se afirma es que la lectura NO depende del sitio actual de la caja, y el
+    // traslado exige una fecha posterior a su colocación vigente, que es de hoy.
+    await prisma.hive.update({ where: { id: caja }, data: { locationId: apiarioAjeno } });
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: caja } })).locationId).toBe(apiarioAjeno); // el control: la caja sí se movió
+
+    await anotarCeraDeExtraccion(operario, { apiaryLocationId: apiarioId, massKg: 3, destination: "GUARDADA", ...ventana });
+    const [aqui] = await ceraDeExtraccionDelApiario(operario, apiarioId);
+    expect(aqui!.cosechas.map((c) => c.id)).toEqual([cosecha.id]); // se cosechó aquí, y aquí sigue
+    await anotarCeraDeExtraccion(adminId, { apiaryLocationId: apiarioAjeno, massKg: 3, destination: "GUARDADA", ...ventana });
+    const [alla] = await ceraDeExtraccionDelApiario(adminId, apiarioAjeno);
+    expect(alla!.cosechas).toEqual([]); // y no aparece en el apiario al que llegó la caja
+  });
+
+  it("UNA VENTANA A MEDIAS SE RECHAZA, no se completa con hoy", async () => {
+    const base = { apiaryLocationId: apiarioId, massKg: 3, destination: "GUARDADA" as const };
+    await expect(anotarCeraDeExtraccion(operario, { ...base, windowStart: null, windowEnd: dia("2026-05-05") })).rejects.toThrow(/ventana_incompleta/);
+    await expect(anotarCeraDeExtraccion(operario, { ...base, windowStart: dia("2026-05-03"), windowEnd: null })).rejects.toThrow(/ventana_incompleta/);
+    expect(await prisma.byproductBatch.count({ where: { producedAtLocationId: apiarioId } })).toBe(0);
+  });
+
+  it("LA CERA NO SE AÑADE A UNA TRANSFORMACIÓN YA CUADRADA por el servicio genérico", async () => {
+    const cosecha = await cosechaEn(dia("2026-05-04"));
+    await completarCierreDeCosecha(adminId, { apiaryHarvestEventId: cosecha.id, extractedWeightKg: 30 });
+    const colado = await procesarMiel(adminId, {
+      lotId: cosecha.resultingLotId, occurredAt: dia("2026-05-06"), acts: ["colado"], inputKg: 30, outputKg: 30,
+      provenanceClass: "measured_fact",
+    });
+    const comun = { transformationId: colado.transformation.id, destination: "GUARDADA" as const, massKg: 4, producedAtLocationId: apiarioId };
+    await expect(crearSubproducto(adminId, { ...comun, byproductType: "CERA" })).rejects.toThrow(/la cera se anota al colar o en el apiario/);
+    // El control: la cascarilla sí entra por ahí, que es para lo que existe ese servicio.
+    const cascarilla = await crearSubproducto(adminId, { ...comun, byproductType: "CASCARILLA" });
+    expect(cascarilla.byproductType).toBe("CASCARILLA");
   });
 });
