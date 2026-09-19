@@ -6,6 +6,8 @@ import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
+import { insumosDeLugar } from "../../lib/rutinas/lugares";
+import { getObserverCandidates } from "../../lib/traceability/lots";
 import { destinosDelBeneficio } from "./destinos";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +67,17 @@ export default async function BeneficioPage({
     listarBeneficios(user.userAccountId),
   ]);
 
+  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
+  // misma lista de Personas activas, sea cual sea el beneficio, así que se
+  // resuelve UNA vez para todos. `insumosDeLugar` sí varía por beneficio —cada
+  // uno puede ser de una organización distinta—, así que se resuelve una por
+  // beneficio, pero desde aquí (en paralelo) en vez de una vez por instancia
+  // de `RutinasDeLugar` anidada.
+  const [personas, insumosPorBeneficio] = await Promise.all([
+    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
+    Promise.all(beneficios.map((b) => insumosDeLugar(user.userAccountId, b.id))),
+  ]);
+
   return (
     <div>
       <h1>{t("titulo")}</h1>
@@ -79,10 +92,10 @@ export default async function BeneficioPage({
         ))}
       </ul>
       <AvisoDeRutina ok={ok} error={error} t={tEq} />
-      {beneficios.map((b) => (
+      {beneficios.map((b, i) => (
         <div key={b.id}>
           <h2 style={{ marginTop: "1.5rem" }}>{b.name}</h2>
-          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} />
+          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} insumos={insumosPorBeneficio[i]} personas={personas} />
         </div>
       ))}
     </div>

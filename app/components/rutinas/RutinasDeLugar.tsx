@@ -20,7 +20,23 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
  * en cualquier lugar de `/instalaciones/[id]` no puede tumbar la página
  * (arreglo de revisión de Tarea 6).
  */
-export async function RutinasDeLugar({ userAccountId, locationId }: { userAccountId: string; locationId: string }) {
+export async function RutinasDeLugar({
+  userAccountId,
+  locationId,
+  insumos: insumosDelLlamador,
+  personas: personasDelLlamador,
+}: {
+  userAccountId: string;
+  locationId: string;
+  /**
+   * Ya resueltos por el llamador (arreglo de revisión final, Hallazgo 4): evita
+   * el N+1 de `insumosDeLugar`/`getObserverCandidates` cuando una página monta
+   * varias instancias (`/instalaciones/[id]`, `/beneficio`). Si faltan, el
+   * componente los resuelve solo — lo que mantiene `/bodegas/[id]` en una línea.
+   */
+  insumos?: Awaited<ReturnType<typeof insumosDeLugar>>;
+  personas?: { id: string; name: string }[];
+}) {
   const [t, lugar, puedeVer, puedeGestionar, puedeApuntar] = await Promise.all([
     getTranslations("Equipos"),
     lugarConRutinasOVacio(locationId),
@@ -30,13 +46,14 @@ export async function RutinasDeLugar({ userAccountId, locationId }: { userAccoun
   ]);
   if (!lugar || !puedeVer) return null;
   const hoy = diaDeHoy(new Date(), lugar.timezone ?? null);
-  const [rutinas, insumos, equipos, observadores] = await Promise.all([
+  const [rutinas, insumos, equipos, personas] = await Promise.all([
     rutinasDeLugar(userAccountId, locationId, hoy),
-    insumosDeLugar(userAccountId, locationId),
+    insumosDelLlamador ?? insumosDeLugar(userAccountId, locationId),
     equiposAqui(userAccountId, locationId),
-    getObserverCandidates(userAccountId),
+    personasDelLlamador
+      ? Promise.resolve(personasDelLlamador)
+      : getObserverCandidates(userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
   ]);
-  const personas = observadores.people.map((p) => ({ id: p.id, name: p.displayName }));
   return (
     <section style={{ marginTop: "1.5rem" }}>
       <h2>{t("rutinas")}</h2>

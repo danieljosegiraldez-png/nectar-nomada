@@ -9,6 +9,8 @@ import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
+import { insumosDeLugar } from "../../../lib/rutinas/lugares";
+import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
@@ -46,6 +48,15 @@ export default async function InstalacionPage({ params, searchParams }: {
     ? instalacion.estantes.flatMap((e) => e.posiciones.map((p) => ({ ...p, estanteId: e.id }))).find((p) => p.id === posicion)
     : undefined;
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
+  // Hallazgo 4 (revisión final, 2026-09-19): la instalación y todas sus camas
+  // comparten la misma organización (`crearUbicacionDeSecado` copia
+  // `organizationId` del padre), así que resolver esto UNA vez y pasarlo a
+  // cada `RutinasDeLugar` evita el N+1 de `insumosDeLugar`/`getObserverCandidates`
+  // que antes corría una vez por cama.
+  const [insumos, personas] = await Promise.all([
+    insumosDeLugar(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
+  ]);
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
@@ -59,8 +70,8 @@ export default async function InstalacionPage({ params, searchParams }: {
     {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} insumos={insumos} personas={personas} />
     </section>)}
-    {instalacion.camas.map((c) => <RutinasDeLugar key={`r-${c.id}`} userAccountId={user.userAccountId} locationId={c.id} />)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
     {instalacion.estantes.map((estante, i) => {
@@ -95,6 +106,6 @@ export default async function InstalacionPage({ params, searchParams }: {
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumos} personas={personas} />
   </div>;
 }

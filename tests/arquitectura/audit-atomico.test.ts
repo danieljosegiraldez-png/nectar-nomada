@@ -449,11 +449,20 @@ const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), 
   .sort();
 
 /**
- * Todo `lib/` y `app/` — no sólo `ARCHIVOS`, que se filtra por quien YA
- * audita — porque quien llama a una función transaccional puede vivir en un
- * archivo que no audita nada por su cuenta.
+ * Todo `lib/`, `app/` y `scripts/` — no sólo `ARCHIVOS`, que se filtra por
+ * quien YA audita — porque quien llama a una función transaccional puede
+ * vivir en un archivo que no audita nada por su cuenta.
+ *
+ * `scripts/` entró en la ola de arreglos de revisión final (2026-09-19,
+ * Hallazgo 6): `ARCHIVOS` ya lo recorre, pero esta lista se había quedado en
+ * `lib/`+`app/`, así que un guion que llamara a una función transaccional
+ * pasaba sin que esta regla lo viera — el mismo punto ciego que costó
+ * `app/actions/auth.ts` cuando `fuentes` sólo miraba `lib/`. Medido al
+ * escribir esto: ningún archivo de `scripts/` llama hoy a ninguna
+ * `TRANSACCIONALES_CON_AUDIT`, así que el guardia sigue en verde — cubre el
+ * caso futuro, no corrige uno presente.
  */
-const TODO_LIB_APP = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app"))]
+const TODO_LIB_APP = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), ...fuentes(join(RAIZ, "scripts"))]
   .map((r) => relative(RAIZ, r))
   .sort();
 
