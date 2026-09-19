@@ -11701,3 +11701,77 @@ inspeccion que no conto no borra el conteo anterior.
 
 **Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
 cada marco negro, y no se inventa.
+
+## ADR-177 — Los umbrales del beneficio salen de la receta; el paquete v3.1 queda como plantilla
+
+**Fecha:** 2026-09-19 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta) ·
+**Revisión de literatura:** `docs/dominio/revision-literatura-fermentacion-2026-09-19.md`
+
+**Contexto.** Los motores de `lib/beneficio/` evalúan pH, °Brix y humedad con cinco perfiles fijos
+(`WASHED_STANDARD`, `NATURAL`, `ANAEROBIC_SHORT`, `CARBONIC_MACERATION`, `COLD_HOLD_PREFERMENT`),
+todos `[PROVISIONAL]` y **sin una sola fuente citada**. P-F pedía que Daniel dijera qué respalda. La
+revisión de literatura encontró referencias contextualizadas pero ninguna banda universal validada;
+ningún fabricante (Fermentis, Lallemand) publica pH ni °Brix; y la temperatura, que gobierna el tiempo,
+no entra en los motores. Además los perfiles planos chocan con ADR-053 («anaeróbico no es un proceso,
+es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/78) reciben hoy `NATURAL`.
+
+**Decisiones de Daniel** (sus palabras entre comillas; lo demás es síntesis):
+
+1. **Umbrales desde la receta**, por proceso o fase. **Sin receta, el motor no opina.**
+2. **Tiempo.** La receta fija la ventana y la temperatura óptima; **la ventana no se recalcula sola**:
+   la temperatura medida produce recomendaciones —más caliente, más atención y revisión más frecuente
+   o acortar; más fría, nunca menos que lo fijado—.
+3. **Manda el pH objetivo de la fase.** Si lo alcanza, listo. Si vence la ventana y le faltan unos
+   puntos, se puede extender; **el límite lo pone la señal, no el reloj**: mientras el pH siga bajando.
+   Qué es «seguir bajando» (bajada mínima y separación entre lecturas) lo fija la receta por fase.
+4. **Estancado** = el pH no baja según la receta, **salvo** que otra señal medida muestre actividad:
+   «si baja Brix» es actividad. Y un olor negativo —«muy acético, pasado, rancio»— avisa para revisión
+   aunque el pH no se mueva. La temperatura no es señal de actividad.
+5. **Brix: objetivo de receta, pero secundario al pH** «en casi todos los casos relacionados a
+   fermentación»: con mucílago se liberan azúcares y la degradación enzimática suelta más sólidos, y la
+   lectura «puede ser falsa o misleading». Se mide con **hidrómetro o refractómetro**, configurable por
+   beneficio o receta; una serie no mezcla instrumentos.
+6. **Brix de cereza para elegir proceso**, según requisitos y capacidades del beneficio: bajo para esa
+   cereza → fermentar para dulzores y ésteres; alto → natural o lavado con poca intervención, o
+   CryoBloom («para que libere betaglicósidos, más precursores atrapados en la cereza»). **El rango de
+   cada cereza se aprende del historial**; no se inventa un estándar.
+7. **Primera lectura** = al recibir, en selección, antes de procesar, sobre **mucílago o pulpa
+   exprimida sin agua**. pH muy bajo ahí = «no apto para primera», fuera del 99 % de los procesos:
+   debe tener uno o dos tratamientos propios —**secado directo** o **un rescate con intención de sabor**,
+   según el lote— para «homogenizar y estabilizar» y no ser pérdida total. Y todo proceso que salga del
+   rango aceptable **se señala, se marca y se notifica**, aunque termine o se interrumpa a secado.
+8. **Correlación entre lotes** —levadura y dosis, peso, temperatura, pH y Brix inicial/intermedios/final—
+   contra **taza, defectos, rendimiento y cumplimiento de la receta**, para **reproducibilidad**.
+9. **Hora obligatoria** desde ahora en lecturas de fermentación. Las viejas quedan «sólo fecha» y su
+   «24hr / mosto inicial / final» se recupera como tiempo declarado, nunca como hora medida.
+10. **Los cinco perfiles del paquete pasan a ser plantillas** para crear recetas, con la literatura al
+    lado marcada «referencia, no norma». El motor nunca los usa directamente.
+11. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
+    Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
+12. **Dilución**: fuera el 6,5 fijo. El mosto se compara contra el pH del **agua de ese lote** y contra el
+    historial; rutina opcional del beneficio para medir el agua, sobre todo si se lava o sumerge en ella.
+    Hay aguas de 7–8 que cambian con lluvias y temporadas.
+13. **Levaduras con ficha de fabricante** (especie, dosis, rango de temperatura, duración por tramo) y
+    fuente; la receta la propone y lo que ajusta Daniel manda. MP-72 y HD A54 son de enología: su uso en
+    café sale de su experiencia. (Encaja con la tabla de levaduras de ADR-172.)
+14. **Temperatura de masa y ambiente**, por separado; la receta compara contra la de la masa.
+15. **Sensorial de proceso**: quien procesa marca buena, neutra o negativa, y negativa avisa; hay una
+    lista de descriptores negativos, y **cada receta declara qué es atributo y qué es defecto**.
+16. **Secado en ambiente compartido.** La receta fija objetivos, sujetos a la capacidad del beneficio y
+    al clima; ante retrasos, primero acciones sobre el lote (mover bandeja, abanico); si se propone
+    tocar el cuarto (deshumidificar), se muestra el efecto en cada lote antes —«por uno no podemos
+    sacrificar los demás»—. Decide una persona; queda quién y por qué.
+17. **Fin de secado con el AgraTronix Coffee Tester 08150** (escala pergamino): por humedad, marcado
+    «sin actividad de agua medida». Avisar al beneficio y al procesador si el instrumento está **cerca o
+    fuera** de su calibración; foto opcional al tomar la muestra.
+18. **Cáscara.** No se usa 75–80 °C durante 12 h: deshidratador por bandejas, pocas capas, horas a días,
+    secar y reposar con temperatura y abanico ajustables «sin ser muy rápido y volatilizar». Terminada
+    por humedad, con tacto y sensorial opcionales. Es **secundaria al café**. Queda abierto estudiar el
+    trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
+
+**Lo que esto NO decide.** Los números de cada receta (los pone Daniel). La implementación en los
+motores, que es trabajo aparte con su diseño. Las guías de Varroa y Meliponini de P-F.
+
+**Consecuencias.** Los normativos `00` §8, `10`, `11`, `12` §5 y `13` quedan anotados donde contradicen
+esto: **manda Daniel**. `02` §3 se anota con su decisión del 2026-09-14 (verificación por contraste
+contra patrón), que `CLAUDE.md` daba por anotada y no lo estaba.

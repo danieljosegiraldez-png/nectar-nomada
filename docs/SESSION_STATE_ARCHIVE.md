@@ -4088,3 +4088,12 @@ de otras ya aplicadas; y las cifras del inventario de acceso se desfasaron dos v
 (CI prueba el PR fusionado con `main`, no la rama). Y `tools/pack-for-review.sh` (#390, #391, #393,
 #396, #401): lee todo de la punta del rango, rutas con espacios y con tildes; en bash 3.2, `set -e`
 mata el script cuando falla una función aunque esté a la izquierda de un `||`.
+
+**Archivado el 2026-09-19** (estado en 393/400 líneas), la entrada más vieja sin nada pendiente:
+
+### 2026-09-18 · Anular una asignación a tienda que no va a llegar
+
+ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
+lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
+recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
+petición de Daniel.

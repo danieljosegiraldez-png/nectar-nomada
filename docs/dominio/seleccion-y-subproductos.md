@@ -1,7 +1,10 @@
 <!--
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
-  estado    : borrador · pendiente de revisión
+  estado    : reemplazado · no normativo
+  reemplazo : docs/beneficio/12_mass_balance_byproducts.md (v3.1, «Reemplaza: v2.0»). Además, por ADR-177 (2026-09-19) los
+              umbrales salen de la receta de Daniel y los números de este borrador no
+              gobiernan nada. Se conserva como historia del paquete.
   origen    : redactado por un modelo de lenguaje a partir de indicaciones de
               Daniel; entregado el 2026-09-13 en `coffee_processing_specs_packet`
   revisado  : NO. Daniel aún no lo ha repasado línea a línea.

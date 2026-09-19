@@ -230,6 +230,12 @@ ENGINE_STATUSES: dict[str, frozenset[str]] # {"ph": {...}, "brix": {...},
 
 ## 10. Constantes físicas (no son umbrales de dominio)
 
+> **Nota del 2026-09-19 (ADR-177).** Tres de estas no son límites de instrumento sino juicios de
+> dominio: `PH_DILUTION_SUSPECT` (se retira; ver `10`), `PH_INITIAL_PHASE_FLOOR` y `PLATEAU_EPSILON`
+> (la meseta la define la receta). Y `PH_PHYSICAL_MAX = 8,00` queda en el borde de aguas reales de
+> pH 7–8: revisar antes de tratar esas lecturas como fallo de sensor.
+
+
 Viven en `services/processing/constants.py` y quedan exentas de la prueba de umbrales literales. Delimitan lo que un instrumento puede medir, no lo que el café debe hacer.
 
 ```python

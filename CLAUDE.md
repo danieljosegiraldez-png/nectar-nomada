@@ -46,9 +46,17 @@
 > **Un `[PROVISIONAL]` de esos documentos no se cierra desde aquí.** Son de
 > Daniel, y `99_revision_v2_a_v3.md` §D lista los cinco que siguen abiertos.
 > El 2026-09-14 él cerró uno —la verificación de instrumentos es por contraste
-> contra patrón, no por calendario— y eso **cambió** la §3 de `02_calibration`:
+> contra patrón, no por calendario— y eso cambia la §3 de `02_calibration`:
 > cuando una decisión suya contradiga un documento normativo, manda él y se
-> anota en el documento.
+> anota en el documento. **Corregido el 2026-09-19:** este párrafo lo daba por
+> anotado y `02` no tenía ningún commit desde que entró; la nota se puso ese día.
+>
+> **Y el 2026-09-19 cerró el fondo de P-F para el café (ADR-177): los umbrales
+> salen de la receta, no del paquete.** Los cinco perfiles de `00` §8 son
+> plantillas; `10`–`13` llevan su nota encima de cada sección afectada. La
+> revisión de literatura que lo sostiene está en
+> `docs/dominio/revision-literatura-fermentacion-2026-09-19.md`, con cada cita
+> marcada como comprobada o no. P-F sigue abierta por Varroa y Meliponini.
 
 ---
 

@@ -26,7 +26,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
-| P-F | Revisar las **cinco** guías de `docs/dominio/` — pH, Brix, subproductos y, desde el 2026-09-17, **Varroa** y **Meliponini** (ADR-158) | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-F | Revisar las guías de `docs/dominio/` que quedan: **Varroa** y **Meliponini** (ADR-158). Las tres de café están **reemplazadas** por `docs/beneficio/10`–`12`, y el fondo quedó decidido en ADR-177 (2026-09-19) | Las redactó un modelo a partir de indicaciones suyas y **esas dos nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -37,6 +37,16 @@ de «hecho y sin rastro».
 ---
 
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-177)
+
+Daniel pidió revisar **toda** la literatura de fermentación antes de responder. Seis subagentes, citas
+decisivas comprobadas contra la fuente, Codex de segundo asiento:
+`docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. Ninguna banda universal validada; ningún
+fabricante publica pH ni Brix; la temperatura manda y los motores no la leen. **Decidió 18 puntos, uno
+por pregunta** (ADR-177): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
+los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
+del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 
 ### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
 
@@ -105,14 +115,8 @@ falta entrar con una cuenta. Siguen: la cera por color de año y el año de las 
 `friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
 `PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
 propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
-ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
-
-### 2026-09-18 · Anular una asignación a tienda que no va a llegar
-
-ADR-170. Una asignación pendiente se anula con motivo y día —desde `/tienda` o desde la ficha del
-lote— y sus envases vuelven a libres. No se borra (quién, cuándo, por qué y AuditEvent); una
-recibida no se anula y una anulada no se recibe. Salió como hueco del flujo de dos actos, no como
-petición de Daniel.
+ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.** Quedan **nueve clases** más con el
+mismo defecto: `PENDING_IMPLEMENTATIONS/013`.
 
 ### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
 
