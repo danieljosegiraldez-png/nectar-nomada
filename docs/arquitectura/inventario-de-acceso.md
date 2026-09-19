@@ -13,14 +13,14 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**386 operaciones** que tocan la base, en **118 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
+**387 operaciones** que tocan la base, en **118 archivos**:<!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
      la compuerta falla y dice cuál. Todo el trabajo del 2026-08-31 empezó por
      una discrepancia de uno entre este documento y la medición. -->
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **275** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **276** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo || **34** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **59** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama || **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **4** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()` y, desde P4 §2, `registrarAparato()` y `refrescarAcceso()` — las cuatro miradas a mano y explicadas en el allowlist |
@@ -49,6 +49,16 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > parcela; `listPlantSpecimens()` y `lecturaDeTrampaQueMotivo()`
 > (`lib/traceability/specimens.ts`) resuelven `requireSpecimenAccess(view)`. Ningún
 > archivo nuevo: las tres viven en archivos ya inventariados.
+
+> **Ronda final de revisión (2026-09-18, hallazgo 3): 386→387, una operación
+> nueva, guardia directo.** `requireOpenFieldSessionForEvent()`
+> (`lib/traceability/fieldSessions.ts`) se extrajo de `recordFieldEvent()` para que
+> `registrarIntervencion()` la reutilizara antes de escribir su `FieldEvent`: antes
+> sólo comprobaba parentesco de ubicación con la jornada, nunca autorización sobre
+> ELLA. Resuelve `requireFieldSessionAccess()` sobre `session.locationId`, que es la
+> misma compuerta que ya usaba `recordFieldEvent()` — de ahí que sume una fila y no
+> dos: la llamada existente no cambió de forma, sólo de sitio. Ningún archivo nuevo:
+> vive en `fieldSessions.ts`, ya inventariado.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con

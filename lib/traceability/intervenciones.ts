@@ -21,14 +21,15 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
-import { resolveOrganizationForLocation } from "./locations";
+import { resolveOrganizationForLocation, LocationAccessError } from "./locations";
+import { requireOpenFieldSessionForEvent, FieldSessionValidationError } from "./fieldSessions";
 import type { IntervencionParaCarencia } from "./carenciaDeIntervencion";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
 import { diaDeHoy } from "../time/diaDeHoy";
 import { recordAuditEvent } from "../audit";
+import { Prisma } from "../../generated/prisma/client";
 import type {
   DataQuality,
-  Prisma,
   PlotIntervention,
   PlotInterventionKind,
   PlotInterventionMethod,
@@ -88,6 +89,13 @@ function validarPura(input: Pick<RegistrarIntervencionInput, "kind" | "target" |
         throw new IntervencionValidationError(`${campo} inválido: ${valor}. Cero es válido; negativo no.`);
       }
     }
+    // Ronda final, hallazgo 5: nulo y cero se conservan tal cual (nulo = no
+    // declarada; cero es una cantidad legítima); negativo y no finito se
+    // rechazan aquí para que el camino SIN frasco —que no pasa por el `CHECK`
+    // del libro mayor— no acepte lo que el camino CON frasco ya rechazaba.
+    if (linea.quantity != null && (!Number.isFinite(linea.quantity) || linea.quantity < 0)) {
+      throw new IntervencionValidationError(`quantity inválida: ${linea.quantity}. Cero es válido; negativo no.`);
+    }
   }
 }
 
@@ -105,7 +113,7 @@ interface ParcelaResuelta {
  */
 async function validarReferencias(
   parcela: ParcelaResuelta,
-  datos: Pick<RegistrarIntervencionInput, "specimenIds" | "lineas" | "fieldSessionId">,
+  datos: Pick<RegistrarIntervencionInput, "specimenIds" | "lineas" | "fieldSessionId" | "motivoObservationId">,
 ) {
   const specimenIds = datos.specimenIds ?? [];
   if (specimenIds.length > 0) {
@@ -156,15 +164,37 @@ async function validarReferencias(
     }
   }
 
-  if (datos.fieldSessionId) {
-    const jornada = await prisma.fieldSession.findUnique({
-      where: { id: datos.fieldSessionId },
-      select: { locationId: true },
-    });
-    if (!jornada) throw new IntervencionValidationError("no existe la jornada");
+  if (datos.fieldSessionId || datos.motivoObservationId) {
     const emparentadas = await ubicacionesEmparentadas(parcela.id);
-    if (!emparentadas.includes(jornada.locationId)) {
-      throw new IntervencionValidationError("la jornada es de una parcela sin relación con ésta");
+
+    if (datos.fieldSessionId) {
+      const jornada = await prisma.fieldSession.findUnique({
+        where: { id: datos.fieldSessionId },
+        select: { locationId: true },
+      });
+      if (!jornada) throw new IntervencionValidationError("no existe la jornada");
+      if (!emparentadas.includes(jornada.locationId)) {
+        throw new IntervencionValidationError("la jornada es de una parcela sin relación con ésta");
+      }
+    }
+
+    // Ronda final, hallazgo 4: `motivoObservationId` se escribía directo, sin
+    // comprobar que exista, que sea una lectura de trampa (`trap_check` — el
+    // único tipo que trae `captureCount`, spec §4.3) ni que su planta esté
+    // emparentada con esta parcela. Sin esto, una intervención de A podía
+    // quedar «motivada» por una observación de B.
+    if (datos.motivoObservationId) {
+      const motivo = await prisma.specimenObservation.findUnique({
+        where: { id: datos.motivoObservationId },
+        select: { observationType: true, specimen: { select: { locationId: true } } },
+      });
+      if (!motivo) throw new IntervencionValidationError("no existe la observación que motiva la intervención");
+      if (motivo.observationType !== "trap_check") {
+        throw new IntervencionValidationError("la observación que motiva la intervención no es una lectura de trampa");
+      }
+      if (!emparentadas.includes(motivo.specimen.locationId)) {
+        throw new IntervencionValidationError("la observación que motiva la intervención es de otra parcela");
+      }
     }
   }
 }
@@ -293,6 +323,28 @@ export async function registrarIntervencion(
 
   await validarReferencias(parcela, input);
 
+  // Ronda final, hallazgo 3: `validarReferencias` sólo comprueba que la
+  // jornada esté emparentada con esta parcela — identidad, no autorización.
+  // Esta función SÍ va a escribir un `FieldEvent` en esa jornada (abajo), y
+  // eso exige las mismas reglas que `recordFieldEvent`: acceso sobre la
+  // ubicación de la jornada (que puede no ser la de esta parcela — una cuenta
+  // con ámbito sólo en la microparcela no autoriza escribir en la madre) y
+  // que siga ABIERTA. Sin esto, una jornada cerrada o ajena aceptaba el
+  // evento igual, un camino que `recordFieldEvent` ya rechaza.
+  if (input.fieldSessionId) {
+    try {
+      await requireOpenFieldSessionForEvent(userAccountId, input.fieldSessionId, input.occurredAt);
+    } catch (error) {
+      if (error instanceof LocationAccessError) {
+        throw new TraceabilityAccessError(`sin acceso a la jornada: ${error.message}`);
+      }
+      if (error instanceof FieldSessionValidationError) {
+        throw new IntervencionValidationError(`jornada no disponible: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
   return unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "PlotIntervention",
     recuperar: (id) => prisma.plotIntervention.findUniqueOrThrow({ where: { id } }),
@@ -406,27 +458,42 @@ export async function corregirIntervencion(
   await validarReferencias(parcela, input.nueva);
 
   return prisma.$transaction(async (tx) => {
-    const creada = await tx.plotIntervention.create({
-      data: {
-        locationId: original.locationId,
-        kind: input.nueva.kind,
-        target: input.nueva.target,
-        targetNote: input.nueva.targetNote?.trim() || null,
-        method: input.nueva.method ?? null,
-        mixVolume: input.nueva.mixVolume ?? null,
-        mixUnit: input.nueva.mixUnit ?? null,
-        occurredAt: input.nueva.occurredAt,
-        operatorPersonId: input.nueva.operatorPersonId ?? null,
-        fieldSessionId: input.nueva.fieldSessionId ?? null,
-        motivoObservationId: input.nueva.motivoObservationId ?? null,
-        provenanceClass: "original_record",
-        dataQuality: input.nueva.dataQuality ?? null,
-        notes: input.nueva.notes ?? null,
-        correctsId: original.id,
-        correctionReason: motivo,
-        createdBy: userAccountId,
-      },
-    });
+    // Ronda final, hallazgo 2: la comprobación de arriba («ya tiene
+    // corrección») lee y escribe en pasos separados, así que dos operadores
+    // pueden pasarla los dos antes de que cualquiera confirme. La garantía
+    // real es el índice único PARCIAL de la base sobre `corrects_id`
+    // (migración `20260918170000_correccion_unica_y_cantidad_no_negativa`,
+    // `WHERE corrects_id IS NOT NULL`) — mismo patrón que
+    // `lib/sensory/service.ts` para su doble envío: el `catch` va atado a
+    // este `create`, así que un P2002 aquí sólo puede ser esa unicidad.
+    const creada = await tx.plotIntervention
+      .create({
+        data: {
+          locationId: original.locationId,
+          kind: input.nueva.kind,
+          target: input.nueva.target,
+          targetNote: input.nueva.targetNote?.trim() || null,
+          method: input.nueva.method ?? null,
+          mixVolume: input.nueva.mixVolume ?? null,
+          mixUnit: input.nueva.mixUnit ?? null,
+          occurredAt: input.nueva.occurredAt,
+          operatorPersonId: input.nueva.operatorPersonId ?? null,
+          fieldSessionId: input.nueva.fieldSessionId ?? null,
+          motivoObservationId: input.nueva.motivoObservationId ?? null,
+          provenanceClass: "original_record",
+          dataQuality: input.nueva.dataQuality ?? null,
+          notes: input.nueva.notes ?? null,
+          correctsId: original.id,
+          correctionReason: motivo,
+          createdBy: userAccountId,
+        },
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new IntervencionValidationError("ya_corregida");
+        }
+        throw error;
+      });
 
     const areas = await crearAreas(tx, creada.id, input.nueva.specimenIds ?? []);
     // Sin descuento: una corrección no vuelve a gastar producto (Restricciones

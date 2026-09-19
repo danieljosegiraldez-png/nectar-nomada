@@ -4422,6 +4422,16 @@ model PlotIntervention {
   dataQuality     DataQuality?    @map("data_quality")
   notes           String?
 
+  /// **Como mucho UNA corrección vigente por fila, y NO se declara aquí.** El
+  /// índice real es único PARCIAL —`(corrects_id) WHERE corrects_id IS NOT
+  /// NULL`, migración `20260918170000_correccion_unica_y_cantidad_no_negativa`—
+  /// porque un único exacto sobre una columna nula prohibiría más de una fila
+  /// SIN corrección, que es el caso normal. Prisma no sabe expresar índices
+  /// parciales (mismo motivo que el funcional de `ConsumableMaterial`, más
+  /// arriba); declarar aquí el `@@unique([correctsId])` exacto pediría un
+  /// índice que las migraciones no crean, y `derivaDeMigraciones` lo cazaría.
+  /// La restricción vive en la base; el servicio (`corregirIntervencion`)
+  /// traduce su violación (P2002) a un error que se entiende.
   correctsId       String?            @map("corrects_id") @db.Uuid
   corrects         PlotIntervention?  @relation("PlotInterventionCorrection", fields: [correctsId], references: [id])
   correcciones     PlotIntervention[] @relation("PlotInterventionCorrection")
@@ -4468,6 +4478,10 @@ model PlotInterventionLine {
   material        ConsumableMaterial @relation("PlotInterventionLineMaterial", fields: [materialId], references: [id])
   consumableLotId String?            @map("consumable_lot_id") @db.Uuid
   consumableLot   ConsumableLot?     @relation("PlotInterventionLineLot", fields: [consumableLotId], references: [id], onDelete: Restrict)
+  /// Nulo = no declarada; 0 es una cantidad legítima. CHECK ≥ 0 (migración
+  /// `20260918170000_correccion_unica_y_cantidad_no_negativa`): antes sólo el
+  /// libro mayor —vía el `CHECK` de `ConsumableStockEvent`— rechazaba una
+  /// cantidad negativa, y sólo cuando la línea llevaba frasco.
   quantity        Decimal?           @db.Decimal(10, 3)
   unit            String?
   /// Nulo = no declarada; 0 = declarada cero. Sin DEFAULT, a propósito.
