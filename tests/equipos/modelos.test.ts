@@ -109,6 +109,45 @@ describe("especificaciones", () => {
     expect(ficha.specs.map((s) => s.quantity)).toEqual(["temperatura"]);
   });
 
+  it("crear con especificaciones es atómico: una fila mala no deja el modelo a medias", async () => {
+    const entrada = (modelName: string, especificaciones: object[]) => ({
+      dueno: { tipo: "propio" as const, locationId: sitioA },
+      kind: "instrument" as const,
+      manufacturer: `AT ${RUN}`,
+      modelName,
+      provenanceClass: "manufacturer_specification" as const,
+      especificaciones: especificaciones as never,
+    });
+    await expect(
+      crearModelo(jefeA, entrada("atomico", [
+        { quantity: "sólidos solubles", unit: "°Bx", rangeMin: "0", rangeMax: "32" },
+        { quantity: "temperatura", unit: "°C", rangeMin: "40", rangeMax: "10" },
+      ])),
+    ).rejects.toThrow(new ModeloError("rango_invertido"));
+    expect(await prisma.equipmentModel.count({ where: { manufacturer: `AT ${RUN}`, modelName: "atomico" } })).toBe(0);
+    for (const [mala, error] of [
+      [{ quantity: " ", unit: "°C" }, "magnitud_y_unidad_obligatorias"],
+      [{ quantity: "t", unit: "°C", resolution: "0" }, "resolucion_positiva"],
+      [{ quantity: "t", unit: "°C", accuracyAbs: "-0.1" }, "precision_no_negativa"],
+      [{ quantity: "t", unit: "°C", rangeMin: "abc" }, "numero_invalido"],
+    ] as const) {
+      await expect(crearModelo(jefeA, entrada("atomico", [mala]))).rejects.toThrow(new ModeloError(error));
+    }
+    await expect(
+      crearModelo(jefeA, { ...entrada("vaso-con-spec", [{ quantity: "t", unit: "°C" }]), kind: "vessel" }),
+    ).rejects.toThrow(new ModeloError("especificacion_solo_en_instrumentos"));
+    expect(await prisma.equipmentModel.count({ where: { manufacturer: `AT ${RUN}` } })).toBe(0);
+
+    // Control positivo: con filas válidas entran modelo, filas y sus AuditEvent.
+    const m = await crearModelo(jefeA, entrada("atomico", [
+      { quantity: "sólidos solubles", unit: "°Bx", rangeMin: "0", rangeMax: "32", resolution: "0.1", accuracyAbs: "0.2" },
+      { quantity: "temperatura", unit: "°C", rangeMin: "10", rangeMax: "40" },
+    ]));
+    const specs = await prisma.equipmentModelSpec.findMany({ where: { modelId: m.id }, orderBy: { quantity: "asc" } });
+    expect(specs.map((s) => s.quantity)).toEqual(["sólidos solubles", "temperatura"]);
+    expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model_spec", entityId: { in: specs.map((s) => s.id) }, operation: "create" } })).toBe(2);
+  });
+
   it("una especificación en un modelo de vaso se rechaza", async () => {
     const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "vessel", manufacturer: `V ${RUN}`, modelName: "v1", provenanceClass: "original_record" });
     await expect(declararEspecificacion(jefeA, m.id, { quantity: "x", unit: "y" })).rejects.toThrow(new ModeloError("especificacion_solo_en_instrumentos"));

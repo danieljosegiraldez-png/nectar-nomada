@@ -38,6 +38,8 @@ export interface DatosDeModelo {
 export interface CrearModeloInput extends DatosDeModelo {
   dueno: Dueno;
   kind: EquipmentKind;
+  /** Filas del mismo formulario. Entran con el modelo o no entra nada. */
+  especificaciones?: EspecificacionInput[];
 }
 
 export interface EspecificacionInput {
@@ -92,6 +94,44 @@ function datosLimpios(kind: EquipmentKind, d: DatosDeModelo) {
   };
 }
 
+/**
+ * Una especificación limpia, o `ModeloError` con frase legible. La base rechaza
+ * lo mismo con sus CHECK; esto va antes para que el error se pueda leer, y para
+ * que una fila mala se sepa ANTES de escribir nada.
+ */
+function especificacionLimpia(kind: EquipmentKind, e: EspecificacionInput) {
+  if (kind !== "instrument") throw new ModeloError("especificacion_solo_en_instrumentos");
+  const quantity = e.quantity.trim();
+  const unit = e.unit.trim();
+  if (!quantity || !unit) throw new ModeloError("magnitud_y_unidad_obligatorias");
+  const dec = (v: string | null | undefined) => {
+    const t = texto(v);
+    if (t === null) return null;
+    if (!Number.isFinite(Number(t))) throw new ModeloError("numero_invalido");
+    return new Prisma.Decimal(t);
+  };
+  const data = { quantity, unit, rangeMin: dec(e.rangeMin), rangeMax: dec(e.rangeMax), resolution: dec(e.resolution), accuracyAbs: dec(e.accuracyAbs) };
+  if (data.rangeMin !== null && data.rangeMax !== null && data.rangeMin.greaterThan(data.rangeMax)) throw new ModeloError("rango_invertido");
+  if (data.resolution !== null && !data.resolution.greaterThan(0)) throw new ModeloError("resolucion_positiva");
+  if (data.accuracyAbs !== null && data.accuracyAbs.isNegative()) throw new ModeloError("precision_no_negativa");
+  return data;
+}
+
+type EspecificacionLimpia = ReturnType<typeof especificacionLimpia>;
+
+/** Lo que la auditoría guarda de una especificación nueva. */
+function especificacionAuditada(modelId: string, data: EspecificacionLimpia) {
+  return {
+    modelId,
+    quantity: data.quantity,
+    unit: data.unit,
+    rangeMin: data.rangeMin?.toString() ?? null,
+    rangeMax: data.rangeMax?.toString() ?? null,
+    resolution: data.resolution?.toString() ?? null,
+    accuracyAbs: data.accuracyAbs?.toString() ?? null,
+  };
+}
+
 function esDuplicado(e: unknown) {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
@@ -99,6 +139,9 @@ function esDuplicado(e: unknown) {
 export async function crearModelo(userAccountId: string, input: CrearModeloInput): Promise<{ id: string }> {
   const organizationId = await requireCatalogoAccess(userAccountId, input.dueno, GESTIONAR);
   const datos = datosLimpios(input.kind, input);
+  // Todas las filas se validan ANTES de tocar la base: el modelo y sus
+  // especificaciones entran juntos o no entra nada.
+  const especificaciones = (input.especificaciones ?? []).map((e) => especificacionLimpia(input.kind, e));
   try {
     return await prisma.$transaction(async (tx) => {
       const m = await tx.equipmentModel.create({
@@ -116,6 +159,20 @@ export async function crearModelo(userAccountId: string, input: CrearModeloInput
         },
         tx,
       );
+      for (const e of especificaciones) {
+        const spec = await tx.equipmentModelSpec.create({ data: { ...e, modelId: m.id, createdBy: userAccountId }, select: { id: true } });
+        await recordAuditEvent(
+          {
+            actorUserAccountId: userAccountId,
+            entityType: "equipment_model_spec",
+            entityId: spec.id,
+            operation: "create",
+            sourceInterface: "lib/equipos/modelos.ts",
+            after: especificacionAuditada(m.id, e),
+          },
+          tx,
+        );
+      }
       return m;
     });
   } catch (e) {
@@ -180,26 +237,21 @@ export async function declararEspecificacion(userAccountId: string, modelId: str
   const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
   if (!m) throw new ModeloError("modelo_no_encontrado");
   await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
-  if (m.kind !== "instrument") throw new ModeloError("especificacion_solo_en_instrumentos");
-  const quantity = e.quantity.trim();
-  const unit = e.unit.trim();
-  if (!quantity || !unit) throw new ModeloError("magnitud_y_unidad_obligatorias");
-  const dec = (v: string | null | undefined) => (texto(v) === null ? null : new Prisma.Decimal(texto(v)!));
-  const data = { quantity, unit, rangeMin: dec(e.rangeMin), rangeMax: dec(e.rangeMax), resolution: dec(e.resolution), accuracyAbs: dec(e.accuracyAbs) };
+  const data = especificacionLimpia(m.kind, e);
   return prisma.$transaction(async (tx) => {
-    const s = await tx.equipmentModelSpec.create({ data: { ...data, modelId, createdBy: userAccountId }, select: { id: true } });
+    const spec = await tx.equipmentModelSpec.create({ data: { ...data, modelId, createdBy: userAccountId }, select: { id: true } });
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
         entityType: "equipment_model_spec",
-        entityId: s.id,
+        entityId: spec.id,
         operation: "create",
         sourceInterface: "lib/equipos/modelos.ts",
-        after: { modelId, quantity, unit, rangeMin: e.rangeMin ?? null, rangeMax: e.rangeMax ?? null, resolution: e.resolution ?? null, accuracyAbs: e.accuracyAbs ?? null },
+        after: especificacionAuditada(modelId, data),
       },
       tx,
     );
-    return s;
+    return spec;
   });
 }
 

@@ -12,6 +12,7 @@ import {
   retirarEspecificacion,
   retirarModelo,
   type DatosDeModelo,
+  type EspecificacionInput,
 } from "../../lib/equipos/modelos";
 import type { EquipmentContactMaterial, EquipmentKind, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -66,29 +67,34 @@ export async function crearModeloFormAction(formData: FormData): Promise<void> {
   const kind = String(formData.get("kind") ?? "instrument") as EquipmentKind;
   const volverA = volverASeguro(formData);
 
+  // Filas de especificación del mismo formulario: `spec_quantity_0`, `spec_unit_0`…
+  // Van DENTRO de `crearModelo`, que las escribe en la misma transacción que el
+  // modelo: una fila mala no deja un modelo a medias.
+  const especificaciones: EspecificacionInput[] = [];
+  if (kind === "instrument") {
+    for (let i = 0; formData.has(`spec_quantity_${i}`); i++) {
+      const q = String(formData.get(`spec_quantity_${i}`) ?? "").trim();
+      const u = String(formData.get(`spec_unit_${i}`) ?? "").trim();
+      if (!q && !u) continue;
+      especificaciones.push({
+        quantity: q,
+        unit: u,
+        rangeMin: String(formData.get(`spec_rangeMin_${i}`) ?? "") || null,
+        rangeMax: String(formData.get(`spec_rangeMax_${i}`) ?? "") || null,
+        resolution: String(formData.get(`spec_resolution_${i}`) ?? "") || null,
+        accuracyAbs: String(formData.get(`spec_accuracyAbs_${i}`) ?? "") || null,
+      });
+    }
+  }
+
   let destino: string;
   try {
     const modelo = await crearModelo(user.userAccountId, {
       ...datosDelFormulario(formData),
       kind,
       dueno: dueno === "compartido" ? { tipo: "compartido" } : { tipo: "propio", locationId: dueno },
+      especificaciones,
     });
-    // Filas de especificación del mismo formulario: `spec_quantity_0`, `spec_unit_0`…
-    if (kind === "instrument") {
-      for (let i = 0; formData.has(`spec_quantity_${i}`); i++) {
-        const q = String(formData.get(`spec_quantity_${i}`) ?? "").trim();
-        const u = String(formData.get(`spec_unit_${i}`) ?? "").trim();
-        if (!q && !u) continue;
-        await declararEspecificacion(user.userAccountId, modelo.id, {
-          quantity: q,
-          unit: u,
-          rangeMin: String(formData.get(`spec_rangeMin_${i}`) ?? "") || null,
-          rangeMax: String(formData.get(`spec_rangeMax_${i}`) ?? "") || null,
-          resolution: String(formData.get(`spec_resolution_${i}`) ?? "") || null,
-          accuracyAbs: String(formData.get(`spec_accuracyAbs_${i}`) ?? "") || null,
-        });
-      }
-    }
     revalidatePath("/equipos/modelos");
     destino = volverA
       ? `${volverA}${volverA.includes("?") ? "&" : "?"}modelo=${modelo.id}`
