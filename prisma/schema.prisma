@@ -239,6 +239,8 @@ model UserAccount {
   hiveFittingsCreated  HiveFitting[]  @relation("HiveFittingCreatedBy")
   hiveNodesCreated     HiveNode[]     @relation("HiveNodeCreatedBy")
   hiveSupersCreated    HiveSuper[]    @relation("HiveSuperCreatedBy")
+  newWaxEntriesCreated NewWaxEntry[]  @relation("NewWaxEntryCreatedBy")
+  frameRemovalsCreated FrameRemoval[] @relation("FrameRemovalCreatedBy")
   nodeCalibrationsCreated NodeCalibration[] @relation("NodeCalibrationCreatedBy")
   nodeDerivedReadingsCreated NodeDerivedReading[] @relation("NodeDerivedReadingCreatedBy")
   varroaCountsCreated               VarroaCount[]                @relation("VarroaCountCreatedBy")
@@ -1030,6 +1032,8 @@ model Organization {
 
   hiveNodes HiveNode[]
   hiveSupers HiveSuper[]
+  newWaxEntries NewWaxEntry[]
+  frameRemovals FrameRemoval[]
   @@map("organization")
   @@schema("core")
   lotTransformationsPerformed LotTransformation[] @relation("LotTransformationPerformedBy")
@@ -6483,6 +6487,7 @@ model Hive {
   cleanings  HiveCleaning[]
   fittings   HiveFitting[]
   nodeObservations NodeObservation[]
+  newWaxEntries NewWaxEntry[]
 
   @@unique([locationId, identifier])
   @@index([locationId])
@@ -9299,6 +9304,89 @@ model ApiaryHarvestSuper {
   @@id([apiaryHarvestEventId, hiveSuperId])
   @@index([hiveSuperId])
   @@map("apiary_harvest_super")
+  @@schema("apiary")
+}
+
+/// Cera nueva que entra — spec 2026-09-18 §5.2. El DÍA decide el año, y el año el color
+/// (`colorDelAño`): el color no se guarda. Una fila por entrada, no por marco.
+model NewWaxEntry {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// El día (medianoche UTC, de un `type="date"`). Su año es el color.
+  enteredAt  DateTime @map("entered_at")
+  /// Cuántos marcos. Positivo (CHECK).
+  frameCount Int      @map("frame_count")
+  /// A dónde fueron, si se dice.
+  destination WaxDestination?
+  waxKind     WaxKind         @map("wax_kind")
+  /// La colmena, si entró directo a una. RESTRICT.
+  hiveId String? @map("hive_id") @db.Uuid
+  hive   Hive?   @relation(fields: [hiveId], references: [id], onDelete: Restrict)
+  /// Procedencia y lo que no cabe; obligatoria con `otro` (CHECK).
+  notes String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("NewWaxEntryCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, enteredAt])
+  @@index([hiveId])
+  @@map("new_wax_entry")
+  @@schema("apiary")
+}
+
+/// Marcos que se sacan, de un año de color — spec §5.2. Opcional: si nadie lo anota, el marco
+/// sigue diciendo su año con su color. **No** se limita a lo que se anotó entrando: los marcos de
+/// antes de este registro no tienen entrada.
+model FrameRemoval {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  /// El año del color de los marcos sacados. No posterior al año de `removedAt` (CHECK).
+  waxYear    Int                @map("wax_year")
+  removedAt  DateTime           @map("removed_at")
+  frameCount Int                @map("frame_count")
+  reason     FrameRemovalReason
+  notes      String?
+
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+  creator   UserAccount? @relation("FrameRemovalCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, waxYear])
+  @@map("frame_removal")
+  @@schema("apiary")
+}
+
+/// Vocabulario cerrado con escape, como el de alimentación: «que no sea campo libre».
+enum WaxKind {
+  lamina_estampada_propia
+  lamina_comprada
+  sin_lamina
+  otro
+
+  @@schema("apiary")
+}
+
+enum WaxDestination {
+  camara_de_cria
+  alza
+
+  @@schema("apiary")
+}
+
+enum FrameRemovalReason {
+  cera_vieja
+  danado
+  enfermedad
+  otro
+
   @@schema("apiary")
 }
 
