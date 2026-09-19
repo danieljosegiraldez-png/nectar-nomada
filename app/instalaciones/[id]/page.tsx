@@ -7,17 +7,19 @@ import { LocationAccessError, puedeEditarBeneficioEn } from "../../../lib/tracea
 import { SecadoFormError } from "../../../lib/traceability/secadoForm";
 import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
+import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
-  params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; posicion?: string }>;
+  params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; posicion?: string; error?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Secado");
+  const tEq = await getTranslations("Equipos");
   const { id } = await params;
-  const { ok, posicion } = await searchParams;
+  const { ok, posicion, error: errorCode } = await searchParams;
   let instalacion;
   try { instalacion = await detalleInstalacion(user.userAccountId, id); }
   catch (error) {
@@ -49,6 +51,7 @@ export default async function InstalacionPage({ params, searchParams }: {
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
     <h1>{instalacion.name}</h1>
     {ok === "guardado" && <p role="status">{t("guardado")}</p>}
+    <AvisoDeRutina ok={ok} error={errorCode} t={tEq} />
     {!puedeEditar && <p role="alert">{t("sinPermisoEditar")}</p>}
     {puedeEditar && <FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} />}
     <h2>{t("camas")}</h2>
