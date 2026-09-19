@@ -12,6 +12,7 @@ import {
   retirarEspecificacion,
   retirarModelo,
 } from "../../lib/equipos/modelos";
+import { registrarEquipo } from "../../lib/equipos/equipos";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
 
 let f: Fixtures;
@@ -23,6 +24,9 @@ beforeAll(async () => {
   RUN = f.run;
 });
 afterAll(async () => {
+  const eqs = (await prisma.equipment.findMany({ where: { name: { contains: RUN } }, select: { id: true } })).map((e) => e.id);
+  await prisma.equipmentTransfer.deleteMany({ where: { equipmentId: { in: eqs } } });
+  await prisma.equipment.deleteMany({ where: { id: { in: eqs } } });
   const modelos = await prisma.equipmentModel.findMany({ where: { manufacturer: { contains: RUN } }, select: { id: true } });
   const ids = modelos.map((m) => m.id);
   await prisma.equipmentModelSpec.deleteMany({ where: { modelId: { in: ids } } });
@@ -161,5 +165,33 @@ describe("listarModelos", () => {
     expect(todos.some((m) => m.organizationId === orgB)).toBe(false);
     expect(lista.propios.some((m) => m.organizationId === orgA)).toBe(true);
     expect(lista.compartidos.every((m) => m.organizationId === null)).toBe(true);
+  });
+});
+
+describe("el inventario detrás de un modelo sigue el permiso real de cada equipo", () => {
+  const equipo = (usuario: string, org: string, sitio: string, modelId: string) =>
+    registrarEquipo(usuario, { name: `TEST eq ${RUN} ${Math.random()}`, kind: "instrument", organizationId: org, initialLocationId: sitio, provenanceClass: "original_record", modelId });
+
+  it("la ficha de un modelo propio lista sólo los equipos que el jefe ve, no todos los de su organización", async () => {
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `INV ${RUN}`, modelName: "propio", provenanceClass: "original_record" });
+    const enA1 = await equipo(jefeA, orgA, sitioA, m.id);
+    const enA2 = await equipo(f.jefeA2, orgA, f.sitioA2, m.id);
+    expect((await modeloParaFicha(jefeA, m.id)).equipment.map((e) => e.id)).toEqual([enA1.id]);
+    // Control: el jefe de A2 ve el suyo y no el de A1 — la regla no es «nadie ve nada».
+    expect((await modeloParaFicha(f.jefeA2, m.id)).equipment.map((e) => e.id)).toEqual([enA2.id]);
+    const propio = (await listarModelos(jefeA)).propios.find((x) => x.id === m.id);
+    expect(propio?.equipos).toBe(1);
+  });
+
+  it("la cuenta de un modelo compartido no suma las unidades de otra organización", async () => {
+    const comp = await crearModelo(admin, { dueno: { tipo: "compartido" }, kind: "instrument", manufacturer: `INV ${RUN}`, modelName: "comp", provenanceClass: "original_record" });
+    await equipo(jefeA, orgA, sitioA, comp.id);
+    await equipo(admin, orgB, sitioB, comp.id);
+    const paraJefeA = (await listarModelos(jefeA)).compartidos.find((x) => x.id === comp.id);
+    expect(paraJefeA?.equipos).toBe(1);
+    // Control positivo: quien sí ve las dos unidades las cuenta a las dos.
+    const paraAdmin = (await listarModelos(admin)).compartidos.find((x) => x.id === comp.id);
+    expect(paraAdmin?.equipos).toBe(2);
+    expect((await modeloParaFicha(jefeA, comp.id)).equipment).toHaveLength(1);
   });
 });

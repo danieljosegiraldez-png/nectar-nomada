@@ -16,6 +16,7 @@ import {
   type Dueno,
 } from "../catalogos/propiedad";
 import { prisma } from "../db";
+import { puedeSobreEquipo } from "./equipos";
 
 export class ModeloError extends Error {}
 
@@ -269,13 +270,37 @@ export async function retirarEspecificacion(userAccountId: string, specId: strin
   });
 }
 
-async function enLista(where: Prisma.EquipmentModelWhereInput): Promise<ModeloEnLista[]> {
+/**
+ * «¿Puede esta persona ver ESTE equipo?», con memoria por id. La cuenta y la
+ * lista de equipos de un modelo siguen el permiso real de cada unidad —dónde
+ * está, su proyecto, su clasificación— y no la organización: «de mi
+ * organización» no es «puedo verlo», y un modelo compartido tiene unidades de
+ * todas.
+ */
+function verEquipo(userAccountId: string) {
+  const memo = new Map<string, Promise<boolean>>();
+  return (equipmentId: string) => {
+    let p = memo.get(equipmentId);
+    if (!p) {
+      p = puedeSobreEquipo(userAccountId, equipmentId, "view");
+      memo.set(equipmentId, p);
+    }
+    return p;
+  };
+}
+
+async function soloVisibles<T extends { id: string }>(equipos: readonly T[], veo: (id: string) => Promise<boolean>): Promise<T[]> {
+  const si = await Promise.all(equipos.map((e) => veo(e.id)));
+  return equipos.filter((_, i) => si[i]);
+}
+
+async function enLista(where: Prisma.EquipmentModelWhereInput, veo: (id: string) => Promise<boolean>): Promise<ModeloEnLista[]> {
   const filas = await prisma.equipmentModel.findMany({
     where,
-    select: { id: true, manufacturer: true, modelName: true, kind: true, organizationId: true, recommendedMaintenanceDays: true, retiredAt: true, _count: { select: { equipment: true } } },
+    select: { id: true, manufacturer: true, modelName: true, kind: true, organizationId: true, recommendedMaintenanceDays: true, retiredAt: true, equipment: { select: { id: true } } },
     orderBy: [{ manufacturer: "asc" }, { modelName: "asc" }],
   });
-  return filas.map(({ _count, ...f }) => ({ ...f, equipos: _count.equipment }));
+  return Promise.all(filas.map(async ({ equipment, ...f }) => ({ ...f, equipos: (await soloVisibles(equipment, veo)).length })));
 }
 
 export async function listarModelos(
@@ -283,13 +308,14 @@ export async function listarModelos(
   filtro: { kind?: EquipmentKind; incluirRetirados?: boolean } = {},
 ): Promise<{ compartidos: ModeloEnLista[]; propios: ModeloEnLista[] }> {
   const orgs = await organizacionesVisibles(userAccountId, VER);
+  const veo = verEquipo(userAccountId);
   const base: Prisma.EquipmentModelWhereInput = {
     ...(filtro.kind ? { kind: filtro.kind } : {}),
     ...(filtro.incluirRetirados ? {} : { retiredAt: null }),
   };
   const [compartidos, propios] = await Promise.all([
-    enLista({ ...base, organizationId: null }),
-    orgs.length > 0 ? enLista({ ...base, organizationId: { in: orgs } }) : Promise.resolve([]),
+    enLista({ ...base, organizationId: null }, veo),
+    orgs.length > 0 ? enLista({ ...base, organizationId: { in: orgs } }, veo) : Promise.resolve([]),
   ]);
   return { compartidos, propios };
 }
@@ -297,10 +323,11 @@ export async function listarModelos(
 /** Para el desplegable del alta: sólo vigentes, del tipo dado, compartidos + los de ESA organización. */
 export async function modelosParaElegir(userAccountId: string, organizationId: string, kind: EquipmentKind) {
   const orgs = await organizacionesVisibles(userAccountId, VER);
+  const veo = verEquipo(userAccountId);
   const propios = orgs.includes(organizationId)
-    ? await enLista({ kind, retiredAt: null, organizationId })
+    ? await enLista({ kind, retiredAt: null, organizationId }, veo)
     : [];
-  const compartidos = await enLista({ kind, retiredAt: null, organizationId: null });
+  const compartidos = await enLista({ kind, retiredAt: null, organizationId: null }, veo);
   return { compartidos, propios };
 }
 
@@ -311,11 +338,11 @@ export async function modeloParaFicha(userAccountId: string, modelId: string) {
     include: {
       organization: { select: { name: true } },
       specs: { where: { retiredAt: null }, orderBy: [{ displayOrder: "asc" }, { quantity: "asc" }] },
-      equipment: { where: { organizationId: { in: orgs } }, select: { id: true, name: true }, orderBy: { name: "asc" } },
+      equipment: { select: { id: true, name: true }, orderBy: { name: "asc" } },
     },
   });
   if (!m) throw new ModeloError("modelo_no_encontrado");
-  return m;
+  return { ...m, equipment: await soloVisibles(m.equipment, verEquipo(userAccountId)) };
 }
 export type FichaDeModelo = Awaited<ReturnType<typeof modeloParaFicha>>;
 
