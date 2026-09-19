@@ -1,5 +1,11 @@
 # Secado por bandeja, paso 2 — bandejas y posiciones: plan de implementación
 
+> **⚠ EN REVISIÓN — NO EJECUTAR.** La spec cambió el 2026-09-18, en la tercera ronda de Daniel (§2 y §4.1–§4.2b). Hay estantes con posiciones generadas por estante + nivel + puesto, **`rackRow` queda retirado**, y entran los tipos de bandeja, la numeración por finca y la capacidad medida por estado. Este plan se parte en dos:
+> - **2a**: instalaciones, estantes, bandejas y capacidad. Plan nuevo.
+> - **2b**: el lote en sus bandejas. Son sus Tareas 2 a 5, ajustadas a la posición nueva.
+>
+> Su Tarea 1 se mueve a 2a. Hasta que los dos estén reescritos, lo de abajo es la versión anterior.
+
 > **Para agentes:** SUB-SKILL OBLIGATORIA: usar superpowers:subagent-driven-development (recomendado) o superpowers:executing-plans para ejecutar este plan tarea a tarea. Los pasos usan casillas (`- [ ]`).
 
 **Objetivo:** que un lote en secado pueda repartirse en bandejas —cada una con su posición de nivel y fila, cargada y bajada por separado—, con las reglas en la base y no sólo en TypeScript.
