@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-18
 
-**441 operaciones** que tocan la base, en **132 archivos**:
+**468 operaciones** que tocan la base, en **136 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **321** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **348** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **63** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -33,6 +33,13 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > operaciones —`registrarAlza`, `ponerAlza`, `darDeBajaAlza` y `alzasDelApiario`— y las cuatro
 > suben la fila de **guardia directo**, 310→314: llaman a `requireApiaryAccess` (manage para
 > escribir, view para listar) antes de tocar nada. 430→434, en 131 archivos.
+
+> **Catálogos, rutinas y modelos de equipo (2026-09-19, ADR-172).** Cuatro archivos nuevos
+> —`lib/catalogos/propiedad.ts`, `lib/equipos/modelos.ts`, `lib/equipos/documentos.ts` y
+> `lib/rutinas/rutinas.ts`— y operaciones nuevas en `lib/equipos/equipos.ts`. Las 27 suben la
+> fila de **guardia directo**, 314→341: cada una pasa por `can(` o por un `require…Access`
+> (`requireCatalogoAccess`, `requireEntradaDeCatalogoAccess`, `requireRutinaAccess`) antes de
+> leer o escribir. 434→461, en 135 archivos.
 
 > **Anular una asignación a tienda (ADR-170, 2026-09-18).** Una operación nueva,
 > `anularAsignacion` en `lib/commerce/tienda.ts`, y sube la fila de **guardia directo**,
@@ -120,6 +127,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > 434/131 en `main` (alzas con marca, ADR-171 de `main`), y **ninguna de las dos vale
 > para el árbol combinado**. Las cifras de arriba son las que imprime
 > `node scripts/inventario-de-acceso.mjs` sobre esta segunda fusión: **441 en 132**.
+
+> **Tercera integración de `origin/main` en `fitosanitarios` (2026-09-19).** Otra vez la
+> misma forma: 441/132 aquí y 461/135 en `main` (catálogos, rutinas y modelos de equipo,
+> ADR-172 de `main`), y **ninguna de las dos vale para el árbol combinado**. Las cifras de
+> arriba son las que imprime `node scripts/inventario-de-acceso.mjs` sobre esta tercera
+> fusión: **468 en 136**.
 
 > **Tareas 8 y 9 (2026-09-16):** el inventario incluye las opciones de inspección y
 > el servicio de instalaciones. Las cifras anteriores se regeneraron con

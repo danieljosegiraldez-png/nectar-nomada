@@ -458,6 +458,10 @@
       "razon": "Modulo de dominio de equipos e instrumentos (EQUIPMENT_AND_READINESS.md §2-§4, §7 y §9). Es el sitio donde el acceso a datos vive por diseno. Cada funcion resuelve `can(..., \"equipment\", ...)` contra el ambito hoja del equipo ANTES de leer o escribir, y toda escritura confirma su AuditEvent en la misma transaccion. El veredicto de una verificacion NO se calcula aqui: lo deriva un trigger de la base."
     },
     {
+      "archivo": "lib/rutinas/rutinas.ts",
+      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo."
+    },
+    {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
       "razon": "Los vitales de cada colmena del inventario (Anexo E §3): la última inspección, su población y el origen de la colonia viva. Dos lecturas, ninguna escritura. Es el gemelo por colmena de vitalesDelSitio.ts y comparte su disciplina: no recibe principal a propósito, porque quien lo llama ya autorizó el sitio con getApiaryDetail."
     },
@@ -532,6 +536,18 @@
     {
       "archivo": "lib/apiary/cosechasSinSaldo.ts",
       "razon": "Módulo de dominio (ADR-166). `asentarPesoDeCosecha` exige `requireApiaryAccess(\"manage\")` sobre la caja de la cosecha antes de escribir, y dentro de una transacción `Serializable` vuelve a comprobar que el lote no tenga asientos, para no asentar dos veces. Escritura y AuditEvent en la MISMA transacción."
+    },
+    {
+      "archivo": "lib/catalogos/propiedad.ts",
+      "razon": "Contrato común de los catálogos de referencia (spec de catálogos §2.5). Decide quién crea, edita y ve una entrada: compartida sólo con el permiso en ámbito de plataforma; propia, con el permiso juzgado en un sitio de esa organización, que se deriva del sitio y no del formulario. Sólo LEE sitios para resolver el ámbito; no escribe nada."
+    },
+    {
+      "archivo": "lib/equipos/modelos.ts",
+      "razon": "Catálogo de modelos de equipo (spec de catálogos §3.1-3.2), primer consumidor del contrato común de lib/catalogos. Crear, editar y retirar exige equipment:manage vía requireCatalogoAccess/requireEntradaDeCatalogoAccess; toda escritura confirma su AuditEvent en la misma transacción; lecturas filtradas por organizacionesVisibles."
+    },
+    {
+      "archivo": "lib/equipos/documentos.ts",
+      "razon": "Manuales, fichas técnicas, certificados y fotos de modelos y equipos (spec de catálogos §3.5). Misma forma que lib/traceability/media.ts: URL firmada y Asset creado sólo al confirmar, con la clave obligada a su prefijo por destino. Subir exige equipment:manage (vía puedeSobreEquipo o requireEntradaDeCatalogoAccess); leer, equipment:view. El AuditEvent va en la misma transacción."
     }
   ],
   "reciben_transaccion": [

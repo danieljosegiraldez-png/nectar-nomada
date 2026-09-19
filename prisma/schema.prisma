@@ -138,6 +138,7 @@ model Person {
   instrumentReqDecided    InstrumentCheckRequirement[] @relation("InstrumentRequirementDecidedBy")
   instrumentChecksDone    InstrumentCheck[]            @relation("InstrumentCheckPerformedBy")
   measurementsReviewed    MeasurementReviewFlag[]      @relation("MeasurementReviewedBy")
+  careRoutineEvents CareRoutineEvent[] @relation("CareRoutineEventPerformedBy")
 
   @@map("person")
   @@schema("core")
@@ -923,6 +924,7 @@ model Location {
   @@index([organizationId])
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
   equipmentTransfersTo   EquipmentTransfer[] @relation("EquipmentTransferTo")
+  careRoutines CareRoutine[] @relation("CareRoutineLocation")
 
   @@map("location")
   @@schema("core")
@@ -1026,6 +1028,8 @@ model Organization {
   externalCoffeeOriginsAsBrand     ExternalCoffeeOrigin[]   @relation("ExternalCoffeeBrand")
 
   equipment Equipment[] @relation("EquipmentOwner")
+  equipmentModels   EquipmentModel[] @relation("EquipmentModelOwner")
+  suppliedEquipment Equipment[]      @relation("EquipmentSupplier")
 
   hiveNodes HiveNode[]
   hiveSupers HiveSuper[]
@@ -2007,6 +2011,13 @@ model Asset {
   consumableLotId String?        @map("consumable_lot_id") @db.Uuid
   consumableLot   ConsumableLot? @relation(fields: [consumableLotId], references: [id], onDelete: Restrict)
 
+  /// Catálogos y rutinas (2026-09-18) — la foto de un equipo o de un modelo de
+  /// catálogo, mismo molde de FK-nulable-por-padre que las de arriba.
+  equipmentId      String?         @map("equipment_id") @db.Uuid
+  equipment        Equipment?      @relation("AssetEquipment", fields: [equipmentId], references: [id], onDelete: Restrict)
+  equipmentModelId String?         @map("equipment_model_id") @db.Uuid
+  equipmentModel   EquipmentModel? @relation("AssetEquipmentModel", fields: [equipmentModelId], references: [id], onDelete: Restrict)
+
   // T12.5: required, no default — same reasoning as ADR-038 (T9.5): a
   // photograph is a fact-bearing record, and a silent default would
   // misrepresent an unstated provenance as the strongest class in the
@@ -2042,6 +2053,8 @@ model Asset {
   @@index([biocharBatchId])
   @@index([soilProfileId])
   @@index([specimenObservationId])
+  @@index([equipmentId])
+  @@index([equipmentModelId])
   equipmentConditionEvidence EquipmentConditionReport[] @relation("EquipmentConditionEvidence")
 
   @@map("asset")
@@ -5091,6 +5104,145 @@ enum EquipmentCondition {
   @@schema("core")
 }
 
+/// D4 del spec de catálogos (2026-09-18). La lista la dio Daniel; «otro» obliga a nota.
+enum EquipmentContactMaterial {
+  acero_inoxidable
+  plastico_alimentario
+  madera
+  vidrio_o_ceramica
+  otro
+
+  @@schema("core")
+}
+
+/// D8. «etc.» vive en `otra` con nota hasta que un tipo se repita lo bastante.
+enum CareRoutineKind {
+  mantenimiento
+  limpieza
+  fumigacion
+  otra
+
+  @@schema("core")
+}
+
+/// Catálogo de referencia (spec §2): nulo en `organizationId` = compartido.
+/// Unicidad, CHECK y la exclusión de capacidad fuera de vaso/máquina viven en la
+/// migración `catalogos_y_rutinas`; que dueño y tipo no cambien (disparador) y
+/// que la nota de material no sea sólo espacios, en `catalogos_restricciones`.
+/// Prisma no sabe escribirlos.
+model EquipmentModel {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  organizationId String?       @map("organization_id") @db.Uuid
+  organization   Organization? @relation("EquipmentModelOwner", fields: [organizationId], references: [id], onDelete: Restrict)
+
+  kind                       EquipmentKind
+  manufacturer               String
+  modelName                  String                    @map("model_name")
+  recommendedMaintenanceDays Int?                      @map("recommended_maintenance_days")
+  capacityValue              Decimal?                  @map("capacity_value") @db.Decimal(12, 3)
+  capacityUnit               String?                   @map("capacity_unit")
+  contactMaterial            EquipmentContactMaterial? @map("contact_material")
+  contactMaterialNote        String?                   @map("contact_material_note")
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+  notes           String?
+
+  retiredAt DateTime? @map("retired_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
+
+  specs     EquipmentModelSpec[]
+  equipment Equipment[]          @relation("EquipmentOfModel")
+  assets    Asset[]              @relation("AssetEquipmentModel")
+
+  @@unique([id, kind])
+  @@index([organizationId])
+  @@map("equipment_model")
+  @@schema("core")
+}
+
+/// Lo que el fabricante DECLARA que mide, una fila por magnitud. No es medición:
+/// los contrastes contra patrón dicen lo que el aparato hace de verdad.
+/// Se retira y se crea otra; no se edita en su sitio.
+model EquipmentModelSpec {
+  id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelId String         @map("model_id") @db.Uuid
+  model   EquipmentModel @relation(fields: [modelId], references: [id], onDelete: Restrict)
+
+  quantity    String
+  unit        String
+  rangeMin    Decimal? @map("range_min") @db.Decimal(12, 4)
+  rangeMax    Decimal? @map("range_max") @db.Decimal(12, 4)
+  resolution  Decimal? @db.Decimal(12, 4)
+  accuracyAbs Decimal? @map("accuracy_abs") @db.Decimal(12, 4)
+
+  displayOrder Int       @default(0) @map("display_order")
+  retiredAt    DateTime? @map("retired_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  createdBy    String?   @map("created_by") @db.Uuid
+
+  @@index([modelId])
+  @@map("equipment_model_spec")
+  @@schema("core")
+}
+
+/// Qué toca y cada cuánto, sobre UNA cosa: un equipo o un sitio (CHECK en la
+/// migración). Avisa, nunca bloquea (D1). Una activa por (cosa, tipo), y sólo
+/// `otra` distingue además por su nota: índice parcial de expresión en
+/// `catalogos_restricciones`, como el CHECK de nota no vacía.
+model CareRoutine {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  equipmentId String?    @map("equipment_id") @db.Uuid
+  equipment   Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  locationId  String?    @map("location_id") @db.Uuid
+  location    Location?  @relation("CareRoutineLocation", fields: [locationId], references: [id], onDelete: Restrict)
+
+  kind         CareRoutineKind
+  kindNote     String?         @map("kind_note")
+  intervalDays Int             @map("interval_days")
+  instructions String?
+
+  retiredAt DateTime? @map("retired_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
+
+  events CareRoutineEvent[]
+
+  @@index([equipmentId])
+  @@index([locationId])
+  @@map("care_routine")
+  @@schema("core")
+}
+
+/// Cada vez que se hizo. Sólo se añade; lo apuntado por error se ANULA con motivo.
+model CareRoutineEvent {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routineId String      @map("routine_id") @db.Uuid
+  routine   CareRoutine @relation(fields: [routineId], references: [id], onDelete: Restrict)
+
+  /// Campo de DÍA: medianoche UTC, leído con `fechaDeDia`.
+  performedOn         DateTime @map("performed_on")
+  performedByPersonId String?  @map("performed_by_person_id") @db.Uuid
+  performedBy         Person?  @relation("CareRoutineEventPerformedBy", fields: [performedByPersonId], references: [id], onDelete: Restrict)
+  note                String?
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  sourceReference String?         @map("source_reference")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidReason String?   @map("void_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.Uuid
+
+  @@index([routineId])
+  @@map("care_routine_event")
+  @@schema("core")
+}
+
 model Equipment {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -5139,6 +5291,22 @@ model Equipment {
   provenanceClass ProvenanceClass @map("provenance_class")
   sourceReference String?         @map("source_reference")
 
+  /// Catálogo (spec §3.3). FK COMPUESTA con `kind`: un instrumento no puede
+  /// apuntar a un modelo de vaso, y lo impide la base. Un disparador impide
+  /// además un modelo propio de otra organización.
+  modelId String?         @map("model_id") @db.Uuid
+  model   EquipmentModel? @relation("EquipmentOfModel", fields: [modelId, kind], references: [id, kind], onDelete: Restrict)
+
+  serialNumber String? @map("serial_number")
+  /// El que se pega en el aparato. Único por organización, sin mayúsculas (migración).
+  internalCode String? @map("internal_code")
+
+  supplierOrganizationId String?       @map("supplier_organization_id") @db.Uuid
+  supplier               Organization? @relation("EquipmentSupplier", fields: [supplierOrganizationId], references: [id], onDelete: Restrict)
+
+  /// Campo de DÍA.
+  warrantyUntil DateTime? @map("warranty_until")
+
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
   creator   UserAccount? @relation("EquipmentCreatedBy", fields: [createdBy], references: [id])
@@ -5154,9 +5322,12 @@ model Equipment {
   roastSessions       RoastSession[]      @relation("RoastSessionEquipment")
   storageAssignments  StorageAssignment[] @relation("StorageAssignmentContainer")
   measurements        Measurement[]       @relation("MeasurementInstrument")
+  careRoutines CareRoutine[]
+  assets       Asset[]       @relation("AssetEquipment")
 
   @@index([organizationId])
   @@index([kind])
+  @@index([modelId])
   @@map("equipment")
   @@schema("core")
 }
