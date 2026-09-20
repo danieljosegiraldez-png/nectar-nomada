@@ -2946,6 +2946,22 @@ cat .vercel/project.json   # debe decir prj_9EkGhnZZgdgsEOJGsxGNFOd24Bvm
 `vercel link` además escribe un `.env.local` con lo que el proyecto tenga. Está
 gitignorado (`.env*`), pero es un secreto en disco: mirar qué trajo y borrarlo.
 
+### Una fusión sin conflictos puede dejar código roto
+
+**2026-09-19, en el PR #445.** Git auto-fusionó
+`lib/traceability/pendienteDeTrampas.ts` **sin un solo marcador de conflicto** y
+el resultado no compilaba: la lógica de «atendido» de `main` se cruzó con un
+refactor de helpers de la rama y dejó `revisionVigente` referenciada fuera de
+alcance. Lo cazó el typecheck, no la lectura del diff.
+
+**El silencio de git no es evidencia.** Que no haya conflictos dice que los
+cambios no se solapan **textualmente**, no que el resultado tenga sentido. Es la
+misma forma que el resto de esta sección: una salida que parece buena —«sin
+conflictos»— y que no mide lo que se cree.
+
+**Arreglo:** `npx tsc --noEmit` y `npm run build` después de CADA rebase o merge,
+aunque git no se haya quejado. Con cinco ramas en cola el mismo día, esto pasa.
+
 ### Una clase de validación nueva que llegue a una acción es un 500
 
 **PR #433.** `friendlyError` (`app/actions/traceability.ts`) **relanza toda clase
