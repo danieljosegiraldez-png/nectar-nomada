@@ -20,6 +20,7 @@ import { crearUsuarioSinAcceso } from "../helpers/traceability";
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
 
 let organizationId: string;
+let siteId: string;
 let locationId: string;
 let userAccountId: string;
 let personId: string;
@@ -35,8 +36,24 @@ beforeAll(async () => {
   });
   organizationId = organization.id;
 
+  // `createTrap` exige un sitio antepasado (`resolveFarmSiteId`, `fincas.ts`):
+  // un `plot` sin ninguno es una topología inválida en el dominio real —
+  // `crearParcela`/`createMicrolot` nunca la producen — y sin este sitio
+  // las pruebas de trampa de más abajo lanzarían `no_site_ancestor`.
+  const site = await prisma.location.create({
+    data: { locationType: "site", name: `TEST Site (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  siteId = site.id;
+
   const location = await prisma.location.create({
-    data: { locationType: "plot", name: `TEST Plot (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+    data: {
+      locationType: "plot",
+      name: `TEST Plot (${RUN_ID})`,
+      organizationId,
+      parentLocationId: siteId,
+      status: "approved",
+      classification: "internal",
+    },
   });
   locationId = location.id;
 
@@ -87,6 +104,7 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: siteId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 

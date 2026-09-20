@@ -6396,8 +6396,11 @@ model Specimen {
 
   // F2 §4 — el número que va rotulado en la botella. Lo genera el sistema,
   // correlativo por finca. `farmLocationId` se rellena al crear con
-  // `location.parentLocationId ?? location.id`: los lotes de Finca Rosina tienen
-  // `organization_id` NULL, así que la finca es el padre en la jerarquía.
+  // `resolveFarmSiteId` (`lib/traceability/fincas.ts`), que camina hasta la
+  // Location `site` antepasada — nunca sólo el padre inmediato: una trampa en
+  // una microparcela (`createMicrolot`) tiene por padre inmediato la parcela,
+  // no la finca. Corregido 2026-09-19; antes tomaba `location.parentLocationId
+  // ?? location.id`, correcto sólo para una parcela de primer nivel.
   farmLocationId String?   @map("farm_location_id") @db.Uuid
   farmLocation   Location? @relation("SpecimenFarm", fields: [farmLocationId], references: [id])
   trapNumber     Int?      @map("trap_number")

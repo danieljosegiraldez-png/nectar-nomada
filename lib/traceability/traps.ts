@@ -5,6 +5,7 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import { diaDeHoy } from "../time/diaDeHoy";
+import { resolveFarmSiteId } from "./fincas";
 
 export class TrapAccessError extends Error {}
 export class TrapValidationError extends Error {}
@@ -22,7 +23,7 @@ export class TrapValidationError extends Error {}
 export async function requireTrapAccess(userAccountId: string, locationId: string) {
   const location = await prisma.location.findUnique({
     where: { id: locationId },
-    select: { classification: true, parentLocationId: true, timezone: true },
+    select: { classification: true, timezone: true },
   });
   if (!location) throw new TrapAccessError("location_not_found");
 
@@ -68,9 +69,14 @@ export interface CreateTrapInput {
  * F2 §4 — alta de una trampa, una por una. El número lo pone el sistema,
  * correlativo por finca, y el operador lo rotula en la botella.
  *
- * La finca es `parentLocationId` y no la organización: los lotes reales de
- * Finca Rosina tienen `organization_id` NULL (medido en la Tarea 2), así que
- * el padre en la jerarquía de `Location` es la finca.
+ * La finca es el SITIO antepasado (`resolveFarmSiteId`, `fincas.ts`), no la
+ * organización ni el padre inmediato: los lotes reales de Finca Rosina tienen
+ * `organization_id` NULL (medido en la Tarea 2), y una trampa en una
+ * microparcela (spec fincas y parcelas §3.3, `createMicrolot`) tiene por
+ * padre inmediato la PARCELA, no la finca — `location.parentLocationId ??
+ * input.locationId` numeraba esas trampas por parcela en vez de por finca, y
+ * las dejaba sin la regla de la finca (`TrapRule` se busca por
+ * `farmLocationId`). Ver el docstring de `resolveFarmSiteId`.
  *
  * `createSpecimen` no se reutiliza: necesita el número correlativo y la
  * finca, que esa función no conoce.
@@ -88,7 +94,7 @@ export async function createTrap(userAccountId: string, input: CreateTrapInput, 
   if (diaEnElFuturo(input.installedAt, location.timezone, ahora)) {
     throw new TrapValidationError("installed_at_in_future");
   }
-  const farmLocationId = location.parentLocationId ?? input.locationId;
+  const farmLocationId = await resolveFarmSiteId(input.locationId);
 
   if (input.plotBlockId) {
     const bloque = await prisma.plotBlock.findUnique({

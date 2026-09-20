@@ -45,7 +45,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
     throw error;
   }
 
-  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
+  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas, farmLocationId } = detail;
   // Spec fincas y parcelas §3.3, regla de `main` sin cambios: el enlace se
   // ofrece sobre cualquier Location `plot` con `manage_attributes` (ya
   // exigido por `getPlotDetail` arriba, la misma comprobación de
@@ -279,8 +279,10 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         </details>
       </section>
 
-      {/* La regla es de la FINCA —el padre de la parcela, la misma clave que
-          usa `createTrap`—, así que vale para todas sus parcelas. */}
+      {/* La regla es de la FINCA —el sitio antepasado, no el padre inmediato:
+          una microparcela tiene por padre la parcela, no la finca. La misma
+          clave que usa `createTrap` (`resolveFarmSiteId`, `fincas.ts`), así
+          que vale para todas las parcelas y microparcelas de la finca. */}
       <section className="nn-section" id="regla-trampas">
         <h2>{t("trapRuleTitle")}</h2>
         <p className="nn-muted">{t("trapRuleIntro")}</p>
@@ -296,11 +298,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <p className="nn-muted">{t("trapRuleNone")}</p>
         )}
-        <ReglaDeTrampasForm
-          locationId={location.id}
-          farmLocationId={location.parentLocation?.id ?? location.id}
-          regla={reglaDeTrampas}
-        />
+        <ReglaDeTrampasForm locationId={location.id} farmLocationId={farmLocationId} regla={reglaDeTrampas} />
       </section>
     </div>
   );

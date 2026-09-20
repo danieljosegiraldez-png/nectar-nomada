@@ -17,6 +17,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
+import { resolveFarmSiteId } from "./fincas";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -614,13 +615,23 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   const instaladaEl = new Map<string, Date>();
   for (const i of instalaciones) if (!instaladaEl.has(i.specimenId)) instaladaEl.set(i.specimenId, i.observedAt);
 
-  // La regla de la finca, que es el padre de la parcela —la misma clave que
-  // usan `createTrap` y `saveTrapRule`—. Se lee aquí y no con `getTrapRule`
-  // para que quede detrás de la compuerta del tablero y no exija además la
-  // de la finca. `null` = sin regla, y sin regla no hay avisos ni plazos.
+  // La finca es el SITIO antepasado (`resolveFarmSiteId`, `fincas.ts`), no el
+  // padre inmediato: para una microparcela (spec fincas y parcelas §3.3,
+  // `createMicrolot`) el padre inmediato es la PARCELA, no la finca.
+  // `location.parentLocation?.id ?? location.id` — un solo nivel — leía la
+  // regla equivocada ahí, y la pantalla de ajustes le pasaba al formulario
+  // esa misma parcela como si fuera la finca. Se calcula siempre, no sólo
+  // detrás de `puedeVerTrampas`: la pantalla usa este valor para el
+  // formulario de la regla aunque la lista de trampas no se muestre.
+  const farmLocationId = await resolveFarmSiteId(locationId);
+
+  // La regla de la finca —la misma clave que usan `createTrap` y
+  // `saveTrapRule`—. Se lee aquí y no con `getTrapRule` para que quede
+  // detrás de la compuerta del tablero y no exija además la de la finca.
+  // `null` = sin regla, y sin regla no hay avisos ni plazos.
   const reglaDeTrampas = puedeVerTrampas
     ? await prisma.trapRule.findUnique({
-        where: { farmLocationId: location.parentLocation?.id ?? location.id },
+        where: { farmLocationId },
         select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
       })
     : null;
@@ -663,6 +674,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     eventosDeProduccion,
     trampas,
     reglaDeTrampas,
+    // La finca de esta Location, para el formulario de la regla de trampas —
+    // ver el comentario junto a `resolveFarmSiteId` arriba. El llamador no
+    // debe recomponerla con `location.parentLocation`.
+    farmLocationId,
     density: computePlotDensity(cohorts, location.areaHectares),
     yield: computePlotYield(
       harvestContributions.map((c) => ({
