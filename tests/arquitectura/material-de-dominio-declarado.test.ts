@@ -32,8 +32,24 @@ import { describe, expect, it } from "vitest";
 const RAIZ = new URL("../..", import.meta.url).pathname;
 const CARPETA = join(RAIZ, "docs/dominio");
 
-/** Los tres de la tabla del README, y ninguno más. */
-const ESTADOS = ["material del dueño", "borrador · pendiente de revisión", "referencia externa"] as const;
+/**
+ * **Los estados se LEEN de la tabla del README, no se copian aquí.**
+ *
+ * Antes eran una lista literal con el comentario «los tres de la tabla del README», y el
+ * 2026-09-19 derivaron: el PR #446 declaró un cuarto estado —`reemplazado · no normativo`— en
+ * la tabla y lo usó en tres guías, este guardia siguió con tres, y `main` quedó ROJO en su
+ * propia punta. El carril de sólo-documentación del PR no lo vio porque se salta las compuertas
+ * de código, que es donde vive este test: un cambio de documentación rompió un guardia que lee
+ * documentación, sin que ninguna comprobación del PR lo ejercitara.
+ *
+ * Dos fuentes para una misma lista siempre acaban separándose. Con una sola, añadir un estado a
+ * la tabla lo habilita, y usar uno que la tabla no declara sigue estando prohibido.
+ */
+function estadosDeLaTabla(): string[] {
+  const readme = readFileSync(join(CARPETA, "README.md"), "utf8");
+  return [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|/gm)].map((m) => m[1]!);
+}
+const ESTADOS = estadosDeLaTabla();
 
 const documentos = () => readdirSync(CARPETA).filter((f) => f.endsWith(".md") && f !== "README.md");
 
@@ -49,6 +65,13 @@ describe("el material de dominio dice de dónde salió", () => {
     const docs = documentos();
     expect(docs.length, `documentos encontrados: ${docs.join(", ") || "NINGUNO"}`).toBeGreaterThanOrEqual(3);
     expect(readFileSync(join(CARPETA, "README.md"), "utf8")).toContain("Material de dominio");
+
+    // **Control positivo del lector de la tabla.** Si el README cambia de formato y la expresión
+    // deja de casar, `ESTADOS` queda vacío, `declarados` sale vacío para todos y el guardia
+    // acusaría a TODOS los archivos en vez de quedarse ciego — ruidoso, pero indistinguible de
+    // un fallo real. Esta línea dice cuál de las dos cosas pasó.
+    expect(ESTADOS.length, `estados leídos del README: ${ESTADOS.join(" · ") || "NINGUNO"}`).toBeGreaterThanOrEqual(3);
+    expect(ESTADOS, "la tabla del README tiene que declarar el estado base").toContain("material del dueño");
   });
 
   it.each(documentos())("%s declara su procedencia", (nombre) => {
