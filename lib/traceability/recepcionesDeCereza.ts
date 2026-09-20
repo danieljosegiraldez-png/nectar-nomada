@@ -387,6 +387,20 @@ export async function disponibleDeRecepciones(recepcionIds: readonly string[]): 
   return new Map(recepciones.map((r) => [r.id, a3(Number(r.netoKg) - (resta.get(r.id) ?? 0))]));
 }
 
+/**
+ * Las mermas vigentes de unas recepciones, para poder anular la que se anotó mal.
+ *
+ * **Sin principal**, como `disponibleDeRecepciones`: la llama la pantalla del beneficio con las
+ * recepciones que `recepcionesDeBeneficio` —que sí exige `lot:view`— acaba de devolverle.
+ */
+export async function mermasDeRecepciones(recepcionIds: readonly string[]) {
+  if (recepcionIds.length === 0) return [];
+  return prisma.mermaDeRecepcion.findMany({
+    where: { recepcionId: { in: [...recepcionIds] }, estado: "vigente" },
+    orderBy: { anotadaAt: "desc" },
+  });
+}
+
 /** Foto de una recepción, paso 1: la URL de subida directa. */
 export async function pedirSubidaDeFotoDeRecepcion(userAccountId: string, input: { recepcionId: string; originalFilename: string; contentType: string }) {
   const recepcion = await prisma.recepcionDeCereza.findUnique({ where: { id: input.recepcionId }, select: { id: true, beneficioId: true } });

@@ -129,6 +129,48 @@ export async function armarLote(userAccountId: string, input: ArmarLoteInput) {
 }
 
 /**
+ * El detalle de unas recepciones para pintar de dónde viene un lote: quién entregó, de qué parcela,
+ * bloque o planta, o de qué proveedor de fuera.
+ *
+ * **Sin principal**, como `origenDelLote`, y por lo mismo: la llama la ficha del lote con los ids
+ * que `origenDelLote` acaba de devolverle sobre un lote que ya autorizó.
+ */
+export async function detalleDeRecepciones(recepcionIds: readonly string[]) {
+  if (recepcionIds.length === 0) return new Map<string, { origen: string; detalle: string | null; recibidaAt: Date }>();
+  const filas = await prisma.recepcionDeCereza.findMany({
+    where: { id: { in: [...recepcionIds] } },
+    select: {
+      id: true,
+      recibidaAt: true,
+      proveedor: { select: { name: true } },
+      entrega: {
+        select: {
+          recolector: { select: { displayName: true } },
+          location: { select: { name: true } },
+          plotBlock: { select: { name: true } },
+          specimen: { select: { commonName: true } },
+          jornada: { select: { fincaSite: { select: { name: true } } } },
+        },
+      },
+    },
+  });
+  return new Map(
+    filas.map((f) => [
+      f.id,
+      {
+        origen: f.proveedor?.name ?? f.entrega?.jornada.fincaSite.name ?? "",
+        detalle: f.entrega
+          ? [f.entrega.recolector.displayName, f.entrega.plotBlock?.name ?? f.entrega.specimen?.commonName ?? f.entrega.location?.name]
+              .filter(Boolean)
+              .join(" · ")
+          : null,
+        recibidaAt: f.recibidaAt,
+      },
+    ]),
+  );
+}
+
+/**
  * De qué recepciones viene un lote, por lejos que esté de ellas.
  *
  * Si el lote tiene vínculos, son su origen. Si no, se sube por `LotTransformation` —de salida a

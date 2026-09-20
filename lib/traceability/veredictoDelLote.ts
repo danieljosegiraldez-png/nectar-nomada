@@ -11,6 +11,7 @@
  * - **Corre dentro de la transacción de la selección** (por `enLaMismaTransaccion`), así que una
  *   selección no puede guardarse sin su veredicto ni el veredicto sin su selección.
  */
+import { prisma } from "../db";
 import { evaluarCalidad, type CondicionDePesaje } from "../beneficio/veredictoDeCalidad";
 import type { Prisma } from "../../generated/prisma/client";
 
@@ -96,4 +97,34 @@ export async function recalcularVeredicto(tx: Prisma.TransactionClient, lotId: s
     actualizadoAt: new Date(),
   };
   await tx.veredictoDeCalidadDePedido.upsert({ where: { lotId }, create: { lotId, ...fila }, update: fila });
+}
+
+/**
+ * El veredicto guardado de un lote, para pintarlo. **Sin principal**: lo llaman la ficha del lote y
+ * la pantalla de pedidos, que ya autorizaron lo que enseñan.
+ */
+export async function veredictoDeCalidadDelLote(lotId: string) {
+  return prisma.veredictoDeCalidadDePedido.findUnique({ where: { lotId } });
+}
+
+/**
+ * Los veredictos de los lotes de unos pedidos, agrupados por pedido, para la pantalla de pedidos.
+ * **Sin principal**, como los dos de arriba: los pedidos se los da `pedidosDeBeneficio`, que sí
+ * exige `lot:view` sobre el beneficio.
+ */
+export async function veredictosDePedidos(pedidoIds: readonly string[]) {
+  const agrupado = new Map<string, Array<{ lotId: string; lotCode: string; juicio: string; motivo: string | null }>>();
+  if (pedidoIds.length === 0) return agrupado;
+  const filas = await prisma.veredictoDeCalidadDePedido.findMany({
+    where: { pedidoId: { in: [...pedidoIds] } },
+    select: { lotId: true, pedidoId: true, juicio: true, motivo: true, lot: { select: { lotCode: true } } },
+    orderBy: { actualizadoAt: "desc" },
+  });
+  for (const f of filas) {
+    if (!f.pedidoId) continue;
+    const lista = agrupado.get(f.pedidoId) ?? [];
+    lista.push({ lotId: f.lotId, lotCode: f.lot.lotCode, juicio: f.juicio, motivo: f.motivo });
+    agrupado.set(f.pedidoId, lista);
+  }
+  return agrupado;
 }

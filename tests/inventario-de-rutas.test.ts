@@ -179,7 +179,10 @@ describe("el inventario del router", () => {
     // 2026-09-21 (merge de origin/main 5afbe3f3 en la rama, hecho por la sesión coordinadora
     // porque la de secado se cerró). Medido con `node scripts/inventario-de-rutas.mjs` sobre el
     // árbol fusionado: 106 entradas (95 páginas, 11 handlers), y cuadra con 105 + 1.
-    expect(salida).toContain("106 entradas");
+    // 106 → 105 el 2026-09-19: se retira /lots/new con la pieza 3 —un lote de cereza nace de una
+    // recepción—. Es la primera vez que esta cifra BAJA, y por eso se dice. Medido con
+    // `node scripts/inventario-de-rutas.mjs`: 105 entradas (94 páginas, 11 handlers).
+    expect(salida).toContain("105 entradas");
     expect(codigo, salida).toBe(0);
   });
 

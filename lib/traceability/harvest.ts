@@ -86,6 +86,14 @@ export interface RecordHarvestEventInput {
   sourceReference?: string | null;
 }
 
+/**
+ * **Su pantalla se retiró el 2026-09-19** (pieza 3): `/lots/new` ya no existe, porque un lote de
+ * cereza nace de una recepción en el beneficio y no de un formulario que pedía la organización y
+ * la ubicación a mano. El servicio SE QUEDA, y sus pruebas con él, por dos razones: los 34
+ * `HarvestEvent` reales que ya existen se leen por aquí, y son la red que demuestra que el camino
+ * viejo sigue íntegro. No tiene llamador de pantalla; si alguna vez vuelve a tenerlo, esta línea
+ * es la que hay que releer.
+ */
 export async function recordHarvestEvent(userAccountId: string, input: RecordHarvestEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
   // Spec fincas y parcelas §3.4: la cereza se cosecha en una parcela o en una microparcela (las
@@ -211,6 +219,11 @@ export interface RecordReceivingEventInput {
   sourceReference?: string | null;
 }
 
+/**
+ * **Su pantalla se retiró el 2026-09-19**, igual que la de `recordHarvestEvent` y por lo mismo: la
+ * recepción de cereza del beneficio (`/beneficio/recepcion`, pieza 2) la sustituye, y de ella
+ * salen los lotes (pieza 3). El servicio y sus pruebas se quedan como red del camino viejo.
+ */
 export async function recordReceivingEvent(userAccountId: string, input: RecordReceivingEventInput) {
   await requireLotAccess(userAccountId, "manage", [{ projectId: input.projectId, locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
 

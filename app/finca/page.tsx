@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
  *
  * **«Registrar una cosecha» ya no está aquí** (decisión de Daniel, 2026-09-19): «en finca no se
  * registra cosecha». La finca abre jornadas y anota entregas; el lote de cereza se sigue creando a
- * mano desde Beneficio → Lotes (`/lots/new`) hasta que la pieza 3 lo haga nacer de la recepción.
+ * mano; desde la pieza 3 (2026-09-19) nace de la recepción, en `/beneficio/recepcion`.
  *
  * **Cada enlace sólo aparece si quien mira puede usarlo**, con la misma pregunta
  * ancha que ya hace la navegación. La autorización de verdad sigue en cada destino.

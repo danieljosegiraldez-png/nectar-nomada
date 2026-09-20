@@ -30,6 +30,8 @@ import { VeredictoDeBeneficio } from "../../components/traceability/VeredictoDeB
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
 import { TargetComparisonTable } from "../../components/traceability/TargetComparisonTable";
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
+import { detalleDeRecepciones, origenDelLote } from "../../../lib/traceability/lotesDeBeneficio";
+import { veredictoDeCalidadDelLote } from "../../../lib/traceability/veredictoDelLote";
 import {
   recordFermentationInterventionFormAction,
   endFermentationFormAction,
@@ -121,6 +123,16 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   // la regla aquí, que es exactamente cómo la pantalla y el servicio acaban
   // discrepando.
   const puedeRegistrar = await puedeGestionarLote(user.userAccountId, lot);
+
+  // De dónde viene la cereza de este lote (spec de la recepción a los lotes §3.2). `origenDelLote`
+  // sube por la genealogía hasta los lotes que tienen vínculo con una recepción, así que también
+  // responde en un lote de tres transformaciones más abajo. Vacío en todo lo que no nació de una
+  // recepción, que es la mayoría de lo que ya existe.
+  const origenDeRecepciones = await origenDelLote(lot.id);
+  const [detalleDeOrigen, veredictoDeCalidad] = await Promise.all([
+    detalleDeRecepciones(origenDeRecepciones.map((o) => o.recepcionId)),
+    veredictoDeCalidadDelLote(lot.id),
+  ]);
 
   // Una clave por formulario y por render. El servidor las genera —no el
   // cliente— porque un `crypto.randomUUID()` dentro de un `useState` daría un
@@ -791,6 +803,47 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
           first, and the photo is the complement to it (ADR-096). */}
       {puedeRegistrar ? (
         <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
+      ) : null}
+
+      {origenDeRecepciones.length > 0 ? (
+        <section className="nn-section">
+          <h2>{t("origenRecepcionesHeading")}</h2>
+          <ul>
+            {origenDeRecepciones.map((o) => {
+              const d = detalleDeOrigen.get(o.recepcionId);
+              return (
+                <li key={o.recepcionId}>
+                  {t("origenRecepcionLinea", { kg: o.kg.toFixed(1), origen: d?.origen ?? "" })}
+                  {d?.detalle ? <span className="nn-muted">{` · ${d.detalle}`}</span> : null}
+                  {o.nivel1LotId !== lot.id ? (
+                    <>
+                      {" · "}
+                      <Link href={`/lots/${o.nivel1LotId}`} className="nn-code">
+                        {lineage.lotCodesById.get(o.nivel1LotId) ?? o.nivel1LotId.slice(0, 8)}
+                      </Link>
+                    </>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {veredictoDeCalidad ? (
+            <p>
+              {t(`juicio_${veredictoDeCalidad.juicio}`)}
+              {veredictoDeCalidad.motivo ? <span className="nn-muted">{` — ${veredictoDeCalidad.motivo}`}</span> : null}
+              <br />
+              <span className="nn-muted">
+                {t("veredictoMasas", {
+                  insumo: Number(veredictoDeCalidad.insumoKg).toFixed(1),
+                  aceptado: Number(veredictoDeCalidad.aceptadoKg).toFixed(1),
+                  verde: Number(veredictoDeCalidad.verdeKg).toFixed(1),
+                  flotes: Number(veredictoDeCalidad.flotesKg).toFixed(1),
+                  n: veredictoDeCalidad.selecciones,
+                })}
+              </span>
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
       <section className="nn-section">

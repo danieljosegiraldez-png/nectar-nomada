@@ -5,11 +5,14 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { COOKIE_BENEFICIO, beneficioDeLaPagina } from "../../../lib/traceability/beneficioElegido";
-import { pendientesDeBeneficio, recepcionesDeBeneficio } from "../../../lib/traceability/recepcionesDeCereza";
+import { disponibleDeRecepciones, mermasDeRecepciones, pendientesDeBeneficio, recepcionesDeBeneficio } from "../../../lib/traceability/recepcionesDeCereza";
+import { recepcionesArmables } from "../../../lib/traceability/lotesDeBeneficio";
 import { pedidosDeBeneficio } from "../../../lib/traceability/pedidosDeCereza";
 import { proveedoresDeCereza } from "../../../lib/traceability/proveedoresDeCereza";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 import { BeneficioElegido } from "../../components/beneficio/BeneficioElegido";
+import { ArmarLoteForm } from "../../components/beneficio/ArmarLoteForm";
+import { AnularMermaForm, MermaForm } from "../../components/beneficio/MermaForm";
 import {
   AnularRecepcionForm,
   FotoDeRecepcionForm,
@@ -48,12 +51,17 @@ export default async function RecepcionPage() {
   }
 
   const gestiona = granted.has("lot:manage");
-  const [pendientes, recibidas, pedidos, proveedores] = await Promise.all([
+  const [pendientes, recibidas, pedidos, proveedores, armables] = await Promise.all([
     pendientesDeBeneficio(user.userAccountId, elegido.id),
     recepcionesDeBeneficio(user.userAccountId, elegido.id, 24),
     pedidosDeBeneficio(user.userAccountId, elegido.id),
     gestiona ? proveedoresDeCereza(user.userAccountId) : Promise.resolve([]),
+    recepcionesArmables(user.userAccountId, elegido.id),
   ]);
+  // El disponible de las recepciones que se están mostrando, para la merma. `armables` ya trae el
+  // suyo, pero deja fuera las que llegaron a cero, y ahí sigue habiendo mermas que anular.
+  const disponible = await disponibleDeRecepciones(recibidas.map((r) => r.id));
+  const mermas = gestiona ? await mermasDeRecepciones(recibidas.map((r) => r.id)) : [];
   const abiertos: PedidoElegible[] = pedidos
     .filter((p) => p.estado === "abierto")
     .map((p) => ({
@@ -117,6 +125,26 @@ export default async function RecepcionPage() {
         </section>
       ) : null}
 
+      {gestiona ? (
+        <section className="nn-section">
+          <h2>{t("armarTitulo")}</h2>
+          <p className="nn-muted">{t("armarAyuda")}</p>
+          {armables.length === 0 ? (
+            <p className="nn-muted">{t("sinArmables")}</p>
+          ) : (
+            <ArmarLoteForm
+              beneficioId={elegido.id}
+              recepciones={armables.map((a) => ({
+                id: a.recepcion.id,
+                etiqueta: t("armableEtiqueta", { origen: a.origen, neto: kg(Number(a.recepcion.netoKg)) }),
+                disponibleKg: a.disponibleKg,
+                pedidoId: a.pedidoId,
+              }))}
+            />
+          )}
+        </section>
+      ) : null}
+
       <section className="nn-section">
         <h2>{t("recibidasTitulo")}</h2>
         {recibidas.length === 0 ? (
@@ -149,6 +177,20 @@ export default async function RecepcionPage() {
                   <>
                     <FotoDeRecepcionForm recepcionId={r.id} />
                     <AnularRecepcionForm recepcionId={r.id} />
+                    {r.estado === "recibida" ? (
+                      <>
+                        <p className="nn-muted">{t("disponible", { kg: kg(disponible.get(r.id) ?? 0) })}</p>
+                        <MermaForm recepcionId={r.id} disponibleKg={disponible.get(r.id) ?? 0} />
+                        {mermas
+                          .filter((m) => m.recepcionId === r.id)
+                          .map((m) => (
+                            <div key={m.id}>
+                              <span className="nn-muted">{t("mermaLinea", { kg: kg(Number(m.kg)), motivo: m.motivo })}</span>
+                              <AnularMermaForm mermaId={m.id} />
+                            </div>
+                          ))}
+                      </>
+                    ) : null}
                   </>
                 ) : null}
               </li>
