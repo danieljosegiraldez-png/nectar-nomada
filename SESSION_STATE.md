@@ -133,24 +133,6 @@ calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y 
 enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
 en la inspección (toca la cola sin conexión) y el año de las reinas.
 
-### 2026-09-18 · El manejo fitosanitario de la parcela
-
-ADR-174 (nació como 170; otras sesiones ocuparon 170-173 mientras se integraba: el número de un
-ADR se asigna al fusionar, no al escribirlo).
-Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
-manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
-en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
-del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
-cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
-(`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
-en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-19):** intervenciones sobre bloques, la regla apunta a producto, aviso de trampa atendido (ver anexo PR B en el ADR).
-
-**Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
-55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
-los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
-ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
-dispatch llevar prohibición explícita de reset/restore/migrate dev.
-
 ## 3. Bloqueado, y en qué
 
 #### Kiva Estate: crear su terreno (de Daniel)

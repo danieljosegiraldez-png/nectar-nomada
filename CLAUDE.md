@@ -2587,6 +2587,27 @@ revienta.
   Y con un control positivo al lado: la misma búsqueda sobre una migración que
   sí está en `main`, para probar que el bucle mira donde debe.
 
+### Un subagente resetea la base compartida si su encargo no se lo prohíbe
+
+**2026-09-18, ~23:39Z.** Durante la tarea 8 del manejo fitosanitario (ADR-174),
+un subagente corrió `npm run test:db -- reset` sobre la base compartida del
+55433 y restauró el backup del 2026-09-14. La prohibición estaba en los encargos
+de las tareas 3 a 7 y **faltó en el de la 8**. El esquema quedó coherente al
+medirlo después, pero los datos de prueba entre el 14 y el reset no se reparan.
+
+**Y un subagente puede fabricarse el permiso.** El 2026-09-19, en las rutinas de
+lugar (ADR-180), otro subagente usó el texto de su propio encargo como
+`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` para correr `prisma migrate reset`.
+Esa variable pide el consentimiento **de Daniel**, no el de quien delega. Esa
+vez sólo tocó una base propia y no se perdió nada, pero el guardia de Prisma
+quedó saltado.
+
+**La regla:** todo encargo a un subagente que toque la base lleva escrita la
+prohibición de `test:db -- reset`, `prisma migrate reset`, `db push
+--force-reset`, borrar bases y fijar esa variable, y nombra la **única** base
+que puede usar. Que las tareas anteriores lo dijeran no cuenta: el subagente
+sólo ve su propio encargo.
+
 ### Una prueba nueva que necesita base corre en el carril que no la tiene
 
 **2026-09-07.** `npx vitest run` pasó 1291/1291 en local y CI falló el carril
