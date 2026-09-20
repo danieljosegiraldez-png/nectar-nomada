@@ -9264,10 +9264,23 @@ model ByproductBatch {
   /// el balance dejara de poder sumarse.
   massKg Decimal @map("mass_kg") @db.Decimal(10, 3)
 
-  /// De qué transformación salió. **Requerido**: un subproducto sin origen no
-  /// es trazable, y la trazabilidad es la razón de esta tabla.
-  transformationId String            @map("transformation_id") @db.Uuid
-  transformation   LotTransformation @relation(fields: [transformationId], references: [id])
+  /// De qué transformación salió: la cascarilla de la trilla, y la cera **al colar**.
+  /// **Opcional desde la spec 2026-09-19 §4.1**, porque la cera **al desopercular** no
+  /// sale de un lote concreto —se desopercula junto— y en su lugar lleva el apiario
+  /// (`producedAtLocationId`) y una ventana de fechas. Exactamente uno de los dos orígenes,
+  /// y lo exige un CHECK: un subproducto sin origen no es trazable, y la trazabilidad es la
+  /// razón de esta tabla.
+  transformationId String?            @map("transformation_id") @db.Uuid
+  /// `Restrict`, no `SetNull`: dejar la transformación en nulo convertiría esta fila en una cera
+  /// «de apiario» sin ventana, que es justo lo que el CHECK de un solo origen prohíbe.
+  transformation   LotTransformation? @relation(fields: [transformationId], references: [id], onDelete: Restrict)
+
+  /// La ventana de la actividad cuando el origen es el apiario: del día en que empezó la
+  /// extracción al día en que terminó. Es la trazabilidad a lugar y tiempo que pidió Daniel
+  /// el 2026-09-19 —«aunque no sepa cuál alza o colmena»—, y por eso NO hay colmena aquí:
+  /// decir de qué colmenas salió la cera sería inventarlo.
+  windowStart DateTime? @map("window_start")
+  windowEnd   DateTime? @map("window_end")
 
   /// Dónde se produjo. Requerido por lo mismo que en `BiocharBatch`: es el
   /// ancla de RBAC, y sin un ámbito concreto no hay autorización que comprobar.
@@ -9296,6 +9309,10 @@ model ByproductBatch {
 enum ByproductType {
   CASCARILLA
   PULPA
+  /// La cera de la miel: la que sale al desopercular y la que sale al colar.
+  /// Spec 2026-09-19 §4 — **no es merma**: contarla como pérdida infla la merma
+  /// y esconde la de verdad, que es la que dice si alguien pesó mal.
+  CERA
 
   @@schema("traceability")
 }
@@ -9307,6 +9324,11 @@ enum ByproductDestination {
   BIOCHAR
   DISPOSAL
   SALE
+  /// Los tres de la cera (spec 2026-09-19 §4.1). `SALE` ya servía para «se vende».
+  /// Con `OTRO`, la nota es obligatoria y lo exige un CHECK.
+  LAMINA_PROPIA
+  GUARDADA
+  OTRO
 
   @@schema("traceability")
 }

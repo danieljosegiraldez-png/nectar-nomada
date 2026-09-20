@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**513 operaciones** que tocan la base, en **144 archivos**:
+**515 operaciones** que tocan la base, en **145 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **386** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **388** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **68** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -59,6 +59,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `completarCierreDeCosecha`, entra como **«acotado por construcción»**, 39→40 — **la etiqueta del
 > script no es exacta**: no se autoriza sola, recibe el `tx` de quien la llama, y sus dos llamadores
 > (`completarCierreDeCosecha` y `recipientes.ts`) comprueban `apiary:manage` antes. 490→493, en 141.
+> **La cera como subproducto (ADR-178, 2026-09-19).** `lib/apiary/ceraDeExtraccion.ts` sube
+> **guardia directo**, 386→388: anotar exige `apiary:manage` y leer `apiary:view` sobre el apiario,
+> los dos por `fincaDelApiario`, con los mismos candidatos que `getApiaryDetail` (ubicación y los
+> proyectos de sus colmenas). 513→515, en 145.
+
 > Tras la revisión de Codex, `bloquearCosechaEn` —el `FOR UPDATE` que ordena a quien cambia el peso
 > de una misma cosecha— entra como **«depende del llamador»**, 65→66: sus tres llamadores autorizan
 > antes. 493→494.

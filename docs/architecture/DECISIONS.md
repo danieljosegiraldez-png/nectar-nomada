@@ -11733,6 +11733,60 @@ inspeccion que no conto no borra el conteo anterior.
 **Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
 cada marco negro, y no se inventa.
 
+## ADR-178 -- La cera de la miel es un subproducto con destino, no merma
+
+**Contexto.** La cera que sale al colar se anotaba como **merma del proceso**. Es el mismo error que
+el cafe evito con la cascarilla (`ByproductBatch`): contar un subproducto como perdida infla la
+merma y esconde la de verdad, que es el numero que dice si alguien peso mal. Y la cera que sale al
+**desopercular** no se registraba en ninguna parte. Spec
+`docs/superpowers/specs/2026-09-19-cera-y-pesada-por-recipiente-design.md` §4, plan
+`docs/superpowers/plans/2026-09-19-cera-como-subproducto.md`. Daniel, el 2026-09-19: la cera se
+separa **en los dos momentos**, va a **las cuatro** salidas, y *«quiero saber que esa cera vino de
+tal apiario por lo menos, de tal cosecha, aunque no sepa cual alza o colmena»*.
+
+**Decision.** `ByproductType` gana `CERA` y `ByproductDestination` gana `LAMINA_PROPIA`, `GUARDADA`
+y `OTRO` (`SALE` ya existia). La cera vive en la tabla que ya existe, con **dos origenes posibles y
+exactamente uno**, que hace cumplir un CHECK:
+
+- **un paso del lote** (`transformationId`): la cera **al colar**. `procesarMiel` la acepta y la
+  pasa a `recordTransformation`, que ya cuenta su masa como **salida** del balance. Deja de ir en la
+  merma: 26 kg de miel mas 4 de cera cuadran los 30 que entraron.
+- **un apiario con una ventana** (`producedAtLocationId` + `windowStart`/`windowEnd`, sin
+  transformacion): la cera **al desopercular**, en `lib/apiary/ceraDeExtraccion.ts`. Al leerla se
+  dicen **las cosechas de ese apiario que caen en la ventana**, con los dos extremos incluidos, y se
+  dicen como lo que son —«cosechas de este apiario entre el 3 y el 5»—, no como «esta cera salio de
+  estas colmenas».
+
+Dos CHECK mas: la ventana en orden y con las dos fechas o ninguna, y `OTRO` con nota. Los valores
+nuevos del enum se comparan como **texto** en los CHECK, porque un valor no se puede usar en la
+misma transaccion que lo anade. Cero kilos es un dato —se desoperculo y no se recogio nada
+aprovechable—; una masa en blanco o negativa se rechaza.
+
+**Por que no se eligen colmenas ni alzas.** Se desopercula junto, asi que la aplicacion no lo sabe.
+Ofrecer el campo seria invitar a inventarlo, y la trazabilidad a **lugar y tiempo** es exactamente
+lo que Daniel pidio.
+
+**Revision de Codex, cuatro hallazgos, los cuatro con su prueba en rojo primero.**
+1. **La ventana perdia casi todo su ultimo dia.** `occurredAt` es un instante y el extremo es un dia
+   a medianoche, asi que una cosecha del dia final a las 15:30 quedaba fuera. Ahora `gte` el inicio
+   y `lt` el dia siguiente, el idioma de `limpiezaDeCaja.ts`. Las pruebas de antes cosechaban a
+   medianoche y no lo veian.
+2. **Un traslado cambiaba de apiario una cosecha vieja**: se filtraba por `Hive.locationId`, que un
+   traslado actualiza. Ahora manda `Lot.locationId`, que es la foto del sitio donde se cosecho.
+3. **Un extremo de ventana ausente se sustituia por hoy**, escribiendo procedencia inventada como
+   `measured_fact`. Ahora una ventana a medias se rechaza.
+4. **`crearSubproducto` aceptaba CERA** sobre una transformacion que ya habia cuadrado su balance,
+   sin reconciliarla: la cera se habria quedado fuera de la masa de salida. Ese servicio ya no
+   acepta CERA; la cascarilla sigue entrando por ahi, que es para lo que existe.
+
+**Lo que queda dicho y no arreglado:** la ventana se compara en dias UTC, como todos los campos de
+dia de la casa, asi que una cosecha de la noche panamena del ultimo dia cae en el dia UTC siguiente.
+Cambiarlo es una decision de zona horaria que afecta a todos los campos de dia, no a esta rebanada.
+
+**Lo que NO entra.** Enlazar la cera fundida con la «cera nueva» de su ano (ADR-173), que la cera
+sea un lote propio —Daniel eligio el subproducto—, y asignar la cera de extraccion a colmenas
+concretas.
+
 ## ADR-177 -- La miel se pesa por recipiente, y el peso de la cosecha es la suma de sus netos
 
 **Contexto.** Q28 esta decidida en el paquete de Daniel (Fase 1): la cadena de la miel tiene que

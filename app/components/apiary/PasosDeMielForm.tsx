@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { dividirMielAction, envasarMielAction, procesarMielAction } from "../../actions/apiary";
-import { ACTOS_DE_PROCESO_DE_MIEL } from "../../../lib/apiary/vocabularioDeMiel";
+import { ACTOS_DE_PROCESO_DE_MIEL, DESTINOS_DE_CERA_SUBPRODUCTO } from "../../../lib/apiary/vocabularioDeMiel";
 
 type Estado = { error?: string; ok?: boolean; nuevoLoteId?: string; nuevoLoteCodigo?: string };
 const inicial: Estado = {};
@@ -86,6 +86,28 @@ export function ProcesarMielForm({ lotId }: { lotId: string }) {
       <div className="nn-field">
         <label htmlFor="proceso-merma">{t("mielMerma")}</label>
         <CampoNumerico id="proceso-merma" name="lossKg" min={0} step="0.001" inputMode="decimal" />
+      </div>
+      {/* La cera que salió al colar. NO va en la merma: es subproducto con destino, y su masa
+          cuenta como salida del balance (spec 2026-09-19 §4.2). */}
+      <div className="nn-field">
+        <label htmlFor="proceso-cera">{t("ceraDelColado")}</label>
+        <CampoNumerico id="proceso-cera" name="ceraKg" min={0} step="0.001" inputMode="decimal" />
+      </div>
+      <div className="nn-field">
+        <label htmlFor="proceso-cera-destino">{t("ceraDelColadoDestino")}</label>
+        <select id="proceso-cera-destino" name="ceraDestino" defaultValue="">
+          {/* El vacío no se ofrece como opción (Anexo E §6): sin cera, no se dice destino. */}
+          <option value="" />
+          {DESTINOS_DE_CERA_SUBPRODUCTO.map((d) => (
+            <option key={d} value={d}>
+              {t(`ceraSubproductoDestino_${d}`)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="nn-field">
+        <label htmlFor="proceso-cera-nota">{t("ceraDelColadoNota")}</label>
+        <input id="proceso-cera-nota" name="ceraNota" type="text" />
       </div>
       <Resultado estado={estado} />
       <button type="submit" disabled={pending}>
