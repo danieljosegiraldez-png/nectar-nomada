@@ -72,6 +72,7 @@ tests/traceability/recepcionDeCereza-esquema.test.ts
 tests/traceability/destinoDeJornada.test.ts
 tests/traceability/pedidosDeCereza.test.ts
 tests/traceability/recepcionesDeCereza.test.ts
+tests/traceability/loteDesdeRecepcion-esquema.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts

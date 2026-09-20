@@ -3168,6 +3168,10 @@ model Lot {
   lotProcesses              LotProcess[]
   transformationInputs      LotTransformationInput[]
   transformationOutputs     LotTransformationOutput[]
+  /// Spec 2026-09-19 de la recepción a los lotes §3.1 y §3.4: de qué recepciones salió (sólo los
+  /// lotes de nivel 1), y el veredicto de la calidad pedida.
+  desdeRecepciones          LoteDesdeRecepcion[]
+  veredictoDeCalidad        VeredictoDeCalidadDePedido?
   quantityEvents            QuantityEvent[]
   measurements              Measurement[]
   samples                   Sample[]
@@ -3321,6 +3325,10 @@ model LotTransformation {
   // P3 §1 — both nullable and only meaningful for transformationType
   // `selection`. equipmentNote stays free text, matching
   // FermentationRun.vesselNote's precedent: no Equipment entity exists yet.
+  /// Spec 2026-09-19 de la recepción a los lotes §3.4: cómo se pesó esta selección. **Obligatoria
+  /// sólo cuando el método es `flotacion`** —la que moja la cereza—, decisión de Daniel del
+  /// 2026-09-19; nula en los demás métodos y en todo lo guardado antes, que es «sin declarar».
+  condicionDePesaje      CondicionDePesaje?    @map("condicion_de_pesaje")
   selectionMethodValueId String?               @map("selection_method_value_id") @db.Uuid
   selectionMethodValue   VariableCatalogValue? @relation("LotTransformationSelectionMethod", fields: [selectionMethodValueId], references: [id])
   equipmentNote          String?               @map("equipment_note")
@@ -6763,6 +6771,7 @@ model PedidoDeCereza {
   cerradoAt         DateTime?      @map("cerrado_at")
   notaDeCierre      String?        @map("nota_de_cierre")
   recepciones       RecepcionDeCereza[]
+  veredictos        VeredictoDeCalidadDePedido[]
   createdAt         DateTime       @default(now()) @map("created_at")
   createdBy         String?        @map("created_by") @db.Uuid
 
@@ -6806,12 +6815,103 @@ model RecepcionDeCereza {
   anuladaAt           DateTime?                 @map("anulada_at")
   anuladaPor          String?                   @map("anulada_por") @db.Uuid
   motivoAnulacion     String?                   @map("motivo_anulacion")
+  lotes               LoteDesdeRecepcion[]
+  mermas              MermaDeRecepcion[]
   assets              Asset[]
   createdAt           DateTime                  @default(now()) @map("created_at")
 
   @@index([beneficioId, recibidaAt])
   @@index([pedidoId])
   @@map("recepcion_de_cereza")
+  @@schema("traceability")
+}
+
+/// `WeighingCondition` de `docs/beneficio/03_public_api.md`.
+enum CondicionDePesaje {
+  DRAINED
+  WET
+  DRY
+
+  @@schema("traceability")
+}
+
+enum EstadoDeMerma {
+  vigente
+  anulada
+
+  @@schema("traceability")
+}
+
+/// Spec §3.4. `CUMPLE`/`NO_CUMPLE` son el juicio; los demás dicen por qué NO se juzgó.
+enum JuicioDeCalidad {
+  CUMPLE
+  NO_CUMPLE
+  NO_ATRIBUIBLE
+  BALANCE_DESCUADRADO
+  INCOMPARABLE_WEIGHING_CONDITION
+  CONDICION_SIN_DECLARAR
+
+  @@schema("traceability")
+}
+
+/// Spec §3.1 — de qué recepción salió un lote, y cuántos kilos tomó. **Los kilos viven sólo aquí**,
+/// en el nivel 1: copiarlos a los descendientes los contaría dos veces cuando dos ramas se vuelven
+/// a juntar. La fila es inmutable y no se borra (disparador).
+model LoteDesdeRecepcion {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId       String            @map("lot_id") @db.Uuid
+  lot         Lot               @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  recepcionId String            @map("recepcion_id") @db.Uuid
+  recepcion   RecepcionDeCereza @relation(fields: [recepcionId], references: [id], onDelete: Restrict)
+  kg          Decimal           @db.Decimal(10, 3)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  createdBy   String?           @map("created_by") @db.Uuid
+
+  @@unique([lotId, recepcionId])
+  @@index([recepcionId])
+  @@map("lote_desde_recepcion")
+  @@schema("traceability")
+}
+
+/// Spec §3.2 — lo que se perdió de una recepción antes de armar lotes: deja de estar disponible, y
+/// la pérdida queda donde ocurrió.
+model MermaDeRecepcion {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recepcionId     String            @map("recepcion_id") @db.Uuid
+  recepcion       RecepcionDeCereza @relation(fields: [recepcionId], references: [id], onDelete: Restrict)
+  kg              Decimal           @db.Decimal(10, 3)
+  motivo          String
+  estado          EstadoDeMerma     @default(vigente)
+  anotadaPor      String            @map("anotada_por") @db.Uuid
+  anotadaAt       DateTime          @map("anotada_at")
+  anuladaAt       DateTime?         @map("anulada_at")
+  anuladaPor      String?           @map("anulada_por") @db.Uuid
+  motivoAnulacion String?           @map("motivo_anulacion")
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  @@index([recepcionId])
+  @@map("merma_de_recepcion")
+  @@schema("traceability")
+}
+
+/// Spec §3.4 — una fila por lote de nivel 1, recalculada con cada selección suya.
+model VeredictoDeCalidadDePedido {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lotId         String          @unique @map("lot_id") @db.Uuid
+  lot           Lot             @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  pedidoId      String?         @map("pedido_id") @db.Uuid
+  pedido        PedidoDeCereza? @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  selecciones   Int
+  insumoKg      Decimal         @map("insumo_kg") @db.Decimal(10, 3)
+  aceptadoKg    Decimal         @map("aceptado_kg") @db.Decimal(10, 3)
+  verdeKg       Decimal         @map("verde_kg") @db.Decimal(10, 3)
+  flotesKg      Decimal         @map("flotes_kg") @db.Decimal(10, 3)
+  juicio        JuicioDeCalidad
+  motivo        String?
+  actualizadoAt DateTime        @map("actualizado_at")
+
+  @@index([pedidoId])
+  @@map("veredicto_de_calidad_de_pedido")
   @@schema("traceability")
 }
 
