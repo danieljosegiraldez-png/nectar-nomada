@@ -163,6 +163,15 @@ describe("armar un lote", () => {
     ]);
     expect(r.filter((x) => x.status === "fulfilled")).toHaveLength(1);
     expect(await prisma.loteDesdeRecepcion.count({ where: { recepcionId: a.id } })).toBe(1);
+    // Y el perdedor cae con el error del DOMINIO, no con la excepción cruda del disparador. Esta
+    // línea es la que distingue los dos guardias: sin el `FOR UPDATE` del servicio, quien rechaza
+    // es el disparador —la red— y el mensaje sería el suyo. Medido con el flip de la tarea 4: sin
+    // ella, quitar el bloqueo del servicio dejaba las seis pruebas en verde.
+    const perdedor = r.find((x) => x.status === "rejected");
+    // Anclado a propósito: el disparador dice `lote_desde_recepcion_kg_sobre_lo_recibido: quedan …`,
+    // que un `toMatch(/kg_sobre_lo_recibido/)` daría por bueno. Sólo el mensaje EXACTO distingue al
+    // servicio de su red.
+    expect((perdedor as PromiseRejectedResult).reason?.message).toBe("kg_sobre_lo_recibido");
   }, 30000);
 
   it("una recepción de OTRO beneficio no entra aquí", async () => {
