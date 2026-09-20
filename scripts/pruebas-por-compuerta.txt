@@ -74,6 +74,7 @@ tests/traceability/pedidosDeCereza.test.ts
 tests/traceability/recepcionesDeCereza.test.ts
 tests/traceability/loteDesdeRecepcion-esquema.test.ts
 tests/traceability/mermaDeRecepcion.test.ts
+tests/traceability/lotesDeBeneficio.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts

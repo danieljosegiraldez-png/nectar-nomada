@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**538 operaciones** que tocan la base, en **150 archivos**:
+**541 operaciones** que tocan la base, en **151 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,18 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **406** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **408** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **72** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **73** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Armar el lote (pieza 3, tarea 4, 2026-09-19): 518→521, y un archivo nuevo,
+> `lib/traceability/lotesDeBeneficio.ts`.** `armarLote` y `recepcionesArmables` suben **guardia
+> directo**, 390→392, por `exigeGestionarBeneficio` y `exigeVerBeneficio`. `origenDelLote` entra
+> como **«depende del llamador»**, 69→70: camina la genealogía de un lote que su llamador ya
+> autorizó.
 
 > **La merma de una recepción (pieza 3, tarea 3, 2026-09-19): 515→518.** `anotarMerma` y
 > `anularMerma` en `lib/traceability/recepcionesDeCereza.ts` suben **guardia directo**, 388→390:

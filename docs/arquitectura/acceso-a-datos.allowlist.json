@@ -604,6 +604,10 @@
     {
       "archivo": "lib/beneficio/vistaDeBandejas.ts",
       "razon": "Módulo de dominio: el modelo de vista de /beneficio/bandejas (Tarea 5, plan 2a de secado). No autoriza nada por sí mismo: delega en `sitiosParaRegistrar`, `tiposDeBandeja`, `bandejasDeLaFinca`, `capacidadDeTipo` y `puedeGestionarLote`, cada uno ya guardado; sólo organizaciones con al menos un `site` entran (revisión final del plan 2a, A5)."
+    },
+    {
+      "archivo": "lib/traceability/lotesDeBeneficio.ts",
+      "razon": "Módulo de dominio: armar un lote con cereza de una o varias recepciones (spec de la recepción a los lotes §3.1). `armarLote` exige `requireLotAccess(manage)` sobre ESE beneficio —por `exigeGestionarBeneficio`— antes de tocar nada, y `recepcionesArmables` el de ver. Dentro de la transacción bloquea cada recepción con `SELECT … FOR UPDATE` en orden de id y recalcula el disponible ahí, porque una suma leída fuera no es una garantía; el disparador `lote_desde_recepcion_cabe` es la red. `origenDelLote` no recibe principal y está justificada aparte."
     }
   ],
   "reciben_transaccion": [
@@ -1148,6 +1152,12 @@
       "archivo": "lib/traceability/recepcionesDeCereza.ts",
       "operacion": "disponibleDeRecepciones",
       "razon": "Devuelve cuánto queda por repartir de unas recepciones ya elegidas: neto menos mermas vigentes menos lo ya vinculado a lotes. No recibe principal a propósito, misma disciplina que `recepcionDeEntregas` en este mismo archivo: sus llamadores —la pantalla del beneficio y `armarLote`— ya autorizaron esas recepciones con `exigeVerBeneficio`/`exigeGestionarBeneficio`. Lee cifras de ids concedidos y no escribe nada. La comprobación que SÍ decide —si una merma o un lote caben— no es ésta: vive dentro de la transacción, con la fila bloqueada, en `anotarMerma`, y el disparador `merma_de_recepcion_cabe` es su red.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/lotesDeBeneficio.ts",
+      "operacion": "origenDelLote",
+      "razon": "Camina la genealogía hacia arriba —de salida a entrada de cada `LotTransformation`— hasta los lotes que tienen vínculo con una recepción, y devuelve esas recepciones con sus kilos. No recibe principal a propósito, misma disciplina que `leerEnmiendas` y `recepcionDeEntregas`: su llamador es la ficha del lote, que ya resolvió `requireLotAccess(\"view\")` sobre ese lote antes de pedir su historia. Darle compuerta propia crearía dos sitios donde decidir lo mismo. Devuelve ids de recepción y kilos de un lote ya concedido, y no escribe nada.",
       "verificado": "2026-09-19"
     }
   ]
