@@ -24,7 +24,7 @@ import { DESTINOS_DE_CERA, leyendaDeCera, marcosNegrosDelApiario, MOTIVOS_DE_SAL
 import { colorDelAño } from "../../../lib/apiary/colorDelAno";
 import { CampoNumerico } from "../../components/CampoNumerico";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
-import { confirmarCoordenadasAction } from "../../actions/traceability";
+import { ConfirmarCoordenadasForm } from "../../components/apiary/ConfirmarCoordenadasForm";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { NewHiveForm } from "../../components/apiary/NewHiveForm";
 import { AltaEnLoteForm } from "../../components/apiary/AltaEnLoteForm";
@@ -313,30 +313,11 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             están vacíos, no por qué no se puede escribir. */}
         {coordenadas.propuesta === null ? <p className="nn-muted">{tt("coordsNoSamples")}</p> : null}
 
-        <form action={confirmarCoordenadasAction} className="nn-form" style={{ maxWidth: 420 }}>
-          <input type="hidden" name="locationId" value={id} />
-          {/* Los valores van en campos editables, no ocultos: quien declara
-              tiene que poder corregir la propuesta, que para eso es una
-              propuesta. */}
-          <div className="nn-field">
-            <label htmlFor="coords-lat">{tt("coordsLatitude")}</label>
-            <input id="coords-lat" name="latitude" type="text" inputMode="decimal" defaultValue={coordenadas.propuesta ? coordenadas.propuesta.latitude.toFixed(6) : ""} required />
-          </div>
-          <div className="nn-field">
-            <label htmlFor="coords-lon">{tt("coordsLongitude")}</label>
-            <input id="coords-lon" name="longitude" type="text" inputMode="decimal" defaultValue={coordenadas.propuesta ? coordenadas.propuesta.longitude.toFixed(6) : ""} required />
-          </div>
-          <div className="nn-field">
-            <label htmlFor="coords-reason">{tt("coordsReason")}</label>
-            <input id="coords-reason" name="reason" type="text" placeholder={tt("coordsReasonPlaceholder")} />
-          </div>
-          {coordenadas.distanciaALoDeclaradoM !== null && coordenadas.distanciaALoDeclaradoM > 50 ? (
-            <p className="nn-muted">
-              {tt("coordsDiffersFromDeclared", { metros: Math.round(coordenadas.distanciaALoDeclaradoM) })}
-            </p>
-          ) : null}
-          <BotonDeEnvio className="nn-button">{tt("coordsConfirm")}</BotonDeEnvio>
-        </form>
+        <ConfirmarCoordenadasForm
+          locationId={id}
+          propuesta={coordenadas.propuesta}
+          distanciaALoDeclaradoM={coordenadas.distanciaALoDeclaradoM}
+        />
       </section>
 
 

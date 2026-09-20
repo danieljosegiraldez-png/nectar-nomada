@@ -1,8 +1,9 @@
 "use client";
 
 import { CampoNumerico } from "../CampoNumerico";
+import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { crearApiarioFormAction } from "../../actions/apiary";
+import { crearApiarioFormAction, type EstadoDeApiario } from "../../actions/apiary";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { Ayuda } from "./Ayuda";
 
@@ -38,9 +39,11 @@ export function NuevoApiarioForm({
   lugares: { id: string; name: string; locationType: string }[];
 }) {
   const t = useTranslations("Apiary");
+  // Un nombre en blanco o un ámbito insuficiente eran un 500 hasta el 2026-09-19.
+  const [state, formAction] = useActionState(crearApiarioFormAction, {} as EstadoDeApiario);
 
   return (
-    <form action={crearApiarioFormAction} className="nn-form" style={{ maxWidth: 520 }}>
+    <form action={formAction} className="nn-form" style={{ maxWidth: 520 }}>
       <div className="nn-field">
         {/* **Qué es, primero.** El dueño lo decidió el 2026-09-16: «tener meliponiarios y
             tener apiarios separado». Va arriba porque cambia lo que significa todo lo demás —
@@ -109,6 +112,7 @@ export function NuevoApiarioForm({
         <CampoNumerico id="ap-lon" name="longitude" inputMode="decimal" step="0.000001" min="-180" max="180" />
       </div>
 
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <BotonDeEnvio>{t("apiaryCreateButton")}</BotonDeEnvio>
     </form>
   );

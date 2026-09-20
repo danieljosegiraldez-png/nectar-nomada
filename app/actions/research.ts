@@ -9,7 +9,14 @@ import { createTreatmentBatch, addProcessingStage, completeProcessingStage, Trea
 import { ResearchAccessError } from "../../lib/research/access";
 import type { ProtocolVariableValueType, ProvenanceClass } from "../../generated/prisma/client";
 import type { MeasurementVariable } from "../../lib/traceability/units";
-import { parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import {
+  parseLocalDateTime,
+  parseOptionalLocalDateTime,
+  FechaDeDiaInvalida,
+  LocalDateTimeError,
+  TZ_OFFSET_FIELD,
+} from "../../lib/time/localDateTime";
+import { WashMediumValidationError } from "../../lib/research/treatments";
 
 export interface ResearchActionState {
   error?: string;
@@ -20,6 +27,11 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   if (error instanceof ProtocolValidationError) return t("error_validation", { detail: error.message });
   if (error instanceof TreatmentBatchValidationError) return t("error_validation", { detail: error.message });
   if (error instanceof ProcessingStageValidationError) return t("error_stage", { detail: error.message });
+  // Las tres de abajo faltaban: una fecha mal escrita y un medio de lavado que
+  // el catálogo no ofrece eran un 500 (`PENDING_IMPLEMENTATIONS/013`).
+  if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
+  if (error instanceof FechaDeDiaInvalida) return t("error_datetime", { detail: error.message });
+  if (error instanceof WashMediumValidationError) return t("error_wash_medium", { detail: error.message });
   throw error;
 }
 

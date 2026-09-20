@@ -1508,7 +1508,19 @@
     "error_condicion_otro_sin_decir_cual": "You ticked «other» in site condition: say which.",
     "error_condicion_nota_sin_otro": "You wrote which «other» site condition, but did not tick it.",
     "error_proposito_requerido": "Choose at least one purpose for the visit.",
-    "error_proposito_desconocido": "Unknown visit purpose: {value}."
+    "error_proposito_desconocido": "Unknown visit purpose: {value}.",
+    "error_vitales_en_sitio": "Could not save the site readings: {detail}",
+    "error_clima": "That weather value is not on the list: {detail}",
+    "error_cajas_presentes": "The hive-box count is not a valid number: {detail}",
+    "error_mass_balance": "The quantities do not add up: {detail}",
+    "error_subproducto": "Could not record the by-product: {detail}",
+    "error_cereza": "Could not record the cherry: {detail}",
+    "error_roast": "Could not save the roast: {detail}",
+    "error_process_target": "Could not save the recipe: {detail}",
+    "error_labour": "Could not record the labour: {detail}",
+    "error_material_consumption": "Could not record the material used: {detail}",
+    "error_coordenadas": "Could not save the coordinates: {detail}",
+    "error_clave_de_envio": "This was already recorded. Reload the page to see it."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",
@@ -2163,7 +2175,8 @@
     "recipienteGuardar": "Add container",
     "recipienteQuitar": "Remove",
     "recipienteMotivo": "Why remove it?",
-    "pesoLoDanLosRecipientes": "This harvest's weight comes from its containers."
+    "pesoLoDanLosRecipientes": "This harvest's weight comes from its containers.",
+    "crearApiarioError": "Could not create the site: {detalle}"
   },
   "Research": {
     "badge": "Research OS",
@@ -2218,7 +2231,9 @@
     "noSensoryLinkage": "No sensory session linked yet.",
     "error_access": "You don't have access to do that ({detail}).",
     "error_validation": "Couldn't save that ({detail}).",
-    "error_stage": "That stage can't be completed yet ({detail})."
+    "error_stage": "That stage can't be completed yet ({detail}).",
+    "error_datetime": "Could not read the date: {detail}",
+    "error_wash_medium": "That wash medium cannot be used this way: {detail}"
   },
   "LocaleSwitcher": {
     "label": "Language"

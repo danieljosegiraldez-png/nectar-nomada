@@ -18,7 +18,18 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { parseLocalDateTime, LocalDateTimeError, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import {
+  parseLocalDateTime,
+  FechaDeDiaInvalida,
+  LocalDateTimeError,
+  TZ_OFFSET_FIELD,
+} from "../../lib/time/localDateTime";
+// Sólo para nombrarlas abajo: llegan aquí por los servicios, no porque esta
+// acción llame a esos módulos (`PENDING_IMPLEMENTATIONS/013`).
+import { MassBalanceError } from "../../lib/traceability/balance";
+import { ByproductValidationError } from "../../lib/traceability/subproductos";
+import { ClaveDeEnvioAjena } from "../../lib/envios/unaVezPorEnvio";
+import { FieldSessionValidationError } from "../../lib/traceability/fieldSessions";
 import {
   registrarIntervencion,
   corregirIntervencion,
@@ -49,11 +60,23 @@ const emptyToNullNumber = (value: FormDataEntryValue | null) => {
 const fechaLocal = (formData: FormData, campo: string) =>
   parseLocalDateTime(String(formData.get(campo) ?? ""), asString(formData.get(TZ_OFFSET_FIELD)));
 
-/** Copia mínima de `friendlyError`, acotada a lo que este servicio lanza. */
+/**
+ * Copia mínima de `friendlyError`, acotada a lo que este servicio lanza.
+ *
+ * «Lo que este servicio lanza» era menos de lo que parecía: `registrarIntervencion`
+ * abre la jornada, descuenta del lote y pasa por la clave de envío, así que las
+ * cuatro últimas llegan aquí igual que a `app/actions/traceability.ts`. Las cuenta
+ * `tests/arquitectura/acciones-traducen-sus-errores.test.ts`.
+ */
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
   if (error instanceof IntervencionValidationError) return t("error_manejo", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
+  if (error instanceof FechaDeDiaInvalida) return t("error_datetime", { detail: error.message });
+  if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
+  if (error instanceof MassBalanceError) return t("error_mass_balance", { detail: error.message });
+  if (error instanceof ByproductValidationError) return t("error_subproducto", { detail: error.message });
+  if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");
   throw error;
 }
 
