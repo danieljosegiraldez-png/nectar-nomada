@@ -94,6 +94,7 @@ function parseNueva(formData: FormData) {
     fieldSessionId: emptyToNull(formData.get("fieldSessionId")),
     motivoObservationId: emptyToNull(formData.get("motivoObservationId")),
     specimenIds: formData.getAll("specimenIds").map(String),
+    plotBlockIds: formData.getAll("plotBlockIds").map(String),
     lineas: parseLineas(formData),
     notes: emptyToNull(formData.get("notes")),
   };

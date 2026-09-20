@@ -26,7 +26,7 @@ import { actualizarConfiguracionDeCajaFormAction } from "../../../../actions/api
 import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
 import { TimezoneOffsetField } from "../../../../components/TimezoneOffsetField";
 import { cosechasDeColonia, TIPOS_DE_MIEL } from "../../../../../lib/apiary/cierreDeCosecha";
-import { completarCierreDeCosechaFormAction } from "../../../../actions/apiary";
+import { anotarRecipienteFormAction, completarCierreDeCosechaFormAction, quitarRecipienteFormAction } from "../../../../actions/apiary";
 import { NewColonyForm } from "../../../../components/apiary/NewColonyForm";
 import { Ayuda } from "../../../../components/apiary/Ayuda";
 import { LimpiezaDeCajaForm } from "../../../../components/apiary/LimpiezaDeCajaForm";
@@ -985,6 +985,57 @@ export default async function HiveDetailPage({
                         </details>
                       ) : null}
 
+                      {/* Pesada por recipiente (spec 2026-09-19 §3): con recipientes, el peso de la
+                          cosecha ES la suma de sus netos, y el campo de peso a mano desaparece. */}
+                      <details open={c.recipientes.length > 0}>
+                        <summary>{t("recipientesHeading")}</summary>
+                        {c.recipientes.length > 0 ? (
+                          <>
+                            <ul>
+                              {c.recipientes.map((r) => (
+                                <li key={r.id}>
+                                  {t("recipienteFila", { label: r.label, bruto: r.grossKg, tara: r.tareKg, neto: r.netoKg })}
+                                  <details style={{ display: "inline-block", marginLeft: "0.5rem" }}>
+                                    <summary>{t("recipienteQuitar")}</summary>
+                                    <form action={quitarRecipienteFormAction} className="nn-form">
+                                      <input type="hidden" name="containerId" value={r.id} />
+                                      <input type="hidden" name="apiaryId" value={apiaryId} />
+                                      <input type="hidden" name="hiveId" value={hiveId} />
+                                      <div className="nn-field">
+                                        <label htmlFor={`quitar-${r.id}`}>{t("recipienteMotivo")}</label>
+                                        <input id={`quitar-${r.id}`} name="reason" type="text" required />
+                                      </div>
+                                      <BotonDeEnvio>{t("recipienteQuitar")}</BotonDeEnvio>
+                                    </form>
+                                  </details>
+                                </li>
+                              ))}
+                            </ul>
+                            <p>
+                              <strong>{t("recipientesTotal", { kg: c.extractedWeightKg ?? 0 })}</strong>
+                            </p>
+                          </>
+                        ) : null}
+                        <form action={anotarRecipienteFormAction} className="nn-form" style={{ margin: 0 }}>
+                          <input type="hidden" name="apiaryHarvestEventId" value={c.id} />
+                          <input type="hidden" name="apiaryId" value={apiaryId} />
+                          <input type="hidden" name="hiveId" value={hiveId} />
+                          <div className="nn-field">
+                            <label htmlFor={`rec-label-${c.id}`}>{t("recipienteEtiqueta")}</label>
+                            <input id={`rec-label-${c.id}`} name="label" type="text" required />
+                          </div>
+                          <div className="nn-field">
+                            <label htmlFor={`rec-bruto-${c.id}`}>{t("recipienteBruto")}</label>
+                            <CampoNumerico id={`rec-bruto-${c.id}`} name="grossKg" min={0} step="0.001" inputMode="decimal" required />
+                          </div>
+                          <div className="nn-field">
+                            <label htmlFor={`rec-tara-${c.id}`}>{t("recipienteTara")}</label>
+                            <CampoNumerico id={`rec-tara-${c.id}`} name="tareKg" min={0} step="0.001" inputMode="decimal" required />
+                          </div>
+                          <BotonDeEnvio>{t("recipienteGuardar")}</BotonDeEnvio>
+                        </form>
+                      </details>
+
                       <form action={completarCierreDeCosechaFormAction} className="nn-form" style={{ margin: 0 }}>
                         <input type="hidden" name="apiaryHarvestEventId" value={c.id} />
                         <input type="hidden" name="apiaryId" value={apiaryId} />
@@ -1000,17 +1051,21 @@ export default async function HiveDetailPage({
                             ))}
                           </select>
                         </div>
-                        <div className="nn-field">
-                          <label htmlFor={`peso-${c.id}`}>{t("extractedWeightLabel")}</label>
-                          <CampoNumerico
-                            id={`peso-${c.id}`}
-                            name="extractedWeightKg"
-                            min={0}
-                            step="0.001"
-                            inputMode="decimal"
-                            defaultValue={c.extractedWeightKg ?? ""}
-                          />
-                        </div>
+                        {c.recipientes.length > 0 ? (
+                          <p className="nn-muted">{t("pesoLoDanLosRecipientes")}</p>
+                        ) : (
+                          <div className="nn-field">
+                            <label htmlFor={`peso-${c.id}`}>{t("extractedWeightLabel")}</label>
+                            <CampoNumerico
+                              id={`peso-${c.id}`}
+                              name="extractedWeightKg"
+                              min={0}
+                              step="0.001"
+                              inputMode="decimal"
+                              defaultValue={c.extractedWeightKg ?? ""}
+                            />
+                          </div>
+                        )}
                         <div className="nn-field">
                           <label htmlFor={`razon-${c.id}`}>{t("cierreCosechaRazon")}</label>
                           <input id={`razon-${c.id}`} name="reason" type="text" />

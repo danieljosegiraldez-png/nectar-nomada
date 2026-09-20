@@ -32,7 +32,7 @@ class CalibrationRecord:
 > una vigencia de calendario. **El tiempo sólo avisa**: un instrumento vencido se sigue usando y su
 > lectura queda marcada (`REVISION_VENCIDA`); bloquear se esquiva en el patio y el sistema sabe menos.
 > La columna «Vigencia» de abajo es, desde entonces, **el plazo del aviso**, no una condición de uso.
-> Y el 2026-09-19 (ADR-177 §17): avisar también **antes** de vencer, al beneficio y al procesador.
+> Y el 2026-09-19 (ADR-180 §17): avisar también **antes** de vencer, al beneficio y al procesador.
 > `CLAUDE.md` decía que esta sección ya estaba cambiada; no lo estaba hasta esta nota.
 
 

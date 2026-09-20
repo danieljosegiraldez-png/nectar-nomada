@@ -12,7 +12,7 @@
               ✅ = cita comprobada por el agente contra la fuente, con la frase o la tabla;
               ◻ = la reporta un subagente y NO se comprobó aparte. No citar ◻ como hecho.
   qué puede : servir de referencia para escribir recetas y para la guía pedagógica, citando la fuente.
-  qué NO    : ser umbral del motor. Por decisión de Daniel (ADR-177) los umbrales salen de la receta;
+  qué NO    : ser umbral del motor. Por decisión de Daniel (ADR-180) los umbrales salen de la receta;
               esto es lo que la receta puede mirar al lado, marcado «referencia, no norma».
 -->
 
@@ -84,7 +84,7 @@ es un riesgo inferido, **no un fallo observado** (Codex). Los lotes anaeróbicos
 
 **Semi-lavado.** En la norma (✅ Codex/ICO), «semi-washed» es secar el despulpado **dentro** de su
 pergamino mucilaginoso. El «Semi Wash 50 % / 75 %» de Daniel es el **porcentaje de mucílago quitado**
-antes de la cama (ADR-177): otra cosa, y deliberada. Los porcentajes de honey amarillo/rojo/negro
+antes de la cama (ADR-180): otra cosa, y deliberada. Los porcentajes de honey amarillo/rojo/negro
 **no tienen fuente académica** (◻).
 
 ## 3. Correcciones que hizo Codex a los informes (no citar lo tachado)

@@ -26,7 +26,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
-| P-F | Revisar las guías de `docs/dominio/` que quedan: **Varroa** y **Meliponini** (ADR-158). Las tres de café están **reemplazadas** por `docs/beneficio/10`–`12`, y el origen de los umbrales quedó decidido en ADR-177 (2026-09-19); selección, balance y enrutamiento de `12` siguen sin revisar | Las redactó un modelo a partir de indicaciones suyas y **esas dos nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-F | Revisar las guías de `docs/dominio/` que quedan: **Varroa** y **Meliponini** (ADR-158). Las tres de café están **reemplazadas** por `docs/beneficio/10`–`12`, y el origen de los umbrales quedó decidido en ADR-180 (2026-09-19); selección, balance y enrutamiento de `12` siguen sin revisar | Las redactó un modelo a partir de indicaciones suyas y **esas dos nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -38,13 +38,38 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-177)
+### 2026-09-19 · La cera de la miel es subproducto, no merma (Q28, rebanada 2)
+
+ADR-178. La cera que sale al colar deja de ir en la merma y cuenta como salida del balance; la que
+sale al desopercular se anota por apiario y ventana de fechas, y la ficha dice qué cosechas de ese
+apiario caen dentro. No se eligen colmenas: se desopercula junto. **Sin ver en navegador.**
+
+### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
+jornada dice a qué beneficio va. `/beneficio/recepcion`: recibir o rechazar cada entrega y la
+cereza de fuera (productor dado de alta como organización), con **doble peso** (bruto − tara contra
+el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con punto de muestreo y
+**siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
+pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
+viejo, sigue hasta entonces. **Sin navegador.**
+
+
+### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
+
+ADR-180. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
+su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
+encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
+y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
+**Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+
+### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-180)
 
 Daniel pidió revisar **toda** la literatura de fermentación antes de responder. Seis subagentes, citas
 decisivas comprobadas contra la fuente, Codex de segundo asiento:
 `docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. En lo revisado, ninguna banda universal validada; ni
 Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores no la leen. **Sus respuestas,
-una por pregunta, quedan en 19 apartados** (ADR-177): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
+una por pregunta, quedan en 19 apartados** (ADR-180): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
 los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
 del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 
@@ -62,20 +87,11 @@ ver en navegador.** Sigue: «marcos negros» en la inspección.
 
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
-Daniel: «en finca no se registra cosecha… se asigna personas a cosecha, y esta persona… lleva al
-beneficio». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-jornada-y-entrega-de-cosecha*`.
-- **`/finca/jornadas`:** abrir una jornada (parcelas × recolectores), recolectores de la finca;
-  la jornada anota entregas (origen parcela/bloque/planta, kg de finca, hora, foto), anula con
-  motivo y se cierra. **Ninguna entrega crea lote**: queda `enviada` (piezas 2 y 3: recepción con
-  doble peso, y lotes).
-- **`/mis-entregas`:** el perfil nuevo **Recolector** anota SU entrega y reporta situaciones o la
-  condición del día (sin mm: eso es de instrumentos) con foto. Las ve el Farm Manager y el capataz;
-  a un compañero, sólo con `field_report:view` concedido en `/admin/users/…/permisos`.
-- **Sin ver en navegador.** Specs aprobados sin construir: condiciones fijas del terreno,
-  instrumentos de campo.
-
-**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta. «Mis
-entregas» no va al menú (decisión suya del 2026-09-19): se entra al iniciar sesión y desde Mi Néctar.
+`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
+foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
+**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
+Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
 
 ### 2026-09-18 · La cera con el color de su año
 
@@ -94,8 +110,7 @@ en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tabla
 del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
 cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
 (`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
-en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; el PR B ya puede empezar:
-`PlotBlock` y `TrapRule` están en `main` desde el PR #413.
+en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-19):** intervenciones sobre bloques, la regla apunta a producto, aviso de trampa atendido (ver anexo PR B en el ADR).
 
 **Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
 55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
@@ -110,38 +125,19 @@ colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin mar
 contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
 falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
 
-### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
-
-`friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
-`PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
-propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
-ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.** Quedan **nueve clases** más con el
-mismo defecto: `PENDING_IMPLEMENTATIONS/013`.
-
-### 2026-09-18 · Fincas y parcelas: elegir la finca, y crearlas desde la app (PR #425)
-
-Daniel: «debería preguntarme qué finca —trabajo con varias— o mostrarme todas» y «no me deja crear
-parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parcelas*`.
-- **Elegir:** `/fincas`. La elección vive en una cookie de sesión que **sólo acota**: una finca
-  ajena se ignora. `/finca`, `/plots` y `/lots/new` preguntan si hay varias y ninguna elegida.
-- **Crear:** finca nueva o terreno de una organización sin él (sólo admin, permiso nuevo
-  `organization:create_farm`); parcela (Farm Manager de esa finca, `create_site`); microparcela
-  (`createMicrolot`, que ya existía sin pantalla). Nombres únicos bajo el mismo padre.
-- **La cosecha sólo sobre `plot`**, lo comprueba el servicio.
-- **Sin ver en navegador.**
-
-**De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
-es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
-él decida.
-
-### 2026-09-18 · El despacho dice de qué lote sale cada frasco
-
-ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nada ponía un pedido en
-`fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
-cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
-libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
-
 ## 3. Bloqueado, y en qué
+
+#### Kiva Estate: crear su terreno (de Daniel)
+
+Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
+Estate** desde `/fincas` → «sin terreno». El seed dice que es un nombre ficticio
+(`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que él decida.
+
+#### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
+
+Movido aquí al archivar la entrada del despacho por lote (ADR-169): el dato ya se guarda
+(`OrderItemLot`), falta la pantalla del cliente, y **qué del lote se le enseña** —código, apiario,
+cosecha, fotos— lo decide Daniel.
 
 #### Nodos de sensores: lo que falta cuando haya nodos (de Daniel)
 
@@ -234,9 +230,8 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
   2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — bloqueado en que `PlotBlock` y `TrapRule` existan en `main`. Áreas
-  por bloque, `TrapRule.suggestedMaterialId`, botón «Registrar aplicación» desde el aviso de trampa,
-  aviso atendido. Pieza 2 (#369, diseño+plan fusionado).
+- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
+  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así

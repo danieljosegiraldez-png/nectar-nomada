@@ -2,9 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getPlotDetail } from "../../../../../lib/traceability/plantingCohorts";
-import { LocationAccessError } from "../../../../../lib/traceability/locations";
-import { listarIntervenciones, productosFitosanitarios } from "../../../../../lib/traceability/intervenciones";
+import { TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import {
+  listarIntervenciones,
+  productosFitosanitarios,
+  bloquesDeLaParcela,
+  contextoDeManejo,
+} from "../../../../../lib/traceability/intervenciones";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -38,27 +42,37 @@ export default async function ManejoDetailPage({
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  let detail;
+  let location;
   try {
-    detail = await getPlotDetail(user.userAccountId, id);
+    // Ronda final de arreglos, hallazgo 5: lectura propia y acotada,
+    // autorizada con `lot:view` — no `getPlotDetail`, que exige
+    // `location:manage_attributes` y dejaba fuera a un operario con sólo
+    // `lot:view`/`lot:manage`. Ver el docstring de `contextoDeManejo`.
+    location = await contextoDeManejo(user.userAccountId, id);
   } catch (error) {
-    if (error instanceof LocationAccessError) notFound();
+    if (error instanceof TraceabilityAccessError) notFound();
     throw error;
   }
-  const { location } = detail;
 
   const lista = await listarIntervenciones(user.userAccountId, id);
   const intervencion = lista.find((i) => i.id === interventionId);
   if (!intervencion) notFound();
   const correccion = lista.find((i) => i.correctsId === interventionId) ?? null;
 
-  const [productos, { people, selfPersonId }, plantas, trampa] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, trampa, bloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listPlantSpecimens(user.userAccountId, id),
     intervencion.motivoObservationId
       ? lecturaDeTrampaQueMotivo(user.userAccountId, intervencion.motivoObservationId)
       : Promise.resolve(null),
+    // Ronda de arreglos 1 (hallazgo crítico): los bloques de manejo se leen
+    // con el MISMO permiso (`lot:view`/`manage`) que ya exige
+    // `listarIntervenciones` — nunca `location:manage_attributes`. Antes,
+    // sin ese permiso distinto, corregir una intervención de bloque perdía
+    // el bloque en silencio: no había forma de listarlo NI de conservarlo.
+    // Ver el docstring de `bloquesDeLaParcela`.
+    bloquesDeLaParcela(user.userAccountId, id),
   ]);
 
   const ahora = new Date();
@@ -152,7 +166,11 @@ export default async function ManejoDetailPage({
         ) : null}
         <p>
           {t("manejoAreaLabel")}:{" "}
-          {intervencion.areas.length === 0 ? t("manejoAreaWholePlot") : intervencion.areas.map((a) => a.specimen.commonName).join(", ")}
+          {intervencion.areas.length === 0
+            ? t("manejoAreaWholePlot")
+            : // Tarea 5 PR B: cada área es una planta o un bloque (nunca las
+              // dos — CHECK en la base), y las dos traen su nombre.
+              intervencion.areas.map((a) => a.specimen?.commonName ?? a.plotBlock?.name ?? "—").join(", ")}
         </p>
         {intervencion.notes ? (
           <p>
@@ -215,6 +233,7 @@ export default async function ManejoDetailPage({
             observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
             selfPersonId={selfPersonId}
             specimens={plantas}
+            bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}
             claveDeEnvio={crypto.randomUUID()}
             valores={
               {
@@ -230,7 +249,14 @@ export default async function ManejoDetailPage({
                 occurredAt: intervencion.occurredAt.toISOString(),
                 operatorPersonId: intervencion.operatorPersonId,
                 motivoObservationId: intervencion.motivoObservationId,
-                specimenIds: intervencion.areas.map((a) => a.specimenId),
+                specimenIds: intervencion.areas
+                  .map((a) => a.specimenId)
+                  .filter((sid): sid is string => sid != null),
+                // Tarea 5 PR B, decisión del controlador #1: corregir sin
+                // tocarlos los conserva, igual que las plantas.
+                plotBlockIds: intervencion.areas
+                  .map((a) => a.plotBlockId)
+                  .filter((bid): bid is string => bid != null),
                 notes: intervencion.notes,
                 lineas: intervencion.lineas.map((l) => ({
                   materialId: l.materialId,

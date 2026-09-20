@@ -10,7 +10,7 @@ El vacío importa más de lo que parece: el secado es donde se destruye la mayor
 
 ## 2. Parámetros de control `[PROVISIONAL — validar contra el SOP de cada finca]`
 
-> **Decisión de Daniel, 2026-09-19 (ADR-177 §16–17).** Los objetivos son de la **receta**, sujetos a
+> **Decisión de Daniel, 2026-09-19 (ADR-180 §16–17).** Los objetivos son de la **receta**, sujetos a
 > la capacidad del beneficio y al clima. El secado es un **ambiente compartido**: ante un retraso, primero
 > acciones sobre el lote (mover bandeja, abanico); si se propone tocar el cuarto, se muestra el efecto
 > en cada lote antes de decidir. El fin se mide con el **AgraTronix Coffee Tester 08150** en escala

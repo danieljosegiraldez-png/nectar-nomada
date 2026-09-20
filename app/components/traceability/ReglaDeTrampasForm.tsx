@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { saveTrapRuleFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
+import { opcionesConActual } from "../../../lib/traceability/precargaDeIntervencion";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
 
@@ -15,6 +16,7 @@ export interface ReglaActual {
   normalDays: number;
   alertDays: number;
   suggestedAction: string;
+  suggestedMaterial: { id: string; name: string } | null;
 }
 
 /**
@@ -29,14 +31,22 @@ export function ReglaDeTrampasForm({
   locationId,
   farmLocationId,
   regla,
+  productos,
 }: {
   locationId: string;
   farmLocationId: string;
   regla: ReglaActual | null;
+  /** Productos fitosanitarios de la organización de la finca (pieza 3, §5). */
+  productos: readonly { id: string; name: string }[];
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(saveTrapRuleFormAction, initialState);
   const id = (campo: string) => `${campo}-${farmLocationId}`;
+  // Ronda final de arreglos, hallazgo 4: sin acceso para listar productos,
+  // `productos` llega vacío. Sin esto el `<select>` no podría representar el
+  // producto ya guardado, y guardar sin tocarlo lo borraría — ver
+  // `opcionesConActual`.
+  const opcionesDeMaterial = opcionesConActual(productos, regla?.suggestedMaterial ?? null);
 
   return (
     <form action={formAction} className="nn-form">
@@ -91,6 +101,22 @@ export function ReglaDeTrampasForm({
           required
           defaultValue={regla?.suggestedAction ?? ""}
         />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor={id("suggestedMaterialId")}>{t("trapRuleSuggestedMaterial")}</label>
+        <select
+          id={id("suggestedMaterialId")}
+          name="suggestedMaterialId"
+          defaultValue={regla?.suggestedMaterial?.id ?? ""}
+        >
+          <option value="">{t("trapRuleSuggestedMaterialNone")}</option>
+          {opcionesDeMaterial.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}

@@ -66,6 +66,8 @@ class BalancePolicy:
 
 Toda masa lleva `weighing_condition` (`DRAINED` / `WET` / `DRY`). Comparar un peso `WET` contra uno `DRAINED` es un error de datos y se marca `INCOMPARABLE_WEIGHING_CONDITION`.
 
+> **Decisión de Daniel, 2026-09-19 — la recepción de cereza no anota la condición.** Entre el peso de finca de una entrega y el peso en la báscula del beneficio (o el declarado por un productor de fuera), la cereza se pesa **siempre fresca, tal cual, en los dos lados**, y las dos pesadas se consideran comparables sin `weighing_condition`. Aplica sólo a esa comparación de básculas (`docs/superpowers/specs/2026-09-19-recepcion-de-cereza-en-beneficio-design.md` §3.4); las masas de las etapas de proceso siguen esta regla tal cual. Si la cereza empezara a llegar en condiciones distintas, se añade el campo.
+
 ## 3. Verificaciones de plausibilidad por rendimiento (nuevo)
 
 El balance solo prueba que los números suman; no que sean ciertos. Estos rangos de la industria detectan errores de pesaje que un balance cuadrado no revela. Todos `[PROVISIONAL]` — calibrar contra la data histórica de cada finca.
@@ -98,7 +100,7 @@ Enmienda a la v2.0: la fermentación anaeróbica corta de vinazos **no puede esp
 
 ## 5. Cáscara: producto alimenticio, no subproducto
 
-> **Decisión de Daniel, 2026-09-19 (ADR-177 §18).** No usa 75–80 °C durante 12 h. Su proceso:
+> **Decisión de Daniel, 2026-09-19 (ADR-180 §18).** No usa 75–80 °C durante 12 h. Su proceso:
 > deshidratador por bandejas, pocas capas, de horas a días, ciclos de secar y reposar con temperatura
 > y abanico ajustables, lento para no volatilizar. Terminada por **humedad**, tacto y sensorial
 > opcionales. Otra fuente: la cáscara seca que sale al trillar un natural. Es secundaria al café.

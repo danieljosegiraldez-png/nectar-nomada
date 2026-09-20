@@ -13,6 +13,7 @@
  * `locationIds`, y `trap_rule` se borra antes que `location` porque la
  * referencia.
  */
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { getTrapRule, saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import { LocationAccessError } from "../../lib/traceability/locations";
@@ -25,10 +26,12 @@ let personIds: string[] = [];
 let scopeIds: string[] = [];
 let locationIds: string[] = [];
 let organizationIds: string[] = [];
+let materialIds: string[] = [];
 
 afterEach(async () => {
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: userAccountIds } }) });
   await prisma.trapRule.deleteMany({ where: assertDefinedWhere({ farmLocationId: { in: locationIds } }) });
+  await prisma.consumableMaterial.deleteMany({ where: assertDefinedWhere({ id: { in: materialIds } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
@@ -40,6 +43,7 @@ afterEach(async () => {
   scopeIds = [];
   locationIds = [];
   organizationIds = [];
+  materialIds = [];
 });
 
 const reglaValida = {
@@ -272,5 +276,115 @@ describe("regla de trampas de la finca", () => {
     await expect(getTrapRule(ajeno.userAccountId, parcela.parentLocationId!)).rejects.toThrow(
       new LocationAccessError("no_location_attribute_access"),
     );
+  });
+});
+
+describe("la regla apunta a un producto (Tarea 3)", () => {
+  it("guarda con un producto fitosanitario de la organización de la finca", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const farmLocationId = parcela.parentLocationId!;
+
+    const material = await prisma.consumableMaterial.create({
+      data: {
+        organizationId: parcela.organizationId!,
+        name: `TEST Fito (${randomUUID()})`,
+        defaultUnit: "l",
+        isPlantProtection: true,
+      },
+    });
+    materialIds.push(material.id);
+
+    await saveTrapRule(usuario.userAccountId, {
+      farmLocationId,
+      ...reglaValida,
+      suggestedMaterialId: material.id,
+    });
+    const leida = await getTrapRule(usuario.userAccountId, farmLocationId);
+    expect(leida?.suggestedMaterialId).toBe(material.id);
+  });
+
+  it("rechaza un producto que no es de manejo fitosanitario", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const farmLocationId = parcela.parentLocationId!;
+
+    const aserrin = await prisma.consumableMaterial.create({
+      data: {
+        organizationId: parcela.organizationId!,
+        name: `TEST Aserrín (${randomUUID()})`,
+        defaultUnit: "saco",
+        isPlantProtection: false,
+      },
+    });
+    materialIds.push(aserrin.id);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, { farmLocationId, ...reglaValida, suggestedMaterialId: aserrin.id }),
+    ).rejects.toThrow(new TrapRuleValidationError("suggested_material_not_plant_protection"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId } })).toBe(0);
+  });
+
+  it("rechaza un producto fitosanitario de otra organización", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const farmLocationId = parcela.parentLocationId!;
+
+    const otraOrganizacion = await prisma.organization.create({
+      data: { name: `TEST Finca Ajena (${randomUUID()})`, organizationType: "farm", status: "approved" },
+    });
+    organizationIds.push(otraOrganizacion.id);
+    const fitoDeOtraOrg = await prisma.consumableMaterial.create({
+      data: {
+        organizationId: otraOrganizacion.id,
+        name: `TEST FitoAjeno (${randomUUID()})`,
+        defaultUnit: "l",
+        isPlantProtection: true,
+      },
+    });
+    materialIds.push(fitoDeOtraOrg.id);
+
+    await expect(
+      saveTrapRule(usuario.userAccountId, {
+        farmLocationId,
+        ...reglaValida,
+        suggestedMaterialId: fitoDeOtraOrg.id,
+      }),
+    ).rejects.toThrow(new TrapRuleValidationError("suggested_material_other_organization"));
+    expect(await prisma.trapRule.count({ where: { farmLocationId } })).toBe(0);
+  });
+
+  it("sin producto guarda null: un selector vacío nunca es un id inventado (control)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const farmLocationId = parcela.parentLocationId!;
+
+    await saveTrapRule(usuario.userAccountId, { farmLocationId, ...reglaValida, suggestedMaterialId: null });
+    const leida = await getTrapRule(usuario.userAccountId, farmLocationId);
+    expect(leida?.suggestedMaterialId).toBeNull();
   });
 });

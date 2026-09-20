@@ -117,7 +117,7 @@ Catálogos en `locales/es-PA.json` y `locales/en.json`. Una clave sin traducció
 
 ## 8. Perfiles de protocolo — *los umbrales no son globales*
 
-> **Decisión de Daniel, 2026-09-19 (ADR-177) — manda sobre esta sección.** Los umbrales salen de la
+> **Decisión de Daniel, 2026-09-19 (ADR-180) — manda sobre esta sección.** Los umbrales salen de la
 > **receta** de cada proceso o fase; sin receta el motor no opina. Los cinco perfiles de abajo pasan a
 > ser **plantillas** para crear recetas, con la literatura al lado marcada «referencia, no norma»; el
 > motor no los usa directamente. Además: la tabla pone `brix_floor` 15,0 y el código de ejemplo 14,0 —

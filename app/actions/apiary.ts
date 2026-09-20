@@ -23,6 +23,7 @@ import { MeasurementValidationError } from "../../lib/traceability/measurements"
 import { UnitValidationError } from "../../lib/traceability/units";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { dividirMiel, envasarMiel, procesarMiel } from "../../lib/apiary/mielDelLote";
+import { anotarCeraDeExtraccion } from "../../lib/apiary/ceraDeExtraccion";
 import { MielInvalida } from "../../lib/apiary/vocabularioDeMiel";
 import { asentarPesoDeCosecha, SaldoDeCosechaInvalido } from "../../lib/apiary/cosechasSinSaldo";
 import { MassBalanceError } from "../../lib/traceability/balance";
@@ -37,8 +38,9 @@ import type { ApiaryAssetParent } from "../../lib/apiary/media";
 import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 import { darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
+import { anotarRecipiente, quitarRecipiente } from "../../lib/apiary/recipientes";
 import { registrarCeraNueva, registrarSalidaDeMarcos } from "../../lib/apiary/cera";
-import type { FrameRemovalReason, WaxDestination, WaxKind } from "../../generated/prisma/client";
+import type { ByproductDestination, FrameRemovalReason, WaxDestination, WaxKind } from "../../generated/prisma/client";
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
 import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
@@ -449,6 +451,25 @@ export async function registrarCeraNuevaFormAction(formData: FormData): Promise<
   revalidatePath(`/apiaries/${apiaryId}`);
 }
 
+/** Anotar la cera que salió al desopercular: kilos, destino y la ventana de la extracción. */
+export async function anotarCeraDeExtraccionFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  await anotarCeraDeExtraccion(user.userAccountId, {
+    apiaryLocationId: apiaryId,
+    // En crudo: `Number("")` es 0, y un campo vacío es un dato que falta, no cero kilos.
+    massKg: String(formData.get("massKg") ?? ""),
+    destination: String(formData.get("destination") ?? "") as ByproductDestination,
+    // Sin `?? hoyComoDia()`: una ventana que falta no es la de hoy. Poner hoy escribiría una
+    // procedencia inventada como `measured_fact` (revisión de Codex, ADR-178).
+    windowStart: fechaDeDia(String(formData.get("windowStart") ?? ""), "windowStart"),
+    windowEnd: fechaDeDia(String(formData.get("windowEnd") ?? ""), "windowEnd"),
+    notes: emptyToNull(formData.get("notes")),
+  });
+  revalidatePath(`/apiaries/${apiaryId}`);
+}
+
 /** Anotar marcos sacados, de un año de color. */
 export async function registrarSalidaDeMarcosFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
@@ -482,10 +503,40 @@ export async function completarCierreDeCosechaFormAction(formData: FormData): Pr
   await completarCierreDeCosecha(user.userAccountId, {
     apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
     honeyType: emptyToNull(formData.get("honeyType")),
-    extractedWeightKg: emptyToNull(formData.get("extractedWeightKg")),
+    // Con recipientes el formulario NO manda el campo de peso: ausente es «no se toca», y no
+    // «se borró» — el servicio rechazaría un null como peso escrito a mano (spec 2026-09-19 §3).
+    extractedWeightKg: formData.has("extractedWeightKg") ? emptyToNull(formData.get("extractedWeightKg")) : undefined,
     reason: emptyToNull(formData.get("reason")),
   });
 
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Pesada por recipiente (spec 2026-09-19 §3) — anotar un balde o tambor de la extracción. */
+export async function anotarRecipienteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  await anotarRecipiente(user.userAccountId, {
+    apiaryHarvestEventId: String(formData.get("apiaryHarvestEventId") ?? ""),
+    label: String(formData.get("label") ?? ""),
+    grossKg: String(formData.get("grossKg") ?? ""),
+    tareKg: String(formData.get("tareKg") ?? ""),
+  });
+  revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+}
+
+/** Quitar un recipiente mal anotado. Pide motivo; el peso se recalcula. */
+export async function quitarRecipienteFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const apiaryId = String(formData.get("apiaryId") ?? "");
+  const hiveId = String(formData.get("hiveId") ?? "");
+  await quitarRecipiente(user.userAccountId, {
+    containerId: String(formData.get("containerId") ?? ""),
+    reason: String(formData.get("reason") ?? ""),
+  });
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
 }
 
@@ -785,6 +836,11 @@ export async function procesarMielAction(_prev: EstadoDeMiel, formData: FormData
       inputKg: String(formData.get("inputKg") ?? ""),
       outputKg: String(formData.get("outputKg") ?? ""),
       lossKg: String(formData.get("lossKg") ?? ""),
+      // La cera que salió al colar: subproducto, no merma (spec 2026-09-19 §4.2). En crudo, para
+      // que un campo vacío llegue vacío y no como cero.
+      ceraKg: String(formData.get("ceraKg") ?? ""),
+      ceraDestino: emptyToNull(formData.get("ceraDestino")) as ByproductDestination | null,
+      ceraNota: String(formData.get("ceraNota") ?? ""),
       provenanceClass: "measured_fact",
     });
     revalidatePath(`/lots/${lotId}`);

@@ -20,6 +20,7 @@ const ubicaciones: string[] = [];
 const hoy = new Date(new Date().toISOString().slice(0, 10));
 
 let A: string;
+let beneficioA: string;
 let B: string;
 let parcelaA: string;
 let parcelaB: string;
@@ -61,6 +62,7 @@ beforeAll(async () => {
   const fa = await finca("A");
   const fb = await finca("B");
   A = fa.site; parcelaA = fa.plot; B = fb.site; parcelaB = fb.plot;
+  beneficioA = (await prisma.location.create({ data: { name: `TEST Beneficio (${RUN})`, locationType: "beneficio", parentLocationId: A, classification: "internal" } })).id;
   managerA = await cuenta("Farm Manager", A);
   operarioA = await cuenta("Farm Operator", A);
   operarioB = await cuenta("Farm Operator", B);
@@ -80,7 +82,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcelaA, parcelaB] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, parcelaA, parcelaB] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [A, B] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
@@ -103,7 +105,7 @@ describe("los permisos nuevos", () => {
 
 describe("la jornada de cosecha", () => {
   it("el Farm Manager de la finca abre una jornada con su asignación, y se lee con su detalle", async () => {
-    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const j = await abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     expect(j.estado).toBe("abierta");
     const d = await detalleDeJornada(managerA, j.id);
     expect(d.asignaciones.map((a) => [a.location.id, a.person.id])).toEqual([[parcelaA, recolector1]]);
@@ -111,29 +113,29 @@ describe("la jornada de cosecha", () => {
   }, 20000);
 
   it("el capataz de esta finca también abre (control positivo)", async () => {
-    const j = await abrirJornada(operarioA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const j = await abrirJornada(operarioA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     expect(j.fincaSiteId).toBe(A);
   }, 20000);
 
   it("una parcela de otra finca se rechaza", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaB, personId: recolector1 }] })).rejects.toThrow(
+    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaB, personId: recolector1 }] })).rejects.toThrow(
       /parcela_fuera_de_la_finca/,
     );
   }, 20000);
 
   it("una persona que no es recolectora de la finca se rechaza", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: noRecolector }] })).rejects.toThrow(
+    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: noRecolector }] })).rejects.toThrow(
       /no_es_recolector/,
     );
   }, 20000);
 
   it("el capataz de OTRA finca no abre jornadas aquí", async () => {
-    await expect(abrirJornada(operarioB, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] })).rejects.toThrow();
+    await expect(abrirJornada(operarioB, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] })).rejects.toThrow();
   }, 20000);
 
   it("sin asignaciones no se abre, y cerrar dos veces da ya_cerrada", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [] })).rejects.toThrow(/sin_asignaciones/);
-    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [] })).rejects.toThrow(/sin_asignaciones/);
+    const j = await abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     const cerrada = await cerrarJornada(managerA, j.id);
     expect(cerrada.estado).toBe("cerrada");
     await expect(cerrarJornada(managerA, j.id)).rejects.toThrow(/ya_cerrada/);

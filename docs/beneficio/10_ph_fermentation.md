@@ -4,7 +4,7 @@
 
 ## 1. Matriz de umbrales — perfil `WASHED_STANDARD`
 
-> **Decisión de Daniel, 2026-09-19 (ADR-177) — manda sobre este documento.** El pH objetivo y los
+> **Decisión de Daniel, 2026-09-19 (ADR-180) — manda sobre este documento.** El pH objetivo y los
 > umbrales son **de la receta, por fase**. Manda el pH objetivo; al vencer la ventana se puede extender
 > **mientras el pH siga bajando** (bajada mínima y separación, de la receta). Estancado = el pH no baja,
 > salvo que el Brix baje o haya otra señal de actividad; un olor negativo (acético, pasado, rancio)

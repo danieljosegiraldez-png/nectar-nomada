@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-18
+## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**490 operaciones** que tocan la base, en **140 archivos**:
+**515 operaciones** que tocan la base, en **145 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,51 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **367** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **388** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **68** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **Manejo fitosanitario, ronda final de arreglos (2026-09-19, hallazgo 5).** Una
+> operación nueva en `lib/traceability/intervenciones.ts`, ya inventariado:
+> `contextoDeManejo` sube **guardia directo**, 367→368. El arreglo de
+> `bloquesDeLaParcela` (entrada de abajo) dejó incompleto el permiso de las
+> pantallas de manejo: `/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`
+> seguían pidiendo `getPlotDetail` (`location:manage_attributes`) ANTES de
+> llegar a `bloquesDeLaParcela`, así que un operario con `lot:view`/`lot:manage`
+> y sin ese permiso distinto recibía `notFound()` igual. `contextoDeManejo` lee
+> sólo nombre y zona de la parcela, autorizada con el MISMO `requireLotAccess("view")`
+> que ya exige leer o corregir sus intervenciones — `getPlotDetail` y el
+> tablero (`/plots/[id]`) siguen exigiendo `location:manage_attributes`, sin
+> cambios.
+
+> **Manejo fitosanitario, ronda de arreglos 1 (2026-09-19).** Dos operaciones nuevas en
+> `lib/traceability/intervenciones.ts`, ya inventariado. `bloquesDeLaParcela` sube **guardia
+> directo**, 366→367: lee los bloques de una parcela con el MISMO permiso (`lot:view`/`manage`,
+> vía `requireLotAccess`) que ya exige leer o corregir sus intervenciones — reemplaza a
+> `listPlotBlocks` (`location:manage_attributes`) para este consumidor, porque ese permiso
+> distinto era lo que dejaba borrar un bloque en silencio al corregir sin tenerlo. `motivoValidoParaParcela`
+> no autoriza nada a propósito —sólo decide si `?motivo=` de la URL sirve para precargar el
+> formulario— y va en **depende del llamador**, 65→66: su único llamador,
+> `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), ya pasó `getPlotDetail`
+> (`location:manage_attributes`) sobre la misma parcela antes de invocarla.
+
+> **Pesada por recipiente (ADR-177, 2026-09-19).** Un archivo nuevo, `lib/apiary/recipientes.ts`:
+> `anotarRecipiente` y `quitarRecipiente` suben **guardia directo**, 367→369 (`requireApiaryAccess`
+> manage sobre la caja de la cosecha antes de escribir). Y `asentarPesoDeCosechaEn`, extraído de
+> `completarCierreDeCosecha`, entra como **«acotado por construcción»**, 39→40 — **la etiqueta del
+> script no es exacta**: no se autoriza sola, recibe el `tx` de quien la llama, y sus dos llamadores
+> (`completarCierreDeCosecha` y `recipientes.ts`) comprueban `apiary:manage` antes. 490→493, en 141.
+> **La cera como subproducto (ADR-178, 2026-09-19).** `lib/apiary/ceraDeExtraccion.ts` sube
+> **guardia directo**, 386→388: anotar exige `apiary:manage` y leer `apiary:view` sobre el apiario,
+> los dos por `fincaDelApiario`, con los mismos candidatos que `getApiaryDetail` (ubicación y los
+> proyectos de sus colmenas). 513→515, en 145.
+
+> Tras la revisión de Codex, `bloquearCosechaEn` —el `FOR UPDATE` que ordena a quien cambia el peso
+> de una misma cosecha— entra como **«depende del llamador»**, 65→66: sus tres llamadores autorizan
+> antes. 493→494.
 
 > **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
 > `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
