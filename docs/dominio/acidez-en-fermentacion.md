@@ -2,9 +2,9 @@
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
   estado    : reemplazado · no normativo
-  reemplazo : docs/beneficio/10_ph_fermentation.md (v3.1, «Reemplaza: v2.5»). Además, por ADR-180 (2026-09-19) los
+  reemplazo : docs/beneficio/10_ph_fermentation.md (v3.1, «Reemplaza: v2.5»). Además, por ADR-181 (2026-09-19) los
               umbrales salen de la receta de Daniel. Reemplazado NO quiere decir revisado:
-              lo que este borrador trata y ADR-180 no decide sigue abierto en su sucesor.
+              lo que este borrador trata y ADR-181 no decide sigue abierto en su sucesor.
   origen    : redactado por un modelo de lenguaje a partir de indicaciones de
               Daniel; entregado el 2026-09-13 en `coffee_processing_specs_packet`
   revisado  : NO. Daniel aún no lo ha repasado línea a línea.

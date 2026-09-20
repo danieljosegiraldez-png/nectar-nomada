@@ -6,7 +6,7 @@
               por Daniel como el medidor que usa al final del secado. Texto extraído del propio PDF el
               2026-09-19; las cifras de abajo son literales del catálogo.
   qué puede : ser la ficha del modelo en el catálogo de equipos (ADR-172) y decir qué mide y qué no.
-  qué NO    : sustituir el contraste contra patrón (ADR-180, `02_calibration` §3): la ficha dice lo que
+  qué NO    : sustituir el contraste contra patrón (ADR-181, `02_calibration` §3): la ficha dice lo que
               promete el fabricante, la verificación dice lo que hace el aparato.
 
   El PDF NO se versiona: es obra del fabricante. Vive en el ordenador de Daniel.
@@ -14,7 +14,7 @@
 
 # AgraTronix Coffee Tester — ref. 08150
 
-**Es el instrumento con que se decide el fin del secado** (ADR-180 §17).
+**Es el instrumento con que se decide el fin del secado** (ADR-181 §17).
 
 | | literal del catálogo |
 |---|---|

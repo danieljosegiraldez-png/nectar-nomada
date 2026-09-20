@@ -11823,7 +11823,7 @@ se pudo medir; si aparece, se ve como un saldo mayor que el peso.
 
 **Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.
 
-## ADR-180 — Los umbrales del beneficio salen de la receta; el paquete v3.1 queda como plantilla
+## ADR-181 — Los umbrales del beneficio salen de la receta; el paquete v3.1 queda como plantilla
 
 **Fecha:** 2026-09-19 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta) ·
 **Revisión de literatura:** `docs/dominio/revision-literatura-fermentacion-2026-09-19.md`
