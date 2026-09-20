@@ -1455,6 +1455,8 @@ export async function saveTrapRuleFormAction(
       normalDays: Number(String(formData.get("normalDays") ?? "").trim() || Number.NaN),
       alertDays: Number(String(formData.get("alertDays") ?? "").trim() || Number.NaN),
       suggestedAction: String(formData.get("suggestedAction") ?? ""),
+      // Vacío del selector es "sin producto", nunca un id inventado.
+      suggestedMaterialId: emptyToNull(formData.get("suggestedMaterialId")),
     });
   } catch (error) {
     revalidarParcela(locationId);

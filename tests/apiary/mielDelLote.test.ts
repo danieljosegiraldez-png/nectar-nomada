@@ -108,6 +108,7 @@ describe("los pasos de un lote de miel", () => {
     ).map((x) => x.transformationId);
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: [userAccountId, otroUserAccountId] } }) });
     await prisma.deviation.deleteMany({ where: assertDefinedWhere({ lotTransformationId: { in: trans } }) });
+    await prisma.byproductBatch.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
     await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
     await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
     await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: trans } }) });
@@ -156,6 +157,38 @@ describe("los pasos de un lote de miel", () => {
     expect(await saldo(hijo.id)).toBe(19.4);
     expect(Number(t.unexplainedQuantity ?? 0)).toBe(0);
     expect(await prisma.deviation.count({ where: { lotTransformationId: t.id } })).toBe(0);
+  });
+
+  // Spec 2026-09-19 §4.2 — la cera que sale al colar era merma, e inflarla escondía la merma de
+  // verdad, que es el número que dice si alguien pesó mal.
+  it("LA CERA DEL COLADO ES SUBPRODUCTO, no merma: cuenta como salida del balance", async () => {
+    const { lot } = await cosechaCerrada(30);
+    const r = await procesarMiel(userAccountId, {
+      lotId: lot.id, occurredAt: DIA, acts: ["colado"], inputKg: 30, outputKg: 26,
+      ceraKg: 4, ceraDestino: "LAMINA_PROPIA", provenanceClass: "measured_fact",
+    });
+    const cera = await prisma.byproductBatch.findMany({ where: { transformationId: r.transformation.id } });
+    expect(cera).toHaveLength(1);
+    expect([cera[0]!.byproductType, cera[0]!.destination]).toEqual(["CERA", "LAMINA_PROPIA"]);
+    expect(Number(cera[0]!.massKg)).toBeCloseTo(4, 3);
+    expect(cera[0]!.windowStart).toBeNull(); // su origen es la transformación, no un apiario
+    const t = await prisma.lotTransformation.findUniqueOrThrow({ where: { id: r.transformation.id } });
+    expect(t.declaredLossQuantity).toBeNull(); // NO fue a la merma
+    expect(Number(t.unexplainedQuantity ?? 0)).toBeCloseTo(0, 3); // 26 + 4 = 30: la cera cuenta como salida
+  });
+
+  it("LA CERA EXIGE DESTINO, y con «otro uso» exige nota", async () => {
+    const { lot } = await cosechaCerrada(30);
+    const comun = { lotId: lot.id, occurredAt: DIA, acts: ["colado"], inputKg: 30, outputKg: 26, provenanceClass: "measured_fact" as const };
+    await expect(procesarMiel(userAccountId, { ...comun, ceraKg: 4 })).rejects.toThrow(/cera_sin_destino/);
+    await expect(procesarMiel(userAccountId, { ...comun, ceraKg: 4, ceraDestino: "OTRO" })).rejects.toThrow(/cera_otro_sin_nota/);
+    // Los dos controles: con nota entra, y sin cera el paso sigue funcionando como antes.
+    const conNota = await procesarMiel(userAccountId, { ...comun, ceraKg: 4, ceraDestino: "OTRO", ceraNota: " para cambalache " });
+    const cera = await prisma.byproductBatch.findMany({ where: { transformationId: conNota.transformation.id } });
+    expect([cera.length, cera[0]!.notes]).toEqual([1, "para cambalache"]);
+    const otro = await cosechaCerrada(10); // su propio lote: el anterior ya se coló entero
+    const sinCera = await procesarMiel(userAccountId, { ...comun, lotId: otro.lot.id, inputKg: 10, outputKg: 9 });
+    expect(await prisma.byproductBatch.count({ where: { transformationId: sinCera.transformation.id } })).toBe(0);
   });
 
   it("ENVASAR: envases × masa neta, y el frasco sabe de qué caja salió", async () => {

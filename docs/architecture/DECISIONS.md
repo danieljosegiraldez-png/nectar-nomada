@@ -11672,6 +11672,37 @@ se sigue el precedente para coherencia.
 peligra residuo y cuando. Las intervenciones vigentes se distinguen de las corregidas. Una carencia
 desconocida no desaparece con el tiempo. Crecer la lista de objetivos es una migración de una línea.
 Lo que no esté entra como `otro` con nota.
+
+### Anexo — PR B (2026-09-19)
+
+**Cambios en el esquema y el manejo de áreas.**
+
+- `PlotInterventionArea` gana `plotBlockId` (FK `PlotBlock`). Ahora una intervención puede actuar sobre **bloques** además de plantas. Exactamente uno de `specimenId` o `plotBlockId` por fila (`CHECK num_nonnulls(specimen_id, plot_block_id) = 1`).
+- `TrapRule` gana `suggestedMaterialId` (FK `ConsumableMaterial`, opcional, filtrado a `isPlantProtection`). El texto `suggestedAction` sigue siendo obligatorio y pasa a ser la nota que aparece debajo del nombre del producto en el aviso.
+
+**Los avisos de trampa vigentes (`trampa_con_lectura_alta`).**
+
+El aviso se da por **atendido** cuando existe una intervención vigente (no corregida) posterior a la lectura de la trampa que cubra esa trampa. «Cubrir» significa:
+
+- Una intervención sobre **la misma parcela que la trampa**, **sin importar bloque ni planta** (la intervención puede ser sobre toda la parcela o sobre un bloque específico). No cuenta una intervención sobre la parcela madre si la trampa está en una microparcela.
+- Cualquier tipo de intervención: aplicación, liberación o manejo cultural.
+- La intervención vigente anterior o simultánea a la lectura no atiende (el borde es estricto: `occurredAt > ultimaRevision.observedAt`).
+- Una trampa sin bloque asignado (`plotBlockId` nulo) solo la atiende una intervención sobre toda la parcela (`parcelaEntera: true`).
+- El aviso de **revisión vencida** sigue viéndose aunque el de lectura alta esté atendido; «atendido» se refiere solo a la lectura alta, no a la revisión pendiente.
+
+**Permisos para el manejo.**
+
+Los bloques de una parcela se leen para registrar y corregir intervenciones con `lot:view` (mismo nivel que listar intervenciones vigentes). Con este permiso, quien registra un manejo siempre ve el nombre de los bloques y puede conservarlos al corregir.
+
+**Las cuatro decisiones de este plan.**
+
+| Decisión | Por qué | Coste si es mal |
+|---|---|---|
+| «Cubre» sólo mira intervenciones de **la misma parcela que la trampa** | una intervención en la parcela madre sobre «la parcela entera» es de la madre; si se contara, habría que decidir si baja a todas las microparcelas, y el spec no lo dice | un aviso de más en una microparcela tratada desde la madre: el lado seguro |
+| El texto `suggestedAction` **sigue obligatorio** | la regla ya lo exige; con producto pasa a ser la nota que se enseña debajo | ninguno: pedir una frase corta |
+| Una trampa **sin revisión vigente** no tiene nada que atender | sin lectura no hay «lectura alta» | ninguno |
+| «Atendido» apaga **sólo** el aviso de lectura alta, no el de revisión vencida | atendido no es resuelto (spec §4.2): la trampa sigue con su plazo | ninguno |
+
 ## ADR-175 -- La reina guarda el ano en que nacio; su color es un apodo, no una marca
 
 **Contexto.** Spec `docs/superpowers/specs/2026-09-18-alzas-y-tandas-de-marcos-design.md` §5.4:
@@ -11701,6 +11732,60 @@ inspeccion que no conto no borra el conteo anterior.
 
 **Lo que NO entra.** Relacionar los marcos negros con el año de su color: no se sabe de que ano es
 cada marco negro, y no se inventa.
+
+## ADR-178 -- La cera de la miel es un subproducto con destino, no merma
+
+**Contexto.** La cera que sale al colar se anotaba como **merma del proceso**. Es el mismo error que
+el cafe evito con la cascarilla (`ByproductBatch`): contar un subproducto como perdida infla la
+merma y esconde la de verdad, que es el numero que dice si alguien peso mal. Y la cera que sale al
+**desopercular** no se registraba en ninguna parte. Spec
+`docs/superpowers/specs/2026-09-19-cera-y-pesada-por-recipiente-design.md` §4, plan
+`docs/superpowers/plans/2026-09-19-cera-como-subproducto.md`. Daniel, el 2026-09-19: la cera se
+separa **en los dos momentos**, va a **las cuatro** salidas, y *«quiero saber que esa cera vino de
+tal apiario por lo menos, de tal cosecha, aunque no sepa cual alza o colmena»*.
+
+**Decision.** `ByproductType` gana `CERA` y `ByproductDestination` gana `LAMINA_PROPIA`, `GUARDADA`
+y `OTRO` (`SALE` ya existia). La cera vive en la tabla que ya existe, con **dos origenes posibles y
+exactamente uno**, que hace cumplir un CHECK:
+
+- **un paso del lote** (`transformationId`): la cera **al colar**. `procesarMiel` la acepta y la
+  pasa a `recordTransformation`, que ya cuenta su masa como **salida** del balance. Deja de ir en la
+  merma: 26 kg de miel mas 4 de cera cuadran los 30 que entraron.
+- **un apiario con una ventana** (`producedAtLocationId` + `windowStart`/`windowEnd`, sin
+  transformacion): la cera **al desopercular**, en `lib/apiary/ceraDeExtraccion.ts`. Al leerla se
+  dicen **las cosechas de ese apiario que caen en la ventana**, con los dos extremos incluidos, y se
+  dicen como lo que son —«cosechas de este apiario entre el 3 y el 5»—, no como «esta cera salio de
+  estas colmenas».
+
+Dos CHECK mas: la ventana en orden y con las dos fechas o ninguna, y `OTRO` con nota. Los valores
+nuevos del enum se comparan como **texto** en los CHECK, porque un valor no se puede usar en la
+misma transaccion que lo anade. Cero kilos es un dato —se desoperculo y no se recogio nada
+aprovechable—; una masa en blanco o negativa se rechaza.
+
+**Por que no se eligen colmenas ni alzas.** Se desopercula junto, asi que la aplicacion no lo sabe.
+Ofrecer el campo seria invitar a inventarlo, y la trazabilidad a **lugar y tiempo** es exactamente
+lo que Daniel pidio.
+
+**Revision de Codex, cuatro hallazgos, los cuatro con su prueba en rojo primero.**
+1. **La ventana perdia casi todo su ultimo dia.** `occurredAt` es un instante y el extremo es un dia
+   a medianoche, asi que una cosecha del dia final a las 15:30 quedaba fuera. Ahora `gte` el inicio
+   y `lt` el dia siguiente, el idioma de `limpiezaDeCaja.ts`. Las pruebas de antes cosechaban a
+   medianoche y no lo veian.
+2. **Un traslado cambiaba de apiario una cosecha vieja**: se filtraba por `Hive.locationId`, que un
+   traslado actualiza. Ahora manda `Lot.locationId`, que es la foto del sitio donde se cosecho.
+3. **Un extremo de ventana ausente se sustituia por hoy**, escribiendo procedencia inventada como
+   `measured_fact`. Ahora una ventana a medias se rechaza.
+4. **`crearSubproducto` aceptaba CERA** sobre una transformacion que ya habia cuadrado su balance,
+   sin reconciliarla: la cera se habria quedado fuera de la masa de salida. Ese servicio ya no
+   acepta CERA; la cascarilla sigue entrando por ahi, que es para lo que existe.
+
+**Lo que queda dicho y no arreglado:** la ventana se compara en dias UTC, como todos los campos de
+dia de la casa, asi que una cosecha de la noche panamena del ultimo dia cae en el dia UTC siguiente.
+Cambiarlo es una decision de zona horaria que afecta a todos los campos de dia, no a esta rebanada.
+
+**Lo que NO entra.** Enlazar la cera fundida con la «cera nueva» de su ano (ADR-173), que la cera
+sea un lote propio —Daniel eligio el subproducto—, y asignar la cera de extraccion a colmenas
+concretas.
 
 ## ADR-177 -- La miel se pesa por recipiente, y el peso de la cosecha es la suma de sus netos
 

@@ -4536,17 +4536,23 @@ model PlotIntervention {
 
 /// Dónde, dentro de la parcela. Sin filas = la parcela entera (spec §2.2).
 ///
-/// **En el PR A sólo plantas.** El bloque llega en el PR B, cuando `PlotBlock`
-/// exista: entonces `specimenId` pasa a anulable, entra `plotBlockId` y el CHECK
-/// de «exactamente uno».
+/// **PR B.** `specimenId` es anulable y entra `plotBlockId`: exactamente uno de
+/// los dos, CHECK en la base (`plot_intervention_area_planta_o_bloque`).
 model PlotInterventionArea {
   id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   interventionId String           @map("intervention_id") @db.Uuid
   intervention   PlotIntervention @relation(fields: [interventionId], references: [id])
-  specimenId     String           @map("specimen_id") @db.Uuid
-  specimen       Specimen         @relation("PlotInterventionAreaSpecimen", fields: [specimenId], references: [id])
+  specimenId     String?          @map("specimen_id") @db.Uuid
+  /// `onDelete: Restrict` explícito: la columna pasa a anulable en este PR, y sin
+  /// esto el default de Prisma para una relación opcional cambiaría la FK a
+  /// `SET NULL` — un cambio de comportamiento que este brief no pide.
+  specimen       Specimen?        @relation("PlotInterventionAreaSpecimen", fields: [specimenId], references: [id], onDelete: Restrict)
+  /// El bloque (pieza 2). Exactamente uno de `specimenId` o `plotBlockId`: CHECK en la base.
+  plotBlockId    String?          @map("plot_block_id") @db.Uuid
+  plotBlock      PlotBlock?       @relation("PlotInterventionAreaBlock", fields: [plotBlockId], references: [id], onDelete: Restrict)
 
   @@unique([interventionId, specimenId])
+  @@unique([interventionId, plotBlockId])
   @@map("plot_intervention_area")
   @@schema("traceability")
 }
@@ -6468,6 +6474,7 @@ model PlotBlock {
 
   entregasDeCosecha EntregaDeCosecha[]
   fieldEvents       FieldEvent[]       @relation("FieldEventBloque")
+  intervencionesSobreEl PlotInterventionArea[] @relation("PlotInterventionAreaBlock")
   @@unique([locationId, name])
   @@index([locationId])
   @@map("plot_block")
@@ -9257,10 +9264,23 @@ model ByproductBatch {
   /// el balance dejara de poder sumarse.
   massKg Decimal @map("mass_kg") @db.Decimal(10, 3)
 
-  /// De qué transformación salió. **Requerido**: un subproducto sin origen no
-  /// es trazable, y la trazabilidad es la razón de esta tabla.
-  transformationId String            @map("transformation_id") @db.Uuid
-  transformation   LotTransformation @relation(fields: [transformationId], references: [id])
+  /// De qué transformación salió: la cascarilla de la trilla, y la cera **al colar**.
+  /// **Opcional desde la spec 2026-09-19 §4.1**, porque la cera **al desopercular** no
+  /// sale de un lote concreto —se desopercula junto— y en su lugar lleva el apiario
+  /// (`producedAtLocationId`) y una ventana de fechas. Exactamente uno de los dos orígenes,
+  /// y lo exige un CHECK: un subproducto sin origen no es trazable, y la trazabilidad es la
+  /// razón de esta tabla.
+  transformationId String?            @map("transformation_id") @db.Uuid
+  /// `Restrict`, no `SetNull`: dejar la transformación en nulo convertiría esta fila en una cera
+  /// «de apiario» sin ventana, que es justo lo que el CHECK de un solo origen prohíbe.
+  transformation   LotTransformation? @relation(fields: [transformationId], references: [id], onDelete: Restrict)
+
+  /// La ventana de la actividad cuando el origen es el apiario: del día en que empezó la
+  /// extracción al día en que terminó. Es la trazabilidad a lugar y tiempo que pidió Daniel
+  /// el 2026-09-19 —«aunque no sepa cuál alza o colmena»—, y por eso NO hay colmena aquí:
+  /// decir de qué colmenas salió la cera sería inventarlo.
+  windowStart DateTime? @map("window_start")
+  windowEnd   DateTime? @map("window_end")
 
   /// Dónde se produjo. Requerido por lo mismo que en `BiocharBatch`: es el
   /// ancla de RBAC, y sin un ámbito concreto no hay autorización que comprobar.
@@ -9289,6 +9309,10 @@ model ByproductBatch {
 enum ByproductType {
   CASCARILLA
   PULPA
+  /// La cera de la miel: la que sale al desopercular y la que sale al colar.
+  /// Spec 2026-09-19 §4 — **no es merma**: contarla como pérdida infla la merma
+  /// y esconde la de verdad, que es la que dice si alguien pesó mal.
+  CERA
 
   @@schema("traceability")
 }
@@ -9300,6 +9324,11 @@ enum ByproductDestination {
   BIOCHAR
   DISPOSAL
   SALE
+  /// Los tres de la cera (spec 2026-09-19 §4.1). `SALE` ya servía para «se vende».
+  /// Con `OTRO`, la nota es obligatoria y lo exige un CHECK.
+  LAMINA_PROPIA
+  GUARDADA
+  OTRO
 
   @@schema("traceability")
 }
@@ -9319,6 +9348,10 @@ model TrapRule {
   /// Texto libre: «aplicar repelente Bralic». Los productos son de la finca y el
   /// catálogo fitosanitario es la pieza 3.
   suggestedAction String          @map("suggested_action")
+  /// El producto que sugiere la regla (spec fitosanitario §4.2). Opcional: el texto
+  /// `suggestedAction` se queda como nota, y una regla vieja no pierde nada.
+  suggestedMaterialId String?             @map("suggested_material_id") @db.Uuid
+  suggestedMaterial   ConsumableMaterial? @relation("TrapRuleSuggestedMaterial", fields: [suggestedMaterialId], references: [id], onDelete: Restrict)
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -9408,6 +9441,7 @@ model ConsumableMaterial {
   @@schema("traceability")
   lots ConsumableLot[]
   lineasDeIntervencion PlotInterventionLine[] @relation("PlotInterventionLineMaterial")
+  reglasDeTrampaQueLoSugieren TrapRule[] @relation("TrapRuleSuggestedMaterial")
 }
 
 /// Lo que entró una vez: 28 quintales de gallinaza del 1 de julio, con su

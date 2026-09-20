@@ -130,6 +130,10 @@
       "razon": "Módulo de dominio: el nodo de sensores. Registrar, instalar y mover exigen `requireHiveNodeAccess` (hive_node:manage, que el Farm Operator no tiene) sobre el sitio o la colmena ANTES de escribir; el nodo tiene que ser de la finca de la colmena. Los cruces de intervalos se comprueban dentro de la transaccion y los abiertos los sostiene la base con indices parciales. Escritura y AuditEvent en la MISMA transaccion."
     },
     {
+      "archivo": "lib/apiary/ceraDeExtraccion.ts",
+      "razon": "Módulo de dominio: la cera del desopercular (spec 2026-09-19 §4.3). `anotarCeraDeExtraccion` exige `requireApiaryAccess` manage sobre el apiario ANTES de escribir, y `ceraDeExtraccionDelApiario` view antes de leer, los dos vía `fincaDelApiario`. Escribe en `byproduct_batch` —la misma tabla que la cascarilla— con su AuditEvent en la MISMA transacción, y lee las cosechas de ESE apiario en la ventana para nombrarlas, sin afirmar que la cera salga de ellas."
+    },
+    {
       "archivo": "lib/apiary/recipientes.ts",
       "razon": "Módulo de dominio: la pesada por recipiente (spec 2026-09-19 §3). Anotar y quitar exigen `requireApiaryAccess` manage sobre la caja de la cosecha ANTES de escribir, con la fila de la cosecha bloqueada (`bloquearCosechaEn`); el peso de la cosecha y su asiento en el libro del lote van por `asentarPesoDeCosechaEn`, con AuditEvent de recipiente y de cosecha en la MISMA transacción."
     },
@@ -1085,6 +1089,12 @@
       "operacion": "cosechasSinSaldo",
       "razon": "No recibe principal. Su único llamador es la ficha del apiario (`app/apiaries/[id]/page.tsx`), que la invoca DESPUÉS del `Promise.all` donde `getApiaryDetail` autoriza —y LANZA sin permiso—, con el id del apiario ya concedido. Filtra por ese apiario: no ve cosechas de otros sitios.",
       "verificado": "2026-09-18"
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "operacion": "motivoValidoParaParcela",
+      "razon": "No recibe principal a propósito: no autoriza nada, sólo decide si `?motivo=` de la URL es válido para PRECARGAR el formulario de manejo (ronda de arreglos 1, importante #2) — nunca si el registro se permite, eso lo sigue haciendo `validarReferencias` al guardar, con su propio permiso. Su único llamador de producción es `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), que ya pasó `getPlotDetail` (`location:manage_attributes`) sobre esta misma parcela antes de llamarla.",
+      "verificado": "2026-09-19"
     }
   ]
 }

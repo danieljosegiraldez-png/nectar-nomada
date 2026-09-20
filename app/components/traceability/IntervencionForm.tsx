@@ -43,6 +43,10 @@ export interface SpecimenOption {
   id: string;
   commonName: string;
 }
+export interface PlotBlockOption {
+  id: string;
+  name: string;
+}
 
 export interface IntervencionFormValues {
   kind: PlotInterventionKind;
@@ -62,6 +66,8 @@ export interface IntervencionFormValues {
   operatorPersonId: string | null;
   motivoObservationId: string | null;
   specimenIds: readonly string[];
+  /** Los bloques marcados — Tarea 5 PR B. Igual que `specimenIds`: guardar sin tocarlos los conserva. */
+  plotBlockIds: readonly string[];
   notes: string | null;
   lineas: readonly ValoresDeLinea[];
 }
@@ -89,6 +95,7 @@ export function IntervencionForm({
   observers,
   selfPersonId,
   specimens,
+  bloques,
   claveDeEnvio,
   valores,
 }: {
@@ -100,6 +107,7 @@ export function IntervencionForm({
   observers: readonly PersonOption[];
   selfPersonId: string | null;
   specimens: readonly SpecimenOption[];
+  bloques: readonly PlotBlockOption[];
   claveDeEnvio: string;
   valores: IntervencionFormValues;
 }) {
@@ -110,7 +118,6 @@ export function IntervencionForm({
   const [kind, setKind] = useState<PlotInterventionKind>(valores.kind);
   const [target, setTarget] = useState<PlotInterventionTarget>(valores.target);
   const [lineas, setLineas] = useState<readonly ValoresDeLinea[]>(valores.lineas.length > 0 ? valores.lineas : [lineaVacia()]);
-  const [areaModo, setAreaModo] = useState<"parcela" | "plantas">(valores.specimenIds.length > 0 ? "plantas" : "parcela");
 
   /**
    * Ronda final, hallazgo 1: el reloj de pared se escribe en el DOM al
@@ -172,34 +179,59 @@ export function IntervencionForm({
 
       <fieldset>
         <legend>{t("manejoAreaLegend")}</legend>
-        <label style={{ display: "block" }}>
-          <input type="radio" checked={areaModo === "parcela"} onChange={() => setAreaModo("parcela")} /> {t("manejoAreaWholePlot")}
-        </label>
-        <label style={{ display: "block" }}>
-          <input type="radio" checked={areaModo === "plantas"} onChange={() => setAreaModo("plantas")} /> {t("manejoAreaMarkPlants")}
-        </label>
-        {areaModo === "plantas" ? (
-          specimens.length === 0 ? (
-            <p className="nn-muted">{t("manejoAreaNoPlants")}</p>
-          ) : (
-            <ul className="nn-seleccion">
-              {specimens.map((s) => (
-                <li key={s.id}>
-                  <label htmlFor={`specimen-${s.id}`}>
-                    <input
-                      id={`specimen-${s.id}`}
-                      type="checkbox"
-                      name="specimenIds"
-                      value={s.id}
-                      defaultChecked={valores.specimenIds.includes(s.id)}
-                    />{" "}
-                    {s.commonName}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )
-        ) : null}
+        {/*
+         * Ronda final de arreglos, hallazgo 2: el modelo permite áreas MIXTAS
+         * (plantas Y bloques a la vez — `crearAreas`, `intervenciones.ts`); un
+         * radio de tres modos excluyentes obligaba a elegir uno, así que
+         * corregir una intervención mixta mostrando sólo "plantas" enviaba
+         * `plotBlockIds: []` y borraba los bloques en silencio. Las dos
+         * secciones se enseñan y envían siempre juntas, cada una precargada
+         * con lo que ya tenga la intervención; "parcela entera" sigue siendo
+         * el caso de no marcar nada en ninguna, spec §2.2.
+         */}
+        <p className="nn-muted">{t("manejoAreaWholePlotHint")}</p>
+        <p>{t("manejoAreaMarkPlants")}</p>
+        {specimens.length === 0 ? (
+          <p className="nn-muted">{t("manejoAreaNoPlants")}</p>
+        ) : (
+          <ul className="nn-seleccion">
+            {specimens.map((s) => (
+              <li key={s.id}>
+                <label htmlFor={`specimen-${s.id}`}>
+                  <input
+                    id={`specimen-${s.id}`}
+                    type="checkbox"
+                    name="specimenIds"
+                    value={s.id}
+                    defaultChecked={valores.specimenIds.includes(s.id)}
+                  />{" "}
+                  {s.commonName}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>{t("manejoAreaMarkBlocks")}</p>
+        {bloques.length === 0 ? (
+          <p className="nn-muted">{t("manejoAreaNoBlocks")}</p>
+        ) : (
+          <ul className="nn-seleccion">
+            {bloques.map((b) => (
+              <li key={b.id}>
+                <label htmlFor={`bloque-${b.id}`}>
+                  <input
+                    id={`bloque-${b.id}`}
+                    type="checkbox"
+                    name="plotBlockIds"
+                    value={b.id}
+                    defaultChecked={valores.plotBlockIds.includes(b.id)}
+                  />{" "}
+                  {b.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
       </fieldset>
 
       <div className="nn-field">

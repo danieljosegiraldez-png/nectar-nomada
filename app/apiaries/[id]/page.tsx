@@ -16,11 +16,14 @@ import {
   completarCierreDeTratamientoFormAction,
   darDeBajaAlzaFormAction,
   registrarAlzaFormAction,
+  anotarCeraDeExtraccionFormAction,
   registrarCeraNuevaFormAction,
   registrarSalidaDeMarcosFormAction,
 } from "../../actions/apiary";
 import { alzasDelApiario } from "../../../lib/apiary/alzas";
 import { DESTINOS_DE_CERA, leyendaDeCera, marcosNegrosDelApiario, MOTIVOS_DE_SALIDA, TIPOS_DE_CERA } from "../../../lib/apiary/cera";
+import { ceraDeExtraccionDelApiario } from "../../../lib/apiary/ceraDeExtraccion";
+import { DESTINOS_DE_CERA_SUBPRODUCTO } from "../../../lib/apiary/vocabularioDeMiel";
 import { colorDelAño } from "../../../lib/apiary/colorDelAno";
 import { CampoNumerico } from "../../components/CampoNumerico";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
@@ -74,6 +77,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const alzas = await alzasDelApiario(user.userAccountId, id);
   // Cera con el color de su año (spec §5.3). El primer renglón es siempre el año en curso.
   const cera = await leyendaDeCera(user.userAccountId, id);
+  const ceraDeExtraccion = await ceraDeExtraccionDelApiario(user.userAccountId, id);
   // El aviso por aspecto (spec §5.3): la última inspección que contó marcos negros, por colmena.
   const marcosNegros = await marcosNegrosDelApiario(user.userAccountId, id);
   const añoEnCurso = cera[0]?.año ?? new Date().getUTCFullYear();
@@ -846,6 +850,76 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
               </form>
             </details>
           </>
+        ) : null}
+      </section>
+
+      {/* Spec 2026-09-19 §4.3 — la cera del desopercular. Va aquí, con la del apiario, porque su
+          origen es el sitio y una ventana: no se sabe de qué colmena salió, y no se inventa. */}
+      <section className="nn-section">
+        <h2>{t("ceraExtraccionHeading")}</h2>
+        <p className="nn-muted">{t("ceraExtraccionIntro")}</p>
+        {ceraDeExtraccion.length === 0 ? (
+          <p className="nn-muted">{t("ceraExtraccionVacio")}</p>
+        ) : (
+          <ul>
+            {ceraDeExtraccion.map((c) => (
+              <li key={c.id}>
+                {t("ceraExtraccionFila", {
+                  kg: c.massKg,
+                  destino: t(`ceraSubproductoDestino_${c.destination}`),
+                  desde: c.windowStart.toISOString().slice(0, 10),
+                  hasta: c.windowEnd.toISOString().slice(0, 10),
+                })}
+                {c.notes ? <span className="nn-muted"> · {c.notes}</span> : null}
+                <div className="nn-muted">
+                  {c.cosechas.length === 0
+                    ? t("ceraExtraccionSinCosechas")
+                    : t("ceraExtraccionCosechas", {
+                        desde: c.windowStart.toISOString().slice(0, 10),
+                        hasta: c.windowEnd.toISOString().slice(0, 10),
+                        cuales: c.cosechas.map((h) => `${h.lotCode} (${h.hiveIdentifier})`).join(", "),
+                      })}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {puedeGestionarAlzas ? (
+          <details>
+            <summary>{t("ceraExtraccionAnotar")}</summary>
+            <form action={anotarCeraDeExtraccionFormAction} className="nn-form" style={{ maxWidth: 420 }}>
+              <input type="hidden" name="apiaryId" value={id} />
+              <div className="nn-field">
+                <label htmlFor="cerax-kg">{t("ceraExtraccionKilos")}</label>
+                <CampoNumerico id="cerax-kg" name="massKg" min={0} step="0.001" inputMode="decimal" required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="cerax-desde">{t("ceraExtraccionDesde")}</label>
+                <input id="cerax-desde" name="windowStart" type="date" required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="cerax-hasta">{t("ceraExtraccionHasta")}</label>
+                <input id="cerax-hasta" name="windowEnd" type="date" required />
+              </div>
+              <div className="nn-field">
+                <label htmlFor="cerax-destino">{t("ceraExtraccionDestino")}</label>
+                <select id="cerax-destino" name="destination" required defaultValue="">
+                  {/* El vacío no se ofrece como opción (Anexo E §6). */}
+                  <option value="" disabled />
+                  {DESTINOS_DE_CERA_SUBPRODUCTO.map((d) => (
+                    <option key={d} value={d}>
+                      {t(`ceraSubproductoDestino_${d}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="nn-field">
+                <label htmlFor="cerax-nota">{t("ceraExtraccionNota")}</label>
+                <input id="cerax-nota" name="notes" type="text" />
+              </div>
+              <BotonDeEnvio>{t("ceraExtraccionGuardar")}</BotonDeEnvio>
+            </form>
+          </details>
         ) : null}
       </section>
 

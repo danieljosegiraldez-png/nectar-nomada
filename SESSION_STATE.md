@@ -38,6 +38,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · La cera de la miel es subproducto, no merma (Q28, rebanada 2)
+
+ADR-178. La cera que sale al colar deja de ir en la merma y cuenta como salida del balance; la que
+sale al desopercular se anota por apiario y ventana de fechas, y la ficha dice qué cosechas de ese
+apiario caen dentro. No se eligen colmenas: se desopercula junto. **Sin ver en navegador.**
+
 ### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
 
 Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
@@ -47,6 +53,7 @@ el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con 
 **siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
 pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
 viejo, sigue hasta entonces. **Sin navegador.**
+
 
 ### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
 
@@ -93,8 +100,7 @@ en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tabla
 del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
 cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
 (`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
-en tablero y al abrir jornada; corregir no descuenta de nuevo. PR A; el PR B ya puede empezar:
-`PlotBlock` y `TrapRule` están en `main` desde el PR #413.
+en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-19):** intervenciones sobre bloques, la regla apunta a producto, aviso de trampa atendido (ver anexo PR B en el ADR).
 
 **Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
 55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
@@ -222,9 +228,8 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
   2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — bloqueado en que `PlotBlock` y `TrapRule` existan en `main`. Áreas
-  por bloque, `TrapRule.suggestedMaterialId`, botón «Registrar aplicación» desde el aviso de trampa,
-  aviso atendido. Pieza 2 (#369, diseño+plan fusionado).
+- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
+  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
