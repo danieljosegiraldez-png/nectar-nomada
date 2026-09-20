@@ -692,6 +692,18 @@
       "operacion": "tomadoDe",
       "razon": "Suma lo ya comprometido de UNA recepción —mermas vigentes más lo vinculado a lotes— dentro de la transacción que va a escribir, porque una suma leída fuera no es una garantía: dos mermas simultáneas la leerían las dos antes de que ninguna escribiera. Recibe el cliente de transacción para eso y sólo para eso; no es exportada, su único llamador es `anotarMerma` en este mismo archivo, que ya autorizó con `exigeGestionarBeneficio` y acaba de bloquear la fila de la recepción con `SELECT … FOR UPDATE`. Devuelve un número, no filas.",
       "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "recalcularVeredicto",
+      "razon": "Recibe el cliente de transacción PORQUE ÉSA es la propiedad: el veredicto de calidad de un lote se recalcula dentro de la misma transacción que la selección que lo cambia, así que no puede guardarse una selección sin su veredicto ni un veredicto sin su selección. Su único llamador es `recordSelection` (selection.ts), que ya pasó por `requireLotAccess(\"manage\")` sobre el lote de entrada dentro de `recordTransformation`. Lee las selecciones de ESE lote y sus recepciones, y escribe una sola fila, la suya.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "enLaMismaTransaccion (gancho de RecordTransformationInput)",
+      "razon": "No es una función que reciba una transacción: es un PARÁMETRO que la entrega. `recordTransformation` acepta un gancho que corre dentro de su transacción justo antes de confirmarla, para que un cálculo derivado —hoy `recalcularVeredicto`— no pueda guardarse por separado de la transformación que lo cambia: si lanza, todo revierte, y hay una prueba que lo afirma. Quien lo aprovecha está inventariado aparte. Lo que pase el gancho NO es una superficie nueva: `recordTransformation` ya autorizó los lotes de entrada con `requireLotAccess(\"manage\")` antes de abrir la transacción.",
+      "verificado": "2026-09-19"
     }
   ],
   "operaciones_sin_patron": [
@@ -1158,6 +1170,12 @@
       "archivo": "lib/traceability/lotesDeBeneficio.ts",
       "operacion": "origenDelLote",
       "razon": "Camina la genealogía hacia arriba —de salida a entrada de cada `LotTransformation`— hasta los lotes que tienen vínculo con una recepción, y devuelve esas recepciones con sus kilos. No recibe principal a propósito, misma disciplina que `leerEnmiendas` y `recepcionDeEntregas`: su llamador es la ficha del lote, que ya resolvió `requireLotAccess(\"view\")` sobre ese lote antes de pedir su historia. Darle compuerta propia crearía dos sitios donde decidir lo mismo. Devuelve ids de recepción y kilos de un lote ya concedido, y no escribe nada.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "recalcularVeredicto",
+      "razon": "No recibe principal a propósito: no es una superficie, es el cálculo derivado que corre dentro de la transacción de `recordSelection`, que ya autorizó el lote con `requireLotAccess(\"manage\")`. Darle compuerta propia resolvería dos veces la misma autorización —y con el `tx` a medias— que es como se acaba con dos respuestas distintas. Si un lote no viene de recepciones, no hace nada.",
       "verificado": "2026-09-19"
     }
   ]

@@ -145,6 +145,9 @@ describe("selection conserves mass", () => {
       inputQuantity: 186.4,
       unit: "kg",
       selectionMethodValueId: flotacionId,
+      // La flotación moja la cereza, así que desde la pieza 3 hay que declarar cómo se pesó
+      // (spec de la recepción a los lotes §3.4). Sin esto, `condicion_de_pesaje_obligatoria`.
+      condicionDePesaje: "DRAINED",
       occurredAt: new Date(),
       provenanceClass: "measured_fact",
       accepted: { lotCode: `${RUN_ID}-balanced-ok`, lotType: "cherry", quantity: 171.8 },
@@ -378,6 +381,9 @@ describe("outturn", () => {
       inputQuantity: 200,
       unit: "kg",
       selectionMethodValueId: flotacionId,
+      // La flotación moja la cereza, así que desde la pieza 3 hay que declarar cómo se pesó
+      // (spec de la recepción a los lotes §3.4). Sin esto, `condicion_de_pesaje_obligatoria`.
+      condicionDePesaje: "DRAINED",
       equipmentNote: "Tanque de flotación 2",
       occurredAt: new Date(),
       provenanceClass: "measured_fact",

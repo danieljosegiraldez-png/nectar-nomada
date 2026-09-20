@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**541 operaciones** que tocan la base, en **151 archivos**:
+**542 operaciones** que tocan la base, en **152 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -24,10 +24,16 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 |---:|---|---|
 | **408** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **73** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **74** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **El veredicto del lote (pieza 3, tarea 5, 2026-09-19): 521→522, y un archivo nuevo,
+> `lib/traceability/veredictoDelLote.ts`.** `recalcularVeredicto` entra como **«depende del
+> llamador»**, 70→71, y además en `reciben_transaccion`: las dos cosas por la misma razón, que
+> corre DENTRO de la transacción de `recordSelection` —que ya autorizó el lote— para que una
+> selección no pueda guardarse sin su veredicto.
 
 > **Armar el lote (pieza 3, tarea 4, 2026-09-19): 518→521, y un archivo nuevo,
 > `lib/traceability/lotesDeBeneficio.ts`.** `armarLote` y `recepcionesArmables` suben **guardia

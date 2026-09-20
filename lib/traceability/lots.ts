@@ -157,6 +157,19 @@ export interface RecordTransformationInput {
   // single correct default across split/merge/blend/stage_change/etc.
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  /**
+   * Cómo estaba la cereza al pesarla. Se declara **sólo cuando el método moja la cereza** —la
+   * flotación— porque es entonces cuando la diferencia entre escurrida y mojada es agua y no
+   * calidad (decisión de Daniel, 2026-09-19). `null` es «sin declarar», nunca una suposición.
+   */
+  condicionDePesaje?: "DRAINED" | "WET" | "DRY" | null;
+  /**
+   * Un gancho que corre DENTRO de la transacción, justo antes de confirmarla. Existe para que un
+   * cálculo derivado —hoy el veredicto de calidad de un lote— no pueda guardarse por separado de
+   * la transformación que lo cambia: si lanza, la transformación entera revierte. No es un sitio
+   * para efectos de fuera (correos, subidas): lo que haga aquí tiene que poder deshacerse.
+   */
+  enLaMismaTransaccion?: (tx: Prisma.TransactionClient, transformationId: string) => Promise<void>;
   inputs: ReadonlyArray<{ lotId: string; quantity?: number | null; unit?: string | null }>;
   // New Lot(s) this transformation produces — every LotTransformation output
   // is a freshly created Lot row (execution plan §8.1's lineage diagram: a
@@ -298,6 +311,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       data: {
         transformationType: input.transformationType,
         occurredAt: input.occurredAt,
+        condicionDePesaje: input.condicionDePesaje ?? null,
         operatorPersonId: input.operatorPersonId ?? null,
         notes: input.notes ?? null,
         createdBy: userAccountId,
@@ -446,6 +460,9 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       },
       tx,
     );
+
+    // El último acto de la transacción, para que lo que derive de ella no pueda quedarse a medias.
+    if (input.enLaMismaTransaccion) await input.enLaMismaTransaccion(tx, transformation.id);
 
     return { transformation, outputLots, reconciliation };
   });

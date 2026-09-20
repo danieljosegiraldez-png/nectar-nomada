@@ -757,6 +757,9 @@ export async function recordSelectionFormAction(
       // the weights on it are read off a scale — measured_fact, not a
       // recollection.
       provenanceClass: "measured_fact",
+      // Vacío es `null` —«sin declarar»—, no una suposición. El servicio la exige si el método es
+      // la flotación, y el formulario sólo la pide entonces.
+      condicionDePesaje: emptyToNull(formData.get("condicionDePesaje")) as "DRAINED" | "WET" | "DRY" | null,
     });
   } catch (error) {
     return { error: friendlyError(t, error) };
