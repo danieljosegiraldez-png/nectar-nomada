@@ -27,6 +27,15 @@ class CalibrationRecord:
 
 ## 3. Requisitos por instrumento
 
+> **Decisión de Daniel, 2026-09-14 — anotada aquí el 2026-09-19.** La verificación de un instrumento
+> es un **contraste contra patrón declarado** (agua a 0 °Bx; tampones 4,01 y 7,00; pesa patrón), no
+> una vigencia de calendario. **El tiempo sólo avisa**: un instrumento vencido se sigue usando y su
+> lectura queda marcada (`REVISION_VENCIDA`); bloquear se esquiva en el patio y el sistema sabe menos.
+> La columna «Vigencia» de abajo es, desde entonces, **el plazo del aviso**, no una condición de uso.
+> Y el 2026-09-19 (ADR-181 §17): avisar también **antes** de vencer, al beneficio y al procesador.
+> `CLAUDE.md` decía que esta sección ya estaba cambiada; no lo estaba hasta esta nota.
+
+
 | Instrumento | Procedimiento mínimo | Vigencia `[PROVISIONAL]` | Criterio de rechazo |
 | :--- | :--- | :--- | :--- |
 | **Potenciómetro (pH)** | Calibración de dos puntos con buffers 4.01 y 7.00, a temperatura ambiente registrada | 24 h en cosecha activa | Pendiente (*slope*) fuera de 92–102 %; deriva > 0.05 pH contra buffer de verificación |

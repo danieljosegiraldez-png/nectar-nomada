@@ -100,6 +100,13 @@ Enmienda a la v2.0: la fermentación anaeróbica corta de vinazos **no puede esp
 
 ## 5. Cáscara: producto alimenticio, no subproducto
 
+> **Decisión de Daniel, 2026-09-19 (ADR-181 §18).** No usa 75–80 °C durante 12 h. Su proceso:
+> deshidratador por bandejas, pocas capas, de horas a días, ciclos de secar y reposar con temperatura
+> y abanico ajustables, lento para no volatilizar. Terminada por **humedad**, tacto y sensorial
+> opcionales. Otra fuente: la cáscara seca que sale al trillar un natural. Es secundaria al café.
+> El parámetro de choque térmico de abajo se retira como valor por defecto.
+
+
 La v2.0 trataba la cáscara como una salida de proceso más. Es un **alimento de exportación** y arrastra obligaciones que ninguna otra línea tiene. `CascaraBatch` es una entidad de primera clase con su propio ciclo de vida (ver 01 §1).
 
 **Puntos de control obligatorios:**

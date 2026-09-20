@@ -4095,6 +4095,7 @@ ADR-169. Daniel: «lo elige quien despacha». **El despacho no existía** —nad
 `fulfilled`— y hay cero pedidos en la copia local. `/tienda` lista los pagados; por artículo se dice
 cuántos frascos salen de cada lote recibido, la suma tiene que dar lo pedido, y los kilos salen del
 libro del lote (`transfer_out`). Falta que el cliente lo vea en «Mis pedidos».
+**Archivado el 2026-09-19** (estado en 393/400 líneas), la entrada más vieja sin nada pendiente:
 
 ### 2026-09-18 · Anular una asignación a tienda que no va a llegar
 
@@ -4118,3 +4119,15 @@ parcelas». Spec y plan `docs/superpowers/{specs,plans}/2026-09-18-fincas-y-parc
 **De Daniel:** crear el terreno de **Kiva Estate** desde `/fincas` → «sin terreno». El seed dice que
 es un nombre ficticio (`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que
 él decida.
+
+### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
+
+`friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
+`PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
+propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
+ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.** Quedan **nueve clases**
+más con el mismo defecto: `PENDING_IMPLEMENTATIONS/013`.
+
+## 3. Bloqueado, y en qué
+
+#
