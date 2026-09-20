@@ -660,6 +660,8 @@ describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
     const detalle = await getPlotDetail(userAccountId, parcela.id);
     expect(detalle.reglaDeTrampas).toEqual({
       triggerLevel: "algunos", normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic",
+      // Tarea 3 — sin producto sugerido, `suggestedMaterial` es null, no ausente.
+      suggestedMaterial: null,
     });
     expect(detalle.trampas).toHaveLength(1);
     expect(detalle.trampas[0]!.instaladaEl?.toISOString().slice(0, 10)).toBe("2026-09-02");
@@ -714,7 +716,13 @@ describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
 
     const detalle = await getPlotDetail(userAccountId, microparcela.id);
     expect(detalle.farmLocationId).toBe(sitio);
-    const regla = { triggerLevel: "algunos" as const, normalDays: 14, alertDays: 7, suggestedAction: "aplicar Bralic" };
+    const regla = {
+      triggerLevel: "algunos" as const,
+      normalDays: 14,
+      alertDays: 7,
+      suggestedAction: "aplicar Bralic",
+      suggestedMaterial: null,
+    };
     expect(detalle.reglaDeTrampas).toEqual(regla);
 
     // Y el estado que calcula la pantalla no es "sin_regla" — el mismo

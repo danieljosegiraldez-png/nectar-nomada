@@ -13,6 +13,7 @@ import { PlotAttributesForm } from "../../../components/traceability/PlotAttribu
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
+import { productosFitosanitariosSiPuede } from "../../../../lib/traceability/intervenciones";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
 import { AsignarTipoDeBloqueForm } from "../../../components/traceability/AsignarTipoDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
@@ -56,10 +57,20 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const puedeSubdividir = location.locationType === "plot";
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
-  const [calicatas, bloques, { people, selfPersonId }] = await Promise.all([
+  // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
+  // `lot:view` (lo que exige el selector) son permisos distintos sobre
+  // ámbitos que NO se implican entre sí — un ámbito alcanza sus
+  // descendientes, nunca sus ancestros —, así que alguien con permiso sólo
+  // sobre la parcela puede entrar aquí y no tener `lot:view` en la finca.
+  // `productosFitosanitariosSiPuede` no lanza en ese caso: sin permiso, el
+  // selector sale vacío en vez de reventar la página entera. `farmLocationId`
+  // ya viene de `detail` (resuelto por `resolveFarmSiteId`, el sitio
+  // antepasado): no se recalcula aquí con `parentLocation?.id ?? location.id`.
+  const [calicatas, bloques, { people, selfPersonId }, productosDeLaFinca] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
+    productosFitosanitariosSiPuede(user.userAccountId, farmLocationId),
   ]);
 
   return (
@@ -298,7 +309,12 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <p className="nn-muted">{t("trapRuleNone")}</p>
         )}
-        <ReglaDeTrampasForm locationId={location.id} farmLocationId={farmLocationId} regla={reglaDeTrampas} />
+        <ReglaDeTrampasForm
+          locationId={location.id}
+          farmLocationId={farmLocationId}
+          regla={reglaDeTrampas}
+          productos={productosDeLaFinca}
+        />
       </section>
     </div>
   );

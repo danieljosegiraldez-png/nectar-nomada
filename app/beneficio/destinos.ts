@@ -8,6 +8,10 @@
  */
 export function destinosDelBeneficio(granted: Set<string>) {
   return [
+    // Spec recepción de cereza §4: la entrada del beneficio. Ver pendientes y lo recibido pide
+    // `lot:view` sobre el beneficio; recibir y pedir, `lot:manage`, que exige cada servicio.
+    { href: "/beneficio/recepcion", clave: "recepcion", visible: true },
+    { href: "/beneficio/pedidos", clave: "pedidos", visible: true },
     // Lotes y el informe son de lectura: los ve quien entra a la sección.
     { href: "/lots", clave: "lotes", visible: true },
     // Recetas, sólo quien gestiona lotes: `listRecipes` exige `manage` sobre un

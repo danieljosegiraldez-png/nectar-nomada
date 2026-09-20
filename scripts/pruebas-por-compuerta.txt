@@ -55,6 +55,8 @@ tests/apiary/nodo.test.ts
 tests/apiary/alzas.test.ts
 tests/apiary/cera.test.ts
 tests/apiary/marcosNegros.test.ts
+tests/apiary/recipientes.test.ts
+tests/apiary/ceraDeExtraccion.test.ts
 tests/sensores/ingesta.test.ts
 tests/sensores/derivar.test.ts
 tests/sensores/ruta-de-ingesta.test.ts
@@ -64,6 +66,10 @@ tests/traceability/entregaDeCosecha-esquema.test.ts
 tests/traceability/jornadasDeCosecha.test.ts
 tests/traceability/entregasDeCosecha.test.ts
 tests/traceability/situacionesDeCampo.test.ts
+tests/traceability/recepcionDeCereza-esquema.test.ts
+tests/traceability/destinoDeJornada.test.ts
+tests/traceability/pedidosDeCereza.test.ts
+tests/traceability/recepcionesDeCereza.test.ts
 tests/apiary/reinas.test.ts
 tests/apiary/refractometroDeMiel.test.ts
 tests/apiary/mielDelLote.test.ts
@@ -150,6 +156,7 @@ tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts
 tests/traceability/lotProcess.test.ts
 tests/traceability/manejoEsquema.test.ts
+tests/traceability/manejoPrB.test.ts
 tests/traceability/reporteDeProceso.test.ts
 tests/traceability/coordenadasDelSitio.test.ts
 tests/traceability/lots.test.ts

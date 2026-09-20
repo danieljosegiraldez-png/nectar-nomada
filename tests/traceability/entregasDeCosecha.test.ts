@@ -18,6 +18,7 @@ const hoy = new Date(new Date().toISOString().slice(0, 10));
 
 let orgId: string;
 let finca: string;
+let beneficio: string;
 let parcela: string;
 let otraParcela: string;
 let bloque: string;
@@ -48,6 +49,7 @@ async function cuenta(personId: string, perfil: string) {
 beforeAll(async () => {
   orgId = (await prisma.organization.create({ data: { organizationType: "farm", name: `TEST Finca (${RUN})`, status: "approved", classification: "internal" } })).id;
   finca = (await prisma.location.create({ data: { name: `TEST Finca (${RUN})`, locationType: "site", organizationId: orgId, classification: "internal" } })).id;
+  beneficio = (await prisma.location.create({ data: { name: `TEST Beneficio (${RUN})`, locationType: "beneficio", parentLocationId: finca, classification: "internal" } })).id;
   parcela = (await prisma.location.create({ data: { name: `TEST P (${RUN})`, locationType: "plot", parentLocationId: finca, classification: "internal" } })).id;
   otraParcela = (await prisma.location.create({ data: { name: `TEST Q (${RUN})`, locationType: "plot", parentLocationId: finca, classification: "internal" } })).id;
   bloque = (await prisma.plotBlock.create({ data: { locationId: parcela, name: `TEST Bloque (${RUN})` } })).id;
@@ -60,7 +62,7 @@ beforeAll(async () => {
   await agregarRecolector(capataz, { fincaSiteId: finca, personId: r2, desde: ayer });
   jornada = (
     await abrirJornada(capataz, {
-      fincaSiteId: finca,
+      fincaSiteId: finca, beneficioId: beneficio,
       fecha: hoy,
       asignaciones: [
         { locationId: parcela, personId: r1 },
@@ -83,7 +85,7 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: bloque }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, otraParcela] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficio, parcela, otraParcela] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: finca }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });
@@ -122,7 +124,7 @@ describe("anotar la entrega", () => {
   }, 20000);
 
   it("en una jornada cerrada no se anota", async () => {
-    const otra = await abrirJornada(capataz, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: r1 }] });
+    const otra = await abrirJornada(capataz, { fincaSiteId: finca, beneficioId: beneficio, fecha: hoy, asignaciones: [{ locationId: parcela, personId: r1 }] });
     await cerrarJornada(capataz, otra.id);
     await expect(anotarEntrega(capataz, { ...base(), jornadaId: otra.id, recolectorPersonId: r1, origen: { locationId: parcela } })).rejects.toThrow(
       /jornada_cerrada/,

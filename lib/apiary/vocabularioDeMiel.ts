@@ -6,7 +6,7 @@
  * decantar y madurar en el madurador, y se homogeniza antes de envasar. «Otro, ¿cuál?» para lo
  * que no entra (Daniel: vocabularios fijos, con salida para lo que no está).
  */
-import type { HoneyProcessAct } from "../../generated/prisma/client";
+import type { ByproductDestination, HoneyProcessAct } from "../../generated/prisma/client";
 
 export class MielInvalida extends Error {}
 
@@ -54,3 +54,12 @@ export function kilos(valor: unknown, campo: string): number | null {
   if (!Number.isFinite(n) || n < 0) throw new MielInvalida(`kilos_invalidos:${campo}`);
   return n;
 }
+
+
+/**
+ * A dónde va la cera que sale de la miel — spec 2026-09-19 §4.1. Daniel pidió las cuatro: fundirla
+ * para lámina propia, venderla (`SALE`, que ya existía), guardarla, u otro uso. Vive aquí, en el
+ * módulo puro, porque la elige el formulario de proceso, que es de CLIENTE: desde
+ * `lib/apiary/ceraDeExtraccion.ts` arrastraría `prisma` al navegador.
+ */
+export const DESTINOS_DE_CERA_SUBPRODUCTO: readonly ByproductDestination[] = ["LAMINA_PROPIA", "SALE", "GUARDADA", "OTRO"];

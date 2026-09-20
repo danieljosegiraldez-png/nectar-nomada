@@ -1,6 +1,6 @@
 import type { EstadoDeProduccion } from "./estadoDeProduccion";
 import { carenciaDeIntervencion, reentradaDeIntervencion, type IntervencionParaCarencia } from "./carenciaDeIntervencion";
-import { avisosDeTrampas, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
+import { avisosDeTrampas, type IntervencionQueCubre, type ReglaParaAviso, type TrampaParaAviso } from "./pendienteDeTrampas";
 
 /**
  * Lo pendiente de una parcela — tablero de parcela, spec §4.
@@ -30,6 +30,14 @@ export interface EntradaDePendiente {
   /** Hoy como `YYYY-MM-DD`, de `diaDeHoy(ahora, location.timezone)`. */
   hoy: string;
   /**
+   * `location.timezone` tal cual — revisión final del PR B, hallazgos 1 y 3:
+   * `avisosDeTrampas` la necesita para comparar el día de una intervención
+   * contra el día de la lectura que disparó, en la misma zona que calculó
+   * `hoy`. Nunca se inventa un valor por defecto aquí: eso ya lo decide
+   * `diaDeHoy`.
+   */
+  zona: string | null;
+  /**
    * `location.areaHectares`, pasado por `Number()` sólo si no es nulo. El aviso
    * de área sale de aquí y NO de `computePlotDensity`: ésa devuelve
    * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con
@@ -50,6 +58,13 @@ export interface EntradaDePendiente {
   trampas: readonly TrampaParaAviso[];
   /** La regla de la finca. `null` = sin regla, y sin regla no hay avisos de trampas. */
   regla: ReglaParaAviso | null;
+  /**
+   * Las intervenciones que pueden «atender» una trampa (spec §4.2) — vigentes
+   * de esta MISMA parcela, no las de `intervenciones` (que incluye las
+   * emparentadas, para carencia/reentrada). La página las filtra por
+   * `locationId` antes de pasarlas.
+   */
+  intervencionesDeTrampas: readonly IntervencionQueCubre[];
 }
 
 export type Aviso =
@@ -65,7 +80,17 @@ export type Aviso =
   | { tipo: "carencia_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
   | { tipo: "reentrada_no_declarada"; interventionId: string; locationId: string; alMenosHasta: Date | null }
   | { tipo: "trampa_por_revisar"; specimenId: string; trapNumber: number | null; diasDeRetraso: number }
-  | { tipo: "trampa_con_lectura_alta"; specimenId: string; trapNumber: number | null; lectura: string; accion: string };
+  | {
+      tipo: "trampa_con_lectura_alta";
+      specimenId: string;
+      trapNumber: number | null;
+      lectura: string;
+      accion: string;
+      observationId: string;
+      plotBlockId: string | null;
+      materialId: string | null;
+      materialName: string | null;
+    };
 
 /** Mismo día y mes del año siguiente; un 29 de febrero vence el 28. */
 export function venceElMuestreo(ultimoDia: string): string {
@@ -105,7 +130,9 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     tocaHacer.push({ tipo: "muestras_sin_resultado", suelo: sueloSinResultado, foliar: foliarSinResultado });
   }
 
-  tocaHacer.push(...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla }));
+  tocaHacer.push(
+    ...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla, intervenciones: e.intervencionesDeTrampas, zona: e.zona }),
+  );
 
   if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
   // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.
@@ -155,4 +182,22 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
     case "trampa_con_lectura_alta":
       return `/plots/${locationId}?pestana=trampas`;
   }
+}
+
+/**
+ * El botón «Registrar aplicación» de un aviso de lectura alta — PR B tarea 5,
+ * decisión del controlador #4. Distinto de `enlaceDelAviso`, que sigue
+ * llevando a `#trampas`: éste abre el formulario de manejo con lo que ya se
+ * sabe precargado. Sólo `motivo` es seguro (la observación que disparó el
+ * aviso siempre existe); `bloque` y `material` se omiten si son nulos — el
+ * formulario no pinta un parámetro vacío como si fuera una elección.
+ */
+export function enlaceDeRegistrarAplicacion(
+  aviso: Extract<Aviso, { tipo: "trampa_con_lectura_alta" }>,
+  locationId: string,
+): string {
+  const params = new URLSearchParams({ motivo: aviso.observationId });
+  if (aviso.plotBlockId != null) params.set("bloque", aviso.plotBlockId);
+  if (aviso.materialId != null) params.set("material", aviso.materialId);
+  return `/plots/${locationId}/manejo/nuevo?${params.toString()}`;
 }

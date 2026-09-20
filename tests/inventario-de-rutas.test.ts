@@ -171,7 +171,11 @@ describe("el inventario del router", () => {
     // `plot`, creada con `createMicrolot` — no la Location `micro_plot`, corregido tras
     // revisión), y su formulario de creación sale del tablero (no vive captura en el
     // dashboard).
-    expect(salida).toContain("103 entradas");
+    // 103 (rama) + 98 (origin/main, con recepción de cereza) fusionados el 2026-09-19
+    // (merge-main-3): unión de rutas de ambos lados. Cifra REAL medida con
+    // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado — ver el informe
+    // de este merge (merge-main-3): 105 entradas (94 páginas, 11 handlers).
+    expect(salida).toContain("105 entradas");
     expect(codigo, salida).toBe(0);
   });
 

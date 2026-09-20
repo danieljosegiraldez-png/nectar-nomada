@@ -42,6 +42,11 @@ export function validarMasaDeSubproducto(massKg: number): void {
 
 export async function crearSubproducto(userAccountId: string, input: CrearSubproductoInput) {
   validarMasaDeSubproducto(input.massKg);
+  // La CERA no entra por aquí (revisión de Codex, ADR-178): este servicio añade un subproducto a
+  // una transformación que YA cuadró su balance, y nadie lo vuelve a conciliar — la cera se
+  // quedaría fuera de la masa de salida. Sus dos caminos la escriben dentro de la transacción que
+  // hace el balance (`procesarMiel`) o sin transformación (`ceraDeExtraccion.ts`).
+  if (input.byproductType === "CERA") throw new ByproductValidationError("la cera se anota al colar o en el apiario, no aquí");
 
   const transformacion = await prisma.lotTransformation.findUnique({
     where: { id: input.transformationId },

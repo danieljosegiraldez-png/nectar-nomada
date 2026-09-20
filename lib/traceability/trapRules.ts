@@ -1,7 +1,7 @@
 import type { TrapCaptureLevel } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLocationAttributeAccess } from "./locations";
+import { requireLocationAttributeAccess, resolveOrganizationForLocation } from "./locations";
 
 export class TrapRuleValidationError extends Error {}
 
@@ -13,6 +13,15 @@ export interface SaveTrapRuleInput {
   normalDays: number;
   alertDays: number;
   suggestedAction: string;
+  /**
+   * El producto fitosanitario que sugiere la regla (spec fitosanitario §4.2).
+   * Opcional: `null`/`undefined` es «sin producto», nunca un id inventado.
+   * Tiene que existir, ser `isPlantProtection` y ser de la organización de la
+   * finca (`resolveOrganizationForLocation(farmLocationId)`) — nunca
+   * `farmLocation.organizationId` directo, porque una finca real puede
+   * heredarlo de un ancestro.
+   */
+  suggestedMaterialId?: string | null;
 }
 
 /**
@@ -38,11 +47,28 @@ export async function saveTrapRule(userAccountId: string, input: SaveTrapRuleInp
 
   await requireLocationAttributeAccess(userAccountId, input.farmLocationId);
 
+  const suggestedMaterialId = input.suggestedMaterialId ?? null;
+  if (suggestedMaterialId) {
+    const material = await prisma.consumableMaterial.findUnique({
+      where: { id: suggestedMaterialId },
+      select: { organizationId: true, isPlantProtection: true },
+    });
+    if (!material) throw new TrapRuleValidationError("suggested_material_not_found");
+    if (!material.isPlantProtection) {
+      throw new TrapRuleValidationError("suggested_material_not_plant_protection");
+    }
+    const organizationId = await resolveOrganizationForLocation(input.farmLocationId);
+    if (material.organizationId !== organizationId) {
+      throw new TrapRuleValidationError("suggested_material_other_organization");
+    }
+  }
+
   const campos = {
     triggerLevel: input.triggerLevel,
     normalDays: input.normalDays,
     alertDays: input.alertDays,
     suggestedAction,
+    suggestedMaterialId,
   };
 
   return prisma.$transaction(async (tx) => {

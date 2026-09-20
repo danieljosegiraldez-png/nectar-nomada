@@ -14,15 +14,23 @@ import {
   registrarIntervencion,
   corregirIntervencion,
   productosFitosanitarios,
+  productosFitosanitariosSiPuede,
+  intervencionesVigentes,
+  listarIntervenciones,
+  bloquesDeLaParcela,
+  motivoValidoParaParcela,
+  contextoDeManejo,
   IntervencionValidationError,
   type RegistrarIntervencionInput,
 } from "../../lib/traceability/intervenciones";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { LocationAccessError } from "../../lib/traceability/locations";
 import { crearMaterial } from "../../lib/inventario/materiales";
 import { recibirLote } from "../../lib/inventario/lotes";
 import { existencias } from "../../lib/inventario/existencias";
 import { startFieldSession, endFieldSession } from "../../lib/traceability/fieldSessions";
 import { recordSpecimenObservation } from "../../lib/traceability/specimens";
+import { createPlotBlock, listPlotBlocks } from "../../lib/traceability/plotBlocks";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -67,6 +75,26 @@ let trampaAjena: string;
 let lecturaPropia: string;
 let lecturaAjena: string;
 let observacionNoTrampa: string;
+// Ronda final de arreglos, hallazgo 6: una trampa en `finca` (la MADRE de
+// `parcelaHija`) y otra en `parcelaHija` misma, para exigir la MISMA parcela
+// en `motivoObservationId` — no basta con estar emparentada.
+let trampaEnFinca: string;
+let lecturaEnFinca: string;
+let trampaEnParcelaHija: string;
+let lecturaEnParcelaHija: string;
+// Tarea 2: un bloque de `parcela` y uno de `otraParcela`, para «el bloque
+// tiene que tener locationId IGUAL a la parcela de la intervención».
+let bloque: string;
+let bloqueAjeno: string;
+// Ronda de arreglos 1 (hallazgo crítico): `bloquesDeLaParcela` se lee con
+// `lot:view`/`manage`, nunca `location:manage_attributes`. `soloVista` tiene
+// el primero y no el segundo (perfil `Project Viewer`); `operadorSinAtributos`
+// es un `Farm Operator` (lot:manage) con ese permiso QUITADO por un `deny` de
+// asignación — el mismo patrón de «grant más estrecho» que describe el
+// catálogo de roles y que dispara el defecto real.
+let soloVista: string;
+let operadorSinAtributos: string;
+let assignmentOperadorSinAtributos: string;
 
 async function crearPersona(label: string) {
   const persona = await prisma.person.create({
@@ -83,14 +111,15 @@ async function crearCuenta(label: string) {
   return cuenta.id;
 }
 
-async function asignarRol(userAccountId: string, roleProfileName: string, locationId: string) {
+async function asignarRol(userAccountId: string, roleProfileName: string, locationId: string): Promise<string> {
   const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: roleProfileName } });
   // Dos roles pueden compartir el mismo ámbito de ubicación: `Scope` es único
   // por (scopeType, scopeRefId), como en `consumo-descuenta.test.ts`.
   const scope =
     (await prisma.scope.findFirst({ where: { scopeType: "location", scopeRefId: locationId } })) ??
     (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: locationId } }));
-  await prisma.assignment.create({ data: { userAccountId, roleProfileId: perfil.id, scopeId: scope.id } });
+  const a = await prisma.assignment.create({ data: { userAccountId, roleProfileId: perfil.id, scopeId: scope.id } });
+  return a.id;
 }
 
 beforeAll(async () => {
@@ -307,21 +336,90 @@ beforeAll(async () => {
       provenanceClass: "direct_observation",
     })
   ).id;
+
+  // Ronda final de arreglos, hallazgo 6: `finca` es la MADRE de `parcelaHija`
+  // (`ubicacionesEmparentadas(parcelaHija)` la incluye), así que antes del
+  // arreglo una lectura de `finca` se aceptaba como motivo de una
+  // intervención sobre `parcelaHija`. `gestor` tiene `Farm Manager` en
+  // `finca`; `operador` tiene `Farm Operator` en `parcelaHija`.
+  trampaEnFinca = (
+    await prisma.specimen.create({
+      data: { locationId: finca, specimenType: "trap", commonName: `Trampa en finca ${RUN_ID}`, provenanceClass: "original_record" },
+    })
+  ).id;
+  lecturaEnFinca = (
+    await recordSpecimenObservation(gestor, {
+      specimenId: trampaEnFinca,
+      observationType: "trap_check",
+      observedAt: new Date("2026-09-09T12:00:00Z"),
+      captureCount: 4,
+      brocaLevel: "algunos",
+      provenanceClass: "direct_observation",
+    })
+  ).id;
+  trampaEnParcelaHija = (
+    await prisma.specimen.create({
+      data: { locationId: parcelaHija, specimenType: "trap", commonName: `Trampa en hija ${RUN_ID}`, provenanceClass: "original_record" },
+    })
+  ).id;
+  lecturaEnParcelaHija = (
+    await recordSpecimenObservation(operador, {
+      specimenId: trampaEnParcelaHija,
+      observationType: "trap_check",
+      observedAt: new Date("2026-09-09T12:00:00Z"),
+      captureCount: 2,
+      brocaLevel: "algunos",
+      provenanceClass: "direct_observation",
+    })
+  ).id;
+
+  // Tarea 2: un bloque de `parcela` y uno de `otraParcela`. `blockType` es
+  // obligatorio desde la decisión de Daniel del 2026-09-19 (microparcela ya
+  // no es un tipo de bloque); "experimental" porque estas pruebas no son de
+  // trampas, son de intervenciones sobre un bloque cualquiera.
+  bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}`, blockType: "experimental" })).id;
+  bloqueAjeno = (
+    await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}`, blockType: "experimental" })
+  ).id;
+
+  // Ronda de arreglos 1 (hallazgo crítico): `soloVista` tiene `lot:view` (perfil
+  // `Project Viewer`) y NINGÚN `location:manage_attributes`.
+  soloVista = await crearCuenta("SoloVista");
+  await asignarRol(soloVista, "Project Viewer", parcela);
+
+  // `operadorSinAtributos`: `Farm Operator` (que trae `lot:manage` Y
+  // `location:manage_attributes` de perfil) con ese segundo permiso QUITADO
+  // por un `deny` de asignación — el «grant más estrecho que el perfil» que
+  // el propio catálogo describe como patrón válido (comentario de «Farm
+  // Manager» en `lib/rbac/catalog.ts`) y que dispara el defecto real.
+  operadorSinAtributos = await crearCuenta("OperadorSinAtributos");
+  assignmentOperadorSinAtributos = await asignarRol(operadorSinAtributos, "Farm Operator", parcela);
+  const permisoManageAttributes = await prisma.permission.findFirstOrThrow({
+    where: { resourceType: "location", action: "manage_attributes" },
+  });
+  await prisma.assignmentPermissionOverride.create({
+    data: { assignmentId: assignmentOperadorSinAtributos, permissionId: permisoManageAttributes.id, effect: "deny" },
+  });
 }, 30000);
 
 afterAll(async () => {
   await prisma.fieldEvent.deleteMany({
     where: assertDefinedWhere({ fieldSessionId: { in: [jornada, jornadaOtraParcela, jornadaCerrada, jornadaEnFinca] } }),
   });
-  await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimenId: { in: [trampaPropia, trampaAjena] } }) });
+  await prisma.specimenObservation.deleteMany({
+    where: assertDefinedWhere({ specimenId: { in: [trampaPropia, trampaAjena, trampaEnFinca, trampaEnParcelaHija] } }),
+  });
 
   const ubicaciones = [parcela, otraParcela, parcelaOtraOrg, finca, parcelaHija];
   const originales = await prisma.plotIntervention.findMany({ where: { locationId: { in: ubicaciones } }, select: { id: true } });
   const idsIntervenciones = originales.map((o) => o.id);
   await prisma.plotInterventionLine.deleteMany({ where: assertDefinedWhere({ interventionId: { in: idsIntervenciones } }) });
+  // Las áreas ANTES que los bloques: `plotBlock` tiene `onDelete: Restrict`
+  // desde `plotInterventionArea` (brief, Limpieza completa).
   await prisma.plotInterventionArea.deleteMany({ where: assertDefinedWhere({ interventionId: { in: idsIntervenciones } }) });
   await prisma.plotIntervention.deleteMany({ where: assertDefinedWhere({ id: { in: idsIntervenciones }, correctsId: { not: null } }) });
   await prisma.plotIntervention.deleteMany({ where: assertDefinedWhere({ id: { in: idsIntervenciones } }) });
+  await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: { in: [bloque, bloqueAjeno] } }) });
 
   const materiales = [fito, fito2, fitoOtraOrg];
   const lotes = await prisma.consumableLot.findMany({ where: { materialId: { in: materiales } }, select: { id: true } });
@@ -330,7 +428,9 @@ afterAll(async () => {
   await prisma.consumableLot.deleteMany({ where: assertDefinedWhere({ id: { in: idsLotes } }) });
   await prisma.consumableMaterial.deleteMany({ where: assertDefinedWhere({ id: { in: [fito, aserrin, fito2, fitoOtraOrg] } }) });
 
-  await prisma.specimen.deleteMany({ where: assertDefinedWhere({ id: { in: [plantaPropia, plantaAjena, trampaPropia, trampaAjena] } }) });
+  await prisma.specimen.deleteMany({
+    where: assertDefinedWhere({ id: { in: [plantaPropia, plantaAjena, trampaPropia, trampaAjena, trampaEnFinca, trampaEnParcelaHija] } }),
+  });
 
   await prisma.fieldSession.deleteMany({
     where: assertDefinedWhere({ id: { in: [jornada, jornadaOtraParcela, jornadaCerrada, jornadaEnFinca] } }),
@@ -588,6 +688,28 @@ describe("la organización se resuelve subiendo por parentLocationId (ronda de a
 });
 
 /**
+ * Tarea 3, ronda de arreglos 1 — la regla de trampas ofrece este selector
+ * como algo OPCIONAL (`app/plots/[id]/ajustes/page.tsx`), y `operador` es el
+ * fixture que ya reproduce el hueco: `Farm Operator` en `parcelaHija`, hija
+ * de `finca`, y NINGÚN `Assignment` en `finca` misma. Un ámbito de ubicación
+ * alcanza sus descendientes, nunca sus ancestros, así que pedir
+ * `lot:view` sobre `finca` con la asignación de `operador` falla — y antes de
+ * esta ronda esa falla llegaba sin capturar hasta la página.
+ */
+describe("productosFitosanitariosSiPuede — ronda de arreglos 1", () => {
+  it("sin lot:view en la finca (ámbito sólo en la parcela hija): lista vacía, no lanza", async () => {
+    await expect(productosFitosanitariosSiPuede(operador, finca)).resolves.toEqual([]);
+  });
+
+  it("control: con lot:view en la finca, trae los mismos productos que productosFitosanitarios", async () => {
+    const esperado = await productosFitosanitarios(gestor, finca);
+    const obtenido = await productosFitosanitariosSiPuede(gestor, finca);
+    expect(obtenido).toEqual(esperado);
+    expect(obtenido.map((p) => p.id)).toContain(fito);
+  });
+});
+
+/**
  * Revisión final, hallazgo 2: como mucho UNA corrección vigente por
  * intervención, garantizado en la BASE (índice único parcial, migración
  * `20260918170000_correccion_unica_y_cantidad_no_negativa`), no sólo por la
@@ -777,5 +899,233 @@ describe("revisión final — hallazgo 5: cantidad negativa se rechaza en servic
     // Control positivo del propio CHECK: 0 sí entra por este mismo camino directo.
     const linea0 = await prisma.plotInterventionLine.create({ data: { interventionId: o.id, materialId: fito, quantity: 0 } });
     expect(linea0.quantity?.toNumber()).toBe(0);
+  });
+});
+
+/**
+ * PR B, Tarea 2 — intervenciones sobre bloques (`task-2-brief.md`). El bloque
+ * tiene que tener `locationId` IGUAL a la parcela de la intervención: no
+ * basta con estar emparentado (a diferencia de la jornada o la observación
+ * que motiva, arriba, que sí aceptan parentesco).
+ */
+describe("intervenciones sobre bloques — Tarea 2", () => {
+  it("un bloque de OTRA parcela se rechaza; uno de ésta entra con su propia área", async () => {
+    await expect(registrarIntervencion(operador, base({ plotBlockIds: [bloqueAjeno] }))).rejects.toThrow(
+      IntervencionValidationError,
+    );
+    const ok = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: ok.id } });
+    expect(areas).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+
+  it("corregir con bloques: la fila nueva lleva sus propias áreas de bloque, la original ninguna", async () => {
+    const o = await registrarIntervencion(operador, base());
+    const c = await corregirIntervencion(operador, {
+      interventionId: o.id,
+      motivo: "era sobre un bloque",
+      nueva: base({ plotBlockIds: [bloque] }),
+    });
+    expect(await prisma.plotInterventionArea.count({ where: { interventionId: o.id } })).toBe(0);
+    const areasCorreccion = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areasCorreccion).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+
+  it("intervencionesVigentes: sin áreas → parcelaEntera true y plotBlockIds vacío", async () => {
+    const o = await registrarIntervencion(operador, base());
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: true, plotBlockIds: [] });
+  });
+
+  it("intervencionesVigentes: con un bloque → parcelaEntera false y plotBlockIds con su id", async () => {
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: false, plotBlockIds: [bloque] });
+  });
+
+  it("intervencionesVigentes: sólo plantas → parcelaEntera false y plotBlockIds vacío (no se confunde con bloque)", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia] }));
+    const vigentes = await intervencionesVigentes([parcela]);
+    expect(vigentes.find((v) => v.id === o.id)).toMatchObject({ parcelaEntera: false, plotBlockIds: [] });
+  });
+
+  // Tarea 5 PR B: la ficha (`/plots/<id>/manejo/<id>`) enseña el bloque por su
+  // nombre, no un «—». `listarIntervenciones` es lo que se lo trae.
+  it("listarIntervenciones: el área de un bloque trae el NOMBRE del bloque", async () => {
+    const bloqueDeLaBase = await prisma.plotBlock.findUniqueOrThrow({ where: { id: bloque } });
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+    const lista = await listarIntervenciones(operador, parcela);
+    const encontrada = lista.find((i) => i.id === o.id)!;
+    expect(encontrada.areas).toEqual([
+      expect.objectContaining({ plotBlockId: bloque, specimenId: null, plotBlock: { name: bloqueDeLaBase.name } }),
+    ]);
+  });
+});
+
+/**
+ * Ronda final de arreglos, hallazgo 2: el modelo permite áreas MIXTAS (una
+ * planta Y un bloque en la misma intervención — `crearAreas` nunca lo
+ * prohibió), pero el formulario obligaba a elegir un modo excluyente, así que
+ * corregir una intervención mixta mostrando sólo "plantas" enviaba
+ * `plotBlockIds: []` y el bloque desaparecía en silencio. El arreglo es del
+ * formulario (`IntervencionForm.tsx`: las dos secciones se envían siempre
+ * juntas); esta prueba demuestra que el SERVICIO, que es lo que el formulario
+ * arreglado ahora envía, conserva las dos áreas sin necesidad de otro cambio.
+ */
+describe("áreas mixtas (planta Y bloque) — ronda final, hallazgo 2", () => {
+  it("registrar con planta y bloque a la vez guarda las dos áreas", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia], plotBlockIds: [bloque] }));
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: o.id } });
+    expect(areas).toHaveLength(2);
+    expect(areas).toContainEqual(expect.objectContaining({ plotBlockId: null, specimenId: plantaPropia }));
+    expect(areas).toContainEqual(expect.objectContaining({ plotBlockId: bloque, specimenId: null }));
+  });
+
+  it("corregir reenviando la planta y el bloque precargados conserva las dos áreas en la fila nueva", async () => {
+    const o = await registrarIntervencion(operador, base({ specimenIds: [plantaPropia], plotBlockIds: [bloque] }));
+    const c = await corregirIntervencion(operador, {
+      interventionId: o.id,
+      motivo: "sólo se corrigen las notas; planta y bloque van tal cual estaban",
+      nueva: base({ specimenIds: [plantaPropia], plotBlockIds: [bloque], notes: "corregida" }),
+    });
+    const areasCorreccion = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areasCorreccion).toHaveLength(2);
+    expect(areasCorreccion).toContainEqual(expect.objectContaining({ plotBlockId: null, specimenId: plantaPropia }));
+    expect(areasCorreccion).toContainEqual(expect.objectContaining({ plotBlockId: bloque, specimenId: null }));
+  });
+});
+
+/**
+ * Ronda de arreglos 1, hallazgo CRÍTICO: corregir una intervención de bloque
+ * sin `location:manage_attributes` la borraba en silencio, porque los
+ * bloques de manejo se pedían con `listPlotBlocks` (ese permiso) en vez del
+ * mismo permiso que ya exige leer/escribir la intervención (`lot:view`/
+ * `manage`). `bloquesDeLaParcela` es el arreglo de raíz.
+ */
+describe("bloquesDeLaParcela — ronda de arreglos 1 (hallazgo crítico)", () => {
+  it("sin lot:view: acceso denegado", async () => {
+    await expect(bloquesDeLaParcela(sinPermiso, parcela)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+
+  it("con lot:view (Project Viewer) pero SIN location:manage_attributes: ve los bloques (control positivo)", async () => {
+    const bloques = await bloquesDeLaParcela(soloVista, parcela);
+    expect(bloques.map((b) => b.id)).toContain(bloque);
+    // Ordenados por nombre, como pide la firma.
+    expect(bloques).toEqual([...bloques].sort((a, b) => a.name.localeCompare(b.name)));
+  });
+
+  it("control: listPlotBlocks SÍ exige location:manage_attributes, y por eso Project Viewer no puede usarlo", async () => {
+    // Demuestra que el arreglo no fue «aflojar `listPlotBlocks`»: esa función
+    // y su permiso quedan intactos para su propia pantalla (`ajustes`).
+    await expect(listPlotBlocks(soloVista, parcela)).rejects.toBeInstanceOf(LocationAccessError);
+  });
+
+  it("corregir con bloque, desde una cuenta con lot:manage pero SIN location:manage_attributes: el bloque que bloquesDeLaParcela le mostró se conserva al guardar", async () => {
+    const o = await registrarIntervencion(operador, base({ plotBlockIds: [bloque] }));
+
+    // Lo que la pantalla de corregir hace ahora: pedir los bloques con el
+    // MISMO permiso que ya tiene para corregir, no con `listPlotBlocks`.
+    const bloquesQueVe = await bloquesDeLaParcela(operadorSinAtributos, parcela);
+    expect(bloquesQueVe.map((b) => b.id)).toContain(bloque);
+
+    const c = await corregirIntervencion(operadorSinAtributos, {
+      interventionId: o.id,
+      motivo: "conserva el bloque sin location:manage_attributes",
+      nueva: base({ plotBlockIds: [bloque] }),
+    });
+    const areas = await prisma.plotInterventionArea.findMany({ where: { interventionId: c.id } });
+    expect(areas).toEqual([expect.objectContaining({ plotBlockId: bloque, specimenId: null })]);
+  });
+});
+
+/**
+ * Ronda final de arreglos, hallazgo 5: las pantallas de manejo
+ * (`/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`) pedían
+ * `getPlotDetail`, que exige `location:manage_attributes` — el mismo defecto
+ * que `bloquesDeLaParcela` arregló para los bloques, pero incompleto: un
+ * operario con `lot:view`/`lot:manage` y sin ese permiso llegaba a
+ * `notFound()` ANTES de que `bloquesDeLaParcela` importara. `contextoDeManejo`
+ * es la lectura propia que reemplaza a `getPlotDetail` en esas dos pantallas.
+ */
+describe("contextoDeManejo — ronda final de arreglos, hallazgo 5", () => {
+  it("con lot:manage pero SIN location:manage_attributes: trae nombre y zona (control positivo del arreglo)", async () => {
+    const contexto = await contextoDeManejo(operadorSinAtributos, parcela);
+    expect(contexto.id).toBe(parcela);
+    expect(contexto.name).toEqual(expect.any(String));
+  });
+
+  it("con lot:view (Project Viewer) también entra: view basta, no hace falta manage", async () => {
+    const contexto = await contextoDeManejo(soloVista, parcela);
+    expect(contexto.id).toBe(parcela);
+  });
+
+  it("sin lot:view: TraceabilityAccessError — no LocationAccessError, que es lo que lanzaba getPlotDetail", async () => {
+    await expect(contextoDeManejo(sinPermiso, parcela)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+
+  it("control: getPlotDetail SÍ exige location:manage_attributes, y por eso operadorSinAtributos no puede usarlo", async () => {
+    // Demuestra que el arreglo no fue «aflojar getPlotDetail»: el tablero de
+    // la parcela (`/plots/[id]`) sigue exigiendo ese permiso, sin cambios.
+    const { getPlotDetail } = await import("../../lib/traceability/plantingCohorts");
+    await expect(getPlotDetail(operadorSinAtributos, parcela)).rejects.toBeInstanceOf(LocationAccessError);
+  });
+});
+
+/**
+ * Ronda de arreglos 1, importante #2: `?motivo=` de `/manejo/nuevo` no se
+ * ignoraba en silencio cuando era inválido — el servicio lo rechazaba con un
+ * error al guardar. `motivoValidoParaParcela` repite las mismas tres
+ * condiciones que `validarReferencias` exige (existe, es `trap_check`, su
+ * trampa está emparentada con la parcela) pero devuelve `null` en vez de
+ * lanzar.
+ */
+describe("motivoValidoParaParcela — ronda de arreglos 1 (importante #2)", () => {
+  it("una lectura de trampa de esta parcela: se devuelve tal cual (control positivo)", async () => {
+    await expect(motivoValidoParaParcela(lecturaPropia, parcela)).resolves.toBe(lecturaPropia);
+  });
+
+  it("de otra parcela sin relación: null", async () => {
+    await expect(motivoValidoParaParcela(lecturaAjena, parcela)).resolves.toBeNull();
+  });
+
+  it("una observación que no es lectura de trampa: null", async () => {
+    await expect(motivoValidoParaParcela(observacionNoTrampa, parcela)).resolves.toBeNull();
+  });
+
+  it("inexistente: null", async () => {
+    await expect(motivoValidoParaParcela("00000000-0000-0000-0000-000000000000", parcela)).resolves.toBeNull();
+  });
+
+  it("sin parámetro (null o undefined): null, sin tocar la base", async () => {
+    await expect(motivoValidoParaParcela(null, parcela)).resolves.toBeNull();
+    await expect(motivoValidoParaParcela(undefined, parcela)).resolves.toBeNull();
+  });
+});
+
+/**
+ * Ronda final de arreglos, hallazgo 6: `?motivo=` aceptaba una lectura de la
+ * parcela MADRE como precarga en una microparcela, vía `ubicacionesEmparentadas`
+ * — tener acceso a la hija no da acceso a la madre. `esMotivoDeTrampaValido`
+ * exige ahora la MISMA parcela, y `motivoValidoParaParcela` y
+ * `validarReferencias` (a través de `registrarIntervencion`/
+ * `corregirIntervencion`) comparten ese único predicado.
+ */
+describe("motivoObservationId exige la MISMA parcela, no una emparentada — ronda final, hallazgo 6", () => {
+  it("precarga: una lectura de la parcela MADRE (`finca`) para la hija (`parcelaHija`) se ignora", async () => {
+    await expect(motivoValidoParaParcela(lecturaEnFinca, parcelaHija)).resolves.toBeNull();
+  });
+
+  it("precarga: una lectura de la propia `parcelaHija` se devuelve tal cual (control positivo)", async () => {
+    await expect(motivoValidoParaParcela(lecturaEnParcelaHija, parcelaHija)).resolves.toBe(lecturaEnParcelaHija);
+  });
+
+  it("guardar: una lectura de la parcela MADRE se rechaza aunque esté emparentada", async () => {
+    await expect(
+      registrarIntervencion(operador, base({ locationId: parcelaHija, motivoObservationId: lecturaEnFinca })),
+    ).rejects.toThrow(IntervencionValidationError);
+  });
+
+  it("guardar: una lectura de la MISMA parcela entra (control positivo)", async () => {
+    const r = await registrarIntervencion(operador, base({ locationId: parcelaHija, motivoObservationId: lecturaEnParcelaHija }));
+    expect(r.motivoObservationId).toBe(lecturaEnParcelaHija);
   });
 });

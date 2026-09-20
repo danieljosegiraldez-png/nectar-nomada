@@ -17,6 +17,7 @@ import { can } from "../rbac/service";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLotAccess } from "./lots";
 import { origenesDeParcelas } from "./jornadasDeCosecha";
+import { recepcionDeEntregas } from "./recepcionesDeCereza";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class EntregaError extends Error {}
@@ -129,6 +130,10 @@ export async function anularEntrega(userAccountId: string, input: { entregaId: s
   return prisma.$transaction(async (tx) => {
     const antes = await tx.entregaDeCosecha.findUniqueOrThrow({ where: { id: input.entregaId } });
     if (antes.estado !== "enviada") throw new EntregaError("ya_anulada");
+    // Spec recepción §3.4: recibida en el beneficio, ya no se anula desde la finca. El disparador
+    // `entrega_de_cosecha_recibida_no_se_anula` es la red en la base.
+    const recibida = await tx.recepcionDeCereza.findFirst({ where: { entregaId: antes.id, estado: { not: "anulada" } }, select: { id: true } });
+    if (recibida) throw new EntregaError("ya_recibida");
     const despues = await tx.entregaDeCosecha.update({ where: { id: antes.id }, data: { estado: "anulada", anuladaAt: new Date(), motivoAnulacion: motivo } });
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, operation: "harvest_delivery.void", entityType: "entrega_de_cosecha", entityId: antes.id, before: antes, after: despues, sourceInterface: "traceability.service" },
@@ -160,8 +165,12 @@ export async function misEntregas(userAccountId: string) {
     }),
   ]);
   // Los orígenes sólo de las parcelas asignadas a ESTA persona en sus jornadas abiertas.
-  const origenes = await origenesDeParcelas([...new Set(asignaciones.map((a) => a.locationId))]);
-  return { personaId: persona, asignaciones, entregas, origenes };
+  const [origenes, recibidas] = await Promise.all([
+    origenesDeParcelas([...new Set(asignaciones.map((a) => a.locationId))]),
+    // Spec recepción §4: el recolector ve lo que recibió el beneficio de SUS entregas.
+    recepcionDeEntregas(entregas.map((e) => e.id)),
+  ]);
+  return { personaId: persona, asignaciones, entregas: entregas.map((e) => ({ ...e, recepcion: recibidas.get(e.id) ?? null })), origenes };
 }
 
 /** Paso 1 de la foto de una entrega: la URL de subida. Misma autorización que anotarla. */

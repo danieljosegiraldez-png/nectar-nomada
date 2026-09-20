@@ -1,5 +1,6 @@
 import type { Aviso } from "./pendienteDeLaParcela";
 import type { PlotBlockType } from "../../generated/prisma/client";
+import { diaDeHoy } from "../time/diaDeHoy";
 
 /**
  * Los avisos de las trampas de broca — spec de trampas §6.
@@ -22,6 +23,13 @@ export interface TrampaParaAviso {
   id: string;
   trapNumber: number | null;
   bloque: { name: string; blockType: PlotBlockType | null } | null;
+  /**
+   * El bloque de VERDAD (FK), a diferencia de `bloque` que es su nombre para
+   * mostrar. Es lo que compara «atendido» contra `plotBlockIds` de una
+   * intervención — spec §4.2. `null` = trampa sin bloque, y a esa sólo la
+   * cubre una intervención sobre la parcela entera.
+   */
+  plotBlockId: string | null;
   status: "active" | "removed" | "dead";
   /**
    * `dia` es campo de día `YYYY-MM-DD` (la revisión se guarda a medianoche UTC).
@@ -32,8 +40,20 @@ export interface TrampaParaAviso {
    * **F7 fix-final**: si `dia` es ANTERIOR a `instaladaEl`, `avisosDeTrampas`
    * la trata como si no existiera — es de un ciclo cerrado por un retiro y
    * reinstalación posteriores, y ni cuenta como visita ni puede disparar.
+   *
+   * `id` y `observedAt` son la Tarea 4: `id` nombra la observación que motivó
+   * el aviso. `observedAt` se guardaba pensando en compararlo como INSTANTE
+   * contra `occurredAt` de una intervención — revisión final del PR B,
+   * hallazgo 1: la lectura es un campo de DÍA (medianoche UTC, ver arriba),
+   * así que un `>` de instantes compara un día contra una hora de pared que
+   * el dato nunca representó. Una intervención registrada el MISMO día que la
+   * lectura, aunque su hora sea posterior, apagaba el aviso sin que hubiera
+   * pasado un día completo desde que se vio el problema. `avisosDeTrampas`
+   * ahora compara DÍAS, en la zona de la parcela (`avisosDeTrampas.zona`), no
+   * instantes — `observedAt` se conserva porque `dia` ya sale de él
+   * (`trampasParaAviso`), pero la comparación real vive en `dia`.
    */
-  ultimaRevision: { dia: string; brocaLevel: NivelDeBroca | null } | null;
+  ultimaRevision: { id: string; dia: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   /**
    * Día `YYYY-MM-DD` de la última observación `installed` O `reinstalled`
    * (lo que sea más reciente); `null` si no hay ninguna. Es la fecha de la
@@ -47,6 +67,24 @@ export interface ReglaParaAviso {
   normalDays: number;
   alertDays: number;
   suggestedAction: string;
+  /** Tarea 4, spec §4.2: la regla puede apuntar a un producto del catálogo. */
+  suggestedMaterial: { id: string; name: string } | null;
+}
+
+/**
+ * Una intervención vigente de la MISMA parcela que la trampa — Tarea 4, spec
+ * §4.2. Sólo lo que hace falta para juzgar si «cubre»: nunca el `kind`, porque
+ * cualquier tipo cuenta igual, también un manejo cultural (la regla sugiere,
+ * no manda).
+ *
+ * `occurredAt` se compara por DÍA, en la zona de la parcela — revisión final
+ * del PR B, hallazgos 1 y 3 — no como instante: ver el docstring de
+ * `TrampaParaAviso.ultimaRevision`.
+ */
+export interface IntervencionQueCubre {
+  occurredAt: Date;
+  parcelaEntera: boolean;
+  plotBlockIds: readonly string[];
 }
 
 /**
@@ -74,7 +112,14 @@ function diasEntre(desde: string, hasta: string): number {
 function plazoDeLaTrampa(
   trampa: TrampaParaAviso,
   regla: ReglaParaAviso,
-): { desde: string | null; plazo: number; disparo: boolean; lectura: NivelDeBroca | null } {
+): {
+  desde: string | null;
+  plazo: number;
+  disparo: boolean;
+  lectura: NivelDeBroca | null;
+  /** La revisión vigente misma (F7), para que `avisosDeTrampas` compare «atendido» sin recalcularla. */
+  revisionVigente: TrampaParaAviso["ultimaRevision"];
+} {
   const disparador = ESCALA.indexOf(regla.triggerLevel);
   const revisionVigente =
     trampa.ultimaRevision != null &&
@@ -90,7 +135,7 @@ function plazoDeLaTrampa(
   // instalación registrada no hay desde dónde contar, y no se inventa uno.
   const desde = revisionVigente?.dia ?? trampa.instaladaEl;
   const plazo = disparo ? regla.alertDays : regla.normalDays;
-  return { desde, plazo, disparo, lectura };
+  return { desde, plazo, disparo, lectura, revisionVigente };
 }
 
 /**
@@ -105,10 +150,15 @@ function disparoYPlazo(
   trampa: TrampaParaAviso,
   regla: ReglaParaAviso,
   hoy: string,
-): { disparo: boolean; lectura: NivelDeBroca | null; diasDeRetraso: number | null } {
-  const { desde, plazo, disparo, lectura } = plazoDeLaTrampa(trampa, regla);
+): {
+  disparo: boolean;
+  lectura: NivelDeBroca | null;
+  diasDeRetraso: number | null;
+  revisionVigente: TrampaParaAviso["ultimaRevision"];
+} {
+  const { desde, plazo, disparo, lectura, revisionVigente } = plazoDeLaTrampa(trampa, regla);
   const diasDeRetraso = desde == null ? null : diasEntre(desde, hoy) - plazo;
-  return { disparo, lectura, diasDeRetraso };
+  return { disparo, lectura, diasDeRetraso, revisionVigente };
 }
 
 /**
@@ -138,6 +188,15 @@ export function avisosDeTrampas(e: {
   hoy: string;
   trampas: readonly TrampaParaAviso[];
   regla: ReglaParaAviso | null;
+  /** Vigentes de la MISMA parcela — spec §4.2. Sin este parámetro nada atiende. */
+  intervenciones: readonly IntervencionQueCubre[];
+  /**
+   * La zona de la parcela, para comparar `occurredAt` por día contra
+   * `ultimaRevision.dia` — revisión final del PR B, hallazgos 1 y 3. Se pasa
+   * tal cual (`location.timezone`, puede ser `null`): esta función no inventa
+   * una zona por defecto, esa decisión ya vive en `diaDeHoy`.
+   */
+  zona: string | null;
 }): Aviso[] {
   const { regla } = e;
   if (regla == null) return [];
@@ -147,20 +206,49 @@ export function avisosDeTrampas(e: {
     // Una retirada o muerta no se revisa.
     if (t.status !== "active") continue;
 
-    const { disparo, lectura, diasDeRetraso } = disparoYPlazo(t, regla, e.hoy);
+    const { disparo, lectura, diasDeRetraso, revisionVigente } = disparoYPlazo(t, regla, e.hoy);
 
     // El día exacto del vencimiento todavía no avisa: sólo un retraso > 0.
     if (diasDeRetraso != null && diasDeRetraso > 0) {
       avisos.push({ tipo: "trampa_por_revisar", specimenId: t.id, trapNumber: t.trapNumber, diasDeRetraso });
     }
 
-    if (disparo) {
+    // Spec §4.2: «atendido» apaga SÓLO este aviso, nunca `trampa_por_revisar`
+    // (la trampa sigue con su plazo). Cubre cualquier intervención vigente de
+    // ESTA parcela, de un DÍA estrictamente posterior al día de la lectura
+    // que disparó — el mismo día, aunque su hora sea posterior, no cuenta
+    // (revisión final del PR B, hallazgo 1: la lectura es un campo de día, no
+    // un instante). Y nunca un día futuro respecto a «hoy» — una fecha
+    // introducida por error como mañana no puede atender nada hoy (hallazgo
+    // 3). Los dos comparan como cadena `YYYY-MM-DD` en la MISMA zona que
+    // calculó `e.hoy` (`e.zona`, spec §4.2 + revisión final). Una trampa sin
+    // bloque sólo la cubre una intervención sobre la parcela entera; con
+    // bloque, también una que incluya ese bloque. Nunca una intervención
+    // sobre plantas sueltas (esas no llegan aquí como `parcelaEntera` ni
+    // aportan a `plotBlockIds`, ver `intervencionesVigentes`).
+    const atendida =
+      disparo &&
+      revisionVigente != null &&
+      e.intervenciones.some((i) => {
+        const diaDeLaIntervencion = diaDeHoy(i.occurredAt, e.zona);
+        return (
+          diaDeLaIntervencion > revisionVigente.dia &&
+          diaDeLaIntervencion <= e.hoy &&
+          (i.parcelaEntera || (t.plotBlockId != null && i.plotBlockIds.includes(t.plotBlockId)))
+        );
+      });
+
+    if (disparo && !atendida) {
       avisos.push({
         tipo: "trampa_con_lectura_alta",
         specimenId: t.id,
         trapNumber: t.trapNumber,
         lectura: lectura!,
         accion: regla.suggestedAction,
+        observationId: revisionVigente!.id,
+        plotBlockId: t.plotBlockId,
+        materialId: regla.suggestedMaterial?.id ?? null,
+        materialName: regla.suggestedMaterial?.name ?? null,
       });
     }
   }
@@ -235,9 +323,10 @@ export function trampasParaAviso(
     id: string;
     trapNumber: number | null;
     bloque: { name: string; blockType: PlotBlockType | null } | null;
+    plotBlockId: string | null;
     status: TrampaParaAviso["status"];
     instaladaEl: Date | null;
-    ultimaRevision: { observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
+    ultimaRevision: { id: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   }[],
 ): TrampaParaAviso[] {
   const dia = (d: Date) => d.toISOString().slice(0, 10);
@@ -245,10 +334,13 @@ export function trampasParaAviso(
     id: t.id,
     trapNumber: t.trapNumber,
     bloque: t.bloque,
+    plotBlockId: t.plotBlockId,
     status: t.status,
     instaladaEl: t.instaladaEl == null ? null : dia(t.instaladaEl),
     ultimaRevision:
-      t.ultimaRevision == null ? null : { dia: dia(t.ultimaRevision.observedAt), brocaLevel: t.ultimaRevision.brocaLevel },
+      t.ultimaRevision == null
+        ? null
+        : { id: t.ultimaRevision.id, dia: dia(t.ultimaRevision.observedAt), observedAt: t.ultimaRevision.observedAt, brocaLevel: t.ultimaRevision.brocaLevel },
   }));
 }
 

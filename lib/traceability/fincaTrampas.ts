@@ -102,6 +102,8 @@ export interface FincaTrampa {
   plotId: string;
   plotName: string;
   bloque: { name: string; blockType: PlotBlockType | null } | null;
+  /** El bloque de VERDAD (FK) — ver el mismo campo en `TrampaParaAviso`. */
+  plotBlockId: string | null;
   status: "active" | "removed" | "dead";
   ultimaRevision: { id: string; observedAt: Date; brocaLevel: NivelDeBroca | null } | null;
   instaladaEl: Date | null;
@@ -152,7 +154,7 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
       trapNumber: true,
       status: true,
       locationId: true,
-      plotBlock: { select: { name: true, blockType: true } },
+      plotBlock: { select: { id: true, name: true, blockType: true } },
       observations: {
         where: { observationType: "trap_check" },
         orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
@@ -181,6 +183,7 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
     plotId: t.locationId,
     plotName: nombrePorLote.get(t.locationId) ?? "",
     bloque: t.plotBlock ? { name: t.plotBlock.name, blockType: t.plotBlock.blockType } : null,
+    plotBlockId: t.plotBlock?.id ?? null,
     status: t.status,
     instaladaEl: instaladaEl.get(t.id) ?? null,
     ultimaRevision: t.observations[0]
@@ -190,7 +193,13 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
 
   const reglaDeTrampas: ReglaParaAviso | null = await prisma.trapRule.findUnique({
     where: { farmLocationId },
-    select: { triggerLevel: true, normalDays: true, alertDays: true, suggestedAction: true },
+    select: {
+      triggerLevel: true,
+      normalDays: true,
+      alertDays: true,
+      suggestedAction: true,
+      suggestedMaterial: { select: { id: true, name: true } },
+    },
   });
 
   return {
