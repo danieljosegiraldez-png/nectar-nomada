@@ -38,7 +38,7 @@ beforeAll(async () => {
   // Un lugar que SÍ admite rutinas (a diferencia de `sitioA`, un `plot`), para
   // probar que `forbidden` manda incluso cuando el tipo permitiría seguir
   // (Hallazgo 2, ola de arreglos de revisión final). Una bodega exige un padre
-  // `site` o `beneficio` (ADR-177, disparador `location_bodega_padre`): `sitioA`
+  // `site` o `beneficio` (ADR-180, disparador `location_bodega_padre`): `sitioA`
   // es un `plot`, así que hace falta un `site` propio debajo.
   sitio = (
     await prisma.location.create({

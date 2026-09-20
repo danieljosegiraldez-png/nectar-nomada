@@ -11964,7 +11964,7 @@ motores, que es trabajo aparte con su diseño. Las guías de Varroa y Meliponini
 **Consecuencias.** Los normativos `00` §8, `10`, `11`, `12` §5 y `13` quedan anotados donde contradicen
 esto: **manda Daniel**. `02` §3 se anota con su decisión del 2026-09-14 (verificación por contraste
 
-## ADR-177 — Rutinas de lugar y la bodega
+## ADR-180 — Rutinas de lugar y la bodega
 
 **Contexto.** Spec `docs/superpowers/specs/2026-09-19-rutinas-de-instalaciones-y-bodega-design.md`.
 D8 del spec de catálogos (ADR-172) decidió que la misma rutina periódica —limpieza, fumigación,
