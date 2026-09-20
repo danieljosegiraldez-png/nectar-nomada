@@ -682,6 +682,12 @@
     {
       "archivo": "lib/traceability/estantes.ts",
       "razon": "`crearPosiciones(tx, …)` recibe el `tx` de `crearEstante`/`ampliarEstante` para crear las posiciones DENTRO de la transacción que ya autorizó con `exigeEditarBeneficioEn` sobre la instalación; no autoriza nada por sí misma."
+    },
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "tomadoDe",
+      "razon": "Suma lo ya comprometido de UNA recepción —mermas vigentes más lo vinculado a lotes— dentro de la transacción que va a escribir, porque una suma leída fuera no es una garantía: dos mermas simultáneas la leerían las dos antes de que ninguna escribiera. Recibe el cliente de transacción para eso y sólo para eso; no es exportada, su único llamador es `anotarMerma` en este mismo archivo, que ya autorizó con `exigeGestionarBeneficio` y acaba de bloquear la fila de la recepción con `SELECT … FOR UPDATE`. Devuelve un número, no filas.",
+      "verificado": "2026-09-19"
     }
   ],
   "operaciones_sin_patron": [
@@ -1136,6 +1142,12 @@
       "archivo": "lib/traceability/locations.ts",
       "operacion": "lugaresDeOrganizacion",
       "razon": "Las Location propias de una organización más sus descendientes que heredan su organizationId (comentario del propio archivo). No recibe principal: es un hecho de la jerarquía. La usan guardias que SÍ autorizan (`exigeEditarBeneficioEnOrganizacion`) y lecturas ya acotadas por su llamador (`puedeVerEquiposEnOrganizacion` en `lib/equipos/bandejas.ts`, que primero prueba `edit_beneficio` y sólo baja el árbol para el resto).",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "disponibleDeRecepciones",
+      "razon": "Devuelve cuánto queda por repartir de unas recepciones ya elegidas: neto menos mermas vigentes menos lo ya vinculado a lotes. No recibe principal a propósito, misma disciplina que `recepcionDeEntregas` en este mismo archivo: sus llamadores —la pantalla del beneficio y `armarLote`— ya autorizaron esas recepciones con `exigeVerBeneficio`/`exigeGestionarBeneficio`. Lee cifras de ids concedidos y no escribe nada. La comprobación que SÍ decide —si una merma o un lote caben— no es ésta: vive dentro de la transacción, con la fila bloqueada, en `anotarMerma`, y el disparador `merma_de_recepcion_cabe` es su red.",
       "verificado": "2026-09-19"
     }
   ]

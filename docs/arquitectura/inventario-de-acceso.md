@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**535 operaciones** que tocan la base, en **150 archivos**:
+**538 operaciones** que tocan la base, en **150 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,12 +22,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **404** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **406** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **71** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **72** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **La merma de una recepción (pieza 3, tarea 3, 2026-09-19): 515→518.** `anotarMerma` y
+> `anularMerma` en `lib/traceability/recepcionesDeCereza.ts` suben **guardia directo**, 388→390:
+> las dos pasan por `exigeGestionarBeneficio`, que llama a `requireLotAccess(manage)` sobre el
+> beneficio de la recepción. `disponibleDeRecepciones` entra como **«depende del llamador»**,
+> 68→69: la comprobación que decide —si la merma cabe— no es ésa, sino la que corre dentro de la
+> transacción con la fila bloqueada.
 
 > **Merge de `origin/main` en `vistas-finca-parcela` (2026-09-19, merge-main-3).** Unión de esta
 > rama —la finca de la trampa, `resolveFarmSiteId`— con el manejo fitosanitario PR B, la pesada

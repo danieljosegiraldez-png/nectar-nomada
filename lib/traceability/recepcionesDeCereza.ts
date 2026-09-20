@@ -212,8 +212,7 @@ export async function recibirCereza(userAccountId: string, input: RecibirCerezaI
 
 /**
  * Anula una recepción: la entrega vuelve a pendiente, en el mismo beneficio. Dos personas también
- * aquí. **«Sólo mientras no haya salido ningún lote» llega con la pieza 3**, que crea el vínculo
- * entre lote y recepción; hasta entonces no hay lote del que comprobarlo.
+ * aquí, y **sólo mientras no haya salido ningún lote** (`ya_tiene_lotes`, pieza 3).
  */
 export async function anularRecepcion(userAccountId: string, input: { recepcionId: string; motivo: string }) {
   const recepcion = await prisma.recepcionDeCereza.findUnique({ where: { id: input.recepcionId } });
@@ -227,6 +226,9 @@ export async function anularRecepcion(userAccountId: string, input: { recepcionI
     await tx.$queryRaw`SELECT "id" FROM "traceability"."recepcion_de_cereza" WHERE "id" = ${recepcion.id}::uuid FOR UPDATE`;
     const antes = await tx.recepcionDeCereza.findUniqueOrThrow({ where: { id: recepcion.id } });
     if (antes.estado === "anulada") throw new RecepcionError("ya_anulada");
+    // De una recepción con cereza ya en un lote no se vuelve atrás: el lote existe y su genealogía
+    // apunta aquí. El disparador `recepcion_de_cereza_con_lotes_no_se_anula` es la red.
+    if ((await tx.loteDesdeRecepcion.count({ where: { recepcionId: antes.id } })) > 0) throw new RecepcionError("ya_tiene_lotes");
     if (antes.entregaId) {
       const e = await tx.entregaDeCosecha.findUniqueOrThrow({ where: { id: antes.entregaId }, select: { anotadaPor: true, recolectorId: true } });
       if (e.anotadaPor === userAccountId || e.recolectorId === persona) throw new RecepcionError("misma_persona");
@@ -296,6 +298,93 @@ export async function recepcionDeEntregas(entregaIds: readonly string[]) {
       { estado: f.estado, netoKg: Number(f.netoKg), diferenciaKg: f.diferenciaKg == null ? null : Number(f.diferenciaKg), motivoRechazo: f.motivoRechazo },
     ]),
   );
+}
+
+/**
+ * Anota una merma: cereza que entró y no va a llegar a ningún lote —se regó, se pudrió, se pesó de
+ * más—. No es un lote y no tiene genealogía; lo único que hace es bajar el disponible.
+ *
+ * El disponible se comprueba **dentro de la transacción y con la fila de la recepción bloqueada**:
+ * una suma sin bloqueo no es una garantía, porque dos mermas simultáneas la leerían las dos antes
+ * de que ninguna escribiera. El disparador `merma_de_recepcion_cabe` es la red, no la regla.
+ */
+export async function anotarMerma(
+  userAccountId: string,
+  input: { recepcionId: string; kg: number; motivo: string; anotadaAt: Date },
+) {
+  const recepcion = await prisma.recepcionDeCereza.findUnique({ where: { id: input.recepcionId }, select: { id: true, beneficioId: true } });
+  if (!recepcion) throw new RecepcionError("recepcion_no_encontrada");
+  await exigeGestionarBeneficio(userAccountId, recepcion.beneficioId);
+  if (!(input.kg > 0)) throw new RecepcionError("kg_invalidos");
+  const motivo = input.motivo.trim();
+  if (!motivo) throw new RecepcionError("motivo_obligatorio");
+  if (Number.isNaN(input.anotadaAt.getTime())) throw new RecepcionError("fecha_invalida");
+  const kg = a3(input.kg);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "traceability"."recepcion_de_cereza" WHERE "id" = ${recepcion.id}::uuid FOR UPDATE`;
+    const fila = await tx.recepcionDeCereza.findUniqueOrThrow({ where: { id: recepcion.id }, select: { estado: true, netoKg: true } });
+    if (fila.estado !== "recibida") throw new RecepcionError("recepcion_no_recibida");
+    if (kg > Number(fila.netoKg) - (await tomadoDe(tx, recepcion.id))) throw new RecepcionError("merma_sobre_lo_disponible");
+    const merma = await tx.mermaDeRecepcion.create({
+      data: { recepcionId: recepcion.id, kg, motivo, anotadaPor: userAccountId, anotadaAt: input.anotadaAt },
+    });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, operation: "cherry_reception.loss", entityType: "merma_de_recepcion", entityId: merma.id, after: merma, sourceInterface: "traceability.service" },
+      tx,
+    );
+    return merma;
+  });
+}
+
+/** Anula una merma mal anotada: el kilo vuelve al disponible. */
+export async function anularMerma(userAccountId: string, input: { mermaId: string; motivo: string }) {
+  const merma = await prisma.mermaDeRecepcion.findUnique({ where: { id: input.mermaId }, include: { recepcion: { select: { beneficioId: true } } } });
+  if (!merma) throw new RecepcionError("merma_no_encontrada");
+  await exigeGestionarBeneficio(userAccountId, merma.recepcion.beneficioId);
+  const motivo = input.motivo.trim();
+  if (!motivo) throw new RecepcionError("motivo_obligatorio");
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "traceability"."merma_de_recepcion" WHERE "id" = ${merma.id}::uuid FOR UPDATE`;
+    const antes = await tx.mermaDeRecepcion.findUniqueOrThrow({ where: { id: merma.id } });
+    if (antes.estado === "anulada") throw new RecepcionError("ya_anulada");
+    const despues = await tx.mermaDeRecepcion.update({
+      where: { id: antes.id },
+      data: { estado: "anulada", anuladaAt: new Date(), anuladaPor: userAccountId, motivoAnulacion: motivo },
+    });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, operation: "cherry_reception.loss_void", entityType: "merma_de_recepcion", entityId: antes.id, before: antes, after: despues, sourceInterface: "traceability.service" },
+      tx,
+    );
+    return despues;
+  });
+}
+
+/** Lo ya comprometido de una recepción: mermas vigentes más lo que se llevaron los lotes. */
+async function tomadoDe(tx: Prisma.TransactionClient, recepcionId: string) {
+  const [mermas, lotes] = await Promise.all([
+    tx.mermaDeRecepcion.aggregate({ where: { recepcionId, estado: "vigente" }, _sum: { kg: true } }),
+    tx.loteDesdeRecepcion.aggregate({ where: { recepcionId }, _sum: { kg: true } }),
+  ]);
+  return Number(mermas._sum.kg ?? 0) + Number(lotes._sum.kg ?? 0);
+}
+
+/**
+ * Cuánto queda por repartir de cada recepción: neto − mermas vigentes − lo ya vinculado a lotes.
+ *
+ * **Sin principal**: la llaman pantallas y servicios que ya autorizaron esas recepciones. Devuelve
+ * cifras de ids concedidos y no escribe nada.
+ */
+export async function disponibleDeRecepciones(recepcionIds: readonly string[]): Promise<Map<string, number>> {
+  const ids = [...new Set(recepcionIds)];
+  if (ids.length === 0) return new Map();
+  const [recepciones, mermas, lotes] = await Promise.all([
+    prisma.recepcionDeCereza.findMany({ where: { id: { in: ids }, estado: "recibida" }, select: { id: true, netoKg: true } }),
+    prisma.mermaDeRecepcion.groupBy({ by: ["recepcionId"], where: { recepcionId: { in: ids }, estado: "vigente" }, _sum: { kg: true } }),
+    prisma.loteDesdeRecepcion.groupBy({ by: ["recepcionId"], where: { recepcionId: { in: ids } }, _sum: { kg: true } }),
+  ]);
+  const resta = new Map<string, number>();
+  for (const g of [...mermas, ...lotes]) resta.set(g.recepcionId, (resta.get(g.recepcionId) ?? 0) + Number(g._sum.kg ?? 0));
+  return new Map(recepciones.map((r) => [r.id, a3(Number(r.netoKg) - (resta.get(r.id) ?? 0))]));
 }
 
 /** Foto de una recepción, paso 1: la URL de subida directa. */

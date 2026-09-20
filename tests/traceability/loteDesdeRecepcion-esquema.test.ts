@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { borrarVinculosDeLote } from "../helpers/borrarVinculosDeLote";
 
 const RUN = `ldr-${Date.now()}`;
 const personas: string[] = [];
@@ -66,10 +67,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.veredictoDeCalidadDePedido.deleteMany({ where: assertDefinedWhere({ lotId: { in: [loteId, otroLoteId] } }) });
-  // El vínculo es inmutable y su disparador rechaza DELETE: se desactiva sólo para limpiar.
-  await prisma.$executeRawUnsafe('ALTER TABLE "traceability"."lote_desde_recepcion" DISABLE TRIGGER "lote_desde_recepcion_inmutable"');
-  await prisma.loteDesdeRecepcion.deleteMany({ where: assertDefinedWhere({ recepcionId }) });
-  await prisma.$executeRawUnsafe('ALTER TABLE "traceability"."lote_desde_recepcion" ENABLE TRIGGER "lote_desde_recepcion_inmutable"');
+  await borrarVinculosDeLote([recepcionId]);
   await prisma.mermaDeRecepcion.deleteMany({ where: assertDefinedWhere({ recepcionId }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [loteId, otroLoteId] } }) });
   await prisma.recepcionDeCereza.deleteMany({ where: assertDefinedWhere({ id: recepcionId }) });
