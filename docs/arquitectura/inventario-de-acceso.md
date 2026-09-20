@@ -11,15 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-19
+## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**515 operaciones** que tocan la base, en **145 archivos**:
-**433 operaciones** que tocan la base, en **131 archivos**:
-**439 operaciones** que tocan la base, en **132 archivos**:
-**442 operaciones** que tocan la base, en **133 archivos**:
-**443 operaciones** que tocan la base, en **134 archivos**:
-**503 operaciones** que tocan la base, en **144 archivos**:
-**504 operaciones** que tocan la base, en **144 archivos**:
+**529 operaciones** que tocan la base, en **149 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -28,24 +22,18 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **388** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **68** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
-| **312** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **38** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **64** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
-| **316** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **318** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **319** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **39** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **65** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
-| **377** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **378** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **67** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **399** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **70** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+`origin/main` mide **515 operaciones en 145 archivos**; la diferencia —**+14
+operaciones en +4 archivos** (+11 guardia directo, +2 depende del llamador,
++1 acotado por construcción)— es lo que trae `secado-2a` por encima: el árbol
+de estantes y posiciones, los tipos y el número de bandeja, y el pesaje de
+bandeja con su capacidad derivada.
 
 > **Segunda revisión final del plan 2a de secado (2026-09-19), F4.**
 > `lotesGestionablesDeOrganizacion` (`lib/beneficio/vistaDeBandejas.ts`), nueva
