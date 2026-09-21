@@ -12165,3 +12165,16 @@ un proyecto suyo o un lugar que cuelgue de ella), del equipo (membresía en una 
 - **Lo que no se hace aquí:** `declararCanal` (`lib/notificaciones/canales.ts`) deja a cualquier
   cuenta cambiar la preferencia de aviso de cualquier persona. Es otro defecto, de autorización y no de
   «quién lo hizo», y queda señalado para su propio arreglo.
+
+## ADR-185 — El secado por bandeja, paso 4: el ambiente a mano, y la lectura de un punto es sólo la de ese punto
+
+**Fecha:** 2026-09-21. **Spec:** `docs/superpowers/specs/2026-09-18-secado-por-bandeja-y-su-receta-design.md` §4.5. **Plan:** `docs/superpowers/plans/2026-09-21-secado-4-ambiente-a-mano.md`. Nombres aprobados por Daniel el 2026-09-21 y declarados en `docs/beneficio/03_public_api.md` §11.
+
+- Una tabla ancha, `traceability.drying_ambient_reading`: temperatura, HR, cielo y ventilación que anota una persona en un momento. **No** es `environmental.observation` de `DATA_ARCHITECTURE.md` §6, que sigue reservada para sensores (estrecha y particionada). Si llega un registrador a un cuarto, se decide entonces si escribe aquí con `sourceType = sensor` o en aquélla.
+- El punto es la instalación, con estante y nivel opcionales. No hay «fila», porque la fila es el estante (2a).
+- **La lectura de un punto es sólo la de ese mismo punto.** Ni la general ni la de otro nivel ocupan su sitio: sin lectura propia se dice «sin lectura de este nivel». Lo guarda `lecturaDelPunto` en `lib/traceability/ambienteVigente.ts`, con flip-test.
+- La edad se enseña siempre; no hay umbral de «vieja» porque no hay ninguno aprobado.
+- Inmutable, corregible por sustitución con razón. No se borra salvo por la puerta de pruebas, igual que el pesaje de bandeja.
+- Permiso: `sample:manage` para registrar y `sample:manage|view` para ver, sobre la instalación, como una inspección de cama. Es una elección técnica; si Daniel quiere otro, es un cambio de una función (`puedeEn` en `lib/traceability/ambiente.ts`).
+- Fuera: la bandeja viendo su lectura (espera al 2b), corregir desde la pantalla (el servicio ya corrige) y el acotado de «quién lo hizo» (P-G).
+- **La migración se aplicó en `nectar_test` el 2026-09-21 a las 12:11 -05, antes de fusionar.** La sesión coordinadora decidió dejarla ahí: no se edita, y cualquier cambio va en una migración nueva.

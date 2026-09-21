@@ -41,6 +41,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-21 · Secado, paso 4: el ambiente a mano
+
+ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
+enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
+pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
+
 ### 2026-09-21 · El canal de aviso de una persona exige permiso (PR #464)
 
 ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal de cualquier persona sin
