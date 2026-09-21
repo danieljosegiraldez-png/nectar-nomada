@@ -254,9 +254,18 @@ const filas = ops
      * que no puede devolver lo ajeno. Es autorización, y de la más fuerte —
      * no hay puerta que saltarse porque no hay puerta. `getPartnerProjects`
      * filtra `assignment` por `userAccountId` y luego pide sólo esos ids.
+     *
+     * **Sólo cuenta dentro de un `where`.** Hubo una segunda regla,
+     * `/userAccountId,\s*$/m`, que casaba cualquier línea terminada así — y eso
+     * son sobre todo **sellos de actor**: `createdBy: userAccountId,`,
+     * `actorUserAccountId: userAccountId,` en `recordAuditEvent`. Firmar una
+     * escritura no es filtrar una lectura. Medido el 2026-09-21: 14 operaciones
+     * eran «acotadas» sólo por esa regla y **ninguna** filtraba por el
+     * principal; una, `declararCanal`, no tenía autorización alguna (PR #464).
+     * Sin ella caen en «recibe principal, sin guardia visible», que obliga a
+     * justificarlas una a una en la allowlist — que es donde deben estar.
      */
-    const acotado = /where:\s*\{[^}]*userAccountId/s.test(o.cuerpo ?? "") ||
-      /userAccountId,\s*$/m.test(o.cuerpo ?? "");
+    const acotado = /where:\s*\{[^}]*userAccountId/s.test(o.cuerpo ?? "");
     /**
      * Resolutor de visibilidad: `resolveLotVisibility(userAccountId)` calcula
      * el alcance a partir de las asignaciones y el `where` se construye desde
