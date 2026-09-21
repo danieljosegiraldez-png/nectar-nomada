@@ -298,6 +298,9 @@ describe("a dónde vuelve cada lugar", () => {
     expect(rutaDeLugar({ id: "c", locationType: "drying_bed", parentLocationId: "i" })).toBe("/instalaciones/i");
     expect(rutaDeLugar({ id: "z", locationType: "beneficio", parentLocationId: "x" })).toBe("/beneficio");
   });
+  it("un estante (drying_rack): a la instalación que lo contiene, no a sí mismo (Parte 2)", () => {
+    expect(rutaDeLugar({ id: "e", locationType: "drying_rack", parentLocationId: "i" })).toBe("/instalaciones/i");
+  });
 });
 
 describe("lugarParaVolver: exige permiso (Hallazgo A, revisión de Codex)", () => {
