@@ -18,6 +18,7 @@ import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
 import { horizontesDelFormulario, maxIndiceDeFilas } from "../../lib/traceability/horizontesDelFormulario";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { confirmarCoordenadasDelSitio, CoordenadasValidationError } from "../../lib/traceability/coordenadasDelSitio";
+import { SitioNoEncontradoError } from "../../lib/traceability/fincas";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
 import {
@@ -217,6 +218,8 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
     return t("error_material_consumption", { detail: error.message });
   }
   if (error instanceof CoordenadasValidationError) return t("error_coordenadas", { detail: error.message });
+  // Entró con el PR #445 y el guardia la cazó al fusionar: sin esta rama era otro 500.
+  if (error instanceof SitioNoEncontradoError) return t("error_sitio_no_encontrado", { detail: error.message });
   // Dos toques del mismo botón. No es un fallo del operario ni hay nada que
   // corregir en el formulario: lo que hay que decirle es que ya está guardado.
   if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");

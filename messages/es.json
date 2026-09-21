@@ -1590,6 +1590,7 @@
     "error_labour": "No se pudo registrar la mano de obra: {detail}",
     "error_material_consumption": "No se pudo registrar el material usado: {detail}",
     "error_coordenadas": "No se pudieron guardar las coordenadas: {detail}",
+    "error_sitio_no_encontrado": "No se encontró la finca a la que pertenece esta ubicación: {detail}",
     "error_clave_de_envio": "Esto ya quedó registrado. Vuelve a cargar la página para verlo."
   },
   "Apiary": {

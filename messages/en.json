@@ -1590,6 +1590,7 @@
     "error_labour": "Could not record the labour: {detail}",
     "error_material_consumption": "Could not record the material used: {detail}",
     "error_coordenadas": "Could not save the coordinates: {detail}",
+    "error_sitio_no_encontrado": "Could not find the farm this location belongs to: {detail}",
     "error_clave_de_envio": "This was already recorded. Reload the page to see it."
   },
   "Apiary": {
