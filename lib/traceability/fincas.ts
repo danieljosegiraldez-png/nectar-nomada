@@ -50,15 +50,21 @@ export async function listarFincas(userAccountId: string): Promise<Finca[]> {
     select: { id: true, parentLocationId: true, locationType: true, name: true, organization: { select: { id: true, organizationType: true } } },
   });
   const porId = new Map(arbol.map((l) => [l.id, l]));
+  // El sitio **de más arriba**, no el primero que aparece al subir. Daniel, 2026-09-21:
+  // «Invernadero solar» le salía en /fincas como otra finca. El import de Cafelino lo creó como
+  // `site` colgado del sitio de Cafelino —antes de que existiera `drying_facility`—, y parar en
+  // el primer `site` lo tomaba por una finca aparte. Un sitio dentro de otro es parte de la de
+  // arriba. (Los datos se corrigen aparte; esto hace que la lista no dependa de que lo estén.)
   const sitioDe = (id: string) => {
     const vistos = new Set<string>();
     let actual = porId.get(id);
+    let sitio: (typeof arbol)[number] | undefined;
     while (actual && !vistos.has(actual.id)) {
-      if (actual.locationType === "site") return actual;
+      if (actual.locationType === "site") sitio = actual;
       vistos.add(actual.id);
       actual = actual.parentLocationId ? porId.get(actual.parentLocationId) : undefined;
     }
-    return undefined;
+    return sitio;
   };
 
   const fincas = new Map<string, Finca>();
