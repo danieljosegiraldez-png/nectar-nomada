@@ -40,15 +40,13 @@ export default async function NuevaBodegaPage({
               </option>
               {padres.map((p) => (
                 <option key={p.id} value={p.id}>
-                  «{p.name} · {t(`tipo_${p.tipo}`)}»
+                  {p.name} · {t(`tipo_${p.tipo}`)}
                 </option>
               ))}
             </select>
           </label>
-          <label>
-            {t("nombre")}
-            <input type="text" name="name" required maxLength={120} />
-          </label>
+          <label htmlFor="name">{t("nombre")}</label>
+          <input type="text" id="name" name="name" required maxLength={120} />
           <BotonDeEnvio>{t("crear")}</BotonDeEnvio>
         </form>
       )}
