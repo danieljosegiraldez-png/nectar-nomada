@@ -20,7 +20,7 @@ export type LugarConRutina = {
   createdAt: Date;
 };
 
-const CON_RUTINA = new Set<LocationType>(["beneficio", "drying_facility", "storage_facility", "drying_bed"]);
+const CON_RUTINA = new Set<LocationType>(["beneficio", "drying_facility", "storage_facility", "drying_bed", "drying_rack"]);
 
 export async function lugarParaRutina(locationId: string): Promise<LugarConRutina> {
   const l = await prisma.location.findUnique({
@@ -31,8 +31,9 @@ export async function lugarParaRutina(locationId: string): Promise<LugarConRutin
   if (!CON_RUTINA.has(l.locationType)) throw new RutinaError("lugar_sin_rutinas");
   if (l.locationType === "drying_bed" && l.parentLocationId) {
     const padre = await prisma.location.findUnique({ where: { id: l.parentLocationId }, select: { locationType: true } });
-    // Parte 2: cuando exista `drying_rack`, una posición dentro de un estante
-    // comparte la rutina del estante. Hoy toda cama cuelga de una instalación.
+    // Parte 2 (spec §7): una posición dentro de un estante (`drying_rack`)
+    // comparte la rutina del estante, no lleva la suya propia. Sólo una cama
+    // SUELTA —cuyo padre es la instalación misma (`drying_facility`)— entra.
     if (padre && padre.locationType !== "drying_facility") throw new RutinaError("rutina_en_el_estante");
   }
   return l;
@@ -83,6 +84,8 @@ export function rutaDeLugar(l: { id: string; locationType: LocationType; parentL
       return `/bodegas/${l.id}`;
     case "drying_facility":
       return `/instalaciones/${l.id}`;
+    case "drying_rack":
+      return `/instalaciones/${l.parentLocationId}`;
     case "drying_bed":
       return `/instalaciones/${l.parentLocationId}`;
     case "beneficio":
