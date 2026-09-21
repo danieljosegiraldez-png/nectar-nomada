@@ -499,7 +499,11 @@
     },
     {
       "archivo": "lib/rutinas/rutinas.ts",
-      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo."
+      "razon": "Rutinas periódicas de equipo (spec de catálogos §3.4, D1 y D8): definir y anular es gestión (equipment:manage), apuntar lo hecho es faena (equipment:report_condition), siempre vía requireRutinaAccess → puedeSobreEquipo. Toda escritura confirma su AuditEvent en la misma transacción; nada se borra, los registros se anulan con motivo. Desde la Tarea 4 (spec 2026-09-19 §4.2) `requireRutinaAccess` juzga en el lugar (`lib/rutinas/lugares.ts`) cuando la rutina no es de equipo, y `rutinasDeLugar`/`vencidasPorLugar` exigen `puedeSobreLugar(…, \"view\")` antes de leer."
+    },
+    {
+      "archivo": "lib/rutinas/lugares.ts",
+      "razon": "Qué lugar admite rutinas, a dónde vuelve su pantalla y quién puede qué (spec 2026-09-19 §4.2). Módulo de dominio, hermano de lib/equipos/equipos.ts: gestión = `location:edit_beneficio`, faena = `equipment:report_condition` sobre el lugar, ver = `location:manage_attributes`, todo resuelto con `can(` directo antes de leer o escribir. `lugarParaRutina` es la única excepción, sin principal a propósito, explicada en `dependen_del_llamador`."
     },
     {
       "archivo": "lib/apiary/vitalesDeColmena.ts",
@@ -528,6 +532,10 @@
     {
       "archivo": "lib/traceability/beneficios.ts",
       "razon": "Tarea 2 del plan de alta de beneficio — crea y renombra el beneficio (LocationType nuevo) bajo un sitio. Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. A diferencia de instalaciones.ts, crear exige DOS permisos sobre el padre —`location:manage_attributes` y `location:create_site`—, porque dar de alta un lugar nuevo es una autoridad más estrecha que administrar el árbol de uno existente y es justo la que un Farm Operator no tiene. Escritura y AuditEvent en la MISMA transacción, tanto al crear como al renombrar."
+    },
+    {
+      "archivo": "lib/traceability/bodegas.ts",
+      "razon": "Tarea 2 de la spec 2026-09-19 §4.1 — crear, listar y ver la bodega (`storage_facility`, LocationType de Tarea 1). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño. Crearla es configurar el beneficio: exige `location:edit_beneficio` sobre el padre (`exigeEditarBeneficioEn`), igual que una instalación de secado; la base lo comprueba también, con el disparador `location_bodega_padre` (sólo `site` o `beneficio`). Escritura y AuditEvent en la MISMA transacción."
     },
     {
       "archivo": "lib/traceability/concesiones.ts",
@@ -708,6 +716,10 @@
       "operacion": "enLaMismaTransaccion (gancho de RecordTransformationInput)",
       "razon": "No es una función que reciba una transacción: es un PARÁMETRO que la entrega. `recordTransformation` acepta un gancho que corre dentro de su transacción justo antes de confirmarla, para que un cálculo derivado —hoy `recalcularVeredicto`— no pueda guardarse por separado de la transformación que lo cambia: si lanza, todo revierte, y hay una prueba que lo afirma. Quien lo aprovecha está inventariado aparte. Lo que pase el gancho NO es una superficie nueva: `recordTransformation` ya autorizó los lotes de entrada con `requireLotAccess(\"manage\")` antes de abrir la transacción.",
       "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/operations.ts",
+      "razon": "T3 de rutinas de instalaciones y bodega (2026-09-19) — `crearConsumoEnTx` recibe el `tx` de quien la llama porque el consumo, su descuento de existencias en `consumableStockEvent` y su AuditEvent tienen que confirmarse juntos con la escritura que los origina: `recordMaterialConsumptionEntry` aquí mismo (por el lote o el lugar), y en un plan siguiente el registro de una rutina de cuidado, colgando varios consumos de la MISMA transacción que la vez que se hizo la rutina. No autoriza nada — «No autoriza: autoriza quien la llama» en su propio comentario — y sólo toca `materialConsumptionEntry` y `consumableStockEvent`, las dos tablas que `recordMaterialConsumptionEntry` ya tocaba antes de que este cambio moviera su cuerpo aquí."
     }
   ],
   "operaciones_sin_patron": [
@@ -1204,6 +1216,12 @@
       "archivo": "lib/traceability/veredictoDelLote.ts",
       "operacion": "veredictosDePedidos",
       "razon": "Los veredictos de los lotes de unos pedidos, agrupados, para la pantalla de pedidos. No recibe principal a propósito: los ids de pedido se los da `pedidosDeBeneficio`, que sí exige `lot:view` sobre el beneficio, en la misma página y dos líneas antes.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/rutinas/lugares.ts",
+      "operacion": "lugarParaRutina",
+      "razon": "No recibe principal a propósito (spec 2026-09-19 §4.2, ruling de Tarea 4). **Corregido en la ola de arreglos de revisión final (2026-09-19, Hallazgo 2):** ya NO se lee antes del permiso — `requireRutinaAccess` llama primero a `puedeSobreLugar`, que devuelve `false` para un id que no existe, y sólo si eso pasa entra aquí a decidir el tipo. Un llamador sin permiso recibe hoy `forbidden` idéntico para un uuid inexistente, un lugar que no admite rutinas y un lugar que sí las admite pero no puede ver; sólo uno YA AUTORIZADO llega a distinguir `lugar_sin_rutinas`/`rutina_en_el_estante`. Sigue expuesta por una vía distinta, sin gatear: `lugarConRutinasOVacio` (que envuelve esta función) la usa `RutinasDeLugar.tsx` en el mismo `Promise.all` que su propio `puedeSobreLugar(…, \"view\")` —no DETRÁS de él—, así que la lectura del lugar ocurre igual aunque el resultado sólo se pinte si `puedeVer` también sale cierto; un id inexistente ahí sigue lanzando `lugar_no_encontrado` sin capturar (aparte, no arreglado en esta ola).",
       "verificado": "2026-09-19"
     }
   ]

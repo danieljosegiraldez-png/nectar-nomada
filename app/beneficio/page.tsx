@@ -3,6 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { listarBeneficios } from "../../lib/traceability/beneficios";
+import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
+import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
+import { insumosDeLugar } from "../../lib/rutinas/lugares";
+import { getObserverCandidates } from "../../lib/traceability/lots";
 import { destinosDelBeneficio } from "./destinos";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +31,11 @@ export const dynamic = "force-dynamic";
  * servidor va a rechazar es el fallo que S2 §4 nombra. La autorización de verdad
  * sigue en cada destino.
  */
-export default async function BeneficioPage() {
+export default async function BeneficioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ok?: string; error?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -37,6 +46,37 @@ export default async function BeneficioPage() {
   const t = await getTranslations("SeccionBeneficio");
   // Qué enlace ve cada perfil lo decide `destinosDelBeneficio`, que tiene su prueba.
   const destinos = destinosDelBeneficio(granted);
+
+  // Las rutinas de cada beneficio (spec 2026-09-19 §5/§6). `rutaDeLugar()`
+  // manda de vuelta aquí, a `/beneficio` a secas, así que el aviso de
+  // `?ok=`/`?error=` vive en esta página y no en una de detalle.
+  //
+  // `listarBeneficios` filtra por `location:manage_attributes`, no por
+  // `equipment:report_condition` (la faena que de verdad hace falta para
+  // apuntar una rutina). Con los perfiles de serie coinciden — Farm Manager y
+  // Farm Operator llevan los dos permisos juntos (`lib/rbac/catalog.ts`) — pero
+  // una cuenta con `report_condition` sobre un beneficio SIN
+  // `manage_attributes` ahí (una concesión estrecha por asignación) no vería
+  // esta sección para ese beneficio, aunque `RutinasDeLugar` sí la dejaría
+  // apuntar si llegara por otra vía. `RutinasDeLugar` vuelve a comprobar su
+  // propio `view` de todas formas, así que reusar esta lista no abre nada de
+  // más — sólo puede quedarse corta en ese caso estrecho.
+  const [tEq, { ok, error }, beneficios] = await Promise.all([
+    getTranslations("Equipos"),
+    searchParams,
+    listarBeneficios(user.userAccountId),
+  ]);
+
+  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
+  // misma lista de Personas activas, sea cual sea el beneficio, así que se
+  // resuelve UNA vez para todos. `insumosDeLugar` sí varía por beneficio —cada
+  // uno puede ser de una organización distinta—, así que se resuelve una por
+  // beneficio, pero desde aquí (en paralelo) en vez de una vez por instancia
+  // de `RutinasDeLugar` anidada.
+  const [personas, insumosPorBeneficio] = await Promise.all([
+    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
+    Promise.all(beneficios.map((b) => insumosDeLugar(user.userAccountId, b.id))),
+  ]);
 
   return (
     <div>
@@ -51,6 +91,13 @@ export default async function BeneficioPage() {
           </li>
         ))}
       </ul>
+      <AvisoDeRutina ok={ok} error={error} t={tEq} />
+      {beneficios.map((b, i) => (
+        <div key={b.id}>
+          <h2 style={{ marginTop: "1.5rem" }}>{b.name}</h2>
+          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} insumos={insumosPorBeneficio[i]} personas={personas} />
+        </div>
+      ))}
     </div>
   );
 }

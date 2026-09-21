@@ -21,6 +21,8 @@
 
 tests/derivaDeMigraciones.test.ts
 tests/limpiarAuditDePruebas.test.ts
+tests/instalaciones/esquemaDeBodega.test.ts
+tests/instalaciones/bodegas.test.ts
 tests/traceability/beneficios.test.ts
 tests/traceability/editarBeneficio.test.ts
 tests/traceability/concesiones.test.ts
@@ -35,6 +37,7 @@ tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
 tests/equipos/documentos.test.ts
 tests/rutinas/rutinas.test.ts
+tests/rutinas/rutinasDeLugar.test.ts
 tests/catalogos/propiedad.test.ts
 tests/apiary/alcanceDelAlimento.test.ts
 tests/apiary/bitacora.test.ts
@@ -185,6 +188,7 @@ tests/traceability/intervenciones.test.ts
 tests/traceability/carenciaEnLaCosecha.test.ts
 tests/traceability/estantes.test.ts
 tests/traceability/cerezaComoDato.test.ts
+tests/traceability/consumoConRutina.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts

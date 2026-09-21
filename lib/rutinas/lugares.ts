@@ -1,0 +1,141 @@
+/**
+ * Qué lugar admite rutinas, a dónde vuelve su pantalla y quién puede qué
+ * (spec 2026-09-19 §4.2). Gestión = `location:edit_beneficio` en el lugar;
+ * faena = `equipment:report_condition` en el lugar —el mismo permiso con que ya
+ * se apunta la rutina de un equipo—; ver = `location:manage_attributes`.
+ */
+import type { ClassificationLevel, LocationType } from "../../generated/prisma/client";
+import { prisma } from "../db";
+import { can } from "../rbac/service";
+import { puedeSobreEquipo } from "../equipos/equipos";
+import { RutinaError } from "./error";
+
+export type LugarConRutina = {
+  id: string;
+  locationType: LocationType;
+  parentLocationId: string | null;
+  organizationId: string | null;
+  classification: ClassificationLevel;
+  timezone: string | null;
+  createdAt: Date;
+};
+
+const CON_RUTINA = new Set<LocationType>(["beneficio", "drying_facility", "storage_facility", "drying_bed"]);
+
+export async function lugarParaRutina(locationId: string): Promise<LugarConRutina> {
+  const l = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { id: true, locationType: true, parentLocationId: true, organizationId: true, classification: true, timezone: true, createdAt: true },
+  });
+  if (!l) throw new RutinaError("lugar_no_encontrado");
+  if (!CON_RUTINA.has(l.locationType)) throw new RutinaError("lugar_sin_rutinas");
+  if (l.locationType === "drying_bed" && l.parentLocationId) {
+    const padre = await prisma.location.findUnique({ where: { id: l.parentLocationId }, select: { locationType: true } });
+    // Parte 2: cuando exista `drying_rack`, una posición dentro de un estante
+    // comparte la rutina del estante. Hoy toda cama cuelga de una instalación.
+    if (padre && padre.locationType !== "drying_facility") throw new RutinaError("rutina_en_el_estante");
+  }
+  return l;
+}
+
+/**
+ * Igual que `lugarParaRutina`, pero para un llamador que sólo quiere pintar
+ * un bloque de rutinas si el lugar las admite (spec 2026-09-19 §6, arreglo de
+ * revisión de Tarea 6): `null` cuando el lugar no lleva rutina propia
+ * —`lugar_sin_rutinas` o `rutina_en_el_estante`—, en vez de propagar el error.
+ * Cualquier otro `RutinaError` (hoy sólo `lugar_no_encontrado`) se relanza: un
+ * id que no existe es un error de programación del llamador, no un lugar sin
+ * rutinas.
+ */
+export async function lugarConRutinasOVacio(locationId: string): Promise<LugarConRutina | null> {
+  try {
+    return await lugarParaRutina(locationId);
+  } catch (e) {
+    if (e instanceof RutinaError && (e.message === "lugar_sin_rutinas" || e.message === "rutina_en_el_estante")) {
+      return null;
+    }
+    throw e;
+  }
+}
+
+/**
+ * El lugar mínimo para decidir a dónde vuelve una acción (spec 2026-09-19 §5);
+ * `null` si no existe O si quien pregunta no puede verlo.
+ *
+ * **Antes no recibía principal a propósito** (razón documentada en
+ * docs/arquitectura/acceso-a-datos.allowlist.json), y por eso `volverA()` en
+ * `app/actions/rutinas.ts` podía usarla con cualquier `locationId` que
+ * mandara el cliente: un llamador SIN NINGÚN permiso aprendía la existencia y
+ * el tipo/padre de un lugar ajeno por la URL de redirección misma, aunque la
+ * acción de verdad terminara en `forbidden` (Hallazgo A, revisión
+ * independiente de Codex, ola de arreglos de revisión final, 2026-09-19).
+ * Ahora exige `puedeSobreLugar(…, "view")` antes de leer nada: sin permiso,
+ * `null` — idéntico a un id que no existe.
+ */
+export async function lugarParaVolver(userAccountId: string, locationId: string): Promise<{ id: string; locationType: LocationType; parentLocationId: string | null } | null> {
+  if (!(await puedeSobreLugar(userAccountId, locationId, "view"))) return null;
+  return prisma.location.findUnique({ where: { id: locationId }, select: { id: true, locationType: true, parentLocationId: true } });
+}
+
+export function rutaDeLugar(l: { id: string; locationType: LocationType; parentLocationId: string | null }): string {
+  switch (l.locationType) {
+    case "storage_facility":
+      return `/bodegas/${l.id}`;
+    case "drying_facility":
+      return `/instalaciones/${l.id}`;
+    case "drying_bed":
+      return `/instalaciones/${l.parentLocationId}`;
+    case "beneficio":
+      return "/beneficio";
+    default:
+      return "/instalaciones";
+  }
+}
+
+export async function puedeSobreLugar(userAccountId: string, locationId: string, accion: "view" | "manage" | "report_condition"): Promise<boolean> {
+  const l = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  if (!l) return false;
+  const objetivo = { scopeType: "location", scopeRefId: locationId } as const;
+  if (accion === "manage") return can(userAccountId, "edit_beneficio", "location", objetivo, l.classification);
+  if (accion === "report_condition") return can(userAccountId, "report_condition", "equipment", objetivo, l.classification);
+  return can(userAccountId, "manage_attributes", "location", objetivo, l.classification);
+}
+
+/** Los lotes de insumo de la organización del lugar, para las filas de producto. */
+export async function insumosDeLugar(userAccountId: string, locationId: string) {
+  if (!(await puedeSobreLugar(userAccountId, locationId, "report_condition"))) return [];
+  const l = await prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+  if (!l?.organizationId) return [];
+  const lotes = await prisma.consumableLot.findMany({
+    where: { material: { organizationId: l.organizationId } },
+    orderBy: [{ material: { name: "asc" } }, { receivedAt: "desc" }],
+    select: { id: true, batchLabel: true, material: { select: { name: true } } },
+  });
+  return lotes.map((x) => ({ id: x.id, etiqueta: `${x.material.name} · ${x.batchLabel}`, materialName: x.material.name, batchLabel: x.batchLabel }));
+}
+
+/**
+ * Los equipos cuyo ÚLTIMO traslado va a este lugar (spec §4.4).
+ *
+ * El permiso sobre el LUGAR no es el permiso sobre cada EQUIPO (arreglo de
+ * revisión final, 2026-09-19): un equipo trae su propia `organizationId` y su
+ * propia `classification`, así que cada candidato que sobrevive al filtro de
+ * traslado pasa además por `puedeSobreEquipo`, igual que hace `listarEquipos`
+ * (`lib/equipos/equipos.ts`) para cualquier otra lista de equipos.
+ */
+export async function equiposAqui(userAccountId: string, locationId: string) {
+  if (!(await puedeSobreLugar(userAccountId, locationId, "view"))) return [];
+  const candidatos = await prisma.equipment.findMany({
+    where: { transfers: { some: { toLocationId: locationId } } },
+    select: { id: true, name: true, transfers: { orderBy: { occurredAt: "desc" }, take: 1, select: { toLocationId: true } } },
+    orderBy: { name: "asc" },
+  });
+  const aqui = candidatos.filter((e) => e.transfers[0]?.toLocationId === locationId);
+  const visible = new Map<string, boolean>();
+  const salida: { id: string; name: string }[] = [];
+  for (const e of aqui) {
+    if (!visible.has(e.id)) visible.set(e.id, await puedeSobreEquipo(userAccountId, e.id, "view"));
+    if (visible.get(e.id)) salida.push({ id: e.id, name: e.name });
+  }
+  return salida;
+}

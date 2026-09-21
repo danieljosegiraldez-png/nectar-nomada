@@ -7,16 +7,21 @@ import { LocationAccessError, puedeEditarBeneficioEn } from "../../../lib/tracea
 import { SecadoFormError } from "../../../lib/traceability/secadoForm";
 import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
+import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
+import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
+import { insumosDeLugar } from "../../../lib/rutinas/lugares";
+import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
-  params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; posicion?: string }>;
+  params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; posicion?: string; error?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Secado");
+  const tEq = await getTranslations("Equipos");
   const { id } = await params;
-  const { ok, posicion } = await searchParams;
+  const { ok, posicion, error: errorCode } = await searchParams;
   let instalacion;
   try { instalacion = await detalleInstalacion(user.userAccountId, id); }
   catch (error) {
@@ -43,11 +48,25 @@ export default async function InstalacionPage({ params, searchParams }: {
     ? instalacion.estantes.flatMap((e) => e.posiciones.map((p) => ({ ...p, estanteId: e.id }))).find((p) => p.id === posicion)
     : undefined;
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
+  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
+  // misma lista de Personas activas sea cual sea el lugar, así que se
+  // resuelve UNA vez para toda la página. `insumosDeLugar` NO se hoistea del
+  // mismo modo: gatea sobre `report_condition` del id que recibe, y una cama
+  // puede tener ese permiso sin que lo tenga la instalación (o al revés) —
+  // reutilizar el de la instalación en cada cama devolvía `[]` para quien sí
+  // podía apuntar en su cama, y `RutinasDeLugar` trata `[]` como «ya
+  // resuelto», no como «vacío de verdad» (arreglo de la re-revisión final,
+  // 2026-09-19). Cada `RutinasDeLugar` de cama sigue resolviendo el suyo.
+  const [insumosDeLaInstalacion, personas] = await Promise.all([
+    insumosDeLugar(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
+  ]);
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
     <h1>{instalacion.name}</h1>
     {ok === "guardado" && <p role="status">{t("guardado")}</p>}
+    <AvisoDeRutina ok={ok} error={errorCode} t={tEq} />
     {!puedeEditar && <p role="alert">{t("sinPermisoEditar")}</p>}
     {puedeEditar && <FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} />}
     <h2>{t("camas")}</h2>
@@ -55,6 +74,7 @@ export default async function InstalacionPage({ params, searchParams }: {
     {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} personas={personas} />
     </section>)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
@@ -90,5 +110,6 @@ export default async function InstalacionPage({ params, searchParams }: {
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumosDeLaInstalacion} personas={personas} />
   </div>;
 }

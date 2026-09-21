@@ -9,7 +9,7 @@ import { prisma } from "../../lib/db";
  * construyó no prueba nada.
  */
 const RUN = `cat-${Date.now()}`;
-let orgA: string, orgB: string, sitioA: string;
+let orgA: string, orgB: string, sitioA: string, beneficioA: string;
 const modelos: string[] = [];
 const equipos: string[] = [];
 const rutinas: string[] = [];
@@ -33,6 +33,15 @@ beforeAll(async () => {
       data: { locationType: "plot", name: `TEST sitio ${RUN}`, organizationId: orgA, status: "approved", classification: "internal" },
     })
   ).id;
+  // Una rutina de LUGAR exige un tipo que la admita (trigger
+  // `care_routine_lugar_valido`, migración 20260919201000); `sitioA` es un
+  // `plot` y no vale para eso, así que las rutinas de lugar de este archivo
+  // usan este beneficio.
+  beneficioA = (
+    await prisma.location.create({
+      data: { locationType: "beneficio", name: `TEST beneficio ${RUN}`, organizationId: orgA, status: "approved", classification: "internal" },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -41,7 +50,7 @@ afterAll(async () => {
   await prisma.equipment.deleteMany({ where: { id: { in: equipos } } });
   await prisma.equipmentModelSpec.deleteMany({ where: { modelId: { in: modelos } } });
   await prisma.equipmentModel.deleteMany({ where: { id: { in: modelos } } });
-  await prisma.location.deleteMany({ where: { id: sitioA } });
+  await prisma.location.deleteMany({ where: { id: { in: [sitioA, beneficioA] } } });
   await prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
 });
 
@@ -128,8 +137,8 @@ describe("rutinas: forma en la base", () => {
   it("exactamente uno de equipo o sitio", async () => {
     const e = await equipo(orgA, "instrument", null);
     await rechaza(prisma.careRoutine.create({ data: { kind: "limpieza", intervalDays: 7 } }));
-    await rechaza(prisma.careRoutine.create({ data: { kind: "limpieza", intervalDays: 7, equipmentId: e.id, locationId: sitioA } }));
-    const deSitio = await prisma.careRoutine.create({ data: { kind: "limpieza", intervalDays: 7, locationId: sitioA } });
+    await rechaza(prisma.careRoutine.create({ data: { kind: "limpieza", intervalDays: 7, equipmentId: e.id, locationId: beneficioA } }));
+    const deSitio = await prisma.careRoutine.create({ data: { kind: "limpieza", intervalDays: 7, locationId: beneficioA } });
     rutinas.push(deSitio.id);
   });
   it("intervalo > 0 y «otra» con nota", async () => {
@@ -192,9 +201,9 @@ describe("restricciones de la revisión final (catalogos_restricciones)", () => 
     const o2 = await prisma.careRoutine.create({ data: { kind: "otra", kindNote: "desinfección", intervalDays: 7, equipmentId: e.id } });
     rutinas.push(o2.id);
     // Y lo mismo para las rutinas de sitio.
-    const s1 = await prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "a", intervalDays: 30, locationId: sitioA } });
+    const s1 = await prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "a", intervalDays: 30, locationId: beneficioA } });
     rutinas.push(s1.id);
-    await rechazaCon(prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "b", intervalDays: 30, locationId: sitioA } }), /Unique constraint/);
+    await rechazaCon(prisma.careRoutine.create({ data: { kind: "fumigacion", kindNote: "b", intervalDays: 30, locationId: beneficioA } }), /Unique constraint/);
   });
 
   it("motivo de anulación, nota de tipo y nota de material no pueden ser sólo espacios", async () => {

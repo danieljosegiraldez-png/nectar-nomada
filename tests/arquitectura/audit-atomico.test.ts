@@ -107,6 +107,17 @@ interface Llamada {
  * Del `=>` en adelante: si el cuerpo es un bloque se casan llaves, y si es una
  * expresión se corta en la primera coma o paréntesis de cierre a profundidad
  * cero. Ninguna de las dos depende del formato.
+ *
+ * **`function nombre(tx: Tipo, …)` entró el 2026-09-19**, con
+ * `crearConsumoEnTx` (T3 de rutinas de instalaciones): antes todo cierre con
+ * `tx` era una función flecha de un único parámetro —`(tx) => …`—, y una
+ * función NOMBRADA que recibe `tx` como primer parámetro y otros detrás
+ * —para que otra transacción pueda reutilizarla, en vez de un ayudante que
+ * abre la suya— no casaba con ese molde. La llamada SÍ vive dentro de la
+ * transacción de quien la invoca; lo que no reconocía el detector era la
+ * forma. `envasesDelLote`/`disponiblesPorLote` (`commerce/tienda.ts`) y
+ * `versionIdDe` (`traceability/reporteDeVisita.ts`) tienen la misma forma y no
+ * auditan nada, así que ampliar el patrón no cambia su clasificación.
  */
 /**
  * El mismo texto con comentarios y cadenas **en blanco**, conservando cada
@@ -164,7 +175,8 @@ function sinRuido(src: string): string {
   return salida.join("");
 }
 
-const CIERRE_CON_TX = /(?:async\s*)?\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\], ]*)?\)\s*=>/g;
+const CIERRE_CON_TX =
+  /(?:async\s*)?\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\], ]*)?\)\s*=>|function\s+[A-Za-z_$][\w$]*\s*\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\],: ]*)?\)/g;
 
 function rangosDeTransaccion(fuente: string): Array<[number, number]> {
   const src = sinRuido(fuente);
@@ -198,6 +210,116 @@ function rangosDeTransaccion(fuente: string): Array<[number, number]> {
     if (fin !== -1) rangos.push([m.index, fin]);
   }
   return rangos;
+}
+
+/**
+ * **Ronda 1 de revisión de T3 (2026-09-19).** La rama `function nombre(tx…)`
+ * de `CIERRE_CON_TX` sólo demuestra que el CUERPO de esa función corre con el
+ * `tx` que recibe. No demuestra que quien la LLAMA le pase de verdad una
+ * transacción: `lib/commerce/tienda.ts` ya llama a `envasesDelLote(prisma,
+ * lotId)` con el cliente global —lícito, porque no audita nada—, y
+ * `Prisma.TransactionClient` acepta un `PrismaClient` normal en su tipo, así
+ * que `crearConsumoEnTx(prisma, …)` compilaría igual y partiría la fila, el
+ * descuento de existencias y el `AuditEvent` en tres confirmaciones sueltas
+ * con el guardia en verde.
+ *
+ * Esta sección aísla sólo esa rama —con el nombre capturado— para poder
+ * preguntar, de cada función que cae en ella Y audita, si TODOS sus
+ * llamadores en `lib/` y `app/` le pasan `tx` como primer argumento. El
+ * `tests/` queda fuera a propósito: es donde vive el flip-test de esta misma
+ * regla, y unos cuantos tests abren su propia `$transaction` y llaman al
+ * ayudante desde el callback con la variable que ELLOS llamaron `tx` —la
+ * misma convención que el resto de esta casa—, así que no aporta ninguna
+ * llamada nueva que vigilar.
+ */
+const NOMBRE_FUNCION_CON_TX =
+  /function\s+([A-Za-z_$][\w$]*)\s*\(\s*tx\s*(?::\s*[A-Za-z_$][\w.$<>\[\],: ]*)?\)/g;
+
+/** Ver el punto ciego de firma en una sola línea, documentado más arriba. */
+function funcionesNombradasConTx(fuente: string): Array<{ nombre: string; inicio: number; fin: number }> {
+  const src = sinRuido(fuente);
+  const re = new RegExp(NOMBRE_FUNCION_CON_TX.source, "g");
+  const salida: Array<{ nombre: string; inicio: number; fin: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    let j = m.index + m[0].length;
+    while (j < src.length && /\s/.test(src[j]!)) j++;
+    if (src[j] !== "{") continue;
+    let profundidad = 0;
+    let fin = -1;
+    for (let k = j; k < src.length; k++) {
+      if (src[k] === "{") profundidad++;
+      else if (src[k] === "}") {
+        profundidad--;
+        if (profundidad === 0) { fin = k; break; }
+      }
+    }
+    if (fin !== -1) salida.push({ nombre: m[1]!, inicio: m.index, fin });
+  }
+  return salida;
+}
+
+interface FuncionTransaccional {
+  archivo: string;
+  nombre: string;
+}
+
+/**
+ * De las funciones nombradas con `tx` de un archivo, sólo las que auditan
+ * —«al mínimo un `recordAuditEvent`», que es la condición que pidió la
+ * revisión—. Busca en la fuente SIN blanquear porque el rango ya viene de la
+ * versión blanqueada y ambas tienen la misma longitud y los mismos saltos de
+ * línea: la comprobación es la misma que ya usa `llamadas` más abajo.
+ */
+function funcionesTransaccionalesConAudit(archivo: string, fuente: string): FuncionTransaccional[] {
+  return funcionesNombradasConTx(fuente)
+    .filter(({ inicio, fin }) => fuente.slice(inicio, fin).includes("recordAuditEvent("))
+    .map(({ nombre }) => ({ archivo, nombre }));
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * El primer argumento de una llamada `nombre(...)`, contando profundidad de
+ * paréntesis/corchetes/llaves — la misma técnica que la rama de expresión de
+ * `rangosDeTransaccion` y que `textoDeLaLlamada`, aplicada al primer
+ * argumento en vez de a la llamada entera. `aperturaParen` es el índice del
+ * `(` que abre la llamada.
+ */
+function primerArgumento(src: string, aperturaParen: number): string {
+  let profundidad = 0;
+  for (let k = aperturaParen; k < src.length; k++) {
+    const c = src[k];
+    if (c === "(" || c === "[" || c === "{") { profundidad++; continue; }
+    if (c === ")" || c === "]" || c === "}") {
+      profundidad--;
+      if (profundidad === 0) return src.slice(aperturaParen + 1, k).trim();
+      continue;
+    }
+    if (c === "," && profundidad === 1) return src.slice(aperturaParen + 1, k).trim();
+  }
+  return src.slice(aperturaParen + 1).trim();
+}
+
+/**
+ * Líneas de `fuente` donde se llama a `nombre(` sin `tx` LITERAL como primer
+ * argumento — sin resolver alias ni seguir el valor, que es la simplificación
+ * que pidió la revisión: «el argumento literal `tx`». Excluye la propia
+ * declaración (`function nombre(tx…)`), que también casa con `nombre\s*\(`.
+ */
+function llamadasSinTx(fuente: string, nombre: string): number[] {
+  const src = sinRuido(fuente);
+  const re = new RegExp(`\\b${escapeRegex(nombre)}\\s*\\(`, "g");
+  const violaciones: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    if (/\bfunction\s+$/.test(src.slice(Math.max(0, m.index - 40), m.index))) continue;
+    const aperturaParen = m.index + m[0].length - 1;
+    if (primerArgumento(src, aperturaParen) !== "tx") violaciones.push(lineaDe(src, m.index));
+  }
+  return violaciones;
 }
 
 /** Número de línea 1-indexado de un desplazamiento absoluto. */
@@ -298,11 +420,55 @@ function llamadas(fuente: string): Llamada[] {
  * tanda: lo que faltaba era que la escritura y su audit fueran juntas. Que las
  * N filas se apliquen todas o ninguna es otra decisión, y cambiaría el
  * comportamiento de dos guiones que ya se ejecutaron.
+ *
+ * **Otro punto ciego, de la rama `function nombre(tx…)` del 2026-09-19, dicho
+ * aquí en vez de esperar a que alguien lo descubra (ronda 1 de revisión de
+ * T3).** Sólo reconoce una firma en UNA sola línea y SIN anotación de tipo de
+ * retorno:
+ * - `function f(\n  tx: X,\n  …\n)` —firma partida en varias líneas— no casa.
+ *   La función queda fuera de esta rama entera, así que ni la regla de abajo
+ *   («cada `recordAuditEvent` en transacción recibe su cliente») ni la nueva
+ *   regla del llamador la vigilan. Falla en rojo de todas formas, y a viva
+ *   voz: al no reconocerse ningún rango de transacción para esa función, su
+ *   `recordAuditEvent` sale «huérfano» y la tercera regla de abajo («todo
+ *   `recordAuditEvent` va en una transacción, o dice por qué no») se pone roja
+ *   con su nombre.
+ * - `function f(tx: X): Promise<Y> {` —con anotación de tipo de retorno antes
+ *   de la llave— hace que el rastreador de rangos SE PASE: tras el `)` de los
+ *   parámetros no encuentra `{` sino `:`, cae en la rama pensada para el
+ *   cuerpo-expresión de una flecha, y cuenta el `{` del cuerpo real como si
+ *   fuera parte de esa expresión. El rango que sale de ahí no es de fiar.
+ *
+ * Ninguna de las dos se ha comprobado con mutación —queda dicho, no cazado—,
+ * pero las dos fallan RUIDOSAMENTE (una tercera regla existente se pone roja
+ * con nombre de archivo y línea) en vez de quedarse calladas.
  */
 const ARCHIVOS = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), ...fuentes(join(RAIZ, "scripts"))]
   .map((r) => relative(RAIZ, r))
   .filter((r) => readFileSync(join(RAIZ, r), "utf8").includes("recordAuditEvent("))
   .sort();
+
+/**
+ * Todo `lib/`, `app/` y `scripts/` — no sólo `ARCHIVOS`, que se filtra por
+ * quien YA audita — porque quien llama a una función transaccional puede
+ * vivir en un archivo que no audita nada por su cuenta.
+ *
+ * `scripts/` entró en la ola de arreglos de revisión final (2026-09-19,
+ * Hallazgo 6): `ARCHIVOS` ya lo recorre, pero esta lista se había quedado en
+ * `lib/`+`app/`, así que un guion que llamara a una función transaccional
+ * pasaba sin que esta regla lo viera — el mismo punto ciego que costó
+ * `app/actions/auth.ts` cuando `fuentes` sólo miraba `lib/`. Medido al
+ * escribir esto: ningún archivo de `scripts/` llama hoy a ninguna
+ * `TRANSACCIONALES_CON_AUDIT`, así que el guardia sigue en verde — cubre el
+ * caso futuro, no corrige uno presente.
+ */
+const TODO_LIB_APP = [...fuentes(join(RAIZ, "lib")), ...fuentes(join(RAIZ, "app")), ...fuentes(join(RAIZ, "scripts"))]
+  .map((r) => relative(RAIZ, r))
+  .sort();
+
+const TRANSACCIONALES_CON_AUDIT: FuncionTransaccional[] = ARCHIVOS.flatMap((a) =>
+  funcionesTransaccionalesConAudit(a, readFileSync(join(RAIZ, a), "utf8")),
+);
 
 describe("el audit viaja con la transacción que lo produjo", () => {
   /**
@@ -384,6 +550,73 @@ describe("el audit viaja con la transacción que lo produjo", () => {
       dentro.length,
       "el audit del `crear` de un ayudante volvió a leerse como suelto: el análisis está atado a `$transaction(` otra vez",
     ).toBe(1);
+  });
+
+  /**
+   * Control sintético del ANÁLISIS de la regla del llamador, sobre un
+   * fixture aislado — el mismo estilo que el control de arriba. Un caller
+   * que pasa `prisma` tiene que marcarse; uno que pasa `tx` no.
+   */
+  it("control sintético: pasar `prisma` en vez de `tx` se marca, pasar `tx` no", () => {
+    const fuente = [
+      "function ayudanteConAudit(tx: Prisma.TransactionClient, userAccountId: string, input: unknown) {",
+      "  return recordAuditEvent({ operation: 'x' }, tx);",
+      "}",
+      "",
+      "async function llamadorMalo() {",
+      "  return ayudanteConAudit(prisma, actor, {});",
+      "}",
+      "",
+      "async function llamadorBueno(tx: Prisma.TransactionClient) {",
+      "  return ayudanteConAudit(tx, actor, {});",
+      "}",
+    ].join("\n");
+
+    const funciones = funcionesTransaccionalesConAudit("fixture.ts", fuente);
+    expect(
+      funciones.map((f) => f.nombre),
+      "el fixture no reconoció la función de prueba como transaccional-con-audit",
+    ).toEqual(["ayudanteConAudit"]);
+
+    const violaciones = llamadasSinTx(fuente, "ayudanteConAudit");
+    expect(violaciones, "el caller que pasa `prisma` no se marcó, o el que pasa `tx` se marcó de más").toEqual([6]);
+  });
+
+  /**
+   * **Regla nueva, ronda 1 de revisión de T3 (2026-09-19).** La rama
+   * `function nombre(tx…)` sólo demuestra que el CUERPO corre con el `tx`
+   * que recibe — no que quien la llama se lo pase de verdad. El repositorio
+   * ya tiene el precedente de llamar a un ayudante con `tx` nombrado usando
+   * el cliente global (`envasesDelLote(prisma, lotId)`, lícito porque no
+   * audita nada), y `Prisma.TransactionClient` acepta un `PrismaClient`
+   * normal en su tipo: `crearConsumoEnTx(prisma, …)` compilaría igual y
+   * partiría la fila, el descuento de existencias y el `AuditEvent` en tres
+   * confirmaciones sueltas con el guardia de arriba en verde, porque ese
+   * guardia sólo mira DENTRO de la función, nunca a quien la llama.
+   *
+   * Por cada función que cae en esa rama Y audita, cada llamada suya en
+   * `lib/` y `app/` —fuera de su propia definición— tiene que pasarle `tx`
+   * literal como primer argumento.
+   */
+  it("quien llama a una función nombrada que audita en transacción le pasa `tx`", () => {
+    expect(
+      TRANSACCIONALES_CON_AUDIT.length,
+      "ninguna función nombrada con `tx` audita: o no queda ninguna (revisar el comentario de esta regla), " +
+        "o el detector dejó de reconocerlas",
+    ).toBeGreaterThan(0);
+
+    const violaciones = TRANSACCIONALES_CON_AUDIT.flatMap(({ archivo, nombre }) =>
+      TODO_LIB_APP.flatMap((llamador) =>
+        llamadasSinTx(readFileSync(join(RAIZ, llamador), "utf8"), nombre).map(
+          (linea) => `${llamador}:${linea} llama a \`${nombre}\` (definida en ${archivo}) sin pasarle \`tx\` como primer argumento`,
+        ),
+      ),
+    );
+    expect(
+      violaciones,
+      "Recibe una transacción abierta pero se la puede llamar con el cliente global: eso separa la fila, el " +
+        "descuento de existencias y el AuditEvent en tres confirmaciones sueltas en vez de una.",
+    ).toEqual([]);
   });
 
   it("el análisis encuentra transacciones y llamadas de verdad", () => {

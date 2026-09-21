@@ -4158,3 +4158,30 @@ en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-1
 los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
 ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
 dispatch llevar prohibición explícita de reset/restore/migrate dev.
+
+**Archivada el 2026-09-21**, con el estado en 412/400 líneas tras rebasar el PR #456 (rutinas de
+lugar y la bodega) sobre `origin/main` (919d0ba4): «La cera con el color de su año», la más vieja.
+Su decisión vive en **ADR-173**, que ya trae el mismo contenido. La otra sección que el chequeo
+nombró, «Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)», **no se archivó**: su
+última línea —«De Daniel: dar el perfil Recolector (ámbito: la finca) a cada recolector con
+cuenta»— es un pendiente que no aparece en ningún ADR ni en `docs/architecture/DECISIONS.md`, y la
+regla de esta sesión manda parar y reportarlo en vez de archivarlo en silencio. Queda en
+`SESSION_STATE.md` §2, y el presupuesto de líneas sigue por encima de 400 hasta que Daniel diga si
+ese pendiente ya se hizo.
+
+### 2026-09-18 · La cera con el color de su año
+
+ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
+calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
+enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
+en la inspección (toca la cola sin conexión) y el año de las reinas.
+
+**Archivada el 2026-09-21**, al rebasar el PR #456 con el estado en 405/400 líneas: «Jornada de cosecha y entrega al beneficio (PR #431)». Su última línea era un pendiente de Daniel que no vivía en ningún otro sitio —dar el perfil Recolector a cada recolector con cuenta—, así que antes de archivarla se movió a §3 del estado, igual que se hizo con Kiva Estate.
+
+### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
+
+`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
+foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
+**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
+Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.

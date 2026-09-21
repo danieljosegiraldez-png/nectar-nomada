@@ -18,7 +18,7 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { recordAuditEvent } from "../audit";
-import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
+import type { DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
 export class LabourValidationError extends Error {}
 export class MaterialConsumptionValidationError extends Error {}
@@ -176,7 +176,10 @@ export type MaterialConsumptionParent =
   // ahumador, un encendedor, una lija— pertenece a la visita y no al sitio.
   // El ámbito de autorización sale de la ubicación DE la jornada: una visita
   // no lleva permisos propios.
-  | { kind: "fieldSession"; fieldSessionId: string };
+  | { kind: "fieldSession"; fieldSessionId: string }
+  // La vez que se hizo una rutina de cuidado; sólo la crea
+  // `lib/rutinas/rutinas.ts`, que autoriza en el lugar o el equipo.
+  | { kind: "careRoutineEvent"; careRoutineEventId: string };
 
 export interface RecordMaterialConsumptionEntryInput {
   // Required for every parent kind except "location" — same convention as
@@ -216,7 +219,88 @@ function consumptionParentData(parent: MaterialConsumptionParent) {
       return { locationId: parent.locationId };
     case "fieldSession":
       return { fieldSessionId: parent.fieldSessionId };
+    case "careRoutineEvent":
+      return { careRoutineEventId: parent.careRoutineEventId };
   }
+}
+
+function validarNombreYLote(input: RecordMaterialConsumptionEntryInput) {
+  if (!input.materialName.trim()) throw new MaterialConsumptionValidationError("material_name_required");
+  if (!input.batchLabel.trim()) throw new MaterialConsumptionValidationError("batch_label_required");
+}
+
+/**
+ * Crear un consumo DENTRO de una transacción ajena: la fila, su descuento de
+ * existencias y su AuditEvent, los tres con `tx`. **No autoriza**: la
+ * autorización es de quien la llama —`recordMaterialConsumptionEntry` por el
+ * lote o el lugar; `registrarRealizada` por la rutina—.
+ */
+export async function crearConsumoEnTx(tx: Prisma.TransactionClient, userAccountId: string, input: RecordMaterialConsumptionEntryInput) {
+  validarNombreYLote(input);
+
+  const creada = await tx.materialConsumptionEntry.create({
+    data: {
+      materialName: input.materialName.trim(),
+      batchLabel: input.batchLabel.trim(),
+      consumableLotId: input.consumableLotId ?? null,
+      quantity: input.quantity ?? null,
+      unit: input.unit ?? null,
+      occurredAt: input.occurredAt ?? new Date(),
+      operatorPersonId: input.operatorPersonId ?? null,
+      provenanceClass: input.provenanceClass,
+      dataQuality: input.dataQuality ?? null,
+      notes: input.notes ?? null,
+      createdBy: userAccountId,
+      ...consumptionParentData(input.parent),
+    },
+  });
+
+  // **El descuento, en la MISMA transacción.** Un consumo guardado sin su
+  // descuento sería material gastado que el inventario nunca vio, y el
+  // saldo mentiría desde ese momento.
+  //
+  // Sin cantidad no se descuenta y la fila se guarda igual: «se usó aserrín
+  // de este saco» sin pesar dice DE QUÉ LOTE salió aunque no cuánto, e
+  // inventar un descuento sería peor que no descontar nada.
+  if (input.consumableLotId && input.quantity != null) {
+    const unidad = (input.unit ?? "").trim();
+    if (!unidad) throw new MaterialConsumptionValidationError("unidad requerida para descontar del lote");
+    const previo = await tx.consumableStockEvent.findFirst({
+      where: { consumableLotId: input.consumableLotId },
+      select: { unit: true },
+    });
+    if (previo && previo.unit !== unidad) {
+      throw new MaterialConsumptionValidationError(
+        `unidad distinta: el lote va en ${previo.unit} y el consumo viene en ${unidad}`,
+      );
+    }
+    await tx.consumableStockEvent.create({
+      data: {
+        consumableLotId: input.consumableLotId,
+        eventType: "consumed",
+        quantity: input.quantity,
+        unit: unidad,
+        occurredAt: input.occurredAt ?? new Date(),
+        provenanceClass: input.provenanceClass,
+        createdBy: userAccountId,
+      },
+    });
+  }
+
+  // C1 §3: evidentiary write (carries provenanceClass).
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "material_consumption_entry.create",
+      entityType: "material_consumption_entry",
+      entityId: creada.id,
+      after: creada,
+      sourceInterface: "traceability.service",
+    },
+    tx,
+  );
+
+  return creada;
 }
 
 /**
@@ -226,8 +310,13 @@ function consumptionParentData(parent: MaterialConsumptionParent) {
  * "never a guessed number"). `materialName`/`batchLabel` are required.
  */
 export async function recordMaterialConsumptionEntry(userAccountId: string, input: RecordMaterialConsumptionEntryInput) {
-  if (!input.materialName.trim()) throw new MaterialConsumptionValidationError("material_name_required");
-  if (!input.batchLabel.trim()) throw new MaterialConsumptionValidationError("batch_label_required");
+  validarNombreYLote(input);
+
+  if (input.parent.kind === "careRoutineEvent") {
+    // Ese padre sólo lo crea el servicio de rutinas, que ya sabe autorizar en
+    // el lugar o el equipo de la rutina — este servicio no tiene esa lectura.
+    throw new MaterialConsumptionValidationError("consumo_de_rutina_por_su_servicio");
+  }
 
   if (input.parent.kind === "location") {
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
@@ -259,71 +348,7 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     // escritura ya vive dentro de `unaVezPorEnvio`, así que envolverla por
     // fuera no la haría atómica — sólo añadiría una transacción alrededor de
     // algo ya confirmado. Es la misma forma que `measurements.ts` ya usaba.
-    crear: async (tx) => {
-      const creada = await tx.materialConsumptionEntry.create({
-        data: {
-          materialName: input.materialName.trim(),
-          batchLabel: input.batchLabel.trim(),
-          consumableLotId: input.consumableLotId ?? null,
-          quantity: input.quantity ?? null,
-          unit: input.unit ?? null,
-          occurredAt: input.occurredAt ?? new Date(),
-          operatorPersonId: input.operatorPersonId ?? null,
-          provenanceClass: input.provenanceClass,
-          dataQuality: input.dataQuality ?? null,
-          notes: input.notes ?? null,
-          createdBy: userAccountId,
-          ...consumptionParentData(input.parent),
-        },
-      });
-
-      // **El descuento, en la MISMA transacción.** Un consumo guardado sin su
-      // descuento sería material gastado que el inventario nunca vio, y el
-      // saldo mentiría desde ese momento.
-      //
-      // Sin cantidad no se descuenta y la fila se guarda igual: «se usó aserrín
-      // de este saco» sin pesar dice DE QUÉ LOTE salió aunque no cuánto, e
-      // inventar un descuento sería peor que no descontar nada.
-      if (input.consumableLotId && input.quantity != null) {
-        const unidad = (input.unit ?? "").trim();
-        if (!unidad) throw new MaterialConsumptionValidationError("unidad requerida para descontar del lote");
-        const previo = await tx.consumableStockEvent.findFirst({
-          where: { consumableLotId: input.consumableLotId },
-          select: { unit: true },
-        });
-        if (previo && previo.unit !== unidad) {
-          throw new MaterialConsumptionValidationError(
-            `unidad distinta: el lote va en ${previo.unit} y el consumo viene en ${unidad}`,
-          );
-        }
-        await tx.consumableStockEvent.create({
-          data: {
-            consumableLotId: input.consumableLotId,
-            eventType: "consumed",
-            quantity: input.quantity,
-            unit: unidad,
-            occurredAt: input.occurredAt ?? new Date(),
-            provenanceClass: input.provenanceClass,
-            createdBy: userAccountId,
-          },
-        });
-      }
-
-      // C1 §3: evidentiary write (carries provenanceClass).
-      await recordAuditEvent(
-        {
-          actorUserAccountId: userAccountId,
-          operation: "material_consumption_entry.create",
-          entityType: "material_consumption_entry",
-          entityId: creada.id,
-          after: creada,
-          sourceInterface: "traceability.service",
-        },
-        tx,
-      );
-
-      return creada;
-    },
+    crear: (tx) => crearConsumoEnTx(tx, userAccountId, input),
   });
 
   return materialConsumptionEntry;

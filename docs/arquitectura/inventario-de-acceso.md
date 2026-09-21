@@ -11,9 +11,15 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
+## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
+## vez el 2026-09-21 al rebasar `spec/instalaciones-rutinas`
 
-**545 operaciones** que tocan la base, en **152 archivos**:
+**557 operaciones** que tocan la base, en **154 archivos** — regenerado tras el
+rebase de `spec/instalaciones-rutinas` sobre `origin/main` (919d0ba4, 2026-09-21),
+con `node scripts/inventario-de-acceso.mjs`: `origin/main` mide 545 operaciones en
+152 archivos; la diferencia —**+12 operaciones en +2 archivos** (+10 guardia
+directo, +1 depende del llamador, +1 acotado por construcción)— es lo que trae
+esta rama (bodega, rutinas de lugar) encima:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,9 +28,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **407** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **78** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **417** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **42** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **79** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
@@ -142,9 +148,74 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `recepcionDeEntregas` entra como **depende del llamador**: no recibe principal, y sus dos
 > llamadores (`detalleDeJornada`, `misEntregas`) ya autorizaron esas entregas antes.
 
+> **Rutinas de lugar (Tarea 4, spec 2026-09-19 §4.2), con un archivo nuevo.**
+> `lib/rutinas/lugares.ts` aporta **cuatro** operaciones. Tres suben la fila
+> de **guardia directo**: `puedeSobreLugar` llama a `can(` directo;
+> `insumosDeLugar` y `equiposAqui` se gatean sobre `puedeSobreLugar` antes de
+> consultar. Además, en `lib/rutinas/rutinas.ts`, ya inventariado, se le suman
+> `rutinasDeLugar` y `vencidasPorLugar` —dos operaciones más de **guardia
+> directo**, fuera de la cuenta de `lugares.ts`—, que exigen
+> `puedeSobreLugar(…, "view")` antes de leer. La cuarta operación de
+> `lugares.ts`, `lugarParaRutina`, no recibe principal a propósito: lee el
+> lugar ANTES de que `requireRutinaAccess` compruebe el permiso, para
+> distinguir «no admite rutinas» de «prohibido» — mirada a mano y explicada en
+> el allowlist, y cae en **depende del llamador**. `rutaDeLugar` no toca la
+> base y no cuenta. Cifras exactas de esta fusión, regeneradas al final de la
+> Tarea 8 más abajo.
+
+> **Acciones y la tarjeta (Tarea 5, spec 2026-09-19 §5), sin archivo nuevo.**
+> `app/actions/rutinas.ts` no puede importar `lib/db` directamente (guardia
+> `no-restricted-imports`, `docs/arquitectura/acceso-a-datos.allowlist.json`), así
+> que `volverA()` —a dónde redirige cada acción, equipo o lugar— pasó a apoyarse
+> en `lugarParaVolver`, nueva en `lib/rutinas/lugares.ts`. Como se escribió
+> entonces, no recibía principal a propósito y subía la fila de **depende del
+> llamador**.
+>
+> **CORREGIDO en la ola de arreglos de revisión final (2026-09-19, Hallazgo A
+> de la revisión independiente de Codex): era exactamente el riesgo que el
+> párrafo de arriba minimizaba.** El `locationId` viene del formulario, sí,
+> pero un formulario lo rellena el NAVEGADOR de quien sea, así que un llamador
+> AUTENTICADO sin ningún permiso podía mandar el id de un lugar ajeno y
+> aprender su existencia y su tipo/padre por la URL de redirección misma,
+> incluso cuando la acción terminaba en `forbidden` — la autorización de la
+> ACCIÓN no protegía la RUTA de vuelta. `lugarParaVolver` ahora exige
+> `userAccountId` y comprueba `puedeSobreLugar(…, "view")` antes de leer nada;
+> sin permiso, `null`, igual que un id que no existe. Pasó de **depende del
+> llamador** a **guardia directo** (comprobado con
+> `node scripts/inventario-de-acceso.mjs --json`).
+
+> **La bodega (Tarea 2, spec 2026-09-19 §4.1), con un archivo nuevo.**
+> `lib/traceability/bodegas.ts` aporta **cuatro** operaciones y las cuatro
+> llevan **guardia directo**: `crearBodega` y `padresParaBodega`
+> resuelven `location:edit_beneficio` (`exigeEditarBeneficioEn`/`can()`) sobre
+> el candidato a padre; `listarBodegas` y `detalleBodega` resuelven
+> `manage_attributes` sobre la propia bodega. `padresParaBodega` llama a
+> `can(` directo y no al booleano `puedeEditarBeneficioEn` — ese envoltorio
+> sólo invoca `exigeEditarBeneficioEn` dentro de un try/catch, sin `can(`
+> literal en su propio cuerpo, así que el detector no lo reconoce como guardia
+> transitivo y la operación habría quedado «sin guardia visible» pese a estar
+> autorizada igual que sus hermanas. 4 = 4: si la cuenta no cerrara con la fila
+> de «guardia directo», alguna se habría colado sin ese permiso. Cifras exactas
+> de esta fusión, regeneradas al final del rebase más abajo.
+
 > **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
-> `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
-> `requireApiaryAccess` view sobre el apiario antes de leer. 489→490; el archivo ya estaba contado.
+> `marcosNegrosDelApiario`, que sube la fila de **guardia directo** tras rebasar sobre reinas y fitosanitarios: llama a
+> `requireApiaryAccess` view sobre el apiario antes de leer. El archivo ya estaba contado.
+
+> **Y el de 468→469, sin archivo nuevo, es `crearConsumoEnTx` (Tarea 3, spec
+> 2026-09-19).** Vive en `lib/traceability/operations.ts`, que ya estaba
+> inventariado, y sube la fila de **acotado por construcción**, 38→39. No es
+> el patrón de siempre —filtrar un `where` por el principal—: es el heurístico
+> `userAccountId,$` de fin de línea, porque el `create` termina en
+> `createdBy: userAccountId,`. La lectura correcta no es «autoriza por sí
+> misma»: es lo que dice su propio comentario, **«No autoriza: autoriza quien
+> la llama»** — `recordMaterialConsumptionEntry` aquí mismo, y en el plan
+> siguiente el registro de una rutina. Recibe el `tx` de quien la invoca en vez
+> de abrir el suyo, así que también entra en `reciben_transaccion` de
+> `acceso-a-datos.allowlist.json`, con su razón — es la misma forma que
+> `crearColocacionInicial` (`lib/apiary/hives.ts`, ADR-135): escribe unas pocas
+> filas y no consulta nada por su cuenta, así que no puede leer de más aunque
+> reciba el cliente entero.
 
 > **La cera con el color de su año (ADR-173, 2026-09-18).** Un archivo nuevo, `lib/apiary/cera.ts`,
 > con tres operaciones —`registrarCeraNueva`, `registrarSalidaDeMarcos` y `leyendaDeCera`— que

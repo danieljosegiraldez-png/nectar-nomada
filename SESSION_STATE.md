@@ -41,6 +41,14 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-21 · Rutinas de limpieza y fumigación en lugares, y la bodega (PR #456)
+
+ADR-180. La bodega (`storage_facility`) cuelga de un beneficio o de una finca, y la base lo exige.
+Las rutinas de equipo cuelgan también de lugares —beneficio, instalación, cama suelta, bodega—: avisan
+cuando vencen y **no bloquean**. El insumo usado descuenta existencias en la misma transacción. Visto en
+navegador con una cuenta DEMO en base propia. **Siguen:** rutinas por estante, ahora que `drying_rack`
+está en main.
+
 ### 2026-09-19 · De la recepción a los lotes (pieza 3 de 3)
 
 Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-de-la-recepcion-a-los-lotes*`. De una
@@ -118,22 +126,12 @@ en la descripción del PR.
 ADR-080: la ausencia nunca se guarda como 0. Todo `type="number"` pasa por `CampoNumerico`; lo vigila
 un guardia de arquitectura con flip-test, y se verificó en navegador girando la rueda sobre un campo
 crudo (vacío → 0) y uno protegido (sin cambio).
-### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
-
-`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
-foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
-**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
-Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
-**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
-
-### 2026-09-18 · La cera con el color de su año
-
-ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
-calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
-enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
-en la inspección (toca la cola sin conexión) y el año de las reinas.
-
 ## 3. Bloqueado, y en qué
+
+#### Recolectores: darles su perfil (de Daniel)
+
+Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
+(ámbito: la finca) a cada recolector con cuenta, para que anote su entrega en `/mis-entregas`.
 
 #### Kiva Estate: crear su terreno (de Daniel)
 

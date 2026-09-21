@@ -182,7 +182,19 @@ describe("el inventario del router", () => {
     // 106 → 105 el 2026-09-19: se retira /lots/new con la pieza 3 —un lote de cereza nace de una
     // recepción—. Es la primera vez que esta cifra BAJA, y por eso se dice. Medido con
     // `node scripts/inventario-de-rutas.mjs`: 105 entradas (94 páginas, 11 handlers).
-    expect(salida).toContain("105 entradas");
+    // 96 → 98 el mismo día: /beneficio/recepcion y /beneficio/pedidos (spec recepción de cereza).
+    // Medido: 87 páginas y 11 handlers.
+    // 98 → 101 el 2026-09-19 (rebase de spec/instalaciones-rutinas): /bodegas,
+    // /bodegas/nueva y /bodegas/[id] — la bodega como lugar con rutinas (Tarea 6,
+    // spec 2026-09-19 §4.1/§6). Medido con `node scripts/inventario-de-rutas.mjs`
+    // sobre el árbol ya rebasado sobre origin/main: 90 páginas y 11 handlers.
+    // 101 → 108 el 2026-09-21 (rebase final de spec/instalaciones-rutinas sobre
+    // origin/main 919d0ba4, un `origin/main` más nuevo que trajo más rutas propias).
+    // `origin/main` mide 105 entradas (94 páginas, 11 handlers); la diferencia
+    // —+3 páginas, los mismos /bodegas, /bodegas/nueva y /bodegas/[id]— es lo que
+    // trae esta rama. Medido con `node scripts/inventario-de-rutas.mjs` sobre el
+    // árbol ya rebasado: 108 entradas (97 páginas, 11 handlers).
+    expect(salida).toContain("108 entradas");
     expect(codigo, salida).toBe(0);
   });
 

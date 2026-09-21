@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { recordStorageMoveAction, type TraceabilityActionState } from "../../actions/traceability";
+import { ordenarParaAlmacenar } from "../../../lib/traceability/ordenarParaAlmacenar";
 
 const initialState: TraceabilityActionState = {};
 
@@ -12,6 +13,7 @@ interface Option {
 }
 interface LocationOption extends Option {
   organization: Option | null;
+  locationType: string;
 }
 
 export function StorageForm({
@@ -28,6 +30,12 @@ export function StorageForm({
 }) {
   const [state, formAction, pending] = useActionState(recordStorageMoveAction, initialState);
   const t = useTranslations("Traceability");
+  const { bodegas, otros } = ordenarParaAlmacenar(locations);
+  const opcion = (loc: LocationOption) => (
+    <option key={loc.id} value={loc.id}>
+      {loc.organization ? `${loc.name} (${loc.organization.name})` : loc.name}
+    </option>
+  );
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
@@ -36,11 +44,8 @@ export function StorageForm({
       <div className="nn-field">
         <label htmlFor="s-locationId">{t("storageLocationLabel")}</label>
         <select id="s-locationId" name="locationId" required>
-          {locations.map((loc) => (
-            <option key={loc.id} value={loc.id}>
-              {loc.organization ? `${loc.name} (${loc.organization.name})` : loc.name}
-            </option>
-          ))}
+          {bodegas.length ? <optgroup label={t("storageGroupBodegas")}>{bodegas.map(opcion)}</optgroup> : null}
+          <optgroup label={t("storageGroupOtros")}>{otros.map(opcion)}</optgroup>
         </select>
       </div>
       <div className="nn-field">
