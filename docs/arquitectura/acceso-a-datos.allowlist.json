@@ -246,6 +246,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/bandejasDelSecado.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/drying.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },

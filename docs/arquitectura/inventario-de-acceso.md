@@ -12,13 +12,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
-## vez el 2026-09-21 al rebasar `spec/instalaciones-rutinas`
+## vez el 2026-09-22 al rebasar `secado-2b`
 
-**561 operaciones** que tocan la base, en **155 archivos** — regenerado tras el
-rebase sobre `origin/main` (`98daefa7`, 2026-09-22), con
-`node scripts/inventario-de-acceso.mjs`: `origin/main` mide 557 operaciones en
-154 archivos. El logotipo de la finca suma **+4 operaciones en +1 archivo**
-(+3 guardia directo, +1 depende del llamador):
+**569 operaciones** que tocan la base, en **156 archivos** — regenerado tras el
+rebase sobre `origin/main` (`a7335007`, 2026-09-22), con
+`node scripts/inventario-de-acceso.mjs`: `origin/main` mide 561 operaciones en
+155 archivos. Secado por bandeja suma **+8 operaciones en +1 archivo**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -27,12 +26,12 @@ rebase sobre `origin/main` (`98daefa7`, 2026-09-22), con
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **421** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **428** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **18** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, desde el 2026-09-18 `listarFincas()`, y desde el 2026-09-21 las **13** que el detector daba por acotadas sólo por su sello de actor — las dieciocho miradas a mano y explicadas en el allowlist, **una de ellas como hallazgo** |
+| **19** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
 
 > **Un sello de actor no es un filtro (2026-09-21): tras fusionar #464, 41→28 acotado por construcción, 5→18
 > sin guardia visible; el total no cambia, 557.** La regla tenía una segunda forma,
@@ -80,6 +79,15 @@ rebase sobre `origin/main` (`98daefa7`, 2026-09-22), con
 > con `requireLocationAttributeAccess`); pedir la firma comprueba además que la ubicación sea una finca antes de crear
 > el objeto remoto. `urlDelLogotipo` es «depende del llamador» (79→80): firma la URL de
 > un `logoAssetId` que llega de `listarFincas`, que ya acota a lo que quien mira ve.
+
+> **Secado por bandeja, plan 2b, tarea 2 (2026-09-21, rebasado 2026-09-22): 561→569, y un archivo nuevo,
+> `lib/traceability/bandejasDelSecado.ts`.** Sus siete funciones exportadas —`posicionDeBandeja`,
+> `cargarBandeja`, `bajarBandeja`, `bandejasDeCorrida`, `bandejasDisponibles`, `moverBandeja` y
+> `posicionesParaMover`— suben **guardia directo**, 421→428: cada una exige `requireLotAccess`
+> sobre el lote de la corrida (`corridaConPermiso`), o `puedeVerEquipo`/`puedeConfigurarEn` sobre
+> el equipo o la posición. Y `lib/traceability/drying.ts` gana `cerrarCorridaEnTransaccion`, que
+> entra como **«recibe principal sin guardia visible»**, 18→19: no autoriza por sí misma — lo hace quien la llama
+> (`endDryingRun` y `bajarBandeja`) antes de abrir la transacción que la envuelve.
 
 > **Las pantallas de la pieza 3 (tarea 6, 2026-09-19): 522→526, las cuatro «depende del
 > llamador»**, 71→75. Son lectores para pintar: `mermasDeRecepciones`, `detalleDeRecepciones`,

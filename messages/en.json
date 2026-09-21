@@ -1394,6 +1394,7 @@
     "viewProcessButton": "Lot process",
     "chooseOption": "— Choose —",
     "error_lot_process": "The process could not be recorded: {detail}",
+    "error_bandeja": "The tray operation could not be completed: {detail}",
     "recordProcessInterventionButton": "Record handling",
     "processReportHeading": "Process, roast and cup report",
     "processReportIntro": "Each lot process with its intent, closing moisture, varietal, roast profile and the scores of the samples that came from it.",

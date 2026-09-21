@@ -37,6 +37,7 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
+import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
   abrirProceso,
@@ -223,6 +224,10 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   // Dos toques del mismo botón. No es un fallo del operario ni hay nada que
   // corregir en el formulario: lo que hay que decirle es que ya está guardado.
   if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");
+  // A4 (secado por bandeja, ajustes.md): sin esta rama, una bandeja cargada
+  // entre que se pinta la página y se envía el cierre era un 500 — el mismo
+  // caso que ya obligó a las ramas de arriba.
+  if (error instanceof BandejaError) return t("error_bandeja", { detail: error.codigo });
   throw error;
 }
 
@@ -623,15 +628,27 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const lotId = String(formData.get("lotId") ?? "");
-  await endDryingRun(user.userAccountId, {
-    dryingRunId: String(formData.get("dryingRunId") ?? ""),
-    endedAt: new Date(),
-    outputLotCode: String(formData.get("outputLotCode") ?? ""),
-    outputLotType: String(formData.get("outputLotType") ?? "green") as never,
-    quantity: emptyToNullNumber(formData.get("quantity")),
-    unit: emptyToNull(formData.get("unit")),
-    provenanceClass: "original_record",
-  });
+  try {
+    await endDryingRun(user.userAccountId, {
+      dryingRunId: String(formData.get("dryingRunId") ?? ""),
+      endedAt: new Date(),
+      outputLotCode: String(formData.get("outputLotCode") ?? ""),
+      outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+      quantity: emptyToNullNumber(formData.get("quantity")),
+      unit: emptyToNull(formData.get("unit")),
+      provenanceClass: "original_record",
+    });
+  } catch (error) {
+    // A4 (secado por bandeja, ajustes.md): una bandeja cargada entre que se
+    // pinta la página y se envía este formulario ya no es un 500 — vuelve al
+    // lote con el código en la URL, que es lo único que esta acción sin
+    // estado de error propio puede transmitir.
+    if (error instanceof BandejaError) {
+      revalidatePath(`/lots/${lotId}`);
+      redirect(`/lots/${lotId}?error=${error.codigo}`);
+    }
+    throw error;
+  }
 
   revalidatePath(`/lots/${lotId}`);
 }

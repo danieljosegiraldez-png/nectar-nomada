@@ -19,7 +19,8 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
-import type { DryingOutcome, LotType, ProvenanceClass } from "../../generated/prisma/client";
+import { BandejaError } from "./bandejaError";
+import type { DryingOutcome, Lot, LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
   const transformation = await prisma.lotTransformation.findFirst({
@@ -146,6 +147,109 @@ export interface EndDryingRunInput {
   endedOutcome?: DryingOutcome | null;
 }
 
+export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">;
+
+/**
+ * El cierre de un secado dentro de una transacción ajena: lo usan `endDryingRun`
+ * y bajar la última bandeja (`lib/traceability/bandejasDelSecado.ts`), que cierra en la
+ * MISMA transacción en que la baja. El permiso lo exige quien llama.
+ */
+export async function cerrarCorridaEnTransaccion(
+  tx: Parameters<typeof settleMassBalance>[0],
+  userAccountId: string,
+  dryingRunId: string,
+  sourceLot: Lot,
+  input: EndDryingRunInput,
+) {
+  const provenanceClass = input.provenanceClass;
+
+  const endedRun = await tx.dryingRun.update({
+    where: { id: dryingRunId },
+    data: { endedAt: input.endedAt, endedOutcome: input.endedOutcome ?? null },
+  });
+
+  const transformation = await tx.lotTransformation.create({
+    data: {
+      transformationType: "stage_change",
+      occurredAt: input.endedAt,
+      operatorPersonId: input.operatorPersonId ?? null,
+      notes: input.notes ?? null,
+      createdBy: userAccountId,
+      dryingRunId: dryingRunId,
+      provenanceClass,
+      sourceReference: input.sourceReference ?? null,
+      inputs: {
+        create: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
+      },
+    },
+  });
+
+  const outputLot = await tx.lot.create({
+    data: {
+      lotCode: input.outputLotCode,
+      lotType: input.outputLotType,
+      organizationId: sourceLot.organizationId,
+      projectId: sourceLot.projectId,
+      locationId: sourceLot.locationId,
+      createdBy: userAccountId,
+    },
+  });
+
+  await tx.lotTransformationOutput.create({
+    data: {
+      transformationId: transformation.id,
+      lotId: outputLot.id,
+      quantity: input.quantity ?? null,
+      unit: input.unit ?? null,
+    },
+  });
+
+  if (input.quantity != null && input.unit) {
+    await tx.quantityEvent.create({
+      data: {
+        lotId: outputLot.id,
+        eventType: "process_output",
+        quantity: input.quantity,
+        unit: input.unit,
+        occurredAt: input.endedAt,
+        transformationId: transformation.id,
+        createdBy: userAccountId,
+        provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+      },
+    });
+  }
+
+  // P0 — decrement the source lot. Only reached from the *closing*
+  // transformation: the run-opening one has zero outputs, so movesMaterial()
+  // inside settleMassBalance() correctly declines to consume anything then.
+  const reconciliation = await settleMassBalance(tx, {
+    transformationId: transformation.id,
+    transformationType: "stage_change",
+    organizationId: sourceLot.organizationId,
+    inputs: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
+    outputs: [{ quantity: input.quantity ?? null, unit: input.unit ?? null }],
+    occurredAt: input.endedAt,
+    provenanceClass,
+    sourceReference: input.sourceReference ?? null,
+    createdBy: userAccountId,
+  });
+
+  // C1 §3 pattern: an evidentiary write. The audit call for this same write
+  // is left to EACH CALLER's own transaction closure (`endDryingRun` below,
+  // and `bajarBandeja` in bandejasDelSecado.ts), not here:
+  // `tests/arquitectura/audit-atomico.test.ts` recognises "inside a
+  // transaction" only by a `(tx) => { … }` closure literal in the SAME file,
+  // and this helper's multi-parameter signature (`tx` plus four more) can
+  // never match that shape no matter where it is called from. Keeping the
+  // audit call textually inside each caller's own closure is what makes the
+  // guard's per-file, no-list-to-maintain analysis see it correctly, while the
+  // actual atomicity — same `tx`, same commit/rollback — is identical either
+  // way and is what the behavioural tests in bandejasDelSecado.test.ts and
+  // drying.test.ts verify.
+  return { run: endedRun, transformation, outputLot, reconciliation };
+}
+
 export async function endDryingRun(userAccountId: string, input: EndDryingRunInput) {
   const run = await prisma.dryingRun.findUnique({ where: { id: input.dryingRunId } });
   if (!run) throw new TraceabilityAccessError("drying_run_not_found");
@@ -154,98 +258,33 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
-  const provenanceClass = input.provenanceClass;
+  // DESPUÉS del permiso: a quien no gestiona el lote no se le dice si hay bandejas
+  // (revisión de Codex del plan). El secado termina bandeja a bandeja (Daniel,
+  // 2026-09-18); el disparador de `bandejas_de_la_corrida` cierra la carrera.
+  if (await prisma.dryingRunTray.count({ where: { dryingRunId: run.id, hasta: null } }) > 0) {
+    throw new BandejaError("bandejas_sin_bajar");
+  }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const endedRun = await tx.dryingRun.update({
-      where: { id: input.dryingRunId },
-      data: { endedAt: input.endedAt, endedOutcome: input.endedOutcome ?? null },
-    });
-
-    const transformation = await tx.lotTransformation.create({
-      data: {
-        transformationType: "stage_change",
-        occurredAt: input.endedAt,
-        operatorPersonId: input.operatorPersonId ?? null,
-        notes: input.notes ?? null,
-        createdBy: userAccountId,
-        dryingRunId: input.dryingRunId,
-        provenanceClass,
-        sourceReference: input.sourceReference ?? null,
-        inputs: {
-          create: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const resultado = await cerrarCorridaEnTransaccion(tx, userAccountId, run.id, sourceLot, input);
+      await recordAuditEvent(
+        {
+          actorUserAccountId: userAccountId,
+          operation: "drying_run.end",
+          entityType: "drying_run",
+          entityId: resultado.run.id,
+          after: resultado.run,
+          sourceInterface: "traceability.service",
         },
-      },
+        tx,
+      );
+      return resultado;
     });
-
-    const outputLot = await tx.lot.create({
-      data: {
-        lotCode: input.outputLotCode,
-        lotType: input.outputLotType,
-        organizationId: sourceLot.organizationId,
-        projectId: sourceLot.projectId,
-        locationId: sourceLot.locationId,
-        createdBy: userAccountId,
-      },
-    });
-
-    await tx.lotTransformationOutput.create({
-      data: {
-        transformationId: transformation.id,
-        lotId: outputLot.id,
-        quantity: input.quantity ?? null,
-        unit: input.unit ?? null,
-      },
-    });
-
-    if (input.quantity != null && input.unit) {
-      await tx.quantityEvent.create({
-        data: {
-          lotId: outputLot.id,
-          eventType: "process_output",
-          quantity: input.quantity,
-          unit: input.unit,
-          occurredAt: input.endedAt,
-          transformationId: transformation.id,
-          createdBy: userAccountId,
-          provenanceClass,
-          sourceReference: input.sourceReference ?? null,
-        },
-      });
-    }
-
-    // P0 — decrement the source lot. Only reached from the *closing*
-    // transformation: the run-opening one has zero outputs, so movesMaterial()
-    // inside settleMassBalance() correctly declines to consume anything then.
-    const reconciliation = await settleMassBalance(tx, {
-      transformationId: transformation.id,
-      transformationType: "stage_change",
-      organizationId: sourceLot.organizationId,
-      inputs: [{ lotId: sourceLot.id, quantity: input.quantity ?? null, unit: input.unit ?? null }],
-      outputs: [{ quantity: input.quantity ?? null, unit: input.unit ?? null }],
-      occurredAt: input.endedAt,
-      provenanceClass,
-      sourceReference: input.sourceReference ?? null,
-      createdBy: userAccountId,
-    });
-
-    // C1 §3 pattern: an evidentiary write. Dentro de la transacción y con
-    // `tx` desde el 2026-09-06: una escritura confirmada no puede quedarse
-    // sin su AuditEvent. Ver la cabecera de `lib/audit.ts`.
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "drying_run.end",
-        entityType: "drying_run",
-        entityId: endedRun.id,
-        after: endedRun,
-        sourceInterface: "traceability.service",
-      },
-      tx,
-    );
-
-    return { run: endedRun, transformation, outputLot, reconciliation };
-  });
-
-  return result;
+  } catch (error) {
+    // Si una bandeja se cargó entre la cuenta de arriba y el cierre, la base lo
+    // rechaza: llega como el mismo código, no como SQL (segunda pasada de Codex).
+    if (error instanceof Error && /bandejas sin bajar/.test(error.message)) throw new BandejaError("bandejas_sin_bajar");
+    throw error;
+  }
 }

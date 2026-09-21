@@ -1394,6 +1394,7 @@
     "viewProcessButton": "Proceso del lote",
     "chooseOption": "— Elige —",
     "error_lot_process": "No se pudo registrar el proceso: {detail}",
+    "error_bandeja": "No se pudo completar la operación con la bandeja: {detail}",
     "recordProcessInterventionButton": "Registrar manejo",
     "processReportHeading": "Reporte de proceso, tueste y taza",
     "processReportIntro": "Cada proceso de lote con su intención, su humedad de cierre, su varietal, su perfil de tueste y los puntajes de las muestras que salieron de él.",
