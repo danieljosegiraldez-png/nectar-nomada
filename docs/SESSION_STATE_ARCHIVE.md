@@ -4131,3 +4131,10 @@ más con el mismo defecto: `PENDING_IMPLEMENTATIONS/013`.
 ## 3. Bloqueado, y en qué
 
 #
+
+### 2026-09-18 · Alzas con marca
+
+ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
+colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
+contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
+falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.

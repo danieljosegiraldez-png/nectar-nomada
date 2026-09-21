@@ -6,6 +6,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { COOKIE_BENEFICIO, beneficioDeLaPagina } from "../../../lib/traceability/beneficioElegido";
 import { pedidosDeBeneficio } from "../../../lib/traceability/pedidosDeCereza";
+import { veredictosDePedidos } from "../../../lib/traceability/veredictoDelLote";
 import { proveedoresDeCereza } from "../../../lib/traceability/proveedoresDeCereza";
 import { listarFincas } from "../../../lib/traceability/fincas";
 import { BeneficioElegido } from "../../components/beneficio/BeneficioElegido";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Los pedidos de cereza del beneficio elegido (spec recepción §3.3 y §4): a quién, cuánto, con qué
- * margen, y lo recibido contra lo pedido. La calidad pedida se guarda y la evalúa la pieza 3.
+ * margen, lo recibido contra lo pedido, y el veredicto de calidad de cada lote que salió de él.
  * Ver exige `lot:view` sobre el beneficio; pedir y cerrar, `lot:manage`, que exige el servicio.
  */
 export default async function PedidosPage() {
@@ -46,6 +47,7 @@ export default async function PedidosPage() {
     gestiona ? listarFincas(user.userAccountId) : Promise.resolve([]),
   ]);
   const kg = (x: number) => x.toFixed(1);
+  const veredictos = await veredictosDePedidos(pedidos.map((p) => p.id));
 
   return (
     <div>
@@ -74,6 +76,18 @@ export default async function PedidosPage() {
                   {p.falta && p.estado === "cerrado" ? ` · ${t("falta")}` : ""}
                   {p.notaDeCierre ? ` · ${p.notaDeCierre}` : ""}
                 </span>
+                {(veredictos.get(p.id) ?? []).length > 0 ? (
+                  <ul>
+                    {(veredictos.get(p.id) ?? []).map((v) => (
+                      <li key={v.lotId}>
+                        <Link href={`/lots/${v.lotId}`} className="nn-code">{v.lotCode}</Link>
+                        {" — "}
+                        {t(`juicio_${v.juicio}`)}
+                        {v.motivo ? <span className="nn-muted">{` — ${v.motivo}`}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {gestiona && p.estado === "abierto" ? <CerrarPedidoForm pedidoId={p.id} /> : null}
               </li>
             ))}

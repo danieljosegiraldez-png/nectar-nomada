@@ -22,6 +22,7 @@
  */
 import { prisma } from "../db";
 import { recordTransformation, type CreateLotInput } from "./lots";
+import { recalcularVeredicto } from "./veredictoDelLote";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class SelectionValidationError extends Error {}
@@ -68,7 +69,15 @@ export interface RecordSelectionInput {
   sourceReference?: string | null;
   /** Requires `lot:override_balance`; never suppresses the Deviation. */
   acceptUnexplained?: { reason: string } | null;
+  /**
+   * Cómo estaba la cereza al pesarla. **Obligatoria si el método es la flotación** —la que moja la
+   * cereza—; en una selección manual o de banda no se pide, porque ahí la diferencia entre
+   * escurrida y mojada no existe (decisión de Daniel, 2026-09-19).
+   */
+  condicionDePesaje?: "DRAINED" | "WET" | "DRY" | null;
 }
+
+const CONDICIONES_DE_PESAJE = ["DRAINED", "WET", "DRY"] as const;
 
 /** Confirms a catalog value exists and belongs to the catalog it should. */
 async function requireCatalogValue(valueId: string, catalogKey: string, errorLabel: string) {
@@ -97,6 +106,20 @@ export async function recordSelection(userAccountId: string, input: RecordSelect
   const selectionMethodValueId = input.selectionMethodValueId
     ? await requireCatalogValue(input.selectionMethodValueId, "seleccion_metodo", "selection_method")
     : null;
+
+  // La condición de pesaje se pide sólo cuando el método moja la cereza. Se comprueba contra el
+  // valor CANÓNICO —el que devuelve requireCatalogValue— y no contra el id que llegó, para que un
+  // alias de «flotación» no se salte la exigencia.
+  const condicionDePesaje = input.condicionDePesaje ?? null;
+  if (condicionDePesaje != null && !CONDICIONES_DE_PESAJE.includes(condicionDePesaje)) {
+    throw new SelectionValidationError("condicion_de_pesaje_invalida");
+  }
+  if (selectionMethodValueId) {
+    const metodo = await prisma.variableCatalogValue.findUnique({ where: { id: selectionMethodValueId }, select: { value: true } });
+    if (metodo?.value === "flotacion" && condicionDePesaje == null) {
+      throw new SelectionValidationError("condicion_de_pesaje_obligatoria");
+    }
+  }
 
   const rejectedResolved = await Promise.all(
     input.rejected.map(async (rejected) => ({
@@ -139,6 +162,10 @@ export async function recordSelection(userAccountId: string, input: RecordSelect
     declaredLossUnit: input.declaredLossQuantity != null ? input.unit : null,
     declaredLossReason: input.declaredLossReason ?? null,
     acceptUnexplained: input.acceptUnexplained ?? null,
+    condicionDePesaje,
+    // El veredicto de calidad se recalcula DENTRO de la misma transacción: una selección no se
+    // guarda sin él, y si el lote no viene de recepciones no hace nada.
+    enLaMismaTransaccion: (tx) => recalcularVeredicto(tx, input.inputLotId),
   });
 }
 

@@ -70,6 +70,7 @@ export function SelectionForm({
   const siguiente = (usados: readonly string[]) =>
     codigosDerivados(lotCode, 1, [...codigosTomados, ...usados.filter(Boolean)])[0] ?? "";
 
+  const [metodo, setMetodo] = useState("");
   const [acceptedLotCode, setAcceptedLotCode] = useState(() => siguiente([]));
   const [rows, setRows] = useState<RejectionRow[]>(() => [
     { key: 0, categoryId: "", lotCode: siguiente([codigosDerivados(lotCode, 1, [...codigosTomados])[0] ?? ""]), quantity: "" },
@@ -136,13 +137,28 @@ export function SelectionForm({
 
       <div className="nn-field">
         <label htmlFor="sel-method">{t("selectionMethodLabel")}</label>
-        <select id="sel-method" name="selectionMethod" defaultValue="">
+        <select id="sel-method" name="selectionMethod" value={metodo} onChange={(e) => setMetodo(e.target.value)}>
           <option value="">—</option>
           {methods.map((m) => (
             <option key={m.id} value={m.id}>{m.value}</option>
           ))}
         </select>
       </div>
+
+      {/* Sólo la flotación moja la cereza, así que sólo ahí la diferencia entre escurrida y mojada
+          sería agua y no calidad, y sólo ahí se pide (spec de la recepción a los lotes §3.4). El
+          servicio lo vuelve a exigir: este `required` es una comodidad, no la regla. */}
+      {methods.find((m) => m.id === metodo)?.value === "flotacion" ? (
+        <div className="nn-field">
+          <label htmlFor="sel-condicion">{t("condicionDePesajeLabel")}</label>
+          <select id="sel-condicion" name="condicionDePesaje" defaultValue="" required>
+            <option value="" disabled>—</option>
+            <option value="DRAINED">{t("condicion_DRAINED")}</option>
+            <option value="WET">{t("condicion_WET")}</option>
+            <option value="DRY">{t("condicion_DRY")}</option>
+          </select>
+        </div>
+      ) : null}
 
       <div className="nn-field">
         <label htmlFor="sel-equipment">{t("selectionEquipmentLabel")}</label>

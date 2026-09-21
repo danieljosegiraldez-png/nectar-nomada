@@ -59,11 +59,9 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             aquí al lado. Ocultarlo es lo que SECURITY.md §2 llama esconder por
             UX: la escritura se sigue re-comprobando en el servidor pase lo que
             pase. */}
-        {canManageLots ? (
-          <Link href="/lots/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
-            {t("createLotButton")}
-          </Link>
-        ) : null}
+        {/* El botón «crear lote» se retiró el 2026-09-19 con la pieza 3: un lote de cereza nace
+            de una recepción, en /beneficio/recepcion, y no de un formulario que pedía su
+            organización y su ubicación a mano. Ver la cabecera de `recordHarvestEvent`. */}
         {/* El reporte transversal vive aquí y NO en la barra de navegación, por
             la misma razón que las recetas (ADR-100): S2 dejó esa barra en ocho
             entradas para que quepa en un teléfono, y un test lo vigila. Es de

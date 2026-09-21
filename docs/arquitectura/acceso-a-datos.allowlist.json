@@ -604,6 +604,14 @@
     {
       "archivo": "lib/beneficio/vistaDeBandejas.ts",
       "razon": "Módulo de dominio: el modelo de vista de /beneficio/bandejas (Tarea 5, plan 2a de secado). No autoriza nada por sí mismo: delega en `sitiosParaRegistrar`, `tiposDeBandeja`, `bandejasDeLaFinca`, `capacidadDeTipo` y `puedeGestionarLote`, cada uno ya guardado; sólo organizaciones con al menos un `site` entran (revisión final del plan 2a, A5)."
+    },
+    {
+      "archivo": "lib/traceability/lotesDeBeneficio.ts",
+      "razon": "Módulo de dominio: armar un lote con cereza de una o varias recepciones (spec de la recepción a los lotes §3.1). `armarLote` exige `requireLotAccess(manage)` sobre ESE beneficio —por `exigeGestionarBeneficio`— antes de tocar nada, y `recepcionesArmables` el de ver. Dentro de la transacción bloquea cada recepción con `SELECT … FOR UPDATE` en orden de id y recalcula el disponible ahí, porque una suma leída fuera no es una garantía; el disparador `lote_desde_recepcion_cabe` es la red. `origenDelLote` no recibe principal y está justificada aparte."
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "razon": "Módulo de dominio: el veredicto de calidad de un lote armado desde recepciones (spec de la recepción a los lotes §3.4). Lo ESCRIBE `recalcularVeredicto`, que corre dentro de la transacción de `recordSelection` —ya autorizada con `requireLotAccess(\"manage\")`— y está inventariada aparte. Lo LEEN `veredictoDeCalidadDelLote` y `veredictosDePedidos`, sin principal, desde pantallas que ya autorizaron lo que enseñan; las dos están en `dependen_del_llamador`."
     }
   ],
   "reciben_transaccion": [
@@ -682,6 +690,24 @@
     {
       "archivo": "lib/traceability/estantes.ts",
       "razon": "`crearPosiciones(tx, …)` recibe el `tx` de `crearEstante`/`ampliarEstante` para crear las posiciones DENTRO de la transacción que ya autorizó con `exigeEditarBeneficioEn` sobre la instalación; no autoriza nada por sí misma."
+    },
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "tomadoDe",
+      "razon": "Suma lo ya comprometido de UNA recepción —mermas vigentes más lo vinculado a lotes— dentro de la transacción que va a escribir, porque una suma leída fuera no es una garantía: dos mermas simultáneas la leerían las dos antes de que ninguna escribiera. Recibe el cliente de transacción para eso y sólo para eso; no es exportada, su único llamador es `anotarMerma` en este mismo archivo, que ya autorizó con `exigeGestionarBeneficio` y acaba de bloquear la fila de la recepción con `SELECT … FOR UPDATE`. Devuelve un número, no filas.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "recalcularVeredicto",
+      "razon": "Recibe el cliente de transacción PORQUE ÉSA es la propiedad: el veredicto de calidad de un lote se recalcula dentro de la misma transacción que la selección que lo cambia, así que no puede guardarse una selección sin su veredicto ni un veredicto sin su selección. Su único llamador es `recordSelection` (selection.ts), que ya pasó por `requireLotAccess(\"manage\")` sobre el lote de entrada dentro de `recordTransformation`. Lee las selecciones de ESE lote y sus recepciones, y escribe una sola fila, la suya.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "enLaMismaTransaccion (gancho de RecordTransformationInput)",
+      "razon": "No es una función que reciba una transacción: es un PARÁMETRO que la entrega. `recordTransformation` acepta un gancho que corre dentro de su transacción justo antes de confirmarla, para que un cálculo derivado —hoy `recalcularVeredicto`— no pueda guardarse por separado de la transformación que lo cambia: si lanza, todo revierte, y hay una prueba que lo afirma. Quien lo aprovecha está inventariado aparte. Lo que pase el gancho NO es una superficie nueva: `recordTransformation` ya autorizó los lotes de entrada con `requireLotAccess(\"manage\")` antes de abrir la transacción.",
+      "verificado": "2026-09-19"
     }
   ],
   "operaciones_sin_patron": [
@@ -1136,6 +1162,48 @@
       "archivo": "lib/traceability/locations.ts",
       "operacion": "lugaresDeOrganizacion",
       "razon": "Las Location propias de una organización más sus descendientes que heredan su organizationId (comentario del propio archivo). No recibe principal: es un hecho de la jerarquía. La usan guardias que SÍ autorizan (`exigeEditarBeneficioEnOrganizacion`) y lecturas ya acotadas por su llamador (`puedeVerEquiposEnOrganizacion` en `lib/equipos/bandejas.ts`, que primero prueba `edit_beneficio` y sólo baja el árbol para el resto).",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "disponibleDeRecepciones",
+      "razon": "Devuelve cuánto queda por repartir de unas recepciones ya elegidas: neto menos mermas vigentes menos lo ya vinculado a lotes. No recibe principal a propósito, misma disciplina que `recepcionDeEntregas` en este mismo archivo: sus llamadores —la pantalla del beneficio y `armarLote`— ya autorizaron esas recepciones con `exigeVerBeneficio`/`exigeGestionarBeneficio`. Lee cifras de ids concedidos y no escribe nada. La comprobación que SÍ decide —si una merma o un lote caben— no es ésta: vive dentro de la transacción, con la fila bloqueada, en `anotarMerma`, y el disparador `merma_de_recepcion_cabe` es su red.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/lotesDeBeneficio.ts",
+      "operacion": "origenDelLote",
+      "razon": "Camina la genealogía hacia arriba —de salida a entrada de cada `LotTransformation`— hasta los lotes que tienen vínculo con una recepción, y devuelve esas recepciones con sus kilos. No recibe principal a propósito, misma disciplina que `leerEnmiendas` y `recepcionDeEntregas`: su llamador es la ficha del lote, que ya resolvió `requireLotAccess(\"view\")` sobre ese lote antes de pedir su historia. Darle compuerta propia crearía dos sitios donde decidir lo mismo. Devuelve ids de recepción y kilos de un lote ya concedido, y no escribe nada.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "recalcularVeredicto",
+      "razon": "No recibe principal a propósito: no es una superficie, es el cálculo derivado que corre dentro de la transacción de `recordSelection`, que ya autorizó el lote con `requireLotAccess(\"manage\")`. Darle compuerta propia resolvería dos veces la misma autorización —y con el `tx` a medias— que es como se acaba con dos respuestas distintas. Si un lote no viene de recepciones, no hace nada.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/recepcionesDeCereza.ts",
+      "operacion": "mermasDeRecepciones",
+      "razon": "Devuelve las mermas vigentes de unas recepciones ya elegidas, para poder anular la que se anotó mal. No recibe principal a propósito, misma disciplina que `recepcionDeEntregas` y `disponibleDeRecepciones` en este mismo archivo: su único llamador es `app/beneficio/recepcion/page.tsx`, que le pasa las recepciones que `recepcionesDeBeneficio` —que sí exige `lot:view` sobre el beneficio— acaba de devolverle, y sólo cuando quien mira tiene `lot:manage`. La ESCRITURA hermana, `anularMerma`, sí exige principal.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/lotesDeBeneficio.ts",
+      "operacion": "detalleDeRecepciones",
+      "razon": "Devuelve quién entregó, de qué parcela, bloque o planta, o de qué proveedor, para pintar de dónde viene un lote. No recibe principal a propósito, misma disciplina que `origenDelLote` en este mismo archivo: su único llamador es la ficha del lote, que ya pasó por `getLotDetail` —`requireLotAccess(\"view\")`, que LANZA sin permiso— y le pasa los ids que `origenDelLote` acaba de devolver sobre ESE lote.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "veredictoDeCalidadDelLote",
+      "razon": "Lee el veredicto guardado de un lote para pintarlo. No recibe principal a propósito: su llamador es la ficha del lote, que ya autorizó el lote con `getLotDetail`. Devuelve cifras y un juicio de un lote ya concedido; la ESCRITURA, `recalcularVeredicto`, corre dentro de la transacción de la selección.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/veredictoDelLote.ts",
+      "operacion": "veredictosDePedidos",
+      "razon": "Los veredictos de los lotes de unos pedidos, agrupados, para la pantalla de pedidos. No recibe principal a propósito: los ids de pedido se los da `pedidosDeBeneficio`, que sí exige `lot:view` sobre el beneficio, en la misma página y dos líneas antes.",
       "verificado": "2026-09-19"
     }
   ]

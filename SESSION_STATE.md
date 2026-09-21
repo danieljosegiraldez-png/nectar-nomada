@@ -38,6 +38,20 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-19 · De la recepción a los lotes (pieza 3 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-de-la-recepcion-a-los-lotes*`. De una
+recepción salen **uno o varios lotes**, y cada proceso distinto es un lote distinto: el lote nace
+**sin proceso**, que se abre después sobre él. El vínculo recepción↔lote es de nivel 1 e inmutable;
+`origenDelLote` camina la genealogía hacia arriba, así que un lote tres transformaciones más abajo
+sigue diciendo de qué recepción vino, y **no cuenta dos veces** cuando dos ramas se fusionan. La
+merma baja el disponible y no es un lote. La **selección escribe el veredicto** de la calidad
+pedida —sobre TODAS sus selecciones, dentro de su misma transacción—, y no juzga cuando no puede:
+balance descuadrado, condiciones de pesaje distintas o un lote de dos pedidos. La condición de
+pesaje se exige **sólo en flotación**, que es la que moja la cereza. Se retiran `/lots/new`,
+`HarvestForm` y `ReceivingForm` —primera vez que la cifra de rutas baja, 98→97—; sus servicios se
+quedan con la nota de por qué. **Sin ver en navegador.**
+
 ### 2026-09-19 · La cera de la miel es subproducto, no merma (Q28, rebanada 2)
 
 ADR-178. La cera que sale al colar deja de ir en la merma y cuenta como salida del balance; la que
@@ -117,13 +131,6 @@ en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-1
 los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
 ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
 dispatch llevar prohibición explícita de reset/restore/migrate dev.
-
-### 2026-09-18 · Alzas con marca
-
-ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiario, se ponen en una
-colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
-contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
-falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
 
 ## 3. Bloqueado, y en qué
 

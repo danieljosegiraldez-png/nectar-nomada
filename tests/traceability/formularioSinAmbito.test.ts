@@ -4,7 +4,8 @@
  * **El defecto (sexta revisión, 2026-09-05).** `getManageableContext` devolvía
  * las tres listas vacías tanto para «no hay dónde registrar» como para «tu
  * cuenta no puede registrar en ningún sitio», y las páginas pintaban los
- * formularios igual. En `/lots/new`, `organizationId` y `locationId` son
+ * formularios igual. En `/lots/new` —retirada el 2026-09-19 con la pieza 3,
+ * pero el defecto es el mismo donde siga—, `organizationId` y `locationId` son
  * `<select required>` **sin opción de marcador**: con cero opciones el
  * formulario no se puede enviar y nada dice por qué. Lo mismo en
  * `/lots/[id]/storage/new`, que además se alcanza legítimamente —su guardia de

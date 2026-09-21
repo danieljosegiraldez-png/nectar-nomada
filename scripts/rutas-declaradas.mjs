@@ -79,7 +79,6 @@ export const RUTAS = {
   "/content/new": { clase: "requiere-sesion", razon: "Autoría de contenido." },
   "/content/[id]": { clase: "requiere-sesion", razon: "Autoría de contenido." },
   "/lots": { clase: "requiere-sesion", razon: "Trazabilidad de lotes." },
-  "/lots/new": { clase: "requiere-sesion", razon: "Trazabilidad de lotes." },
   "/lots/[id]": { clase: "requiere-sesion", razon: "Trazabilidad de lotes." },
   "/lots/[id]/report": { clase: "requiere-sesion", razon: "Informe de lote." },
   "/lots/[id]/drying/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },

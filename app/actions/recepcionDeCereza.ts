@@ -8,6 +8,8 @@ import { getCurrentUser } from "../../lib/auth/session";
 import { COOKIE_BENEFICIO } from "../../lib/traceability/beneficioElegido";
 import {
   RecepcionError,
+  anotarMerma,
+  anularMerma,
   anularRecepcion,
   confirmarFotoDeRecepcion,
   pedirSubidaDeFotoDeRecepcion,
@@ -15,6 +17,7 @@ import {
   type OrigenDeRecepcion,
 } from "../../lib/traceability/recepcionesDeCereza";
 import { PedidoError, cerrarPedido, crearPedido } from "../../lib/traceability/pedidosDeCereza";
+import { LoteDeBeneficioError, armarLote } from "../../lib/traceability/lotesDeBeneficio";
 import { ProveedorError, crearProveedorDeCereza } from "../../lib/traceability/proveedoresDeCereza";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { FechaDeDiaInvalida, LocalDateTimeError, TZ_OFFSET_FIELD, fechaDeDia, parseLocalDateTime } from "../../lib/time/localDateTime";
@@ -34,11 +37,15 @@ const CODIGOS = [
   "clave_invalida", "tamano_invalido", "beneficio_no_valido", "kg_invalidos", "margen_invalido", "fuente_no_valida",
   "min_maduro_invalido", "max_verde_invalido", "max_flotes_invalido", "pedido_no_encontrado", "ya_cerrado",
   "sin_permiso", "nombre_invalido", "proveedor_repetido", "brix_invalido",
+  // Pieza 3: la merma, el disponible y armar el lote.
+  "merma_sobre_lo_disponible", "merma_no_encontrada", "ya_tiene_lotes", "recepcion_no_recibida",
+  "sin_recepciones", "codigo_obligatorio", "codigo_repetido", "recepcion_repetida",
+  "recepcion_de_otro_beneficio", "kg_sobre_lo_recibido", "beneficio_sin_organizacion",
 ] as const;
 
 async function traducir(error: unknown): Promise<RecepcionActionState> {
   const t = await getTranslations("Recepcion");
-  if (error instanceof RecepcionError || error instanceof PedidoError || error instanceof ProveedorError) {
+  if (error instanceof RecepcionError || error instanceof PedidoError || error instanceof ProveedorError || error instanceof LoteDeBeneficioError) {
     const codigo = CODIGOS.find((c) => c === error.message);
     return { error: codigo ? t(`error_${codigo}`) : t("error_generico") };
   }
@@ -102,6 +109,56 @@ export async function anularRecepcionAction(_prev: RecepcionActionState, formDat
   const yo = await usuario();
   try {
     await anularRecepcion(yo, { recepcionId: texto(formData, "recepcionId"), motivo: texto(formData, "motivo") });
+  } catch (error) {
+    return traducir(error);
+  }
+  revalidatePath("/beneficio/recepcion");
+  return { ok: true };
+}
+
+/**
+ * Armar un lote con cereza de una o varias recepciones. Los kilos llegan como `kg.<recepcionId>`:
+ * una fila por recepción, y las vacías no se mandan —quien no escribió un peso no tomó cero kilos,
+ * no tomó nada—.
+ */
+export async function armarLoteAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
+  const yo = await usuario();
+  try {
+    const recepciones: Array<{ recepcionId: string; kg: number }> = [];
+    for (const [clave, valor] of formData.entries()) {
+      if (!clave.startsWith("kg.") || typeof valor !== "string") continue;
+      const kg = valor.trim().replace(",", ".");
+      if (kg === "") continue;
+      recepciones.push({ recepcionId: clave.slice(3), kg: Number(kg) });
+    }
+    await armarLote(yo, { beneficioId: texto(formData, "beneficioId"), codigo: texto(formData, "codigo"), recepciones });
+  } catch (error) {
+    return traducir(error);
+  }
+  revalidatePath("/beneficio/recepcion");
+  return { ok: true };
+}
+
+export async function anotarMermaAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
+  const yo = await usuario();
+  try {
+    await anotarMerma(yo, {
+      recepcionId: texto(formData, "recepcionId"),
+      kg: numero(formData, "kg") ?? Number.NaN,
+      motivo: texto(formData, "motivo"),
+      anotadaAt: parseLocalDateTime(texto(formData, "anotadaAt"), String(formData.get(TZ_OFFSET_FIELD) ?? "")),
+    });
+  } catch (error) {
+    return traducir(error);
+  }
+  revalidatePath("/beneficio/recepcion");
+  return { ok: true };
+}
+
+export async function anularMermaAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
+  const yo = await usuario();
+  try {
+    await anularMerma(yo, { mermaId: texto(formData, "mermaId"), motivo: texto(formData, "motivo") });
   } catch (error) {
     return traducir(error);
   }
