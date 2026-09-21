@@ -68,6 +68,15 @@ Toda masa lleva `weighing_condition` (`DRAINED` / `WET` / `DRY`). Comparar un pe
 
 > **Decisión de Daniel, 2026-09-19 — la recepción de cereza no anota la condición.** Entre el peso de finca de una entrega y el peso en la báscula del beneficio (o el declarado por un productor de fuera), la cereza se pesa **siempre fresca, tal cual, en los dos lados**, y las dos pesadas se consideran comparables sin `weighing_condition`. Aplica sólo a esa comparación de básculas (`docs/superpowers/specs/2026-09-19-recepcion-de-cereza-en-beneficio-design.md` §3.4); las masas de las etapas de proceso siguen esta regla tal cual. Si la cereza empezara a llegar en condiciones distintas, se añade el campo.
 
+> **Decisión de Daniel, 2026-09-19 — en la SELECCIÓN sí se anota, y sólo cuando el método es la
+> flotación.** Es su pareja y el reverso: la flotación mete la cereza en agua, así que entre dos
+> selecciones pesadas una escurrida y otra mojada la diferencia sería agua y no calidad. Por eso
+> `LotTransformation.condicionDePesaje` es obligatoria ahí (`condicion_de_pesaje_obligatoria`) y no
+> se pide en una selección manual o de banda, donde no hay agua que escurrir. Cuando dos
+> selecciones de un mismo lote declaran condiciones distintas, el veredicto de calidad **no juzga**:
+> dice `INCOMPARABLE_WEIGHING_CONDITION`, que es la respuesta correcta y no un `CUMPLE` inventado
+> (`docs/superpowers/specs/2026-09-19-de-la-recepcion-a-los-lotes-design.md` §3.4).
+
 ## 3. Verificaciones de plausibilidad por rendimiento (nuevo)
 
 El balance solo prueba que los números suman; no que sean ciertos. Estos rangos de la industria detectan errores de pesaje que un balance cuadrado no revela. Todos `[PROVISIONAL]` — calibrar contra la data histórica de cada finca.
