@@ -195,6 +195,7 @@ tests/traceability/soilProfiles.test.ts
 tests/traceability/soilSamples.test.ts
 tests/traceability/storage.test.ts
 tests/traceability/topologiaDeSecado.test.ts
+tests/traceability/bandejasEnLaBase.test.ts
 tests/traceability/v1-vocabulary.test.ts
 tests/traceability/ubicacionesEmparentadas.test.ts
 tests/beneficio/vistaDeBandejas.test.ts
