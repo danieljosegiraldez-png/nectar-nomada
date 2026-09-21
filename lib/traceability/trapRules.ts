@@ -2,6 +2,7 @@ import type { TrapCaptureLevel } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, resolveOrganizationForLocation } from "./locations";
+import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 
 export class TrapRuleValidationError extends Error {}
 
@@ -49,6 +50,15 @@ export async function saveTrapRule(userAccountId: string, input: SaveTrapRuleInp
 
   const suggestedMaterialId = input.suggestedMaterialId ?? null;
   if (suggestedMaterialId) {
+    // Mismo permiso con el que `productosFitosanitarios`
+    // (`lib/traceability/intervenciones.ts`) lista el catálogo de la finca:
+    // sin esta comprobación, quien sólo tiene `location:manage_attributes`
+    // podía apuntar la regla a un producto que no puede ni listar, con sólo
+    // conocer su id. Sólo se exige aquí, cuando SÍ llega un producto — guardar
+    // sin producto no toca el catálogo y no cambia.
+    await requireLotAccess(userAccountId, "view", [
+      { locationId: input.farmLocationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+    ]);
     const material = await prisma.consumableMaterial.findUnique({
       where: { id: suggestedMaterialId },
       select: { organizationId: true, isPlantProtection: true },
