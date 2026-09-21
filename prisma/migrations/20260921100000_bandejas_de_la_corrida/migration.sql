@@ -14,6 +14,17 @@
 -- `FOR UPDATE` de corrida y equipo por `FOR NO KEY UPDATE`, que basta para
 -- serializar esta fila sin bloquear los `FOR KEY SHARE` que ya piden sus FK
 -- (traslados, mediciones, volteos, trabajos de esa corrida).
+--
+-- Ronda 1 de revisión: faltaba la guarda del OTRO padre. `exigir_bandeja_valida`
+-- ya rechaza CARGAR una bandeja de otra organización que el lote, pero nada
+-- impedía cambiar la organización del LOTE una vez cargada — el `FOR SHARE`
+-- de esa comprobación sólo demora un cambio concurrente, no lo prohíbe. Se
+-- añade `exigir_lote_con_bandejas_quieto`, calcada de
+-- `exigir_lote_con_pesajes_quieto` (20260918191500_pesaje_de_bandeja:128-140):
+-- un lote alcanzado por `drying_run_tray` (por `lot_transformation_input` →
+-- `lot_transformation` → `drying_run` → `drying_run_tray`) no cambia de
+-- organización. Ese es el camino real: `lot_transformation.drying_run_id`
+-- señala la corrida, y `drying_run_tray.drying_run_id` señala la misma fila.
 
 CREATE TABLE "traceability"."drying_run_tray" (
   "id" UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -193,3 +204,27 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "equipment_bandeja_con_lote_quieta"
   BEFORE UPDATE OF "organization_id" ON "core"."equipment"
   FOR EACH ROW EXECUTE FUNCTION "core"."exigir_bandeja_con_lote_quieta"();
+
+-- Ronda 1, el otro padre: un lote alcanzado por drying_run_tray no cambia de
+-- organización. El camino es lot_transformation_input (lot_id = este lote) →
+-- lot_transformation (transformation_id) → drying_run_tray
+-- (drying_run_id = lot_transformation.drying_run_id).
+CREATE OR REPLACE FUNCTION "traceability"."exigir_lote_con_bandejas_quieto"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."organization_id" IS DISTINCT FROM OLD."organization_id" AND EXISTS (
+    SELECT 1
+      FROM "traceability"."lot_transformation_input" lti
+      JOIN "traceability"."lot_transformation" lt ON lt."id" = lti."transformation_id"
+      JOIN "traceability"."drying_run_tray" drt ON drt."drying_run_id" = lt."drying_run_id"
+     WHERE lti."lot_id" = NEW."id"
+  ) THEN
+    RAISE EXCEPTION 'Un lote con bandejas de secado no cambia de organizacion';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "lot_con_bandejas_quieto"
+  BEFORE UPDATE OF "organization_id" ON "traceability"."lot"
+  FOR EACH ROW EXECUTE FUNCTION "traceability"."exigir_lote_con_bandejas_quieto"();

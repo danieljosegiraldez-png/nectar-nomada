@@ -168,6 +168,35 @@ describe("un equipo con bandejas cargadas no cambia de organizacion", () => {
   });
 });
 
+describe("un lote con bandejas de secado no cambia de organizacion", () => {
+  // Ronda 1 de revisión (hallazgo del coordinador): la comprobación de D5 en
+  // `exigir_bandeja_valida` sólo protege el momento de CARGAR una bandeja; el
+  // `FOR SHARE` que toma sobre el lote demora un UPDATE concurrente, no lo
+  // prohíbe para siempre. Esta es la guarda del otro padre: el lote mismo, una
+  // vez que tiene bandejas, no cambia de organización. Camino real:
+  // lot_transformation_input → lot_transformation → drying_run_tray.
+  it("rechaza cambiar la organizacion de un lote con bandejas cargadas; acepta uno sin bandejas", async () => {
+    const lote = await prisma.lot.create({ data: { lotCode: `${RUN_ID}-lote-quieto`, lotType: "drying", organizationId } });
+    lotes.push(lote.id);
+    const r = await corrida();
+    const transformacion = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: new Date("2026-09-01T09:00:00Z"),
+      provenanceClass: "original_record", dryingRunId: r.id,
+      inputs: { create: [{ lotId: lote.id }] },
+    } });
+    transformaciones.push(transformacion.id);
+    await cargar(r.id, (await equipo("vessel", "lote-quieto")).id, "2026-09-01T10:00:00Z");
+
+    const otraOrg = await createTestOrganization(`${RUN_ID}-otra3`);
+    await expect(prisma.lot.update({ where: { id: lote.id }, data: { organizationId: otraOrg } })).rejects.toThrow(/no cambia de organizacion/);
+
+    // Control positivo: un lote SIN bandejas de secado sí puede cambiar de organizacion.
+    const loteLibre = await prisma.lot.create({ data: { lotCode: `${RUN_ID}-lote-libre`, lotType: "drying", organizationId } });
+    lotes.push(loteLibre.id);
+    expect((await prisma.lot.update({ where: { id: loteLibre.id }, data: { organizationId: otraOrg } })).organizationId).toBe(otraOrg);
+  });
+});
+
 describe("una corrida dice una sola verdad sobre dónde está el lote", () => {
   it("rechaza bandejas en una corrida con cama, y cama en una corrida con bandejas", async () => {
     const sitio = await prisma.location.create({ data: { name: `TEST Sitio (${RUN_ID})`, locationType: "site", organizationId, classification: "internal" } });
