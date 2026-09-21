@@ -440,14 +440,20 @@ const SUBJECT_KEYS = [
  * **Comportamiento sin cambios respecto a `recordFieldEvent`**: mismo orden
  * —existe, cerrada, autorización—, mismos mensajes. La comprobación del
  * instante contra el inicio de la jornada (`event_before_session_start`) NO
- * vive aquí: en `recordFieldEvent` se evalúa DESPUÉS de sus propias
- * comprobaciones (sujeto único, tipo de evento, operador, coordenadas), y
- * moverla a esta función compartida adelantaba su orden en silencio — nada la
- * cubría, y `registrarIntervencion` (`lib/traceability/intervenciones.ts`)
- * nunca la tuvo ni la necesita. Lo que queda fuera (sujeto único, tipo de
- * evento, operador, coordenadas, el instante contra el inicio, y la relectura
- * justo antes de insertar) es propio de `recordFieldEvent` y no de esta regla
- * compartida.
+ * vive aquí: cada llamador la hace en SU PROPIO sitio, con el `startedAt` que
+ * esta función devuelve en la `FieldSession` que retorna. `recordFieldEvent`
+ * la evalúa DESPUÉS de sus propias comprobaciones (sujeto único, tipo de
+ * evento, operador, coordenadas); `registrarIntervencion`
+ * (`lib/traceability/intervenciones.ts`) SÍ la necesita —y la tenía,
+ * indirectamente, mientras vivió aquí— y la evalúa justo después de llamar a
+ * esta función, envuelta en el mismo `catch` que ya traduce sus errores.
+ * Meterla en esta función compartida adelantaba el orden de `recordFieldEvent`
+ * en silencio (nada la cubría) y además le quitaba a `registrarIntervencion`
+ * el control de dónde evaluar la suya — un hallazgo de revisión lo destapó
+ * cuando la comprobación se sacó de aquí sin reponerla en ese otro llamador.
+ * Lo que queda fuera (sujeto único, tipo de evento, operador, coordenadas, el
+ * instante contra el inicio, y la relectura justo antes de insertar) es
+ * propio de cada llamador y no de esta regla compartida.
  */
 export async function requireOpenFieldSessionForEvent(userAccountId: string, fieldSessionId: string, occurredAt: Date) {
   const session = await prisma.fieldSession.findUnique({ where: { id: fieldSessionId } });

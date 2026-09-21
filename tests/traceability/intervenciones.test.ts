@@ -814,6 +814,34 @@ describe("revisión final — hallazgo 3: la jornada necesita autorización prop
 });
 
 /**
+ * Ronda de arreglos 1 (revisión) — Hueco 2. `event_before_session_start` se
+ * sacó de `requireOpenFieldSessionForEvent` (compartida) y se repuso sólo en
+ * `recordFieldEvent`; `registrarIntervencion` llama a la función compartida
+ * pero construye su propio `FieldEvent` a mano, así que quedó sin la
+ * comprobación. Ahora la evalúa ella misma, con el `startedAt` que
+ * `requireOpenFieldSessionForEvent` devuelve, envuelta en el mismo `catch`
+ * que ya traduce sus errores — mismo mensaje que cuando la comprobación vivía
+ * en la función compartida (`jornada no disponible: event_before_session_start`).
+ */
+describe("Hueco 2 (revisión, ronda 1): el instante contra el inicio de la jornada", () => {
+  it("occurredAt anterior al inicio de la jornada: se rechaza", async () => {
+    // `jornada` empieza a las 13:00Z (ver beforeAll); 11:00Z es anterior.
+    await expect(
+      registrarIntervencion(operador, base({ fieldSessionId: jornada, occurredAt: new Date("2026-09-10T11:00:00Z") })),
+    ).rejects.toThrow("event_before_session_start");
+  });
+
+  it("control positivo: un instante dentro de la jornada entra", async () => {
+    const r = await registrarIntervencion(
+      operador,
+      base({ fieldSessionId: jornada, occurredAt: new Date("2026-09-10T15:00:00Z") }),
+    );
+    const ev = await prisma.fieldEvent.findFirst({ where: { plotInterventionId: r.id } });
+    expect(ev?.fieldSessionId).toBe(jornada);
+  });
+});
+
+/**
  * Revisión final, hallazgo 4: `motivoObservationId` tiene que existir, ser
  * una lectura de trampa (`trap_check`) y pertenecer a una ubicación
  * emparentada con la parcela — antes se escribía directo, sin comprobar
