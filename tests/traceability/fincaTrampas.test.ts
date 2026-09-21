@@ -13,40 +13,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  elegirFincaDeTrampas,
-  FincaTrapAccessError,
-  getFincasConTrampas,
-  getFincaTrampas,
-  puedeVerTrampasDeFinca,
-} from "../../lib/traceability/fincaTrampas";
+import { FincaTrapAccessError, getFincaTrampas, puedeVerTrampasDeFinca } from "../../lib/traceability/fincaTrampas";
 import { createTrap } from "../../lib/traceability/traps";
 import { createMicrolot } from "../../lib/traceability/locations";
 import { prisma } from "../../lib/db";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { crearFinca, crearParcela, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-
-/**
- * La elección de finca que comparten `/finca/trampas` y `/finca/trampas/ronda`
- * (Tarea 9) — pura, sin base. Vive en este archivo por estar junto a las demás
- * pruebas de `fincaTrampas.ts`, aunque no necesite `afterEach`.
- */
-describe("elegirFincaDeTrampas", () => {
-  const FINCAS = [{ id: "f1", name: "Uno" }, { id: "f2", name: "Dos" }];
-
-  it("con una sola finca accesible, entra directo sin necesitar ?finca=", () => {
-    expect(elegirFincaDeTrampas([FINCAS[0]!], undefined)).toBe("f1");
-  });
-
-  it("con varias y sin ?finca=, no elige ninguna: hace falta el selector", () => {
-    expect(elegirFincaDeTrampas(FINCAS, undefined)).toBeNull();
-  });
-
-  it("?finca= manda, incluso con una sola finca accesible", () => {
-    expect(elegirFincaDeTrampas([FINCAS[0]!], "f2")).toBe("f2");
-  });
-});
 
 let userAccountIds: string[] = [];
 let personIds: string[] = [];
@@ -120,7 +93,7 @@ describe("getFincaTrampas", () => {
     expect(resultado.trampas.map((t) => t.plotId)).toEqual([parcelaA.id]);
     expect(resultado.trampas).toHaveLength(1);
     expect(resultado.trampas[0]!.id).toBe(trampaA.id);
-    expect(resultado.plots).toEqual([{ id: parcelaA.id, name: parcelaA.name }]);
+    expect(resultado.plots).toEqual([{ id: parcelaA.id, name: parcelaA.name, parentPlotId: null }]);
   });
 
   /**
@@ -143,7 +116,7 @@ describe("getFincaTrampas", () => {
     locationIds.push(parcela.id);
 
     // Un scope en la parcela alcanza a sus descendientes (decisión de Daniel
-    // 2026-09-16, ver el docstring de `getFincasConTrampas`), así que el
+    // 2026-09-16, ver el comentario de `getFincaTrampas`), así que el
     // mismo Farm Operator crea la microparcela (exige manage_attributes
     // sobre la parcela) y después la trampa sobre ella (exige specimen
     // sobre la microparcela, heredado).
@@ -175,6 +148,10 @@ describe("getFincaTrampas", () => {
     // que las dos son accesibles. Lo que este test afirma es que la
     // microparcela SÍ está — antes de este arreglo, no lo estaba.
     expect(resultado.plots.map((p) => p.id).sort()).toEqual([microparcela.id, parcela.id].sort());
+    // La microparcela dice de qué parcela cuelga, y la parcela no cuelga de otro lote: con esto la
+    // pantalla anida la una dentro de la otra en vez de listarlas como dos parcelas (Daniel, 2026-09-21).
+    expect(resultado.plots.find((p) => p.id === microparcela.id)?.parentPlotId).toBe(parcela.id);
+    expect(resultado.plots.find((p) => p.id === parcela.id)?.parentPlotId).toBeNull();
   });
 
   it("deniega sin ningún acceso de specimen en la finca", async () => {
@@ -192,34 +169,6 @@ describe("getFincaTrampas", () => {
     organizationIds.push(ajeno.organizationId);
 
     await expect(getFincaTrampas(ajeno.userAccountId, finca.id)).rejects.toThrow(FincaTrapAccessError);
-  });
-});
-
-describe("getFincasConTrampas", () => {
-  it("sólo devuelve fincas con al menos un lote accesible", async () => {
-    const finca = await crearFinca();
-    locationIds.push(finca.id);
-    organizationIds.push(finca.organizationId!);
-    const parcelaA = await crearParcela(finca);
-    locationIds.push(parcelaA.id);
-
-    const usuarioAcceso = await crearUsuarioConAccesoAlLote(parcelaA.id);
-    userAccountIds.push(usuarioAcceso.userAccountId);
-    personIds.push(usuarioAcceso.personId);
-    scopeIds.push(usuarioAcceso.scopeId);
-
-    const fincas = await getFincasConTrampas(usuarioAcceso.userAccountId);
-    expect(fincas.map((f) => f.id)).toContain(finca.id);
-
-    const ajeno = await crearUsuarioSinAcceso();
-    userAccountIds.push(ajeno.userAccountId);
-    personIds.push(ajeno.personId);
-    scopeIds.push(ajeno.scopeId);
-    locationIds.push(ajeno.locationId);
-    organizationIds.push(ajeno.organizationId);
-
-    const ninguna = await getFincasConTrampas(ajeno.userAccountId);
-    expect(ninguna).toEqual([]);
   });
 });
 

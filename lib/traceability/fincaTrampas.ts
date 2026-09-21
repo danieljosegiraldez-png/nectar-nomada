@@ -18,21 +18,6 @@ export function puedeVerTrampasDeFinca(granted: ReadonlySet<string>): boolean {
   return granted.has("specimen:view") || granted.has("specimen:manage");
 }
 
-/**
- * La elección de finca que resuelven `/finca/trampas` y `/finca/trampas/ronda` —
- * mismo criterio en las dos pantallas: una sola finca entra directo, varias
- * ofrecen un selector por `?finca=`. El valor crudo de la URL se manda tal cual a
- * `getFincaTrampas`, que es la autoridad y lo revalida (Fix round 1, Tarea 8) — así
- * que aquí NO se comprueba contra `fincas`. Extraída para que la ronda no repita la
- * lógica en vez de copiarla.
- */
-export function elegirFincaDeTrampas(
-  fincas: readonly { id: string; name: string }[],
-  fincaElegida: string | undefined,
-): string | null {
-  return fincaElegida ?? (fincas.length === 1 ? fincas[0]!.id : null);
-}
-
 async function puedeVerTrampasDelLote(
   userAccountId: string,
   plot: { id: string; classification: import("../../generated/prisma/client").ClassificationLevel },
@@ -42,58 +27,6 @@ async function puedeVerTrampasDelLote(
     (await can(userAccountId, "view", "specimen", target, plot.classification)) ||
     (await can(userAccountId, "manage", "specimen", target, plot.classification))
   );
-}
-
-/**
- * Las fincas donde esta persona puede ver o gestionar trampas, spec §6: el ámbito
- * puede estar en la finca o en uno de sus lotes, y comprobarlo lote por lote cubre
- * las dos formas porque una asignación a la finca alcanza a sus descendientes
- * (`lib/rbac/service.ts`, decisión de Daniel 2026-09-16).
- *
- * «Lote» es cualquier `plot` bajo el sitio, A CUALQUIER PROFUNDIDAD — no sólo
- * hijo directo. Una microparcela (spec fincas y parcelas §3.3) es una
- * Location `plot` cuyo padre es OTRA `plot`, creada con `createMicrolot`
- * (`lib/traceability/locations.ts`): es nieta del sitio, no hija. Filtrar por
- * `parentLocationId: sitio.id` la dejaba fuera; `idsBajoLaFinca` (mismo
- * helper que ya usa `abrirJornada`) camina el árbol entero. `micro_plot`
- * sigue en el filtro por si alguna vez se produce, aunque hoy nada lo crea.
- *
- * El `where` de abajo se queda en `site | plot | micro_plot` a propósito, no
- * `findMany()` sin filtro: un `plot`/microparcela sólo cuelga de un sitio o
- * de otro `plot` (nunca de un beneficio ni de una instalación de secado —
- * `createMicrolot` los rechaza como padre), así que estos tres tipos bastan
- * para reconstruir el árbol completo. Además, la base de pruebas es
- * compartida (CLAUDE.md) y puede tener valores de `LocationType` que otra
- * sesión está introduciendo y que el cliente de Prisma de ESTA sesión no
- * conoce todavía (visto en vivo: `drying_rack`) — pedir esa columna sin
- * filtrar revienta la deserialización del cliente en cuanto topa una fila
- * así, aunque no tenga nada que ver con fincas ni trampas.
- */
-export async function getFincasConTrampas(userAccountId: string): Promise<{ id: string; name: string }[]> {
-  const ubicaciones = await prisma.location.findMany({
-    where: { locationType: { in: ["site", "plot", "micro_plot"] } },
-    select: { id: true, name: true, parentLocationId: true, locationType: true, classification: true },
-  });
-  const sitios = ubicaciones
-    .filter((u) => u.locationType === "site")
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const accesibles: { id: string; name: string }[] = [];
-  for (const sitio of sitios) {
-    const bajo = idsBajoLaFinca(ubicaciones, sitio.id);
-    const lotes = ubicaciones.filter(
-      (u) => u.id !== sitio.id && bajo.has(u.id) && (u.locationType === "plot" || u.locationType === "micro_plot"),
-    );
-    let puede = false;
-    for (const lote of lotes) {
-      if (await puedeVerTrampasDelLote(userAccountId, lote)) {
-        puede = true;
-        break;
-      }
-    }
-    if (puede) accesibles.push({ id: sitio.id, name: sitio.name });
-  }
-  return accesibles;
 }
 
 export interface FincaTrampa {
@@ -125,12 +58,21 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
   });
   if (!finca) throw new FincaTrapAccessError("farm_not_found");
 
-  // Cualquier `plot` bajo la finca, a cualquier profundidad — ver el docstring
-  // de `getFincasConTrampas`: una microparcela es nieta del sitio, no hija. El
-  // `where` se queda acotado a `plot | micro_plot` por la misma razón que ahí:
-  // un plot/microparcela sólo cuelga de otro plot, y sin el filtro la base de
-  // pruebas compartida puede tener un `LocationType` que este cliente de
-  // Prisma no conoce todavía y revienta la deserialización.
+  // Cualquier `plot` bajo la finca, A CUALQUIER PROFUNDIDAD, no sólo hijo directo. Una
+  // microparcela (spec fincas y parcelas §3.3) es una Location `plot` cuyo padre es OTRA
+  // `plot`, creada con `createMicrolot` (`lib/traceability/locations.ts`): es nieta del sitio,
+  // no hija. Filtrar por `parentLocationId: sitio.id` la dejaba fuera; `idsBajoLaFinca` camina
+  // el árbol entero.
+  //
+  // El `where` se queda acotado a `plot | micro_plot` a propósito, no `findMany()` sin filtro:
+  // un plot/microparcela sólo cuelga de un sitio o de otro plot, y la base de pruebas es
+  // compartida y puede tener valores de `LocationType` que otra sesión está introduciendo y que
+  // el cliente de Prisma de ESTA sesión no conoce todavía (visto en vivo: `drying_rack`) — pedir
+  // esa columna sin filtrar revienta la deserialización en cuanto topa una fila así.
+  //
+  // (Esta explicación vivía en `getFincasConTrampas`, que servía al selector de fincas de
+  // `/finca/trampas`. El 2026-09-21 la pantalla pasó a usar la finca elegida de la sección y
+  // esa función quedó sin uso, así que se quitó y su explicación se trajo aquí.)
   const ubicaciones = await prisma.location.findMany({
     where: { locationType: { in: ["plot", "micro_plot"] } },
     select: { id: true, name: true, parentLocationId: true, locationType: true, classification: true },
@@ -211,7 +153,14 @@ export async function getFincaTrampas(userAccountId: string, farmLocationId: str
     // para los avisos, aplicada ahora a un valor por defecto en vez de a una
     // comparación de vencimiento.
     farmTimezone: finca.timezone,
-    plots: accesibles.map((l) => ({ id: l.id, name: l.name })),
+    // `parentPlotId` es la parcela que contiene a una microparcela, para que la pantalla agrupe
+    // por parcela → microparcela → bloque (Daniel, 2026-09-21). Sólo si ese padre es un lote de
+    // esta finca: una parcela colgada directamente del sitio lleva `null`.
+    plots: accesibles.map((l) => ({
+      id: l.id,
+      name: l.name,
+      parentPlotId: l.parentLocationId && bajo.has(l.parentLocationId) && l.parentLocationId !== farmLocationId ? l.parentLocationId : null,
+    })),
     trampas,
     reglaDeTrampas,
   };

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
-import { getFincasConTrampas, getFincaTrampas, FincaTrapAccessError, elegirFincaDeTrampas } from "../../../../lib/traceability/fincaTrampas";
+import { cookies } from "next/headers";
+import { getFincaTrampas, FincaTrapAccessError } from "../../../../lib/traceability/fincaTrampas";
+import { COOKIE_FINCA, fincaDeLaPagina } from "../../../../lib/traceability/fincas";
 import { estadoDeTrampa, ordenDeRonda, proximaRevisionDe, trampasParaAviso } from "../../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../../lib/time/diaDeHoy";
@@ -17,39 +19,22 @@ export const dynamic = "force-dynamic";
  * trampa activa, primero las que tocan revisar. Sólo trampas activas: una retirada
  * no se revisa (mismo criterio que `recordTrapCheck`).
  *
- * La elección de finca (una entra directo, varias ofrecen selector, ninguna dice
- * el mensaje explícito) es la misma de `/finca/trampas` — Tarea 8 —, extraída a
- * `elegirFincaDeTrampas` en vez de copiarse.
+ * La finca es la elegida en la sección Finca, igual que `/finca/trampas` (corregido el
+ * 2026-09-21 por Daniel: la ronda es de una finca, no un listado de todas).
  */
-export default async function RondaDeTrampasPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ finca?: string }>;
-}) {
+export default async function RondaDeTrampasPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const fincas = await getFincasConTrampas(user.userAccountId);
-  if (fincas.length === 0) {
+  // La finca de la sección, igual que `/finca/trampas` (Daniel, 2026-09-21): la ronda es de
+  // UNA finca, la que se está trabajando, no un listado de todas para quien ve varias.
+  const finca = await fincaDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_FINCA)?.value);
+  if (finca.fincas.length === 0) {
     return <p className="nn-error" role="alert">{t("fincaTrapsNoAnyAccess")}</p>;
   }
-
-  const { finca: fincaElegida } = await searchParams;
-  const farmLocationId = elegirFincaDeTrampas(fincas, fincaElegida);
-
-  if (farmLocationId == null) {
-    return (
-      <div>
-        <h1>{t("trapsRoundTitle")}</h1>
-        <ul>
-          {fincas.map((f) => (
-            <li key={f.id}><Link href={`/finca/trampas/ronda?finca=${f.id}`}>{f.name}</Link></li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
+  if (!finca.elegida) redirect("/fincas?volver=/finca/trampas/ronda");
+  const farmLocationId = finca.elegida.siteId;
 
   let detalle;
   try {
