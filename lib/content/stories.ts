@@ -29,6 +29,7 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { compareNames } from "../naturalOrder";
+import { exigirPersonaPermitida, personasPermitidas } from "../people/quienLoHizo";
 import type { ClassificationLevel, RecordStatus } from "../../generated/prisma/client";
 import type { ScopeTarget } from "../rbac/types";
 
@@ -125,10 +126,9 @@ export async function getStoryForEditor(userAccountId: string, storyId: string) 
 
 /** The choices an author needs, each filtered to what they may actually attach to. */
 export async function getAuthoringContext(userAccountId: string) {
-  const [projects, locations, people] = await Promise.all([
+  const [projects, locations] = await Promise.all([
     prisma.project.findMany({ select: { id: true, name: true, classification: true } }),
     prisma.location.findMany({ select: { id: true, name: true, classification: true } }),
-    prisma.person.findMany({ where: { status: "active" }, select: { id: true, displayName: true } }),
   ]);
 
   const reachableProjects = [];
@@ -144,10 +144,18 @@ export async function getAuthoringContext(userAccountId: string) {
     }
   }
 
+  // El autor, como «quién lo hizo» (decisión P-G, 2026-09-21): hasta ese día esta lista era toda
+  // persona activa de la plataforma. Ahora, las de las fincas de lo que se puede adjuntar, más el
+  // equipo Néctar Nómada; el servicio exige después la del proyecto o lugar que se elija.
+  const { people } = await personasPermitidas(userAccountId, [
+    ...reachableProjects.map((p) => ({ projectId: p.id })),
+    ...reachableLocations.map((l) => ({ locationId: l.id })),
+  ]);
+
   return {
     projects: reachableProjects.sort((a, b) => compareNames(a.name, b.name)),
     locations: reachableLocations.sort((a, b) => compareNames(a.name, b.name)),
-    people: people.sort((a, b) => compareNames(a.displayName, b.displayName)),
+    people,
   };
 }
 
@@ -203,6 +211,7 @@ export async function createStory(userAccountId: string, input: CreateStoryInput
   await requireContent(userAccountId, "create", scope, classification);
 
   const story = await prisma.$transaction(async (tx) => {
+    await exigirPersonaPermitida(userAccountId, input.authorPersonId, [scope], { db: tx });
     const story = await tx.story.create({
       data: {
         title,
@@ -262,6 +271,12 @@ export async function updateStory(userAccountId: string, storyId: string, input:
   if (input.title !== undefined && !title) throw new ContentValidationError("title_required");
 
   const after = await prisma.$transaction(async (tx) => {
+    // Contra el proyecto y el lugar con que queda la historia, no con los de antes.
+    const ancla = {
+      projectId: input.projectId !== undefined ? input.projectId : before.projectId,
+      locationId: input.locationId !== undefined ? input.locationId : before.locationId,
+    };
+    await exigirPersonaPermitida(userAccountId, input.authorPersonId, [ancla], { db: tx, actual: before.authorPersonId });
     const after = await tx.story.update({
       where: { id: storyId },
       data: {

@@ -31,8 +31,12 @@ import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { sortByName } from "../naturalOrder";
 
-/** Lo que ya tiene en mano quien escribe: el mismo par que pasa a su guardia de acceso. */
+/**
+ * Lo que ya tiene en mano quien escribe: el mismo par que pasa a su guardia de acceso. Un equipo
+ * trae además su organización dueña, que es la respuesta directa.
+ */
 export interface Ancla {
+  organizationId?: string | null;
   projectId?: string | null;
   locationId?: string | null;
 }
@@ -54,7 +58,9 @@ type Db = Prisma.TransactionClient | typeof prisma;
 async function organizacionesDe(db: Db, anclas: readonly Ancla[]): Promise<Set<string>> {
   const orgs = new Set<string>();
   for (const ancla of anclas) {
-    if (ancla.locationId) {
+    if (ancla.organizationId) {
+      orgs.add(ancla.organizationId);
+    } else if (ancla.locationId) {
       const vistos = new Set<string>();
       let id: string | null = ancla.locationId;
       while (id && !vistos.has(id)) {
@@ -174,15 +180,21 @@ export async function personasPermitidas(
  * respuesta válida en todos los formularios—.
  *
  * Se llama con el mismo par `{ projectId, locationId }` que la escritura ya pasa a su guardia de
- * acceso, y dentro de su transacción si la tiene.
+ * acceso, y dentro de su transacción si la tiene (`db`).
+ *
+ * `actual` es la persona que el registro YA tiene, en una edición o una corrección: dejarla como
+ * estaba no se comprueba. Sin eso, corregir la hora de una intervención de alguien que ya dejó la
+ * finca obligaría a borrar quién la hizo — y el historial dice quién estuvo, no quién sigue.
  */
 export async function exigirPersonaPermitida(
   userAccountId: string,
   personId: string | null | undefined,
   anclas: readonly Ancla[],
-  db: Db = prisma,
+  opciones: { db?: Db; actual?: string | null } = {},
 ): Promise<void> {
   if (!personId) return;
+  if (opciones.actual && personId === opciones.actual) return;
+  const db = opciones.db ?? prisma;
   const { people } = await personasPermitidas(userAccountId, anclas, db);
   if (!people.some((p) => p.id === personId)) {
     throw new PersonaNoPermitidaError("Esa persona no pertenece a esta finca ni al equipo Néctar Nómada.");

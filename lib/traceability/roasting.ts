@@ -25,6 +25,7 @@
  * whether three children came from one transformation row or three —
  * without touching recordTransformation or the split mechanism at all.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
@@ -67,6 +68,7 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
   const sourceLot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.roasterPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
   if (input.endedAt && input.endedAt < input.startedAt) {
     throw new RoastSessionValidationError("ended_before_started");

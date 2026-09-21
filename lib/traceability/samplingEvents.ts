@@ -3,6 +3,7 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import type { ClassificationLevel } from "../rbac/types";
+import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import type { MaterialState, SamplingEvent, SamplingRole, SamplingZone } from "../../generated/prisma/client";
 
 export interface CreateSamplingEventInput {
@@ -42,7 +43,9 @@ async function autorizarContextos(
   userAccountId: string,
   input: CreateSamplingEventInput,
   opciones: { exigirAlgunContexto: boolean },
-) {
+): Promise<Ancla[]> {
+  // Lo autorizado, devuelto como ancla de «quién lo hizo» (P-G).
+  const anclas: Ancla[] = [];
   if (input.dryingRunId != null) {
     // DryingRun no tiene lotId: el origen vive en su transformación, como en drying.ts.
     const transformation = await prisma.lotTransformation.findFirst({
@@ -53,23 +56,27 @@ async function autorizarContextos(
     const lot = transformation?.inputs[0]?.lot;
     if (!lot) throw new TraceabilityAccessError("drying_run_not_found");
     await requireSamplingAccess(userAccountId, lot);
+    anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
   }
   if (input.dryingBedLocationId != null) {
     const bed = await prisma.location.findUnique({ where: { id: input.dryingBedLocationId } });
     if (!bed) throw new TraceabilityAccessError("location_not_found");
     await requireSamplingAccess(userAccountId, { locationId: bed.id, classification: bed.classification });
+    anclas.push({ locationId: bed.id });
   }
   if (opciones.exigirAlgunContexto && input.dryingRunId == null && input.dryingBedLocationId == null) {
     // Sin contexto sólo una asignación de plataforma puede autorizar el acto.
     await requireSamplingAccess(userAccountId, { classification: DEFAULT_NEW_RECORD_CLASSIFICATION });
   }
+  return anclas;
 }
 
 export async function createSamplingEvent(
   userAccountId: string,
   input: CreateSamplingEventInput,
 ): Promise<SamplingEvent> {
-  await autorizarContextos(userAccountId, input, { exigirAlgunContexto: true });
+  const anclas = await autorizarContextos(userAccountId, input, { exigirAlgunContexto: true });
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas);
 
   return prisma.$transaction(async (tx) => {
     const event = await tx.samplingEvent.create({
@@ -128,7 +135,8 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
   await requireSamplingAccess(userAccountId, lot);
   // Y CADA contexto declarado, por separado. El permiso sobre el lote no autoriza
   // la cama ni la corrida: hallazgo I1 de la revisión independiente.
-  await autorizarContextos(userAccountId, input, { exigirAlgunContexto: false });
+  const contextos = await autorizarContextos(userAccountId, input, { exigirAlgunContexto: false });
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }, ...contextos]);
 
   return prisma.$transaction(async (tx) => {
     const event = await tx.samplingEvent.create({
@@ -201,10 +209,15 @@ export async function opcionesParaInspeccion(userAccountId: string) {
   ]);
   const lotes = [];
   const camas = [];
+  // Las fincas de todo lo que se ofrece: el formulario elige el lote o la cama después, y
+  // «quién lo hizo» ofrece a las personas de cualquiera de ellas. El servicio exige después la
+  // del elegido (`exigirPersonaPermitida`).
+  const anclas: Ancla[] = [];
   for (const lot of lots) {
     try {
       await requireSamplingAccess(userAccountId, lot);
       lotes.push({ id: lot.id, name: lot.lotCode });
+      anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
     } catch (error) {
       if (!(error instanceof TraceabilityAccessError)) throw error;
     }
@@ -213,9 +226,10 @@ export async function opcionesParaInspeccion(userAccountId: string) {
     try {
       await requireSamplingAccess(userAccountId, { locationId: bed.id, classification: bed.classification });
       camas.push({ id: bed.id, name: bed.name });
+      anclas.push({ locationId: bed.id });
     } catch (error) {
       if (!(error instanceof TraceabilityAccessError)) throw error;
     }
   }
-  return { lotes, camas };
+  return { lotes, camas, anclas };
 }

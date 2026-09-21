@@ -24,7 +24,7 @@ export default async function NuevaJornadaPage({ params }: { params: Promise<{ i
     if (error instanceof LocationAccessError) notFound();
     throw error;
   }
-  const { people, selfPersonId } = await getObserverCandidates(user.userAccountId);
+  const { people, selfPersonId } = await getObserverCandidates(user.userAccountId, [{ locationId: id }]);
 
   return (
     <div>

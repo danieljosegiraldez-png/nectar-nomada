@@ -17,6 +17,7 @@
  * cannot express it would exclude most of the people doing the work — the same
  * blocker `Task.assignedToUserAccountId` still has (P2 §1, not built here).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { normalizarCondicionDelSitio } from "../apiary/condicionDelSitio";
 import { exigeClimaObservado } from "../apiary/climaObservado";
@@ -106,6 +107,7 @@ export interface StartFieldSessionInput {
 
 export async function startFieldSession(userAccountId: string, input: StartFieldSessionInput) {
   await requireFieldSessionAccess(userAccountId, input.locationId);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.locationId }]);
 
   const operator = await prisma.person.findUnique({ where: { id: input.operatorPersonId } });
   if (!operator) throw new FieldSessionValidationError("operator_not_found");
@@ -494,6 +496,7 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
   }
 
   const session = await requireOpenFieldSessionForEvent(userAccountId, input.fieldSessionId, input.occurredAt);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: session.locationId }]);
 
   // At most one subject. Two would make the timeline ambiguous about which row
   // this moment refers to, and the spine's whole value is that it is not.

@@ -1,5 +1,6 @@
 "use server";
 
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { CondicionDelSitioInvalida } from "../../lib/apiary/condicionDelSitio";
 import { PropositoInvalido } from "../../lib/apiary/propositoDeVisita";
 import { redirect } from "next/navigation";
@@ -142,6 +143,7 @@ export interface TraceabilityActionState {
 // copy — functional and honest beats a polished translation catalog for
 // every possible internal error code.
 async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): Promise<string> {
+  if (error instanceof PersonaNoPermitidaError) return t("error_persona_no_permitida");
   if (error instanceof CondicionDelSitioInvalida) {
     const [clave, ...resto] = error.message.split(":");
     return t(`error_condicion_${clave}` as "error_condicion_otro_sin_decir_cual", { value: resto.join(":") });

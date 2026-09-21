@@ -64,7 +64,7 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
 
   const { session, events } = timeline;
   const [{ people, selfPersonId }, eventKinds] = await Promise.all([
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: session.locationId }]),
     getFieldEventKinds(),
   ]);
 

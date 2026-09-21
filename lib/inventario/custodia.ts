@@ -8,6 +8,7 @@
  *
  * Spec: docs/superpowers/specs/2026-09-17-faena-de-colmena-y-botiquin-design.md §B.3
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
@@ -33,6 +34,7 @@ export async function moverACustodia(userAccountId: string, input: MoverACustodi
   if (!(await can(userAccountId, "manage", "lot", { scopeType: "location", scopeRefId: input.locationId }, "internal"))) {
     throw new CustodiaError("forbidden");
   }
+  await exigirPersonaPermitida(userAccountId, input.responsiblePersonId, [{ locationId: input.locationId }]);
 
   return prisma.$transaction(async (tx) => {
     const vigente = await tx.consumableCustody.findFirst({

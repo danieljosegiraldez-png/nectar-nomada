@@ -18,6 +18,7 @@
  * project/location, the same leaf-scope containment check every other
  * traceability write path in this module uses.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
@@ -111,6 +112,7 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
 
   await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
   // Decisión de Daniel, 2026-09-18 (docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md
   // §3-4): una muestra de café VERDE sólo es válida si el lote ya llegó a

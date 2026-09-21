@@ -1,5 +1,6 @@
 "use server";
 
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
@@ -44,6 +45,7 @@ export async function createStoryFormAction(formData: FormData): Promise<void> {
     });
     storyId = story.id;
   } catch (error) {
+    if (error instanceof PersonaNoPermitidaError) backTo("/content/new", "persona_no_permitida");
     if (error instanceof ContentAccessError || error instanceof ContentValidationError) {
       backTo("/content/new", error.message);
     }
@@ -69,6 +71,7 @@ export async function updateStoryFormAction(formData: FormData): Promise<void> {
       authorPersonId: optionalId(formData, "authorPersonId"),
     });
   } catch (error) {
+    if (error instanceof PersonaNoPermitidaError) backTo(`/content/${storyId}`, "persona_no_permitida");
     if (error instanceof ContentAccessError || error instanceof ContentValidationError) {
       backTo(`/content/${storyId}`, error.message);
     }

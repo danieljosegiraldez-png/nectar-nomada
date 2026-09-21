@@ -7,6 +7,7 @@
  * HoneyBatch is a Lot (§2), so requestLotAssetUpload/finalizeLotAssetUpload
  * already cover it.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
@@ -107,6 +108,7 @@ export interface FinalizeApiaryAssetUploadInput {
 export async function finalizeApiaryAssetUpload(userAccountId: string, input: FinalizeApiaryAssetUploadInput) {
   const scope = await resolveScope(input.parent);
   await requireApiaryAccess(userAccountId, "manage", [scope]);
+  await exigirPersonaPermitida(userAccountId, input.creatorPersonId, [scope]);
 
   if (!input.storageKey.startsWith(`nectar-originals/apiary/${input.parent.kind}/`)) {
     throw new ApiaryAccessError("invalid_storage_key");

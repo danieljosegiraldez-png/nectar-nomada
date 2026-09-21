@@ -1,4 +1,5 @@
 import { Prisma } from "../../generated/prisma/client";
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import type { DataQuality, ProvenanceClass, TrapCaptureLevel } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
@@ -221,6 +222,7 @@ export async function recordTrapCheck(
   if (trampa.status !== "active") throw new TrapValidationError("trap_retired");
 
   const location = await requireTrapAccess(userAccountId, trampa.locationId);
+  await exigirPersonaPermitida(userAccountId, input.observerPersonId, [{ locationId: trampa.locationId }]);
 
   // A9 fix-final (M2), ruling del controlador — el lookup por `clientDraftId`
   // va DESPUÉS del control de acceso, y sólo cuenta como duplicado si la fila

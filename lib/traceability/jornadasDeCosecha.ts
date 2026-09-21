@@ -13,6 +13,7 @@
  * Permiso: `lot:manage` sobre el sitio de la finca —lo que ya tienen el Farm Manager y el
  * capataz—. Leer una jornada exige `lot:view` sobre ese sitio.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
@@ -37,6 +38,8 @@ async function exigeGestionarFinca(userAccountId: string, fincaSiteId: string) {
 /** Añade una persona a la lista de recolectores de la finca, desde una fecha. */
 export async function agregarRecolector(userAccountId: string, input: { fincaSiteId: string; personId: string; desde: Date }) {
   await exigeGestionarFinca(userAccountId, input.fincaSiteId);
+  // La lista de recolectores sale de «quién lo hizo» (P-G): sólo gente de esta finca o del equipo.
+  await exigirPersonaPermitida(userAccountId, input.personId, [{ locationId: input.fincaSiteId }]);
   if (!(await prisma.person.findUnique({ where: { id: input.personId }, select: { id: true } }))) throw new JornadaError("persona_no_encontrada");
   return prisma.$transaction(async (tx) => {
     const abierta = await tx.fincaRecolector.findFirst({ where: { personId: input.personId, fincaSiteId: input.fincaSiteId, hasta: null } });

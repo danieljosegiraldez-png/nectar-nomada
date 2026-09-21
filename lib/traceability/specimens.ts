@@ -16,6 +16,7 @@
  * (`trap_check`) live — reusing the one observation mechanism rather than
  * building a parallel one, per the ticket's own instruction.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
@@ -152,6 +153,7 @@ export async function recordSpecimenObservation(userAccountId: string, input: Re
   if (!specimen) throw new SpecimenAccessError("specimen_not_found");
 
   await requireSpecimenAccess(userAccountId, "manage", specimen.locationId);
+  await exigirPersonaPermitida(userAccountId, input.observerPersonId, [{ locationId: specimen.locationId }]);
 
   // Las TRES escrituras en una sola transacción desde el 2026-09-06.
   const observation = await prisma.$transaction(async (tx) => {

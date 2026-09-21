@@ -9,6 +9,7 @@
  * the same "resolve via the parent" pattern lib/traceability/storage.ts
  * already uses against its parent Lot.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
@@ -111,6 +112,7 @@ export interface RecordInspectionInput {
 export async function recordInspection(userAccountId: string, input: RecordInspectionInput) {
   const scope = await resolveColonyScope(input.colonyId);
   await requireApiaryAccess(userAccountId, "manage", [scope]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [scope]);
 
   if (input.clientDraftId) {
     const existing = await prisma.inspection.findUnique({ where: { clientDraftId: input.clientDraftId } });

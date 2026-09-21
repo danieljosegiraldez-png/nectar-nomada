@@ -28,6 +28,7 @@
  *   además, habría dos cálculos que pueden discrepar.
  */
 
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { recordAuditEvent } from "../audit";
 import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
@@ -383,6 +384,7 @@ export async function trasladarEquipo(userAccountId: string, input: TrasladarInp
   const equipo = await equipoOFalla(input.equipmentId);
   await exigePermiso(userAccountId, "manage", equipo);
   if (equipo.isFixedInPlace) throw new EquipoError("equipo_fijo_no_se_traslada");
+  await exigirPersonaPermitida(userAccountId, input.movedByPersonId, [{ organizationId: equipo.organizationId }]);
 
   return prisma.$transaction(async (tx) => {
     const t = await tx.equipmentTransfer.create({
@@ -433,6 +435,8 @@ export async function informarCondicion(
   const equipo = await equipoOFalla(input.equipmentId);
   await exigePermiso(userAccountId, "report_condition", equipo);
 
+  await exigirPersonaPermitida(userAccountId, input.reportedByPersonId, [{ organizationId: equipo.organizationId }]);
+  await exigirPersonaPermitida(userAccountId, input.responsiblePersonId, [{ organizationId: equipo.organizationId }]);
   return prisma.$transaction(async (tx) => {
     const r = await tx.equipmentConditionReport.create({
       data: {
@@ -484,6 +488,7 @@ export async function declararPatron(
   const equipo = await equipoOFalla(input.equipmentId);
   await exigePermiso(userAccountId, "manage", equipo);
   if (equipo.kind !== "instrument") throw new EquipoError("solo_los_instrumentos_se_verifican");
+  await exigirPersonaPermitida(userAccountId, input.decidedByPersonId, [{ organizationId: equipo.organizationId }]);
   if (input.label.trim().length === 0) throw new EquipoError("label_required");
   if (!Number.isFinite(input.toleranceAbs) || input.toleranceAbs < 0) throw new EquipoError("tolerancia_no_negativa");
 
@@ -589,6 +594,7 @@ export async function verificarInstrumento(
   const equipo = await equipoOFalla(input.equipmentId);
   await exigePermiso(userAccountId, "report_condition", equipo);
   if (equipo.kind !== "instrument") throw new EquipoError("solo_los_instrumentos_se_verifican");
+  await exigirPersonaPermitida(userAccountId, input.performedByPersonId, [{ organizationId: equipo.organizationId }]);
   if (input.contrastes.length === 0) throw new EquipoError("hace_falta_al_menos_un_contraste");
 
   const requisitos = await prisma.instrumentCheckRequirement.findMany({

@@ -4,6 +4,7 @@
  * pesajes vigentes de ese estado. Sin pesajes, el estimado SUPUESTO —sólo cereza—
  * o «sin medir». Nunca se rellena un hueco (21_rubrica_veracidad §2).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
@@ -55,6 +56,7 @@ export async function registrarPesaje(userAccountId: string, input: {
   if (input.supersedesId && !input.correctionReason?.trim()) throw new PesajeError("datos_invalidos");
   const lot = await prisma.lot.findUniqueOrThrow({ where: { id: input.lotId } });
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
   const tipo = await prisma.dryingTrayType.findUnique({ where: { id: input.trayTypeId } });
   if (!tipo || tipo.organizationId !== lot.organizationId) throw new PesajeError("tipo_no_encontrado");
 

@@ -18,6 +18,7 @@
  * apiary:manage/apiary:view to the same profile that already had
  * lot:manage/lot:view).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { carenciasVigentes, diasPendientes } from "./carencia";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
@@ -51,6 +52,7 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
 
   const { hive } = colony;
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: hive.projectId, locationId: hive.locationId }]);
 
   // P0 §7 — Lot.organizationId is required now, and a Location's is not, so
   // the apiary site must actually name its owner before it can produce a

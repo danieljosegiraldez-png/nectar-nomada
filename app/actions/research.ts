@@ -1,5 +1,6 @@
 "use server";
 
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -23,6 +24,7 @@ export interface ResearchActionState {
 }
 
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+  if (error instanceof PersonaNoPermitidaError) return t("error_persona_no_permitida");
   if (error instanceof ResearchAccessError) return t("error_access", { detail: error.message });
   if (error instanceof ProtocolValidationError) return t("error_validation", { detail: error.message });
   if (error instanceof TreatmentBatchValidationError) return t("error_validation", { detail: error.message });

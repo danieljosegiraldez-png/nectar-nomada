@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
@@ -102,11 +103,7 @@ export function RevisionDeTrampaForm({
           defaultValue={propioEsElegible ? (selfPersonId as string) : ""}
         >
           <option value="">{t("notRecorded")}</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.id === selfPersonId ? t("observerSelfOption", { name: p.displayName }) : p.displayName}
-            </option>
-          ))}
+          <OpcionesDePersona personas={people} selfPersonId={selfPersonId} />
         </select>
       </div>
 

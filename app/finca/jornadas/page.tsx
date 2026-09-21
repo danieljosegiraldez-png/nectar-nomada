@@ -52,7 +52,7 @@ export default async function JornadasPage() {
 
   const gestiona = granted.has("lot:manage");
   const [contexto, candidatos, destinos] = gestiona
-    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId), beneficiosDeDestino(user.userAccountId)])
+    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId, [{ locationId: siteId }]), beneficiosDeDestino(user.userAccountId)])
     : [null, null, []];
   const bajo = contexto ? idsBajoLaFinca(contexto.locations, siteId) : new Set<string>();
   const parcelas = contexto ? ordenarParcelas(contexto.plotLocations.filter((p) => bajo.has(p.id))) : [];

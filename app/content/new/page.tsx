@@ -6,6 +6,7 @@ import { getAuthoringContext } from "../../../lib/content/stories";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { createStoryFormAction } from "../../actions/content";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { OpcionesDePersona } from "../../components/OpcionesDePersona";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function NewStoryPage({
           <label htmlFor="authorPersonId">{t("authorLabel")}</label>
           <select id="authorPersonId" name="authorPersonId" defaultValue="">
             <option value="">{t("noneOption")}</option>
-            {context.people.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+            <OpcionesDePersona personas={context.people} />
           </select>
         </div>
         <BotonDeEnvio className="nn-button">{t("createButton")}</BotonDeEnvio>

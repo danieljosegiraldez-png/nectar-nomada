@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -125,11 +126,7 @@ export function FieldSessionStartForm({
           <option value="" disabled>
             {t("fieldSessionOperatorChoose")}
           </option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.id === selfPersonId ? t("observerSelfOption", { name: p.displayName }) : p.displayName}
-            </option>
-          ))}
+          <OpcionesDePersona personas={people} selfPersonId={selfPersonId} />
         </select>
       </div>
 
@@ -254,11 +251,7 @@ export function FieldEventForm({
             por si una parte de la visita la hizo otra persona. */}
         <select id="eventOperatorPersonId" name="operatorPersonId" defaultValue="">
           <option value="">{t("fieldEventOperatorInherit")}</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.id === selfPersonId ? t("observerSelfOption", { name: p.displayName }) : p.displayName}
-            </option>
-          ))}
+          <OpcionesDePersona personas={people} selfPersonId={selfPersonId} />
         </select>
       </div>
 

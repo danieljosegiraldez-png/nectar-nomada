@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { registrarIntervencionFormAction, corregirIntervencionFormAction } from "../../actions/manejo";
@@ -283,11 +284,7 @@ export function IntervencionForm({
         <label htmlFor="manejo-operator">{t("manejoOperatorLabel")}</label>
         <select id="manejo-operator" name="operatorPersonId" defaultValue={valores.operatorPersonId ?? selfPersonId ?? ""}>
           <option value="">{t("manejoOperatorNone")}</option>
-          {observers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.id === selfPersonId ? t("observerSelfOption", { name: p.displayName }) : p.displayName}
-            </option>
-          ))}
+          <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
         </select>
       </div>
 

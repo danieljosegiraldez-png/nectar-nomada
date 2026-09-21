@@ -35,12 +35,15 @@ describe("who took this reading — the observer list", () => {
     created.personIds.push(person.id);
     created.accountIds.push(account.id);
 
-    const { people, selfPersonId } = await getObserverCandidates(account.id);
+    const { people, selfPersonId } = await getObserverCandidates(account.id, []);
     expect(selfPersonId).toBe(person.id);
     expect(people[0]!.id).toBe(person.id);
   });
 
-  it("still lists everyone else, and loses nobody", async () => {
+  // Since P-G (2026-09-21) the list no longer holds "everyone": it holds the people who may appear
+  // on a record anchored where the page is — see tests/people/quienLoHizo.test.ts for the rule.
+  // What stays true for any anchor, even none, is that reordering loses and duplicates nobody.
+  it("loses nobody it may list, duplicates nobody, returns nobody inactive", async () => {
     const person = await prisma.person.create({
       data: { givenName: "AAA", familyName: "Observer", displayName: `AAA Observer ${RUN}` },
     });
@@ -50,7 +53,7 @@ describe("who took this reading — the observer list", () => {
     created.personIds.push(person.id);
     created.accountIds.push(account.id);
 
-    const { people } = await getObserverCandidates(account.id);
+    const { people } = await getObserverCandidates(account.id, []);
 
     // Deliberately NOT compared against `person.count({ status: "active" })`.
     // That is what this assertion used to do, and it is a race: the count and
@@ -76,7 +79,7 @@ describe("who took this reading — the observer list", () => {
 
   it("orders the rest naturally, so accented names are not exiled to the end", async () => {
     const account = await prisma.userAccount.findFirstOrThrow({ where: { status: "active" } });
-    const { people, selfPersonId } = await getObserverCandidates(account.id);
+    const { people, selfPersonId } = await getObserverCandidates(account.id, []);
     const others = people.filter((p) => p.id !== selfPersonId).map((p) => p.displayName);
     const expected = [...others].sort((a, b) =>
       new Intl.Collator(["es", "en"], { numeric: true, sensitivity: "base" }).compare(a, b),

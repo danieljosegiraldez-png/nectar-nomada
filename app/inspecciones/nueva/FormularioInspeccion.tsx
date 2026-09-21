@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { registrarInspeccionFormAction } from "../../actions/inspecciones";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { OpcionesDePersona, type OpcionDePersona } from "../../components/OpcionesDePersona";
 import { TimezoneOffsetField } from "../../components/TimezoneOffsetField";
 import { MATERIALES_DE_SECADO, PAPELES_DE_MUESTRA, ZONAS_DE_MUESTRA } from "../../../lib/traceability/secadoForm";
 
@@ -31,7 +32,7 @@ function Muestra({ numero }: { numero: number }) {
   </fieldset>;
 }
 
-export function FormularioInspeccion({ lotes, camas, personas }: { lotes: Opcion[]; camas: Opcion[]; personas: Opcion[] }) {
+export function FormularioInspeccion({ lotes, camas, personas }: { lotes: Opcion[]; camas: Opcion[]; personas: readonly OpcionDePersona[] }) {
   const t = useTranslations("Secado");
   const [state, action] = useActionState(registrarInspeccionFormAction, {});
   return <form action={action}>
@@ -48,7 +49,7 @@ export function FormularioInspeccion({ lotes, camas, personas }: { lotes: Opcion
     <label>{t("hora")}<input type="datetime-local" name="occurredAt" required /></label>
     <label>{t("operador")}<select name="operatorPersonId" defaultValue="">
       <option value="">{t("noDeclarado")}</option>
-      {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      <OpcionesDePersona personas={personas} />
     </select></label>
     <p className="nn-muted">{t("papelAyuda")}</p>
     <Muestra numero={1} /><Muestra numero={2} />

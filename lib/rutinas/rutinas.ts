@@ -6,6 +6,7 @@
  * un registro es gestión. Las de LUGAR juzgan en el lugar (`lib/rutinas/lugares.ts`,
  * spec 2026-09-19 §4.2).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { Prisma, type CareRoutineKind, type ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
 import { prisma } from "../db";
@@ -131,6 +132,11 @@ export async function registrarRealizada(userAccountId: string, r: NuevoRegistro
   const ru = await rutina(r.routineId);
   await requireRutinaAccess(userAccountId, ru, "report_condition");
   if (ru.retiredAt) throw new RutinaError("rutina_retirada");
+  // «Quién la hizo» (P-G): de la organización dueña del equipo, o de la finca del lugar.
+  const duena = ru.equipmentId
+    ? (await prisma.equipment.findUnique({ where: { id: ru.equipmentId }, select: { organizationId: true } }))?.organizationId ?? null
+    : null;
+  await exigirPersonaPermitida(userAccountId, r.performedByPersonId || null, [{ organizationId: duena, locationId: ru.locationId }]);
   // Ningún lugar del planeta ha llegado todavía a un día posterior al de la zona
   // más adelantada: eso es una fecha futura, se mire desde donde se mire.
   const hoyEnLaZonaMasAdelantada = diaDeHoy(new Date(), "Etc/GMT-14");

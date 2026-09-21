@@ -10,6 +10,7 @@
  * lo marca «derivado», y guardarlo sería un segundo sitio que puede discrepar
  * del primero. Se calcula al leer, aquí, en un solo lugar.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
@@ -65,6 +66,7 @@ export async function registrarConteoDeVarroa(userAccountId: string, input: Regi
   await requireApiaryAccess(userAccountId, "manage", [
     { projectId: colony.hive.projectId, locationId: colony.hive.locationId },
   ]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: colony.hive.projectId, locationId: colony.hive.locationId }]);
 
   if (input.clientDraftId) {
     const yaEstaba = await prisma.varroaCount.findUnique({ where: { clientDraftId: input.clientDraftId } });

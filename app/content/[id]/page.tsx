@@ -10,6 +10,7 @@ import {
 } from "../../../lib/content/stories";
 import { updateStoryFormAction, setStoryStatusFormAction } from "../../actions/content";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
+import { OpcionesDePersona } from "../../components/OpcionesDePersona";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +134,15 @@ export default async function StoryEditorPage({
                 <label htmlFor="authorPersonId">{t("authorLabel")}</label>
                 <select id="authorPersonId" name="authorPersonId" defaultValue={story.authorPersonId ?? ""}>
                   <option value="">{t("noneOption")}</option>
-                  {context.people.map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}
+                  {/* Quien ya firmaba sigue ofrecido aunque haya dejado la finca: sin su opción, el
+                      desplegable mostraría «ninguno» y guardar borraría el autor en silencio. */}
+                  <OpcionesDePersona
+                    personas={
+                      story.authorPerson && !context.people.some((p) => p.id === story.authorPersonId)
+                        ? [{ id: story.authorPerson.id, displayName: story.authorPerson.displayName }, ...context.people]
+                        : context.people
+                    }
+                  />
                 </select>
               </div>
               <BotonDeEnvio className="nn-button">{t("saveButton")}</BotonDeEnvio>

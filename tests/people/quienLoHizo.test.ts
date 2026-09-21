@@ -192,9 +192,14 @@ describe("exigirPersonaPermitida", () => {
     await expect(exigirPersonaPermitida(operarioA.cuenta, null, [{ locationId: A.plot }])).resolves.toBeUndefined();
   });
 
+  it("en una corrección, dejar a quien ya figuraba no se comprueba; cambiarlo a alguien de fuera, sí", async () => {
+    await expect(exigirPersonaPermitida(operarioA.cuenta, exMiembroA, [{ locationId: A.plot }], { actual: exMiembroA })).resolves.toBeUndefined();
+    await expect(exigirPersonaPermitida(operarioA.cuenta, operarioB.persona, [{ locationId: A.plot }], { actual: exMiembroA })).rejects.toBeInstanceOf(PersonaNoPermitidaError);
+  });
+
   it("dentro de una transacción usa esa transacción", async () => {
     await prisma.$transaction(async (tx) => {
-      await expect(exigirPersonaPermitida(operarioA.cuenta, operarioB.persona, [{ locationId: A.plot }], tx)).rejects.toBeInstanceOf(PersonaNoPermitidaError);
+      await expect(exigirPersonaPermitida(operarioA.cuenta, operarioB.persona, [{ locationId: A.plot }], { db: tx })).rejects.toBeInstanceOf(PersonaNoPermitidaError);
     });
   });
 });

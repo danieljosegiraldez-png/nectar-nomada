@@ -430,7 +430,6 @@
     "provenanceClass_manufacturer_specification": "Especificación del fabricante",
     "provenanceClass_hypothesis": "Hipótesis",
     "observerLabel": "Observado por",
-    "observerSelfOption": "Yo ({name})",
     "notesLabel": "Notas",
     "recordMeasurementButton": "Registrar medición",
     "timelineHeading": "Cronología",
@@ -1606,7 +1605,8 @@
     "condicionDePesajeLabel": "¿Cómo se pesó?",
     "condicion_DRAINED": "Escurrida",
     "condicion_WET": "Mojada",
-    "condicion_DRY": "Seca"
+    "condicion_DRY": "Seca",
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
@@ -2339,7 +2339,8 @@
     "error_validation": "No se pudo guardar ({detail}).",
     "error_stage": "Esa etapa todavía no se puede completar ({detail}).",
     "error_datetime": "No se pudo interpretar la fecha: {detail}",
-    "error_wash_medium": "Ese medio de lavado no se puede usar así: {detail}"
+    "error_wash_medium": "Ese medio de lavado no se puede usar así: {detail}",
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
   },
   "LocaleSwitcher": {
     "label": "Idioma"
@@ -2420,7 +2421,8 @@
     "classification_confidential": "Confidencial",
     "classification_trade_secret": "Secreto comercial",
     "error_title_required": "El título no puede estar vacío.",
-    "error_no_content_access": "No tienes acceso a esta historia."
+    "error_no_content_access": "No tienes acceso a esta historia.",
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
   },
   "Beneficio": {
     "alert": {
@@ -2832,7 +2834,8 @@
     "resumenEstante": "{niveles} niveles × {puestos} puestos = {total} posiciones",
     "nivel": "Nivel {n}",
     "error_estante_no_se_reduce": "Un estante no se reduce: las posiciones pueden tener historia.",
-    "bodegas": "Bodegas"
+    "bodegas": "Bodegas",
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
   },
   "Bodegas": {
     "titulo": "Bodegas",
@@ -3394,7 +3397,8 @@
     "error_sobre_no_asignado": "Eso no está en lo que tienes asignado.",
     "error_nota_obligatoria": "Con «otro», escribe una nota.",
     "error_event_kind_invalido": "Elige un tipo de situación.",
-    "error_condicion_del_dia_invalido": "Elige una condición del día."
+    "error_condicion_del_dia_invalido": "Elige una condición del día.",
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
   },
   "Tienda": {
     "titulo": "Tienda",
@@ -3526,5 +3530,10 @@
     "error_fecha_antes_del_ultimo_traslado": "Esa hora es anterior al último movimiento de la bandeja.",
     "error_cantidad_invalida": "Esa cantidad no es un número.",
     "error_desconocido": "No se pudo completar la acción. Vuelve a intentarlo."
+  },
+  "QuienLoHizo": {
+    "yo": "Yo ({name})",
+    "deEstaFinca": "De esta finca",
+    "equipoNectarNomada": "Equipo Néctar Nómada"
   }
 }

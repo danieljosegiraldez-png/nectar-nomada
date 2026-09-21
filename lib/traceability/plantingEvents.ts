@@ -10,6 +10,7 @@
  * Location record itself (that's `location:manage_attributes`,
  * `locations.ts`).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { requireLocationAttributeAccess } from "./locations";
@@ -42,6 +43,7 @@ export async function recordPlantingEvent(userAccountId: string, input: RecordPl
   if (!location) throw new TraceabilityAccessError("location_not_found");
 
   await requireLotAccess(userAccountId, "manage", [{ locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.locationId }]);
 
   const plantingEvent = await prisma.$transaction(async (tx) => {
     const plantingEvent = await tx.plantingEvent.create({

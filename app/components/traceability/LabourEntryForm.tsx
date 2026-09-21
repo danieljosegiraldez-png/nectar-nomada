@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -86,11 +87,7 @@ export function LabourEntryForm({
         <div className="nn-field">
           <label htmlFor={`labour-observer-${parent.kind}`}>{t("reportedByLabel")}</label>
           <select id={`labour-observer-${parent.kind}`} name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
-            {observers.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.id === selfPersonId ? t("observerSelfOption", { name: person.displayName }) : person.displayName}
-              </option>
-            ))}
+            <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
           </select>
         </div>
       ) : null}

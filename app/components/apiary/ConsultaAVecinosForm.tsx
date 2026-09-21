@@ -6,6 +6,7 @@ import { registrarConsultaAVecinosFormAction } from "../../actions/apiary";
 import { RESULTADOS_DE_CONSULTA } from "../../../lib/apiary/vocabularioDeConsulta";
 import { Ayuda } from "./Ayuda";
 import { BotonDeEnvio } from "../BotonDeEnvio";
+import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
 
 export interface Opcion {
   id: string;
@@ -36,7 +37,7 @@ export function ConsultaAVecinosForm({
 }: {
   locationId: string;
   vecinos: Opcion[];
-  personas: Opcion[];
+  personas: readonly OpcionDePersona[];
   selfPersonId: string | null;
   /** `YYYY-MM-DD` calculado en el servidor: el cliente no decide qué día es hoy. */
   hoy: string;
@@ -113,11 +114,7 @@ export function ConsultaAVecinosForm({
           <label htmlFor="cv-operador">{t("consultaOperadorLabel")}</label>
           <select id="cv-operador" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
             <option value="" />
-            {personas.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            <OpcionesDePersona personas={personas} selfPersonId={selfPersonId} />
           </select>
         </div>
       ) : null}

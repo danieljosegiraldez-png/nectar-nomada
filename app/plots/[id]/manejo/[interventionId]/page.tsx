@@ -61,7 +61,7 @@ export default async function ManejoDetailPage({
 
   const [productos, { people, selfPersonId }, plantas, trampa, bloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listPlantSpecimens(user.userAccountId, id),
     intervencion.motivoObservationId
       ? lecturaDeTrampaQueMotivo(user.userAccountId, intervencion.motivoObservationId)

@@ -27,6 +27,7 @@
  * dejaría que el más laxo abriera lo del otro—, así que se resuelve **por
  * rama**, y el sujeto es exclusivo: o café, o biochar, nunca los dos.
  */
+import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
@@ -126,7 +127,8 @@ const SUJETOS_NO_CAFE = [
   },
 ] as const;
 
-async function requireSubjectAccess(userAccountId: string, subject: SujetoDeMedicion) {
+/** Autoriza y devuelve el ámbito del sujeto: lo reusa «quién lo hizo» (P-G) como ancla. */
+async function requireSubjectAccess(userAccountId: string, subject: SujetoDeMedicion): Promise<Ancla[]> {
   const presentes = SUJETOS_NO_CAFE.filter((s) => subject[s.campo]);
 
   if (presentes.length > 0) {
@@ -140,11 +142,12 @@ async function requireSubjectAccess(userAccountId: string, subject: SujetoDeMedi
     const locationId = await s.ubicacion(subject[s.campo]!);
     if (!locationId) throw new TraceabilityAccessError(s.error);
     await requireLocationAttributeAccess(userAccountId, locationId);
-    return;
+    return [{ locationId }];
   }
 
   const candidates = await scopeCandidatesForSubject(subject.lotId, subject.sampleId);
   await requireLotAccess(userAccountId, "manage", candidates);
+  return candidates.map((c) => ({ projectId: c.projectId, locationId: c.locationId }));
 }
 
 async function scopeCandidatesForSubject(lotId?: string | null, sampleId?: string | null): Promise<ScopeCandidate[]> {
@@ -227,7 +230,8 @@ export interface RecordMeasurementInput {
 }
 
 export async function recordMeasurement(userAccountId: string, input: RecordMeasurementInput) {
-  await requireSubjectAccess(userAccountId, input);
+  const anclas = await requireSubjectAccess(userAccountId, input);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas);
 
   if (input.roastSessionId && !input.lotId) {
     throw new MeasurementValidationError("roast_session_link_requires_lot_id");
@@ -416,7 +420,8 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   const original = await prisma.measurement.findUnique({ where: { id: input.measurementId } });
   if (!original) throw new TraceabilityAccessError("measurement_not_found");
 
-  await requireSubjectAccess(userAccountId, original);
+  const anclas = await requireSubjectAccess(userAccountId, original);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas, { actual: original.operatorPersonId });
 
   // No se corrige lo ya corregido: se corrige lo vigente. Dos correcciones de
   // la misma lectura no se ordenan entre sí —ninguna supersede a la otra— y
