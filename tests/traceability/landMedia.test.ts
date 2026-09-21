@@ -7,14 +7,17 @@
  * hay credenciales en ningún entorno de prueba. Igual que `media.test.ts`, se
  * prueba todo lo que corre ANTES de esa llamada (RBAC) y todo
  * `finalizeLandAssetUpload`, que no toca el almacenamiento. `listLandAssets`
- * pide URL firmadas, así que sólo se prueba su rechazo.
+ * pide URL firmadas: donde importa QUÉ se firma, se espía
+ * `objectStorageProvider.getSignedUrl` en vez de depender de que falten las
+ * credenciales de R2 (en este Mac están, en CI no).
  *
  * El test que más importa está en el último describe: que el padre pertenezca
  * a la Location contra la que se autoriza. Sin él, quien tiene acceso al bloque
  * A puede colgar una foto del perfil del bloque B.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../lib/db";
+import { objectStorageProvider } from "../../lib/integrations/storage";
 import { LocationAccessError } from "../../lib/traceability/locations";
 import {
   finalizeLandAssetUpload,
@@ -386,10 +389,25 @@ describe("listLandAssets: la foto de revisión de trampa exige specimen:view/man
     scopeIds.push(soloVer.scopeId);
 
     // El caso anterior demuestra que sin NINGÚN permiso de trampas la lista
-    // sale vacía sin tocar el proveedor. Que ÉSTE tire (por falta de
-    // credenciales de R2, no por el filtro) es la prueba de que la fila SÍ
-    // se intentó incluir.
-    await expect(listLandAssets(soloVer.userAccountId, parcela.id)).rejects.toThrow();
+    // sale vacía sin tocar el proveedor. Aquí se espía el firmador: que se le
+    // pida la URL de ESTA foto es la prueba de que la fila pasó el filtro.
+    // Antes se esperaba un rechazo «por falta de credenciales de R2», que
+    // medía el entorno: con las credenciales presentes la llamada no fallaba
+    // y la prueba caía sin que el código cambiara.
+    const foto = await prisma.asset.findFirstOrThrow({
+      where: { locationId: parcela.id, specimenObservationId: { not: null } },
+      select: { id: true, storageKey: true },
+    });
+    const firmar = vi
+      .spyOn(objectStorageProvider, "getSignedUrl")
+      .mockImplementation(async (key) => `https://firmada.test/${key}`);
+    try {
+      const lista = await listLandAssets(soloVer.userAccountId, parcela.id);
+      expect(firmar).toHaveBeenCalledWith(foto.storageKey);
+      expect(lista.map((a) => [a.id, a.url])).toEqual([[foto.id, `https://firmada.test/${foto.storageKey}`]]);
+    } finally {
+      firmar.mockRestore();
+    }
   });
 });
 
