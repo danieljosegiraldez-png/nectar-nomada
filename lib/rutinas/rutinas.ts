@@ -85,9 +85,19 @@ export async function crearRutina(userAccountId: string, r: NuevaRutina): Promis
   }
 }
 
+/**
+ * Oráculo de existencia cerrado (arreglo de revisión, item 3): un `routineId`
+ * que no existe da `forbidden`, idéntico a una rutina ajena que sí existe. Sin
+ * la fila no hay `equipmentId`/`locationId` contra el que juzgar permiso —así
+ * que aquí no hay «primero el permiso» posible—, y por eso la única forma de
+ * no filtrar existencia es no distinguir el caso: cualquier llamador sin
+ * autorización ve `forbidden` para los dos, y sólo uno YA AUTORIZADO llega más
+ * allá de esto (a `requireRutinaAccess`, que si el `routineId` es ajeno también
+ * da `forbidden`).
+ */
 async function rutina(routineId: string) {
   const r = await prisma.careRoutine.findUnique({ where: { id: routineId } });
-  if (!r) throw new RutinaError("rutina_no_encontrada");
+  if (!r) throw new RutinaError("forbidden");
   return r;
 }
 
@@ -186,7 +196,9 @@ export async function registrarRealizada(userAccountId: string, r: NuevoRegistro
 
 export async function anularRegistro(userAccountId: string, eventId: string, motivo: string): Promise<void> {
   const ev = await prisma.careRoutineEvent.findUnique({ where: { id: eventId }, include: { routine: true } });
-  if (!ev) throw new RutinaError("registro_no_encontrado");
+  // Mismo oráculo cerrado que `rutina()`: un `eventId` inexistente da
+  // `forbidden`, no `registro_no_encontrado` (arreglo de revisión, item 3).
+  if (!ev) throw new RutinaError("forbidden");
   await requireRutinaAccess(userAccountId, ev.routine, "manage");
   const razon = motivo.trim();
   if (!razon) throw new RutinaError("motivo_obligatorio");
