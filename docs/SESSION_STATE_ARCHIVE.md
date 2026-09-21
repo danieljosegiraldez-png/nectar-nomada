@@ -4158,3 +4158,20 @@ en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-1
 los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
 ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
 dispatch llevar prohibición explícita de reset/restore/migrate dev.
+
+**Archivada el 2026-09-21**, con el estado en 412/400 líneas tras rebasar el PR #456 (rutinas de
+lugar y la bodega) sobre `origin/main` (919d0ba4): «La cera con el color de su año», la más vieja.
+Su decisión vive en **ADR-173**, que ya trae el mismo contenido. La otra sección que el chequeo
+nombró, «Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)», **no se archivó**: su
+última línea —«De Daniel: dar el perfil Recolector (ámbito: la finca) a cada recolector con
+cuenta»— es un pendiente que no aparece en ningún ADR ni en `docs/architecture/DECISIONS.md`, y la
+regla de esta sesión manda parar y reportarlo en vez de archivarlo en silencio. Queda en
+`SESSION_STATE.md` §2, y el presupuesto de líneas sigue por encima de 400 hasta que Daniel diga si
+ese pendiente ya se hizo.
+
+### 2026-09-18 · La cera con el color de su año
+
+ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
+calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
+enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
+en la inspección (toca la cola sin conexión) y el año de las reinas.

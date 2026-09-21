@@ -41,6 +41,18 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-21 · Rutinas de limpieza y fumigación en lugares, y la bodega (PR #456)
+
+ADR-180. La bodega es un `storage_facility` nuevo, cuelga de un `beneficio` o de una `finca`
+(`site`), con su padre exigido por un disparador en la base, no sólo en el servicio. La misma
+rutina periódica de un equipo —limpieza, fumigación, mantenimiento— ahora cuelga también de un
+lugar (beneficio, instalación de secado, cama o bodega): avisa cuando vence y **no bloquea** nada.
+El insumo que se usa al apuntarla descuenta existencias en la misma transacción que crea el
+evento, por `crearConsumoEnTx`. Reglas estructurales en la base: un consumo tiene a lo sumo un
+padre (`CHECK`), y el padre de una bodega se valida con un disparador. Verificado en navegador con
+una cuenta DEMO en una base propia. Siguen: la parte 2 (rutinas por estante) ahora que
+`drying_rack` está en main; P-G, P-H, P-I abiertas.
+
 ### 2026-09-19 · De la recepción a los lotes (pieza 3 de 3)
 
 Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-de-la-recepcion-a-los-lotes*`. De una
@@ -125,13 +137,6 @@ foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`
 **Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
 Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
 **De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
-
-### 2026-09-18 · La cera con el color de su año
-
-ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las reinas. El color se
-calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
-enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
-en la inspección (toca la cola sin conexión) y el año de las reinas.
 
 ## 3. Bloqueado, y en qué
 
