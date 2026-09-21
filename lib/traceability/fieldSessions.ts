@@ -438,10 +438,16 @@ const SUBJECT_KEYS = [
  * una versión más floja que sólo comprobaba parentesco de ubicación.
  *
  * **Comportamiento sin cambios respecto a `recordFieldEvent`**: mismo orden
- * —existe, cerrada, autorización, antes de empezar—, mismos mensajes. Lo que
- * queda fuera (sujeto único, tipo de evento, operador, coordenadas, y la
- * relectura justo antes de insertar) es propio de esa función y no de esta
- * regla compartida.
+ * —existe, cerrada, autorización—, mismos mensajes. La comprobación del
+ * instante contra el inicio de la jornada (`event_before_session_start`) NO
+ * vive aquí: en `recordFieldEvent` se evalúa DESPUÉS de sus propias
+ * comprobaciones (sujeto único, tipo de evento, operador, coordenadas), y
+ * moverla a esta función compartida adelantaba su orden en silencio — nada la
+ * cubría, y `registrarIntervencion` (`lib/traceability/intervenciones.ts`)
+ * nunca la tuvo ni la necesita. Lo que queda fuera (sujeto único, tipo de
+ * evento, operador, coordenadas, el instante contra el inicio, y la relectura
+ * justo antes de insertar) es propio de `recordFieldEvent` y no de esta regla
+ * compartida.
  */
 export async function requireOpenFieldSessionForEvent(userAccountId: string, fieldSessionId: string, occurredAt: Date) {
   const session = await prisma.fieldSession.findUnique({ where: { id: fieldSessionId } });
@@ -456,9 +462,6 @@ export async function requireOpenFieldSessionForEvent(userAccountId: string, fie
   }
 
   await requireFieldSessionAccess(userAccountId, session.locationId);
-
-  // An event before its session started belongs to a different session.
-  if (occurredAt < session.startedAt) throw new FieldSessionValidationError("event_before_session_start");
 
   return session;
 }
@@ -513,6 +516,9 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
 
   validateCoordinates(input.position, "position");
   validateCaptureTimes(input.occurredAt, input.capture);
+
+  // An event before its session started belongs to a different session.
+  if (input.occurredAt < session.startedAt) throw new FieldSessionValidationError("event_before_session_start");
 
   // Se relee el estado de la jornada JUSTO antes de insertar, y se rechaza si
   // se cerró mientras tanto. No es una carrera exótica: `FieldEvent` lleva
