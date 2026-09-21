@@ -28,7 +28,7 @@ La spec dice «`LecturaDeAmbiente` (nombre a contrastar con `03`)», y `docs/ben
 | `ventilationNote` | columna | ídem |
 | `sourceType` | columna, **reutiliza** `MeasurementSourceType` | la «fuente» de la spec. `manual` hoy; el enum ya tiene `sensor` y `device` para el día del registrador, sin migrar |
 
-**Si Daniel cambia un nombre, se cambia aquí antes de empezar la Tarea 1**, en todo el plan. Su aprobación se anota en `docs/beneficio/03_public_api.md` §11 dentro del commit de la Tarea 1.
+**Aprobados por Daniel el 2026-09-21, tal cual, en conversación.** Si más adelante cambia uno, se cambia aquí antes de empezar la Tarea 1, en todo el plan. Su aprobación se anota en `docs/beneficio/03_public_api.md` §11 dentro del commit de la Tarea 1.
 
 ## Restricciones globales
 
@@ -552,7 +552,7 @@ Esperado: `ambiente.test.ts` 13/13 en verde. Las dos guardias de arquitectura, e
 Añadir al final de `docs/beneficio/03_public_api.md` §11:
 
 ```markdown
-Paso 4 de la misma spec, el ambiente a mano (§4.5). Nombres aprobados por Daniel el <fecha de la Tarea 0>:
+Paso 4 de la misma spec, el ambiente a mano (§4.5). Nombres aprobados por Daniel el 2026-09-21:
 
 | nombre | dónde | qué es |
 |---|---|---|
