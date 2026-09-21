@@ -1578,7 +1578,20 @@
     "error_condicion_otro_sin_decir_cual": "Marcaste «otro» en la condición del sitio: di cuál.",
     "error_condicion_nota_sin_otro": "Escribiste cuál es el «otro» de la condición del sitio, pero no lo marcaste.",
     "error_proposito_requerido": "Elige al menos un propósito de la visita.",
-    "error_proposito_desconocido": "Propósito de la visita desconocido: {value}."
+    "error_proposito_desconocido": "Propósito de la visita desconocido: {value}.",
+    "error_vitales_en_sitio": "No se pudieron guardar los datos del sitio: {detail}",
+    "error_clima": "Ese clima no está en la lista: {detail}",
+    "error_cajas_presentes": "El recuento de cajas no es un número válido: {detail}",
+    "error_mass_balance": "Las cantidades no cuadran: {detail}",
+    "error_subproducto": "No se pudo registrar el subproducto: {detail}",
+    "error_cereza": "No se pudo registrar la cereza: {detail}",
+    "error_roast": "No se pudo guardar el tueste: {detail}",
+    "error_process_target": "No se pudo guardar la receta: {detail}",
+    "error_labour": "No se pudo registrar la mano de obra: {detail}",
+    "error_material_consumption": "No se pudo registrar el material usado: {detail}",
+    "error_coordenadas": "No se pudieron guardar las coordenadas: {detail}",
+    "error_sitio_no_encontrado": "No se encontró la finca a la que pertenece esta ubicación: {detail}",
+    "error_clave_de_envio": "Esto ya quedó registrado. Vuelve a cargar la página para verlo."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
@@ -2234,6 +2247,7 @@
     "recipienteQuitar": "Quitar",
     "recipienteMotivo": "¿Por qué se quita?",
     "pesoLoDanLosRecipientes": "El peso de esta cosecha lo dan sus recipientes.",
+    "crearApiarioError": "No se pudo crear el sitio: {detalle}",
     "ceraExtraccionHeading": "Cera de la extracción",
     "ceraExtraccionIntro": "La cera que sale al desopercular. No se sabe de qué colmena vino —se desopercula junto—, así que se anota por apiario y por la ventana de la extracción.",
     "ceraExtraccionVacio": "Todavía no se ha anotado cera de extracción en este apiario.",
@@ -2308,7 +2322,9 @@
     "noSensoryLinkage": "Todavía no hay sesión sensorial enlazada.",
     "error_access": "No tenés acceso para hacer eso ({detail}).",
     "error_validation": "No se pudo guardar ({detail}).",
-    "error_stage": "Esa etapa todavía no se puede completar ({detail})."
+    "error_stage": "Esa etapa todavía no se puede completar ({detail}).",
+    "error_datetime": "No se pudo interpretar la fecha: {detail}",
+    "error_wash_medium": "Ese medio de lavado no se puede usar así: {detail}"
   },
   "LocaleSwitcher": {
     "label": "Idioma"

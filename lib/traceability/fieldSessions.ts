@@ -124,9 +124,15 @@ export async function startFieldSession(userAccountId: string, input: StartField
         startLongitude: input.start?.longitude ?? null,
         startAccuracyM: input.start?.accuracyM ?? null,
         notes: input.notes ?? null,
-        // Se valida en la frontera, no se confía en lo que llega. Vacío o `null` guarda un
-        // arreglo vacío, que es «sin registrar»; una lista con algo dentro pasa por
-        // `exigePropositos`, que rechaza lo desconocido y lo vacío.
+        // Se valida en la frontera, no se confía en lo que llega. **Sólo `null` o
+        // `undefined`** guardan un arreglo vacío, que es «sin registrar»: todo lo
+        // demás —incluido el `[]` que manda `formData.getAll("purposes")` cuando no
+        // hay ninguna casilla marcada— pasa por `exigePropositos`, que rechaza lo
+        // desconocido y también lo vacío.
+        //
+        // Este comentario decía «vacío o `null`», y era justo al revés en el caso que
+        // importa: es el `[]` del formulario el que tiene que fallar, y falla. Corregido
+        // el 2026-09-19 (`PENDING_IMPLEMENTATIONS/013`).
         purposes: input.purposes == null ? [] : exigePropositos(input.purposes),
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
