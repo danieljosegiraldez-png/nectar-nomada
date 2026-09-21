@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**546 operaciones** que tocan la base, en **152 archivos**:
+**545 operaciones** que tocan la base, en **152 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,7 +22,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **408** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **407** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **78** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -59,6 +59,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > por recipiente, la recepción de cereza y la cera como subproducto, fusionados en `origin/main`.
 > Cifras de arriba REALES, medidas con `node scripts/inventario-de-acceso.mjs` sobre el árbol
 > fusionado, no derivadas por aritmética de los dos lados.
+
+> **Las trampas son de la finca elegida (2026-09-21).** `/finca/trampas` y su ronda pasan a usar
+> la finca elegida de la sección (`fincaDeLaPagina`), así que `getFincasConTrampas` —que servía al
+> selector de fincas que Daniel pidió quitar— queda sin uso y se quita: **guardia directo 408→407,
+> 546→545**, en los mismos 152 archivos. Medido con `node scripts/inventario-de-acceso.mjs`.
 
 > **La finca de la trampa (2026-09-19).** Una operación nueva en `lib/traceability/fincas.ts`,
 > `resolveFarmSiteId` —camina hasta la Location `site` antepasada, para `createTrap` y

@@ -2,7 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getFincasConTrampas, getFincaTrampas, FincaTrapAccessError, elegirFincaDeTrampas } from "../../../lib/traceability/fincaTrampas";
+import { cookies } from "next/headers";
+import { getFincaTrampas, FincaTrapAccessError } from "../../../lib/traceability/fincaTrampas";
+import { COOKIE_FINCA, fincaDeLaPagina } from "../../../lib/traceability/fincas";
+import { agruparTrampasPorParcela, type GrupoDeLote } from "../../../lib/traceability/agrupacionDeTrampas";
+import { FincaElegida } from "../../components/traceability/FincaElegida";
 import { estadoDeTrampa, trampasParaAviso, trampasFiltradas, FILTROS_DE_TRAMPAS } from "../../../lib/traceability/pendienteDeTrampas";
 import { claveDeTituloDeBloque } from "../../../lib/traceability/plotBlocks";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -10,51 +14,41 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
 export const dynamic = "force-dynamic";
 
 /**
- * Todas las trampas de una finca — spec §4.1. Sin `[farmId]` en la ruta: hoy hay una
- * sola finca operativa, y esta pantalla se resuelve sola cuando sólo hay una
- * accesible (mismo patrón que `destinoDeEntrada` con un único apiario,
- * `lib/navigation.ts`). Con más de una, ofrece un selector por `?finca=`.
+ * Las trampas de UNA finca — spec §4.1 —, la que se está trabajando en la sección Finca.
  *
- * Fix round 1 (revisión de la Tarea 8):
- * - `?finca=` ya no se comprueba contra `fincas` antes de usarse: se manda tal
- *   cual a `getFincaTrampas`, que es la autoridad (Tarea 7) y ya lo revalida.
- *   Así la rama `FincaTrapAccessError` deja de ser código muerto — es lo que
- *   responde a una finca concreta que el visor no puede ver, spec §6.
- * - Sin NINGÚN acceso, ya no hay `notFound()`: el mensaje explícito de spec §6.
+ * **Corregido el 2026-09-21, por Daniel recorriéndola en producción.** Llevaba su propio
+ * selector por `?finca=` que, para quien ve varias fincas —un administrador las ve todas—,
+ * enumeraba todas, con o sin trampas. Él: sólo la finca a la que pertenece, «its not a
+ * generalized system». Ahora usa la finca elegida de la sección (`fincaDeLaPagina`, la misma
+ * cookie que `/finca`), y si no hay una elegida manda una vez a `/fincas`. Y las trampas ya no
+ * van en una tabla plana: van por parcela → sus microparcelas → sus bloques
+ * (`agruparTrampasPorParcela`).
  *
- * Fix round 1 (Tarea 9, ruling del controlador): la elección de finca se movió a
- * `elegirFincaDeTrampas` (`lib/traceability/fincaTrampas.ts`), que también usa la
- * ronda — una sola implementación en vez de dos copias con el mismo criterio.
+ * `getFincaTrampas` sigue siendo la autoridad de acceso: si la finca elegida no tiene ningún
+ * lote cuyas trampas pueda ver quien mira, lanza `FincaTrapAccessError` y se dice (spec §6).
  */
 export default async function TrampasDeLaFincaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ finca?: string; filtro?: string }>;
+  searchParams: Promise<{ filtro?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
 
-  const fincas = await getFincasConTrampas(user.userAccountId);
-  if (fincas.length === 0) {
+  // **La finca de la sección, no un listado de fincas.** Daniel, 2026-09-21, recorriendo esta
+  // pantalla en producción: sólo la finca a la que pertenece, «not name of other farms». Antes
+  // llevaba su propio selector (`?finca=`) que, para quien ve varias —un administrador las ve
+  // todas—, enumeraba todas las fincas. Ahora usa la misma finca elegida que `/finca`
+  // (`fincaDeLaPagina` y su cookie), y si no hay una elegida manda a escogerla una vez.
+  const finca = await fincaDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_FINCA)?.value);
+  if (finca.fincas.length === 0) {
     return <p className="nn-error" role="alert">{t("fincaTrapsNoAnyAccess")}</p>;
   }
+  if (!finca.elegida) redirect("/fincas?volver=/finca/trampas");
+  const farmLocationId = finca.elegida.siteId;
 
-  const { finca: fincaElegida, filtro: filtroCrudo } = await searchParams;
-  const farmLocationId = elegirFincaDeTrampas(fincas, fincaElegida);
-
-  if (farmLocationId == null) {
-    return (
-      <div>
-        <h1>{t("fincaTrapsTitle")}</h1>
-        <ul>
-          {fincas.map((f) => (
-            <li key={f.id}><Link href={`/finca/trampas?finca=${f.id}`}>{f.name}</Link></li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
+  const { filtro: filtroCrudo } = await searchParams;
 
   let detalle;
   try {
@@ -87,15 +81,13 @@ export default async function TrampasDeLaFincaPage({
   }));
   const visibles = trampasFiltradas(conEstado, filtroCrudo);
 
-  // El enlace de la regla conserva `?finca=` cuando la URL lo traía; y apunta al
-  // primer lote accesible de esta finca — `detalle.plots` nunca está vacío
+  // El enlace de la regla apunta al primer lote accesible de esta finca — `detalle.plots` nunca está vacío
   // aquí, porque `getFincaTrampas` habría lanzado si lo estuviera.
   const primerLote = detalle.plots[0] ?? null;
   const hrefRegla = primerLote ? `/plots/${primerLote.id}/ajustes#regla-trampas` : null;
 
   function hrefConFiltro(filtro: string | null): string {
     const params = new URLSearchParams();
-    if (fincaElegida) params.set("finca", fincaElegida);
     if (filtro) params.set("filtro", filtro);
     const qs = params.toString();
     return qs ? `/finca/trampas?${qs}` : "/finca/trampas";
@@ -109,6 +101,7 @@ export default async function TrampasDeLaFincaPage({
     <div>
       <p className="nn-detail-meta"><Link href="/finca">{t("plotDashboardBackLink")}</Link></p>
       <h1>{t("fincaTrapsTitleNamed", { name: detalle.farmName })}</h1>
+      <FincaElegida elegida={finca.elegida} hayVarias={finca.fincas.length > 1} volver="/finca/trampas" />
       <p>
         <Link href="/finca/trampas/ronda" className="nn-button">{t("trapsGoToRoundLink")}</Link>
       </p>
@@ -157,38 +150,60 @@ export default async function TrampasDeLaFincaPage({
       {visibles.length === 0 ? (
         <p className="nn-muted">{t("trapsNone")}</p>
       ) : (
-        <table className="nn-table">
-          <thead>
-            <tr>
-              <th>{t("trapsNumber", { n: "" })}</th>
-              <th>{t("trapsColumnPlot")}</th>
-              <th>{t("trapsColumnBlock")}</th>
-              <th>{t("trapsColumnLastCheck")}</th>
-              <th>{t("trapsColumnLastReading")}</th>
-              <th>{t("trapsColumnStatus")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibles.map((trampa) => {
-              const claveBloque = trampa.bloque ? claveDeTituloDeBloque(trampa.bloque.blockType) : null;
-              return (
-                <tr key={trampa.id}>
-                  <td>{trampa.trapNumber ?? t("notRecorded")}</td>
-                  <td><Link href={`/plots/${trampa.plotId}?pestana=trampas`}>{trampa.plotName}</Link></td>
-                  <td>
-                    {trampa.bloque
-                      ? claveBloque ? t(claveBloque, { name: trampa.bloque.name }) : trampa.bloque.name
-                      : t("trapsNoBlock")}
-                  </td>
-                  <td>{trampa.ultimaRevision ? trampa.ultimaRevision.observedAt.toISOString().slice(0, 10) : t("trapsNeverChecked")}</td>
-                  <td>{trampa.ultimaRevision?.brocaLevel ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`) : t("notRecorded")}</td>
-                  <td>{t(`trapEstado_${trampa.estado}` as "trapEstado_al_dia")}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        // Por parcela → sus microparcelas → sus bloques (Daniel, 2026-09-21). Se agrupa lo que
+        // queda tras el filtro, así que «toca revisar» enseña sólo las parcelas donde toca.
+        agruparTrampasPorParcela(detalle.plots, visibles).map((grupo) => (
+          <SeccionDeLote key={grupo.lote.id} grupo={grupo} nivel={2} t={t} />
+        ))
       )}
     </div>
+  );
+}
+
+type Traducir = Awaited<ReturnType<typeof getTranslations<"Traceability">>>;
+type TrampaConEstado = Awaited<ReturnType<typeof getFincaTrampas>>["trampas"][number] & { estado: string };
+
+/** Una parcela (o microparcela): su nombre, sus trampas por bloque, y dentro sus microparcelas. */
+function SeccionDeLote({ grupo, nivel, t }: { grupo: GrupoDeLote<TrampaConEstado>; nivel: 2 | 3; t: Traducir }) {
+  const Titulo = nivel === 2 ? "h2" : "h3";
+  return (
+    <section className="nn-section">
+      <Titulo>
+        <Link href={`/plots/${grupo.lote.id}?pestana=trampas`}>{grupo.lote.name}</Link>
+      </Titulo>
+      {grupo.bloques.map((b) => {
+        const claveBloque = b.bloque ? claveDeTituloDeBloque(b.bloque.blockType) : null;
+        return (
+          <div key={b.plotBlockId ?? "sin-bloque"}>
+            <p className="nn-detail-meta">
+              {b.bloque ? (claveBloque ? t(claveBloque, { name: b.bloque.name }) : b.bloque.name) : t("trapsNoBlock")}
+            </p>
+            <table className="nn-table">
+              <thead>
+                <tr>
+                  <th>{t("trapsNumber", { n: "" })}</th>
+                  <th>{t("trapsColumnLastCheck")}</th>
+                  <th>{t("trapsColumnLastReading")}</th>
+                  <th>{t("trapsColumnStatus")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {b.trampas.map((trampa) => (
+                  <tr key={trampa.id}>
+                    <td>{trampa.trapNumber ?? t("notRecorded")}</td>
+                    <td>{trampa.ultimaRevision ? trampa.ultimaRevision.observedAt.toISOString().slice(0, 10) : t("trapsNeverChecked")}</td>
+                    <td>{trampa.ultimaRevision?.brocaLevel ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`) : t("notRecorded")}</td>
+                    <td>{t(`trapEstado_${trampa.estado}` as "trapEstado_al_dia")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {/* A cualquier profundidad: cortar aquí haría desaparecer las trampas de una microparcela
+          dentro de otra. El título no baja de h3 para no deshacer la jerarquía de la página. */}
+      {grupo.microparcelas.map((m) => <SeccionDeLote key={m.lote.id} grupo={m} nivel={3} t={t} />)}
+    </section>
   );
 }
