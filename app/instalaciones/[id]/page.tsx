@@ -10,6 +10,7 @@ import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
 import { insumosDeLugar } from "../../../lib/rutinas/lugares";
+import { insumosParaBloque } from "../../../lib/rutinas/propsDeBloques";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +75,7 @@ export default async function InstalacionPage({ params, searchParams }: {
     {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
-      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} personas={personas} />
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} personas={personas} insumos={insumosParaBloque("cama", insumosDeLaInstalacion)} />
     </section>)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
@@ -106,10 +107,11 @@ export default async function InstalacionPage({ params, searchParams }: {
             shadePercentage: posicionSeleccionada.shadePercentage, shadeDescription: posicionSeleccionada.shadeDescription,
           }} />}
         {permisosDeEstantes[i] && <FormularioEstante existente={{ id: estante.id, niveles: estante.niveles, puestos: estante.puestos }} />}
+        <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} personas={personas} insumos={insumosParaBloque("estante", insumosDeLaInstalacion)} />
       </section>;
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumosDeLaInstalacion} personas={personas} />
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumosParaBloque("instalacion", insumosDeLaInstalacion)} personas={personas} />
   </div>;
 }
