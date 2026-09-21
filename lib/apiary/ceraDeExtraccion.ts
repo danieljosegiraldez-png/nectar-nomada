@@ -14,6 +14,7 @@
  *
  * Permiso: `apiary:manage` para anotar, `apiary:view` para leer, sobre el apiario.
  */
+import { resolveOrganizationForLocation } from "../traceability/locations";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
@@ -41,9 +42,12 @@ async function fincaDelApiario(userAccountId: string, locationId: string, accion
   });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
   await requireApiaryAccess(userAccountId, accion, [{ locationId }, ...sitio.hives.map((h) => ({ projectId: h.projectId, locationId: h.locationId }))]);
+  // La finca se hereda: un apiario que cuelga de una finca no lleva organización propia (2026-09-21,
+  // «Apiario 1/2 — Finca Rosina» daban 500 en producción). `resolveOrganizationForLocation` sube por padres.
+  const organizationId = await resolveOrganizationForLocation(locationId);
   // La tabla exige organización: es de quién es la cera, no un adorno.
-  if (!sitio.organizationId) throw new CeraDeExtraccionInvalida("sitio_sin_finca");
-  return sitio.organizationId;
+  if (!organizationId) throw new CeraDeExtraccionInvalida("sitio_sin_finca");
+  return organizationId;
 }
 
 export async function anotarCeraDeExtraccion(
