@@ -3112,10 +3112,8 @@
     "volver": "← Mill",
     "intro": "Each farm delivery arrives here with its farm weight. Whoever receives weighs it again: if the two weights differ, it is saved anyway with a note. The receiver can't be the person who logged the delivery.",
     "sinBeneficios": "You don't see any mill. Ask for access to one to receive cherry.",
-    "beneficio": "Mill",
     "beneficioElegido": "Mill: {nombre}",
     "elegir": "Choose…",
-    "elegirBoton": "View this mill",
     "pendientesTitulo": "Waiting to be received",
     "sinPendientes": "No deliveries waiting from the farms.",
     "kgFinca": "{kg} kg farm weight",
@@ -3262,7 +3260,10 @@
     "juicio_NO_ATRIBUIBLE": "Not attributable to one order",
     "juicio_BALANCE_DESCUADRADO": "No verdict: the mass balance did not reconcile",
     "juicio_INCOMPARABLE_WEIGHING_CONDITION": "No verdict: weighed under different conditions",
-    "juicio_CONDICION_SIN_DECLARAR": "No verdict: the weighing condition was not declared"
+    "juicio_CONDICION_SIN_DECLARAR": "No verdict: the weighing condition was not declared",
+    "cambiarBeneficio": "change",
+    "elegirBeneficioTitulo": "Which mill are you working at?",
+    "elegirBeneficioIntro": "You have several. Pick one; it is remembered until you change it."
   },
   "Jornadas": {
     "recibidaEnBeneficio": "received: {kg} kg at the mill ({dif} kg)",

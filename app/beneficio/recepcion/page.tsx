@@ -36,19 +36,18 @@ export default async function RecepcionPage() {
   if (!granted.has("lot:view") && !granted.has("lot:manage")) notFound();
   const t = await getTranslations("Recepcion");
 
-  const { beneficios, elegido } = await beneficioDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_BENEFICIO)?.value);
+  const { beneficios, elegido, debeElegir } = await beneficioDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_BENEFICIO)?.value);
+  // Con varios y ninguno elegido, la misma pregunta que las fincas: un botón por beneficio.
+  if (debeElegir) redirect("/beneficios?volver=/beneficio/recepcion");
   if (!elegido) {
     return (
       <div>
         <h1>{t("titulo")}</h1>
-        {beneficios.length ? (
-          <BeneficioElegido beneficios={beneficios} elegido={null} volver="/beneficio/recepcion" />
-        ) : (
-          <p className="nn-muted">{t("sinBeneficios")}</p>
-        )}
+        <p className="nn-muted">{t("sinBeneficios")}</p>
       </div>
     );
   }
+
 
   const gestiona = granted.has("lot:manage");
   const [pendientes, recibidas, pedidos, proveedores, armables] = await Promise.all([
@@ -80,7 +79,7 @@ export default async function RecepcionPage() {
         <Link href="/beneficio">{t("volver")}</Link>
       </p>
       <h1>{t("titulo")}</h1>
-      <BeneficioElegido beneficios={beneficios} elegido={elegido} volver="/beneficio/recepcion" />
+      <BeneficioElegido elegido={elegido} hayVarios={beneficios.length > 1} volver="/beneficio/recepcion" />
       <p className="nn-muted">{t("intro")}</p>
 
       <section className="nn-section">

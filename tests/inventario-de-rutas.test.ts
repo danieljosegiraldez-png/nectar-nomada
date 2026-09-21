@@ -194,7 +194,10 @@ describe("el inventario del router", () => {
     // —+3 páginas, los mismos /bodegas, /bodegas/nueva y /bodegas/[id]— es lo que
     // trae esta rama. Medido con `node scripts/inventario-de-rutas.mjs` sobre el
     // árbol ya rebasado: 108 entradas (97 páginas, 11 handlers).
-    expect(salida).toContain("108 entradas");
+    // 108 → 109 el 2026-09-21: /beneficios, elegir el beneficio con un botón por beneficio, como
+    // /fincas (Daniel). Medido con `node scripts/inventario-de-rutas.mjs`: 109 entradas (98
+    // páginas, 11 handlers).
+    expect(salida).toContain("109 entradas");
     expect(codigo, salida).toBe(0);
   });
 

@@ -3112,10 +3112,8 @@
     "volver": "← Beneficio",
     "intro": "Cada entrega de las fincas llega aquí con su peso de finca. Quien recibe la vuelve a pesar: si los dos pesos no coinciden, se guarda igual y se deja una nota. Quien recibe no puede ser quien anotó la entrega.",
     "sinBeneficios": "No ves ningún beneficio. Pide acceso a uno para recibir cereza.",
-    "beneficio": "Beneficio",
     "beneficioElegido": "Beneficio: {nombre}",
     "elegir": "Elegir…",
-    "elegirBoton": "Ver este beneficio",
     "pendientesTitulo": "Pendientes de recibir",
     "sinPendientes": "No hay entregas pendientes de las fincas.",
     "kgFinca": "{kg} kg de finca",
@@ -3262,7 +3260,10 @@
     "juicio_NO_ATRIBUIBLE": "No atribuible a un pedido",
     "juicio_BALANCE_DESCUADRADO": "Sin juicio: el balance no cuadró",
     "juicio_INCOMPARABLE_WEIGHING_CONDITION": "Sin juicio: se pesó en condiciones distintas",
-    "juicio_CONDICION_SIN_DECLARAR": "Sin juicio: falta decir cómo se pesó"
+    "juicio_CONDICION_SIN_DECLARAR": "Sin juicio: falta decir cómo se pesó",
+    "cambiarBeneficio": "cambiar",
+    "elegirBeneficioTitulo": "¿En qué beneficio vas a trabajar?",
+    "elegirBeneficioIntro": "Tienes varios. Elige uno; se recuerda hasta que lo cambies."
   },
   "Jornadas": {
     "recibidaEnBeneficio": "recibida: {kg} kg en el beneficio ({dif} kg)",
