@@ -13,6 +13,7 @@ import { TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { ambienteDeInstalacion, puedeRegistrarAmbienteEn } from "../../../lib/traceability/ambiente";
 import { edad, lecturaDelPunto, type LecturaVigente } from "../../../lib/traceability/ambienteVigente";
 import { FormularioAmbiente } from "../FormularioAmbiente";
+import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
@@ -67,7 +68,7 @@ export default async function InstalacionPage({ params, searchParams }: {
       l.relativeHumidityPct != null ? `${l.relativeHumidityPct.toFixed(1)} % HR` : null,
       l.skyCondition ? t(`cielo_${l.skyCondition}`) : null,
       l.ventilation ? t(`ventilacion_${l.ventilation}`) : null,
-    ].filter(Boolean).join(" · ") + ` — ${t(e.unidad === "min" ? "haceMin" : e.unidad === "h" ? "haceH" : "haceD", { n: e.n })} (${t(`fuente_${l.sourceType}`)})`;
+    ].filter(Boolean).join(" · ") + ` — ${mostrarInstante(l.occurredAt, ambiente?.zona)}, ${t(e.unidad === "min" ? "haceMin" : e.unidad === "h" ? "haceH" : "haceD", { n: e.n })} (${t(`fuente_${l.sourceType}`)})`;
   };
   const puntoDe = (l: LecturaVigente) => l.rackId
     ? `${nombreDeEstante(l.rackId)}${l.rackLevel != null ? ` · ${t("nivel", { n: l.rackLevel })}` : ""}`

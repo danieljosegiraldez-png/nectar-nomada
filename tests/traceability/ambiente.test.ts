@@ -233,10 +233,21 @@ describe("registrar una lectura de ambiente", () => {
       temperatura: { valor: 24, unidad: "C" }, supersedesId: original, correctionReason: "tecleé 42 por 24",
     });
     lecturaIds.push(correccion);
-    const { vigentes } = await ambienteDeInstalacion(u, m.instalacion);
+    const { vigentes, recientes } = await ambienteDeInstalacion(u, m.instalacion);
     const delNivel2 = vigentes.filter((v) => v.rackId === m.estante && v.rackLevel === 2);
     expect(delNivel2.map((v) => v.id)).toEqual([correccion]);
     expect(delNivel2[0]?.airTemperatureC).toBe(24);
+    // La sustitución se ESCRIBE, no sólo gana por ser más nueva: sin el
+    // `supersededAt`, la original seguiría viva y saldría en `recientes`
+    // (revisión de Codex de las tareas 2 y 3).
+    const [filaOriginal, filaCorreccion] = await Promise.all([
+      prisma.dryingAmbientReading.findUniqueOrThrow({ where: { id: original } }),
+      prisma.dryingAmbientReading.findUniqueOrThrow({ where: { id: correccion } }),
+    ]);
+    expect(filaOriginal.supersededAt).not.toBeNull();
+    expect(filaCorreccion.supersedesId).toBe(original);
+    expect(filaCorreccion.correctionReason).toBe("tecleé 42 por 24");
+    expect(recientes.map((r) => r.id)).not.toContain(original);
   });
   it("vigentes: una por punto, la más reciente de cada uno; recientes, las últimas de todos", async () => {
     const u = m.operario.userAccountId;
@@ -251,5 +262,20 @@ describe("registrar una lectura de ambiente", () => {
     expect(vigentes.filter((v) => v.rackId === m.estante && v.rackLevel === 1).map((v) => v.id)).toEqual([nueva]);
     expect(recientes[0]?.id).toBe(nueva);
     expect(recientes.length).toBeLessThanOrEqual(20);
+  });
+  it("recientes: con 21 lecturas nuevas salen exactamente las 20 más recientes, en orden", async () => {
+    // Veintiuna lecturas posteriores a todas las de las pruebas anteriores, una por
+    // minuto: la más vieja de ellas es la que tiene que quedar fuera. Sin este
+    // caso, «como mucho 20» pasaba igual quitando el `take` (revisión de Codex).
+    const u = m.operario.userAccountId;
+    const ids: string[] = [];
+    for (let i = 0; i < 21; i++) {
+      const occurredAt = new Date(Date.UTC(2026, 8, 23, 8, i));
+      const { id } = await registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt, humedadRelativaPct: 60 });
+      lecturaIds.push(id);
+      ids.push(id);
+    }
+    const { recientes } = await ambienteDeInstalacion(u, m.instalacion);
+    expect(recientes.map((r) => r.id)).toEqual(ids.slice(1).reverse());
   });
 });

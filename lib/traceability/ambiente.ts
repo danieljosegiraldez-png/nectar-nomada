@@ -144,7 +144,9 @@ function aVigente(f: {
   };
 }
 
-/** Las vigentes —la más reciente de cada punto, sin supersedidas— y las 20 últimas. */
+/** Las vigentes —la más reciente de cada punto, sin supersedidas—, las 20 últimas, y la zona de la
+ *  instalación para enseñar su hora (una lectura sin hora no se puede fechar: sólo con su edad, dos
+ *  lecturas «hace 2 h» no se distinguen). */
 export async function ambienteDeInstalacion(userAccountId: string, facilityLocationId: string) {
   const lugar = await instalacion(facilityLocationId);
   if (!(await puedeEn(userAccountId, lugar, ["manage", "view"]))) throw new TraceabilityAccessError("no_sample_access");
@@ -154,5 +156,5 @@ export async function ambienteDeInstalacion(userAccountId: string, facilityLocat
     prisma.dryingAmbientReading.findMany({ where, orderBy, distinct: ["rackLocationId", "rackLevel"], select: SELECCION }),
     prisma.dryingAmbientReading.findMany({ where, orderBy, take: 20, select: SELECCION }),
   ]);
-  return { vigentes: vigentes.map(aVigente), recientes: recientes.map(aVigente) };
+  return { vigentes: vigentes.map(aVigente), recientes: recientes.map(aVigente), zona: lugar.timezone };
 }
