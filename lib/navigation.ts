@@ -286,6 +286,10 @@ export const DENTRO_DE_SECCION: Readonly<Record<string, string>> = {
   "/lots": "/beneficio",
   // 2026-09-18: las parcelas cuelgan de Finca.
   "/plots": "/finca",
+  // 2026-09-18 (Tarea 8): las trampas de la finca, también.
+  "/finca/trampas": "/finca",
+  // 2026-09-18 (Tarea 9): la ronda de trampas, también.
+  "/finca/trampas/ronda": "/finca",
   // 2026-09-18, spec jornada y entrega §3.6: el recolector aterriza en sus entregas, que «Mi
   // Néctar» enlaza para quien tiene harvest_delivery:create_own. Así el menú no crece.
   "/mis-entregas": "/my-nectar",

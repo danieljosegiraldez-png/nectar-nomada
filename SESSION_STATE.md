@@ -26,7 +26,7 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-B | A qué proyecto apunta el dominio de marca — **cerrada el 2026-08-28** | Decisión de Daniel. Se deja la fila porque vuelve a abrirse sola si el dominio volviera a este proyecto | `curl -s -L https://www.nectarnomada.com/ \| grep -q 'href="/login"'` |
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
-| P-F | Revisar las **cinco** guías de `docs/dominio/` — pH, Brix, subproductos y, desde el 2026-09-17, **Varroa** y **Meliponini** (ADR-158) | Las redactó un modelo a partir de indicaciones suyas y **nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-F | Revisar las guías de `docs/dominio/` que quedan: **Varroa** y **Meliponini** (ADR-158). Las tres de café están **reemplazadas** por `docs/beneficio/10`–`12`, y el origen de los umbrales quedó decidido en ADR-181 (2026-09-19); selección, balance y enrutamiento de `12` siguen sin revisar | Las redactó un modelo a partir de indicaciones suyas y **esas dos nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -57,11 +57,21 @@ viejo, sigue hasta entonces. **Sin navegador.**
 
 ### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
 
-ADR-177. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
+ADR-181. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
 su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
 encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
 y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
 **Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+
+### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-181)
+
+Daniel pidió revisar **toda** la literatura de fermentación antes de responder. Seis subagentes, citas
+decisivas comprobadas contra la fuente, Codex de segundo asiento:
+`docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. En lo revisado, ninguna banda universal validada; ni
+Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores no la leen. **Sus respuestas,
+una por pregunta, quedan en 19 apartados** (ADR-181): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
+los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
+del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 
 ### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
 
@@ -114,14 +124,6 @@ ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiari
 colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
 contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
 falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
-
-### 2026-09-18 · Abrir una jornada sin propósito da un mensaje, no un 500 (PR #433)
-
-`friendlyError` (`app/actions/traceability.ts`) **relanza toda clase que no conoce**, y no conocía
-`PropositoInvalido`: el formulario manda `[]` y el servicio lo rechaza. Ahora dice «Elige al menos un
-propósito de la visita». **Una clase de validación nueva que llegue a una acción necesita su rama
-ahí**, o es un 500. Prueba hermética con flip-test. **Sin ver en navegador.**
-
 
 ## 3. Bloqueado, y en qué
 

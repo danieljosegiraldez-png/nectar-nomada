@@ -28,7 +28,14 @@ const DEVICE_KEY = "nn-field-device-id";
 export type DraftStatus = "pending" | "error";
 
 export interface FieldEventDraft {
-  /** Es también el `clientDraftId` del servidor: la clave de idempotencia. */
+  /**
+   * El id LOCAL del borrador en IndexedDB. Para casi todos los tipos de
+   * mutación es TAMBIÉN el `clientDraftId` que ve el servidor —
+   * `construirMutacionDesdeBorrador`, más abajo, lo usa como respaldo—,
+   * pero no para `trap_check` desde la Tarea 11: ese payload ya trae su
+   * propia clave (`construirPayloadDeRevisionDeTrampa`), y es ÉSA la que
+   * viaja, no `id`. Ver el docstring de `construirMutacionDesdeBorrador`.
+   */
   id: string;
   payload: Record<string, unknown>;
   createdAt: number;
@@ -92,6 +99,29 @@ export const FIELD_DRAFTS_CHANGED_EVENT = "nn-field-drafts-changed";
 
 function avisarDeCambio(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(FIELD_DRAFTS_CHANGED_EVENT));
+}
+
+/**
+ * A4 fix-final — se dispara cuando `syncFieldEvents` INTENTA sincronizar,
+ * sin importar el resultado (aplicado, rechazado, o servidor caído).
+ *
+ * **Por qué existe.** La ronda de trampas tiene una SEGUNDA cola, la de
+ * fotos (`lib/sync/trapPhotoQueue.ts`), que vive aparte porque guarda
+ * `Blob`s. Antes de este arreglo, sincronizar las revisiones desde
+ * `FieldSyncControls` —el botón genérico, compartido por todos los
+ * formularios de campo— no le decía nada a esa segunda cola: una foto que
+ * había fallado al subir se quedaba pendiente sin que nada la reintentara
+ * hasta que alguien capturara OTRA foto en otra tarjeta (revisión final,
+ * I5). Este evento es el enganche: `SincronizarFotosDeRonda` lo escucha y
+ * reintenta su propia cola cada vez que CUALQUIER sincronización de
+ * revisiones ocurre en la página, sin que este módulo tenga que importar
+ * nada de fotos ni de trampas — la mayoría de formularios que usan
+ * `syncFieldEvents` no tienen fotos, y no deben pagar por esa dependencia.
+ */
+export const FIELD_EVENTS_SYNCED_EVENT = "nn-field-events-synced";
+
+function avisarDeSincronizacion(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(FIELD_EVENTS_SYNCED_EVENT));
 }
 
 export async function listFieldEventDrafts(): Promise<FieldEventDraft[]> {
@@ -203,6 +233,33 @@ export interface SyncSummary {
  */
 export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
 
+/**
+ * Fix final (re-revisión, "New Breakage") — el estado de UN borrador para
+ * mostrarlo en su tarjeta. Pura, misma razón que `clasificarRespuesta`: nada
+ * de IndexedDB aquí, sólo la decisión.
+ *
+ * **El defecto que esto arregla.** `listFieldEventDrafts()` devuelve TODOS
+ * los borradores sin filtrar por `status`: uno rechazado de forma terminal
+ * (`observer_self_missing`, una trampa retirada, la clave de A9 reutilizada
+ * con otra trampa…) sigue existiendo en la cola, porque `syncFieldEvents` lo
+ * re-escribe con `status: "error"` en vez de borrarlo — así el operador
+ * puede verlo y decidir, no para que se reintente solo contra algo que nunca
+ * va a salir bien. `RondaDeTrampaForm` sólo comprobaba «¿sigue existiendo el
+ * borrador?», y la respuesta era «sí» tanto para uno pendiente como para uno
+ * rechazado: un rechazo DEFINITIVO se leía como «todavía pendiente, sólo
+ * falta señal» — lo opuesto de la verdad, porque no se resuelve solo.
+ *
+ * Ausente (`null`) es `"sincronizada"`: el borrador ya no está en la cola,
+ * así que el servidor lo aplicó o lo marcó `duplicate` — las dos formas de
+ * éxito de `syncFieldEvents`, que descarta el borrador en ambas.
+ */
+export type EstadoDeBorrador = "pendiente" | "rechazada" | "sincronizada";
+
+export function estadoDeBorrador(borrador: { status: DraftStatus } | null): EstadoDeBorrador {
+  if (borrador == null) return "sincronizada";
+  return borrador.status === "error" ? "rechazada" : "pendiente";
+}
+
 export function clasificarRespuesta(status: number): DecisionDeRespuesta {
   if (status >= 200 && status < 300) return "aplicar";
   // 5xx es el servidor cayéndose; 408 y 429 son «ahora no, vuelve». Ninguno de
@@ -241,6 +298,35 @@ export async function leerJson<T>(res: Response, contexto: string): Promise<T> {
 type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "rejected"; reason?: string };
 
 /**
+ * Tarea 11, fix round 1 — la mutación que viaja por la red para UN borrador.
+ *
+ * **La clave que manda es la del PAYLOAD, no la del borrador — cuando el
+ * payload trae una.** Los cuatro tipos de captura de parcela que no llevan su
+ * propio `clientDraftId` (`soil_sample`, `foliar_sample`, `soil_profile`,
+ * `planting_cohort`; ver `lib/sync/parcelaPayload.ts`) siguen usando `d.id`
+ * exactamente como antes de este arreglo — es el único id que tienen—.
+ * `trap_check` es el primero que SÍ trae uno propio
+ * (`construirPayloadDeRevisionDeTrampa`), la misma clave que
+ * `RondaDeTrampaForm` pone en el campo oculto y que el camino CON señal
+ * (`recordRoundTrapCheckFormAction`) también usa. Antes de este arreglo, esta
+ * misma línea hacía `{ ...d.payload, clientDraftId: d.id }` — el spread
+ * seguido de la sobreescritura tira SIEMPRE la clave del payload, así que la
+ * fila que el servidor guardaba llevaba la clave de la cola, nunca la del
+ * formulario, y la foto de la Tarea 12 no podía encontrar la revisión que
+ * acababa de crear sin señal. Revisión Task 11, hallazgo Crítico #1.
+ *
+ * Pura y exportada para poder probarla sin IndexedDB — igual que
+ * `clasificarRespuesta` más arriba en este mismo archivo.
+ */
+export function construirMutacionDesdeBorrador(
+  d: FieldEventDraft,
+): Record<string, unknown> & { clientDraftId: string } {
+  const propia = d.payload.clientDraftId;
+  const clientDraftId = typeof propia === "string" && propia !== "" ? propia : d.id;
+  return { ...d.payload, clientDraftId };
+}
+
+/**
  * Vacía la cola en **una sola petición**, y aplica el resultado por mutación.
  *
  * La distinción que sostiene todo esto, heredada de A5/A0: si el `fetch` lanza,
@@ -254,18 +340,28 @@ type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "
  * tanda anterior sí llegó y sólo se perdió la respuesta.
  */
 export async function syncFieldEvents(): Promise<SyncSummary> {
+  // A4 fix-final — se avisa al ENTRAR, no al salir: un formulario con foto
+  // (la ronda de trampas) necesita reintentar su propia cola cada vez que se
+  // intenta ésta, sea cual sea el resultado.
+  avisarDeSincronizacion();
   const drafts = (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error");
   if (drafts.length === 0) {
     return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
   }
 
   const deviceId = await ensureDeviceId();
+  // La clave que se manda es la que decide `construirMutacionDesdeBorrador`
+  // (la del payload si trae una propia, `d.id` si no) — y es la MISMA clave
+  // por la que hay que buscar el borrador cuando vuelva el resultado, más
+  // abajo: el servidor devuelve el `clientDraftId` que recibió, no `d.id`.
+  const mutaciones = drafts.map((d) => ({ draft: d, mutacion: construirMutacionDesdeBorrador(d) }));
+  const porClaveDeEnvio = new Map(mutaciones.map(({ draft, mutacion }) => [mutacion.clientDraftId, draft]));
   const res = await fetch("/api/v1/sync/field-events", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       deviceId,
-      mutations: drafts.map((d) => ({ ...d.payload, clientDraftId: d.id })),
+      mutations: mutaciones.map(({ mutacion }) => mutacion),
     }),
   });
 
@@ -288,7 +384,7 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
 
   for (const r of results) {
-    const draft = drafts.find((d) => d.id === r.clientDraftId);
+    const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
     if (r.status === "rejected") {
       await write((s) => s.put({ ...draft, status: "error", errorMessage: r.reason ?? "rejected" }));

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19
 
-**515 operaciones** que tocan la base, en **145 archivos**:
+**521 operaciones** que tocan la base, en **146 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,16 +22,28 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **388** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **393** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **68** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **69** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
 
+> **Merge de `origin/main` en `vistas-finca-parcela` (2026-09-19, merge-main-3).** Unión de esta
+> rama —la finca de la trampa, `resolveFarmSiteId`— con el manejo fitosanitario PR B, la pesada
+> por recipiente, la recepción de cereza y la cera como subproducto, fusionados en `origin/main`.
+> Cifras de arriba REALES, medidas con `node scripts/inventario-de-acceso.mjs` sobre el árbol
+> fusionado, no derivadas por aritmética de los dos lados.
+
+> **La finca de la trampa (2026-09-19).** Una operación nueva en `lib/traceability/fincas.ts`,
+> `resolveFarmSiteId` —camina hasta la Location `site` antepasada, para `createTrap` y
+> `getPlotDetail`—, sube la fila de **depende del llamador**: no recibe principal, y las
+> dos llamadoras ya comprobaron acceso (`requireTrapAccess`/`requireLocationAttributeAccess`)
+> antes de invocarla.
+
 > **Manejo fitosanitario, ronda final de arreglos (2026-09-19, hallazgo 5).** Una
 > operación nueva en `lib/traceability/intervenciones.ts`, ya inventariado:
-> `contextoDeManejo` sube **guardia directo**, 367→368. El arreglo de
+> `contextoDeManejo` sube **guardia directo**. El arreglo de
 > `bloquesDeLaParcela` (entrada de abajo) dejó incompleto el permiso de las
 > pantallas de manejo: `/plots/[id]/manejo/nuevo` y `/manejo/[interventionId]`
 > seguían pidiendo `getPlotDetail` (`location:manage_attributes`) ANTES de
@@ -44,29 +56,33 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 > **Manejo fitosanitario, ronda de arreglos 1 (2026-09-19).** Dos operaciones nuevas en
 > `lib/traceability/intervenciones.ts`, ya inventariado. `bloquesDeLaParcela` sube **guardia
-> directo**, 366→367: lee los bloques de una parcela con el MISMO permiso (`lot:view`/`manage`,
+> directo**: lee los bloques de una parcela con el MISMO permiso (`lot:view`/`manage`,
 > vía `requireLotAccess`) que ya exige leer o corregir sus intervenciones — reemplaza a
 > `listPlotBlocks` (`location:manage_attributes`) para este consumidor, porque ese permiso
 > distinto era lo que dejaba borrar un bloque en silencio al corregir sin tenerlo. `motivoValidoParaParcela`
 > no autoriza nada a propósito —sólo decide si `?motivo=` de la URL sirve para precargar el
-> formulario— y va en **depende del llamador**, 65→66: su único llamador,
+> formulario— y va en **depende del llamador**: su único llamador,
 > `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), ya pasó `getPlotDetail`
 > (`location:manage_attributes`) sobre la misma parcela antes de invocarla.
 
 > **Pesada por recipiente (ADR-177, 2026-09-19).** Un archivo nuevo, `lib/apiary/recipientes.ts`:
-> `anotarRecipiente` y `quitarRecipiente` suben **guardia directo**, 367→369 (`requireApiaryAccess`
+> `anotarRecipiente` y `quitarRecipiente` suben **guardia directo** (`requireApiaryAccess`
 > manage sobre la caja de la cosecha antes de escribir). Y `asentarPesoDeCosechaEn`, extraído de
-> `completarCierreDeCosecha`, entra como **«acotado por construcción»**, 39→40 — **la etiqueta del
+> `completarCierreDeCosecha`, entra como **«acotado por construcción»** — **la etiqueta del
 > script no es exacta**: no se autoriza sola, recibe el `tx` de quien la llama, y sus dos llamadores
-> (`completarCierreDeCosecha` y `recipientes.ts`) comprueban `apiary:manage` antes. 490→493, en 141.
+> (`completarCierreDeCosecha` y `recipientes.ts`) comprueban `apiary:manage` antes.
+
 > **La cera como subproducto (ADR-178, 2026-09-19).** `lib/apiary/ceraDeExtraccion.ts` sube
-> **guardia directo**, 386→388: anotar exige `apiary:manage` y leer `apiary:view` sobre el apiario,
+> **guardia directo**: anotar exige `apiary:manage` y leer `apiary:view` sobre el apiario,
 > los dos por `fincaDelApiario`, con los mismos candidatos que `getApiaryDetail` (ubicación y los
-> proyectos de sus colmenas). 513→515, en 145.
+> proyectos de sus colmenas).
 
 > Tras la revisión de Codex, `bloquearCosechaEn` —el `FOR UPDATE` que ordena a quien cambia el peso
-> de una misma cosecha— entra como **«depende del llamador»**, 65→66: sus tres llamadores autorizan
-> antes. 493→494.
+> de una misma cosecha— entra como **«depende del llamador»**: sus tres llamadores autorizan antes.
+
+> **Recepción de cereza en beneficio (2026-09-19).** `lib/traceability/recepcionesDeCereza.ts`,
+> `recepcionDeEntregas` entra como **depende del llamador**: no recibe principal, y sus dos
+> llamadores (`detalleDeJornada`, `misEntregas`) ya autorizaron esas entregas antes.
 
 > **Marcos negros (ADR-176, 2026-09-19).** Una operación nueva en `lib/apiary/cera.ts`,
 > `marcosNegrosDelApiario`, que sube la fila de **guardia directo**, 366→367 tras rebasar sobre reinas y fitosanitarios: llama a
@@ -94,6 +110,56 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `anularAsignacion` en `lib/commerce/tienda.ts`, y sube la fila de **guardia directo**,
 > 309→310 tras rebasar sobre las fincas (#425): exige `commerce:manage_store` o, si no, `requireLotAccess("manage")` sobre el lote
 > de la asignación, antes de escribir nada. 429→430.
+
+> **El de 420→421, sin archivo nuevo, es `requestTrampaPhotoUpload`
+> (`lib/traceability/landMedia.ts`, ronda de arreglos finales de vistas de
+> finca y parcela, A6 / I2).** Antes no sumaba fila: no hacía ningún
+> `prisma.*` directo, sólo llamaba al guardia y firmaba la URL. El arreglo de
+> I2 —una `storageKey` derivada del `photoClientDraftId` podía sobrescribir
+> los bytes de un `Asset` ajeno antes de que `finalizeTrampaPhotoPorBorrador`
+> llegara a comprobar de quién era— le añadió dos lecturas propias
+> (`asset.findUnique` por la clave, `specimenObservation.findUnique` por la
+> revisión) para rechazar ANTES de firmar el PUT cuando la clave ya
+> pertenece a otra revisión. Sigue gateada por `requireTrapAccess`, sin
+> cambio de clase. `listLandAssets` (A8/M1, gana `location` y la llamada a
+> `can()` para no listar fotos de trampa sin `specimen:view`/`manage`),
+> `recordTrapCheck` (A9/M2, reordena su lookup por `clientDraftId` para que
+> corra después del control de acceso) y `pushFieldEvents`
+> (`aplicarRevisionDeTrampa`, mismo A9, ahora resuelve la trampa y llama a
+> `requireTrapAccess` directamente en vez de sólo delegar en
+> `recordTrapCheck`) también cambiaron su lista de modelos/guardias, pero
+> ninguna cambió de clase — las tres ya eran **guardia directo**.
+>
+> **El de 419→420, sin archivo nuevo, es `finalizeTrampaPhotoPorBorrador`
+> (`lib/traceability/landMedia.ts`, Tarea 12 de vistas de finca y parcela).**
+> Sube la fila de **guardia directo**: llama a `requireTrapAccess`
+> (`specimen:manage`), nunca a `requireLocationAttributeAccess` — ruling P2 del
+> controlador, para que la foto de la ronda se autorice igual que la revisión
+> que documenta. `requestTrampaPhotoUpload`, su pareja del paso 1, **no** suma
+> fila: como `requestLandAssetUpload` (ya inventariado, cero filas propias),
+> no hace ningún `prisma.*` directo — sólo llama al guardia y al proveedor de
+> almacenamiento. Las dos nuevas Server Actions
+> (`requestTrampaPhotoUploadAction`, `finalizeTrampaPhotoPorBorradorAction`,
+> en `app/actions/traceability.ts`) tampoco suman: delegan toda su
+> autorización en `lib/traceability/landMedia.ts`, el mismo criterio de la
+> nota de la Tarea 3 más abajo.
+
+> **Y el de 417→419, con un archivo nuevo, es `lib/traceability/fincaTrampas.ts` (Tarea 7 de
+> vistas de finca y parcela).** `getFincasConTrampas` y `getFincaTrampas` suben dos veces la
+> fila de **guardia directo**: las dos recorren los lotes de la finca y llaman a
+> `puedeVerTrampasDelLote` (`can(..., "view"/"manage", "specimen", ...)`) lote por lote —la
+> misma comprobación que ya usa `requireTrapAccess` en `traps.ts`, sólo que agregada sobre
+> varios lotes en vez de uno—. `getFincaTrampas` lanza `FincaTrapAccessError` si ningún lote de
+> la finca es accesible, en vez de devolver una lista vacía que se leería como «sin trampas»
+> (spec §6). 2 = 2: si la cuenta no cerrara con la fila de «guardia directo», alguna de las dos
+> habría quedado sin comprobar el ámbito lote por lote.
+
+> **El de 416→417, sin archivos nuevos, es `setPlotBlockType` (Tarea 1 de vistas de
+> finca y parcela).** Vive en `lib/traceability/plotBlocks.ts`, que ya estaba
+> inventariado por `createPlotBlock` y `listPlotBlocks`. Sube la fila de **guardia
+> directo**: llama a `requireLocationAttributeAccess` sobre la parcela del bloque
+> —leída primero con `findUnique`, nunca confiando en el `locationId` del formulario—
+> antes de escribir el tipo o la descripción.
 
 > **Fusión de `origin/main` en `trampas-broca` (2026-09-18).** Los dos lados
 > traían cifras propias —356/106 la rama, 376/116 `main`— y **ninguna de las dos

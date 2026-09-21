@@ -325,6 +325,32 @@ form.nn-form {
   margin-bottom: 0.75rem;
 }
 
+/* Controller ruling 2026-09-18: ningún plan ni tarea posterior estiliza
+   .nn-tabs/.nn-tab; fila única que se desliza en móvil, como .nn-nav-links. */
+.nn-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--nn-border);
+  margin: 1rem 0;
+}
+
+.nn-tab {
+  display: inline-block;
+  flex: 0 0 auto;
+  padding: 0.6rem 0.9rem;
+  text-decoration: none;
+  color: var(--nn-ink-muted);
+  border-bottom: 2px solid transparent;
+}
+
+.nn-tab-activa {
+  color: var(--nn-ink);
+  font-weight: 700;
+  border-bottom-color: var(--nn-accent);
+}
+
 .nn-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
