@@ -20,6 +20,11 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "content", action: "edit", description: "Edit story/content drafts." },
   { resourceType: "content", action: "publish", description: "Publish story/content to the public site." },
 
+  // Decisión de Daniel, 2026-09-21: el canal de aviso de una persona lo declara
+  // ella misma, un Platform Admin, o quien coordina su finca. Esto último es este
+  // permiso; `lib/notificaciones/canales.ts` dice qué es «su finca».
+  { resourceType: "person", action: "manage_notifications", description: "Declare or change the notification channel preference of a person of the farm." },
+
   { resourceType: "project", action: "view", description: "View non-public project details." },
   { resourceType: "project", action: "manage_operations", description: "Manage project tasks, assignments, and operational data." },
 
@@ -387,6 +392,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       ["specimen", "view"],
       ["project", "manage_operations"],
       ["research", "view"],
+      // Quien coordina la finca declara el canal de aviso de su gente; el operario no.
+      ["person", "manage_notifications"],
       ["classification", "clear_partner"],
       ["classification", "clear_internal"],
     ],

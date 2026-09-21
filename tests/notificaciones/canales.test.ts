@@ -16,9 +16,48 @@ import {
   declararCanal,
   primerCanalUtil,
 } from "../../lib/notificaciones/canales";
+import { ROLE_PROFILES } from "../../lib/rbac/catalog";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a911-can-${Date.now()}`;
+
+const scopesCreados: string[] = [];
+
+/**
+ * `person:manage_notifications` entró en el catálogo el 2026-09-21. La base de
+ * CI se siembra de cero y lo trae; la de pruebas compartida no se resiembra
+ * entera, así que se añade aquí sólo lo de este permiso, con el mismo upsert que
+ * `prisma/seed.ts`. Aditivo y sin borrado: otras ramas usan la misma base.
+ */
+async function asegurarPermisoDeCanal() {
+  const permiso = await prisma.permission.upsert({
+    where: { resourceType_action: { resourceType: "person", action: "manage_notifications" } },
+    update: {},
+    create: { resourceType: "person", action: "manage_notifications", description: "test" },
+  });
+  for (const perfil of ROLE_PROFILES.filter((p) => p.permissions.some(([r, a]) => r === "person" && a === "manage_notifications"))) {
+    const roleProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil.name } });
+    await prisma.roleProfilePermission.upsert({
+      where: { roleProfileId_permissionId: { roleProfileId: roleProfile.id, permissionId: permiso.id } },
+      update: {},
+      create: { roleProfileId: roleProfile.id, permissionId: permiso.id },
+    });
+  }
+}
+
+async function asignar(
+  userAccountId: string,
+  perfil: string,
+  scopeType: "platform" | "location",
+  scopeRefId: string | null,
+) {
+  const roleProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil } });
+  // `Scope` es compartido entre corridas: se reutiliza y sólo se borra el que se creó aquí.
+  const existente = await prisma.scope.findFirst({ where: { scopeType, scopeRefId } });
+  const scope = existente ?? (await prisma.scope.create({ data: { scopeType, scopeRefId } }));
+  if (!existente) scopesCreados.push(scope.id);
+  await prisma.assignment.create({ data: { userAccountId, scopeId: scope.id, roleProfileId: roleProfile.id } });
+}
 
 describe("A9.11 — preferencia de canal", () => {
   let userAccountId: string;
@@ -50,6 +89,10 @@ describe("A9.11 — preferencia de canal", () => {
     const actor = await crearPersona("Actor", { email: `actor-${RUN_ID}@ejemplo.test`, conCuenta: true });
     const cuenta = await prisma.userAccount.findFirstOrThrow({ where: { personId: actor } });
     userAccountId = cuenta.id;
+    // Declara por otras personas, así que desde el 2026-09-21 necesita poder:
+    // Platform Admin, el caso más amplio de la regla que prueba el bloque de abajo.
+    await asegurarPermisoDeCanal();
+    await asignar(userAccountId, "Platform Admin", "platform", null);
 
     conTodoId = await crearPersona("ConTodo", {
       email: `todo-${RUN_ID}@ejemplo.test`,
@@ -64,6 +107,7 @@ describe("A9.11 — preferencia de canal", () => {
   afterAll(async () => {
     const ids = [conTodoId, soloCuentaId, sinNadaId];
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: userAccountId }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
     // Las preferencias caen por CASCADE al borrar la persona, pero se borran
     // explícitas: el test no debe depender de una regla que está probando otro.
     await prisma.personNotificationPreference.deleteMany({ where: assertDefinedWhere({ personId: { in: ids } }) });
@@ -147,5 +191,118 @@ describe("A9.11 — preferencia de canal", () => {
     await expect(
       declararCanal(userAccountId, { personId: "00000000-0000-0000-0000-000000000000", canal: "email" }),
     ).rejects.toThrow(PreferenciaDeCanalError);
+  });
+});
+
+/**
+ * Quién puede declarar el canal de una persona. **Decisión de Daniel,
+ * 2026-09-21:** ella misma, un Platform Admin, o quien coordina su finca
+ * (`person:manage_notifications`, que tiene Farm Manager y no Farm Operator).
+ * Antes de esto `declararCanal` sólo miraba que la persona existiera, y
+ * cualquier cuenta podía apagarle los avisos a otra.
+ */
+describe("A9.11 — quién puede declarar el canal de una persona", () => {
+  const RUN = `a911-aut-${Date.now()}`;
+  const personas: string[] = [];
+  const cuentas: string[] = [];
+  const orgs: string[] = [];
+  const lugares: string[] = [];
+
+  let fincaA: string;
+  let lugarA: string;
+  let lugarB: string;
+  let miembro: { personId: string; cuenta: string };
+  let asignadoSinMembresia: { personId: string; cuenta: string };
+
+  async function persona(etiqueta: string) {
+    const p = await prisma.person.create({
+      data: { givenName: "TEST", familyName: etiqueta, displayName: `TEST ${etiqueta} (${RUN})`, locale: "es" },
+    });
+    personas.push(p.id);
+    const c = await prisma.userAccount.create({ data: { personId: p.id, authProvider: "credentials", status: "active" } });
+    cuentas.push(c.id);
+    return { personId: p.id, cuenta: c.id };
+  }
+
+  async function finca(etiqueta: string) {
+    const org = await prisma.organization.create({ data: { organizationType: "farm", name: `TEST ${etiqueta} (${RUN})` } });
+    orgs.push(org.id);
+    const lugar = await prisma.location.create({
+      data: { name: `TEST ${etiqueta} (${RUN})`, locationType: "site", classification: "internal", organizationId: org.id },
+    });
+    lugares.push(lugar.id);
+    return { org: org.id, lugar: lugar.id };
+  }
+
+  beforeAll(async () => {
+    await asegurarPermisoDeCanal();
+    ({ org: fincaA, lugar: lugarA } = await finca("FincaA"));
+    ({ lugar: lugarB } = await finca("FincaB"));
+
+    miembro = await persona("Miembro");
+    await prisma.organizationMembership.create({ data: { personId: miembro.personId, organizationId: fincaA } });
+
+    // La otra mitad de «de la finca» (P-G): sin membresía, pero con asignación en un lugar suyo.
+    asignadoSinMembresia = await persona("Asignado");
+    await asignar(asignadoSinMembresia.cuenta, "Farm Operator", "location", lugarA);
+  });
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
+    await prisma.personNotificationPreference.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
+    await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopesCreados } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: lugares } }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
+  });
+
+  it("una cuenta ajena NO puede declarar el canal de otra persona, y no escribe nada", async () => {
+    const ajena = await persona("Ajena");
+    await expect(declararCanal(ajena.cuenta, { personId: miembro.personId, canal: "email" })).rejects.toThrow(
+      "sin_permiso_sobre_la_persona",
+    );
+    expect(await canalesDe(miembro.personId)).toEqual([]);
+  });
+
+  it("la propia persona sí puede declarar el suyo", async () => {
+    await declararCanal(miembro.cuenta, { personId: miembro.personId, canal: "in_app" });
+    expect((await canalesDe(miembro.personId)).map((c) => c.canal)).toEqual(["in_app"]);
+  });
+
+  it("quien coordina su finca (Farm Manager) sí puede", async () => {
+    const jefe = await persona("Jefe");
+    await asignar(jefe.cuenta, "Farm Manager", "location", lugarA);
+    await declararCanal(jefe.cuenta, { personId: miembro.personId, canal: "email", priority: 5 });
+    expect((await canalesDe(miembro.personId)).find((c) => c.canal === "email")?.priority).toBe(5);
+  });
+
+  it("…también sobre quien es de la finca sólo por asignación, sin membresía", async () => {
+    const jefe = await persona("Jefe2");
+    await asignar(jefe.cuenta, "Farm Manager", "location", lugarA);
+    await declararCanal(jefe.cuenta, { personId: asignadoSinMembresia.personId, canal: "in_app" });
+    expect((await canalesDe(asignadoSinMembresia.personId)).map((c) => c.canal)).toEqual(["in_app"]);
+  });
+
+  it("un Farm Operator de la MISMA finca no puede: lo que decide es el permiso, no estar ahí", async () => {
+    const operario = await persona("Operario");
+    await asignar(operario.cuenta, "Farm Operator", "location", lugarA);
+    // Control positivo: el operario SÍ tiene acceso a ese lugar. Sin esto la
+    // negativa de abajo se cumpliría igual con una cuenta sin acceso a nada.
+    const { can } = await import("../../lib/rbac/service");
+    expect(await can(operario.cuenta, "manage_attributes", "location", { scopeType: "location", scopeRefId: lugarA }, "internal")).toBe(true);
+    await expect(declararCanal(operario.cuenta, { personId: miembro.personId, canal: "whatsapp" })).rejects.toThrow(
+      "sin_permiso_sobre_la_persona",
+    );
+  });
+
+  it("el Farm Manager de OTRA finca no puede", async () => {
+    const jefeAjeno = await persona("JefeAjeno");
+    await asignar(jefeAjeno.cuenta, "Farm Manager", "location", lugarB);
+    await expect(declararCanal(jefeAjeno.cuenta, { personId: miembro.personId, canal: "whatsapp" })).rejects.toThrow(
+      "sin_permiso_sobre_la_persona",
+    );
   });
 });

@@ -12090,3 +12090,43 @@ valida en la base, no sólo en el servicio. `RutinasDeLugar` puede montarse en c
 comprobar antes si admite rutina. La Parte 2 (`drying_rack`, cuando `secado-2a` la traiga) sólo
 necesita que una posición cuelgue de un `drying_rack` en vez de una `drying_facility`: el
 `RutinaError("rutina_en_el_estante")` que la distingue ya existe.
+
+## ADR-184 — Quién declara el canal de aviso de una persona
+
+**Fecha:** 2026-09-21 · **Decide:** Daniel · **Estado:** aceptada
+
+**Contexto.** `declararCanal` (`lib/notificaciones/canales.ts`, A9.11) escribía la
+`PersonNotificationPreference` de cualquier `personId` sin autorizar nada: sólo
+comprobaba que la persona existiera. Cualquier cuenta podía apagarle a otra sus
+avisos. Lo vio la sesión de P-G. Hoy no lo llama ninguna pantalla ni acción, así
+que no era alcanzable; el guardia es para que la primera que lo llame no se
+equivoque. D10(a) decía «cada usuario elige», pero no si alguien más puede.
+
+**Decisión.** Puede declarar o cambiar el canal de una persona:
+
+1. **ella misma** — su cuenta es la de esa persona;
+2. **un Platform Admin** — `person:manage_notifications` en ámbito de plataforma;
+3. **quien coordina su finca** — `person:manage_notifications` sobre un proyecto o
+   un lugar de una organización de la que esa persona es.
+
+«Es de la finca» usa la misma regla que P-G: miembro activo de la organización, o
+con una cuenta que tenga una asignación activa y vigente sobre un proyecto de esa
+organización o sobre un lugar que cuelgue de ella.
+
+`person:manage_notifications` es un **permiso nuevo**, y no se reutiliza
+`project:manage_operations`, para que su nombre diga qué autoriza. Lo tienen
+Platform Admin (como todos) y **Farm Manager**. **Farm Operator no**: estar en la
+finca no basta, hay que coordinarla.
+
+**Consecuencias.**
+
+- Quien no tiene cuenta (3 de 19 personas el 2026-09-08) puede tener preferencia
+  igual, porque la declara su coordinador o un admin.
+- Negar lanza `PreferenciaDeCanalError("sin_permiso_sobre_la_persona")`. Cuando
+  una acción llame a `declararCanal`, su `friendlyError` tiene que traducir esa
+  clase (`tests/arquitectura/acciones-traducen-sus-errores.test.ts`).
+- Producción recibe el permiso sola: `scripts/vercel-build.sh` corre
+  `prisma db seed` en cada despliegue de producción, y la semilla es sólo upserts.
+- Pruebas: `tests/notificaciones/canales.test.ts`, bloque «quién puede declarar
+  el canal de una persona».
+
