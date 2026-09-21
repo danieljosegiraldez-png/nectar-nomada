@@ -49,16 +49,42 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const rs = (await prisma.careRoutine.findMany({ where: { locationId: { in: Object.values(L) } }, select: { id: true } })).map((r) => r.id);
-  const evs = (await prisma.careRoutineEvent.findMany({ where: { routineId: { in: rs } }, select: { id: true } })).map((e) => e.id);
-  await prisma.materialConsumptionEntry.deleteMany({ where: { careRoutineEventId: { in: evs } } });
-  await prisma.consumableStockEvent.deleteMany({ where: { consumableLotId: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } });
-  await prisma.consumableLot.deleteMany({ where: { id: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } });
-  await prisma.consumableMaterial.deleteMany({ where: { name: { contains: f.run } } });
-  await prisma.careRoutineEvent.deleteMany({ where: { id: { in: evs } } });
-  await prisma.careRoutine.deleteMany({ where: { id: { in: rs } } });
-  for (const n of ["bodega", "bodegaSinOrg", "camaSuelta", "cama", "cuarto", "beneficio", "finca"]) await prisma.location.deleteMany({ where: { id: L[n] } });
-  await f.limpiar();
+  // Cadena en orden de FKs, pero sin abandonar el resto si un paso revienta:
+  // cada paso se intenta, los errores se acumulan, y al final se relanza el
+  // primero — misma forma que `montarFixtures().limpiar()`.
+  const errores: unknown[] = [];
+  let rs: string[] = [];
+  let evs: string[] = [];
+  try {
+    rs = (await prisma.careRoutine.findMany({ where: { locationId: { in: Object.values(L) } }, select: { id: true } })).map((r) => r.id);
+    evs = (await prisma.careRoutineEvent.findMany({ where: { routineId: { in: rs } }, select: { id: true } })).map((e) => e.id);
+  } catch (e) {
+    errores.push(e);
+  }
+  const pasos: Array<() => Promise<unknown>> = [
+    () => prisma.materialConsumptionEntry.deleteMany({ where: { careRoutineEventId: { in: evs } } }),
+    () => prisma.consumableStockEvent.deleteMany({ where: { consumableLotId: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } }),
+    () => prisma.consumableLot.deleteMany({ where: { id: { in: [loteDeInsumo, loteDeInsumo2, loteAjeno] } } }),
+    () => prisma.consumableMaterial.deleteMany({ where: { name: { contains: f.run } } }),
+    () => prisma.careRoutineEvent.deleteMany({ where: { id: { in: evs } } }),
+    () => prisma.careRoutine.deleteMany({ where: { id: { in: rs } } }),
+    ...["bodega", "bodegaSinOrg", "camaSuelta", "cama", "cuarto", "beneficio", "finca"].map(
+      (n) => () => prisma.location.deleteMany({ where: { id: L[n] } }),
+    ),
+  ];
+  for (const paso of pasos) {
+    try {
+      await paso();
+    } catch (e) {
+      errores.push(e);
+    }
+  }
+  try {
+    await f.limpiar();
+  } catch (e) {
+    errores.push(e);
+  }
+  if (errores.length) throw errores[0];
 });
 
 describe("qué lugares llevan rutinas", () => {

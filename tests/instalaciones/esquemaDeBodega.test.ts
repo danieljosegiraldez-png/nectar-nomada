@@ -16,8 +16,32 @@ beforeAll(async () => {
   f = await montarFixtures("esqbod");
 });
 afterAll(async () => {
-  await prisma.location.deleteMany({ where: { id: { in: [...creadas].reverse() } } });
-  await f.limpiar();
+  const errores: unknown[] = [];
+  // Un `it` puede dejar una `CareRoutine` (RESTRICT) colgada de uno de estos
+  // lugares si falla entre crearla y borrarla (p. ej. la del beneficio, en
+  // «una rutina de LUGAR sólo cuelga de un tipo que la admite»); quitarla
+  // primero para que el borrado de lugares de abajo no choque con ella.
+  try {
+    await prisma.careRoutine.deleteMany({ where: { locationId: { in: creadas } } });
+  } catch (e) {
+    errores.push(e);
+  }
+  // Uno por uno, en orden hijo-a-padre (`creadas` está en orden de
+  // creación, así que invertido borra primero lo más reciente): si UNO
+  // falla, no se abandona el resto.
+  for (const id of [...creadas].reverse()) {
+    try {
+      await prisma.location.deleteMany({ where: { id } });
+    } catch (e) {
+      errores.push(e);
+    }
+  }
+  try {
+    await f.limpiar();
+  } catch (e) {
+    errores.push(e);
+  }
+  if (errores.length) throw errores[0];
 });
 
 describe("la bodega cuelga de un beneficio o de una finca, en la base", () => {

@@ -89,13 +89,29 @@ export async function montarFixtures(prefijo: string): Promise<Fixtures> {
   return {
     run, orgA, orgB, sitioA, sitioB, sitioA2, admin, jefeA: jefe.userId, operarioA, ajeno, jefeA2, operarioB, personaJefeA: jefe.personId, cuentas,
     async limpiar() {
-      await prisma.auditEvent.deleteMany({ where: { actorUserAccountId: { in: cuentas } } });
-      await prisma.assignment.deleteMany({ where: { userAccountId: { in: cuentas } } });
-      await prisma.scope.deleteMany({ where: { id: { in: scopes } } });
-      await prisma.userAccount.deleteMany({ where: { id: { in: cuentas } } });
-      await prisma.person.deleteMany({ where: { id: { in: personas } } });
-      await prisma.location.deleteMany({ where: { id: { in: [sitioA, sitioB, sitioA2] } } });
-      await prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
+      // Cadena en orden de FKs, pero SIN abandonar el resto si un paso
+      // revienta (p. ej. RESTRICT por una fila que un test dejó colgada):
+      // cada paso se intenta, los errores se acumulan, y al final se
+      // relanza el primero — para no enmascarar el fallo, pero sin que un
+      // solo paso se lleve por delante los que faltan.
+      const pasos: Array<() => Promise<unknown>> = [
+        () => prisma.auditEvent.deleteMany({ where: { actorUserAccountId: { in: cuentas } } }),
+        () => prisma.assignment.deleteMany({ where: { userAccountId: { in: cuentas } } }),
+        () => prisma.scope.deleteMany({ where: { id: { in: scopes } } }),
+        () => prisma.userAccount.deleteMany({ where: { id: { in: cuentas } } }),
+        () => prisma.person.deleteMany({ where: { id: { in: personas } } }),
+        () => prisma.location.deleteMany({ where: { id: { in: [sitioA, sitioB, sitioA2] } } }),
+        () => prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } }),
+      ];
+      const errores: unknown[] = [];
+      for (const paso of pasos) {
+        try {
+          await paso();
+        } catch (e) {
+          errores.push(e);
+        }
+      }
+      if (errores.length) throw errores[0];
     },
   };
 }
