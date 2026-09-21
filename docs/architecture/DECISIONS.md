@@ -11951,6 +11951,11 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     secar y reposar con temperatura y abanico ajustables «sin ser muy rápido y volatilizar». Terminada
     por humedad, con tacto y sensorial opcionales. Es **secundaria al café**. Queda abierto estudiar el
     trillado a mitad de secado (referencia de Daniel: Graciano Cruz); no se inventa su método.
+20. **Reposo** (añadido el 2026-09-21): «la receta debería definir y dar sugerencias así como
+    estipulé». Cada receta fija sus días de reposo —para sacar muestra y para vender—; la
+    herramienta **sugiere** los que Daniel dio el 2026-09-16: lavado 60–90 días, natural (Catuaí)
+    óptimo 45–60. Los 30/60 y 30/45 que carga hoy `lib/beneficio/perfiles.ts` pasan a ser sólo eso,
+    una sugerencia; lo que ponga la receta manda.
 
 **Lo que esto NO decide.** Qué **versión** de la receta produjo cada evaluación y cómo se conserva esa
 relación al editarla —sin ello un veredicto histórico no se puede reproducir—. Los números de cada receta (los pone Daniel). La implementación en los

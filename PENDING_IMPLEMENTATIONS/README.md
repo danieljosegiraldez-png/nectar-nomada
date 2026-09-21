@@ -15,10 +15,10 @@ idea se pierda cuando la respuesta es «ahora no».
 | [006](006-sin-ci-en-este-repositorio.md) | CI: qué cubre hoy y qué no | Parcialmente hecho · lo que falta necesita base efímera |
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [009](009-el-unico-lector-de-auditevent-no-puede-acertar.md) | El único lector de `AuditEvent` en pantalla no puede acertar | Nada — trabajo pendiente |
-| [013](013-friendlyError-relanza-nueve-clases.md) | Nueve clases de validación que `friendlyError` relanza: son 500 | Decisión de Daniel (con o sin guardia) |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en
 CI**, resuelto el 2026-09-06 en el PR #177. Los dos quedan en `SESSION_STATE.md`
 §2. Y **012 · pruebas que ven toda la base y afirman sobre una lista con
-tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de cata. Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
+tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de cata. Y **013 · las clases que `friendlyError` relanzaba**, hecho el 2026-09-21 en el PR #450.
+Sus fichas siguen en la carpeta con el estado escrito arriba del todo.

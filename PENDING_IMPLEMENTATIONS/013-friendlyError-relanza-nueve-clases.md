@@ -1,6 +1,8 @@
 # 013 · `friendlyError` relanza clases de validación que no conoce: son 500
 
-**Estado: abierto.** Encontrado el 2026-09-19 por la revisión de Codex del PR #433, que arregló un
+**Estado: hecho el 2026-09-21**, en el PR #450 (`5afbe3f3`): 23 clases —las nueve de abajo, trece más
+que el guardia encontró y `SitioNoEncontradoError`, que trajo el #445 y el guardia cazó al fusionar—,
+con `tests/arquitectura/acciones-traducen-sus-errores.test.ts` vigilando. Encontrado el 2026-09-19 por la revisión de Codex del PR #433, que arregló un
 caso (`PropositoInvalido`, abrir una jornada sin propósito). Medido después contra `main`
 (`3a3c60c`): la búsqueda `instanceof <Clase>` dentro de `function friendlyError` da **0** para las
 nueve de abajo, y **1** para `PropositoInvalido` — el control de que la búsqueda mira donde debe.
