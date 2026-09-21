@@ -180,8 +180,8 @@ describe("pendienteDeLaParcela", () => {
 describe("enlaceDelAviso", () => {
   it("cada aviso lleva al sitio donde se arregla", () => {
     expect(enlaceDelAviso({ tipo: "jornada_sin_cerrar", fieldSessionId: "j1", startedAt: new Date() }, "L")).toBe("/field-sessions/j1");
-    expect(enlaceDelAviso({ tipo: "muestreo_vencido", muestra: "foliar", ultimo: null }, "L")).toBe("/plots/L#muestras");
-    expect(enlaceDelAviso({ tipo: "muestras_sin_resultado", suelo: 1, foliar: 0 }, "L")).toBe("/plots/L#muestras");
+    expect(enlaceDelAviso({ tipo: "muestreo_vencido", muestra: "foliar", ultimo: null }, "L")).toBe("/plots/L?pestana=muestras");
+    expect(enlaceDelAviso({ tipo: "muestras_sin_resultado", suelo: 1, foliar: 0 }, "L")).toBe("/plots/L?pestana=muestras");
     expect(enlaceDelAviso({ tipo: "sin_area" }, "L")).toBe("/plots/L/ajustes#areaHectares");
     expect(enlaceDelAviso({ tipo: "area_no_valida" }, "L")).toBe("/plots/L/ajustes#areaHectares");
     expect(enlaceDelAviso({ tipo: "siembras_sin_conteo", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
@@ -207,8 +207,10 @@ describe("enlaceDelAviso", () => {
   });
 
   // Tarea 8 de trampas: los avisos de `avisosDeTrampas` entran en «toca hacer»
-  // y enlazan a la sección de trampas del tablero.
-  it("los avisos de trampas entran en «toca hacer» y enlazan a #trampas", () => {
+  // y enlazan a la pestaña de trampas del tablero. Desde la Tarea 3 de este
+  // lote, Trampas es una pestaña (`?pestana=trampas`), no un `<details
+  // id="trampas">` — el `#trampas` viejo ya no existe en el DOM.
+  it("los avisos de trampas entran en «toca hacer» y enlazan a ?pestana=trampas", () => {
     const r = pendienteDeLaParcela(
       base({
         hoy: "2026-09-17",
@@ -240,7 +242,7 @@ describe("enlaceDelAviso", () => {
         materialName: null,
       },
     ]);
-    for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L#trampas");
+    for (const aviso of r.tocaHacer) expect(enlaceDelAviso(aviso, "L")).toBe("/plots/L?pestana=trampas");
   });
 
   // Tarea 4: `intervencionesDeTrampas` llega hasta `avisosDeTrampas` — una

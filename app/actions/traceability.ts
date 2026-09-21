@@ -17,7 +17,8 @@ import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
 // comparten este camino y el de la cola offline. Ver su cabecera.
 import { horizontesDelFormulario, maxIndiceDeFilas } from "../../lib/traceability/horizontesDelFormulario";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
-import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
+import { confirmarCoordenadasDelSitio, CoordenadasValidationError } from "../../lib/traceability/coordenadasDelSitio";
+import { SitioNoEncontradoError } from "../../lib/traceability/fincas";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
 import { recordQuantityEvent, QuantityValidationError } from "../../lib/traceability/quantity";
 import {
@@ -26,10 +27,15 @@ import {
   MeasurementValidationError,
 } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
-import { recordHarvestEvent, recordReceivingEvent } from "../../lib/traceability/harvest";
-import { recordRoastSession, elegirPerfilDeTueste } from "../../lib/traceability/roasting";
+import { recordHarvestEvent, recordReceivingEvent, CerezaError } from "../../lib/traceability/harvest";
+import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
-import { createRecipeWithVersion, createRecipeVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
+import {
+  createRecipeWithVersion,
+  createRecipeVersion,
+  updateRecipeMetadata,
+  ProcessTargetError,
+} from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
@@ -48,7 +54,16 @@ import {
   recordFieldEvent,
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
-import { registrarVitalesEnSitio } from "../../lib/apiary/vitalesEnSitio";
+import { registrarVitalesEnSitio, VitalesEnSitioInvalido } from "../../lib/apiary/vitalesEnSitio";
+// Las cinco siguientes se importan SÓLO para nombrarlas en `friendlyError`.
+// Ninguna acción llama a estos módulos: llegan aquí a través de los servicios
+// que sí se llaman (`PENDING_IMPLEMENTATIONS/013`).
+import { ClimaInvalido } from "../../lib/apiary/climaObservado";
+import { CajasPresentesInvalido } from "../../lib/apiary/cajasPresentes";
+import { ApiaryAccessError } from "../../lib/apiary/hives";
+import { MassBalanceError } from "../../lib/traceability/balance";
+import { ByproductValidationError } from "../../lib/traceability/subproductos";
+import { ClaveDeEnvioAjena } from "../../lib/envios/unaVezPorEnvio";
 import {
   recordHarvestSources,
   createPlantingCohort,
@@ -56,7 +71,7 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
-import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { createPlotBlock, setPlotBlockType, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -100,12 +115,17 @@ import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } fr
 import {
   requestLandAssetUpload,
   finalizeLandAssetUpload,
+  requestTrampaPhotoUpload,
+  finalizeTrampaPhotoPorBorrador,
   LandMediaValidationError,
   type LandAssetParent,
 } from "../../lib/traceability/landMedia";
+import { volverAValido } from "../../lib/traceability/volverA";
 import {
   recordLabourEntry,
   recordMaterialConsumptionEntry,
+  LabourValidationError,
+  MaterialConsumptionValidationError,
   type LabourEntryParent,
   type MaterialConsumptionParent,
 } from "../../lib/traceability/operations";
@@ -174,6 +194,35 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   }
   if (error instanceof FechaInvalidaError) return t("error_datetime", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });
+  // --- Las que faltaban, y por qué están escritas juntas ---------------------
+  //
+  // `PENDING_IMPLEMENTATIONS/013`: cada una de éstas era un 500. Nada las
+  // capturaba aquí, así que escapaban de la acción y el formulario recibía el
+  // error de servidor en vez de una frase. Las nombró la revisión de Codex del
+  // PR #433 sobre `main` y las volvió a nombrar, una por una, el guardia de
+  // `tests/arquitectura/acciones-traducen-sus-errores.test.ts`, que es quien
+  // impide que la lista vuelva a crecer en silencio.
+  if (error instanceof VitalesEnSitioInvalido) return t("error_vitales_en_sitio", { detail: error.message });
+  if (error instanceof ClimaInvalido) return t("error_clima", { detail: error.message });
+  if (error instanceof CajasPresentesInvalido) return t("error_cajas_presentes", { detail: error.message });
+  // Un sitio de abejas tiene su propia puerta, y su «no puedes» es el mismo
+  // «no puedes» de trazabilidad: misma clave, que ya dice lo que hay que decir.
+  if (error instanceof ApiaryAccessError) return t("error_access", { detail: error.message });
+  if (error instanceof MassBalanceError) return t("error_mass_balance", { detail: error.message });
+  if (error instanceof ByproductValidationError) return t("error_subproducto", { detail: error.message });
+  if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
+  if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
+  if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
+  if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
+  if (error instanceof MaterialConsumptionValidationError) {
+    return t("error_material_consumption", { detail: error.message });
+  }
+  if (error instanceof CoordenadasValidationError) return t("error_coordenadas", { detail: error.message });
+  // Entró con el PR #445 y el guardia la cazó al fusionar: sin esta rama era otro 500.
+  if (error instanceof SitioNoEncontradoError) return t("error_sitio_no_encontrado", { detail: error.message });
+  // Dos toques del mismo botón. No es un fallo del operario ni hay nada que
+  // corregir en el formulario: lo que hay que decirle es que ya está guardado.
+  if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");
   throw error;
 }
 
@@ -845,50 +894,75 @@ function consumptionParentFromFormData(formData: FormData): MaterialConsumptionP
   }
 }
 
-export async function recordLabourEntryFormAction(formData: FormData): Promise<void> {
+/**
+ * **Devuelve estado, no `void`.** Hasta el 2026-09-19 no capturaba nada: un
+ * recuento en cero, unas horas en cero o un segundo toque del botón subían un
+ * `LabourValidationError` o un `ClaveDeEnvioAjena` hasta el navegador, y lo que
+ * veía el operario era un 500 (`PENDING_IMPLEMENTATIONS/013`).
+ */
+export async function recordLabourEntryFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
 
   const lotId = String(formData.get("lotId") ?? "");
-  await recordLabourEntry(user.userAccountId, {
-    lotId,
-    // La clave la pinta el servidor en un campo oculto y se renueva con el
-    // `revalidatePath` de abajo: dos toques del mismo formulario la repiten,
-    // un registro posterior legítimo lleva otra.
-    claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
-    parent: labourParentFromFormData(formData),
-    workerCount: Number(formData.get("workerCount") ?? 0),
-    hours: Number(formData.get("hours") ?? 0),
-    taskNote: emptyToNull(formData.get("taskNote")),
-    providedByOrganizationId: emptyToNull(formData.get("providedByOrganizationId")),
-    operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
-    // Source report §3: a headcount/hours tally reported at the time is a
-    // direct observation — not operator-selectable, matching how T9.5
-    // handled every call site without a genuinely ambiguous provenance.
-    provenanceClass: "direct_observation",
-  });
+  try {
+    await recordLabourEntry(user.userAccountId, {
+      lotId,
+      // La clave la pinta el servidor en un campo oculto y se renueva con el
+      // `revalidatePath` de abajo: dos toques del mismo formulario la repiten,
+      // un registro posterior legítimo lleva otra.
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
+      parent: labourParentFromFormData(formData),
+      workerCount: Number(formData.get("workerCount") ?? 0),
+      hours: Number(formData.get("hours") ?? 0),
+      taskNote: emptyToNull(formData.get("taskNote")),
+      providedByOrganizationId: emptyToNull(formData.get("providedByOrganizationId")),
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+      // Source report §3: a headcount/hours tally reported at the time is a
+      // direct observation — not operator-selectable, matching how T9.5
+      // handled every call site without a genuinely ambiguous provenance.
+      provenanceClass: "direct_observation",
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
 
   revalidatePath(`/lots/${lotId}`);
+  return {};
 }
 
-export async function recordMaterialConsumptionEntryFormAction(formData: FormData): Promise<void> {
+/** Igual que la de arriba, y por el mismo motivo: antes no capturaba nada. */
+export async function recordMaterialConsumptionEntryFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
 
   const lotId = String(formData.get("lotId") ?? "");
-  await recordMaterialConsumptionEntry(user.userAccountId, {
-    claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
-    lotId,
-    parent: consumptionParentFromFormData(formData),
-    materialName: String(formData.get("materialName") ?? ""),
-    batchLabel: String(formData.get("batchLabel") ?? ""),
-    quantity: emptyToNullNumber(formData.get("quantity")),
-    unit: emptyToNull(formData.get("unit")),
-    operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
-    provenanceClass: "direct_observation",
-  });
+  try {
+    await recordMaterialConsumptionEntry(user.userAccountId, {
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
+      lotId,
+      parent: consumptionParentFromFormData(formData),
+      materialName: String(formData.get("materialName") ?? ""),
+      batchLabel: String(formData.get("batchLabel") ?? ""),
+      quantity: emptyToNullNumber(formData.get("quantity")),
+      unit: emptyToNull(formData.get("unit")),
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
+      provenanceClass: "direct_observation",
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
 
   revalidatePath(`/lots/${lotId}`);
+  return {};
 }
 
 /**
@@ -1281,7 +1355,33 @@ export async function createPlotBlockFormAction(
     await createPlotBlock(user.userAccountId, {
       locationId,
       name: String(formData.get("name") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
       notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+export async function setPlotBlockTypeFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await setPlotBlockType(user.userAccountId, {
+      plotBlockId: String(formData.get("plotBlockId") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
     });
   } catch (error) {
     revalidarParcela(locationId);
@@ -1444,6 +1544,8 @@ export async function startFieldSessionFormAction(
     return { error: friendlyError(t, error) };
   }
 
+  // Intencional, y NO es el patrón `volverA` de las otras acciones de esta
+  // tarea: quien abre una jornada va a trabajar en ella, no vuelve al tablero.
   redirect(`/field-sessions/${sessionId}`);
 }
 
@@ -1801,6 +1903,11 @@ export async function createSoilProfileAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/suelo/nuevo` manda `volverA` para
+  // volver a la pestaña Condiciones al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1866,6 +1973,11 @@ export async function createSoilSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1900,6 +2012,11 @@ export async function createFoliarSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1931,6 +2048,11 @@ export async function finalizeLandAssetUploadAction(
   originalFilename: string,
   parent: LandAssetParent,
   creatorPersonId: string | null,
+  // Fix round 1 (Tarea 6): opcional — `/plots/[id]/fotos/nueva` lo manda para
+  // volver a la pestaña Fotos al guardar. Los demás llamadores (la foto de una
+  // calicata, en la pestaña Condiciones) no lo pasan y quedan exactamente como
+  // antes.
+  volverA?: string | null,
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -1954,6 +2076,98 @@ export async function finalizeLandAssetUploadAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fuera del try/catch: `redirect()` lanza una señal especial (NEXT_REDIRECT)
+  // que un catch de arriba se tragaría.
+  const destino = volverAValido(volverA, locationId);
+  if (destino) redirect(destino);
+  return { ok: true };
+}
+
+// --- Foto de la ronda de trampas, sin señal (Tarea 12) -------------------
+//
+// Gemelas de `requestLandAssetUploadAction`/`finalizeLandAssetUploadAction`
+// de arriba, y NO un `if` dentro de ellas: ruling P2 del controlador gatea
+// esta pareja con `requireTrapAccess` (specimen:manage), nunca con
+// `location:manage_attributes`, y las dos de arriba siguen exactamente como
+// estaban para los demás padres (bloque, perfil de suelo, lote de biochar).
+
+export async function requestTrampaPhotoUploadAction(
+  locationId: string,
+  originalFilename: string,
+  contentType: string,
+  // Fix round 1 (Tarea 12) — el clientDraftId de la FOTO, del que
+  // `requestTrampaPhotoUpload` deriva la clave. Es lo que hace que un
+  // reintento con acuse perdido calcule la MISMA clave en vez de una nueva.
+  photoClientDraftId: string,
+  // A6 fix-final — el clientDraftId de la REVISIÓN a la que esta foto dice
+  // pertenecer. Sin él, `requestTrampaPhotoUpload` no puede comprobar si la
+  // clave derivada ya tiene un `Asset` de OTRA revisión antes de firmar el
+  // PUT — ver su docstring en `landMedia.ts`.
+  revisionClientDraftId: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestTrampaPhotoUpload(user.userAccountId, {
+      locationId,
+      originalFilename,
+      contentType,
+      photoClientDraftId,
+      revisionClientDraftId,
+    });
+  } catch (error) {
+    if (error instanceof TrapAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * `{ pendiente: true }` no es un error: la revisión todavía no llegó por su
+ * propia cola (Tarea 11) y la foto se reintenta, sin engancharse nunca a otra
+ * revisión (spec §4.3). `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`) es
+ * quien distingue las tres formas de esta respuesta.
+ */
+export async function finalizeTrampaPhotoPorBorradorAction(
+  locationId: string,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  revisionClientDraftId: string,
+): Promise<{ ok: true } | { pendiente: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeTrampaPhotoPorBorrador(user.userAccountId, {
+      locationId,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      revisionClientDraftId,
+      // Una fotografía de la ronda es evidencia original: la tomó quien
+      // registró la revisión. Misma regla que la revisión (T10, ruling del
+      // controlador): procedencia siempre observación directa.
+      provenanceClass: "direct_observation",
+      // A5 fix-final (I6) — ya NO se acepta `creatorPersonId` del llamador.
+      // Antes esta acción reenviaba lo que le pasara `syncTrapPhotos`
+      // (siempre `null` por la UI real), pero seguía existiendo un parámetro
+      // que una llamada directa a la Server Action podía forjar con el id de
+      // otra Person — el mismo patrón que `observerPersonId`/`provenanceClass`
+      // ya cerraron. `finalizeTrampaPhotoPorBorrador` fija siempre
+      // `userAccount.personId` en el servidor.
+    });
+  } catch (error) {
+    if (error instanceof LandMediaValidationError && error.message === "revision_not_found_yet") {
+      return { pendiente: true };
+    }
+    return { error: friendlyError(t, error) };
+  }
+  revalidatePath("/finca/trampas/ronda");
   return { ok: true };
 }
 
@@ -2123,19 +2337,31 @@ export async function devolverASecadoAction(
  * aprueba lo que el sistema ya decidió, y una lectura de GPS se habría
  * convertido en un hecho declarado por la puerta de atrás (`CLAUDE.md` §3).
  */
-export async function confirmarCoordenadasAction(formData: FormData): Promise<void> {
+export async function confirmarCoordenadasAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
 
   const locationId = String(formData.get("locationId") ?? "");
-  await confirmarCoordenadasDelSitio(user.userAccountId, {
-    locationId,
-    latitude: Number(formData.get("latitude")),
-    longitude: Number(formData.get("longitude")),
-    reason: String(formData.get("reason") ?? "").trim() || null,
-  });
+  try {
+    // Los campos son editables, así que una latitud de 95 llega de verdad. Sin
+    // este `catch` —así estuvo hasta el 2026-09-19— eso era un 500 en vez de
+    // «esa latitud no existe».
+    await confirmarCoordenadasDelSitio(user.userAccountId, {
+      locationId,
+      latitude: Number(formData.get("latitude")),
+      longitude: Number(formData.get("longitude")),
+      reason: String(formData.get("reason") ?? "").trim() || null,
+    });
+  } catch (error) {
+    return { error: friendlyError(t, error) };
+  }
 
   revalidatePath(`/apiaries/${locationId}`);
+  return {};
 }
 
 /**

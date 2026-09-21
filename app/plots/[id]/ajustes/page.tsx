@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../lib/traceability/plantingCohorts";
+import { getObserverCandidates } from "../../../../lib/traceability/lots";
 import { LocationAccessError } from "../../../../lib/traceability/locations";
 import { listSoilProfilesForLocation } from "../../../../lib/traceability/soilProfiles";
 import { estadosPorCohorte } from "../../../../lib/traceability/estadoDeProduccion";
@@ -11,10 +12,12 @@ import { PlantingCohortForm } from "../../../components/traceability/PlantingCoh
 import { PlotAttributesForm } from "../../../components/traceability/PlotAttributesForm";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
-import { listPlotBlocks } from "../../../../lib/traceability/plotBlocks";
+import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
 import { productosFitosanitariosSiPuede } from "../../../../lib/traceability/intervenciones";
 import { AltaDeBloqueForm } from "../../../components/traceability/AltaDeBloqueForm";
+import { AsignarTipoDeBloqueForm } from "../../../components/traceability/AsignarTipoDeBloqueForm";
 import { AltaDeTrampaForm } from "../../../components/traceability/AltaDeTrampaForm";
+import { RevisionDeTrampaForm } from "../../../components/traceability/RevisionDeTrampaForm";
 import { ReglaDeTrampasForm } from "../../../components/traceability/ReglaDeTrampasForm";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +36,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
+  const tf = await getTranslations("Fincas");
 
   let detail;
   try {
@@ -42,23 +46,30 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
     throw error;
   }
 
-  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
+  const { location, cohorts, cultivarOptions, eventosDeProduccion, trampas, reglaDeTrampas, farmLocationId } = detail;
+  // Spec fincas y parcelas §3.3, regla de `main` sin cambios: el enlace se
+  // ofrece sobre cualquier Location `plot` con `manage_attributes` (ya
+  // exigido por `getPlotDetail` arriba, la misma comprobación de
+  // `crearMicroparcelaAction`). Una microparcela creada por `createMicrolot`
+  // ES `plot` —copia el tipo de su padre—, así que esta regla también deja
+  // subdividirla otra vez: el spec no lo prohíbe y `createMicrolot` no tiene
+  // tope de profundidad.
+  const puedeSubdividir = location.locationType === "plot";
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
-  // La regla es de la FINCA —el padre de la parcela—, así que sus productos
-  // sugeridos también se ofrecen por la organización de la finca.
-  //
   // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
   // `lot:view` (lo que exige el selector) son permisos distintos sobre
   // ámbitos que NO se implican entre sí — un ámbito alcanza sus
   // descendientes, nunca sus ancestros —, así que alguien con permiso sólo
   // sobre la parcela puede entrar aquí y no tener `lot:view` en la finca.
   // `productosFitosanitariosSiPuede` no lanza en ese caso: sin permiso, el
-  // selector sale vacío en vez de reventar la página entera.
-  const farmLocationId = location.parentLocation?.id ?? location.id;
-  const [calicatas, bloques, productosDeLaFinca] = await Promise.all([
+  // selector sale vacío en vez de reventar la página entera. `farmLocationId`
+  // ya viene de `detail` (resuelto por `resolveFarmSiteId`, el sitio
+  // antepasado): no se recalcula aquí con `parentLocation?.id ?? location.id`.
+  const [calicatas, bloques, { people, selfPersonId }, productosDeLaFinca] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
+    getObserverCandidates(user.userAccountId),
     productosFitosanitariosSiPuede(user.userAccountId, farmLocationId),
   ]);
 
@@ -68,6 +79,14 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         <Link href={`/plots/${location.id}`}>{t("plotDashboardBackLink")}</Link>
       </p>
       <h1>{t("plotDashboardSettingsTitle", { name: location.name })}</h1>
+
+      {puedeSubdividir ? (
+        <p>
+          <Link href={`/plots/${location.id}/microparcela/nueva`} className="nn-button">
+            {tf("nuevaMicroparcelaTitulo")}
+          </Link>
+        </p>
+      ) : null}
 
       <section className="nn-section" id="siembras">
         <h2>{t("plotDashboardCohortsHeading")}</h2>
@@ -206,9 +225,15 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <ul className="nn-detail-meta">
             {bloques.map((b) => (
-              <li key={b.id}>
-                {b.name}
+              <li key={b.id} className="nn-card">
+                <strong>
+                  {claveDeTituloDeBloque(b.blockType) ? t(claveDeTituloDeBloque(b.blockType)!, { name: b.name }) : b.name}
+                </strong>
                 {b.notes ? <span className="nn-muted"> · {b.notes}</span> : null}
+                {b.description ? <p className="nn-muted">{b.description}</p> : null}
+                {b.blockType == null ? (
+                  <AsignarTipoDeBloqueForm locationId={location.id} plotBlockId={b.id} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -222,15 +247,39 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
       <section className="nn-section" id="trampas">
         <h2>{t("trapsTitle")}</h2>
         {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
-        {/* Aquí sólo la configuración: qué trampas hay y en qué bloque. La
-            revisión y su foto son trabajo de campo y viven en el tablero. */}
+        {/* La configuración (qué trampas hay y en qué bloque) y, para cada
+            trampa ACTIVA, un camino de transcripción con procedencia y
+            observador elegibles (spec §4.2) — para quien pasa notas de papel
+            de otra persona a la aplicación, no para quien mira la tela en el
+            campo. Ese camino corto, con provenance/observador fijos al
+            propio operario, vive en la ronda (`/finca/trampas/ronda`), no
+            aquí. Ruling del controlador, Tarea 10 fix round 1: restaura
+            `RevisionDeTrampaForm`, que el commit anterior había dejado sin
+            ningún sitio de montaje. */}
         {trampas.length > 0 ? (
           <ul className="nn-detail-meta">
             {trampas.map((trampa) => (
               <li key={trampa.id}>
                 {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
                 {" · "}
-                {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
+                {trampa.bloque ? (
+                  claveDeTituloDeBloque(trampa.bloque.blockType) != null
+                    ? t(claveDeTituloDeBloque(trampa.bloque.blockType)!, { name: trampa.bloque.name })
+                    : trampa.bloque.name
+                ) : (
+                  t("trapsNoBlock")
+                )}
+                {trampa.status === "active" ? (
+                  <details>
+                    <summary>{t("trapCheckTranscribedSummary")}</summary>
+                    <RevisionDeTrampaForm
+                      locationId={location.id}
+                      specimenId={trampa.id}
+                      people={people}
+                      selfPersonId={selfPersonId}
+                    />
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -241,8 +290,10 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         </details>
       </section>
 
-      {/* La regla es de la FINCA —el padre de la parcela, la misma clave que
-          usa `createTrap`—, así que vale para todas sus parcelas. */}
+      {/* La regla es de la FINCA —el sitio antepasado, no el padre inmediato:
+          una microparcela tiene por padre la parcela, no la finca. La misma
+          clave que usa `createTrap` (`resolveFarmSiteId`, `fincas.ts`), así
+          que vale para todas las parcelas y microparcelas de la finca. */}
       <section className="nn-section" id="regla-trampas">
         <h2>{t("trapRuleTitle")}</h2>
         <p className="nn-muted">{t("trapRuleIntro")}</p>

@@ -1,8 +1,9 @@
 "use client";
 
 import { CampoNumerico } from "../CampoNumerico";
+import { useActionState } from "react";
 import { useTranslations } from "next-intl";
-import { recordMaterialConsumptionEntryFormAction } from "../../actions/traceability";
+import { recordMaterialConsumptionEntryFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import type { MaterialConsumptionParent } from "../../../lib/traceability/operations";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 
@@ -27,9 +28,14 @@ export function MaterialConsumptionForm({
   claveDeEnvio: string;
 }) {
   const t = useTranslations("Traceability");
+  // Ver `LabourEntryForm`: la acción devuelve estado y aquí se pinta.
+  const [state, formAction] = useActionState(
+    recordMaterialConsumptionEntryFormAction,
+    {} as TraceabilityActionState,
+  );
 
   return (
-    <form action={recordMaterialConsumptionEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
+    <form action={formAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
       <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       {/*
         ADR-097. This form recorded zero entries in production, and the reason
@@ -76,6 +82,7 @@ export function MaterialConsumptionForm({
           <input id={`consumption-unit-${parent.kind}`} name="unit" type="text" defaultValue="kg" />
         </div>
       </div>
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <BotonDeEnvio className="nn-button">
         {t("recordConsumptionButton")}
       </BotonDeEnvio>

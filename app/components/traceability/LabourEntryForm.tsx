@@ -1,9 +1,9 @@
 "use client";
 
 import { CampoNumerico } from "../CampoNumerico";
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
-import { recordLabourEntryFormAction } from "../../actions/traceability";
+import { recordLabourEntryFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import type { LabourEntryParent } from "../../../lib/traceability/operations";
 import { BotonDeEnvio } from "../BotonDeEnvio";
 
@@ -44,9 +44,12 @@ export function LabourEntryForm({
 }) {
   const t = useTranslations("Traceability");
   const [showInKind, setShowInKind] = useState(false);
+  // La acción devuelve estado desde el 2026-09-19: sin esto, un recuento en cero
+  // o un segundo toque del botón daban un 500 en vez de una frase.
+  const [state, formAction] = useActionState(recordLabourEntryFormAction, {} as TraceabilityActionState);
 
   return (
-    <form action={recordLabourEntryFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
+    <form action={formAction} className="nn-form" style={{ maxWidth: 420, marginTop: "0.5rem" }}>
       <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
       <input type="hidden" name="lotId" value={lotId} />
       <input type="hidden" name="parentKind" value={parent.kind} />
@@ -118,6 +121,7 @@ export function LabourEntryForm({
           </select>
         </div>
       ) : null}
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <BotonDeEnvio className="nn-button">
         {t("recordLabourButton")}
       </BotonDeEnvio>

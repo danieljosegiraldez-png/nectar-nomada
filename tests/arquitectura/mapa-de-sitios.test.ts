@@ -34,6 +34,7 @@ const leer = (ruta: string) => readFileSync(`${RAIZ}${ruta}`, "utf8");
 
 const MAPA = "app/components/apiary/MapaDeSitios.tsx";
 const FICHA = "app/apiaries/[id]/page.tsx";
+const FORMULARIO_COORDENADAS = "app/components/apiary/ConfirmarCoordenadasForm.tsx";
 const HOJA = "app/globals.css";
 
 describe("el mapa de sitios", () => {
@@ -58,21 +59,35 @@ describe("el mapa de sitios", () => {
     expect(src).toMatch(/attribution:[^\n]*OpenStreetMap/);
   });
 
+  /**
+   * **El formulario se mudó el 2026-09-19 y esta prueba cayó, que es lo que
+   * tenía que pasar.** Su comentario decía «si algún día se muda, esta prueba
+   * tiene que fallar en vez de aprobar su ausencia», y así fue: salió a
+   * `ConfirmarCoordenadasForm` —un componente de cliente— para poder ENSEÑAR el
+   * error que la acción devuelve, que antes era un 500
+   * (`PENDING_IMPLEMENTATIONS/013`). La propiedad vigilada no cambia; cambia
+   * dónde se lee, y ahora se lee en los dos sitios: la ficha tiene que pintarlo
+   * sin condición, y el componente tiene que traer los campos.
+   */
   it("el formulario de coordenadas no depende de que exista una propuesta", () => {
-    const src = leer(FICHA);
+    const ficha = leer(FICHA);
+    const formulario = leer(FORMULARIO_COORDENADAS);
 
-    // Control positivo: el formulario está en este archivo. Si algún día se
-    // muda, esta prueba tiene que fallar en vez de aprobar su ausencia.
-    expect(src).toContain("confirmarCoordenadasAction");
-    expect(src).toContain('name="latitude"');
+    // Control positivo, en sus dos mitades: la ficha lo pinta y el componente
+    // existe con sus campos. Sin esto, «no encontré la condición mala» sería
+    // verde sobre un formulario que ya no está en ninguna parte.
+    expect(ficha).toContain("<ConfirmarCoordenadasForm");
+    expect(formulario).toContain("confirmarCoordenadasAction");
+    expect(formulario).toContain('name="latitude"');
 
     // La forma mala: cualquier condicional de JSX cuyo test sea la propuesta.
-    // Los valores por defecto SÍ pueden mirarla —`coordenadas.propuesta ? … : ""`
-    // dentro de un `defaultValue` es lo correcto—, así que sólo se persigue el
+    // Los valores por defecto SÍ pueden mirarla —`propuesta ? … : ""` dentro de
+    // un `defaultValue` es lo correcto—, así que sólo se persigue el
     // condicional que abre bloque, que es el que esconde el formulario.
-    expect(src).not.toMatch(/\{\s*coordenadas\.propuesta\s*\?\s*\(/);
+    expect(ficha).not.toMatch(/\{\s*coordenadas\.propuesta\s*\?\s*\(/);
+    expect(formulario).not.toMatch(/\{\s*propuesta\s*\?\s*\(/);
     // Y tampoco la sección entera detrás de «hay algo que decir».
-    expect(src).not.toMatch(/\{coordenadas\.yaDeclaradas \|\| coordenadas\.muestras > 0 \?/);
+    expect(ficha).not.toMatch(/\{coordenadas\.yaDeclaradas \|\| coordenadas\.muestras > 0 \?/);
   });
 
   it("el contenedor del mapa tiene una altura explícita", () => {

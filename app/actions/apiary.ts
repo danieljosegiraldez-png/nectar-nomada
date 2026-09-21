@@ -44,6 +44,11 @@ import type { ByproductDestination, FrameRemovalReason, WaxDestination, WaxKind 
 import { dividirColonia, unirColonias } from "../../lib/apiary/genealogia";
 import { cambiarReina, cerrarTenencia, exigeFinDeTenencia, exigeOrigenDeReina, introducirReina } from "../../lib/apiary/reinas";
 
+/** El estado de `crearApiarioFormAction`; `interface` para no exportar un valor desde `"use server"`. */
+export interface EstadoDeApiario {
+  error?: string;
+}
+
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const str = String(value ?? "").trim();
   return str.length ? str : null;
@@ -66,21 +71,34 @@ const emptyToNullNumber = (value: FormDataEntryValue | null) => {
  * Redirige a la ficha del apiario recién creado, que es donde toca seguir:
  * lo siguiente que hace un apicultor es poner su primera colmena.
  */
-export async function crearApiarioFormAction(formData: FormData): Promise<void> {
+export async function crearApiarioFormAction(
+  _prevState: EstadoDeApiario,
+  formData: FormData,
+): Promise<EstadoDeApiario> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
 
-  const sitio = await crearApiario(user.userAccountId, {
-    name: String(formData.get("name") ?? ""),
-    organizationId: String(formData.get("organizationId") ?? ""),
-    projectId: emptyToNull(formData.get("projectId")),
-    latitude: emptyToNullNumber(formData.get("latitude")),
-    longitude: emptyToNullNumber(formData.get("longitude")),
-    // Apiario o meliponario (ADR-145), y de qué lugar cuelga. Los dos llegan como cadena y
-    // los valida el servicio: el tipo contra la familia, el padre contra su existencia.
-    tipo: String(formData.get("tipo") ?? "apiary_site"),
-    parentLocationId: emptyToNull(formData.get("parentLocationId")),
-  });
+  let sitio;
+  try {
+    // `crearApiario` lanza `ApiaryAccessError` por un nombre en blanco, por una
+    // organización que no existe y por ámbito insuficiente. Hasta el 2026-09-19
+    // nada lo capturaba y las tres eran un 500 (`PENDING_IMPLEMENTATIONS/013`).
+    sitio = await crearApiario(user.userAccountId, {
+      name: String(formData.get("name") ?? ""),
+      organizationId: String(formData.get("organizationId") ?? ""),
+      projectId: emptyToNull(formData.get("projectId")),
+      latitude: emptyToNullNumber(formData.get("latitude")),
+      longitude: emptyToNullNumber(formData.get("longitude")),
+      // Apiario o meliponario (ADR-145), y de qué lugar cuelga. Los dos llegan como cadena y
+      // los valida el servicio: el tipo contra la familia, el padre contra su existencia.
+      tipo: String(formData.get("tipo") ?? "apiary_site"),
+      parentLocationId: emptyToNull(formData.get("parentLocationId")),
+    });
+  } catch (error) {
+    if (error instanceof ApiaryAccessError) return { error: t("crearApiarioError", { detalle: error.message }) };
+    throw error;
+  }
 
   revalidatePath("/apiaries");
   redirect(`/apiaries/${sitio.id}`);

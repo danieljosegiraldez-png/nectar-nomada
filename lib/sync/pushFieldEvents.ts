@@ -18,6 +18,7 @@ import { ArtefactoInvalido } from "../apiary/artefactos";
 import { createSoilSample, createFoliarSample, SampleValidationError } from "../traceability/soilSamples";
 import { createSoilProfile, SoilProfileValidationError } from "../traceability/soilProfiles";
 import { createPlantingCohort, PlantingCohortValidationError } from "../traceability/plantingCohorts";
+import { recordTrapCheck, requireTrapAccess, TrapValidationError, TrapAccessError } from "../traceability/traps";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import {
   exigeProcedencia,
@@ -30,6 +31,7 @@ import {
   DataQuality,
   HarvestWindowPrecision,
   SoilFeatureObservation,
+  TrapCaptureLevel,
 } from "../../generated/prisma/enums";
 
 /**
@@ -82,7 +84,8 @@ export type PushMutation =
   | MutacionDeMuestraDeSuelo
   | MutacionDeMuestraFoliar
   | MutacionDePerfilDeSuelo
-  | MutacionDeSiembra;
+  | MutacionDeSiembra
+  | MutacionDeRevisionDeTrampa;
 
 export type MutacionDeEvento = {
   /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
@@ -318,6 +321,32 @@ export type MutacionDeSiembra = {
   plantedPrecision?: string | null;
   plantCount?: number | null;
   notes?: string | null;
+};
+
+/**
+ * La revisión de la ronda de trampas, sin señal — Tarea 11.
+ *
+ * **Sin `observerPersonId` ni `provenanceClass`, a diferencia de las cuatro
+ * mutaciones de arriba.** Ruling del controlador: la ronda aplica la MISMA
+ * regla que `recordRoundTrapCheckFormAction` (Tarea 10) — procedencia y
+ * observador se fijan en el SERVIDOR, nunca desde lo que trae la mutación. Un
+ * payload de cola es tan falsificable como un `<input type="hidden">`
+ * (SECURITY.md §2), así que aunque esta mutación trajera esos dos campos,
+ * `aplicarRevisionDeTrampa` los ignora.
+ */
+export type MutacionDeRevisionDeTrampa = {
+  kind: "trap_check";
+  clientDraftId: string;
+  locationId: string;
+  specimenId: string;
+  observedAt: Date;
+  brocaLevel: string;
+  captureCount?: number | null;
+  otherInsects?: boolean | null;
+  otherInsectsNote?: string | null;
+  cleaned?: boolean | null;
+  liquidChanged?: boolean | null;
+  lureRecharged?: boolean | null;
 };
 
 export type PushResult =
@@ -716,6 +745,136 @@ async function aplicarCapturaDeParcela(
   }
 }
 
+/**
+ * Aplica una revisión de la ronda de trampas — Tarea 11.
+ *
+ * **Procedencia y observador NUNCA salen de `m`.** Ruling del controlador:
+ * `provenanceClass` es siempre `direct_observation`, y el observador es la
+ * Person de la cuenta del DISPOSITIVO que empujó el lote (`userAccountId`,
+ * resuelto por `resolverPrincipal` a partir de la cookie o el token), no un
+ * id que la mutación pudiera forjar. Sin persona vinculada a esa cuenta, se
+ * rechaza explícito — nunca se guarda un observador `null` en su lugar
+ * (ADR-080). Con el fix final A1+A2, éste es el ÚNICO sitio que fija esta
+ * regla para la ronda: ya no existe un camino «con señal» paralelo que la
+ * repitiera por su cuenta.
+ *
+ * La comprobación previa por `clientDraftId` es lo que separa `applied` de
+ * `duplicate`, igual que en `aplicarCapturaDeParcela`.
+ *
+ * **A9 fix-final (M2), ruling del controlador — el lookup por
+ * `clientDraftId` corre DESPUÉS del control de acceso, y sólo cuenta como
+ * duplicado si la fila es de la MISMA trampa.** Antes corría el PRIMERO de
+ * todos, sin comprobar acceso ni `specimenId`: cualquiera con un
+ * `clientDraftId` ajeno (colisionado, o filtrado por otro medio) podía leer
+ * «ya se aplicó, con éxito» para una revisión de una trampa que no puede
+ * ver. `recordTrapCheck` repite la misma comprobación por su cuenta
+ * (defensa en profundidad, igual que `listPlotBlocks`/`getPlotDetail`): la
+ * de aquí evita llegar a llamarlo cuando el resultado ya se puede decidir
+ * sin acceso.
+ *
+ * El orden final es: cuenta del dispositivo (no depende de nada de `m`,
+ * posición sin cambios respecto de antes de este arreglo) → trampa +
+ * control de acceso → `clientDraftId`. Mover la cuenta DESPUÉS del acceso
+ * habría hecho que un `userAccountId` que no resuelve a ninguna fila —el
+ * único caso real de «sin persona vinculada», porque el esquema exige
+ * `personId` `NOT NULL`— se rechazara siempre por «sin acceso» en vez de
+ * «sin observador»: el mismo `userAccountId` sin fila no tiene tampoco
+ * ninguna asignación, así que `requireTrapAccess` habría llegado primero
+ * SIEMPRE, y el motivo de rechazo original habría quedado inalcanzable.
+ */
+async function aplicarRevisionDeTrampa(
+  userAccountId: string,
+  m: MutacionDeRevisionDeTrampa,
+): Promise<PushResult> {
+  // Sin cambio de posición respecto de antes de A9: no depende de acceso a
+  // NADA de `m` — es la cuenta del dispositivo que empujó el lote, ya
+  // autenticada antes de llegar aquí. Comprobarla primero es lo que permite
+  // seguir distinguiendo, con un `userAccountId` que no resuelve a ninguna
+  // cuenta, «no hay observador» de «no tiene acceso a esta trampa» (la
+  // prueba de ese caso fija ese motivo explícitamente).
+  const cuenta = await prisma.userAccount.findUnique({
+    where: { id: userAccountId },
+    select: { personId: true },
+  });
+  if (!cuenta?.personId) {
+    return { clientDraftId: m.clientDraftId, status: "rejected", reason: "observer_self_missing" };
+  }
+
+  const trampa = await prisma.specimen.findUnique({
+    where: { id: m.specimenId },
+    select: { id: true, locationId: true, specimenType: true },
+  });
+  if (!trampa || trampa.specimenType !== "trap") {
+    return { clientDraftId: m.clientDraftId, status: "rejected", reason: "trap_not_found" };
+  }
+  try {
+    await requireTrapAccess(userAccountId, trampa.locationId);
+  } catch (error) {
+    if (error instanceof TrapAccessError) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+
+  // A9 fix-final (M2) — el lookup por `clientDraftId` va DESPUÉS del control
+  // de acceso de arriba, y sólo cuenta como duplicado si la fila encontrada
+  // es de la MISMA trampa. Ver el docstring de la función.
+  const yaEstaba = await prisma.specimenObservation.findUnique({
+    where: { clientDraftId: m.clientDraftId },
+    select: { id: true, specimenId: true },
+  });
+  if (yaEstaba) {
+    if (yaEstaba.specimenId !== m.specimenId) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: "client_draft_id_used_by_other_specimen" };
+    }
+    return { clientDraftId: m.clientDraftId, status: "duplicate", id: yaEstaba.id };
+  }
+
+  try {
+    // `exigeValorEnumerado` sólo devuelve un valor "falsy" cuando `m.brocaLevel`
+    // llega vacío o nulo — un valor no vacío pero inválido ya lanza DENTRO de
+    // ella. Por eso la razón aquí es "vino vacío", la misma que usa el parseo
+    // (`broca_level_required` en `parsearMutaciones.ts`) y no
+    // `..._not_valid`, que describiría un valor que en este punto no existe.
+    const brocaLevel = exigeValorEnumerado(m.brocaLevel, TrapCaptureLevel, "brocaLevel");
+    if (!brocaLevel) throw new ValorEnumeradoInvalido("broca_level_required");
+    const fila = await recordTrapCheck(userAccountId, {
+      specimenId: m.specimenId,
+      observedAt: m.observedAt,
+      brocaLevel,
+      captureCount: m.captureCount ?? null,
+      otherInsects: m.otherInsects ?? null,
+      otherInsectsNote: m.otherInsectsNote ?? null,
+      cleaned: m.cleaned ?? null,
+      liquidChanged: m.liquidChanged ?? null,
+      lureRecharged: m.lureRecharged ?? null,
+      observerPersonId: cuenta.personId,
+      provenanceClass: "direct_observation",
+      clientDraftId: m.clientDraftId,
+    });
+    return { clientDraftId: m.clientDraftId, status: "applied", id: fila.id };
+  } catch (error) {
+    // Carrera: mismo argumento que `aplicarCapturaDeParcela` — dos llamadas
+    // con el mismo `clientDraftId` pueden pasar las dos el `findUnique` de
+    // arriba antes de que la primera termine su `create`.
+    if (esCarreraDeClientDraftId(error)) {
+      const ganador = await prisma.specimenObservation.findUnique({
+        where: { clientDraftId: m.clientDraftId },
+        select: { id: true },
+      });
+      if (ganador) return { clientDraftId: m.clientDraftId, status: "duplicate", id: ganador.id };
+    }
+    if (
+      error instanceof TrapValidationError ||
+      error instanceof TrapAccessError ||
+      error instanceof ValorEnumeradoInvalido
+    ) {
+      return { clientDraftId: m.clientDraftId, status: "rejected", reason: error.message };
+    }
+    throw error;
+  }
+}
+
 export async function pushFieldEvents(
   userAccountId: string,
   deviceId: string,
@@ -759,6 +918,11 @@ export async function pushFieldEvents(
 
     if (m.kind === "soil_sample" || m.kind === "foliar_sample" || m.kind === "soil_profile" || m.kind === "planting_cohort") {
       results.push(await aplicarCapturaDeParcela(userAccountId, m));
+      continue;
+    }
+
+    if (m.kind === "trap_check") {
+      results.push(await aplicarRevisionDeTrampa(userAccountId, m));
       continue;
     }
 

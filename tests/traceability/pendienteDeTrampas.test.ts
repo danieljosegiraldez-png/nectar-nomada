@@ -3,7 +3,19 @@
  * `base-sembrada`; la corre el carril hermético de `scripts/ci.sh`.
  */
 import { describe, expect, it } from "vitest";
-import { avisosDeTrampas, trampasParaAviso, type IntervencionQueCubre } from "../../lib/traceability/pendienteDeTrampas";
+import {
+  avisosDeTrampas,
+  estadoDeTrampa,
+  ordenDeRonda,
+  proximaRevisionDe,
+  trampasFiltradas,
+  trampasParaAviso,
+  claveI18nDeRevisionRechazada,
+  type EstadoDeTrampa,
+  type IntervencionQueCubre,
+  type ReglaParaAviso,
+  type TrampaParaAviso,
+} from "../../lib/traceability/pendienteDeTrampas";
 
 const REGLA = {
   triggerLevel: "algunos" as const,
@@ -20,7 +32,7 @@ const revision = (dia: string, brocaLevel: "ninguno" | "pocos" | "algunos" | "mu
   brocaLevel,
 });
 const activa = (extra: Partial<Parameters<typeof avisosDeTrampas>[0]["trampas"][number]> = {}) => ({
-  id: "t1", trapNumber: 7, bloque: "Norte", plotBlockId: null, status: "active" as const,
+  id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, plotBlockId: null, status: "active" as const,
   ultimaRevision: null, instaladaEl: "2026-09-01", ...extra,
 });
 const sinIntervenciones: readonly IntervencionQueCubre[] = [];
@@ -282,14 +294,14 @@ describe("una intervención de fecha futura no atiende — revisión final, hall
 describe("entrada de los avisos desde getPlotDetail", () => {
   // `observedAt` es un campo de día: medianoche UTC.
   const cruda = (ultimaRevision: { id: string; observedAt: Date; brocaLevel: "muchos" | null } | null) => ({
-    id: "t1", trapNumber: 7, bloque: "Norte", plotBlockId: null, status: "active" as const,
+    id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, plotBlockId: null, status: "active" as const,
     instaladaEl: new Date("2026-09-01T00:00:00Z"), ultimaRevision,
   });
 
   it("convierte los dos días a YYYY-MM-DD y conserva el instante y el id de la observación", () => {
     const [t] = trampasParaAviso([cruda({ id: "o1", observedAt: new Date("2026-09-10T00:00:00Z"), brocaLevel: "muchos" })]);
     expect(t).toEqual({
-      id: "t1", trapNumber: 7, bloque: "Norte", plotBlockId: null, status: "active",
+      id: "t1", trapNumber: 7, bloque: { name: "Norte", blockType: null }, plotBlockId: null, status: "active",
       instaladaEl: "2026-09-01",
       ultimaRevision: { id: "o1", dia: "2026-09-10", observedAt: new Date("2026-09-10T00:00:00Z"), brocaLevel: "muchos" },
     });
@@ -316,5 +328,278 @@ describe("entrada de los avisos desde getPlotDetail", () => {
     const trampas = trampasParaAviso([{ ...cruda(null), instaladaEl: null }]);
     expect(trampas[0]!.instaladaEl).toBeNull();
     expect(avisosDeTrampas({ hoy: "2026-12-31", trampas, regla: REGLA, intervenciones: sinIntervenciones, zona: "UTC" })).toEqual([]);
+  });
+});
+
+describe("estadoDeTrampa", () => {
+  const trampaBase: TrampaParaAviso = {
+    id: "t1", trapNumber: 1, bloque: null, plotBlockId: null, status: "active",
+    ultimaRevision: null, instaladaEl: "2026-09-01",
+  };
+  const regla: ReglaParaAviso = {
+    triggerLevel: "algunos", normalDays: 15, alertDays: 7, suggestedAction: "aplicar cebo", suggestedMaterial: null,
+  };
+
+  it("sin regla, el estado es sin_regla", () => {
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa: trampaBase, regla: null }).estado).toBe(
+      "sin_regla",
+    );
+  });
+
+  it("dentro del plazo normal, al_dia", () => {
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-10", trampa: trampaBase, regla }).estado,
+    ).toBe("al_dia");
+  });
+
+  it("pasado el plazo normal sin revisión, toca_revisar", () => {
+    const r = estadoDeTrampa({ hoy: "2026-09-20", trampa: trampaBase, regla });
+    expect(r.estado).toBe("toca_revisar");
+    expect(r.diasDeRetraso).toBeGreaterThan(0);
+  });
+
+  it("una lectura que dispara es lectura_alta, aunque esté dentro del plazo", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { id: "o1", dia: "2026-09-17", observedAt: new Date("2026-09-17T00:00:00Z"), brocaLevel: "muchos" },
+    };
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).estado).toBe("lectura_alta");
+  });
+
+  it("una trampa retirada dice que está retirada, no que falta la regla (ADR-080)", () => {
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla })
+        .estado,
+    ).toBe("retirada");
+    expect(
+      estadoDeTrampa({ hoy: "2026-09-18", trampa: { ...trampaBase, status: "removed" }, regla: null })
+        .estado,
+    ).toBe("retirada");
+  });
+
+  /**
+   * A12 fix-final (M5) — activa, con regla, sin `instaladaEl` NI ninguna
+   * revisión: no hay desde dónde contar el plazo. Antes de este arreglo caía
+   * en `al_dia`, el mismo estado que una trampa genuinamente revisada a
+   * tiempo (ADR-080: la ausencia de dato no se lee como «todo bien»).
+   */
+  it("activa, con regla, pero sin instalación ni revisiones: sin_base, no al_dia", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: null, ultimaRevision: null };
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).estado).toBe("sin_base");
+    expect(estadoDeTrampa({ hoy: "2026-09-18", trampa, regla }).diasDeRetraso).toBeNull();
+  });
+
+  // Control positivo del caso de arriba: con instalación registrada (todo lo
+  // demás igual), la misma trampa SÍ tiene base y cae en `al_dia`, no en
+  // `sin_base` — si `sin_base` apareciera siempre, esta prueba lo vería.
+  it("con instalación registrada, la misma trampa sin revisiones es al_dia, no sin_base", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: "2026-09-01", ultimaRevision: null };
+    expect(estadoDeTrampa({ hoy: "2026-09-10", trampa, regla }).estado).toBe("al_dia");
+  });
+});
+
+/**
+ * El filtro de `/finca/trampas` — Fix round 1, Tarea 8. Pura: recibe la lista
+ * ya con su `estado`, así que no necesita `hoy` ni la regla.
+ */
+describe("trampasFiltradas", () => {
+  const filas = [
+    { id: "a", estado: "al_dia" as const },
+    { id: "b", estado: "toca_revisar" as const },
+    { id: "c", estado: "lectura_alta" as const },
+    { id: "d", estado: "retirada" as const },
+    { id: "e", estado: "sin_regla" as const },
+  ];
+  const ids = (r: typeof filas) => r.map((f) => f.id);
+
+  it("«toca_revisar» deja sólo las que están en ese estado", () => {
+    expect(ids(trampasFiltradas(filas, "toca_revisar"))).toEqual(["b"]);
+  });
+
+  it("«lectura_alta» deja sólo las que están en ese estado", () => {
+    expect(ids(trampasFiltradas(filas, "lectura_alta"))).toEqual(["c"]);
+  });
+
+  it("sin filtro (undefined) devuelve todas, en el mismo orden", () => {
+    expect(ids(trampasFiltradas(filas, undefined))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("un filtro vacío devuelve todas", () => {
+    expect(ids(trampasFiltradas(filas, ""))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("un filtro desconocido devuelve todas — nunca una tabla vacía por una URL escrita a mano", () => {
+    expect(ids(trampasFiltradas(filas, "algo-que-no-existe"))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("null también cuenta como ausente", () => {
+    expect(ids(trampasFiltradas(filas, null))).toEqual(["a", "b", "c", "d", "e"]);
+  });
+});
+
+/**
+ * El orden de la ronda — Tarea 9, spec §4.2. Pura: recibe la lista ya con su
+ * `estadoActual` calculado (por `estadoDeTrampa`), como `ordenDeRonda` la
+ * consume en `/finca/trampas/ronda`.
+ */
+describe("ordenDeRonda", () => {
+  const trampa = (n: number, estado: EstadoDeTrampa, dias: number | null) => ({
+    id: `t${n}`, trapNumber: n, plotId: "p", plotName: "P", bloque: null,
+    status: "active" as const, ultimaRevision: null, instaladaEl: null,
+    estadoActual: { estado, diasDeRetraso: dias },
+  });
+
+  it("las vencidas van primero, ordenadas por más días de retraso", () => {
+    const orden = ordenDeRonda([
+      trampa(1, "al_dia", null),
+      trampa(2, "toca_revisar", 2),
+      trampa(3, "toca_revisar", 5),
+      trampa(4, "lectura_alta", 0),
+    ]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([3, 2, 4, 1]);
+  });
+
+  it("dentro de un mismo grupo, por número de trampa", () => {
+    const orden = ordenDeRonda([trampa(5, "al_dia", null), trampa(2, "al_dia", null)]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([2, 5]);
+  });
+
+  // Contraejemplo de la revisión: «toca hoy» (al_dia con diasDeRetraso === 0)
+  // es su propia franja, distinta de «al_dia» con días negativos (no vence
+  // todavía). Antes del fix, las dos caían en el mismo grupo «no urgente» y
+  // #2 ganaba por número de trampa — el spec exige lo contrario.
+  it("toca hoy va antes que una que no vence en varios días (contraejemplo de revisión)", () => {
+    const orden = ordenDeRonda([trampa(2, "al_dia", -5), trampa(9, "al_dia", 0)]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([9, 2]);
+  });
+
+  it("las tres franjas juntas: vencida, toca hoy, y el resto (incluye sin_regla)", () => {
+    const orden = ordenDeRonda([
+      trampa(8, "sin_regla", null),
+      trampa(5, "al_dia", 0),
+      trampa(1, "toca_revisar", 3),
+    ]);
+    expect(orden.map((t) => t.trapNumber)).toEqual([1, 5, 8]);
+  });
+});
+
+/**
+ * «próxima revisión» — Tarea 9, spec §4.2: «calculada con la regla. Sin
+ * regla, la próxima revisión no se muestra, porque no hay valor por
+ * defecto» (ADR-080). Comparte `plazoDeLaTrampa` con `disparoYPlazo`, así
+ * que hereda el mismo `desde` (última revisión vigente o instalación) y el
+ * mismo plazo (de alerta si la última lectura disparó).
+ */
+describe("proximaRevisionDe", () => {
+  const trampaBase: TrampaParaAviso = {
+    id: "t1", trapNumber: 1, bloque: null, plotBlockId: null, status: "active",
+    ultimaRevision: null, instaladaEl: "2026-09-01",
+  };
+  const regla: ReglaParaAviso = {
+    triggerLevel: "algunos", normalDays: 15, alertDays: 7, suggestedAction: "aplicar cebo", suggestedMaterial: null,
+  };
+
+  it("sin regla no hay próxima revisión: no hay valor por defecto", () => {
+    expect(proximaRevisionDe(trampaBase, null)).toBeNull();
+  });
+
+  it("nunca revisada: el plazo normal cuenta desde la instalación", () => {
+    expect(proximaRevisionDe(trampaBase, regla)).toBe("2026-09-16");
+  });
+
+  it("revisada: el plazo normal cuenta desde la última revisión", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { id: "o1", dia: "2026-09-10", observedAt: new Date("2026-09-10T00:00:00Z"), brocaLevel: "pocos" },
+    };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-09-25");
+  });
+
+  it("una lectura que dispara usa el plazo de alerta, más corto", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { id: "o1", dia: "2026-09-10", observedAt: new Date("2026-09-10T00:00:00Z"), brocaLevel: "muchos" },
+    };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-09-17");
+  });
+
+  it("sin revisión y sin instalación registrada no inventa una fecha", () => {
+    expect(proximaRevisionDe({ ...trampaBase, instaladaEl: null }, regla)).toBeNull();
+  });
+
+  it("cruza un mes sin cruzar año: instalada el 20 de enero, el plazo normal (15 días) da el 4 de febrero", () => {
+    const trampa: TrampaParaAviso = { ...trampaBase, instaladaEl: "2026-01-20" };
+    expect(proximaRevisionDe(trampa, regla)).toBe("2026-02-04");
+  });
+
+  it("cruza un año: última revisión el 25 de diciembre con un plazo normal de 14 días da el 8 de enero", () => {
+    const trampa: TrampaParaAviso = {
+      ...trampaBase,
+      ultimaRevision: { id: "o1", dia: "2026-12-25", observedAt: new Date("2026-12-25T00:00:00Z"), brocaLevel: "pocos" },
+    };
+    const reglaDeCatorce: ReglaParaAviso = { ...regla, normalDays: 14 };
+    expect(proximaRevisionDe(trampa, reglaDeCatorce)).toBe("2027-01-08");
+  });
+});
+
+/**
+ * Fix final (re-revisión, "New Breakage") — de la razón de rechazo del
+ * servidor a la clave i18n de la tarjeta. Ruling del controlador: las cinco
+ * categorías nombradas, más un genérico para cualquier código sin reconocer
+ * — nunca un mensaje que insinúe una causa que no se comprobó.
+ */
+describe("claveI18nDeRevisionRechazada", () => {
+  it("sin acceso a la trampa", () => {
+    expect(claveI18nDeRevisionRechazada("no_specimen_access")).toBe("trapCheckRejectedNoAccess");
+  });
+
+  it("sin persona vinculada: reutiliza error_trap_no_observer", () => {
+    expect(claveI18nDeRevisionRechazada("observer_self_missing")).toBe("error_trap_no_observer");
+  });
+
+  it("trampa retirada o no activa: reutiliza error_trap_retired", () => {
+    expect(claveI18nDeRevisionRechazada("trap_retired")).toBe("error_trap_retired");
+    expect(claveI18nDeRevisionRechazada("not_a_trap")).toBe("error_trap_retired");
+  });
+
+  it("la clave ya se usó con otra trampa (A9)", () => {
+    expect(claveI18nDeRevisionRechazada("client_draft_id_used_by_other_specimen")).toBe(
+      "trapCheckRejectedKeyReused",
+    );
+  });
+
+  // Las razones REALES que produce el parseo (A10/A11) y el servicio, cada
+  // una con una forma de sufijo distinta.
+  it.each([
+    "location_id_required",
+    "observed_at_required",
+    "broca_level_required",
+    "specimen_id_required",
+    "observed_at_not_a_day",
+    "observed_at_invalid",
+    "cleaned_not_valid",
+    "liquid_changed_not_valid",
+    "lure_recharged_not_valid",
+    "other_insects_not_valid",
+    "other_insects_note_not_valid",
+    "capture_count_invalid",
+    // La forma con `:valor` que produce `exigeValorEnumerado` — Codex
+    // "un brocaLevel que no existe en el enum", en tests/sync/parcelaSinSenal.test.ts.
+    "brocaLevel_not_valid:un montón",
+  ])("%s es un formato o campo inválido", (razon) => {
+    expect(claveI18nDeRevisionRechazada(razon)).toBe("trapCheckRejectedInvalidField");
+  });
+
+  // EL GUARDIA del genérico: un código que esta función no reconoce —
+  // incluido uno malformado a propósito, para que un futuro código nuevo no
+  // caiga por accidente en una de las categorías específicas.
+  it("un código desconocido cae en el genérico, nunca en un motivo que no se comprobó", () => {
+    expect(claveI18nDeRevisionRechazada("algo-que-nunca-existirá")).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada(null)).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada(undefined)).toBe("trapCheckRejectedGeneric");
+    expect(claveI18nDeRevisionRechazada("")).toBe("trapCheckRejectedGeneric");
+    // El rechazo de LOTE entero (aparato revocado, `HTTP 403`) tampoco debe
+    // leerse como uno de los motivos específicos.
+    expect(claveI18nDeRevisionRechazada("HTTP 403")).toBe("trapCheckRejectedGeneric");
   });
 });

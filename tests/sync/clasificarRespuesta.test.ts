@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clasificarRespuesta, leerJson } from "../../lib/sync/offlineQueue";
+import {
+  clasificarRespuesta,
+  leerJson,
+  construirMutacionDesdeBorrador,
+  estadoDeBorrador,
+  type FieldEventDraft,
+} from "../../lib/sync/offlineQueue";
 
 /**
  * P4 §4 — la frontera entre «el servidor se negó» y «el servidor no pudo».
@@ -110,5 +116,121 @@ describe("leerJson: un 2xx que no es JSON dice qué llegó", () => {
     const r = new Response(null, { status: 204 });
     await expect(leerJson(r, "ctx")).rejects.toThrow(/sin content-type/);
     await expect(leerJson(new Response(null, { status: 204 }), "ctx")).rejects.toThrow(/204/);
+  });
+});
+
+/**
+ * Tarea 11, fix round 1 (revisión, hallazgo Crítico #1) — la clave que
+ * `syncFieldEvents` manda al servidor por cada borrador.
+ *
+ * Antes de este arreglo, `syncFieldEvents` hacía `{ ...d.payload,
+ * clientDraftId: d.id }` directamente en la línea del `fetch`: el spread
+ * seguido de la sobreescritura tira SIEMPRE la clave del payload, aunque el
+ * payload ya traiga una propia. `trap_check` es el primer tipo de mutación
+ * que trae su propia clave (`construirPayloadDeRevisionDeTrampa`), y con el
+ * defecto la revisión guardada por el servidor llevaba la clave de la cola,
+ * nunca la del formulario — la Tarea 12 no podría encontrarla para
+ * engancharle la foto.
+ */
+const borrador = (payload: Record<string, unknown>, id = "draft-id-1"): FieldEventDraft => ({
+  id,
+  payload,
+  createdAt: Date.now(),
+  status: "pending",
+});
+
+describe("construirMutacionDesdeBorrador: qué clientDraftId viaja por cada borrador", () => {
+  it("un borrador de trap_check con clientDraftId propio conserva ESA clave, no la del borrador", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "X", brocaLevel: "pocos" }, "draft-id-1");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("X");
+    expect(m.clientDraftId).not.toBe(d.id);
+  });
+
+  it("un borrador de trap_check sin clientDraftId propio usa el del borrador (d.id)", () => {
+    const d = borrador({ kind: "trap_check", brocaLevel: "pocos" }, "draft-id-2");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("draft-id-2");
+  });
+
+  // Control: los otros cuatro tipos de captura de parcela NUNCA declaran
+  // `clientDraftId` en su payload (ver `lib/sync/parcelaPayload.ts`), así que
+  // este arreglo no puede haberles cambiado nada — siguen usando `d.id`,
+  // exactamente como antes.
+  it("un tipo de parcela existente (soil_sample) sigue usando d.id, sin cambios", () => {
+    const d = borrador({ kind: "soil_sample", sampleCode: "S-01", sampledAt: "2026-09-18T00:00:00.000Z" }, "draft-id-3");
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m.clientDraftId).toBe("draft-id-3");
+  });
+
+  it("un clientDraftId vacío en el payload se trata como ausente: usa d.id", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "", brocaLevel: "pocos" }, "draft-id-4");
+    expect(construirMutacionDesdeBorrador(d).clientDraftId).toBe("draft-id-4");
+  });
+
+  it("el resto del payload viaja intacto, la clave es lo único que se decide aquí", () => {
+    const d = borrador({ kind: "trap_check", clientDraftId: "X", brocaLevel: "muchos", captureCount: 12 });
+    const m = construirMutacionDesdeBorrador(d);
+    expect(m).toMatchObject({ kind: "trap_check", brocaLevel: "muchos", captureCount: 12 });
+  });
+
+  /**
+   * Tarea 11, fix round 2 — dos envíos SIN SEÑAL de la MISMA trampa, cada
+   * uno con su propia clave (la que da `generarClaveDeRevision` en cada
+   * envío, nunca un prop fijo por render — ver `RondaDeTrampaForm.tsx`).
+   *
+   * `porClaveDeEnvio` en `syncFieldEvents` es un `Map`: si los dos
+   * borradores calcularan la MISMA clave, el segundo pisaría al primero en
+   * ese `Map` y uno de los dos se volvería ilocalizable — nunca se
+   * descartaría de la cola aunque el servidor lo hubiera aplicado. Esta
+   * prueba simula exactamente esa construcción (no `syncFieldEvents` en
+   * sí, que necesita `fetch`/IndexedDB) y afirma que las DOS mutaciones
+   * sobreviven en el `Map`, con el mismo `specimenId` pero cada una con la
+   * suya.
+   */
+  it("dos borradores de trap_check de la MISMA trampa, cada uno con su clave, no se pisan", () => {
+    const specimenId = "trampa-compartida";
+    const d1 = borrador(
+      { kind: "trap_check", clientDraftId: "clave-1", specimenId, brocaLevel: "pocos" },
+      "draft-a",
+    );
+    const d2 = borrador(
+      { kind: "trap_check", clientDraftId: "clave-2", specimenId, brocaLevel: "muchos" },
+      "draft-b",
+    );
+    const mutaciones = [d1, d2].map((d) => ({ draft: d, mutacion: construirMutacionDesdeBorrador(d) }));
+    // Control: las dos claves de envío son distintas — si no lo fueran, el
+    // `Map` de abajo las colapsaría en una sola entrada.
+    expect(mutaciones[0]!.mutacion.clientDraftId).not.toBe(mutaciones[1]!.mutacion.clientDraftId);
+
+    const porClaveDeEnvio = new Map(mutaciones.map(({ draft, mutacion }) => [mutacion.clientDraftId, draft]));
+    expect(porClaveDeEnvio.size).toBe(2);
+    expect(porClaveDeEnvio.get("clave-1")?.id).toBe("draft-a");
+    expect(porClaveDeEnvio.get("clave-2")?.id).toBe("draft-b");
+  });
+});
+
+/**
+ * Fix final (re-revisión, "New Breakage") — el estado de UN borrador para
+ * mostrarlo en su tarjeta.
+ *
+ * **EL GUARDIA.** `listFieldEventDrafts()` no filtra por `status`: un
+ * borrador rechazado de forma terminal (`status: "error"`) sigue "existiendo"
+ * igual que uno pendiente. Antes de este arreglo, `RondaDeTrampaForm` sólo
+ * comprobaba «¿sigue en la lista?», así que un rechazo definitivo se leía
+ * como «todavía pendiente, sólo falta señal» para siempre — lo opuesto de la
+ * verdad. `estadoDeBorrador` es la decisión que lo distingue.
+ */
+describe("estadoDeBorrador: pendiente, rechazada o sincronizada", () => {
+  it("ausente (ya no está en la cola) es sincronizada", () => {
+    expect(estadoDeBorrador(null)).toBe("sincronizada");
+  });
+
+  it("status pending es pendiente", () => {
+    expect(estadoDeBorrador({ status: "pending" })).toBe("pendiente");
+  });
+
+  it("status error es rechazada, NUNCA pendiente ni sincronizada", () => {
+    expect(estadoDeBorrador({ status: "error" })).toBe("rechazada");
   });
 });

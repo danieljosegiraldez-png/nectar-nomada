@@ -13,6 +13,7 @@ import {
   recordHarvestSources,
   updatePlantingCohort,
   getHarvestSourceContext,
+  getPlotDetail,
   renovatePlantingCohort,
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
@@ -408,6 +409,16 @@ describe("RBAC", () => {
         provenanceClass: "original_record",
       }),
     ).rejects.toThrow(LocationAccessError);
+  });
+
+  // Tarea 6: `getPlotDetail` es la única puerta que abren el tablero de
+  // parcela Y sus tres rutas nuevas de captura (`jornada/nueva`,
+  // `muestras/nueva`, `suelo/nuevo`) — todas llaman a esta misma función antes
+  // de renderizar nada. No hay patrón en este repositorio para probar una
+  // página `.tsx` directamente, así que la puerta se prueba aquí, sobre la
+  // función que las cuatro rutas comparten.
+  it("denies getPlotDetail — la puerta que comparten el tablero y sus tres rutas de captura — a un operador de otra parcela", async () => {
+    await expect(getPlotDetail(wrongLocationUserAccountId, plotAId)).rejects.toThrow(LocationAccessError);
   });
 
   it("denies recording sources for a block the operator cannot manage", async () => {
