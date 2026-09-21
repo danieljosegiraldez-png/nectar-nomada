@@ -57,9 +57,14 @@ export interface SoilFeatureValues {
 export function SoilProfileForm({
   locationId,
   values,
+  volverA,
 }: {
   locationId: string;
   values: SoilFeatureValues;
+  /** Fix round 1 (Tarea 6): sólo lo pasa `/plots/[id]/suelo/nuevo` — con esto,
+   * guardar vuelve a la pestaña Condiciones. `ajustes/page.tsx`, que corrige
+   * un perfil existente, no lo pasa y sigue igual que antes. */
+  volverA?: string;
 }) {
   const t = useTranslations("Traceability");
   const corrigiendo = values.id != null;
@@ -114,6 +119,7 @@ export function SoilProfileForm({
   return (
     <form action={formAction} onSubmit={alEnviar} className="nn-form">
       <input type="hidden" name="locationId" value={locationId} />
+      {volverA ? <input type="hidden" name="volverA" value={volverA} /> : null}
       {corrigiendo ? <input type="hidden" name="soilProfileId" value={values.id} /> : null}
 
       <div className="nn-field">

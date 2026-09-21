@@ -16,6 +16,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 const RUN_ID = `produccion-${Date.now()}`;
 
 let organizationId: string;
+let siteId: string;
 let plotId: string;
 let otroPlotId: string;
 let operadorId: string;
@@ -41,8 +42,19 @@ async function assignFarmOperator(userAccountId: string, locationRefId: string) 
 }
 
 async function plot(name: string) {
+  // `getPlotDetail` exige un sitio antepasado (`resolveFarmSiteId`,
+  // `fincas.ts`): un `plot` sin ninguno es una topología inválida en el
+  // dominio real — `crearParcela`/`createMicrolot` nunca la producen —, así
+  // que cuelga de `siteId`, creado una sola vez en `beforeAll`.
   const location = await prisma.location.create({
-    data: { locationType: "plot", name: `TEST ${name} (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+    data: {
+      locationType: "plot",
+      name: `TEST ${name} (${RUN_ID})`,
+      organizationId,
+      parentLocationId: siteId,
+      status: "approved",
+      classification: "internal",
+    },
   });
   return location.id;
 }
@@ -63,6 +75,10 @@ beforeAll(async () => {
     data: { organizationType: "farm", name: `TEST Farm (${RUN_ID})`, status: "approved", classification: "internal" },
   });
   organizationId = organization.id;
+  const site = await prisma.location.create({
+    data: { locationType: "site", name: `TEST Site (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
+  });
+  siteId = site.id;
   plotId = await plot("Lote produccion");
   otroPlotId = await plot("Lote ajeno");
   operadorId = await createTestUserAccount("Operador");
@@ -89,6 +105,7 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: siteId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 

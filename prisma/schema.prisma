@@ -6414,8 +6414,11 @@ model Specimen {
 
   // F2 §4 — el número que va rotulado en la botella. Lo genera el sistema,
   // correlativo por finca. `farmLocationId` se rellena al crear con
-  // `location.parentLocationId ?? location.id`: los lotes de Finca Rosina tienen
-  // `organization_id` NULL, así que la finca es el padre en la jerarquía.
+  // `resolveFarmSiteId` (`lib/traceability/fincas.ts`), que camina hasta la
+  // Location `site` antepasada — nunca sólo el padre inmediato: una trampa en
+  // una microparcela (`createMicrolot`) tiene por padre inmediato la parcela,
+  // no la finca. Corregido 2026-09-19; antes tomaba `location.parentLocationId
+  // ?? location.id`, correcto sólo para una parcela de primer nivel.
   farmLocationId String?   @map("farm_location_id") @db.Uuid
   farmLocation   Location? @relation("SpecimenFarm", fields: [farmLocationId], references: [id])
   trapNumber     Int?      @map("trap_number")
@@ -6455,6 +6458,18 @@ enum TrapCaptureLevel {
   @@schema("traceability")
 }
 
+/// Decisión de Daniel, 2026-09-19: una microparcela es una Location `plot`
+/// hija de otra `plot` (creada con `createMicrolot`, spec fincas y parcelas
+/// §3.3), no un tipo de bloque — «microparcela» salió de este enum (antes
+/// tenía tres valores). No es la Location `micro_plot`: ese valor del enum
+/// de arriba existe pero nada lo produce.
+enum PlotBlockType {
+  trampa
+  experimental
+
+  @@schema("traceability")
+}
+
 /// Subdivisión con nombre de una parcela — «bloque», término aprobado por el dueño
 /// (F2 §3). Es una ZONA, no una lista de plantas: sirve para saber en qué parte del
 /// lote está cada trampa y comparar bloques a lo largo del tiempo. Opcional en los
@@ -6465,6 +6480,14 @@ model PlotBlock {
   location   Location @relation(fields: [locationId], references: [id])
   name       String
   notes      String?
+
+  // F2 §5 extendido — obligatorio en los bloques NUEVOS (lo exige el servicio, no el
+  // esquema: un bloque existente no puede volverse inválido el día de la migración,
+  // ADR-080). `null` es «sin registrar», nunca un tipo supuesto.
+  blockType   PlotBlockType? @map("block_type")
+  // Texto libre para un bloque experimental: qué se compara. Distinta de `notes`, que
+  // es la nota general del bloque.
+  description String?
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
@@ -6769,6 +6792,10 @@ model SpecimenObservation {
 
   provenanceClass ProvenanceClass @map("provenance_class")
   dataQuality     DataQuality?    @map("data_quality")
+
+  // P4 §11 extendido — la clave de idempotencia de la ronda sin señal. NULL en toda
+  // observación que no viene de ese camino (floraciones, instalaciones, etc.).
+  clientDraftId String? @unique @map("client_draft_id")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid

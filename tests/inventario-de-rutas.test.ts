@@ -129,6 +129,21 @@ describe("el inventario del router", () => {
     // `secreto-de-ruta` — lo que mandan los nodos de sensores. QUINTA vez que dos
     // sesiones suben la cifra al mismo número; medido sobre el árbol resuelto:
     // 75 páginas y 11 handlers.
+    // 86 → 89 el 2026-09-18 (Tarea 6): /plots/[id]/jornada/nueva,
+    // /plots/[id]/muestras/nueva y /plots/[id]/suelo/nuevo — los tres
+    // formularios de captura que salieron del tablero de parcela. 78 páginas
+    // y 11 handlers, medido sobre el árbol de la rama.
+    // 89 → 90 el mismo día (Tarea 6, fix round 1): /plots/[id]/fotos/nueva —
+    // la revisión encontró que la spec pide las CUATRO rutas de captura y el
+    // brief original sólo había pedido tres; ésta faltaba. 79 páginas y 11
+    // handlers.
+    // 90 → 91 el mismo día (Tarea 8): /finca/trampas — la tabla de todas las
+    // trampas de la finca, filtrada a los lotes que cada persona puede ver.
+    // 80 páginas y 11 handlers.
+    // 91 → 92 el mismo día (Tarea 9): /finca/trampas/ronda — la lista de
+    // tarjetas de la ronda, spec §4.2. 81 páginas y 11 handlers.
+    //
+    // Y, en paralelo sobre `origin/main` (rama `fitosanitarios`, no la nuestra):
     // 86 → 88 el 2026-09-18: /fincas y /fincas/nueva (spec fincas y parcelas). Medido: 77 páginas
     // y 11 handlers.
     // SEXTA vez el mismo día que dos sesiones suben la cifra con pantallas
@@ -146,9 +161,21 @@ describe("el inventario del router", () => {
     // 94 → 96 al fusionar `fitosanitarios` (2026-09-19): /plots/[id]/manejo/nuevo y
     // /plots/[id]/manejo/[interventionId]. Medido con `node scripts/inventario-de-rutas.mjs`
     // sobre el árbol fusionado: 85 páginas y 11 handlers.
-    // 96 → 98 el mismo día: /beneficio/recepcion y /beneficio/pedidos (spec recepción de cereza).
-    // Medido: 87 páginas y 11 handlers.
-    expect(salida).toContain("98 entradas");
+    //
+    // 92 (rama) + 96 (origin/main) fusionados el 2026-09-19 (merge de `origin/main` en
+    // `vistas-finca-parcela`): la unión de rutas de ambos lados. Cifra REAL medida con
+    // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado, no derivada por
+    // aritmética — ver el informe de este merge: 102 entradas.
+    // 102 → 103 el mismo día: /plots/[id]/microparcela/nueva — decisión de Daniel de que
+    // una microparcela no es un tipo de bloque (es una Location `plot` hija de otra
+    // `plot`, creada con `createMicrolot` — no la Location `micro_plot`, corregido tras
+    // revisión), y su formulario de creación sale del tablero (no vive captura en el
+    // dashboard).
+    // 103 (rama) + 98 (origin/main, con recepción de cereza) fusionados el 2026-09-19
+    // (merge-main-3): unión de rutas de ambos lados. Cifra REAL medida con
+    // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado — ver el informe
+    // de este merge (merge-main-3): 105 entradas (94 páginas, 11 handlers).
+    expect(salida).toContain("105 entradas");
     expect(codigo, salida).toBe(0);
   });
 
