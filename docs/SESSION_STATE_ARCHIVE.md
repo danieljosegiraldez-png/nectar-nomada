@@ -4175,3 +4175,13 @@ ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las 
 calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
 enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
 en la inspección (toca la cola sin conexión) y el año de las reinas.
+
+**Archivada el 2026-09-21**, al rebasar el PR #456 con el estado en 405/400 líneas: «Jornada de cosecha y entrega al beneficio (PR #431)». Su última línea era un pendiente de Daniel que no vivía en ningún otro sitio —dar el perfil Recolector a cada recolector con cuenta—, así que antes de archivarla se movió a §3 del estado, igual que se hizo con Kiva Estate.
+
+### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
+
+`/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
+foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`: el perfil nuevo
+**Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
+Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
+**De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
