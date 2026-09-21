@@ -131,6 +131,25 @@ describe("qué fincas ve cada uno", () => {
     const a = (await listarFincas(admin)).find((f) => f.siteId === A.site);
     expect(a).toEqual({ siteId: A.site, nombre: `TEST Finca A (${RUN})`, organizationId: A.org, tipo: "farm" });
   }, 20000);
+
+  // Daniel, 2026-09-21: «Invernadero solar» le salía en /fincas como si fuera otra finca. El
+  // import de Cafelino lo creó como `site` colgado del sitio de Cafelino, antes de que existiera
+  // `drying_facility`. Un sitio dentro de otro sitio no es otra finca: es parte de la de arriba.
+  it("UN SITIO COLGADO DE OTRO SITIO no es otra finca, y lo que cuelga de él cuenta como de la finca de arriba", async () => {
+    const invernadero = await prisma.location.create({
+      data: { name: `TEST Invernadero (${RUN})`, locationType: "site", organizationId: A.org, parentLocationId: A.site, classification: "internal" },
+    });
+    ubicaciones.push(invernadero.id);
+    const cama = await plot("Cama del invernadero", invernadero.id);
+
+    const fincas = (await listarFincas(admin)).map((f) => f.siteId);
+    expect(fincas).not.toContain(invernadero.id); // el defecto: salía como finca
+    expect(fincas).toContain(A.site); // el control: la finca de verdad sigue saliendo
+
+    // Y quien sólo tiene ámbito sobre lo que cuelga del invernadero llega a la finca de arriba, no al invernadero.
+    const soloCama = await cuenta("Farm Operator", { scopeType: "location", scopeRefId: cama });
+    expect((await listarFincas(soloCama)).map((f) => f.siteId)).toEqual([A.site]);
+  }, 20000);
 });
 
 describe("qué finca queda elegida", () => {
