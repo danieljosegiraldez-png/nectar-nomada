@@ -33,21 +33,24 @@ const RAIZ = new URL("../..", import.meta.url).pathname;
 const CARPETA = join(RAIZ, "docs/dominio");
 
 /**
- * Los de la tabla del README, y ninguno más.
+ * Los estados **se leen de la tabla del README**, no se copian aquí.
  *
  * **`reemplazado · no normativo` entró el 2026-09-19** con ADR-181: tres guías de café
  * —pH, Brix y subproductos— las reemplazaron `docs/beneficio/10`, `11` y `12`, que lo dicen
  * en su propia cabecera («Reemplaza: v2.5 / v2.0»). Un documento reemplazado no vuelve a
  * borrador ni asciende a material del dueño: es historia, y su cabecera nombra al sucesor.
- * La primera versión de ADR-181 añadió el estado a los archivos y no a esta lista, y dejó
- * `main` en rojo con estas tres pruebas.
+ *
+ * Ese día el estado entró en la tabla del README y en tres guías, pero NO en la lista literal
+ * que había aquí, y `main` quedó rojo dos días. El #452 añadió el cuarto literal; esto quita la
+ * segunda fuente, que era la causa: con una lista copiada, el próximo estado nuevo vuelve a
+ * romper `main` del mismo modo. Ahora añadir un estado a la tabla lo habilita, y usar uno que la
+ * tabla no declara sigue estando prohibido.
  */
-const ESTADOS = [
-  "material del dueño",
-  "borrador · pendiente de revisión",
-  "referencia externa",
-  "reemplazado · no normativo",
-] as const;
+function estadosDeLaTabla(): string[] {
+  const readme = readFileSync(join(CARPETA, "README.md"), "utf8");
+  return [...readme.matchAll(/^\|\s*`([^`]+)`\s*\|/gm)].map((m) => m[1]!);
+}
+const ESTADOS = estadosDeLaTabla();
 
 const documentos = () => readdirSync(CARPETA).filter((f) => f.endsWith(".md") && f !== "README.md");
 
@@ -63,6 +66,13 @@ describe("el material de dominio dice de dónde salió", () => {
     const docs = documentos();
     expect(docs.length, `documentos encontrados: ${docs.join(", ") || "NINGUNO"}`).toBeGreaterThanOrEqual(3);
     expect(readFileSync(join(CARPETA, "README.md"), "utf8")).toContain("Material de dominio");
+
+    // **Control positivo del lector de la tabla.** Si el README cambia de formato y la expresión
+    // deja de casar, `ESTADOS` sale vacío y el guardia acusaría a TODOS los archivos —ruidoso,
+    // pero indistinguible de un fallo real—. Esta línea dice cuál de las dos cosas pasó.
+    expect(ESTADOS.length, `estados leídos del README: ${ESTADOS.join(" · ") || "NINGUNO"}`).toBeGreaterThanOrEqual(3);
+    expect(ESTADOS, "la tabla del README tiene que declarar el estado base").toContain("material del dueño");
+    expect(ESTADOS, "la regla del sucesor, más abajo, depende de este estado").toContain("reemplazado · no normativo");
   });
 
   it.each(documentos())("%s declara su procedencia", (nombre) => {
