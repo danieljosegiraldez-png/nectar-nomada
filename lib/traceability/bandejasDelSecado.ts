@@ -64,8 +64,6 @@ import type { Location } from "../../generated/prisma/client";
 
 export { BandejaError } from "./bandejaError";
 
-const BANDEJA_OCULTA = "(bandeja oculta)";
-
 export interface Posicion {
   camaId: string;
   ajena: boolean;
@@ -82,7 +80,13 @@ export interface Posicion {
   puesto: number | null;
 }
 export interface BandejaEnCorrida {
-  id: string; equipmentId: string; nombre: string; desde: Date; hasta: Date | null;
+  id: string; equipmentId: string;
+  /** RULING (secado-2b, Tarea 3): `null` cuando quien mira no puede ver esta
+   *  bandeja (D2) — nunca el literal "(bandeja oculta)": una cadena en español
+   *  dentro del servicio saldría sin traducir en la pantalla en inglés. La
+   *  pantalla traduce el `null` a su propia etiqueta. */
+  nombre: string | null;
+  desde: Date; hasta: Date | null;
   posicion: Posicion | null;
   conflicto: string[];
   conflictoSinAcceso: number;
@@ -335,7 +339,7 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
     const ultimo = ultimoAntesDe(f.equipmentId, en);
     const posicion = await resolverPosicion(userAccountId, ultimo?.toLocation, lot.organizationId);
     const puedeVerBandeja = await can(userAccountId, "view", "equipment", objetivoDeTraslado(f.equipment, ultimo), f.equipment.classification);
-    return { f, posicion, nombre: puedeVerBandeja ? f.equipment.name : BANDEJA_OCULTA };
+    return { f, posicion, nombre: puedeVerBandeja ? f.equipment.name : null };
   }));
 
   // Conflicto (§4.2) = ocupación FÍSICA: otro recipiente NUMERADO (D4) de la

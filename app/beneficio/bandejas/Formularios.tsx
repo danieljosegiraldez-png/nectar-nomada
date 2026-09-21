@@ -3,10 +3,12 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { crearTipoAction, registrarBandejasAction, registrarPesajeAction, type BandejaFormState } from "../../actions/bandejas";
+import { moverBandejaAction } from "../../actions/bandejasDelSecado";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { CampoNumerico } from "../../components/CampoNumerico";
 import { TimezoneOffsetField } from "../../components/TimezoneOffsetField";
 import { paraCampoLocal } from "../../../lib/time/localDateTime";
+import type { PosicionParaMover } from "../../../lib/traceability/bandejasDelSecado";
 
 const inicial: BandejaFormState = {};
 
@@ -191,6 +193,40 @@ export function FormularioPesaje({
       </label>
       <TimezoneOffsetField />
       <BotonDeEnvio>{t("registrarPesajeBoton")}</BotonDeEnvio>
+    </form>
+  );
+}
+
+/**
+ * Paso 3b (secado-2b, Tarea 3): mover una bandeja desde `/beneficio/bandejas`
+ * —la vía de quien CONFIGURA equipos, y la única para una bandeja vacía, que
+ * no tiene ficha de lote—. `posiciones` ya llega filtrada a las que esta
+ * cuenta puede ver y mover (`posicionesParaMover`, D1).
+ */
+export function FormularioMoverBandeja({ equipmentId, posiciones }: { equipmentId: string; posiciones: PosicionParaMover[] }) {
+  const t = useTranslations("BandejasDelSecado");
+  const [state, action] = useActionState(moverBandejaAction, {} as { error?: string });
+  const lugar = (nombre: string | null, oculto: boolean | undefined) => nombre ?? (oculto ? t("lugarOculto") : "—");
+  if (posiciones.length === 0) return <p className="nn-muted">{t("sinPosicionesParaMover")}</p>;
+  return (
+    <form action={action} style={{ display: "inline-flex", gap: "0.25rem" }}>
+      <input type="hidden" name="equipmentId" value={equipmentId} />
+      {state.error && <p role="alert">{t(`error_${state.error}` as "error_bandeja_ocupada")}</p>}
+      <select name="posicionId" required defaultValue="">
+        <option value="" disabled>{t("moverA")}</option>
+        {posiciones.map((p) => (
+          <option key={p.id} value={p.id}>
+            {t("posicion", {
+              instalacion: lugar(p.instalacion, p.instalacionOculta),
+              estante: lugar(p.estante, p.estanteOculto),
+              nivel: p.nivel,
+              puesto: p.puesto,
+            })}
+            {p.ocupada ? ` — ${p.ocupadaPor ? t("ocupadaPor", { bandeja: p.ocupadaPor }) : t("ocupada")}` : ""}
+          </option>
+        ))}
+      </select>
+      <BotonDeEnvio className="nn-button">{t("mover")}</BotonDeEnvio>
     </form>
   );
 }

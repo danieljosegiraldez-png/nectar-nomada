@@ -32,6 +32,8 @@ import { TargetComparisonTable } from "../../components/traceability/TargetCompa
 import { getSignedUrlForAsset } from "../../../lib/traceability/media";
 import { detalleDeRecepciones, origenDelLote } from "../../../lib/traceability/lotesDeBeneficio";
 import { veredictoDeCalidadDelLote } from "../../../lib/traceability/veredictoDelLote";
+import { bandejasDeCorrida, bandejasDisponibles, posicionesParaMover } from "../../../lib/traceability/bandejasDelSecado";
+import { BandejasDelSecado } from "../../components/traceability/BandejasDelSecado";
 import {
   recordFermentationInterventionFormAction,
   endFermentationFormAction,
@@ -62,7 +64,13 @@ const FERMENTATION_INTERVENTION_TYPES = ["inoculation", "agitation", "purge", "a
 const DRYING_TURN_TYPES = ["turned", "covered", "uncovered", "other"] as const;
 const LOT_TYPES = ["cherry", "processing", "drying", "green", "roast", "sample", "other"] as const;
 
-export default async function LotDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LotDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string | string[] }>;
+}) {
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -70,6 +78,17 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const t = await getTranslations("Traceability");
   const tMiel = await getTranslations("Apiary");
   const tTienda = await getTranslations("Tienda");
+  const tb = await getTranslations("BandejasDelSecado");
+  // `endDryingFormAction` (app/actions/traceability.ts) redirige aquí con
+  // `?error=<código>` cuando una bandeja cargada entre que se pintó la página
+  // y se envió el cierre convierte el rechazo en `BandejaError` (A4, ajustes.md).
+  // `tb.has` evita traducir un código arbitrario de la URL: sin él, un código
+  // que no exista en ningún idioma haría que `next-intl` reventara al pintar.
+  const { error: codigoErrorCrudo } = await searchParams;
+  const codigoError = Array.isArray(codigoErrorCrudo) ? codigoErrorCrudo[0] : codigoErrorCrudo;
+  const mensajeDeErrorDeBandeja = codigoError && tb.has(`error_${codigoError}` as "error_sin_acceso")
+    ? tb(`error_${codigoError}` as "error_sin_acceso")
+    : null;
 
   let detail;
   try {
@@ -230,6 +249,23 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
   const instrumentosDeMedicion = puedeRegistrar ? await instrumentosParaMedicion(user.userAccountId) : [];
   const inspeccionesDeMedicion = puedeRegistrar && activeDrying
     ? await inspeccionesParaMedicion(user.userAccountId, lot.id, activeDrying.id) : [];
+
+  // Ver las bandejas pide `view` del lote —el mismo que ya abrió esta página—;
+  // cargar, bajar y mover, `manage` (`puedeRegistrar`, línea 125).
+  const bandejas = activeDrying ? await bandejasDeCorrida(user.userAccountId, activeDrying.id) : [];
+  const bandejasLibres = activeDrying && puedeRegistrar ? await bandejasDisponibles(user.userAccountId, activeDrying.id) : [];
+  const bandejasSinBajar = bandejas.filter((b) => b.hasta === null).length;
+  // Paso 3b: las posiciones a las que se puede mover cada bandeja CARGADA, sólo
+  // para quien gestiona el lote — el mismo permiso que abre "Cargar"/"Bajar".
+  const posicionesPorBandeja = puedeRegistrar
+    ? Object.fromEntries(
+        await Promise.all(
+          bandejas
+            .filter((b) => b.hasta === null)
+            .map(async (b) => [b.equipmentId, await posicionesParaMover(user.userAccountId, b.equipmentId)] as const),
+        ),
+      )
+    : {};
 
   // ADR-096 — which action this batch is waiting for, and the list to render.
   const suggestedAction = nextActionFor(
@@ -438,6 +474,8 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
+
+      {mensajeDeErrorDeBandeja ? <p role="alert">{mensajeDeErrorDeBandeja}</p> : null}
 
       {/* Un aviso, no dieciséis: repetir el motivo junto a cada formulario sería
           ruido en una página de 825 líneas. La trazabilidad se sigue leyendo
@@ -1055,6 +1093,17 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 ))}
               </ul>
             ) : null}
+
+            <BandejasDelSecado
+              lotId={lot.id}
+              dryingRunId={activeDrying.id}
+              filas={bandejas.map((b) => ({ ...b, desde: b.desde.toISOString(), hasta: b.hasta?.toISOString() ?? null }))}
+              disponibles={bandejasLibres}
+              puedeRegistrar={puedeRegistrar}
+              tiposDeSalida={LOT_TYPES.map((type) => ({ valor: type, etiqueta: t(`lotType_${type}` as "lotType_cherry") }))}
+              posicionesPorBandeja={posicionesPorBandeja}
+            />
+
             <form action={recordDryingTurnFormAction} style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <input type="hidden" name="lotId" value={lot.id} />
               <input type="hidden" name="dryingRunId" value={activeDrying.id} />
@@ -1069,35 +1118,39 @@ export default async function LotDetailPage({ params }: { params: Promise<{ id: 
                 {t("recordTurnButton")}
               </BotonDeEnvio>
             </form>
-            <form action={endDryingFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "1rem" }}>
-              <input type="hidden" name="lotId" value={lot.id} />
-              <input type="hidden" name="dryingRunId" value={activeDrying.id} />
-              <div className="nn-field">
-                <label htmlFor="dry-output-code">{t("outputLotCodeLabel")}</label>
-                <input id="dry-output-code" name="outputLotCode" type="text" required />
-              </div>
-              <div className="nn-field">
-                <label htmlFor="dry-output-type">{t("outputLotTypeLabel")}</label>
-                <select id="dry-output-type" name="outputLotType" defaultValue="green">
-                  {LOT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {t(`lotType_${type}` as "lotType_cherry")}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="nn-field">
-                <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>
-                <CampoNumerico id="dry-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
-              </div>
-              <div className="nn-field">
-                <label htmlFor="dry-output-unit">{t("unitLabel")}</label>
-                <input id="dry-output-unit" name="unit" type="text" placeholder="kg" />
-              </div>
-              <BotonDeEnvio className="nn-button">
-                {t("endDryingButton")}
-              </BotonDeEnvio>
-            </form>
+            {bandejasSinBajar > 0 ? (
+              <p className="nn-muted">{tb("cierreEspera", { n: bandejasSinBajar })}</p>
+            ) : (
+              <form action={endDryingFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "1rem" }}>
+                <input type="hidden" name="lotId" value={lot.id} />
+                <input type="hidden" name="dryingRunId" value={activeDrying.id} />
+                <div className="nn-field">
+                  <label htmlFor="dry-output-code">{t("outputLotCodeLabel")}</label>
+                  <input id="dry-output-code" name="outputLotCode" type="text" required />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="dry-output-type">{t("outputLotTypeLabel")}</label>
+                  <select id="dry-output-type" name="outputLotType" defaultValue="green">
+                    {LOT_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {t(`lotType_${type}` as "lotType_cherry")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>
+                  <CampoNumerico id="dry-output-quantity" name="quantity" inputMode="decimal" step="0.001" />
+                </div>
+                <div className="nn-field">
+                  <label htmlFor="dry-output-unit">{t("unitLabel")}</label>
+                  <input id="dry-output-unit" name="unit" type="text" placeholder="kg" />
+                </div>
+                <BotonDeEnvio className="nn-button">
+                  {t("endDryingButton")}
+                </BotonDeEnvio>
+              </form>
+            )}
             {puedeRegistrar ? (
               <PhotoUploadForm lotId={lot.id} parent={{ kind: "dryingRun", dryingRunId: activeDrying.id }} observers={observers} selfPersonId={selfPersonId} />
             ) : null}

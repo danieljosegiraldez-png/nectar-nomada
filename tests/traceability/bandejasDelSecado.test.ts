@@ -401,7 +401,9 @@ describe("dónde está cada bandeja", () => {
 
     const filas = await bandejasDeCorrida(operador, run.id);
     expect(filas.find((f) => f.equipmentId === visible.id)?.nombre).toBe(visible.name); // control positivo
-    expect(filas.find((f) => f.equipmentId === secreta.id)?.nombre).toBe("(bandeja oculta)");
+    // RULING (Tarea 3): `nombre` es `null` cuando no se ve, no el literal
+    // "(bandeja oculta)" — la pantalla traduce el `null` a su propia etiqueta.
+    expect(filas.find((f) => f.equipmentId === secreta.id)?.nombre).toBeNull();
   });
 
   // Fix round 1, ronda 2 de revisión (Codex + un revisor Claude, independientes):
