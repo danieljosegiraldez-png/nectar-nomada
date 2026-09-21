@@ -13,29 +13,50 @@
  *
  * **Ajustes del pre-flight aplicados aquí (ajustes.md, Tarea 2), donde difieren
  * del texto del encargo:**
- * - D1/D3: el nombre de una posición (cama/estante/instalación) sólo sale si
- *   quien mira pasa `can(manage_attributes, location)` sobre ESA ubicación —
- *   mismo permiso que usa `bandejasDeLaFinca` (`lib/equipos/bandejas.ts:145-152`)
- *   para lo mismo. Por eso `posicionDeBandeja` recibe `userAccountId`, a
- *   diferencia de la firma que trae el encargo: sin él no hay con qué pedir ese
- *   permiso. Cuando no pasa, la `Posicion` sale con `oculta: true` y los mismos
- *   campos en `null` que ya usa el caso `ajena`.
- * - D2: el NOMBRE de cada bandeja de la corrida (no sólo las del conflicto) pasa
- *   por `puedeVerEquipo`; sin ese permiso se muestra un marcador fijo en vez del
- *   nombre real.
+ * - D1: el nombre de una posición sale por partes: la CAMA, el ESTANTE y la
+ *   INSTALACIÓN pasan CADA UNO por su PROPIO `can(manage_attributes, location)`
+ *   —mismo permiso que usa `bandejasDeLaFinca` (`lib/equipos/bandejas.ts:145-152`)—,
+ *   nunca por el permiso de la cama ni por una coincidencia de organización.
+ *   Por eso `posicionDeBandeja` recibe `userAccountId`, a diferencia de la firma
+ *   que trae el encargo. Cuando la cama no pasa, sale `oculta: true`; cuando el
+ *   estante o la instalación no pasan (y la cama sí), cada uno sale `null` con
+ *   su propia bandera (`estanteOculto`/`instalacionOculta`), sin tocar al otro
+ *   (fix round 1, hallazgo 3: antes el nombre del estante y la instalación
+ *   salían con sólo pasar el permiso de la cama, o con sólo comparar
+ *   organización).
+ * - D2: el NOMBRE de cada bandeja de la corrida (no sólo las del conflicto) se
+ *   autoriza igual que D3 exige; sin ese permiso se muestra un marcador fijo en
+ *   vez del nombre real.
+ * - D3: el último traslado de una bandeja se resuelve UNA vez —
+ *   `[occurredAt desc, createdAt desc]`, `occurredAt <= ahora`— y esa MISMA fila
+ *   autoriza y muestra. `puedeVerEquipo` (`lib/equipos/equipos.ts`) NO se usa
+ *   aquí: su `objetivoDeEquipo` ordena sólo por `occurredAt desc`, sin
+ *   desempate y sin techo de fecha, así que un traslado futuro o un empate
+ *   podía autorizar contra un lugar distinto del que la pantalla muestra (fix
+ *   round 1, hallazgo 1). `objetivoDeTraslado`, más abajo, es la versión local
+ *   —misma forma que `objetivoDelTraslado` en `lib/equipos/bandejas.ts:107-120`—
+ *   que sí aplica los dos.
  * - D4: cargar, listar disponibles y los candidatos de conflicto exigen un
  *   recipiente NUMERADO (`trayTypeId` no nulo).
  * - D6/D7: `moverBandeja` decide el permiso ANTES que `no_es_bandeja` /
  *   `bandeja_fija` / `posicion_invalida`, y la vía de "configura el destino"
- *   exige TAMBIÉN `puedeVerEquipo` sobre la bandeja. `isFixedInPlace` se relee
- *   dentro de la transacción, después del `FOR UPDATE`.
+ *   exige TAMBIÉN ver la bandeja (con la misma resolución de D3). `isFixedInPlace`
+ *   se relee dentro de la transacción, después del `FOR UPDATE`.
  * - D10: el último traslado de las bandejas de la corrida y de sus candidatos de
- *   conflicto se trae en dos consultas (una por grupo), no una por fila.
+ *   conflicto se trae en dos consultas (una por grupo), no una por fila. Los
+ *   candidatos, además, se filtran a `occurredAt <= ahora` (fix round 1,
+ *   hallazgo 2: sin ese filtro, un traslado FUTURO a la cama contaba como
+ *   ocupación de HOY — regresión de este mismo refactor de D10).
+ *
+ * **Fix round 1 (revisión del coordinador), hallazgo 4:** bajar la última
+ * bandeja cierra el secado con el `hasta` MÁS TARDÍO de todas sus bandejas, no
+ * con el de la que se registra al final. Una bandeja registrada tarde con una
+ * hora anterior a otra ya bajada no puede adelantar el reloj del cierre.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
-import { puedeVerEquipo, puedeConfigurarEn } from "../equipos/equipos";
+import { puedeConfigurarEn } from "../equipos/equipos";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { cerrarCorridaEnTransaccion, type CierreDelSecado } from "./drying";
 import { BandejaError } from "./bandejaError";
@@ -48,11 +69,15 @@ const BANDEJA_OCULTA = "(bandeja oculta)";
 export interface Posicion {
   camaId: string;
   ajena: boolean;
-  /** Sólo `true` cuando quien mira no puede administrar ESA ubicación (D1). Ausente en los demás casos. */
+  /** Sólo `true` cuando quien mira no puede administrar la CAMA (D1). Ausente en los demás casos. */
   oculta?: boolean;
   cama: string | null;
   instalacion: string | null;
+  /** Sólo `true` cuando la instalación existe pero quien mira no puede administrarla (D1, fix round 1). */
+  instalacionOculta?: boolean;
   estante: string | null;
+  /** Sólo `true` cuando el estante existe pero quien mira no puede administrarlo (D1, fix round 1). */
+  estanteOculto?: boolean;
   nivel: number | null;
   puesto: number | null;
 }
@@ -100,9 +125,25 @@ function traducirRechazo(error: unknown): unknown {
 }
 
 /**
- * D1: arma la `Posicion` a partir de la ubicación de destino de un traslado,
- * con el nombre gateado por el permiso de ESA ubicación. Una sola función para
- * que `posicionDeBandeja` y el cómputo por lote de `bandejasDeCorrida` (D10)
+ * D3: el objetivo de permisos de un traslado YA RESUELTO por quien llama —esta
+ * función no hace ninguna consulta—. Misma forma que `objetivoDelTraslado` en
+ * `lib/equipos/bandejas.ts:107-120`; vive aquí, aparte, porque ese archivo es
+ * del plan 2a (no se toca desde aquí) y porque esta versión recibe un traslado
+ * con la forma mínima que cada llamador ya tiene a mano (`{ toLocationId }`),
+ * sin volver a resolverlo.
+ */
+function objetivoDeTraslado(equipo: { projectId: string | null }, ultimo: { toLocationId: string } | null) {
+  if (ultimo) return { scopeType: "location", scopeRefId: ultimo.toLocationId } as const;
+  if (equipo.projectId) return { scopeType: "project", scopeRefId: equipo.projectId } as const;
+  return { scopeType: "platform", scopeRefId: null } as const;
+}
+
+/**
+ * D1: arma la `Posicion` a partir de la ubicación de destino de un traslado.
+ * La CAMA, el ESTANTE y la INSTALACIÓN nombran cada uno con su PROPIO permiso
+ * (fix round 1, hallazgo 3): una cama visible bajo un estante confidencial no
+ * le presta su permiso al estante, y viceversa. Una sola función para que
+ * `posicionDeBandeja` y el cómputo por lote de `bandejasDeCorrida` (D10)
  * apliquen exactamente la misma regla.
  */
 async function resolverPosicion(
@@ -118,18 +159,36 @@ async function resolverPosicion(
   // lote ni del equipo — mismo permiso que `bandejasDeLaFinca`
   // (`lib/equipos/bandejas.ts:145-152`, D1). `location` no tiene una acción
   // `view` propia en el catálogo.
-  const puedeVerLugar = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: cama.id }, cama.classification);
-  if (!puedeVerLugar) {
+  const puedeVerCama = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: cama.id }, cama.classification);
+  if (!puedeVerCama) {
     return { camaId: cama.id, ajena: false, oculta: true, cama: null, instalacion: null, estante: null, nivel: null, puesto: null };
   }
   // Una posición cuelga de un ESTANTE, y el estante de la instalación (plan 2a).
   // Una cama suelta —cama africana, piso con lona— cuelga directo de la instalación.
   const padre = cama.parentLocation;
   const enEstante = padre?.locationType === "drying_rack";
+  const estanteLoc = enEstante ? padre : null;
+  const instalacionLoc = enEstante ? (padre?.parentLocation ?? null) : (padre ?? null);
+
+  let estanteNombre: string | null = null;
+  let estanteOculto: boolean | undefined;
+  if (estanteLoc) {
+    const puedeVerEstante = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: estanteLoc.id }, estanteLoc.classification);
+    if (puedeVerEstante) estanteNombre = estanteLoc.name;
+    else estanteOculto = true;
+  }
+  let instalacionNombre: string | null = null;
+  let instalacionOculta: boolean | undefined;
+  if (instalacionLoc) {
+    const puedeVerInstalacion = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: instalacionLoc.id }, instalacionLoc.classification);
+    if (puedeVerInstalacion) instalacionNombre = instalacionLoc.name;
+    else instalacionOculta = true;
+  }
+
   return {
     camaId: cama.id, ajena: false, cama: cama.name,
-    instalacion: (enEstante ? padre?.parentLocation?.name : padre?.name) ?? null,
-    estante: enEstante ? padre!.name : null,
+    instalacion: instalacionNombre, ...(instalacionOculta ? { instalacionOculta } : {}),
+    estante: estanteNombre, ...(estanteOculto ? { estanteOculto } : {}),
     nivel: cama.rackLevel, puesto: cama.rackSlot,
   };
 }
@@ -160,7 +219,16 @@ export async function cargarBandeja(userAccountId: string, input: { dryingRunId:
   // D4: sólo un recipiente NUMERADO (tipo y número) es una bandeja.
   if (!equipo || equipo.kind !== "vessel" || equipo.trayTypeId === null) throw new BandejaError("no_es_bandeja");
   if (equipo.organizationId !== lot.organizationId) throw new BandejaError("bandeja_de_otra_organizacion");
-  if (!(await puedeVerEquipo(userAccountId, equipo))) throw new BandejaError("bandeja_sin_acceso");
+  // D3: el traslado VIGENTE ([occurredAt desc, createdAt desc], <= ahora), no
+  // el de `puedeVerEquipo` (sin desempate ni techo de fecha).
+  const ultimoDeEquipo = await prisma.equipmentTransfer.findFirst({
+    where: { equipmentId: equipo.id, occurredAt: { lte: new Date() } },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    select: { toLocationId: true },
+  });
+  if (!(await can(userAccountId, "view", "equipment", objetivoDeTraslado(equipo, ultimoDeEquipo), equipo.classification))) {
+    throw new BandejaError("bandeja_sin_acceso");
+  }
   if (equipo.lifecycleStatus !== "active") throw new BandejaError("bandeja_retirada");
   if (await prisma.dryingRunTray.findFirst({ where: { equipmentId: equipo.id, hasta: null } })) throw new BandejaError("bandeja_ocupada");
 
@@ -207,7 +275,16 @@ export async function bajarBandeja(
         entityId: fila.id, before: fila, after: { ...fila, hasta: input.hasta }, sourceInterface: "traceability.service",
       }, tx);
       if (quedan === 0 && input.cierre) {
-        const cierre = await cerrarCorridaEnTransaccion(tx, userAccountId, run.id, lot, { ...input.cierre, dryingRunId: run.id, endedAt: input.hasta });
+        // Fix round 1, hallazgo 4: el secado no puede decir que terminó antes
+        // de que su bandeja más lenta bajara de verdad. `endedAt` es el
+        // `hasta` MÁS TARDÍO entre TODAS las bandejas de la corrida —ya
+        // todas tienen `hasta` no nulo, porque `quedan === 0`—, no el de esta
+        // fila que se registra al final: una bandeja anotada tarde con una
+        // hora anterior a otra ya bajada no puede adelantar el reloj del
+        // cierre. No se rechaza nada nuevo; sólo se corrige qué hora se usa.
+        const { _max } = await tx.dryingRunTray.aggregate({ where: { dryingRunId: run.id }, _max: { hasta: true } });
+        const endedAt = _max.hasta ?? input.hasta;
+        const cierre = await cerrarCorridaEnTransaccion(tx, userAccountId, run.id, lot, { ...input.cierre, dryingRunId: run.id, endedAt });
         // El audit de este cierre se escribe AQUÍ, dentro de esta misma
         // transacción, y no en `cerrarCorridaEnTransaccion` — ver el comentario
         // largo de esa función en drying.ts: el guardia de atomicidad reconoce
@@ -245,12 +322,17 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
   const ultimoAntesDe = (equipmentId: string, en: Date) =>
     transfersDeFilas.find((t) => t.equipmentId === equipmentId && t.occurredAt <= en) ?? null;
 
-  const conPosicion = await Promise.all(filas.map(async (f) => ({
-    f,
-    posicion: await resolverPosicion(userAccountId, ultimoAntesDe(f.equipmentId, f.hasta ?? ahora)?.toLocation, lot.organizationId),
-    // D2: el nombre de CADA fila pasa por `puedeVerEquipo`, no sólo los del conflicto.
-    nombre: (await puedeVerEquipo(userAccountId, f.equipment)) ? f.equipment.name : BANDEJA_OCULTA,
-  })));
+  const conPosicion = await Promise.all(filas.map(async (f) => {
+    // La POSICIÓN se resuelve a la fecha de interés (`hasta`, o `ahora` si
+    // sigue cargada) — como siempre. El NOMBRE (D2/D3) se autoriza con el
+    // traslado VIGENTE, SIEMPRE a `ahora` — nunca a una fecha futura, y
+    // reutilizando esta misma consulta batched en vez de la resolución propia
+    // (sin desempate ni techo de fecha) de `puedeVerEquipo`.
+    const posicion = await resolverPosicion(userAccountId, ultimoAntesDe(f.equipmentId, f.hasta ?? ahora)?.toLocation, lot.organizationId);
+    const ultimoVigente = ultimoAntesDe(f.equipmentId, ahora);
+    const puedeVerBandeja = await can(userAccountId, "view", "equipment", objetivoDeTraslado(f.equipment, ultimoVigente), f.equipment.classification);
+    return { f, posicion, nombre: puedeVerBandeja ? f.equipment.name : BANDEJA_OCULTA };
+  }));
 
   // Conflicto (§4.2) = ocupación FÍSICA: otro recipiente NUMERADO (D4) de la
   // organización cuyo último traslado también es esta cama, esté cargado o no.
@@ -267,22 +349,29 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
       select: { equipmentId: true, equipment: { select: { id: true, name: true, projectId: true, classification: true } } },
       distinct: ["equipmentId"],
     });
-    // D10: los traslados de los candidatos, también en una sola consulta.
     const idsCandidatos = candidatos.map((c) => c.equipmentId);
+    // D10: los traslados de los candidatos, también en una sola consulta.
+    // Fix round 1, hallazgo 2: `occurredAt: { lte: ahora }` — sin esto, un
+    // traslado FUTURO a la cama contaba como ocupación de HOY (regresión de
+    // este mismo refactor de D10, que perdió el techo de fecha que
+    // `posicionDeBandeja` sí aplicaba antes, por bandeja, en la versión previa).
     const transfersDeCandidatos = idsCandidatos.length > 0
       ? await prisma.equipmentTransfer.findMany({
-          where: { equipmentId: { in: idsCandidatos } },
+          where: { equipmentId: { in: idsCandidatos }, occurredAt: { lte: ahora } },
           orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
           include: transferInclude,
         })
       : [];
     for (const c of candidatos) {
-      const ultimo = transfersDeCandidatos.find((t) => t.equipmentId === c.equipmentId) ?? null; // ya ordenado desc
+      const ultimo = transfersDeCandidatos.find((t) => t.equipmentId === c.equipmentId) ?? null; // ya ordenado desc, ya acotado a hoy
       const p = await resolverPosicion(userAccountId, ultimo?.toLocation, lot.organizationId);
       if (p && !p.ajena && !p.oculta && camas.includes(p.camaId)) {
-        // El conflicto se cuenta siempre; el NOMBRE sólo si esta persona ve ese equipo
-        // (segunda pasada de Codex): mismo `can(view)` que en `bandejasDisponibles`.
-        const nombre = (await puedeVerEquipo(userAccountId, c.equipment)) ? c.equipment.name : null;
+        // El conflicto se cuenta siempre; el NOMBRE sólo si esta persona ve ese
+        // equipo. D3: se autoriza con la MISMA fila `ultimo` ya resuelta para
+        // la posición, no con una segunda resolución de `puedeVerEquipo`.
+        const nombre = (await can(userAccountId, "view", "equipment", objetivoDeTraslado(c.equipment, ultimo), c.equipment.classification))
+          ? c.equipment.name
+          : null;
         ocupantes.set(p.camaId, [...(ocupantes.get(p.camaId) ?? []), { equipmentId: c.equipmentId, nombre }]);
       }
     }
@@ -311,14 +400,43 @@ export async function bandejasDisponibles(userAccountId: string, dryingRunId: st
     },
     orderBy: { name: "asc" },
   });
+  if (filas.length === 0) return [];
+
+  // D3: el último traslado VIGENTE de cada candidata, en una sola consulta —
+  // mismo criterio (`[occurredAt desc, createdAt desc]`, `occurredAt <= ahora`)
+  // que la pantalla, no el de `puedeVerEquipo`.
+  const ahora = new Date();
+  const transfers = await prisma.equipmentTransfer.findMany({
+    where: { equipmentId: { in: filas.map((e) => e.id) }, occurredAt: { lte: ahora } },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    select: { equipmentId: true, toLocationId: true },
+  });
+  const ultimoPorEquipo = new Map<string, { toLocationId: string }>();
+  for (const t of transfers) if (!ultimoPorEquipo.has(t.equipmentId)) ultimoPorEquipo.set(t.equipmentId, t);
+
   const visibles = [];
-  for (const e of filas) if (await puedeVerEquipo(userAccountId, e)) visibles.push({ id: e.id, nombre: e.name });
+  for (const e of filas) {
+    const objetivo = objetivoDeTraslado(e, ultimoPorEquipo.get(e.id) ?? null);
+    if (await can(userAccountId, "view", "equipment", objetivo, e.classification)) visibles.push({ id: e.id, nombre: e.name });
+  }
   return visibles;
 }
 
 // --- Mover una bandeja de posición (paso 4b) --------------------------------
 
-export interface PosicionParaMover { id: string; instalacion: string | null; estante: string | null; nivel: number; puesto: number; ocupada: boolean; ocupadaPor: string | null }
+export interface PosicionParaMover {
+  id: string;
+  instalacion: string | null;
+  /** Sólo `true` cuando la instalación existe pero quien mira no puede administrarla (D1, fix round 1). */
+  instalacionOculta?: boolean;
+  estante: string | null;
+  /** Sólo `true` cuando el estante existe pero quien mira no puede administrarlo (D1, fix round 1). */
+  estanteOculto?: boolean;
+  nivel: number;
+  puesto: number;
+  ocupada: boolean;
+  ocupadaPor: string | null;
+}
 
 export async function moverBandeja(userAccountId: string, input: { equipmentId: string; posicionId: string; occurredAt: Date }) {
   const equipo = await prisma.equipment.findUnique({ where: { id: input.equipmentId } });
@@ -333,8 +451,16 @@ export async function moverBandeja(userAccountId: string, input: { equipmentId: 
     catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
   }
   if (!permitido && equipo && destino) {
-    // D6: la vía de "configura el destino" exige TAMBIÉN ver la bandeja.
-    if ((await puedeConfigurarEn(userAccountId, destino.id)) && (await puedeVerEquipo(userAccountId, equipo))) permitido = true;
+    // D6: la vía de "configura el destino" exige TAMBIÉN ver la bandeja. D3:
+    // con el traslado VIGENTE ([occurredAt desc, createdAt desc], <= ahora),
+    // no con `puedeVerEquipo`.
+    const ultimoDeEquipo = await prisma.equipmentTransfer.findFirst({
+      where: { equipmentId: equipo.id, occurredAt: { lte: new Date() } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { toLocationId: true },
+    });
+    const puedeVerBandeja = await can(userAccountId, "view", "equipment", objetivoDeTraslado(equipo, ultimoDeEquipo), equipo.classification);
+    if ((await puedeConfigurarEn(userAccountId, destino.id)) && puedeVerBandeja) permitido = true;
   }
   if (!permitido) throw new BandejaError("bandeja_sin_acceso");
 
@@ -412,23 +538,47 @@ export async function posicionesParaMover(userAccountId: string, equipmentId: st
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
     select: { equipmentId: true, toLocationId: true, equipment: { select: { id: true, name: true, projectId: true, classification: true } } },
   });
-  const visto = new Set<string>(); const ocupante = new Map<string, { nombre: string | null }>();
+  const vistos = new Set<string>(); const ocupante = new Map<string, { nombre: string | null }>();
   for (const u of ultimos) {
-    if (visto.has(u.equipmentId)) continue;
-    visto.add(u.equipmentId);
-    ocupante.set(u.toLocationId, { nombre: (await puedeVerEquipo(userAccountId, u.equipment)) ? u.equipment.name : null });
+    if (vistos.has(u.equipmentId)) continue;
+    vistos.add(u.equipmentId);
+    // D3: `u` YA ES el traslado vigente ([occurredAt desc, createdAt desc],
+    // <= ahora; el primero de cada equipo tras el filtro de arriba). Se
+    // autoriza con esa MISMA fila, no con la resolución propia (distinta) de
+    // `puedeVerEquipo`.
+    const puedeVerBandeja = await can(userAccountId, "view", "equipment", { scopeType: "location", scopeRefId: u.toLocationId }, u.equipment.classification);
+    ocupante.set(u.toLocationId, { nombre: puedeVerBandeja ? u.equipment.name : null });
   }
-  return posiciones.map((p) => {
+
+  // D1 (fix round 1, hallazgo 3): el nombre del ESTANTE y el de la INSTALACIÓN
+  // se autorizan cada uno con SU PROPIO `manage_attributes` — no con el de la
+  // cama (que ya pasó su propio filtro arriba, en `posiciones`) ni con una
+  // coincidencia de organización, que no dice nada sobre el permiso de quien
+  // mira. Con caché por id: muchas posiciones comparten el mismo estante.
+  const permisoDeLugar = new Map<string, boolean>();
+  async function puedeVerLugar(lugar: Location | null | undefined): Promise<boolean> {
+    if (!lugar) return false;
+    const cacheado = permisoDeLugar.get(lugar.id);
+    if (cacheado !== undefined) return cacheado;
+    const ok = await can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: lugar.id }, lugar.classification);
+    permisoDeLugar.set(lugar.id, ok);
+    return ok;
+  }
+
+  return Promise.all(posiciones.map(async (p) => {
     const estante = p.parentLocation!;
     const instalacion = estante.parentLocation;
-    // Nombres de estante e instalación sólo si son de la misma organización.
+    const estanteVisible = await puedeVerLugar(estante);
+    const instalacionVisible = await puedeVerLugar(instalacion);
     return {
       id: p.id,
-      estante: estante.organizationId === org ? estante.name : null,
-      instalacion: instalacion && instalacion.organizationId === org ? instalacion.name : null,
+      estante: estanteVisible ? estante.name : null,
+      ...(estanteVisible ? {} : { estanteOculto: true as const }),
+      instalacion: instalacionVisible ? (instalacion?.name ?? null) : null,
+      ...(!instalacionVisible && instalacion ? { instalacionOculta: true as const } : {}),
       nivel: p.rackLevel!, puesto: p.rackSlot!,
       ocupada: ocupante.has(p.id),
       ocupadaPor: ocupante.get(p.id)?.nombre ?? null,
     };
-  });
+  }));
 }

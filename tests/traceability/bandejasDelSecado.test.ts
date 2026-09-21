@@ -139,6 +139,27 @@ describe("el secado termina bandeja a bandeja", () => {
     expect(await prisma.lot.findFirst({ where: { lotCode: `${RUN_ID}-ciclo-verde`, lotType: "green" } })).not.toBeNull();
   });
 
+  // Fix round 1, hallazgo 4: bajar la última bandeja no puede adelantar el
+  // reloj del cierre con una hora retrasada. El `endedAt` es el `hasta` MÁS
+  // TARDÍO entre todas las bandejas de la corrida, no el de la que se
+  // registra al final.
+  it("una bandeja registrada tarde, con una hora anterior a otra ya bajada, no adelanta el cierre", async () => {
+    const run = await secado("cierre-retrasado");
+    const [a, b] = [await bandeja("retraso-A"), await bandeja("retraso-B")];
+    const ta = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: a.id, desde: T("2026-09-01T11:00:00Z") });
+    const tb = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+    // A baja primero, a las 12:00.
+    await bajarBandeja(operador, { dryingRunTrayId: ta.id, hasta: T("2026-09-04T12:00:00Z") });
+    // B es la ÚLTIMA en registrarse, pero con una hora ANTERIOR (un parte que
+    // llega tarde): las 10:00, dos horas antes de que A ya hubiera bajado.
+    expect(await bajarBandeja(operador, { dryingRunTrayId: tb.id, hasta: T("2026-09-04T10:00:00Z"), cierre: cierre("cierre-retrasado") }))
+      .toEqual({ id: tb.id, cerro: true });
+    const cerrada = await prisma.dryingRun.findUniqueOrThrow({ where: { id: run.id } });
+    // El MÁS TARDÍO de los dos (12:00, de A), no el de B (10:00) ni "el de la
+    // fila que cerró" — que sería el bug: cerraría con las 10:00.
+    expect(cerrada.endedAt).toEqual(T("2026-09-04T12:00:00Z"));
+  });
+
   it("endDryingRun directo: con bandejas abiertas lo rechaza, pero sólo DESPUÉS del permiso", async () => {
     const run = await secado("directo");
     await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("directo")).id, desde: T("2026-09-01T11:00:00Z") });
@@ -196,6 +217,20 @@ describe("qué se puede cargar", () => {
     await bajarBandeja(operador, { dryingRunTrayId: t1.id, hasta: T("2026-09-05T11:00:00Z"), cierre: cierre("solape-1") });
     await expect(cargarBandeja(operador, { dryingRunId: (await secado("solape-2")).id, equipmentId: b.id, desde: T("2026-09-03T11:00:00Z") }))
       .rejects.toThrow("bandeja_ocupada");
+  });
+
+  // Fix round 1, hallazgo 1 (D3): el permiso se decide con el traslado
+  // VIGENTE ([occurredAt desc, createdAt desc], <= ahora), no con el de mayor
+  // `occurredAt` a secas — que puede ser uno futuro que todavía no rige.
+  it("D3: un traslado FUTURO no decide el permiso; manda el traslado vigente", async () => {
+    const b = await bandeja("d3-futuro"); // su alta ya la deja en `sitio`, donde `operador` SÍ tiene permiso
+    // Traslado futuro a `otroSitio`, donde `operador` NO tiene permiso (es el
+    // sitio de `ajeno`). Si el futuro contara, cargar rechazaría con
+    // `bandeja_sin_acceso` aunque la posición VIGENTE siga siendo `sitio`.
+    await trasladar(b.id, otroSitio, "2099-01-01T00:00:00Z");
+    const run = await secado("d3-futuro");
+    const t = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+    expect(t.id).toBeTruthy(); // control: sin el traslado futuro, esto ya pasaba
   });
 });
 
@@ -266,6 +301,28 @@ describe("dónde está cada bandeja", () => {
     expect(await posicionDeBandeja(operador, b2.id, T("2026-09-02T00:00:00Z"), org)).toMatchObject({ cama: normal.name, ajena: false });
   });
 
+  // Fix round 1, hallazgo 3 (D1 parcial): el nombre del ESTANTE y el de la
+  // INSTALACIÓN se autorizan con su PROPIO permiso, no con el de la cama. Una
+  // cama VISIBLE bajo un estante que quien mira NO puede ver enseña su propio
+  // nombre, pero no el del estante.
+  it("una cama visible bajo un estante que quien mira no puede ver enseña su propio nombre, pero no el del estante", async () => {
+    const instalacionVisible = await ubicacion({ name: "TEST Instalacion visible D1", locationType: "drying_facility", organizationId: org, parentLocationId: sitio });
+    const estanteOculto = await ubicacion({ name: "TEST Estante oculto D1", locationType: "drying_rack", organizationId: org, parentLocationId: instalacionVisible.id });
+    await prisma.location.update({ where: { id: estanteOculto.id }, data: { classification: "trade_secret" } });
+    const camaVisible = await ubicacion({ name: "TEST Cama bajo estante oculto D1", locationType: "drying_bed", organizationId: org, parentLocationId: estanteOculto.id, rackLevel: 30, rackSlot: 30 });
+    // Control: la CAMA sigue "internal" (visible); sólo el ESTANTE es trade_secret.
+    expect(await can(operador, "manage_attributes", "location", { scopeType: "location", scopeRefId: camaVisible.id }, "internal")).toBe(true);
+    expect(await can(operador, "manage_attributes", "location", { scopeType: "location", scopeRefId: estanteOculto.id }, "trade_secret")).toBe(false);
+
+    const b = await bandeja("bajo-estante-oculto-d1");
+    await trasladar(b.id, camaVisible.id, "2026-09-01T12:00:00Z");
+    const p = await posicionDeBandeja(operador, b.id, T("2026-09-02T00:00:00Z"), org);
+    expect(p).toMatchObject({ cama: camaVisible.name, ajena: false, estante: null, estanteOculto: true });
+    // La instalación, en cambio, es "internal" y SÍ se ve: su propio permiso
+    // no depende del estante intermedio.
+    expect(p).toMatchObject({ instalacion: instalacionVisible.name });
+  });
+
   it("conflicto = otro recipiente de la organización registrado en la misma cama, cargado o no", async () => {
     const run = await secado("conflicto");
     const [p, sola] = [await posicion(2, 2), await posicion(2, 3)];
@@ -286,6 +343,24 @@ describe("dónde está cada bandeja", () => {
     expect(por(c.id)).toMatchObject({ conflicto: [] });      // sola en su posición real: sin conflicto
     expect(por(c.id).posicion).toMatchObject({ camaId: sola.id, nivel: 2, puesto: 3 });
     expect(filas.flatMap((f) => f.conflicto)).not.toContain(deOtra.name);
+  });
+
+  // Fix round 1, hallazgo 2: regresión del refactor de D10. `transfersDeCandidatos`
+  // se quedó sin el techo de fecha que la versión anterior (una consulta por
+  // candidato) sí traía, y un traslado FUTURO a la cama contaba como
+  // ocupación de HOY.
+  it("un traslado FUTURO a la misma cama no es un conflicto hoy", async () => {
+    const run = await secado("conflicto-futuro");
+    const p = await posicion(10, 10);
+    const a = await bandeja("conflicto-futuro-a");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: a.id, desde: T("2026-09-01T11:00:00Z") });
+    await trasladar(a.id, p.id, "2026-09-01T12:00:00Z");
+    const futura = await bandeja("conflicto-futuro-b");
+    await trasladar(futura.id, p.id, "2099-01-01T00:00:00Z"); // futuro: no cuenta como conflicto HOY
+    const filas = await bandejasDeCorrida(operador, run.id);
+    const fila = filas.find((f) => f.equipmentId === a.id)!;
+    expect(fila.conflicto).not.toContain(futura.name);
+    expect(fila.conflictoSinAcceso).toBe(0);
   });
 
   it("una bandeja que esta persona no ve cuenta en el conflicto, pero sin su nombre", async () => {
