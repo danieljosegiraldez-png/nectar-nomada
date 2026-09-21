@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -10,32 +12,138 @@ import { describe, expect, it } from "vitest";
  * volviera a pasarle `insumosDeLaInstalacion` a cada cama: esa prueba sólo
  * llama al servicio, nunca a la página.
  *
- * No hay arnés de renderizado de páginas de servidor en este repositorio (ver
- * `tests/arquitectura/cama-con-su-permiso.test.ts`, mismo patrón: leer la
- * fuente). Éste exige que los TRES bloques —instalación, cama, estante—
- * pasen por `insumosParaBloque(...)` (`lib/rutinas/propsDeBloques.ts`, con su
- * propia prueba en `tests/rutinas/propsDeBloques.test.ts`), nunca la variable
- * de la instalación directamente: `RutinasDeLugar` trata cualquier valor
- * PROVISTO, incluido `[]`, como "ya resuelto" — pasarle el de la instalación a
- * una cama que tiene `report_condition` sin tenerlo la instalación (o al
- * revés) le da los lotes equivocados sin que nada lo distinga de un `[]`
- * legítimo.
+ * **Segunda vuelta (ronda de arreglos sobre este mismo guardia).** La primera
+ * versión comprobaba SÓLO texto —`fuente.includes("insumos={insumosDeLaInsta…")`—,
+ * y dos revisiones independientes (Claude y Codex) confirmaron que pasa igual
+ * con dos regresiones reales:
  *
- * **Su límite, dicho:** reconoce el arreglo por el nombre literal de la
- * llamada. Si la página deja de importar `insumosParaBloque` con ese nombre,
- * este guardia hay que actualizarlo — no es una prueba semántica de "insumos
- * correctos", es una prueba de que la decisión pasa por el sitio único.
+ *   1. `insumos={insumosParaBloque("cama", insumosDeLaInstalacion) ?? insumosDeLaInstalacion}`
+ *      — el `??` deja la cadena de texto exacta que el guardia buscaba, y la
+ *      instalación gana en cuanto `insumosParaBloque` alguna vez devuelva algo
+ *      falsy que no sea `undefined` (o, más simple: basta con que el lector
+ *      humano lea "sí pasa por insumosParaBloque" y no note el `??` después).
+ *   2. `const insumosCama = insumosDeLaInstalacion; …
+ *      insumos={insumosCama}` — la cadena `insumos={insumosDeLaInstalacion}`
+ *      nunca aparece junto al JSX, así que el control negativo no la ve.
+ *
+ * Las dos comparten la forma: el TEXTO que el guardia buscaba seguía
+ * "presente" o "ausente" en el lugar equivocado, porque un `grep` no entiende
+ * la ESTRUCTURA — un operador binario o una variable intermedia bastan para
+ * engañarlo. El arreglo usa el compilador de TypeScript (`typescript`, ya es
+ * dependencia) para parsear la página de verdad y exigir, nodo por nodo, que
+ * el atributo `insumos` de cada `<RutinasDeLugar>` sea EXACTAMENTE una llamada
+ * a `insumosParaBloque("<bloque>", insumosDeLaInstalacion)` — ninguna otra
+ * forma de expresión (identificador suelto, `??`, `||`, condicional, etc.)
+ * pasa el chequeo `ts.isCallExpression`.
+ *
+ * No hay arnés de renderizado de páginas de servidor en este repositorio (ver
+ * `tests/arquitectura/cama-con-su-permiso.test.ts`, mismo patrón de leer la
+ * fuente); aquí se lee la fuente pero se analiza su AST, no su texto.
+ *
+ * **Su límite, dicho:** reconoce la llamada por el nombre literal
+ * `insumosParaBloque` y el primer argumento como cadena literal. Si la función
+ * cambia de nombre, o el primer argumento deja de ser un literal, hay que
+ * actualizar este guardia.
  */
-const RUTA = new URL("../../app/instalaciones/[id]/page.tsx", import.meta.url);
+const RUTA = fileURLToPath(new URL("../../app/instalaciones/[id]/page.tsx", import.meta.url));
 
-describe("app/instalaciones/[id]/page.tsx: insumos por bloque, siempre vía insumosParaBloque", () => {
-  it("ningún bloque pasa insumosDeLaInstalacion directamente; los tres pasan por insumosParaBloque", () => {
-    const fuente = readFileSync(RUTA, "utf8");
-    // Control negativo, el hallazgo: la forma que rompería el aislamiento.
-    expect(fuente).not.toContain("insumos={insumosDeLaInstalacion}");
-    // Control positivo: los tres bloques, con su etiqueta correcta.
-    expect(fuente).toContain('insumosParaBloque("cama", insumosDeLaInstalacion)');
-    expect(fuente).toContain('insumosParaBloque("estante", insumosDeLaInstalacion)');
-    expect(fuente).toContain('insumosParaBloque("instalacion", insumosDeLaInstalacion)');
+/** Los tres bloques que la página monta, clasificados por SU FORMA en el AST, no por texto. */
+function analizarBloques() {
+  const fuente = readFileSync(RUTA, "utf8");
+  const sourceFile = ts.createSourceFile(RUTA, fuente, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+  function esRutinasDeLugar(node: ts.Node): node is ts.JsxSelfClosingElement {
+    return ts.isJsxSelfClosingElement(node) && ts.isIdentifier(node.tagName) && node.tagName.text === "RutinasDeLugar";
+  }
+
+  function recolectar(nodo: ts.Node, salida: ts.JsxSelfClosingElement[]) {
+    nodo.forEachChild((hijo) => {
+      if (esRutinasDeLugar(hijo)) salida.push(hijo);
+      recolectar(hijo, salida);
+    });
+  }
+
+  /** `<algo>.<prop>.map(callback)`: los bloques de cama/estante cuelgan de ahí. */
+  function esMapaDePropiedad(node: ts.Node, prop: string): node is ts.CallExpression {
+    return (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "map" &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
+      node.expression.expression.name.text === prop
+    );
+  }
+
+  const camaBloques: ts.JsxSelfClosingElement[] = [];
+  const estanteBloques: ts.JsxSelfClosingElement[] = [];
+  const dentroDeMapa = new Set<ts.JsxSelfClosingElement>();
+  const todos: ts.JsxSelfClosingElement[] = [];
+
+  function visit(node: ts.Node) {
+    if (esMapaDePropiedad(node, "camas")) {
+      recolectar(node, camaBloques);
+      camaBloques.forEach((n) => dentroDeMapa.add(n));
+    } else if (esMapaDePropiedad(node, "estantes")) {
+      recolectar(node, estanteBloques);
+      estanteBloques.forEach((n) => dentroDeMapa.add(n));
+    }
+    if (esRutinasDeLugar(node)) todos.push(node);
+    node.forEachChild(visit);
+  }
+  visit(sourceFile);
+
+  const instalacionBloques = todos.filter((n) => !dentroDeMapa.has(n));
+
+  return { camaBloques, estanteBloques, instalacionBloques };
+}
+
+/** El atributo JSX `insumos` de un `<RutinasDeLugar>`, o `undefined` si no lo lleva. */
+function atributoInsumos(nodo: ts.JsxSelfClosingElement): ts.JsxAttribute | undefined {
+  return nodo.attributes.properties.find(
+    (p): p is ts.JsxAttribute => ts.isJsxAttribute(p) && ts.isIdentifier(p.name) && p.name.text === "insumos",
+  );
+}
+
+/**
+ * `true` sólo si el valor del atributo es, LITERALMENTE en el AST, una llamada
+ * a `insumosParaBloque("<tipoEsperado>", ...)` — nada envuelto en `??`, `||`,
+ * un condicional, ni una variable intermedia.
+ */
+function esLlamadaExacta(attr: ts.JsxAttribute | undefined, tipoEsperado: string): boolean {
+  if (!attr?.initializer || !ts.isJsxExpression(attr.initializer) || !attr.initializer.expression) return false;
+  const expr = attr.initializer.expression;
+  if (!ts.isCallExpression(expr)) return false;
+  if (!ts.isIdentifier(expr.expression) || expr.expression.text !== "insumosParaBloque") return false;
+  const primerArg = expr.arguments[0];
+  return !!primerArg && ts.isStringLiteral(primerArg) && primerArg.text === tipoEsperado;
+}
+
+describe("app/instalaciones/[id]/page.tsx: insumos por bloque, estructural (AST, no texto)", () => {
+  it("control positivo: el detector encuentra la instalación, al menos una cama y al menos un estante", () => {
+    const { camaBloques, estanteBloques, instalacionBloques } = analizarBloques();
+    expect(instalacionBloques.length).toBeGreaterThanOrEqual(1);
+    expect(camaBloques.length).toBeGreaterThanOrEqual(1);
+    expect(estanteBloques.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("cada bloque de INSTALACIÓN pasa insumos={insumosParaBloque(\"instalacion\", …)}, exactamente esa forma", () => {
+    const { instalacionBloques } = analizarBloques();
+    for (const nodo of instalacionBloques) {
+      expect(esLlamadaExacta(atributoInsumos(nodo), "instalacion")).toBe(true);
+    }
+  });
+
+  it("cada bloque de CAMA pasa insumos={insumosParaBloque(\"cama\", …)}, exactamente esa forma — ni ??, ni variable intermedia, ni el literal de la instalación", () => {
+    const { camaBloques } = analizarBloques();
+    for (const nodo of camaBloques) {
+      expect(esLlamadaExacta(atributoInsumos(nodo), "cama")).toBe(true);
+    }
+  });
+
+  it("cada bloque de ESTANTE pasa insumos={insumosParaBloque(\"estante\", …)}, exactamente esa forma", () => {
+    const { estanteBloques } = analizarBloques();
+    for (const nodo of estanteBloques) {
+      expect(esLlamadaExacta(atributoInsumos(nodo), "estante")).toBe(true);
+    }
   });
 });
