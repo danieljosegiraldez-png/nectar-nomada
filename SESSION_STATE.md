@@ -41,6 +41,13 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-21 · El canal de aviso de una persona exige permiso (PR #464)
+
+ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal de cualquier persona sin
+autorizar. Ahora puede la propia persona, un Platform Admin, o quien tenga `person:manage_notifications`
+(permiso nuevo: Farm Manager sí, Farm Operator no) sobre su finca, con la regla de P-G. Ninguna pantalla lo
+llama todavía. Flip-test por nombre. **Sigue:** la acción que lo llame traduce `PreferenciaDeCanalError`.
+
 ### 2026-09-21 · Rutinas de limpieza y fumigación en lugares, y la bodega (PR #456)
 
 ADR-180. La bodega (`storage_facility`) cuelga de un beneficio o de una finca, y la base lo exige.
@@ -121,11 +128,6 @@ insumos, azúcares, especies, varietales) y el spec de **instalaciones** — la 
 rutinas, el servicio las rechaza hasta entonces; se solapa con secado por bandeja. Decisiones abiertas
 en la descripción del PR.
 
-### 2026-09-18 · La rueda del ratón ya no cambia campos numéricos (PR #418)
-
-ADR-080: la ausencia nunca se guarda como 0. Todo `type="number"` pasa por `CampoNumerico`; lo vigila
-un guardia de arquitectura con flip-test, y se verificó en navegador girando la rueda sobre un campo
-crudo (vacío → 0) y uno protegido (sin cambio).
 ## 3. Bloqueado, y en qué
 
 #### Recolectores: darles su perfil (de Daniel)
