@@ -111,6 +111,60 @@ export function idsBajoLaFinca(ubicaciones: readonly { id: string; parentLocatio
   return dentro;
 }
 
+/**
+ * No tiene sitio (`site`) por antepasado. Camino recorrido entero sin
+ * encontrar uno — ruling del controlador, 2026-09-19: nunca se adivina la
+ * finca con el padre inmediato, se declara el error.
+ */
+export class SitioNoEncontradoError extends Error {}
+
+/**
+ * La finca (Location `site`) de cualquier ubicación, subiendo por
+ * `parentLocationId` hasta encontrarla — a CUALQUIER profundidad, nunca sólo
+ * el padre inmediato.
+ *
+ * **El error medido que esto reemplaza.** `createTrap` (`traps.ts`) y la regla
+ * de trampas de una parcela (`getPlotDetail` en `plantingCohorts.ts`, y el
+ * `farmLocationId` que su pantalla pasaba al formulario) tomaban
+ * `location.parentLocationId ?? location.id` como si el padre inmediato
+ * fuera siempre la finca. Cierto para una parcela de primer nivel — su padre
+ * ES el sitio —, falso para una microparcela (spec fincas y parcelas §3.3):
+ * es un `plot` hijo de OTRO `plot` (`createMicrolot`), así que su padre
+ * inmediato es la parcela, no la finca. Medido en la base compartida de
+ * pruebas: una trampa dada de alta en una microparcela se numeraba «Trampa 1»
+ * — reiniciando la numeración, que es correlativa POR FINCA — y su
+ * `farmLocationId` quedaba apuntando a la parcela, así que `TrapRule.findUnique`
+ * (que busca por `farmLocationId`) nunca encontraba la regla de la finca: sin
+ * plazos ni avisos.
+ *
+ * Ninguna `plot` de este dominio cuelga fuera de un sitio —`crearParcela`
+ * exige que el padre sea `site`, y `createMicrolot` copia el tipo del padre—,
+ * así que llegar al final de la cadena sin encontrar uno es un error
+ * explícito (`SitioNoEncontradoError`), nunca un valor por defecto que se lea
+ * como la finca.
+ *
+ * Mismo camino que el `sitioDe` interno de `listarFincas`, que aquí arriba
+ * camina un árbol ya cargado en bloque para muchas ubicaciones a la vez; éste
+ * es el que sirve a un solo `locationId` sin cargar el árbol entero.
+ */
+export async function resolveFarmSiteId(locationId: string): Promise<string> {
+  const vistos = new Set<string>();
+  let actualId: string | null = locationId;
+  while (actualId) {
+    if (vistos.has(actualId)) throw new SitioNoEncontradoError("cycle_detected");
+    vistos.add(actualId);
+    const actual: { id: string; locationType: string; parentLocationId: string | null } | null =
+      await prisma.location.findUnique({
+        where: { id: actualId },
+        select: { id: true, locationType: true, parentLocationId: true },
+      });
+    if (!actual) throw new SitioNoEncontradoError("location_not_found");
+    if (actual.locationType === "site") return actual.id;
+    actualId = actual.parentLocationId;
+  }
+  throw new SitioNoEncontradoError("no_site_ancestor");
+}
+
 export class FincaError extends Error {}
 
 const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;

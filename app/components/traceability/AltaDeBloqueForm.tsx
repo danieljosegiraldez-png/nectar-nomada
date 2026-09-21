@@ -4,10 +4,11 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { createPlotBlockFormAction, type TraceabilityActionState } from "../../actions/traceability";
 import { BotonQueNecesitaConexion } from "./BotonQueNecesitaConexion";
+import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
 
 const initialState: TraceabilityActionState = {};
 
-/** Crear un bloque de la parcela — F2 §3. Nombre y nota; necesita conexión. */
+/** Crear un bloque de la parcela — F2 §3 extendido. Nombre, tipo, descripción y nota; necesita conexión. */
 export function AltaDeBloqueForm({ locationId }: { locationId: string }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(createPlotBlockFormAction, initialState);
@@ -19,6 +20,28 @@ export function AltaDeBloqueForm({ locationId }: { locationId: string }) {
       <div className="nn-field">
         <label htmlFor={`blockName-${locationId}`}>{t("blockName")}</label>
         <input id={`blockName-${locationId}`} type="text" name="name" required />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor={`blockType-${locationId}`}>{t("blockTypeLabel")}</label>
+        <select id={`blockType-${locationId}`} name="blockType" required defaultValue="">
+          <option value="">{t("blockTypeChoose")}</option>
+          {TIPOS_DE_BLOQUE.map((tipo) => (
+            <option key={tipo} value={tipo}>
+              {t(`blockType_${tipo}` as "blockType_trampa")}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor={`blockDescription-${locationId}`}>{t("blockDescriptionLabel")}</label>
+        <input
+          id={`blockDescription-${locationId}`}
+          type="text"
+          name="description"
+          placeholder={t("notRecorded")}
+        />
       </div>
 
       <div className="nn-field">

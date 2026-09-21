@@ -23,8 +23,8 @@ import { describe, expect, it } from "vitest";
  * **Qué NO comprueba, y hay que decirlo para que nadie lo cuente dos veces:**
  * que el estado declarado sea CIERTO. Eso no lo puede ver un test — sólo lo
  * sabe quien trajo el archivo. Lo que sí garantiza es que *haya* un estado, que
- * sea uno de los tres admitidos, y que nadie ascienda un borrador a material
- * del dueño sin tocar esta línea, que se lee en el diff.
+ * sea uno de los admitidos, y que nadie ascienda un borrador a material del
+ * dueño sin tocar esta línea, que se lee en el diff.
  *
  * Hermético: sólo lee archivos.
  */
@@ -32,8 +32,22 @@ import { describe, expect, it } from "vitest";
 const RAIZ = new URL("../..", import.meta.url).pathname;
 const CARPETA = join(RAIZ, "docs/dominio");
 
-/** Los tres de la tabla del README, y ninguno más. */
-const ESTADOS = ["material del dueño", "borrador · pendiente de revisión", "referencia externa"] as const;
+/**
+ * Los de la tabla del README, y ninguno más.
+ *
+ * **`reemplazado · no normativo` entró el 2026-09-19** con ADR-181: tres guías de café
+ * —pH, Brix y subproductos— las reemplazaron `docs/beneficio/10`, `11` y `12`, que lo dicen
+ * en su propia cabecera («Reemplaza: v2.5 / v2.0»). Un documento reemplazado no vuelve a
+ * borrador ni asciende a material del dueño: es historia, y su cabecera nombra al sucesor.
+ * La primera versión de ADR-181 añadió el estado a los archivos y no a esta lista, y dejó
+ * `main` en rojo con estas tres pruebas.
+ */
+const ESTADOS = [
+  "material del dueño",
+  "borrador · pendiente de revisión",
+  "referencia externa",
+  "reemplazado · no normativo",
+] as const;
 
 const documentos = () => readdirSync(CARPETA).filter((f) => f.endsWith(".md") && f !== "README.md");
 
@@ -69,6 +83,15 @@ describe("el material de dominio dice de dónde salió", () => {
     // Un borrador sin revisar tiene que decir en su cara que nada automático se
     // apoya en él. Es la mitad que de verdad protege: el estado solo se lee como
     // metadato, la prohibición se lee como advertencia.
+    // Un reemplazado nombra a su sucesor: sin eso, «reemplazado» es una etiqueta
+    // que esconde el documento en vez de encaminar a quien lo busca.
+    if (declarados[0] === "reemplazado · no normativo") {
+      expect(
+        cabecera,
+        `${nombre}: dice que está reemplazado y no nombra por qué documento`,
+      ).toMatch(/reemplazo\s+:/);
+    }
+
     if (declarados[0] === "borrador · pendiente de revisión") {
       expect(
         cabecera,

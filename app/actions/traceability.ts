@@ -56,7 +56,7 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
-import { createPlotBlock, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import { createPlotBlock, setPlotBlockType, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -100,9 +100,12 @@ import { requestLotAssetUpload, finalizeLotAssetUpload, type LotAssetParent } fr
 import {
   requestLandAssetUpload,
   finalizeLandAssetUpload,
+  requestTrampaPhotoUpload,
+  finalizeTrampaPhotoPorBorrador,
   LandMediaValidationError,
   type LandAssetParent,
 } from "../../lib/traceability/landMedia";
+import { volverAValido } from "../../lib/traceability/volverA";
 import {
   recordLabourEntry,
   recordMaterialConsumptionEntry,
@@ -1281,7 +1284,33 @@ export async function createPlotBlockFormAction(
     await createPlotBlock(user.userAccountId, {
       locationId,
       name: String(formData.get("name") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
       notes: emptyToNull(formData.get("notes")),
+    });
+  } catch (error) {
+    revalidarParcela(locationId);
+    return { error: friendlyError(t, error) };
+  }
+
+  revalidarParcela(locationId);
+  return {};
+}
+
+export async function setPlotBlockTypeFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const locationId = String(formData.get("locationId") ?? "");
+
+  try {
+    await setPlotBlockType(user.userAccountId, {
+      plotBlockId: String(formData.get("plotBlockId") ?? ""),
+      blockType: String(formData.get("blockType") ?? "") as never,
+      description: emptyToNull(formData.get("description")),
     });
   } catch (error) {
     revalidarParcela(locationId);
@@ -1444,6 +1473,8 @@ export async function startFieldSessionFormAction(
     return { error: friendlyError(t, error) };
   }
 
+  // Intencional, y NO es el patrón `volverA` de las otras acciones de esta
+  // tarea: quien abre una jornada va a trabajar en ella, no vuelve al tablero.
   redirect(`/field-sessions/${sessionId}`);
 }
 
@@ -1801,6 +1832,11 @@ export async function createSoilProfileAction(
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/suelo/nuevo` manda `volverA` para
+  // volver a la pestaña Condiciones al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1866,6 +1902,11 @@ export async function createSoilSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1900,6 +1941,11 @@ export async function createFoliarSampleAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fix round 1 (Tarea 6): `/plots/[id]/muestras/nueva` manda `volverA` para
+  // volver a la pestaña Muestras al guardar. Fuera del try/catch: `redirect()`
+  // lanza una señal especial (NEXT_REDIRECT) que un catch de arriba se tragaría.
+  const destino = volverAValido(String(formData.get("volverA") ?? ""), locationId);
+  if (destino) redirect(destino);
   return {};
 }
 
@@ -1931,6 +1977,11 @@ export async function finalizeLandAssetUploadAction(
   originalFilename: string,
   parent: LandAssetParent,
   creatorPersonId: string | null,
+  // Fix round 1 (Tarea 6): opcional — `/plots/[id]/fotos/nueva` lo manda para
+  // volver a la pestaña Fotos al guardar. Los demás llamadores (la foto de una
+  // calicata, en la pestaña Condiciones) no lo pasan y quedan exactamente como
+  // antes.
+  volverA?: string | null,
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -1954,6 +2005,98 @@ export async function finalizeLandAssetUploadAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
+  // Fuera del try/catch: `redirect()` lanza una señal especial (NEXT_REDIRECT)
+  // que un catch de arriba se tragaría.
+  const destino = volverAValido(volverA, locationId);
+  if (destino) redirect(destino);
+  return { ok: true };
+}
+
+// --- Foto de la ronda de trampas, sin señal (Tarea 12) -------------------
+//
+// Gemelas de `requestLandAssetUploadAction`/`finalizeLandAssetUploadAction`
+// de arriba, y NO un `if` dentro de ellas: ruling P2 del controlador gatea
+// esta pareja con `requireTrapAccess` (specimen:manage), nunca con
+// `location:manage_attributes`, y las dos de arriba siguen exactamente como
+// estaban para los demás padres (bloque, perfil de suelo, lote de biochar).
+
+export async function requestTrampaPhotoUploadAction(
+  locationId: string,
+  originalFilename: string,
+  contentType: string,
+  // Fix round 1 (Tarea 12) — el clientDraftId de la FOTO, del que
+  // `requestTrampaPhotoUpload` deriva la clave. Es lo que hace que un
+  // reintento con acuse perdido calcule la MISMA clave en vez de una nueva.
+  photoClientDraftId: string,
+  // A6 fix-final — el clientDraftId de la REVISIÓN a la que esta foto dice
+  // pertenecer. Sin él, `requestTrampaPhotoUpload` no puede comprobar si la
+  // clave derivada ya tiene un `Asset` de OTRA revisión antes de firmar el
+  // PUT — ver su docstring en `landMedia.ts`.
+  revisionClientDraftId: string,
+): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const t = await getTranslations("Traceability");
+  try {
+    return await requestTrampaPhotoUpload(user.userAccountId, {
+      locationId,
+      originalFilename,
+      contentType,
+      photoClientDraftId,
+      revisionClientDraftId,
+    });
+  } catch (error) {
+    if (error instanceof TrapAccessError) return { error: t("error_access", { detail: error.message }) };
+    if (error instanceof Error) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * `{ pendiente: true }` no es un error: la revisión todavía no llegó por su
+ * propia cola (Tarea 11) y la foto se reintenta, sin engancharse nunca a otra
+ * revisión (spec §4.3). `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`) es
+ * quien distingue las tres formas de esta respuesta.
+ */
+export async function finalizeTrampaPhotoPorBorradorAction(
+  locationId: string,
+  storageKey: string,
+  mimeType: string,
+  sizeBytes: number,
+  originalFilename: string,
+  revisionClientDraftId: string,
+): Promise<{ ok: true } | { pendiente: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  try {
+    await finalizeTrampaPhotoPorBorrador(user.userAccountId, {
+      locationId,
+      storageKey,
+      mimeType,
+      sizeBytes,
+      originalFilename,
+      revisionClientDraftId,
+      // Una fotografía de la ronda es evidencia original: la tomó quien
+      // registró la revisión. Misma regla que la revisión (T10, ruling del
+      // controlador): procedencia siempre observación directa.
+      provenanceClass: "direct_observation",
+      // A5 fix-final (I6) — ya NO se acepta `creatorPersonId` del llamador.
+      // Antes esta acción reenviaba lo que le pasara `syncTrapPhotos`
+      // (siempre `null` por la UI real), pero seguía existiendo un parámetro
+      // que una llamada directa a la Server Action podía forjar con el id de
+      // otra Person — el mismo patrón que `observerPersonId`/`provenanceClass`
+      // ya cerraron. `finalizeTrampaPhotoPorBorrador` fija siempre
+      // `userAccount.personId` en el servidor.
+    });
+  } catch (error) {
+    if (error instanceof LandMediaValidationError && error.message === "revision_not_found_yet") {
+      return { pendiente: true };
+    }
+    return { error: friendlyError(t, error) };
+  }
+  revalidatePath("/finca/trampas/ronda");
   return { ok: true };
 }
 

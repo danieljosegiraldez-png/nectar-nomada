@@ -27,8 +27,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { createSpecimen, recordSpecimenObservation } from "../../lib/traceability/specimens";
+import { createMicrolot } from "../../lib/traceability/locations";
 import { getPlotDetail } from "../../lib/traceability/plantingCohorts";
 import { saveTrapRule } from "../../lib/traceability/trapRules";
+import { estadoDeTrampa, trampasParaAviso } from "../../lib/traceability/pendienteDeTrampas";
 import { prisma } from "../../lib/db";
 import { crearUsuarioConAcceso, crearParcela, crearFinca, crearUsuarioSinAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -108,6 +110,66 @@ describe("alta de trampa", () => {
     const segunda = await createTrap(userAccountId, { locationId: otra.id, installedAt: new Date(), provenanceClass: "direct_observation" });
     expect(segunda.trapNumber).toBe(2);
     expect(segunda.farmLocationId).toBe(finca.id);
+  });
+
+  /**
+   * El hallazgo del paseo por el navegador de hoy (2026-09-19), medido en la
+   * base compartida de pruebas: una trampa dada de alta en una MICROPARCELA
+   * (spec fincas y parcelas §3.3 — una `Location` `plot` cuyo padre es OTRA
+   * `plot`, creada con `createMicrolot`) tomaba como finca el padre
+   * INMEDIATO —la parcela— en vez del sitio. Fila real: «Trampa 1» duplicada
+   * en Finca Rosina, con `farm_location_id` apuntando al Lote 1 en vez de al
+   * sitio.
+   *
+   * `resolveFarmSiteId` (`lib/traceability/fincas.ts`) camina el árbol hacia
+   * arriba hasta la Location `site`, a cualquier profundidad — no sólo el
+   * padre inmediato. Esta prueba construye la jerarquía real: sitio → parcela
+   * → microparcela (con `createMicrolot`, nunca `prisma.location.create` a
+   * mano), pone una trampa en la parcela y otra en la microparcela, y afirma
+   * que la segunda sigue la numeración de la finca (2, no 1 reiniciado) y que
+   * su `farmLocationId` es el SITIO, no la parcela.
+   *
+   * **Flip-test**: restaurar en `createTrap`
+   * `location.parentLocationId ?? input.locationId` en vez de
+   * `await resolveFarmSiteId(input.locationId)` hace caer esta prueba con
+   * `expected 1 to be 2` — la trampa de la microparcela reinicia la
+   * numeración en la parcela en vez de seguir la de la finca.
+   */
+  it("sigue la numeración de la finca aunque la trampa esté en una microparcela (nieta del sitio, createMicrolot)", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const sitio = parcela.parentLocationId!;
+
+    const microparcela = await createMicrolot(userAccountId, {
+      parentLocationId: parcela.id,
+      name: `TEST Microparcela (${Date.now()})`,
+      subdivisionReason: "altitude",
+    });
+    locationIds.push(microparcela.id);
+    // El camino real produce `plot`, nunca `micro_plot` (mismo hallazgo que
+    // en fincaTrampas.test.ts) — afirmarlo, no sólo asumirlo, porque toda
+    // esta prueba depende de que la microparcela sea NIETA del sitio.
+    expect(microparcela.locationType).toBe("plot");
+    expect(microparcela.parentLocationId).toBe(parcela.id);
+    expect(microparcela.parentLocationId).not.toBe(sitio);
+
+    const enLaParcela = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const enLaMicroparcela = await createTrap(userAccountId, {
+      locationId: microparcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    expect(enLaParcela.trapNumber).toBe(1);
+    expect(enLaMicroparcela.trapNumber).toBe(2);
+    expect(enLaMicroparcela.farmLocationId).toBe(sitio);
   });
 
   it("deja la trampa activa y con su observación de instalación", async () => {
@@ -203,7 +265,11 @@ describe("alta de trampa", () => {
     organizationIds.push(otra.organizationId!);
 
     const { createPlotBlock } = await import("../../lib/traceability/plotBlocks");
-    const ajeno = await createPlotBlock(userAccountId, { locationId: otra.id, name: "Norte" });
+    const ajeno = await createPlotBlock(userAccountId, {
+      locationId: otra.id,
+      name: "Norte",
+      blockType: "trampa",
+    });
 
     await expect(createTrap(userAccountId, {
       locationId: parcela.id, plotBlockId: ajeno.id, installedAt: new Date(), provenanceClass: "direct_observation",
@@ -485,6 +551,82 @@ describe("revisión de trampa", () => {
       observerPersonId: "00000000-0000-0000-0000-000000000000", provenanceClass: "direct_observation",
     })).rejects.toThrow(TrapValidationError);
   });
+
+  // Tarea 11 — la ronda viaja sin señal por la cola offline, y un reintento del
+  // cliente (misma clave) no puede duplicar la revisión.
+  it("con clientDraftId, una segunda llamada devuelve la misma fila", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampa = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    const inputBase = {
+      specimenId: trampa.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos" as const, provenanceClass: "direct_observation" as const,
+    };
+    const primera = await recordTrapCheck(userAccountId, { ...inputBase, clientDraftId });
+    const segunda = await recordTrapCheck(userAccountId, { ...inputBase, clientDraftId });
+    expect(segunda.id).toBe(primera.id);
+    const total = await prisma.specimenObservation.count({
+      where: { specimenId: trampa.id, observationType: "trap_check" },
+    });
+    expect(total).toBe(1);
+  });
+
+  /**
+   * A9 fix-final (M2) — el mismo `clientDraftId` usado con OTRA trampa no se
+   * lee como «ya se aplicó, con éxito»: eso descartaría en silencio un envío
+   * que en realidad nunca se guardó bajo esa clave. Antes de este arreglo,
+   * el `findUnique` por `clientDraftId` no comprobaba `specimenId` y esta
+   * llamada habría devuelto la fila de la PRIMERA trampa.
+   */
+  it("el mismo clientDraftId con OTRA trampa se rechaza, nunca se lee como duplicado", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+
+    const trampaA = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const trampaB = await createTrap(userAccountId, {
+      locationId: parcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+    const clientDraftId = crypto.randomUUID();
+    await recordTrapCheck(userAccountId, {
+      specimenId: trampaA.id, observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+    });
+
+    await expect(
+      recordTrapCheck(userAccountId, {
+        specimenId: trampaB.id, observedAt: new Date("2026-09-15"),
+        brocaLevel: "pocos", provenanceClass: "direct_observation", clientDraftId,
+      }),
+    ).rejects.toThrow(TrapValidationError);
+
+    // Control: la trampa B sigue sin ninguna revisión — el rechazo no
+    // escribió nada a medias, y no se le atribuyó la fila de A.
+    expect(
+      await prisma.specimenObservation.count({
+        where: { specimenId: trampaB.id, observationType: "trap_check" },
+      }),
+    ).toBe(0);
+  });
 });
 
 describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
@@ -525,6 +667,70 @@ describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
     expect(detalle.trampas[0]!.instaladaEl?.toISOString().slice(0, 10)).toBe("2026-09-02");
     expect(detalle.trampas[0]!.ultimaRevision).toMatchObject({ brocaLevel: "muchos" });
     expect(detalle.trampas[0]!.ultimaRevision?.observedAt.toISOString().slice(0, 10)).toBe("2026-09-15");
+  });
+
+  /**
+   * El mismo hallazgo de arriba («sigue la numeración de la finca aunque la
+   * trampa esté en una microparcela»), del lado de la REGLA: antes de
+   * `resolveFarmSiteId`, `getPlotDetail` buscaba la regla por
+   * `location.parentLocation?.id ?? location.id` — el padre inmediato de la
+   * microparcela es la parcela, no la finca, así que `TrapRule.findUnique`
+   * nunca encontraba la fila guardada para el SITIO: la trampa se quedaba
+   * sin plazos ni avisos aunque la finca sí tuviera una regla.
+   *
+   * Esta prueba guarda la regla en el SITIO (la misma clave que usa
+   * `createTrap`) y comprueba que `getPlotDetail` sobre la MICROPARCELA la
+   * encuentra igual que sobre cualquier otra parcela de la finca, y que
+   * `estadoDeTrampa` deja de ser `sin_regla` — el mismo cálculo que usa la
+   * pantalla de la parcela (`app/plots/[id]/page.tsx`) para cualquier otra
+   * trampa de la finca.
+   */
+  it("la regla de la finca alcanza a la trampa de una microparcela, igual que a cualquier otra de la finca", async () => {
+    const usuario = await crearUsuarioConAcceso();
+    userAccountIds.push(usuario.userAccountId);
+    personIds.push(usuario.personId);
+    scopeIds.push(usuario.scopeId);
+    const { userAccountId } = usuario;
+
+    const parcela = await crearParcela();
+    locationIds.push(parcela.id, parcela.parentLocationId!);
+    organizationIds.push(parcela.organizationId!);
+    const sitio = parcela.parentLocationId!;
+
+    const microparcela = await createMicrolot(userAccountId, {
+      parentLocationId: parcela.id,
+      name: `TEST Microparcela (${Date.now()})`,
+      subdivisionReason: "altitude",
+    });
+    locationIds.push(microparcela.id);
+    expect(microparcela.parentLocationId).not.toBe(sitio);
+
+    await createTrap(userAccountId, {
+      locationId: microparcela.id, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation",
+    });
+
+    await saveTrapRule(userAccountId, {
+      farmLocationId: sitio, triggerLevel: "algunos", normalDays: 14, alertDays: 7,
+      suggestedAction: "aplicar Bralic",
+    });
+
+    const detalle = await getPlotDetail(userAccountId, microparcela.id);
+    expect(detalle.farmLocationId).toBe(sitio);
+    const regla = {
+      triggerLevel: "algunos" as const,
+      normalDays: 14,
+      alertDays: 7,
+      suggestedAction: "aplicar Bralic",
+      suggestedMaterial: null,
+    };
+    expect(detalle.reglaDeTrampas).toEqual(regla);
+
+    // Y el estado que calcula la pantalla no es "sin_regla" — el mismo
+    // cálculo, con la misma regla, que cualquier otra trampa de la finca.
+    const [trampaParaAviso] = trampasParaAviso(detalle.trampas);
+    const { estado } = estadoDeTrampa({ hoy: "2026-09-18", trampa: trampaParaAviso!, regla: detalle.reglaDeTrampas });
+    expect(estado).not.toBe("sin_regla");
+    expect(estado).toBe("toca_revisar");
   });
 
   // F2 fix-final — lo que se escribía y nunca se volvía a leer: el conteo,

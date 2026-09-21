@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { puedeVerTrampasDeFinca } from "../../lib/traceability/fincaTrampas";
 import { cookies } from "next/headers";
 import { COOKIE_FINCA, fincaDeLaPagina, puedeCrearParcelaEn } from "../../lib/traceability/fincas";
 import { NuevaParcelaForm } from "../components/traceability/NuevaParcelaForm";
@@ -48,6 +49,12 @@ export default async function FincaPage() {
   const tf = await getTranslations("Fincas");
   const destinos = [
     { href: "/plots", titulo: t("parcelas"), ayuda: t("parcelasAyuda"), visible: true },
+    {
+      href: "/finca/trampas",
+      titulo: t("fincaTrapsLink"),
+      ayuda: t("fincaTrapsLinkAyuda"),
+      visible: puedeVerTrampasDeFinca(granted),
+    },
     // `jornadasDeFinca` exige `lot:view` sobre la finca; abrir una, `lot:manage`.
     { href: "/finca/jornadas", titulo: t("jornadas"), ayuda: t("jornadasAyuda"), visible: granted.has("lot:view") || granted.has("lot:manage") },
   ].filter((d) => d.visible);

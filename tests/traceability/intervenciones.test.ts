@@ -373,9 +373,14 @@ beforeAll(async () => {
     })
   ).id;
 
-  // Tarea 2: un bloque de `parcela` y uno de `otraParcela`.
-  bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}` })).id;
-  bloqueAjeno = (await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}` })).id;
+  // Tarea 2: un bloque de `parcela` y uno de `otraParcela`. `blockType` es
+  // obligatorio desde la decisión de Daniel del 2026-09-19 (microparcela ya
+  // no es un tipo de bloque); "experimental" porque estas pruebas no son de
+  // trampas, son de intervenciones sobre un bloque cualquiera.
+  bloque = (await createPlotBlock(gestor, { locationId: parcela, name: `Bloque ${RUN_ID}`, blockType: "experimental" })).id;
+  bloqueAjeno = (
+    await createPlotBlock(gestor, { locationId: otraParcela, name: `Bloque ajeno ${RUN_ID}`, blockType: "experimental" })
+  ).id;
 
   // Ronda de arreglos 1 (hallazgo crítico): `soloVista` tiene `lot:view` (perfil
   // `Project Viewer`) y NINGÚN `location:manage_attributes`.

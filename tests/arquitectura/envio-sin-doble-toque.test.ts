@@ -27,10 +27,19 @@ import { describe, expect, it } from "vitest";
 const RAIZ = new URL("../..", import.meta.url).pathname;
 
 /**
- * Excepciones deliberadas. Vacío a propósito: si algún día hace falta una, va
- * aquí con su motivo escrito, no como un `disabled` suelto que nadie explica.
+ * Excepciones deliberadas, con su motivo escrito, no un `disabled` suelto que
+ * nadie explica.
+ *
+ * `RondaDeTrampaForm.tsx` — ronda de arreglos finales de vistas de finca y
+ * parcela, A1+A2: el formulario dejó de tener un camino «con señal» por
+ * Server Action (la foto de la ronda viajaba en su cuerpo y superaba el
+ * límite de 1 MB — C1 de la revisión final). Ahora SIEMPRE encola con
+ * `queueFieldEvent`, así que no hay `useActionState` ni `pending` que mirar:
+ * el pestillo es el `useRef` síncrono que la segunda mitad de este archivo ya
+ * exige para el camino sin señal, y `disabled={encolando}` lo refleja en el
+ * botón. Ver esa segunda mitad para la comprobación real del pestillo.
  */
-const PERMITIDOS: string[] = [];
+const PERMITIDOS: string[] = ["app/components/traceability/RondaDeTrampaForm.tsx"];
 
 function archivosTsx(): string[] {
   return execFileSync("find", ["app", "-name", "*.tsx"], { cwd: RAIZ, encoding: "utf8" })
@@ -111,6 +120,16 @@ describe("un envío no se puede pulsar dos veces", () => {
    */
   const PENDIENTE_EN_OTRO_TRABAJO = ["FieldSessionForms.tsx"];
 
+  /**
+   * `RondaDeTrampaForm.tsx` — A1+A2 fix-final, mismo motivo que su entrada en
+   * `PERMITIDOS` más arriba: ya no existe ningún `pending` que combinar,
+   * porque el formulario perdió su camino con señal por Server Action. El
+   * `disabled={pending || ` de la comprobación de abajo no puede aparecer
+   * nunca en este archivo por diseño, no por descuido — las otras dos
+   * comprobaciones (el `useRef` y el corte con `.current`) SÍ corren sobre él.
+   */
+  const SIN_PENDING_POR_DISEÑO = ["RondaDeTrampaForm.tsx"];
+
   function archivosQueEncolan(): string[] {
     return readdirSync(`${RAIZ}${ENCOLAN}`)
       .filter((f) => f.endsWith(".tsx"))
@@ -134,10 +153,17 @@ describe("un envío no se puede pulsar dos veces", () => {
       if (PENDIENTE_EN_OTRO_TRABAJO.includes(f)) continue;
       const src = readFileSync(`${RAIZ}${ENCOLAN}/${f}`, "utf8");
       // Un `useRef` booleano cuyo `.current` se comprueba y se pone, y un
-      // `disabled` que además de `pending` mira el estado de encolado.
+      // `disabled` que además de `pending` mira el estado de encolado — salvo
+      // en `SIN_PENDING_POR_DISEÑO`, donde no hay `pending` que combinar
+      // porque no hay Server Action: ahí basta con que el propio estado de
+      // encolado apague el botón.
       if (!/useRef/.test(src)) culpables.push(`${f}: no usa useRef`);
       else if (!/\.current\s*\)\s*return/.test(src)) culpables.push(`${f}: no corta la reentrada con .current`);
-      else if (!/disabled=\{pending \|\| /.test(src)) culpables.push(`${f}: el botón no se apaga al encolar`);
+      else if (SIN_PENDING_POR_DISEÑO.includes(f)) {
+        if (!/<button[^>]*type="submit"[^>]*disabled=\{[a-zA-Z]+\}/s.test(src)) {
+          culpables.push(`${f}: el botón no se apaga al encolar`);
+        }
+      } else if (!/disabled=\{pending \|\| /.test(src)) culpables.push(`${f}: el botón no se apaga al encolar`);
     }
     expect(
       culpables,

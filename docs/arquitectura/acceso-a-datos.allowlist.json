@@ -318,6 +318,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/fincaTrampas.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/biocharBatches.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -688,6 +692,12 @@
     }
   ],
   "dependen_del_llamador": [
+    {
+      "archivo": "lib/traceability/fincas.ts",
+      "operacion": "resolveFarmSiteId",
+      "razon": "Camina desde una Location hasta su sitio (finca) antepasado, para dar el `farmLocationId` de una trampa. No recibe principal: sus dos llamadoras ya autorizaron la Location de origen antes de invocarla. `createTrap` (traps.ts) la llama despues de `requireTrapAccess` (specimen:manage sobre la Location de la trampa); `getPlotDetail` (plantingCohorts.ts) la llama despues de `requireLocationAttributeAccess` sobre la misma Location que se esta consultando. Reemplaza a `location.parentLocationId ?? location.id`, que tomaba el padre inmediato como si fuera siempre la finca — cierto solo para una parcela de primer nivel, falso para una microparcela.",
+      "verificado": "2026-09-19"
+    },
     {
       "archivo": "lib/traceability/recepcionesDeCereza.ts",
       "operacion": "recepcionDeEntregas",

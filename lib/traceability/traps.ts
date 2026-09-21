@@ -5,6 +5,7 @@ import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import { diaDeHoy } from "../time/diaDeHoy";
+import { resolveFarmSiteId } from "./fincas";
 
 export class TrapAccessError extends Error {}
 export class TrapValidationError extends Error {}
@@ -22,7 +23,7 @@ export class TrapValidationError extends Error {}
 export async function requireTrapAccess(userAccountId: string, locationId: string) {
   const location = await prisma.location.findUnique({
     where: { id: locationId },
-    select: { classification: true, parentLocationId: true, timezone: true },
+    select: { classification: true, timezone: true },
   });
   if (!location) throw new TrapAccessError("location_not_found");
 
@@ -68,9 +69,14 @@ export interface CreateTrapInput {
  * F2 §4 — alta de una trampa, una por una. El número lo pone el sistema,
  * correlativo por finca, y el operador lo rotula en la botella.
  *
- * La finca es `parentLocationId` y no la organización: los lotes reales de
- * Finca Rosina tienen `organization_id` NULL (medido en la Tarea 2), así que
- * el padre en la jerarquía de `Location` es la finca.
+ * La finca es el SITIO antepasado (`resolveFarmSiteId`, `fincas.ts`), no la
+ * organización ni el padre inmediato: los lotes reales de Finca Rosina tienen
+ * `organization_id` NULL (medido en la Tarea 2), y una trampa en una
+ * microparcela (spec fincas y parcelas §3.3, `createMicrolot`) tiene por
+ * padre inmediato la PARCELA, no la finca — `location.parentLocationId ??
+ * input.locationId` numeraba esas trampas por parcela en vez de por finca, y
+ * las dejaba sin la regla de la finca (`TrapRule` se busca por
+ * `farmLocationId`). Ver el docstring de `resolveFarmSiteId`.
  *
  * `createSpecimen` no se reutiliza: necesita el número correlativo y la
  * finca, que esa función no conoce.
@@ -88,7 +94,7 @@ export async function createTrap(userAccountId: string, input: CreateTrapInput, 
   if (diaEnElFuturo(input.installedAt, location.timezone, ahora)) {
     throw new TrapValidationError("installed_at_in_future");
   }
-  const farmLocationId = location.parentLocationId ?? input.locationId;
+  const farmLocationId = await resolveFarmSiteId(input.locationId);
 
   if (input.plotBlockId) {
     const bloque = await prisma.plotBlock.findUnique({
@@ -175,6 +181,10 @@ export interface RecordTrapCheckInput {
   notes?: string | null;
   provenanceClass: ProvenanceClass;
   dataQuality?: DataQuality | null;
+  // Tarea 11 — la ronda viaja sin señal, y esta es su clave de idempotencia: un
+  // reintento con el mismo valor devuelve la fila ya creada en vez de duplicarla.
+  // `undefined`/`null`/ausente (el camino con señal de siempre) no la comprueba.
+  clientDraftId?: string | null;
 }
 
 const NIVELES: readonly TrapCaptureLevel[] = ["ninguno", "pocos", "algunos", "muchos"];
@@ -211,6 +221,23 @@ export async function recordTrapCheck(
   if (trampa.status !== "active") throw new TrapValidationError("trap_retired");
 
   const location = await requireTrapAccess(userAccountId, trampa.locationId);
+
+  // A9 fix-final (M2), ruling del controlador — el lookup por `clientDraftId`
+  // va DESPUÉS del control de acceso, y sólo cuenta como duplicado si la fila
+  // encontrada es de la MISMA trampa. Antes corría primero, sin comprobar ni
+  // acceso ni `specimenId`: un `clientDraftId` colisionado con OTRA trampa se
+  // leía como «ya se aplicó, con éxito», y un envío que en realidad nunca se
+  // guardó bajo ese id se perdía en silencio.
+  if (input.clientDraftId) {
+    const yaExiste = await prisma.specimenObservation.findUnique({ where: { clientDraftId: input.clientDraftId } });
+    if (yaExiste) {
+      if (yaExiste.specimenId !== trampa.id) {
+        throw new TrapValidationError("client_draft_id_used_by_other_specimen");
+      }
+      return yaExiste;
+    }
+  }
+
   // F9 — necesita la zona de la Location, así que va después de leerla.
   if (diaEnElFuturo(input.observedAt, location.timezone, ahora)) {
     throw new TrapValidationError("observed_at_in_future");
@@ -238,6 +265,7 @@ export async function recordTrapCheck(
         liquidChanged: input.liquidChanged ?? null,
         lureRecharged: input.lureRecharged ?? null,
         notes: input.notes ?? null,
+        clientDraftId: input.clientDraftId ?? null,
         provenanceClass: input.provenanceClass,
         dataQuality: input.dataQuality ?? null,
         createdBy: userAccountId,

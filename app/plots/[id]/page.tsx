@@ -4,20 +4,15 @@ import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
-import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
-import { NuevaMicroparcelaForm } from "../../components/traceability/NuevaMicroparcelaForm";
-import { SoilProfileForm } from "../../components/traceability/SoilProfileForm";
+import { LocationAccessError } from "../../../lib/traceability/locations";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
-import { SoilSampleForm, FoliarSampleForm } from "../../components/traceability/SampleForms";
 import { LabMeasurementForm } from "../../components/traceability/LabMeasurementForm";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 import { listSamplesForLocation, camposDeProtocoloQueFaltan } from "../../../lib/traceability/soilSamples";
 import { listSoilProfilesForLocation, computeAnaerobicSignals } from "../../../lib/traceability/soilProfiles";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
-import { FieldSessionStartForm } from "../../components/traceability/FieldSessionForms";
-import { RevisionDeTrampaForm } from "../../components/traceability/RevisionDeTrampaForm";
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -33,7 +28,11 @@ import {
   textoDeTipoDeManejo as textoDeTipoDeManejoDe,
   textoDeObjetivoDeManejo as textoDeObjetivoDeManejoDe,
 } from "../../components/traceability/etiquetasDeManejo";
-import { trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
+import { estadoDeTrampa, trampasParaAviso } from "../../../lib/traceability/pendienteDeTrampas";
+import { claveDeTituloDeBloque, listPlotBlocks } from "../../../lib/traceability/plotBlocks";
+import { TIPOS_DE_BLOQUE } from "../../../lib/traceability/tiposDeBloque";
+import { claveTriState } from "../../../lib/traceability/claveTriState";
+import { pestanaValida, PESTANAS_DE_PARCELA } from "./pestanas";
 
 export const dynamic = "force-dynamic";
 
@@ -47,13 +46,20 @@ export const dynamic = "force-dynamic";
  * registrado. Todo bloque de Finca Rosina tiene siembras y no área, así que la
  * densidad no se puede calcular, y eso sale con su motivo, no en blanco.
  */
-export default async function PlotDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlotDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pestana?: string }>;
+}) {
   const { id } = await params;
+  const { pestana: pestanaCruda } = await searchParams;
+  const pestana = pestanaValida(pestanaCruda);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
-  const tf = await getTranslations("Fincas");
 
   let detail;
   try {
@@ -67,12 +73,11 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
 
   const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
   const rendimiento = detail.yield;
-  // Spec fincas y parcelas §3.3: una microparcela la crea quien gestiona los atributos de esta parcela.
-  const puedeSubdividir = location.locationType === "plot" && (await puedeGestionarAtributosDeUbicacion(user.userAccountId, id));
-  const [jornadas, { people, selfPersonId }, calicatas] = await Promise.all([
+  const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId),
     listSoilProfilesForLocation(user.userAccountId, id),
+    listPlotBlocks(user.userAccountId, id),
   ]);
   const muestras = await listSamplesForLocation(user.userAccountId, id);
   const fotos = await listLandAssets(user.userAccountId, id);
@@ -92,8 +97,9 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const cifras = cifrasDelLote(activas, estados);
   const ahora = new Date();
+  const hoy = diaDeHoy(ahora, location.timezone);
   const pendiente = pendienteDeLaParcela({
-    hoy: diaDeHoy(ahora, location.timezone),
+    hoy,
     zona: location.timezone,
     areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
@@ -195,6 +201,30 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
         </Link>
       </p>
 
+      <p className="nn-detail-meta">
+        {pendiente.tocaHacer.length + pendiente.faltaUnDato.length === 0
+          ? t("plotDashboardPendingNone")
+          : t("plotDashboardPendingLine", {
+              tocaHacer: pendiente.tocaHacer.length,
+              faltaUnDato: pendiente.faltaUnDato.length,
+            })}
+      </p>
+
+      <nav className="nn-tabs" aria-label={t("plotDashboardTabsLabel")}>
+        {PESTANAS_DE_PARCELA.map((p) => (
+          <Link
+            key={p}
+            href={`/plots/${location.id}?pestana=${p}`}
+            aria-current={p === pestana ? "page" : undefined}
+            className={p === pestana ? "nn-tab nn-tab-activa" : "nn-tab"}
+          >
+            {t(`plotDashboardTab_${p}` as "plotDashboardTab_resumen")}
+          </Link>
+        ))}
+      </nav>
+
+      {pestana === "resumen" ? (
+        <>
       <section className="nn-section">
         <h2>{t("plotDashboardStatusHeading")}</h2>
         <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
@@ -466,23 +496,23 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             ) : null}
           </>
         )}
-        <details>
-          <summary>{t("fieldSessionStartSummary")}</summary>
-          <FieldSessionStartForm
-            locationId={location.id}
-            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
-            selfPersonId={selfPersonId}
-          />
-        </details>
+        <p>
+          <Link href={`/plots/${location.id}/jornada/nueva`} className="nn-button">
+            {t("fieldSessionStartSummary")}
+          </Link>{" "}
+          <Link href="/finca/trampas/ronda" className="nn-button">
+            {t("trapsGoToRoundLink")}
+          </Link>
+        </p>
       </section>
+        </>
+      ) : null}
 
-      {/* M1: el `id` va DENTRO del <details>. El navegador sólo abre un
-          <details> al navegar a un fragmento cuando el destino está dentro de
-          él; en el propio <details> cerrado, el enlace no lo abre. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("plotDashboardConditionsHeading")}</summary>
+      {pestana === "condiciones" ? (
+      <section className="nn-section">
+        <h2>{t("plotDashboardConditionsHeading")}</h2>
 
-        <h3 id="condiciones">{t("groundConditionsHeading")}</h3>
+        <h3>{t("groundConditionsHeading")}</h3>
         <dl className="nn-detail-meta">
           <p>{t("areaLabel")}: {location.areaHectares?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
           <p>{t("spacingLabel")}: {location.plantSpacingMeters?.toString() ?? <span className="nn-muted">{t("notRecorded")}</span>}</p>
@@ -589,51 +619,21 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
           })
         )}
 
-        {/* Sigue disponible aunque ya haya perfiles: volver a describir el
-            mismo bloque dentro de tres años NO es corregir el de hoy. §14 pide
-            repetir el muestreo justamente para ver el cambio. */}
-        <h3>{t("landPhotosHeading")}</h3>
-        <p className="nn-muted">{t("landPhotosIntro")}</p>
-        <FotosDe
-          assets={fotos.filter(
-            (f) => f.soilProfileId == null && f.biocharBatchId == null && f.specimenObservationId == null,
-          )}
-          etiqueta={t}
-        />
-        <LandPhotoUploadForm
-          locationId={location.id}
-          parent={{ kind: "location" }}
-          observers={people}
-          selfPersonId={selfPersonId}
-        />
+        {/* Las fotos generales del terreno viven en la pestaña Fotos (Tarea
+            5b) — sólo las de cada calicata, ligadas a su perfil, se quedan
+            aquí como parte de su descripción. */}
+        <p>
+          <Link href={`/plots/${location.id}/suelo/nuevo`} className="nn-button">
+            {t("soilDescribeHeading")}
+          </Link>
+        </p>
+      </section>
+      ) : null}
 
-        <details>
-          <summary>{t("soilDescribeHeading")}</summary>
-          <SoilProfileForm
-            locationId={location.id}
-            values={{
-              describedAt: null,
-              pitDepthCm: null,
-              rootingDepthCm: null,
-              rootDistribution: null,
-              mottling: null,
-              greyColours: null,
-              rootChannelConcretions: null,
-              sourSmell: null,
-              impedingLayerDepthCm: null,
-              impedingLayerNote: null,
-              provenanceClass: "",
-              dataQuality: null,
-              notes: null,
-            }}
-          />
-        </details>
-      </details>
-
-      {/* M1: igual que #condiciones. `enlaceDelAviso` enlaza a #muestras. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("labSamplesHeading")}</summary>
-        <p className="nn-muted" id="muestras">{t("samplesIntro")}</p>
+      {pestana === "muestras" ? (
+      <section className="nn-section">
+        <h2>{t("labSamplesHeading")}</h2>
+        <p className="nn-muted">{t("samplesIntro")}</p>
 
         <h3>{t("samplesSoilHeading")}</h3>
         {muestras.soil.length === 0 ? (
@@ -666,10 +666,6 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             </article>
           ))
         )}
-        <details>
-          <summary>{t("samplesSoilAdd")}</summary>
-          <SoilSampleForm locationId={location.id} />
-        </details>
 
         <h3>{t("samplesFoliarHeading")}</h3>
         {muestras.foliar.length === 0 ? (
@@ -709,126 +705,154 @@ export default async function PlotDetailPage({ params }: { params: Promise<{ id:
             );
           })
         )}
-        <details>
-          <summary>{t("samplesFoliarAdd")}</summary>
-          <FoliarSampleForm locationId={location.id} />
-        </details>
-      </details>
-
-      {/* Igual que #condiciones y #muestras: el `id` dentro del <details>. */}
-      <details className="nn-section">
-        <summary style={{ fontSize: "1.25rem", fontWeight: 600 }}>{t("trapsTitle")}</summary>
-        <p className="nn-detail-meta" id="trampas">
-          <Link href={`/plots/${location.id}/ajustes#trampas`}>{t("trapsManageLink")}</Link>
+        <p>
+          <Link href={`/plots/${location.id}/muestras/nueva`} className="nn-button">
+            {t("samplesAddButton")}
+          </Link>
         </p>
-        {trampas.length === 0 ? <p className="nn-muted">{t("trapsNone")}</p> : null}
-        {trampas.map((trampa) => (
-          <article key={trampa.id} className="nn-card">
-            <h4>
-              {trampa.trapNumber != null ? t("trapsNumber", { n: trampa.trapNumber }) : t("notRecorded")}
-              {" · "}
-              {trampa.bloque ? t("trapsBlock", { nombre: trampa.bloque }) : t("trapsNoBlock")}
-            </h4>
-            {/* Sin revisión se dice así, no con una lectura de cero (ADR-080).
-                `observedAt` es un día a las 00:00Z, como `sampledAt`. */}
-            {trampa.ultimaRevision ? (
-              <>
-                <p className="nn-detail-meta">
-                  {t("trapsLastCheck", {
-                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                    lectura: trampa.ultimaRevision.brocaLevel
-                      ? t(`trapsLevel_${trampa.ultimaRevision.brocaLevel}`)
-                      : t("notRecorded"),
-                  })}
-                </p>
-                {/* F2 fix-final — lo que se guardaba y nunca se volvía a
-                    mostrar: conteo, otros insectos, mantenimiento y quién
-                    observó. Un `null` se muestra como «sin registrar», nunca
-                    como 0 ni «no» (ADR-080). */}
-                <p className="nn-detail-meta">
-                  {t("trapsCaptureCount", {
-                    n: trampa.ultimaRevision.captureCount != null ? String(trampa.ultimaRevision.captureCount) : t("notRecorded"),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsOtherInsects", {
-                    estado:
-                      trampa.ultimaRevision.otherInsects === true
-                        ? trampa.ultimaRevision.otherInsectsNote
-                          ? `${t("triStateYes")} — ${trampa.ultimaRevision.otherInsectsNote}`
-                          : t("triStateYes")
-                        : estadoTri(trampa.ultimaRevision.otherInsects, t),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsMaintenance", {
-                    limpieza: estadoTri(trampa.ultimaRevision.cleaned, t),
-                    liquido: estadoTri(trampa.ultimaRevision.liquidChanged, t),
-                    atrayente: estadoTri(trampa.ultimaRevision.lureRecharged, t),
-                  })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("trapsObserver", { nombre: trampa.ultimaRevision.observerName ?? t("notRecorded") })}
-                </p>
-                <FotosDe
-                  assets={fotos.filter((f) => f.specimenObservationId === trampa.ultimaRevision?.id)}
-                  etiqueta={t}
-                />
-              </>
-            ) : (
-              <p className="nn-muted">{t("trapsNeverChecked")}</p>
-            )}
-            {/* La revisión es trabajo de campo, así que vive aquí y no en
-                ajustes (ver el docstring de `ajustes/page.tsx`). Sólo en las
-                trampas activas: una retirada no se revisa. */}
-            {trampa.status === "active" ? (
-              <details>
-                <summary>{t("trapCheckTitle")}</summary>
-                <RevisionDeTrampaForm
-                  locationId={location.id}
-                  specimenId={trampa.id}
-                  people={people}
-                  selfPersonId={selfPersonId}
-                />
-              </details>
-            ) : null}
-            {/* F6 fix-final — antes la foto se colgaba SIEMPRE de la última
-                revisión; ahora el operario elige de entre todas las de esta
-                trampa (la última sigue preseleccionada). */}
-            {trampa.status === "active" && trampa.ultimaRevision ? (
-              <details>
-                <summary>
-                  {t("trapCheckPhotosTitle", {
-                    fecha: trampa.ultimaRevision.observedAt.toISOString().slice(0, 10),
-                  })}
-                </summary>
-                <p className="nn-muted">{t("trapCheckPhotosIntro")}</p>
-                <LandPhotoUploadForm
-                  locationId={location.id}
-                  parent={{ kind: "trapCheck", specimenObservationId: trampa.ultimaRevision.id }}
-                  observers={people}
-                  selfPersonId={selfPersonId}
-                  revisionOptions={trampa.revisiones.map((r) => ({
-                    id: r.id,
-                    label: `${r.observedAt.toISOString().slice(0, 10)} · ${
-                      r.brocaLevel ? t(`trapsLevel_${r.brocaLevel}`) : t("notRecorded")
-                    }`,
-                  }))}
-                />
-              </details>
-            ) : null}
-          </article>
-        ))}
-      </details>
+      </section>
+      ) : null}
 
-      {puedeSubdividir ? (
+      {pestana === "fotos" ? (
         <section className="nn-section">
-          <details>
-            <summary>
-              <h2 style={{ display: "inline" }}>{tf("nuevaMicroparcelaTitulo")}</h2>
-            </summary>
-            <NuevaMicroparcelaForm parentLocationId={id} />
-          </details>
+          <h2>{t("landPhotosHeading")}</h2>
+          <p className="nn-muted">{t("landPhotosIntro")}</p>
+          <FotosDe
+            assets={fotos.filter(
+              (f) => f.soilProfileId == null && f.biocharBatchId == null && f.specimenObservationId == null,
+            )}
+            etiqueta={t}
+          />
+          <p>
+            <Link href={`/plots/${location.id}/fotos/nueva`} className="nn-button">
+              {t("addPhotoButton")}
+            </Link>
+          </p>
+
+          {/* Spec §3: las fotos de las revisiones de trampa también se ven
+              aquí, rotuladas — no sólo la galería general de la parcela. */}
+          {fotos.some((f) => f.specimenObservationId != null) ? (
+            <>
+              <h3>{t("landPhotosTrapHeading")}</h3>
+              <FotosDeTrampas assets={fotos.filter((f) => f.specimenObservationId != null)} etiqueta={t} />
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {pestana === "trampas" ? (
+        <section className="nn-section">
+          <h2>{t("trapsTitle")}</h2>
+          <p>
+            <Link href="/finca/trampas/ronda" className="nn-button">{t("trapsGoToRoundLink")}</Link>
+            {" "}
+            <Link href={`/plots/${location.id}/ajustes#trampas`} className="nn-button">
+              {t("trapsManageLink")}
+            </Link>
+          </p>
+
+          {trampas.length === 0 ? (
+            <p className="nn-muted">{t("trapsNone")}</p>
+          ) : (
+            <table className="nn-table">
+              <thead>
+                <tr>
+                  <th>{t("trapsNumber", { n: "" })}</th>
+                  <th>{t("trapsColumnBlock")}</th>
+                  <th>{t("trapsColumnLastCheck")}</th>
+                  <th>{t("trapsColumnLastReading")}</th>
+                  <th>{t("trapsColumnStatus")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trampas.map((trampa) => {
+                  const { estado } = estadoDeTrampa({
+                    hoy,
+                    trampa: trampasParaAviso([trampa])[0]!,
+                    regla: reglaDeTrampas,
+                  });
+                  const claveBloque = trampa.bloque ? claveDeTituloDeBloque(trampa.bloque.blockType) : null;
+                  const revision = trampa.ultimaRevision;
+                  return [
+                    <tr key={trampa.id}>
+                      <td>{trampa.trapNumber ?? t("notRecorded")}</td>
+                      <td>
+                        {trampa.bloque
+                          ? claveBloque
+                            ? t(claveBloque, { name: trampa.bloque.name })
+                            : trampa.bloque.name
+                          : t("trapsNoBlock")}
+                      </td>
+                      <td>
+                        {revision ? revision.observedAt.toISOString().slice(0, 10) : t("trapsNeverChecked")}
+                      </td>
+                      <td>{revision?.brocaLevel ? t(`trapsLevel_${revision.brocaLevel}`) : t("notRecorded")}</td>
+                      <td>{t(`trapEstado_${estado}` as "trapEstado_al_dia")}</td>
+                    </tr>,
+                    // F2 fix-final (PR #413) — lo que la última revisión guardó y
+                    // nunca vuelve a mostrarse en ningún otro sitio: conteo, otros
+                    // insectos, mantenimiento y quién observó. Fix round 1 de la
+                    // revisión de esta tarea: la pestaña se quedó sólo con fecha y
+                    // nivel de lectura, y esto es lo que faltaba. Sin revisión no
+                    // se añade nada (ADR-080: no hay de qué hablar). Las fotos NO
+                    // son parte de este arreglo — las trae la pestaña Fotos.
+                    revision ? (
+                      <tr key={`${trampa.id}-detalle`}>
+                        <td colSpan={5} className="nn-detail-meta">
+                          {revision.captureCount != null
+                            ? t("trapsCaptureCount", { n: String(revision.captureCount) })
+                            : t("trapsCaptureCountNone")}
+                          {" · "}
+                          {t("trapsOtherInsects", {
+                            estado:
+                              revision.otherInsects === true
+                                ? revision.otherInsectsNote
+                                  ? `${t("triStateYes")} — ${revision.otherInsectsNote}`
+                                  : t("triStateYes")
+                                : t(claveTriState(revision.otherInsects)),
+                          })}
+                          {" · "}
+                          {t("trapsMaintenance", {
+                            limpieza: t(claveTriState(revision.cleaned)),
+                            liquido: t(claveTriState(revision.liquidChanged)),
+                            atrayente: t(claveTriState(revision.lureRecharged)),
+                          })}
+                          {" · "}
+                          {t("trapsObserver", { nombre: revision.observerName ?? t("notRecorded") })}
+                        </td>
+                      </tr>
+                    ) : null,
+                  ];
+                })}
+              </tbody>
+            </table>
+          )}
+
+          <h3>{t("blocksTitle")}</h3>
+          {TIPOS_DE_BLOQUE.map((tipo) => {
+            const deEsteTipo = bloquesDeLaParcela.filter((b) => b.blockType === tipo);
+            if (deEsteTipo.length === 0) return null;
+            return (
+              <div key={tipo}>
+                <h4>{t(`blockType_${tipo}` as "blockType_trampa")}</h4>
+                <ul className="nn-detail-meta">
+                  {deEsteTipo.map((b) => (
+                    <li key={b.id}>{b.name}{b.description ? ` — ${b.description}` : ""}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          {bloquesDeLaParcela.some((b) => b.blockType == null) ? (
+            <div>
+              <h4>{t("blockTypeUnassignedHeading")}</h4>
+              <ul className="nn-detail-meta">
+                {bloquesDeLaParcela.filter((b) => b.blockType == null).map((b) => (
+                  <li key={b.id}>{b.name}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </div>
@@ -900,16 +924,6 @@ function ResultadosDeLaboratorio({
  * sección ausente se ven igual, y el Paso 4 pide una foto por perfil — que
  * falte tiene que verse.
  */
-/**
- * F2 fix-final — un booleano de mantenimiento como texto, sin confundir
- * `null` («sin registrar») con `false` («se preguntó y no se hizo»), que es
- * justo la distinción que la migración 20260918100000 dejó de inventar
- * (ADR-080).
- */
-function estadoTri(v: boolean | null, t: (clave: string) => string): string {
-  return v === true ? t("triStateYes") : v === false ? t("triStateNo") : t("notRecorded");
-}
-
 function FotosDe({
   assets,
   etiqueta,
@@ -926,6 +940,48 @@ function FotosDe({
         // acceso restringido.
         // eslint-disable-next-line @next/next/no-img-element
         <img key={a.id} src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Las fotos que cuelgan de una revisión de trampa, cada una con su rótulo —
+ * pestaña Fotos, Tarea 5b (spec §3): «Trampa N · revisión del <día>», para que
+ * se distingan de las fotos generales de la parcela sin abrir cada una.
+ *
+ * `observedAt` es un campo de DÍA (medianoche UTC, como el resto de la
+ * pantalla): se lee con `toISOString().slice(0, 10)`, nunca con la zona del
+ * sitio — igual que `revision.observedAt` en la tabla de trampas.
+ */
+function FotosDeTrampas({
+  assets,
+  etiqueta,
+}: {
+  assets: {
+    id: string;
+    url: string;
+    originalFilename: string | null;
+    specimenObservation: { observedAt: Date; specimen: { trapNumber: number | null } } | null;
+  }[];
+  etiqueta: (clave: string, valores?: Record<string, string | number | Date>) => string;
+}) {
+  if (assets.length === 0) return null;
+  return (
+    <div className="nn-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+      {assets.map((a) => (
+        <figure key={a.id} style={{ margin: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={a.url} alt={a.originalFilename ?? ""} style={{ width: "100%", borderRadius: 4 }} />
+          <figcaption className="nn-detail-meta">
+            {a.specimenObservation
+              ? etiqueta("landPhotosTrapLabel", {
+                  n: a.specimenObservation.specimen.trapNumber ?? etiqueta("notRecorded"),
+                  fecha: a.specimenObservation.observedAt.toISOString().slice(0, 10),
+                })
+              : null}
+          </figcaption>
+        </figure>
       ))}
     </div>
   );
