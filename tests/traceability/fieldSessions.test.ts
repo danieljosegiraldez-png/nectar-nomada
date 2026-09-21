@@ -505,6 +505,57 @@ describe("el operador de un evento se comprueba igual que el de la jornada", () 
   });
 });
 
+describe("Hueco 2: el instante contra el inicio de la jornada se evalúa DESPUÉS de las demás comprobaciones", () => {
+  it("con dos violaciones a la vez, falla por la que ganaba antes de la extracción (operator_not_found)", async () => {
+    const sesion = await startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+
+    // `occurredAt` es ANTERIOR al inicio de la jornada Y el operador no
+    // existe. Antes de la extracción de `requireOpenFieldSessionForEvent`,
+    // `event_before_session_start` se comprobaba DESPUÉS de `operator_not_found`,
+    // así que este último ganaba. La extracción la adelantó en silencio —
+    // ningún test cubría la combinación — y con el orden roto este `expect`
+    // ve `event_before_session_start` en su lugar.
+    await expect(
+      recordFieldEvent(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        eventKindValueId: observacionKindId,
+        occurredAt: new Date("2026-03-12T05:00:00Z"),
+        operatorPersonId: "00000000-0000-0000-0000-000000000000",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow("operator_not_found");
+
+    const eventos = await prisma.fieldEvent.count({ where: { fieldSessionId: sesion.id } });
+    expect(eventos).toBe(0);
+  });
+
+  it("con SÓLO la violación del instante, sigue fallando por ella (control positivo)", async () => {
+    const sesion = await startFieldSession(authorizedUserAccountId, {
+      locationId: plotId,
+      operatorPersonId,
+      startedAt: new Date("2026-03-12T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+
+    await expect(
+      recordFieldEvent(authorizedUserAccountId, {
+        fieldSessionId: sesion.id,
+        eventKindValueId: observacionKindId,
+        occurredAt: new Date("2026-03-12T05:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow("event_before_session_start");
+
+    const eventos = await prisma.fieldEvent.count({ where: { fieldSessionId: sesion.id } });
+    expect(eventos).toBe(0);
+  });
+});
+
 describe("dos escrituras que compiten de verdad", () => {
   /** Abre una jornada lista para competir contra ella. */
   async function abrirJornada(sufijo: string) {

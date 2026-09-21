@@ -402,7 +402,17 @@ export async function registrarIntervencion(
   // evento igual, un camino que `recordFieldEvent` ya rechaza.
   if (input.fieldSessionId) {
     try {
-      await requireOpenFieldSessionForEvent(userAccountId, input.fieldSessionId, input.occurredAt);
+      const sesionAbierta = await requireOpenFieldSessionForEvent(userAccountId, input.fieldSessionId, input.occurredAt);
+      // Hueco 2 (revisión): `requireOpenFieldSessionForEvent` YA NO comprueba
+      // el instante contra el inicio de la jornada — eso vive en cada
+      // llamador, en su propio orden de validaciones (ver la cabecera de esa
+      // función en `fieldSessions.ts`). `recordFieldEvent` la evalúa tras las
+      // suyas; aquí, que es la única otra comprobación de esta rama, va justo
+      // después de abrir/autorizar la jornada, envuelta en el mismo
+      // `catch` que ya traduce `FieldSessionValidationError`.
+      if (input.occurredAt < sesionAbierta.startedAt) {
+        throw new FieldSessionValidationError("event_before_session_start");
+      }
     } catch (error) {
       if (error instanceof LocationAccessError) {
         throw new TraceabilityAccessError(`sin acceso a la jornada: ${error.message}`);
