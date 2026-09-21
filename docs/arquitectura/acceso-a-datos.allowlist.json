@@ -747,6 +747,71 @@
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
+    },
+    {
+      "archivo": "lib/apiary/artefactos.ts",
+      "operacion": "abrirIntervaloEn",
+      "razon": "Ayudante de transacción sin guardia propio. Sus cinco llamadores guardan: ponerAlza, instalarArtefacto, actualizarConfiguracionDeCaja y recordInspection con requireApiaryAccess; instalarNodo con requireHiveNodeAccess. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/apiary/artefactos.ts",
+      "operacion": "cerrarIntervaloEn",
+      "razon": "Ayudante de transacción. Lo llaman retirarArtefacto (requireApiaryAccess y requireHiveNodeAccess) y cerrarAbiertosEn, cuyos llamadores guardan. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/apiary/artefactos.ts",
+      "operacion": "cerrarAbiertosEn",
+      "razon": "Ayudante de transacción. Lo llaman actualizarConfiguracionDeCaja y recordInspection, las dos con requireApiaryAccess. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/apiary/cierreDeCosecha.ts",
+      "operacion": "asentarPesoDeCosechaEn",
+      "razon": "Recibe la tx del llamador. Lo llaman completarCierreDeCosecha (requireApiaryAccess) y recalcularEn, privado de recipientes.ts, al que sólo llegan anotarRecipiente y quitarRecipiente, las dos «guardia directo». Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/apiary/protocoloDeCampo.ts",
+      "operacion": "cargarProtocoloDeCampo",
+      "razon": "SIN autorización propia, y a propósito: operación de consola. Su único llamador es scripts/cargar-protocolo-de-campo.ts (npm run apiary:load-protocol), que elige como actor una cuenta con Platform Admin; ninguna ruta ni acción de app/ la alcanza. Si una pantalla llega a llamarla, necesita guardia antes. Decisión de Daniel, 2026-09-21. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/equipos/bandejas.ts",
+      "operacion": "registrarBandejas",
+      "razon": "Guarda con puedeConfigurarEn (lib/equipos/equipos.ts → puedeConfigurar → can), que el detector no reconoce porque está a dos saltos. Lanza «sin_acceso» antes de leer nada. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/equipos/modosDeInstrumento.ts",
+      "operacion": "declararModoDeInstrumento",
+      "razon": "Guarda con puedeGestionarEquipo (lib/equipos) y lanza «forbidden» antes de leer nada; el detector no lo reconoce como guardia. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/experiences/bookings.ts",
+      "operacion": "createBookingForSession",
+      "razon": "Escribe sólo para el propio principal —la reserva nace con userAccountId del que la hace— y lee sólo sesiones de una Experience public y approved, la misma puerta pública que discover y cart. Autenticación en bookExperienceSessionAction. Era «acotado» por el `userAccountId,` del data, que es dueño y no filtro."
+    },
+    {
+      "archivo": "lib/rbac/service.ts",
+      "operacion": "createAssignment",
+      "razon": "El `userAccountId: input.userAccountId,` es la cuenta que RECIBE el rol, no el principal. Su único llamador, grantRole en lib/rbac/admin.ts, exige requirePermissionAdmin antes. Por eso casaba la regla vieja."
+    },
+    {
+      "archivo": "lib/research/researchActivity.ts",
+      "operacion": "proposeResearchActivity",
+      "razon": "HALLAZGO: escritor SIN autorización. Crea una ResearchActivity sin comprobar permiso alguno; el catálogo sólo tiene research_activity:review y ningún documento dice quién puede proponer. Hoy no tiene llamador (su cabecera la reserva para «una pantalla o guion futuro»): quien la conecte pone el guardia primero, y la regla de quién propone la decide Daniel. Anotada como hallazgo por decisión suya, 2026-09-21. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/sync/devices.ts",
+      "operacion": "registerDevice",
+      "razon": "Sólo autenticación, a propósito: ADR-108 dice que a un aparato lo acota quién lo registró y, evento a evento, el RBAC de la Location de su jornada. La ruta app/api/v1/devices exige resolverPrincipal. `operatorPersonId` sólo se comprueba que exista, y el propio código dice que eso no es un control de permisos. Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/traceability/operations.ts",
+      "operacion": "crearConsumoEnTx",
+      "razon": "Recibe la tx del llamador. Lo llaman recordMaterialConsumptionEntry (requireLotAccess) y registrarRealizada en lib/rutinas (requireRutinaAccess). Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/traceability/visitaAbierta.ts",
+      "operacion": "ligarAVisitaAbierta",
+      "razon": "Recibe la tx del llamador. Lo llaman recordColonyEvent y registrarEventoEnLote (requireColonyEventWriteAccess), recordInspection y registrarConteoDeVarroa (requireApiaryAccess). Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
     }
   ],
   "dependen_del_llamador": [

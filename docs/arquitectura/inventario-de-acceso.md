@@ -29,11 +29,41 @@ esta rama (bodega, rutinas de lugar) encima:
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **418** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **79** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+| **18** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, desde el 2026-09-18 `listarFincas()`, y desde el 2026-09-21 las **13** que el detector daba por acotadas sólo por su sello de actor — las dieciocho miradas a mano y explicadas en el allowlist, **una de ellas como hallazgo** |
+
+> **Un sello de actor no es un filtro (2026-09-21): tras fusionar #464, 41→28 acotado por construcción, 5→18
+> sin guardia visible; el total no cambia, 557.** La regla tenía una segunda forma,
+> `/userAccountId,\s*$/m`, que casaba cualquier línea terminada así — sobre todo
+> `createdBy: userAccountId,` y `actorUserAccountId: userAccountId,` en `recordAuditEvent`.
+> Medido con el script instrumentado: antes de #464, de 42 «acotadas», **14** lo eran sólo por
+> esa forma y **ninguna** filtraba por el principal. `declararCanal` era el control positivo:
+> salía «acotada» sin estar autorizada y #464 le añadió la guardia real. Sobre el árbol ya
+> fusionado, esa operación queda en guardia directo y las otras **13** pasan a sin guardia
+> visible. Leídas una a una:
+>
+> - **Seis ayudantes de transacción** (`abrirIntervaloEn`, `cerrarIntervaloEn`,
+>   `cerrarAbiertosEn`, `asentarPesoDeCosechaEn`, `crearConsumoEnTx`, `ligarAVisitaAbierta`):
+>   todos sus llamadores guardan.
+> - **Dos con guardia que el detector no ve**: `registrarBandejas` (`puedeConfigurarEn`) y
+>   `declararModoDeInstrumento` (`puedeGestionarEquipo`), los dos acaban en `can()`.
+> - **`createAssignment`**: el `userAccountId` es el de quien recibe el rol; `grantRole` exige
+>   `requirePermissionAdmin`.
+> - **Dos escrituras sobre uno mismo**: `createBookingForSession` (sesiones públicas) y
+>   `registerDevice` (ADR-108).
+> - **`cargarProtocoloDeCampo`**: sin guardia, sólo la llama un guion de consola que actúa como
+>   Platform Admin.
+> - **Un hallazgo pendiente**: `proposeResearchActivity`, escritor sin autorización y sin
+>   llamador hoy; quién puede proponer no está escrito en ninguna parte y lo decide Daniel.
+>   `declararCanal`, el segundo hallazgo original, quedó corregido por #464. Las razones están
+>   en el allowlist.
+>
+> Lo guarda `tests/arquitectura/acotado-por-construccion.test.ts`, por nombre, en las dos
+> direcciones: con la regla vieja caen los cinco sellos, y sin la del `where` caen los filtros
+> de verdad.
 
 > **`declararCanal` gana su guardia (2026-09-21): 417→418 guardia directo, 42→41 acotado por
 > construcción, sin operaciones ni archivos nuevos.** Contaba como «acotado por construcción» y
