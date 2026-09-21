@@ -588,6 +588,22 @@
     {
       "archivo": "lib/equipos/documentos.ts",
       "razon": "Manuales, fichas técnicas, certificados y fotos de modelos y equipos (spec de catálogos §3.5). Misma forma que lib/traceability/media.ts: URL firmada y Asset creado sólo al confirmar, con la clave obligada a su prefijo por destino. Subir exige equipment:manage (vía puedeSobreEquipo o requireEntradaDeCatalogoAccess); leer, equipment:view. El AuditEvent va en la misma transacción."
+    },
+    {
+      "archivo": "lib/traceability/estantes.ts",
+      "razon": "Módulo de dominio: estantes de una instalación de secado y sus posiciones (spec §4.1, plan 2a de secado). `crearEstante`/`ampliarEstante` exigen `exigeEditarBeneficioEn` sobre la instalación ANTES de escribir; las posiciones se crean dentro de la misma transacción (ver `reciben_transaccion`)."
+    },
+    {
+      "archivo": "lib/equipos/bandejas.ts",
+      "razon": "Módulo de dominio: tipos de bandeja y bandejas numeradas por finca (spec §4.2, plan 2a de secado). `crearTipoDeBandeja` exige `exigeEditarBeneficioEnOrganizacion`; `registrarBandejas` exige `puedeConfigurarEn` sobre el sitio y rechaza un destino que no sea `site`/`beneficio` (revisión final del plan 2a, A4); leer tipos y bandejas exige ver equipo en algún lugar de la organización (`puedeVerEquiposEnOrganizacion`/`can(view, equipment, …)`)."
+    },
+    {
+      "archivo": "lib/traceability/capacidadDeBandeja.ts",
+      "razon": "Módulo de dominio: el pesaje de bandeja cargada y la capacidad por estado (spec §4.2b, plan 2a de secado). `registrarPesaje` exige `requireLotAccess(manage)` sobre el lote (y sobre el original, si corrige); `capacidadDeTipo`/`pesajesDeTipo` agregan y muestran SÓLO lo que `requireLotAccess(view)` deja ver por pesaje (RULING de la revisión final del plan 2a, A2: antes agregaba también lo oculto)."
+    },
+    {
+      "archivo": "lib/beneficio/vistaDeBandejas.ts",
+      "razon": "Módulo de dominio: el modelo de vista de /beneficio/bandejas (Tarea 5, plan 2a de secado). No autoriza nada por sí mismo: delega en `sitiosParaRegistrar`, `tiposDeBandeja`, `bandejasDeLaFinca`, `capacidadDeTipo` y `puedeGestionarLote`, cada uno ya guardado; sólo organizaciones con al menos un `site` entran (revisión final del plan 2a, A5)."
     }
   ],
   "reciben_transaccion": [
@@ -662,6 +678,10 @@
     {
       "archivo": "lib/apiary/recipientes.ts",
       "razon": "Spec 2026-09-19 §3: `recalcularEn(cosecha, usuario, motivo)(tx)` recibe el `tx` de `anotarRecipiente`/`quitarRecipiente` —con la cosecha ya bloqueada por `bloquearCosechaEn`—, que ya comprobaron `apiary:manage` sobre la caja de la cosecha. Suma los netos, fija el peso por `asentarPesoDeCosechaEn` y audita la cosecha en esa misma transacción."
+    },
+    {
+      "archivo": "lib/traceability/estantes.ts",
+      "razon": "`crearPosiciones(tx, …)` recibe el `tx` de `crearEstante`/`ampliarEstante` para crear las posiciones DENTRO de la transacción que ya autorizó con `exigeEditarBeneficioEn` sobre la instalación; no autoriza nada por sí misma."
     }
   ],
   "operaciones_sin_patron": [
@@ -1104,6 +1124,18 @@
       "archivo": "lib/traceability/intervenciones.ts",
       "operacion": "motivoValidoParaParcela",
       "razon": "No recibe principal a propósito: no autoriza nada, sólo decide si `?motivo=` de la URL es válido para PRECARGAR el formulario de manejo (ronda de arreglos 1, importante #2) — nunca si el registro se permite, eso lo sigue haciendo `validarReferencias` al guardar, con su propio permiso. Su único llamador de producción es `NuevoManejoPage` (`app/plots/[id]/manejo/nuevo/page.tsx`), que ya pasó `getPlotDetail` (`location:manage_attributes`) sobre esta misma parcela antes de llamarla.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/instalaciones.ts",
+      "operacion": "instalacionDe",
+      "razon": "Sube el árbol desde una Location hasta la primera `drying_facility` (spec §4.1). No recibe principal: sólo resuelve un hecho de la jerarquía. Sus llamadores (crear/ampliar un estante, entre otros) ya autorizaron sobre la Location de partida antes de invocarla.",
+      "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/locations.ts",
+      "operacion": "lugaresDeOrganizacion",
+      "razon": "Las Location propias de una organización más sus descendientes que heredan su organizationId (comentario del propio archivo). No recibe principal: es un hecho de la jerarquía. La usan guardias que SÍ autorizan (`exigeEditarBeneficioEnOrganizacion`) y lecturas ya acotadas por su llamador (`puedeVerEquiposEnOrganizacion` en `lib/equipos/bandejas.ts`, que primero prueba `edit_beneficio` y sólo baja el árbol para el resto).",
       "verificado": "2026-09-19"
     }
   ]

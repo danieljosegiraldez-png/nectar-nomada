@@ -11,9 +11,9 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-19
+## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`
 
-**521 operaciones** que tocan la base, en **146 archivos**:
+**535 operaciones** que tocan la base, en **150 archivos**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -22,9 +22,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **393** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **40** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **69** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **404** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **71** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
@@ -40,6 +40,34 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > `getPlotDetail`—, sube la fila de **depende del llamador**: no recibe principal, y las
 > dos llamadoras ya comprobaron acceso (`requireTrapAccess`/`requireLocationAttributeAccess`)
 > antes de invocarla.
+
+`origin/main` (`5afbe3f3`) mide **521 operaciones en 146 archivos**; la diferencia —**+14
+operaciones en +4 archivos** (+11 guardia directo, +2 depende del llamador, +1 acotado por
+construcción)— es lo que trae `secado-2a` por encima. Remedido el 2026-09-21 sobre el árbol
+fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila con la suma.
+
+> **Segunda revisión final del plan 2a de secado (2026-09-19), F4.**
+> `lotesGestionablesDeOrganizacion` (`lib/beneficio/vistaDeBandejas.ts`), nueva
+> función que pagina los lotes candidatos hasta llenar la cuota de gestionables
+> en vez de autorizar sólo los primeros 100 tomados de golpe. 503→504,
+> guardia directo 377→378; mismos 144 archivos (el archivo ya estaba contado).
+
+> **Secado por bandeja, paso 2a, tras la revisión final (ADR-179, 2026-09-19).**
+> Rebasar `secado-2a` sobre este árbol y aplicar la revisión final trae **4
+> archivos nuevos** —`lib/traceability/estantes.ts`, `lib/equipos/bandejas.ts`,
+> `lib/traceability/capacidadDeBandeja.ts`, `lib/beneficio/vistaDeBandejas.ts`—,
+> 140→144. Medido con `node scripts/inventario-de-acceso.mjs --json` contra un
+> checkout limpio de `origin/main` (490/140) y contra el árbol rebasado
+> (503/144): **+14** operaciones nuevas —9 guardia directo y 1 acotado por
+> construcción en los 4 archivos nuevos; `puedeConfigurarEn`/`puedeVerEquipo`
+> en `lib/equipos/equipos.ts` (2, guardia directo, alcanzadas ahora desde el
+> nuevo `bandejas.ts`); `instalacionDe` (`instalaciones.ts`) y
+> `lugaresDeOrganizacion` (`locations.ts`) entran como **depende del llamador**,
+> las dos ya explicadas en el allowlist— y **−1**: `exigeEditarBeneficioEnOrganizacion`
+> deja de contarse aparte; el detector reconoce formas escritas y no
+> propiedades (cabecera del script), y no se investigó más allá de confirmar
+> que la función sigue existiendo y sigue siendo guardia directo por lectura
+> del código. 367→377, 39→40, 65→67; las demás filas no se movieron.
 
 > **Manejo fitosanitario, ronda final de arreglos (2026-09-19, hallazgo 5).** Una
 > operación nueva en `lib/traceability/intervenciones.ts`, ya inventariado:
@@ -93,6 +121,32 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > suben la fila de **guardia directo**, 341→344 tras rebasar sobre catálogos (#435): las tres pasan por `fincaDe`, que llama a
 > `requireApiaryAccess` (manage para anotar, view para leer) antes de tocar nada. 461→464, en 136
 > archivos.
+
+> **Alzas con marca (2026-09-18).** Un archivo nuevo, `lib/apiary/alzas.ts`, con cuatro
+> operaciones —`registrarAlza`, `ponerAlza`, `darDeBajaAlza` y `alzasDelApiario`— y las cuatro
+> suben la fila de **guardia directo**, 310→314: llaman a `requireApiaryAccess` (manage para
+> escribir, view para listar) antes de tocar nada. 430→434, en 131 archivos.
+
+> **Catálogos, rutinas y modelos de equipo (2026-09-19, ADR-172).** Cuatro archivos nuevos
+> —`lib/catalogos/propiedad.ts`, `lib/equipos/modelos.ts`, `lib/equipos/documentos.ts` y
+> `lib/rutinas/rutinas.ts`— y operaciones nuevas en `lib/equipos/equipos.ts`. Las 27 suben la
+> fila de **guardia directo**, 314→341: cada una pasa por `can(` o por un `require…Access`
+> (`requireCatalogoAccess`, `requireEntradaDeCatalogoAccess`, `requireRutinaAccess`) antes de
+> leer o escribir. 434→461, en 135 archivos.
+> **Tarea 5 del plan 2a de secado (la pantalla de bandejas — tipos, registro
+> numerado, pesaje y capacidad, 2026-09-19), con un archivo nuevo.** Partiendo
+> de 442 operaciones en 133 archivos: `lib/beneficio/vistaDeBandejas.ts` es el
+> modelo de vista de `/beneficio/bandejas` — vive en `lib/` y no en la página
+> porque `app/**` no puede importar `lib/db` directamente
+> (`tests/arquitectura/acceso-a-datos.test.ts`). Aporta **una** operación:
+> `vistaDeBandejas` sale **guardia directo** (+1) porque el detector sigue su
+> llamada transitiva a `pesajesDeTipo` (que sí llama a `requireLotAccess`); el
+> resto de lo que autoriza —`tiposDeBandeja`, `bandejasDeLaFinca`,
+> `puedeEditarBeneficioEnOrganizacion`, `puedeConfigurarEn`,
+> `resolveLotVisibility`/`lotWhereFromVisibility`— son las mismas funciones ya
+> inventariadas en sus propios archivos; ésta sólo compone lo que ya filtran.
+> Total: guardia directo 318 + 1 = **319**; 442 + 1 = **443** operaciones en
+> 133 + 1 = **134** archivos.
 
 > **Alzas con marca (2026-09-18).** Un archivo nuevo, `lib/apiary/alzas.ts`, con cuatro
 > operaciones —`registrarAlza`, `ponerAlza`, `darDeBajaAlza` y `alzasDelApiario`— y las cuatro

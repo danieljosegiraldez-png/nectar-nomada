@@ -255,3 +255,28 @@ DRY_CONFIRM_MIN_H,  DRY_CONFIRM_MAX_H      = 12.0, 48.0
 ```
 
 **Regla de mediana en series cortas.** `initial` y `current` se calculan como mediana de hasta `MEDIAN_WINDOW` lecturas **solo si la serie tiene al menos `MIN_READINGS_FOR_MEDIAN` elementos**; de lo contrario los conjuntos se solaparían y `initial` sería igual a `current` por construcción. Con menos lecturas el resultado se usan los valores extremos crudos y el resultado incluye `SHORT_SERIES_NO_MEDIAN` en sus advertencias.
+
+## 11. Secado: instalaciones, estantes y bandejas (TypeScript + Postgres)
+
+Nombres aprobados por Daniel el 2026-09-18 (spec
+`docs/superpowers/specs/2026-09-18-secado-por-bandeja-y-su-receta-design.md`).
+Son de persistencia, no de motor: los motores de §6 no cambian.
+
+| nombre | dónde | qué es |
+|---|---|---|
+| `DryingEnvironment.african_bed_outdoor` | `core` | cama elevada a la intemperie |
+| `DryingEnvironment.floor_tarp` | `core` | en el piso, sobre lona |
+| `LocationType.drying_rack` | `core` | un estante de una instalación de secado |
+| `Location.shadeDescription` | `core.location.shade_description` | qué da la sombra de arriba, en texto libre |
+| `Location.rackSlot` | `core.location.rack_slot` | el puesto dentro del nivel de un estante |
+| `DryingTrayType` | `core.drying_tray_type` | tipo de bandeja de la organización, en cm, con su unidad tecleada |
+| `Equipment.trayTypeId`, `Equipment.trayNumber` | `core.equipment` | tipo y número consecutivo de una bandeja en su finca; se enseña «B-001» |
+| `DryingTrayWeighing` | `traceability.drying_tray_weighing` | pesaje de una bandeja cargada: estado, kg netos y 3–4 profundidades; inmutable, se corrige superseding |
+
+Revisión final del plan 2a (2026-09-19), RULING A2 y hallazgos de la misma revisión:
+
+| nombre | dónde | qué es |
+|---|---|---|
+| `fuente: "sin_acceso"` | `capacidadDeTipo` (`lib/traceability/capacidadDeBandeja.ts`) | hay pesajes de ese estado pero ninguno visible para quien mira: sin número, ni medido ni estimado — un estimado escondería que SÍ hay una medida |
+| `ocultos` | `capacidadDeTipo`, cada línea de estado | cuántos pesajes de ese estado existen y esta cuenta no ve; antes sólo lo traía `pesajesDeTipo` |
+| `dondeOculto` | `bandejasDeLaFinca` (`lib/equipos/bandejas.ts`) | la bandeja está en un lugar cuyo nombre esta cuenta no puede ver (`location:manage_attributes`); distinto de "sin traslado" |

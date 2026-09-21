@@ -1136,13 +1136,20 @@ export async function getManageableContext(userAccountId: string) {
     ).values(),
   ];
 
+  // A4 (revisión final del plan 2a): un estante de secado o una de sus
+  // posiciones no es un destino de traslado — se excluyen de `locations` para
+  // que el formulario de traslado de almacenamiento (`storage/new`) no los
+  // ofrezca. `locations` sigue sin filtrar por TIPO más allá de esto: un
+  // sitio o un beneficio siguen siendo un destino legítimo.
+  const locationsSinPosicionesDeEstante = locations.filter(
+    (l) => l.locationType !== "drying_rack" && !(l.locationType === "drying_bed" && l.rackSlot != null),
+  );
+
   // Harvest/Receiving's own "which plot" dropdown must not offer
   // administrative geography (country/province/district/locality) or
   // processing-stage sites (Beneficio, Cuarto de secado) alongside actual
   // plots — those aren't valid harvest/receiving locations and picking one
   // by mistake is what produced the confusing "no lot access" reports.
-  // `locations` (all types, unfiltered) stays as-is for callers like the
-  // Storage move form, where a warehouse/site is a legitimate destination.
   // Natural order, not the query's string order: `ORDER BY name` puts
   // "Lote 10" before "Lote 2" (ADR-078).
   const plotLocations = sortByName(
@@ -1156,7 +1163,7 @@ export async function getManageableContext(userAccountId: string) {
   // se puede enviar ni dice por qué: el formulario ofrecía lo que el servicio
   // iba a negar. `mode === "none"` es la segunda, y es la única que la página
   // puede explicar.
-  return { projects, locations, plotLocations, organizations, sinAmbito: visibility.mode === "none" };
+  return { projects, locations: locationsSinPosicionesDeEstante, plotLocations, organizations, sinAmbito: visibility.mode === "none" };
 }
 
 /**

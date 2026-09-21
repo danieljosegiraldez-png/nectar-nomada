@@ -92,3 +92,39 @@ describe("una cama de secado es una Location, no una familia de entidades nueva"
     }
   });
 });
+
+describe("la nota de sombra tiene su CHECK en la base, no sólo en el servicio", () => {
+  it("Postgres rechaza más de 300 caracteres escritos directo, sin pasar por validar()", async () => {
+    const sitio = await prisma.location.findFirstOrThrow({ where: { locationType: "site" } });
+    try {
+      await expect(
+        prisma.location.create({
+          data: {
+            name: "TEST Cama nota larga", locationType: "drying_bed",
+            parentLocationId: sitio.id, shadeDescription: "x".repeat(301),
+          },
+        }),
+      ).rejects.toThrow(/location_shade_description_corta/);
+    } finally {
+      // Seguro por construcción: el CHECK debió impedir que la fila naciera.
+      // Si alguna vez dejara pasar esto, esta línea evita que quede en la
+      // base compartida.
+      await prisma.location.deleteMany({ where: { name: "TEST Cama nota larga" } });
+    }
+  });
+
+  it("control positivo: 300 caracteres exactos sí entran", async () => {
+    const sitio = await prisma.location.findFirstOrThrow({ where: { locationType: "site" } });
+    const cama = await prisma.location.create({
+      data: {
+        name: "TEST Cama nota justa", locationType: "drying_bed",
+        parentLocationId: sitio.id, shadeDescription: "x".repeat(300),
+      },
+    });
+    try {
+      expect(cama.shadeDescription).toHaveLength(300);
+    } finally {
+      await prisma.location.delete({ where: { id: cama.id } });
+    }
+  });
+});

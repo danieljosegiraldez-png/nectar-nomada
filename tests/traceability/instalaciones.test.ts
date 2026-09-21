@@ -151,4 +151,21 @@ describe("administración del árbol sitio → instalación → cama", () => {
     expect(await prisma.location.count({ where: { parentLocationId: parent.id } })).toBe(1);
     expect((await prisma.location.findUniqueOrThrow({ where: { id: facility.id } })).dryingEnvironment).toBe("solar_greenhouse");
   });
+
+  it("la sombra va en la instalación y en la cama; la cama sin la suya queda nula, sin copiar", async () => {
+    const parent = await sitio();
+    const actor = await cuenta(parent.id);
+    const patio = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: parent.id, locationType: "drying_facility",
+      dryingEnvironment: "african_bed_outdoor", shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
+    const bajoArbol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed",
+      shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
+    const alSol = await crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed" });
+    const detalle = await detalleInstalacion(actor, patio.id);
+    expect(detalle).toMatchObject({ dryingEnvironment: "african_bed_outdoor", shadePercentage: "pct_30", shadeDescription: "Lona negra a dos metros" });
+    expect(detalle.camas.find((c) => c.id === bajoArbol.id)).toMatchObject({ shadePercentage: "pct_70", shadeDescription: "Bajo el árbol de guaba" });
+    expect(detalle.camas.find((c) => c.id === alSol.id)).toMatchObject({ shadePercentage: null, shadeDescription: null });
+    expect((await actualizarUbicacionDeSecado(actor, { locationId: alSol.id, name: alSol.name, shadePercentage: "pct_20", shadeDescription: null })).shadePercentage).toBe("pct_20");
+    await expect(crearUbicacionDeSecado(actor, { name: nombre(), parentLocationId: patio.id, locationType: "drying_bed", shadeDescription: "x".repeat(301) }))
+      .rejects.toThrow("sombra_invalida");
+  });
 });

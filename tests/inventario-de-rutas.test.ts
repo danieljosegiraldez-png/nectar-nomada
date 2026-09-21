@@ -175,7 +175,11 @@ describe("el inventario del router", () => {
     // (merge-main-3): unión de rutas de ambos lados. Cifra REAL medida con
     // `node scripts/inventario-de-rutas.mjs` sobre el árbol fusionado — ver el informe
     // de este merge (merge-main-3): 105 entradas (94 páginas, 11 handlers).
-    expect(salida).toContain("105 entradas");
+    // 105 (origin/main tras #445 y #450) + /beneficio/bandejas de `secado-2a`, fusionados el
+    // 2026-09-21 (merge de origin/main 5afbe3f3 en la rama, hecho por la sesión coordinadora
+    // porque la de secado se cerró). Medido con `node scripts/inventario-de-rutas.mjs` sobre el
+    // árbol fusionado: 106 entradas (95 páginas, 11 handlers), y cuadra con 105 + 1.
+    expect(salida).toContain("106 entradas");
     expect(codigo, salida).toBe(0);
   });
 

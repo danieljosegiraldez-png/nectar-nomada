@@ -34,6 +34,9 @@ describe("los enlaces del índice del beneficio", () => {
     expect(hrefs(["lot:view"])).not.toContain("/instalaciones");
     expect(hrefs(["lot:view", "location:manage_attributes"])).toContain("/instalaciones");
     expect(hrefs(["lot:view", "equipment:view"])).toContain("/equipos");
+    // Tarea 5 del plan 2a: bandejas cuelga del mismo permiso que equipos.
+    expect(hrefs(["lot:view"])).not.toContain("/beneficio/bandejas");
+    expect(hrefs(["lot:view", "equipment:view"])).toContain("/beneficio/bandejas");
     expect(hrefs(["lot:view", "location:manage_attributes"])).not.toContain("/beneficio/ajustes");
     expect(hrefs(["lot:view", "location:manage_attributes", "location:create_site"])).toContain("/beneficio/ajustes");
   });

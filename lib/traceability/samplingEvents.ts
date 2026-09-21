@@ -194,7 +194,10 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
 export async function opcionesParaInspeccion(userAccountId: string) {
   const [lots, beds] = await Promise.all([
     prisma.lot.findMany({ orderBy: { lotCode: "asc" } }),
-    prisma.location.findMany({ where: { locationType: "drying_bed" }, orderBy: { name: "asc" } }),
+    // La inspección por bandeja es el paso 3 de este plan; hasta entonces,
+    // ofrecer las posiciones de un estante (72, 300…) en un desplegable no
+    // sirve para nada. Sólo las camas sueltas, que no cuelgan de un estante.
+    prisma.location.findMany({ where: { locationType: "drying_bed", parentLocation: { locationType: { not: "drying_rack" } } }, orderBy: { name: "asc" } }),
   ]);
   const lotes = [];
   const camas = [];

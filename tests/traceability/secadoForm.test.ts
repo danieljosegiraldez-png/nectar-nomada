@@ -71,10 +71,25 @@ describe("el envío manual de secado", () => {
       const keys = [
         ...MATERIALES_DE_SECADO.map((v) => `material_${v}`), ...PAPELES_DE_MUESTRA.map((v) => `papel_${v}`),
         ...ZONAS_DE_MUESTRA.map((v) => `zona_${v}`), ...AMBIENTES_DE_SECADO.map((v) => `ambiente_${v}`),
-        ...["sin_acceso", "datos_invalidos", "replica_con_zona", "zona_sin_identificar", "fecha_invalida", "rack_invalido", "tipo_invalido"].map((v) => `error_${v}`),
+        ...["sin_acceso", "datos_invalidos", "replica_con_zona", "zona_sin_identificar", "fecha_invalida", "rack_invalido", "tipo_invalido", "sombra_invalida"].map((v) => `error_${v}`),
       ];
       expect(keys.length).toBeGreaterThan(20);
       for (const key of keys) expect(messages[key], `${lang}.${key}`).toEqual(expect.any(String));
+    }
+  });
+  it("la sombra: grado de la escala de las parcelas y nota libre; vacías quedan nulas", () => {
+    const form = new FormData(); form.set("name", "Cama bajo la guaba");
+    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: null, shadeDescription: null });
+    form.set("shadePercentage", "pct_50"); form.set("shadeDescription", "  Árbol de guaba, copa rala  ");
+    expect(leerUbicacionDeSecado(form)).toMatchObject({ shadePercentage: "pct_50", shadeDescription: "Árbol de guaba, copa rala" });
+    form.set("shadePercentage", "pct_45"); expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
+    form.set("shadePercentage", ""); form.set("shadeDescription", "x".repeat(301));
+    expect(() => leerUbicacionDeSecado(form)).toThrow("sombra_invalida");
+  });
+  it("acepta los dos ambientes nuevos", () => {
+    const form = new FormData(); form.set("name", "Patio");
+    for (const a of ["african_bed_outdoor", "floor_tarp"]) {
+      form.set("dryingEnvironment", a); expect(leerUbicacionDeSecado(form).dryingEnvironment).toBe(a);
     }
   });
 });

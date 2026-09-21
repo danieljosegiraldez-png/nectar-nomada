@@ -915,8 +915,15 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
  */
 export async function sitiosParaRegistrar(userAccountId: string) {
   const sitios = await prisma.location.findMany({
-    where: { organizationId: { not: null } },
-    select: { id: true, name: true, organizationId: true, organization: { select: { name: true } } },
+    where: {
+      organizationId: { not: null },
+      // A4 (revisión final del plan 2a): un estante de secado o una de sus
+      // posiciones no es un lugar donde se REGISTRA equipo — es donde algo ya
+      // registrado se coloca. Sin este filtro el selector de "Sitio" ofrecía
+      // estantes y posiciones junto a fincas y beneficios de verdad.
+      NOT: [{ locationType: "drying_rack" }, { AND: [{ locationType: "drying_bed" }, { rackSlot: { not: null } }] }],
+    },
+    select: { id: true, name: true, organizationId: true, locationType: true, organization: { select: { name: true } } },
     orderBy: { name: "asc" },
   });
   const permitidos = [];
@@ -929,6 +936,7 @@ export async function sitiosParaRegistrar(userAccountId: string) {
         name: s.name,
         organizationId: s.organizationId,
         organizationName: s.organization?.name ?? null,
+        locationType: s.locationType,
       });
     }
   }
@@ -944,6 +952,21 @@ export async function puedeGestionarEquipo(userAccountId: string, equipmentId: s
   if (!equipo) return false;
   const objetivo = await objetivoDeEquipo(equipo);
   return puedeConfigurar(userAccountId, objetivo, equipo.classification);
+}
+
+/** El mismo `puedeConfigurar` de `registrarEquipo`, sobre un lugar: registrar bandejas en un sitio lo pide. */
+export async function puedeConfigurarEn(userAccountId: string, locationId: string): Promise<boolean> {
+  const lugar = await prisma.location.findUnique({ where: { id: locationId }, select: { classification: true } });
+  if (!lugar) return false;
+  return puedeConfigurar(userAccountId, { scopeType: "location", scopeRefId: locationId }, lugar.classification);
+}
+
+/** ¿Puede esta persona VER este equipo? Misma resolución de objetivo que el resto del archivo. */
+export async function puedeVerEquipo(
+  userAccountId: string,
+  equipo: { id: string; projectId: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  return can(userAccountId, "view", "equipment", await objetivoDeEquipo(equipo), equipo.classification);
 }
 
 /** Instrumentos visibles y modos vigentes; las escalas conservan el label del aparato. */

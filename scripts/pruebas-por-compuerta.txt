@@ -26,6 +26,8 @@ tests/traceability/editarBeneficio.test.ts
 tests/traceability/concesiones.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
 tests/notificaciones/canales.test.ts
+tests/equipos/bandejas.test.ts
+tests/traceability/capacidadDeBandeja.test.ts
 tests/equipos/equipos.test.ts
 tests/equipos/datosDeEquipo.test.ts
 tests/equipos/marcasDeRevision.test.ts
@@ -177,6 +179,7 @@ tests/traceability/eventoDeMuestreo.test.ts
 tests/traceability/instalaciones.test.ts
 tests/traceability/intervenciones.test.ts
 tests/traceability/carenciaEnLaCosecha.test.ts
+tests/traceability/estantes.test.ts
 tests/traceability/cerezaComoDato.test.ts
 tests/traceability/selection.test.ts
 tests/traceability/soilProfiles.test.ts
@@ -185,6 +188,9 @@ tests/traceability/storage.test.ts
 tests/traceability/topologiaDeSecado.test.ts
 tests/traceability/v1-vocabulary.test.ts
 tests/traceability/ubicacionesEmparentadas.test.ts
+tests/beneficio/vistaDeBandejas.test.ts
+tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
+tests/traceability/carreraDelArbolDeEstante.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #

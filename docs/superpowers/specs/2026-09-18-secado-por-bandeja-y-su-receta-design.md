@@ -270,7 +270,7 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
 
 ## 7. Abierto
 
-- **Los nombres de la tercera ronda**, pendientes del visto bueno de Daniel porque `03_public_api.md` no declara ninguno de secado:
+- **Los nombres de la tercera ronda: aprobados por Daniel el 2026-09-18** y declarados en `docs/beneficio/03_public_api.md` §11, cada uno en el commit que lo introdujo (`00_reglas_del_modulo` §7.6):
   - `drying_rack`;
   - `rackSlot`;
   - `DryingTrayType`;
@@ -278,7 +278,7 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
   - `DryingTrayWeighing`;
   - `shadeDescription`.
 
-  Los de la segunda ronda (`african_bed_outdoor`, `floor_tarp`, `DryingRunTray`) ya están aprobados. **`rackRow` queda retirado** (§4.1). `00_reglas_del_modulo` §7.6 exige declararlos en `03_public_api.md` **en el mismo commit** que los introduce.
+  Los de la segunda ronda (`african_bed_outdoor`, `floor_tarp`, `DryingRunTray`) ya estaban aprobados. **`rackRow` queda retirado** (§4.1). Construidos en el paso 2a: ADR-179.
 - **Cómo se marca que una bandeja llegó a meta.** Daniel decidió que el secado termina bandeja a bandeja (§2). Lo que **no** decidió, y el plan del paso 2 no lo supone: si bajar una bandeja pide sólo cerrar su `DryingRunTray.hasta` o también dejar escrito con qué humedad bajó. Es una pregunta de modelo, no de dominio: el plan la resuelve con `13_drying_moisture.md` (`TARGET_REACHED` exige humedad **y** actividad de agua) y la enseña antes de construir.
 
 Cerradas el 2026-09-18 y movidas a §2: cómo termina el secado de un lote en bandejas, «una bandeja por posición» (era un supuesto y ahora es decisión) y los catálogos de cielo y ventilación.

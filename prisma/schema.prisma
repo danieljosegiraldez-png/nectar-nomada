@@ -147,6 +147,7 @@ model Person {
   @@schema("core")
   consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
   plotInterventionsOperadas PlotIntervention[] @relation("PlotInterventionOperator")
+  dryingTrayWeighingsOperated DryingTrayWeighing[] @relation("DryingTrayWeighingOperator")
 }
 
 enum UserAccountStatus {
@@ -181,6 +182,7 @@ model UserAccount {
   createdAccounts                   UserAccount[]                @relation("UserAccountCreatedBy")
   personsCreated                    Person[]                     @relation("PersonCreatedBy")
   roleProfilesCreated               RoleProfile[]                @relation("RoleProfileCreatedBy")
+  dryingTrayTypesCreated             DryingTrayType[]             @relation("DryingTrayTypeCreatedBy")
   scopesCreated                     Scope[]                      @relation("ScopeCreatedBy")
   lotRoastProfilesChosen            LotRoastProfile[]            @relation("LotRoastProfileChosenBy")
   submissionKeys                    SubmissionKey[]
@@ -322,6 +324,7 @@ model UserAccount {
   orderItemLotsDispatched OrderItemLot[] @relation("OrderItemLotDispatchedBy")
   /// ADR-170
   storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
+  dryingTrayWeighingsCreated DryingTrayWeighing[] @relation("DryingTrayWeighingCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -716,6 +719,9 @@ enum LocationType {
   /// `apiary_site`: una Location con su tipo y su padre, NO una familia de
   /// entidades nueva.
   drying_facility
+  /// Un estante dentro de una instalación de secado: «Estante 1» del cuarto
+  /// oscuro. Sus posiciones (`drying_bed` con nivel y puesto) se generan al crearlo.
+  drying_rack
   drying_bed
 
   @@schema("core")
@@ -739,6 +745,10 @@ enum DryingEnvironment {
   open_patio
   covered_patio
   mechanical_dryer
+  /// Cama elevada afuera, a la intemperie. Sin estante.
+  african_bed_outdoor
+  /// En el piso, sobre lona. Sin estante.
+  floor_tarp
 
   @@schema("core")
 }
@@ -855,6 +865,14 @@ model Location {
   /// Sólo para `drying_bed`: el nivel del rack en un cuarto de varios niveles.
   /// Anulable, porque una cama de patio no está en ningún rack.
   rackLevel         Int?               @map("rack_level")
+  /// Sólo para una posición de estante (`drying_bed` hija de `drying_rack`): el
+  /// PUESTO dentro del nivel. «Estante 2 · Nivel 4 · Puesto 3» (Daniel, 2026-09-18).
+  rackSlot          Int?               @map("rack_slot")
+  /// Instalación o cama de secado: QUÉ da la sombra de arriba —árbol, enredadera,
+  /// lona, techo con cierta opacidad—, en texto libre al lado de `shadePercentage`,
+  /// nunca en su lugar. Una cama sin la suya se ENSEÑA con la de su instalación,
+  /// marcada como tal; no se copia aquí.
+  shadeDescription  String?            @map("shade_description")
   // P1 §3 — F1 added sun, shade, altitude range, slope, soil and spacing but
   // no area, so planted area, yield per hectare and cultivar distribution by
   // area could not be computed at all. Deliberately NOT derived from a
@@ -1021,6 +1039,7 @@ model Organization {
   locations                        Location[]
   // P2 (ADR-098) — recipes belong to the farm that runs them.
   processRecipes                   ProcessRecipe[]
+  dryingTrayTypes                  DryingTrayType[]          @relation("DryingTrayTypeOwner")
   projectsOwned                    Project[]                @relation("ProjectOrganization")
   projectsAsClient                 Project[]                @relation("ProjectClientOrganization")
   samples                          Sample[]
@@ -3179,6 +3198,7 @@ model Lot {
   storeAllocations StoreAllocation[] @relation("StoreAllocationLot")
   /// ADR-169
   orderItemLots OrderItemLot[] @relation("OrderItemLotLot")
+  dryingTrayWeighings DryingTrayWeighing[] @relation("DryingTrayWeighingLot")
 }
 
 /// ADR-161 -- los actos de procesar miel. Vocabulario fijo con «otro, ¿cual?» (Daniel).
@@ -5286,6 +5306,66 @@ model CareRoutineEvent {
   @@schema("core")
 }
 
+/// Un tipo de bandeja de secado de la organización: «4×2 pies» (spec §4.2). Se
+/// guarda en cm (00_conventions §1) y se conserva la unidad tecleada. El área NO
+/// se guarda: se deriva de ancho × largo, que es lo medido.
+model DryingTrayType {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation("DryingTrayTypeOwner", fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  widthCm        Decimal      @map("width_cm") @db.Decimal(6, 1)
+  lengthCm       Decimal      @map("length_cm") @db.Decimal(6, 1)
+  entryUnit      String       @map("entry_unit")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  createdBy      String?      @map("created_by") @db.Uuid
+  creator        UserAccount? @relation("DryingTrayTypeCreatedBy", fields: [createdBy], references: [id])
+
+  trays Equipment[] @relation("EquipmentTrayType")
+  weighings DryingTrayWeighing[]
+
+  @@unique([organizationId, name], map: "drying_tray_type_nombre_unico")
+  @@map("drying_tray_type")
+  @@schema("core")
+}
+
+/// El pesaje de una bandeja cargada (spec §4.2b; protocolo §7 del plan de secado
+/// 2026-27): de aquí sale cuánto café cabe por tipo de bandeja y estado. Es
+/// measured_fact y no se edita: una corrección es un registro nuevo que supersede.
+model DryingTrayWeighing {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trayTypeId       String          @map("tray_type_id") @db.Uuid
+  trayType         DryingTrayType  @relation(fields: [trayTypeId], references: [id], onDelete: Restrict)
+  lotId            String          @map("lot_id") @db.Uuid
+  lot              Lot             @relation("DryingTrayWeighingLot", fields: [lotId], references: [id], onDelete: Restrict)
+  materialState    MaterialState   @map("material_state")
+  netKg            Decimal         @map("net_kg") @db.Decimal(10, 3)
+  depthPointsCm    Decimal[]       @map("depth_points_cm") @db.Decimal(5, 1)
+  occurredAt       DateTime        @map("occurred_at")
+  // `createdAt`, no `recordedAt`: ver el comentario de la migración
+  // 20260918191500_pesaje_de_bandeja — es el reloj del SERVIDOR al insertar
+  // (como DryingTrayType.createdAt), nunca el del dispositivo del operador, así
+  // que no dispara ni satisface la regla de columnas de sincronización.
+  createdAt        DateTime        @default(now()) @map("created_at")
+  operatorPersonId String?         @map("operator_person_id") @db.Uuid
+  operator         Person?         @relation("DryingTrayWeighingOperator", fields: [operatorPersonId], references: [id], onDelete: Restrict)
+  provenanceClass  ProvenanceClass @map("provenance_class")
+  supersedesId     String?         @map("supersedes_id") @db.Uuid
+  supersedes       DryingTrayWeighing?  @relation("DryingTrayWeighingSupersedes", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy     DryingTrayWeighing[] @relation("DryingTrayWeighingSupersedes")
+  supersededAt     DateTime?       @map("superseded_at")
+  correctionReason String?         @map("correction_reason")
+  createdBy        String?         @map("created_by") @db.Uuid
+  creator          UserAccount?    @relation("DryingTrayWeighingCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  // Los dos `onDelete: Restrict`, explícitos: sin ellos Prisma supone SetNull en
+  // una relación opcional y el esquema diverge de la migración
+  // (tests/derivaDeMigraciones.test.ts lo caza; segunda pasada de Codex).
+
+  @@index([trayTypeId])
+  @@map("drying_tray_weighing")
+  @@schema("traceability")
+}
+
 model Equipment {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -5293,6 +5373,12 @@ model Equipment {
   /// «Refractómetro A», «Barrica 12».
   name String
   kind EquipmentKind
+
+  /// Sólo en una bandeja de secado (kind vessel): su tipo y su número consecutivo
+  /// en la finca, que se enseña como B-001. Los dos juntos o ninguno (CHECK).
+  trayTypeId String?         @map("tray_type_id") @db.Uuid
+  trayType   DryingTrayType? @relation("EquipmentTrayType", fields: [trayTypeId], references: [id], onDelete: Restrict)
+  trayNumber Int?            @map("tray_number")
 
   /// Sólo para `kind = vessel`. La migración lo obliga con un CHECK, porque una
   /// restricción que vive en TypeScript no existe para un importador ni para SQL

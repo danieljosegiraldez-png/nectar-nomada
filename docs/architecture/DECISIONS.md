@@ -11823,6 +11823,59 @@ se pudo medir; si aparece, se ve como un saldo mayor que el peso.
 
 **Lo que NO entra.** La cera y los operculos (spec §4): su rebanada.
 
+## ADR-179 -- El secado por bandeja, paso 2a: estantes con sus posiciones, bandejas numeradas por finca y la capacidad que se mide
+
+**Fecha:** 2026-09-19 · **Estado:** aceptado · **Spec:** `docs/superpowers/specs/2026-09-18-secado-por-bandeja-y-su-receta-design.md` §4.1–§4.2b · **Plan:** `docs/superpowers/plans/2026-09-18-secado-2a-estantes-y-bandejas.md`
+
+**Numeración.** Renumerado dos veces al rebasar sobre un `origin/main` que avanzaba: nació como
+ADR-176; al fusionarse «Los marcos negros se cuentan en la inspección» con ese número, pasó a 177;
+al rebasar de nuevo, `origin/main` ya había tomado 177 («La miel se pesa por recipiente») y 178
+(«La cera de la miel es un subproducto»), así que el siguiente libre medido el 2026-09-19 es 179.
+
+**Contexto.** El plan de secado de Las Nubes Cerro Azul 2026-27 seca en bandejas sobre estantes (el cuarto oscuro I son dos estantes de 6 × 6) y pide saber cuánto café cabe en cada bandeja por estado del café. Hasta ahora una instalación sólo tenía camas sueltas, una bandeja no tenía tipo ni número, y la capacidad no existía. Los nombres nuevos los aprobó Daniel el 2026-09-18 y están declarados en `docs/beneficio/03_public_api.md` §11.
+
+**1. El árbol instalación → estante → posición, todo `Location`.** El estante es un `LocationType` nuevo, `drying_rack`, hijo de una `drying_facility`; su posición es una `drying_bed` hija del estante con `rack_level` (ya existía) y `rack_slot` (nuevo), los dos `> 0`. Una cama africana o un piso con lona (`DryingEnvironment` gana `african_bed_outdoor` y `floor_tarp`) sigue siendo una cama suelta bajo la instalación, sin nivel ni puesto.
+- **Las posiciones se generan** al crear el estante (niveles × puestos, `crearEstante`), y **ampliar** crea sólo las que faltan (`ampliarEstante`); reducir se rechaza y nada se borra: una bandeja que estuvo en una posición tiene que poder seguir diciendo dónde estuvo.
+- **En la base**: el índice único parcial `location_posicion_unica` (padre, nivel, puesto) y el disparador `location_arbol_de_estante` (`core.exigir_arbol_de_estante`), porque mira el tipo de OTRA fila: un estante cuelga sólo de una instalación; una posición de estante lleva nivel y puesto; el puesto sólo existe en una posición de estante; y, del lado del padre, una instalación con estantes o un estante con posiciones no cambian de tipo. El disparador mira cada fila de un `createMany`.
+- **La sombra** va en la instalación y en la cama o posición: `shade_percentage` (ya existía) y `shade_description` (nueva, ≤ 300 caracteres por `CHECK`). Una cama sin sombra propia se enseña con la de su instalación y marcada como heredada; no se copia.
+- **Visibilidad por estante, no por instalación**: `detalleInstalacion` evalúa `can()` sobre cada estante, así que un estante `confidential` bajo una instalación `internal` no sale a un Farm Operator, y el `internal` de al lado sí.
+- **Ruling del controlador (Tarea 2):** el tamaño del estante (niveles, puestos) se calcula con TODAS sus posiciones, también las que el visor no puede abrir: es un atributo del estante, que sí ve, y ampliar necesita el tamaño real. Coste si es erróneo: un visor sabe que existe un puesto que no puede abrir (nunca su nombre, sombra ni ocupante).
+
+**2. `rackRow` queda retirado.** La versión anterior de la spec traía una «fila» del cuarto; con el plan de secado delante, la fila **es** el estante («2 filas» son dos estantes). Guardar `rackRow` además de `rackSlot` diría lo mismo dos veces y podría contradecirse.
+
+**3. Tipos de bandeja en cm, con la unidad tecleada.** `DryingTrayType` (`core.drying_tray_type`) es de la organización: nombre único en ella, `width_cm`/`length_cm` `DECIMAL(6,1)` `> 0`, y `entry_unit` (`ft` o `cm`) que conserva cómo se tecleó (`00_conventions` §1: unidad canónica guardada, la tecleada se conserva). **El área no se guarda**: se deriva de ancho × largo (`areaM2`; 4×2 pies = 0,743 m²). Un tipo con bandejas o con pesajes no cambia de organización (`drying_tray_type_quieto`).
+
+**4. El número por organización y el bloqueo que lo decide.** La bandeja sigue siendo un `Equipment` `vessel`; gana `tray_type_id` y `tray_number`, los dos juntos y sólo en recipientes (`CHECK`), con el tipo de la misma organización (disparador `equipment_tipo_de_bandeja_propio`). El número es **consecutivo por organización** (una finca = una organización; hoy la única es Finca Rosina) y se enseña B-001. `registrarBandejas` registra en tanda (hasta `MAX_TANDA`), cada una con su alta como primer `EquipmentTransfer` al sitio y su `AuditEvent`, y decide el número **dentro de la transacción, con `SELECT … FOR UPDATE` sobre la fila de la organización**: dos tandas a la vez esperan su turno en vez de leer el mismo máximo. El índice único parcial `equipment_numero_de_bandeja_unico` (organización, número) es la red si algún camino se salta el bloqueo.
+
+**5. La capacidad es derivada, con tres fuentes, y no inventa mucílago ni lavado.** `capacidadDeTipo` devuelve, por estado (`CHERRY`, `MUCILAGE_HONEY`, `PARCHMENT` del `MaterialState` que ya existía):
+- **medido** (`DERIVADO`): área × profundidad media × densidad media de los pesajes **vigentes** (`superseded_at IS NULL`) de ese estado, con cuántos pesajes y sus ids; `pesajesDeTipo` es el camino de vuelta a cada lectura (`21_rubrica_veracidad` §2.6);
+- **estimado** (`SUPUESTO`): sólo cereza, 400 kg/m³ a 2,8 cm, del plan de secado §6, etiquetado «estimado, sin medir» con su fuente; es configuración `[PROVISIONAL]` en `lib/beneficio/capacidadSupuesta.ts`, no un literal;
+- **sin medir**: mucílago y lavado sin pesajes salen sin número. La fuente no da densidad para ellos y no se inventa una (`21_rubrica_veracidad` §2.1).
+
+**6. El pesaje es inmutable.** `DryingTrayWeighing` (`traceability.drying_tray_weighing`) es `measured_fact` (`CHECK`): tipo, **lote obligatorio**, estado, kg netos (3 decimales), 3 o 4 profundidades en cm, cuándo y quién. No se edita (`drying_tray_weighing_inmutable`: sólo se permite marcarlo superseded una vez) ni se borra (`drying_tray_weighing_no_se_borra`); una corrección es un registro nuevo que lo supersede, con razón obligatoria. Los `CHECK` descartan el nulo de forma explícita (un `CHECK` que da `NULL` pasa). Tipo y lote de la misma organización (`drying_tray_weighing_una_organizacion`), y un lote con pesajes no cambia de organización.
+- **Permisos**: pesa quien gestiona el lote (`requireLotAccess("manage")`), y corregir exige además gestionar el lote del pesaje ORIGINAL. `pesajesDeTipo` sólo enseña una lectura —lote, peso, profundidades— a quien puede ver su lote; las demás se **cuentan** (`ocultos`) para que la media diga de cuántas lecturas sale.
+- **La puerta de limpieza de pruebas** del disparador de borrado exige a la vez el ajuste de sesión `nn.limpieza_de_pruebas` y una base cuyo nombre case con `^(nectar_test|nectar_ci|nn_flip_)`; un guardia de fuente comprueba que la aplicación no pone ese ajuste. Es la misma debilidad de todo el proyecto (los roles de la base no revocan `DELETE`), dicha en voz alta.
+
+**7. La inspección no ofrece posiciones hasta el paso 3.** `opcionesParaInspeccion` lista sólo las camas que no cuelgan de un estante: la inspección por bandeja es el paso 3 del plan, y un desplegable con 72 posiciones no sirve hasta entonces.
+
+**Desviaciones del plan, con su ruling:**
+- **`recordedAt` → `createdAt`** en el pesaje: el guardia `columnas-de-sincronizacion` reserva `recorded_at` para el reloj del dispositivo; aquí la columna es la hora del servidor al insertar, como en `drying_tray_type`. Coste si es erróneo: renombrar una columna en otra migración.
+- **El lote es obligatorio** en un pesaje (la primera redacción de la spec decía «si se pesó con uno»): el lote es lo que da el permiso y el camino de vuelta de la cifra; sin él no hay a quién preguntar.
+- **`/beneficio/bandejas` lista también las organizaciones donde el visor tiene `edit_beneficio`**, no sólo donde ya ve un tipo o una bandeja: si no, nadie podría crear el primer tipo. Coste: un gerente ve una sección vacía para una organización sin bandejas.
+- **El tamaño del estante sale de todas sus posiciones** (ver 1).
+
+**Lo que NO entra.** Colocar una bandeja en una posición y el conflicto de dos a la vez (§4.3), la humedad y los volteos por bandeja, el ambiente y la receta por tramos (pasos siguientes); el QR de la bandeja (plan propio).
+
+**Correcciones de la revisión final (2026-09-19, `final-findings.md`; el informe completo de Codex y de Opus no está versionado — vive en `.superpowers/sdd/2026-09-18-secado-2a-estantes-y-bandejas/` de esa rama, fuera del repositorio publicado; este párrafo es su resumen autoritativo).** Migración `20260918191800_secado_2a_correcciones`, sin editar las ya aplicadas:
+
+- **RULING A2 — la capacidad se agrega SÓLO de pesajes visibles.** Con una única lectura oculta, "medido" daba exactamente su `netKg` — una fuga disfrazada de agregado. Nueva fuente `sin_acceso` (visible=0, oculto>0): sin número, con el conteo de lo oculto; el estimado sólo aplica cuando NO hay pesajes en absoluto (ni visibles ni ocultos).
+- **A1/A3 — dos fugas de lectura.** El selector de lotes del pesaje enseñaba id y código de lotes que la cuenta no gestiona (ahora filtrado con `puedeGestionarLote`); el nombre del lugar de una bandeja lo autorizaba el permiso del EQUIPO, no el del LUGAR (ahora `location:manage_attributes` sobre el lugar, con el mismo traslado resuelto una sola vez para autorizar y mostrar).
+- **A4 — una bandeja se registra sólo "al sitio" o "en el beneficio".** Nunca en una posición de estante; `registrarBandejas`, `sitiosParaRegistrar`, el traslado de almacenamiento y el picker de ámbitos de admin dejan de ofrecerlas.
+- **A5.** `/beneficio/bandejas` sólo enseña organizaciones con al menos un `site`.
+- **A7 — un redondeo silencioso de un HECHO medido no se detectaba.** `registrarPesaje` ahora rechaza profundidades y kg netos con más decimales de los que sus columnas `DECIMAL(5,1)`/`DECIMAL(10,3)` guardan, y sus rangos, antes de llegar a la base.
+- **A8 — la `UNIQUE` sobre `supersedes_id` que este ADR daba por diferida SÍ se añadió**, junto con: los disparadores que leen el tipo y el lote antes de insertar un pesaje bloquean esas filas con `FOR SHARE` (mismo orden siempre: tipo, luego lote) contra una carrera de cambio de organización concurrente sin confirmar; la corrección debe ser del mismo tipo de bandeja que el original; y convertir un lugar en estante se rechaza si ya tiene camas sin nivel ni puesto.
+- **RULING deliberado: NO se añade una restricción diferida que exija sustituto a todo `superseded_at`.** El único escritor (`registrarPesaje`) hace las dos escrituras en una transacción y no existe ningún importador; el costo si esto resultara equivocado es que un SQL fuera de banda podría retirar una lectura sin dejar su sustituto.
+
 ## ADR-181 — Los umbrales del beneficio salen de la receta; el paquete v3.1 queda como plantilla
 
 **Fecha:** 2026-09-19 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta) ·
@@ -11905,4 +11958,3 @@ motores, que es trabajo aparte con su diseño. Las guías de Varroa y Meliponini
 
 **Consecuencias.** Los normativos `00` §8, `10`, `11`, `12` §5 y `13` quedan anotados donde contradicen
 esto: **manda Daniel**. `02` §3 se anota con su decisión del 2026-09-14 (verificación por contraste
-contra patrón), que `CLAUDE.md` daba por anotada y no lo estaba.
