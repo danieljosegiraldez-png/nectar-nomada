@@ -294,6 +294,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/fincaLogo.ts",
+      "razon": "Módulo de dominio: el logotipo de una finca (2026-09-21). Pedir la subida, finalizarla y abrir su pantalla exigen `requireLocationAttributeAccess` sobre esa finca antes de firmar o escribir."
+    },
+    {
       "archivo": "lib/traceability/operations.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -1288,6 +1292,12 @@
       "operacion": "lugarParaRutina",
       "razon": "No recibe principal a propósito (spec 2026-09-19 §4.2, ruling de Tarea 4). **Corregido en la ola de arreglos de revisión final (2026-09-19, Hallazgo 2):** ya NO se lee antes del permiso — `requireRutinaAccess` llama primero a `puedeSobreLugar`, que devuelve `false` para un id que no existe, y sólo si eso pasa entra aquí a decidir el tipo. Un llamador sin permiso recibe hoy `forbidden` idéntico para un uuid inexistente, un lugar que no admite rutinas y un lugar que sí las admite pero no puede ver; sólo uno YA AUTORIZADO llega a distinguir `lugar_sin_rutinas`/`rutina_en_el_estante`. Sigue expuesta por una vía distinta, sin gatear: `lugarConRutinasOVacio` (que envuelve esta función) la usa `RutinasDeLugar.tsx` en el mismo `Promise.all` que su propio `puedeSobreLugar(…, \"view\")` —no DETRÁS de él—, así que la lectura del lugar ocurre igual aunque el resultado sólo se pinte si `puedeVer` también sale cierto; un id inexistente ahí sigue lanzando `lugar_no_encontrado` sin capturar (aparte, no arreglado en esta ola).",
       "verificado": "2026-09-19"
+    },
+    {
+      "archivo": "lib/traceability/fincaLogo.ts",
+      "operacion": "urlDelLogotipo",
+      "razon": "Firma la URL de lectura del logotipo a partir de un `logoAssetId` que el llamador ya obtuvo de `listarFincas`, que parte de `getManageableContext`: sólo llega el logotipo de fincas que quien mira ya ve. Mismo molde que `listLandAssets`.",
+      "verificado": "2026-09-21"
     }
   ]
 }

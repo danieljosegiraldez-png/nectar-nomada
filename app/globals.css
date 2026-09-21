@@ -1078,3 +1078,48 @@ a.nn-card-link:active {
   border-radius: var(--nn-radius);
   border: 1px solid var(--nn-border);
 }
+
+/* Botones de finca (2026-09-21): un botón por finca arriba de /finca. */
+.nn-fincas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.nn-fincas form {
+  margin: 0;
+}
+
+.nn-finca-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--nn-tap);
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--nn-border-strong);
+  border-radius: var(--nn-radius);
+  background: var(--nn-surface);
+  color: var(--nn-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.nn-finca-boton--elegida {
+  border-color: var(--nn-accent);
+  background: var(--nn-accent-bg);
+  font-weight: 600;
+}
+
+.nn-finca-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.nn-detail-meta .nn-finca-logo {
+  margin-right: -0.5rem;
+}
