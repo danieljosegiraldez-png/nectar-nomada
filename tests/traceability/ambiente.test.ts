@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { AmbienteError, ambienteDeInstalacion, puedeRegistrarAmbienteEn, registrarLecturaDeAmbiente } from "../../lib/traceability/ambiente";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 
 /**
  * Paso 4 del secado por bandeja (spec §4.5): la lectura de ambiente a mano.
@@ -168,5 +170,86 @@ describe("las reglas de la lectura de ambiente viven en la base", () => {
     await prisma.location.update({ where: { id: control.id }, data: { parentLocationId: m.sitio } });
     await expect(prisma.location.update({ where: { id: sola.id }, data: { locationType: "drying_bed" } })).rejects.toThrow(/tiene lecturas de ambiente/);
     await expect(prisma.location.update({ where: { id: sola.id }, data: { parentLocationId: null } })).rejects.toThrow(/tiene lecturas de ambiente/);
+  });
+});
+
+/** El TIPO y el mensaje EXACTO: un error de Prisma cita código cercano y un
+ *  `toThrow(cadena)` puede casar con un `throw` de otra rama (capacidadDeBandeja.test.ts, F3). */
+async function rechazaCon(promesa: Promise<unknown>, mensaje: string) {
+  const error = await promesa.then(() => null, (e: unknown) => e);
+  expect(error).toBeInstanceOf(AmbienteError);
+  expect((error as AmbienteError).message).toBe(mensaje);
+}
+const hora = new Date("2026-09-21T15:00:00Z");
+
+describe("registrar una lectura de ambiente", () => {
+  it("en °F se guarda en °C con un decimal y conserva la unidad tecleada; con medida, measured_fact", async () => {
+    const { id } = await registrarLecturaDeAmbiente(m.operario.userAccountId, {
+      facilityLocationId: m.instalacion, occurredAt: hora, temperatura: { valor: 75.2, unidad: "F" }, humedadRelativaPct: 61.5,
+      operatorPersonId: m.operario.personId,
+    });
+    lecturaIds.push(id);
+    const fila = await prisma.dryingAmbientReading.findUniqueOrThrow({ where: { id } });
+    expect(Number(fila.airTemperatureC)).toBe(24);
+    expect(fila.temperatureEntryUnit).toBe("F");
+    expect(Number(fila.relativeHumidityPct)).toBe(61.5);
+    expect(fila.provenanceClass).toBe("measured_fact");
+    expect(fila.sourceType).toBe("manual");
+  });
+  it("sólo cielo y ventilación: direct_observation", async () => {
+    const { id } = await registrarLecturaDeAmbiente(m.operario.userAccountId, {
+      facilityLocationId: m.instalacion, occurredAt: hora, cielo: "rain", ventilacion: "closed", notaVentilacion: "  lona bajada  ",
+    });
+    lecturaIds.push(id);
+    const fila = await prisma.dryingAmbientReading.findUniqueOrThrow({ where: { id } });
+    expect(fila.provenanceClass).toBe("direct_observation");
+    expect(fila.ventilationNote).toBe("lona bajada");
+  });
+  it("vacía, nota sin valor, °C con dos decimales, fuera de rango y punto ajeno se rechazan con su motivo", async () => {
+    const u = m.operario.userAccountId;
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: hora }), "lectura_vacia");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: hora, humedadRelativaPct: 60, notaCielo: "bruma" }), "nota_sin_valor");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: hora, temperatura: { valor: 24.35, unidad: "C" } }), "datos_invalidos");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: hora, temperatura: { valor: 95, unidad: "C" } }), "fuera_de_rango");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: hora, humedadRelativaPct: 101 }), "fuera_de_rango");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estanteAjeno, occurredAt: hora, humedadRelativaPct: 60 }), "punto_invalido");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 4, occurredAt: hora, humedadRelativaPct: 60 }), "punto_invalido");
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.estante, occurredAt: hora, humedadRelativaPct: 60 }), "instalacion_invalida");
+  });
+  it("sin sample:manage sobre la instalación no registra ni ve; control: el operario sí", async () => {
+    const intento = registrarLecturaDeAmbiente(m.extrano.userAccountId, { facilityLocationId: m.instalacion, occurredAt: hora, humedadRelativaPct: 60 });
+    await expect(intento).rejects.toBeInstanceOf(TraceabilityAccessError);
+    await expect(ambienteDeInstalacion(m.extrano.userAccountId, m.instalacion)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    expect(await puedeRegistrarAmbienteEn(m.extrano.userAccountId, m.instalacion)).toBe(false);
+    expect(await puedeRegistrarAmbienteEn(m.operario.userAccountId, m.instalacion)).toBe(true);
+  });
+  it("corregir: exige razón, supersede la original y la vigente pasa a ser la corrección", async () => {
+    const u = m.operario.userAccountId;
+    const { id: original } = await registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 42, unidad: "C" } });
+    lecturaIds.push(original);
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 24, unidad: "C" }, supersedesId: original }), "datos_invalidos");
+    const { id: correccion } = await registrarLecturaDeAmbiente(u, {
+      facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora,
+      temperatura: { valor: 24, unidad: "C" }, supersedesId: original, correctionReason: "tecleé 42 por 24",
+    });
+    lecturaIds.push(correccion);
+    const { vigentes } = await ambienteDeInstalacion(u, m.instalacion);
+    const delNivel2 = vigentes.filter((v) => v.rackId === m.estante && v.rackLevel === 2);
+    expect(delNivel2.map((v) => v.id)).toEqual([correccion]);
+    expect(delNivel2[0]?.airTemperatureC).toBe(24);
+  });
+  it("vigentes: una por punto, la más reciente de cada uno; recientes, las últimas de todos", async () => {
+    const u = m.operario.userAccountId;
+    const registra = async (h: string, punto: { rackLocationId?: string; rackLevel?: number }) => {
+      const { id } = await registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, occurredAt: new Date(h), humedadRelativaPct: 60, ...punto });
+      lecturaIds.push(id);
+      return id;
+    };
+    await registra("2026-09-22T06:00:00Z", { rackLocationId: m.estante, rackLevel: 1 });
+    const nueva = await registra("2026-09-22T09:00:00Z", { rackLocationId: m.estante, rackLevel: 1 });
+    const { vigentes, recientes } = await ambienteDeInstalacion(u, m.instalacion);
+    expect(vigentes.filter((v) => v.rackId === m.estante && v.rackLevel === 1).map((v) => v.id)).toEqual([nueva]);
+    expect(recientes[0]?.id).toBe(nueva);
+    expect(recientes.length).toBeLessThanOrEqual(20);
   });
 });
