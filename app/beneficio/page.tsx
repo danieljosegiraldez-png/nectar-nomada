@@ -6,7 +6,6 @@ import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
-import { insumosDeLugar } from "../../lib/rutinas/lugares";
 import { getObserverCandidates } from "../../lib/traceability/lots";
 import { destinosDelBeneficio } from "./destinos";
 
@@ -69,14 +68,11 @@ export default async function BeneficioPage({
 
   // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
   // misma lista de Personas activas, sea cual sea el beneficio, así que se
-  // resuelve UNA vez para todos. `insumosDeLugar` sí varía por beneficio —cada
-  // uno puede ser de una organización distinta—, así que se resuelve una por
-  // beneficio, pero desde aquí (en paralelo) en vez de una vez por instancia
-  // de `RutinasDeLugar` anidada.
-  const [personas, insumosPorBeneficio] = await Promise.all([
-    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
-    Promise.all(beneficios.map((b) => insumosDeLugar(user.userAccountId, b.id))),
-  ]);
+  // resuelve UNA vez para todos. `RutinasDeLugar` ya NO recibe `insumos` como
+  // prop (ronda 2 de la revisión de PR A): cada instancia resuelve
+  // `insumosDeLugar` ella misma con el id DE SU PROPIO beneficio, así que aquí
+  // no hay nada que resolver ni repartir por adelantado.
+  const personas = await getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName })));
 
   return (
     <div>
@@ -92,10 +88,10 @@ export default async function BeneficioPage({
         ))}
       </ul>
       <AvisoDeRutina ok={ok} error={error} t={tEq} />
-      {beneficios.map((b, i) => (
+      {beneficios.map((b) => (
         <div key={b.id}>
           <h2 style={{ marginTop: "1.5rem" }}>{b.name}</h2>
-          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} insumos={insumosPorBeneficio[i]} personas={personas} />
+          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} personas={personas} />
         </div>
       ))}
     </div>

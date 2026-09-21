@@ -19,22 +19,28 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
  * cuelga de un `drying_rack`, `rutina_en_el_estante`) no pinta nada: montarlo
  * en cualquier lugar de `/instalaciones/[id]` no puede tumbar la página
  * (arreglo de revisión de Tarea 6).
+ *
+ * **No recibe `insumos` como prop, a propósito (ronda 2 de la revisión de
+ * PR A).** Lo recibía antes, «ya resuelto por el llamador», y una página con
+ * varios bloques (`/instalaciones/[id]`, `/beneficio`) podía —por un `??`, una
+ * variable intermedia, o el literal directo— pasarle el valor de OTRO lugar
+ * a éste: `report_condition` se juzga por lugar, así que los insumos de la
+ * instalación no son los de una cama ni los de un estante, y un guardia que
+ * lee la fuente para prohibirlo es una carrera armamentista (dos rondas de
+ * revisión independiente lo demostraron, tests/arquitectura/insumos-por-bloque
+ * ya no existe). Cada bloque resuelve SIEMPRE `insumosDeLugar` con SU PROPIO
+ * `locationId`, así que pasar el de otro lugar ya no compila — el tipo del
+ * componente no tiene ese hueco. `personas` (observadores) sí sigue siendo
+ * prop: es la misma lista de Personas activas sea cual sea el lugar, así que
+ * hoistearla en el llamador evita el N+1 sin ningún riesgo de mezclar lugares.
  */
 export async function RutinasDeLugar({
   userAccountId,
   locationId,
-  insumos: insumosDelLlamador,
   personas: personasDelLlamador,
 }: {
   userAccountId: string;
   locationId: string;
-  /**
-   * Ya resueltos por el llamador (arreglo de revisión final, Hallazgo 4): evita
-   * el N+1 de `insumosDeLugar`/`getObserverCandidates` cuando una página monta
-   * varias instancias (`/instalaciones/[id]`, `/beneficio`). Si faltan, el
-   * componente los resuelve solo — lo que mantiene `/bodegas/[id]` en una línea.
-   */
-  insumos?: Awaited<ReturnType<typeof insumosDeLugar>>;
   personas?: { id: string; name: string }[];
 }) {
   const [t, lugar, puedeVer, puedeGestionar, puedeApuntar] = await Promise.all([
@@ -48,7 +54,7 @@ export async function RutinasDeLugar({
   const hoy = diaDeHoy(new Date(), lugar.timezone ?? null);
   const [rutinas, insumos, equipos, personas] = await Promise.all([
     rutinasDeLugar(userAccountId, locationId, hoy),
-    insumosDelLlamador ?? insumosDeLugar(userAccountId, locationId),
+    insumosDeLugar(userAccountId, locationId),
     equiposAqui(userAccountId, locationId),
     personasDelLlamador
       ? Promise.resolve(personasDelLlamador)

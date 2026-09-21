@@ -273,6 +273,33 @@ describe("insumosDeLugar: depende del ID que recibe, no de un lugar hermano (re-
     const propios = await insumosDeLugar(f.jefeA, L.cuarto!);
     expect(propios.map((x) => x.batchLabel)).toContain(`TEST L ${f.run}`);
   });
+
+  it("con report_condition SOLO en la cama (no en la instalación): la cama da sus lotes, la instalación da [] — lo que RutinasDeLugar hace ahora SIEMPRE, sin prop `insumos` (ronda 2 de la revisión de PR A)", async () => {
+    // Un ámbito de ubicación alcanza a sus DESCENDIENTES (decisión de Daniel,
+    // 2026-09-16, `lib/rbac/service.ts`), nunca a sus ANCESTROS: un `Scope`
+    // puesto directamente en L.cama da permiso en L.cama y NO en L.cuarto (su
+    // padre). Cuenta nueva, sin la de `f.operarioA` —ésa está bajo `f.sitioA`,
+    // que es ancestro de L.cuarto Y de L.cama, así que ya vería las dos—.
+    const persona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "SoloCama", displayName: `TEST SoloCama ${f.run}` },
+    });
+    const cuentaSolaCama = await prisma.userAccount.create({
+      data: { personId: persona.id, authProvider: "credentials", status: "active" },
+    });
+    const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: L.cama! } });
+    const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    await prisma.assignment.create({ data: { userAccountId: cuentaSolaCama.id, roleProfileId: perfil.id, scopeId: scope.id } });
+    try {
+      const deLaCama = await insumosDeLugar(cuentaSolaCama.id, L.cama!);
+      expect(deLaCama.map((x) => x.batchLabel)).toContain(`TEST L ${f.run}`);
+      await expect(insumosDeLugar(cuentaSolaCama.id, L.cuarto!)).resolves.toEqual([]);
+    } finally {
+      await prisma.assignment.deleteMany({ where: { userAccountId: cuentaSolaCama.id } });
+      await prisma.scope.deleteMany({ where: { id: scope.id } });
+      await prisma.userAccount.deleteMany({ where: { id: cuentaSolaCama.id } });
+      await prisma.person.deleteMany({ where: { id: persona.id } });
+    }
+  });
 });
 
 describe("lugarConRutinasOVacio: no tumba la página en un lugar sin rutina", () => {
