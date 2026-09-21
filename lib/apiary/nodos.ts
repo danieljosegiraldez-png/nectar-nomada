@@ -15,6 +15,7 @@
  * misma observación a dos colmenas). La base guarda los ABIERTOS con índices parciales; los
  * cruces con intervalos ya cerrados los comprueba este servicio, porque un índice no ve rangos.
  */
+import { resolveOrganizationForLocation } from "../traceability/locations";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireHiveNodeAccess } from "./hives";
@@ -39,9 +40,11 @@ export async function registrarNodo(userAccountId: string, input: RegistrarNodoI
   const sitio = await prisma.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
   await requireHiveNodeAccess(userAccountId, [{ locationId: input.locationId }]);
+  // La finca se hereda: un apiario que cuelga de una finca no lleva organización propia (2026-09-21,
+  // «Apiario 1/2 — Finca Rosina» daban 500 en producción). `resolveOrganizationForLocation` sube por padres.
+  const organizationId = await resolveOrganizationForLocation(input.locationId);
   // Sin finca no hay a quién pertenezca el aparato, y sus datos no tendrían dueño.
-  if (!sitio.organizationId) throw new ArtefactoInvalido("sitio_sin_finca");
-  const organizationId = sitio.organizationId;
+  if (!organizationId) throw new ArtefactoInvalido("sitio_sin_finca");
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -90,7 +93,7 @@ export interface InstalarNodoInput {
 export async function instalarNodo(userAccountId: string, input: InstalarNodoInput) {
   const hive = await prisma.hive.findUnique({
     where: { id: input.hiveId },
-    select: { projectId: true, locationId: true, location: { select: { organizationId: true } } },
+    select: { projectId: true, locationId: true },
   });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireHiveNodeAccess(userAccountId, [{ projectId: hive.projectId, locationId: hive.locationId }]);
@@ -98,7 +101,7 @@ export async function instalarNodo(userAccountId: string, input: InstalarNodoInp
 
   const nodo = await prisma.hiveNode.findUnique({ where: { id: input.hiveNodeId } });
   if (!nodo) throw new ArtefactoInvalido("nodo_no_encontrado");
-  if (nodo.organizationId !== hive.location.organizationId) throw new ArtefactoInvalido("nodo_de_otra_finca");
+  if (nodo.organizationId !== (await resolveOrganizationForLocation(hive.locationId))) throw new ArtefactoInvalido("nodo_de_otra_finca");
   if (nodo.lifecycleStatus !== "active") throw new ArtefactoInvalido("nodo_retirado_de_servicio");
 
   // Se cruza con [installedAt, ∞) todo intervalo que siga abierto o se cierre DESPUÉS.

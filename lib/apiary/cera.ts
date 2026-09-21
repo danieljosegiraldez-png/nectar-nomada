@@ -8,6 +8,7 @@
  * Permiso: `apiary:manage` sobre el apiario para anotar; `apiary:view` para leer. La cera es de la
  * finca del apiario, no del apiario: un marco pasa de un sitio a otro sin avisar.
  */
+import { resolveOrganizationForLocation } from "../traceability/locations";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
@@ -25,8 +26,11 @@ async function fincaDe(userAccountId: string, locationId: string, accion: "manag
   const sitio = await prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
   await requireApiaryAccess(userAccountId, accion, [{ locationId }]);
-  if (!sitio.organizationId) throw new CeraInvalida("sitio_sin_finca");
-  return sitio.organizationId;
+  // La finca se hereda: un apiario que cuelga de una finca no lleva organización propia (2026-09-21,
+  // «Apiario 1/2 — Finca Rosina» daban 500 en producción). `resolveOrganizationForLocation` sube por padres.
+  const organizationId = await resolveOrganizationForLocation(locationId);
+  if (!organizationId) throw new CeraInvalida("sitio_sin_finca");
+  return organizationId;
 }
 
 function marcos(n: number) {
@@ -54,8 +58,8 @@ export async function registrarCeraNueva(
   if (input.waxKind === "otro" && !notes) throw new CeraInvalida("otro_sin_nota");
   const frameCount = marcos(input.frameCount);
   if (input.hiveId) {
-    const hive = await prisma.hive.findUnique({ where: { id: input.hiveId }, select: { location: { select: { organizationId: true } } } });
-    if (!hive || hive.location.organizationId !== organizationId) throw new CeraInvalida("colmena_de_otra_finca");
+    const hive = await prisma.hive.findUnique({ where: { id: input.hiveId }, select: { locationId: true } });
+    if (!hive || (await resolveOrganizationForLocation(hive.locationId)) !== organizationId) throw new CeraInvalida("colmena_de_otra_finca");
   }
   return prisma.$transaction(async (tx) => {
     const fila = await tx.newWaxEntry.create({

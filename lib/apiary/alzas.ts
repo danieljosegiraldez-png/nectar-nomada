@@ -12,6 +12,7 @@
  * Permiso: `apiary:manage` sobre el sitio o la colmena, como el resto del trabajo de la caja;
  * leer, `apiary:view`.
  */
+import { resolveOrganizationForLocation } from "../traceability/locations";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
@@ -32,9 +33,11 @@ export async function registrarAlza(
   const sitio = await prisma.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
   if (!sitio) throw new ApiaryAccessError("location_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ locationId: input.locationId }]);
+  // La finca se hereda: un apiario que cuelga de una finca no lleva organización propia (2026-09-21,
+  // «Apiario 1/2 — Finca Rosina» daban 500 en producción). `resolveOrganizationForLocation` sube por padres.
+  const organizationId = await resolveOrganizationForLocation(input.locationId);
   // Sin finca no hay a quién pertenezca el alza.
-  if (!sitio.organizationId) throw new ArtefactoInvalido("sitio_sin_finca");
-  const organizationId = sitio.organizationId;
+  if (!organizationId) throw new ArtefactoInvalido("sitio_sin_finca");
   if (input.inServiceAt && Number.isNaN(input.inServiceAt.getTime())) throw new ArtefactoInvalido("fecha_invalida");
 
   try {
@@ -61,7 +64,7 @@ export async function ponerAlza(
 ) {
   const hive = await prisma.hive.findUnique({
     where: { id: input.hiveId },
-    select: { projectId: true, locationId: true, location: { select: { organizationId: true } } },
+    select: { projectId: true, locationId: true },
   });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: hive.projectId, locationId: hive.locationId }]);
@@ -69,7 +72,7 @@ export async function ponerAlza(
 
   const alza = await prisma.hiveSuper.findUnique({ where: { id: input.hiveSuperId } });
   if (!alza) throw new ArtefactoInvalido("alza_no_encontrada");
-  if (alza.organizationId !== hive.location.organizationId) throw new ArtefactoInvalido("alza_de_otra_finca");
+  if (alza.organizationId !== (await resolveOrganizationForLocation(hive.locationId))) throw new ArtefactoInvalido("alza_de_otra_finca");
   if (alza.lifecycleStatus !== "active") throw new ArtefactoInvalido("alza_dada_de_baja");
 
   // Se cruza con [installedAt, ∞) todo intervalo que siga abierto o se cierre DESPUÉS.
@@ -140,10 +143,10 @@ export interface AlzaDelApiario {
  */
 export async function alzasDelApiario(userAccountId: string, locationId: string): Promise<AlzaDelApiario[]> {
   await requireApiaryAccess(userAccountId, "view", [{ locationId }]);
-  const sitio = await prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
-  if (!sitio?.organizationId) return [];
+  const organizationId = await resolveOrganizationForLocation(locationId);
+  if (!organizationId) return [];
   const alzas = await prisma.hiveSuper.findMany({
-    where: { organizationId: sitio.organizationId },
+    where: { organizationId },
     orderBy: { code: "asc" },
     include: {
       fittings: { orderBy: { installedAt: "desc" }, include: { hive: { select: { id: true, identifier: true, locationId: true } } } },
