@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * Las seis decisiones del dueño, contra la afirmación que su propio guion hace.
+ * Las decisiones del dueño, contra la afirmación que su propio guion hace.
  *
  * `scripts/open-decisions.sh` dice en su cabecera: «Toda prueba pasó un
  * flip-test: se construyó el mundo donde la cosa ya es cierta y el veredicto
@@ -141,6 +141,18 @@ const MUNDOS: Record<string, { abrir: Mundo; cerrar: Mundo }> = {
     abrir: { home: { zshrc: false, url: true } },
     cerrar: { home: { zshrc: true, url: true } },
   },
+  "P-G": {
+    abrir: { arbol: sinAdr("quién lo hizo acotado"), home: { url: true, zshrc: true } },
+    cerrar: { arbol: conAdr("quién lo hizo acotado"), home: { url: true, zshrc: true } },
+  },
+  "P-H": {
+    abrir: { arbol: sinAdr("des-retirar modelos"), home: { url: true, zshrc: true } },
+    cerrar: { arbol: conAdr("des-retirar modelos"), home: { url: true, zshrc: true } },
+  },
+  "P-I": {
+    abrir: { arbol: sinAdr("alta de proveedores"), home: { url: true, zshrc: true } },
+    cerrar: { arbol: conAdr("alta de proveedores"), home: { url: true, zshrc: true } },
+  },
   // El mundo que la CIERRA es que Daniel apruebe las guías, o sea que su línea
   // de estado deje de decir «borrador». La primera versión de esta prueba
   // buscaba «pendiente de revisi» en todo el archivo y la encontraba siempre
@@ -173,18 +185,18 @@ describe("las pruebas de las decisiones del dueño distinguen dos mundos", () =>
     expect(abiertas.has("P-E"), `P-E no se abrió con un HOME vacío:\n${salida}`).toBe(true);
   });
 
-  it("el guion sigue teniendo las seis pruebas que estos mundos cubren", () => {
+  it("el guion sigue teniendo las nueve pruebas que estos mundos cubren", () => {
     const n = execFileSync("grep", ["-c", "^probar ", "scripts/open-decisions.sh"], {
       cwd: RAIZ,
       encoding: "utf8",
     }).trim();
     const cubiertas = new Set(Object.keys(MUNDOS).map(ID));
-    expect(cubiertas.size, "cambiaron las decisiones cubiertas y nadie lo dijo").toBe(5);
+    expect(cubiertas.size, "cambiaron las decisiones cubiertas y nadie lo dijo").toBe(8);
     expect(
       n,
       `el guion tiene ${n} pruebas y aquí hay mundos para ${cubiertas.size} + P-B, que sale a la red. ` +
         `Si has añadido una decisión, añade su pareja de mundos; si has quitado una, quítala.`,
-    ).toBe("6");
+    ).toBe("9");
   });
 
   for (const [nombre, { abrir, cerrar }] of Object.entries(MUNDOS)) {

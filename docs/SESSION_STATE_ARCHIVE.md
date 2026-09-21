@@ -4138,3 +4138,23 @@ ADR-171. Daniel: las alzas «se marcarán». Se registran en la ficha del apiari
 colmena como artefacto con marca y la cosecha dice cuáles salieron. Las sin marca se siguen
 contando. La inspección que quita alzas ya no cierra las marcadas. **Sin ver en navegador**: hace
 falta entrar con una cuenta. Siguen: la cera por color de año y el año de las reinas.
+
+**Archivada el 2026-09-21**, con el estado en 418/400 líneas tras rebasar el PR #440 sobre el #453: «El manejo fitosanitario de la parcela», la más vieja que nombra el guardia. Su decisión vive en **ADR-174**. El incidente que traía —un subagente reseteó la base compartida porque su encargo no lo prohibía— queda escrito en el `CLAUDE.md` del repositorio, que sí se carga, porque su regla sigue valiendo.
+
+### 2026-09-18 · El manejo fitosanitario de la parcela
+
+ADR-174 (nació como 170; otras sesiones ocuparon 170-173 mientras se integraba: el número de un
+ADR se asigna al fusionar, no al escribirlo).
+Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
+manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
+en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
+del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
+cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
+(`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
+en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-19):** intervenciones sobre bloques, la regla apunta a producto, aviso de trampa atendido (ver anexo PR B en el ADR).
+
+**Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
+55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
+los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
+ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
+dispatch llevar prohibición explícita de reset/restore/migrate dev.

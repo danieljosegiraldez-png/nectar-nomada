@@ -118,6 +118,25 @@ probar "P-D" "Nombres y roles de la familia Huerbsch como Personas" \
 probar "P-E" "Destino de backup fuera de la máquina configurado" \
   '! grep -qE "^[[:space:]]*export[[:space:]]+NN_BACKUP_DIR=\"?[^\"[:space:]]" "$HOME/.zshrc"'
 
+# P-G, P-H, P-I · Las tres que dejó abiertas el PR #435 (catálogos y modelos de
+# equipo, ADR-172). Ninguna cambia un artefacto por sí sola, así que aterrizan
+# como P-C: un ADR cuyo encabezado lleve la frase de la prueba.
+# P-G · «Quién lo hizo» en una rutina ofrece a todas las personas activas de la
+# plataforma, como inspecciones y trampas: un operario ve nombres de otras
+# organizaciones. Acotarlo por sitio es transversal y no se decidió en #435.
+probar "P-G" "Quién aparece en «quién lo hizo» (hoy: toda la plataforma)" \
+  '! grep -qiE "^## ADR-[0-9]+.*quién lo hizo acotado" docs/architecture/DECISIONS.md'
+
+# P-H · Un modelo de equipo retirado no se puede des-retirar, y su nombre queda
+# reservado. Añadir la acción es fácil; si debe existir, no.
+probar "P-H" "Des-retirar un modelo de equipo (hoy: no se puede)" \
+  '! grep -qiE "^## ADR-[0-9]+.*des-retirar modelos" docs/architecture/DECISIONS.md'
+
+# P-I · El proveedor de un equipo sólo puede ser una organización `supplier`
+# aprobada, y darlas de alta va por la vía de organizaciones de siempre.
+probar "P-I" "Cómo se da de alta un proveedor de equipos" \
+  '! grep -qiE "^## ADR-[0-9]+.*alta de proveedores" docs/architecture/DECISIONS.md'
+
 echo
 [ "$indeterminadas" -gt 0 ] && echo "$indeterminadas prueba(s) sin determinar. Eso NO es \"cerrada\"."
 if [ "$rotas" -gt 0 ]; then

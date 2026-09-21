@@ -27,6 +27,9 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-C | Quiénes reciben correo y, con él, acceso | Casi nadie en la base tiene correo; sin correo no hay contraseña. Hoy solo Daniel y José. Quién entra no lo decide el sistema | `! grep -qi "correos de las personas" docs/architecture/DECISIONS.md` |
 | P-D | Nombres y roles de la **familia Huerbsch** — **cerrada el 2026-08-29** | La premisa era falsa: sí están en la base desde A7 — Bob (copropietario), Sherry (copropietaria) y Chris (representante familiar), con membresías reales. Faltaba el ADR, que es lo único que la prueba mira. Ver ADR-106 | `! grep -qi "huerbsch registrada" docs/architecture/DECISIONS.md` |
 | P-F | Revisar las guías de `docs/dominio/` que quedan: **Varroa** y **Meliponini** (ADR-158). Las tres de café están **reemplazadas** por `docs/beneficio/10`–`12`, y el origen de los umbrales quedó decidido en ADR-181 (2026-09-19); selección, balance y enrutamiento de `12` siguen sin revisar | Las redactó un modelo a partir de indicaciones suyas y **esas dos nadie las ha repasado**. Traen umbrales con pinta de norma y frases como «PELIGRO: lave el café de inmediato». Qué respalda él y qué no, no lo decide el sistema | `grep -lq "^  estado    : borrador"` sobre los `.md` de la carpeta; carpeta ausente sale **2**, no cerrada |
+| P-G | Quién aparece en «quién lo hizo» de una rutina (PR #435) | Hoy ofrece a todas las personas activas de la plataforma, como inspecciones y trampas: un operario ve nombres de otras organizaciones. Acotarlo por sitio es transversal | `! grep -qiE "^## ADR-[0-9]+.*quién lo hizo acotado"` sobre `DECISIONS.md` |
+| P-H | Des-retirar un modelo de equipo (PR #435) | Hoy no se puede y el nombre retirado queda reservado. La acción es fácil; si debe existir, es de él | `! grep -qiE "^## ADR-[0-9]+.*des-retirar modelos"` |
+| P-I | Cómo se da de alta un proveedor de equipos (PR #435) | Sólo se eligen organizaciones `supplier` aprobadas, dadas de alta por la vía de organizaciones | `! grep -qiE "^## ADR-[0-9]+.*alta de proveedores"` |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
@@ -99,6 +102,22 @@ ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `que
 si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
 ver en navegador.** Sigue: «marcos negros» en la inspección.
 
+### 2026-09-19 · Catálogos de referencia, modelos de equipo y rutinas (PR #435)
+
+ADR-172. Contrato común de catálogos (`lib/catalogos/`, guardia `catalogos-con-contrato`): compartidos
+y propios, retirar sin borrar, unicidad sin mayúsculas en la base. Primer catálogo: modelos de equipo
+(`/equipos/modelos`); el equipo gana modelo, serie, código interno, proveedor y garantía; rutinas de
+mantenimiento/limpieza/fumigación que avisan «vencida» y **no bloquean**. Producción migró las dos
+(`catalogos_y_rutinas`, `catalogos_restricciones`). **Siguen**: los demás catálogos (levaduras,
+insumos, azúcares, especies, varietales) y el spec de **instalaciones** — la base ya admite sus
+rutinas, el servicio las rechaza hasta entonces; se solapa con secado por bandeja. Decisiones abiertas
+en la descripción del PR.
+
+### 2026-09-18 · La rueda del ratón ya no cambia campos numéricos (PR #418)
+
+ADR-080: la ausencia nunca se guarda como 0. Todo `type="number"` pasa por `CampoNumerico`; lo vigila
+un guardia de arquitectura con flip-test, y se verificó en navegador girando la rueda sobre un campo
+crudo (vacío → 0) y uno protegido (sin cambio).
 ### 2026-09-18 · Jornada de cosecha y entrega al beneficio (PR #431, pieza 1 de 3)
 
 `/finca/jornadas`: abrir jornada (parcelas × recolectores), anotar entregas (origen, kg de finca,
@@ -113,24 +132,6 @@ ADR-173. Daniel: la cera nueva de un año lleva el color de ese año, el de las 
 calcula (`colorDelAño`); se anotan la cera que entra y los marcos que salen, y la ficha del apiario
 enseña la leyenda con avisos a los 2 y 4 años. **Sin ver en navegador.** Siguen: «marcos negros»
 en la inspección (toca la cola sin conexión) y el año de las reinas.
-
-### 2026-09-18 · El manejo fitosanitario de la parcela
-
-ADR-174 (nació como 170; otras sesiones ocuparon 170-173 mientras se integraba: el número de un
-ADR se asigna al fusionar, no al escribirlo).
-Registro de intervenciones fitosanitarias: cuatro clases (comprados, preparados, liberaciones,
-manejo cultural); doce objetivos + otro (todo de Daniel, con procedencia en el spec). Dos columnas nuevas
-en `ConsumableMaterial` (`isPlantProtection`, `defaultReentryHours`); tres tablas nuevas. **El descuento
-del frasco es directo, sin fila de consumo, igual que el botiquín** — Daniel lo aprobó sabiendo que
-cambiaba lo que vio en el chat. Carencia y reentrada en aritmética pura; marca en la cosecha como foto
-(`HarvestWithdrawalFlag`, nulo = desconocida). Aviso cuando hoy difiere de lo que se sabía. Reentrada
-en tablero y al abrir jornada; corregir no descuenta de nuevo. **PR B (2026-09-19):** intervenciones sobre bloques, la regla apunta a producto, aviso de trampa atendido (ver anexo PR B en el ADR).
-
-**Incidente durante T8:** un subagente corrió `npm run test:db -- reset` sobre la base compartida
-55433 (2026-09-18 ~23:39Z, restauró el backup del 2026-09-14). La instrucción «no la resetees» estaba en
-los dispatch de T3–T7 y faltó en el de T8. Esquema coherente al medir después (10 de 12 migraciones
-ajenas volvieron). Datos de prueba perdidos entre el 14 y el reset no se reparan. **Ruling:** todo
-dispatch llevar prohibición explícita de reset/restore/migrate dev.
 
 ## 3. Bloqueado, y en qué
 
