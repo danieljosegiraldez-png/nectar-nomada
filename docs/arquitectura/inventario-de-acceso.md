@@ -13,10 +13,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-22 al rebasar «quién lo hizo»
 
-**568 operaciones** que tocan la base, en **156 archivos** — regenerado tras el
-rebase sobre `origin/main` (`30e98d48`, 2026-09-22), con
-`node scripts/inventario-de-acceso.mjs`: «quién lo hizo» sustituye
-`getObserverCandidates` y reduce **una operación acotada por construcción**:
+**571 operaciones** que tocan la base, en **157 archivos** — regenerado tras el
+rebase sobre `origin/main` (`3653123e`, 2026-09-22). El paso 4 del secado
+(ambiente a mano) suma **+3 operaciones con guardia directo en +1 archivo**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -25,7 +24,7 @@ rebase sobre `origin/main` (`30e98d48`, 2026-09-22), con
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **428** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **431** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -87,6 +86,12 @@ rebase sobre `origin/main` (`30e98d48`, 2026-09-22), con
 > el equipo o la posición. Y `lib/traceability/drying.ts` gana `cerrarCorridaEnTransaccion`, que
 > entra como **«recibe principal sin guardia visible»**, 18→19: no autoriza por sí misma — lo hace quien la llama
 > (`endDryingRun` y `bajarBandeja`) antes de abrir la transacción que la envuelve.
+
+> **La lectura de ambiente del secado (paso 4, 2026-09-21): +3 operaciones (545→548 al escribirse, 557→560 tras rebasar), y un archivo nuevo,
+> `lib/traceability/ambiente.ts`.** `registrarLecturaDeAmbiente`, `ambienteDeInstalacion` y
+> `puedeRegistrarAmbienteEn` suben las tres **guardia directo** (407→410 sobre la base de entonces; 417→420 tras rebasar sobre las rutinas de lugar): pasan por `puedeEn`,
+> que llama a `can(…, "sample", …)` sobre la instalación. La regla de qué lectura vale para cada
+> punto vive aparte, en `lib/traceability/ambienteVigente.ts`, que no toca la base.
 
 > **Las pantallas de la pieza 3 (tarea 6, 2026-09-19): 522→526, las cuatro «depende del
 > llamador»**, 71→75. Son lectores para pintar: `mermasDeRecepciones`, `detalleDeRecepciones`,

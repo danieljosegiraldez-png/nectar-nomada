@@ -9,6 +9,10 @@ import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
+import { TraceabilityAccessError } from "../../../lib/traceability/lots";
+import { ambienteDeInstalacion, puedeRegistrarAmbienteEn } from "../../../lib/traceability/ambiente";
+import { edad, lecturaDelPunto, type LecturaVigente } from "../../../lib/traceability/ambienteVigente";
+import { FormularioAmbiente } from "../FormularioAmbiente";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
@@ -46,12 +50,35 @@ export default async function InstalacionPage({ params, searchParams }: {
     ? instalacion.estantes.flatMap((e) => e.posiciones.map((p) => ({ ...p, estanteId: e.id }))).find((p) => p.id === posicion)
     : undefined;
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
+  // El ambiente pide otro permiso que la instalación (`sample`, no
+  // `manage_attributes`): sin él la sección no aparece, sin romper la página.
+  const ambiente = await ambienteDeInstalacion(user.userAccountId, id).catch((error: unknown) => {
+    if (error instanceof TraceabilityAccessError) return null;
+    throw error;
+  });
+  const puedeRegistrarAmbiente = ambiente ? await puedeRegistrarAmbienteEn(user.userAccountId, id) : false;
+  const ahora = new Date();
+  const nombreDeEstante = (rackId: string | null) =>
+    rackId == null ? null : instalacion.estantes.find((e) => e.id === rackId)?.name ?? t("ambienteEstanteNoVisible");
+  const resumen = (l: LecturaVigente) => {
+    const e = edad(l.occurredAt, ahora);
+    return [
+      l.airTemperatureC != null ? `${l.airTemperatureC.toFixed(1)} °C` : null,
+      l.relativeHumidityPct != null ? `${l.relativeHumidityPct.toFixed(1)} % HR` : null,
+      l.skyCondition ? t(`cielo_${l.skyCondition}`) : null,
+      l.ventilation ? t(`ventilacion_${l.ventilation}`) : null,
+    ].filter(Boolean).join(" · ") + ` — ${t(e.unidad === "min" ? "haceMin" : e.unidad === "h" ? "haceH" : "haceD", { n: e.n })} (${t(`fuente_${l.sourceType}`)})`;
+  };
+  const puntoDe = (l: LecturaVigente) => l.rackId
+    ? `${nombreDeEstante(l.rackId)}${l.rackLevel != null ? ` · ${t("nivel", { n: l.rackLevel })}` : ""}`
+    : l.rackLevel != null ? t("ambienteNivelSinEstante", { n: l.rackLevel }) : t("ambienteGeneral");
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
     <h1>{instalacion.name}</h1>
     {ok === "guardado" && <p role="status">{t("guardado")}</p>}
     <AvisoDeRutina ok={ok} error={errorCode} t={tEq} />
+    {ok === "ambiente" && <p role="status">{t("ambienteGuardado")}</p>}
     {!puedeEditar && <p role="alert">{t("sinPermisoEditar")}</p>}
     {puedeEditar && <FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} />}
     <h2>{t("camas")}</h2>
@@ -82,6 +109,9 @@ export default async function InstalacionPage({ params, searchParams }: {
                   </Link>}
                 </td>;
               })}
+              <td>{ambiente
+                ? (() => { const l = lecturaDelPunto(ambiente.vigentes, { rackId: estante.id, rackLevel: nivel }); return l ? resumen(l) : t("ambienteSinLecturaDelNivel"); })()
+                : null}</td>
             </tr>)}
           </tbody>
         </table>
@@ -95,6 +125,19 @@ export default async function InstalacionPage({ params, searchParams }: {
       </section>;
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
+    {ambiente && <section>
+      <h2>{t("ambienteTitulo")}</h2>
+      <p className="nn-muted">{t("ambienteIntro")}</p>
+      <p><strong>{t("ambienteGeneral")}:</strong> {(() => { const g = lecturaDelPunto(ambiente.vigentes, { rackId: null, rackLevel: null }); return g ? resumen(g) : t("ambienteSinLectura"); })()}</p>
+      <h3>{t("ambienteRecientes")}</h3>
+      {ambiente.recientes.length
+        ? <ul>{ambiente.recientes.map((l) => <li key={l.id}>{puntoDe(l)}: {resumen(l)}</li>)}</ul>
+        : <p>{t("ambienteSinLectura")}</p>}
+      {puedeRegistrarAmbiente && <FormularioAmbiente facilityId={id}
+        estantes={instalacion.estantes.map((e) => ({ id: e.id, name: e.name, niveles: e.niveles }))}
+        nivelesSinEstante={[...new Set(instalacion.camas.map((c) => c.rackLevel).filter((n): n is number => n != null))]}
+        personas={personas} />}
+    </section>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
     <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
   </div>;
