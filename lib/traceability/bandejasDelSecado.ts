@@ -323,14 +323,18 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
     transfersDeFilas.find((t) => t.equipmentId === equipmentId && t.occurredAt <= en) ?? null;
 
   const conPosicion = await Promise.all(filas.map(async (f) => {
-    // La POSICIÓN se resuelve a la fecha de interés (`hasta`, o `ahora` si
-    // sigue cargada) — como siempre. El NOMBRE (D2/D3) se autoriza con el
-    // traslado VIGENTE, SIEMPRE a `ahora` — nunca a una fecha futura, y
-    // reutilizando esta misma consulta batched en vez de la resolución propia
-    // (sin desempate ni techo de fecha) de `puedeVerEquipo`.
-    const posicion = await resolverPosicion(userAccountId, ultimoAntesDe(f.equipmentId, f.hasta ?? ahora)?.toLocation, lot.organizationId);
-    const ultimoVigente = ultimoAntesDe(f.equipmentId, ahora);
-    const puedeVerBandeja = await can(userAccountId, "view", "equipment", objetivoDeTraslado(f.equipment, ultimoVigente), f.equipment.classification);
+    // D3 (ronda 2 de revisión): UNA sola fila por bandeja, a la fecha de
+    // interés (`hasta`, o `ahora` si sigue cargada) — esa fila describe dónde
+    // estuvo la bandeja MIENTRAS SECABA este lote, y es la misma que autoriza
+    // el nombre y la que se muestra como posición. Antes se resolvían por
+    // separado: la posición a `f.hasta ?? ahora`, el permiso SIEMPRE a
+    // `ahora` — así que una bandeja ya bajada y luego movida a otro lugar
+    // mostraba la posición de cuando secaba pero autorizaba (o negaba) el
+    // nombre con el traslado de HOY, de un lugar distinto.
+    const en = f.hasta ?? ahora;
+    const ultimo = ultimoAntesDe(f.equipmentId, en);
+    const posicion = await resolverPosicion(userAccountId, ultimo?.toLocation, lot.organizationId);
+    const puedeVerBandeja = await can(userAccountId, "view", "equipment", objetivoDeTraslado(f.equipment, ultimo), f.equipment.classification);
     return { f, posicion, nombre: puedeVerBandeja ? f.equipment.name : BANDEJA_OCULTA };
   }));
 

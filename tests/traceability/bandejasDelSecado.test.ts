@@ -404,6 +404,42 @@ describe("dónde está cada bandeja", () => {
     expect(filas.find((f) => f.equipmentId === secreta.id)?.nombre).toBe("(bandeja oculta)");
   });
 
+  // Fix round 1, ronda 2 de revisión (Codex + un revisor Claude, independientes):
+  // D3 seguía partido para una bandeja YA BAJADA. La posición se resolvía a
+  // `f.hasta` (dónde secaba); el permiso del nombre, siempre a `ahora`. Si la
+  // bandeja se movía DESPUÉS de bajar, las dos fechas caían en traslados
+  // distintos.
+  it("D3 (ronda 2): una bandeja ya bajada y luego movida se autoriza y se muestra con LA MISMA fila — la de cuando secaba, no la de ahora", async () => {
+    const run = await secado("d3-r2");
+    const p1 = await posicion(11, 1); // en `sitio`: `operador` la ve
+    const b = await bandeja("d3-r2");
+    const t = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-01T11:00:00Z") });
+    await trasladar(b.id, p1.id, "2026-09-01T11:30:00Z");
+    // Control positivo, cargada ANTES de bajar `b` (para que `b` no sea la
+    // última): otra bandeja de la MISMA corrida, sin mover, que para que esta
+    // prueba no pueda pasar con una lista vacía sigue enseñando su nombre y
+    // su posición con normalidad.
+    const otra = await bandeja("d3-r2-control");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: otra.id, desde: T("2026-09-01T11:00:00Z") });
+
+    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-02T10:00:00Z") });
+    // DESPUÉS de bajar, se mueve a `otroSitio` — donde `operador` NO tiene
+    // permiso de ver el equipo (sólo `ajeno` está asignado ahí). Si el
+    // permiso se resolviera a "ahora" (el bug), el nombre saldría oculto.
+    await trasladar(b.id, otroSitio, "2026-09-02T11:00:00Z");
+
+    const filas = await bandejasDeCorrida(operador, run.id);
+    expect(filas.length).toBeGreaterThan(0); // control: la lista no está vacía
+    const fila = filas.find((f) => f.equipmentId === b.id)!;
+    // La posición mostrada es la de CUANDO SECABA (p1), no la de ahora (otroSitio).
+    expect(fila.posicion).toMatchObject({ camaId: p1.id });
+    // Y el nombre se autoriza con ESA MISMA fila: `operador` sí veía la
+    // bandeja en `p1`, aunque hoy esté en un sitio que no puede ver.
+    expect(fila.nombre).toBe(b.name);
+    // Control positivo de la corrida: la otra fila sigue con su nombre normal.
+    expect(filas.find((f) => f.equipmentId === otra.id)?.nombre).toBe(otra.name);
+  });
+
   it("disponibles: recipientes activos, numerados, de la organización, visibles y libres", async () => {
     const run = await secado("disponibles");
     const libre = await bandeja("libre");
