@@ -77,7 +77,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      # Sin `npm ci` a propósito: lo que corre aquí no importa dependencias.
+          cache: npm
+      # Desde el 2026-09-21 el guion SÍ hace `npm ci`: corre los guardias de vitest
+      # que leen documentación. Ver su cabecera. La caché de npm abarata esa vuelta.
       - name: Compuerta ligera (scripts/ci-documentacion.sh)
         run: bash scripts/ci-documentacion.sh
 
