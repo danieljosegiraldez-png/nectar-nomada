@@ -14,9 +14,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
 ## vez el 2026-09-21 al rebasar `spec/instalaciones-rutinas`
 
-**PENDIENTE-REGENERAR** operaciones que tocan la base, en **PENDIENTE-REGENERAR**
-archivos — cifra que se sustituye al final del rebase sobre `origin/main` (919d0ba4,
-2026-09-21) con `node scripts/inventario-de-acceso.mjs`:
+**557 operaciones** que tocan la base, en **154 archivos** — regenerado tras el
+rebase de `spec/instalaciones-rutinas` sobre `origin/main` (919d0ba4, 2026-09-21),
+con `node scripts/inventario-de-acceso.mjs`: `origin/main` mide 545 operaciones en
+152 archivos; la diferencia —**+12 operaciones en +2 archivos** (+10 guardia
+directo, +1 depende del llamador, +1 acotado por construcción)— es lo que trae
+esta rama (bodega, rutinas de lugar) encima:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -25,9 +28,9 @@ archivos — cifra que se sustituye al final del rebase sobre `origin/main` (919
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **PENDIENTE-REGENERAR** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
-| **PENDIENTE-REGENERAR** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **417** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **42** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **79** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
