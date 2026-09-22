@@ -1,6 +1,9 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import type { CanalDeAviso } from "../integrations/messaging/types";
+import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
+import { lugaresDeOrganizacion, resolveOrganizationForLocation } from "../traceability/locations";
 
 /**
  * A9.11 (D10a) — la preferencia de canal por persona.
@@ -126,6 +129,65 @@ export interface DeclararCanalInput {
 }
 
 /**
+ * Las organizaciones de las que una persona es «de la finca»: miembro activo, o
+ * con una cuenta que tenga una asignación activa y vigente sobre un proyecto de
+ * esa organización o sobre un lugar que cuelgue de ella. Es la misma regla que
+ * la decisión P-G usa para «quién lo hizo».
+ */
+async function fincasDe(personId: string): Promise<Set<string>> {
+  const ahora = new Date();
+  const [membresias, cuenta] = await Promise.all([
+    prisma.organizationMembership.findMany({ where: { personId, status: "active" }, select: { organizationId: true } }),
+    prisma.userAccount.findUnique({
+      where: { personId },
+      select: {
+        assignments: {
+          where: { status: "active", validFrom: { lte: ahora }, OR: [{ validTo: null }, { validTo: { gt: ahora } }] },
+          select: { scope: { select: { scopeType: true, scopeRefId: true } } },
+        },
+      },
+    }),
+  ]);
+  const orgs = new Set(membresias.map((m) => m.organizationId));
+  for (const { scope } of cuenta?.assignments ?? []) {
+    if (!scope.scopeRefId) continue;
+    if (scope.scopeType === "project") {
+      const proyecto = await prisma.project.findUnique({ where: { id: scope.scopeRefId }, select: { organizationId: true } });
+      if (proyecto?.organizationId) orgs.add(proyecto.organizationId);
+    } else if (scope.scopeType === "location") {
+      const org = await resolveOrganizationForLocation(scope.scopeRefId);
+      if (org) orgs.add(org);
+    }
+  }
+  return orgs;
+}
+
+/**
+ * Quién puede declarar el canal de una persona. **Decisión de Daniel,
+ * 2026-09-21 (ADR-184):** ella misma, un Platform Admin, o quien coordina su finca —
+ * `person:manage_notifications` sobre un proyecto o un lugar de alguna
+ * organización de la que esa persona es (`fincasDe`).
+ *
+ * Hasta entonces `declararCanal` sólo comprobaba que la persona existiera:
+ * cualquier cuenta podía apagarle a otra sus avisos.
+ */
+async function exigirPuedeDeclararCanal(userAccountId: string, personId: string) {
+  const cuenta = await prisma.userAccount.findUnique({ where: { id: userAccountId }, select: { personId: true } });
+  if (cuenta?.personId === personId) return;
+
+  const permiso = (scopeType: "platform" | "project" | "location", scopeRefId: string | null) =>
+    can(userAccountId, "manage_notifications", "person", { scopeType, scopeRefId }, CLASSIFICATION_NOT_APPLICABLE);
+
+  if (await permiso("platform", null)) return;
+  for (const org of await fincasDe(personId)) {
+    const proyectos = await prisma.project.findMany({ where: { organizationId: org }, select: { id: true } });
+    for (const p of proyectos) if (await permiso("project", p.id)) return;
+    for (const l of await lugaresDeOrganizacion(org)) if (await permiso("location", l.id)) return;
+  }
+  throw new PreferenciaDeCanalError("sin_permiso_sobre_la_persona");
+}
+
+/**
  * Declara —o corrige— la preferencia de una persona para un canal.
  *
  * **Escribe su `AuditEvent` en la misma transacción.** Una preferencia de canal
@@ -138,6 +200,7 @@ export async function declararCanal(userAccountId: string, input: DeclararCanalI
   }
   const persona = await prisma.person.findUnique({ where: { id: input.personId }, select: { id: true } });
   if (!persona) throw new PreferenciaDeCanalError("persona_no_encontrada");
+  await exigirPuedeDeclararCanal(userAccountId, input.personId);
 
   const antes = await prisma.personNotificationPreference.findUnique({
     where: { personId_channel: { personId: input.personId, channel: input.canal } },

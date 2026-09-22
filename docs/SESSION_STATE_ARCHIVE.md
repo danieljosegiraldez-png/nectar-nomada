@@ -4185,3 +4185,14 @@ foto), anular con motivo, cerrar; **ninguna entrega crea lote**. `/mis-entregas`
 **Recolector** anota SU entrega y reporta situaciones o la condición del día, con foto; lo ven el
 Farm Manager y el capataz, y un compañero sólo con `field_report:view` concedido. **Sin navegador.**
 **De Daniel:** dar el perfil Recolector (ámbito: la finca) a cada recolector con cuenta.
+
+## Archivado del 2026-09-21 · canal de aviso
+
+Sale la entrada de «La rueda del ratón» para que quepa la del canal de aviso (PR #464, ADR-184).
+Su contenido vive en ADR-080 y en el guardia de `CampoNumerico`; no dirige trabajo nuevo.
+
+### 2026-09-18 · La rueda del ratón ya no cambia campos numéricos (PR #418)
+
+ADR-080: la ausencia nunca se guarda como 0. Todo `type="number"` pasa por `CampoNumerico`; lo vigila
+un guardia de arquitectura con flip-test, y se verificó en navegador girando la rueda sobre un campo
+crudo (vacío → 0) y uno protegido (sin cambio).

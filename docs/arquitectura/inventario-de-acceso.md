@@ -28,12 +28,22 @@ esta rama (bodega, rutinas de lugar) encima:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **417** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **42** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
+| **418** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **41** | acotado por construcción | La consulta filtra por el propio principal —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno |
 | **79** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **5** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, y desde el 2026-09-18 `listarFincas()`, que lee sobre `getManageableContext` —quien autoriza— — las cinco miradas a mano y explicadas en el allowlist |
+
+> **`declararCanal` gana su guardia (2026-09-21): 417→418 guardia directo, 42→41 acotado por
+> construcción, sin operaciones ni archivos nuevos.** Contaba como «acotado por construcción» y
+> **no lo estaba**: recibía `userAccountId` sólo para ponerlo de actor en el `AuditEvent`, y
+> escribía la preferencia de canal de cualquier `personId`. Lo que el script reconoció fue su
+> segunda forma de «acotado» —una línea que termina en `userAccountId,`— en
+> `createdBy: userAccountId,` y `actorUserAccountId: userAccountId,`: sellos de actor, no un
+> filtro. Es la advertencia de su propio pie («reconoce formas escritas, no propiedades»),
+> hecha caso. Ahora llama a `exigirPuedeDeclararCanal`
+> (`can(..., "manage_notifications", "person", ...)`), y mueve la fila que le toca.
 
 > **Las pantallas de la pieza 3 (tarea 6, 2026-09-19): 522→526, las cuatro «depende del
 > llamador»**, 71→75. Son lectores para pintar: `mermasDeRecepciones`, `detalleDeRecepciones`,
