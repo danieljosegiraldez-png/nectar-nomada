@@ -92,6 +92,7 @@ export const RUTAS = {
   "/partner": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/partner/[projectId]": { clase: "requiere-sesion", razon: "Espacio de socios, por asignación." },
   "/fincas": { clase: "requiere-sesion", razon: "Elegir la finca (spec fincas y parcelas §3.1): lista las de `listarFincas`, que parte de `getManageableContext`; elegir sólo guarda una cookie que acota, nunca autoriza." },
+  "/fincas/[siteId]/logotipo": { clase: "requiere-sesion", razon: "Cambiar el logotipo de una finca (2026-09-21): 404 sin `location:manage_attributes` sobre esa finca; las dos acciones de subida lo vuelven a exigir." },
   "/fincas/nueva": { clase: "requiere-sesion", razon: "Dar de alta una finca (spec fincas y parcelas §3.2): 404 sin `organization:create_farm`, que sólo tiene el administrador de plataforma; la acción lo vuelve a exigir." },
   "/mis-entregas": { clase: "requiere-sesion", razon: "La pantalla del recolector (spec jornada y entrega §3.6): 404 sin harvest_delivery:create_own; `misEntregas` sólo lee las asignaciones y entregas de la Person de la propia cuenta, y anotar, reportar y subir fotos lo vuelve a autorizar cada servicio." },
   "/beneficio/recepcion": { clase: "requiere-sesion", razon: "Recepción de cereza del beneficio elegido (spec recepción §4): 404 sin lot:view o lot:manage; cada lector exige lot:view sobre ESE beneficio y recibir, rechazar y anular exigen lot:manage y la regla de dos personas en el servicio." },

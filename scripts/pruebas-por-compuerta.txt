@@ -67,6 +67,7 @@ tests/sensores/derivar.test.ts
 tests/sensores/ruta-de-ingesta.test.ts
 tests/apiary/genealogia.test.ts
 tests/traceability/fincas.test.ts
+tests/traceability/fincaLogo.test.ts
 tests/traceability/entregaDeCosecha-esquema.test.ts
 tests/traceability/jornadasDeCosecha.test.ts
 tests/traceability/entregasDeCosecha.test.ts

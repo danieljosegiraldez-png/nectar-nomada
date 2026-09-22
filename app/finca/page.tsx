@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { COOKIE_FINCA, fincaDeLaPagina, puedeCrearParcelaEn } from "../../lib/traceability/fincas";
 import { NuevaParcelaForm } from "../components/traceability/NuevaParcelaForm";
 import { FincaElegida } from "../components/traceability/FincaElegida";
+import { puedeCambiarLogotipo } from "../../lib/traceability/fincaLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,13 @@ export default async function FincaPage() {
   return (
     <div>
       <h1>{t("titulo")}</h1>
-      <FincaElegida elegida={finca.elegida} hayVarias={finca.fincas.length > 1} volver="/finca" />
+      <FincaElegida
+        elegida={finca.elegida}
+        hayVarias={finca.fincas.length > 1}
+        volver="/finca"
+        fincas={finca.fincas}
+        puedeCambiarLogotipo={finca.elegida ? await puedeCambiarLogotipo(user.userAccountId, finca.elegida.siteId) : false}
+      />
       <p className="nn-muted">{t("intro")}</p>
       <ul>
         {destinos.map((d) => (

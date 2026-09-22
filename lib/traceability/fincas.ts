@@ -34,6 +34,8 @@ export interface Finca {
   readonly nombre: string;
   readonly organizationId: string;
   readonly tipo: TipoDeFinca;
+  /** El logotipo de la finca (`Location.logoAssetId`), o `null` si no tiene. */
+  readonly logoAssetId: string | null;
 }
 
 /**
@@ -47,7 +49,7 @@ export async function listarFincas(userAccountId: string): Promise<Finca[]> {
 
   // Una sola lectura del árbol para subir de una parcela a su sitio.
   const arbol = await prisma.location.findMany({
-    select: { id: true, parentLocationId: true, locationType: true, name: true, organization: { select: { id: true, organizationType: true } } },
+    select: { id: true, parentLocationId: true, locationType: true, name: true, logoAssetId: true, organization: { select: { id: true, organizationType: true } } },
   });
   const porId = new Map(arbol.map((l) => [l.id, l]));
   // El sitio **de más arriba**, no el primero que aparece al subir. Daniel, 2026-09-21:
@@ -72,7 +74,7 @@ export async function listarFincas(userAccountId: string): Promise<Finca[]> {
     if (l.locationType !== "site" && l.locationType !== "plot") continue;
     const sitio = sitioDe(l.id);
     if (!sitio?.organization || !esTipoDeFinca(sitio.organization.organizationType)) continue;
-    fincas.set(sitio.id, { siteId: sitio.id, nombre: sitio.name, organizationId: sitio.organization.id, tipo: sitio.organization.organizationType });
+    fincas.set(sitio.id, { siteId: sitio.id, nombre: sitio.name, organizationId: sitio.organization.id, tipo: sitio.organization.organizationType, logoAssetId: sitio.logoAssetId });
   }
   return sortByName([...fincas.values()], (f) => f.nombre);
 }
@@ -185,6 +187,28 @@ function exigeNombre(nombre: string) {
   return limpio;
 }
 
+/**
+ * GPS de una parcela nueva (spec fincas y parcelas, formulario completo): las dos coordenadas o
+ * ninguna, y dentro del rango del sistema de referencia — mismos límites que
+ * `confirmarCoordenadasDelSitio` en `coordenadasDelSitio.ts`. Un dedo de más manda una parcela al
+ * océano y nadie lo nota hasta ver el mapa.
+ *
+ * **No sincroniza `Location.geoPoint`.** El comentario del esquema junto a `latitude`/`longitude`
+ * dice que ese punto PostGIS «se mantiene sincronizado en la capa de aplicación», pero
+ * `coordenadasDelSitio.ts` deja escrito que **cero líneas de aplicación lo referencian** — el
+ * propio esquema se contradice. No existe la función/servicio que el encargo pedía reusar; esta
+ * sigue el único precedente real (`confirmarCoordenadasDelSitio`), que a propósito no toca
+ * `geoPoint` y explica por qué. Sincronizarlo aquí habría sido inventar el primer punto de sync
+ * del sistema sin que nadie lo pidiera.
+ */
+function exigeCoordenadas(latitude: number | null, longitude: number | null): { latitude: number; longitude: number } | null {
+  if (latitude === null && longitude === null) return null;
+  if (latitude === null || longitude === null) throw new FincaError("gps_incompleto");
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new FincaError("latitud_fuera_de_rango");
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new FincaError("longitud_fuera_de_rango");
+  return { latitude, longitude };
+}
+
 export type CrearFincaInput =
   | { readonly nombre: string; readonly tipo: "farm" | "estate"; readonly descripcion?: string | null }
   | { readonly organizationId: string };
@@ -265,8 +289,26 @@ export async function puedeCrearParcelaEn(userAccountId: string, siteId: string)
  * `create_site`: los mismos dos permisos que crear un beneficio, así que el Farm Manager de esa
  * finca puede, el Farm Operator no, y el Farm Manager de otra finca tampoco. Lo demás de la
  * parcela —sol, sombra, altitud, suelo…— se completa en su ficha de ajustes.
+ *
+ * **Formulario completo (2026-09-21).** `areaHectareas`/`areaMetrosCuadrados` son alternativos —
+ * el formulario manda uno u otro según el selector ha/m², y el segundo se convierte a hectáreas
+ * (÷ 10 000) antes de guardar; `areaHectares` en la base es siempre hectáreas, nunca m². GPS
+ * (`latitude`/`longitude`) es opcional pero, si llega, las dos o ninguna — ver `exigeCoordenadas`.
+ * `descripcion` es texto libre («dónde está en la finca»); vacío se guarda `null` (ADR-080), nunca
+ * se inventa ni se deriva.
  */
-export async function crearParcela(userAccountId: string, input: { siteId: string; nombre: string; areaHectareas?: number | null }) {
+export async function crearParcela(
+  userAccountId: string,
+  input: {
+    siteId: string;
+    nombre: string;
+    areaHectareas?: number | null;
+    areaMetrosCuadrados?: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    descripcion?: string | null;
+  },
+) {
   await requireLocationAttributeAccess(userAccountId, input.siteId);
   const sitio = await prisma.location.findUniqueOrThrow({
     where: { id: input.siteId },
@@ -277,8 +319,15 @@ export async function crearParcela(userAccountId: string, input: { siteId: strin
   }
   if (sitio.locationType !== "site") throw new FincaError("padre_no_es_una_finca");
   const nombre = exigeNombre(input.nombre);
-  const area = input.areaHectareas ?? null;
+
+  const areaHa = input.areaHectareas ?? null;
+  const areaM2 = input.areaMetrosCuadrados ?? null;
+  if (areaHa !== null && areaM2 !== null) throw new FincaError("area_invalida");
+  const area = areaM2 !== null ? areaM2 / 10_000 : areaHa;
   if (area !== null && !(Number.isFinite(area) && area > 0)) throw new FincaError("area_invalida");
+
+  const coordenadas = exigeCoordenadas(input.latitude ?? null, input.longitude ?? null);
+  const descripcion = input.descripcion?.trim() || null;
 
   return prisma.$transaction(async (tx) => {
     if (!(await nombreLibreBajo(tx, sitio.id, nombre))) throw new FincaError("nombre_repetido");
@@ -291,6 +340,9 @@ export async function crearParcela(userAccountId: string, input: { siteId: strin
         classification: sitio.classification,
         timezone: sitio.timezone,
         areaHectares: area,
+        latitude: coordenadas?.latitude ?? null,
+        longitude: coordenadas?.longitude ?? null,
+        description: descripcion,
         createdBy: userAccountId,
       },
     });

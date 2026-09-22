@@ -14,12 +14,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
 ## vez el 2026-09-21 al rebasar `spec/instalaciones-rutinas`
 
-**557 operaciones** que tocan la base, en **154 archivos** — regenerado tras el
-rebase de `spec/instalaciones-rutinas` sobre `origin/main` (919d0ba4, 2026-09-21),
-con `node scripts/inventario-de-acceso.mjs`: `origin/main` mide 545 operaciones en
-152 archivos; la diferencia —**+12 operaciones en +2 archivos** (+10 guardia
-directo, +1 depende del llamador, +1 acotado por construcción)— es lo que trae
-esta rama (bodega, rutinas de lugar) encima:
+**561 operaciones** que tocan la base, en **155 archivos** — regenerado tras el
+rebase sobre `origin/main` (`98daefa7`, 2026-09-22), con
+`node scripts/inventario-de-acceso.mjs`: `origin/main` mide 557 operaciones en
+154 archivos. El logotipo de la finca suma **+4 operaciones en +1 archivo**
+(+3 guardia directo, +1 depende del llamador):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -28,9 +27,9 @@ esta rama (bodega, rutinas de lugar) encima:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **418** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **421** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **79** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **18** | recibía principal sin guardia visible | `listScopeChoices()`, `listBiocharBatches()`, desde P4 §2 `registrarAparato()` y `refrescarAcceso()`, desde el 2026-09-18 `listarFincas()`, y desde el 2026-09-21 las **13** que el detector daba por acotadas sólo por su sello de actor — las dieciocho miradas a mano y explicadas en el allowlist, **una de ellas como hallazgo** |
@@ -74,6 +73,13 @@ esta rama (bodega, rutinas de lugar) encima:
 > filtro. Es la advertencia de su propio pie («reconoce formas escritas, no propiedades»),
 > hecha caso. Ahora llama a `exigirPuedeDeclararCanal`
 > (`can(..., "manage_notifications", "person", ...)`), y mueve la fila que le toca.
+
+> **El logotipo de la finca (2026-09-21, rebasado 2026-09-22): 557→561, y un archivo nuevo,
+> `lib/traceability/fincaLogo.ts`.** `finalizeFincaLogoUpload` y la lectura de su pantalla,
+> `fincaParaLogotipo` y `requestFincaLogoUpload` entran como «guardia directo» (418→421 sobre el árbol rebasado,
+> con `requireLocationAttributeAccess`); pedir la firma comprueba además que la ubicación sea una finca antes de crear
+> el objeto remoto. `urlDelLogotipo` es «depende del llamador» (79→80): firma la URL de
+> un `logoAssetId` que llega de `listarFincas`, que ya acota a lo que quien mira ve.
 
 > **Las pantallas de la pieza 3 (tarea 6, 2026-09-19): 522→526, las cuatro «depende del
 > llamador»**, 71→75. Son lectores para pintar: `mermasDeRecepciones`, `detalleDeRecepciones`,

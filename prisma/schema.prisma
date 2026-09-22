@@ -838,6 +838,14 @@ model Location {
   status           RecordStatus                           @default(draft)
   classification   ClassificationLevel                    @default(internal)
 
+  // Botones de finca y parcela (2026-09-21) — el logotipo de una finca. Igual
+  // que `evidenceAssetId` en EquipmentConditionReport: apunta a `core.asset`,
+  // que ya lleva checksum, tipo MIME y derechos de uso, en vez de abrir un
+  // almacén de imágenes aparte. Reemplazar el logotipo mueve este puntero; el
+  // Asset viejo no se borra.
+  logoAssetId String? @map("logo_asset_id") @db.Uuid
+  logoAsset   Asset?  @relation("LocationLogoAsset", fields: [logoAssetId], references: [id])
+
   // F1 (30_F1_OPERACION_FINCA_ESQUEMA.md §1) — stable terroir attributes,
   // all nullable (existing Locations don't have them). `altitudeMinM`/
   // `altitudeMaxM` replace the old single-value `altitudeMeters` (removed;
@@ -963,6 +971,7 @@ model Location {
   equipmentTransfersFrom EquipmentTransfer[] @relation("EquipmentTransferFrom")
   equipmentTransfersTo   EquipmentTransfer[] @relation("EquipmentTransferTo")
   careRoutines CareRoutine[] @relation("CareRoutineLocation")
+  @@index([logoAssetId])
 
   @@map("location")
   @@schema("core")
@@ -2106,6 +2115,8 @@ model Asset {
   @@index([equipmentId])
   @@index([equipmentModelId])
   equipmentConditionEvidence EquipmentConditionReport[] @relation("EquipmentConditionEvidence")
+  /// Botones de finca y parcela (2026-09-21) — fincas que usan este Asset como logotipo.
+  logoOfLocations            Location[]                 @relation("LocationLogoAsset")
 
   @@map("asset")
   @@schema("core")

@@ -129,7 +129,7 @@ describe("qué fincas ve cada uno", () => {
 
   it("una finca lleva su nombre, su organización y su tipo", async () => {
     const a = (await listarFincas(admin)).find((f) => f.siteId === A.site);
-    expect(a).toEqual({ siteId: A.site, nombre: `TEST Finca A (${RUN})`, organizationId: A.org, tipo: "farm" });
+    expect(a).toEqual({ siteId: A.site, nombre: `TEST Finca A (${RUN})`, organizationId: A.org, tipo: "farm", logoAssetId: null });
   }, 20000);
 
   // Daniel, 2026-09-21: «Invernadero solar» le salía en /fincas como si fuera otra finca. El
@@ -153,8 +153,8 @@ describe("qué fincas ve cada uno", () => {
 });
 
 describe("qué finca queda elegida", () => {
-  const fa: Finca = { siteId: "a", nombre: "A", organizationId: "oa", tipo: "farm" };
-  const fb: Finca = { siteId: "b", nombre: "B", organizationId: "ob", tipo: "estate" };
+  const fa: Finca = { siteId: "a", nombre: "A", organizationId: "oa", tipo: "farm", logoAssetId: null };
+  const fb: Finca = { siteId: "b", nombre: "B", organizationId: "ob", tipo: "estate", logoAssetId: null };
 
   it("con una sola finca, esa, aunque no haya cookie", () => {
     expect(resolverFinca([fa], undefined)).toEqual({ elegida: fa, todas: false, debeElegir: false });
@@ -262,6 +262,65 @@ describe("crear parcelas", () => {
       /nombre_repetido/,
     );
   }, 20000);
+
+  // Formulario completo (2026-09-21): área en ha o en m², GPS opcional (las dos o ninguna,
+  // dentro de rango) y descripción de dónde está en la finca.
+  describe("los campos nuevos del formulario", () => {
+    it("guarda el área declarada en hectáreas tal cual", async () => {
+      const p = await crearParcela(managerA, { siteId: A.site, nombre: `Área ha (${RUN})`, areaHectareas: 2.25 });
+      expect(Number(p.areaHectares)).toBe(2.25);
+    }, 20000);
+
+    it("guarda el área declarada en m², convertida a hectáreas (÷ 10 000)", async () => {
+      const p = await crearParcela(managerA, { siteId: A.site, nombre: `Área m2 (${RUN})`, areaMetrosCuadrados: 20000 });
+      expect(Number(p.areaHectares)).toBe(2);
+    }, 20000);
+
+    it("GPS válido guarda latitud y longitud", async () => {
+      const p = await crearParcela(managerA, {
+        siteId: A.site,
+        nombre: `GPS válido (${RUN})`,
+        latitude: 8.9824,
+        longitude: -79.5199,
+      });
+      expect(p.latitude).toBe(8.9824);
+      expect(p.longitude).toBe(-79.5199);
+    }, 20000);
+
+    it("sólo latitud, sin longitud: error, y no se crea la fila", async () => {
+      const nombre = `GPS incompleto (${RUN})`;
+      await expect(crearParcela(managerA, { siteId: A.site, nombre, latitude: 8.98 })).rejects.toThrow(/gps_incompleto/);
+      expect(await prisma.location.count({ where: { name: nombre } })).toBe(0);
+    }, 20000);
+
+    it("latitud fuera de rango: error, y no se crea la fila", async () => {
+      const nombre = `GPS fuera de rango (${RUN})`;
+      await expect(
+        crearParcela(managerA, { siteId: A.site, nombre, latitude: 95, longitude: -79.5199 }),
+      ).rejects.toThrow(/latitud_fuera_de_rango/);
+      expect(await prisma.location.count({ where: { name: nombre } })).toBe(0);
+    }, 20000);
+
+    it("longitud fuera de rango: error, y no se crea la fila", async () => {
+      const nombre = `GPS longitud fuera de rango (${RUN})`;
+      await expect(
+        crearParcela(managerA, { siteId: A.site, nombre, latitude: 8.98, longitude: -200 }),
+      ).rejects.toThrow(/longitud_fuera_de_rango/);
+      expect(await prisma.location.count({ where: { name: nombre } })).toBe(0);
+    }, 20000);
+
+    it("la descripción se recorta; vacía o sólo espacios se guarda null", async () => {
+      const conTexto = await crearParcela(managerA, {
+        siteId: A.site,
+        nombre: `Con descripción (${RUN})`,
+        descripcion: "  bajando del beneficio, a la izquierda de la quebrada  ",
+      });
+      expect(conTexto.description).toBe("bajando del beneficio, a la izquierda de la quebrada");
+
+      const sinTexto = await crearParcela(managerA, { siteId: A.site, nombre: `Sin descripción (${RUN})`, descripcion: "   " });
+      expect(sinTexto.description).toBeNull();
+    }, 20000);
+  });
 });
 
 describe("la cosecha va sobre una parcela", () => {
