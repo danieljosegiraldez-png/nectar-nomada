@@ -11,11 +11,13 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-22 al rebasar «quién lo hizo»
+## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
 
-**571 operaciones** que tocan la base, en **157 archivos** — regenerado tras el
-rebase sobre `origin/main` (`3653123e`, 2026-09-22). El paso 4 del secado
-(ambiente a mano) suma **+3 operaciones con guardia directo en +1 archivo**:
+**573 operaciones** que tocan la base, en **158 archivos** — regenerado tras el
+rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
+**+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
+contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
+un permiso sensorial:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -24,7 +26,7 @@ rebase sobre `origin/main` (`3653123e`, 2026-09-22). El paso 4 del secado
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **431** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **433** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |

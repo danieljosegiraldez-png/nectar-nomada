@@ -21,6 +21,9 @@
  * - `publica-sin-datos`  **GET sin lectura de datos observada** (inspección del
  *                        2026-08-28). No es una fuente normativa: si mañana la
  *                        portada incorpora contenido, la clase cambia.
+ * - `publica-rueda`      Lee sólo ruedas marcadas públicas y su única versión
+ *                        publicada. Con sesión sensorial puede mostrar borradores;
+ *                        la ampliación se decide en el servicio, no en la ruta.
  * - `flujo-auth`         Es el propio flujo de autenticación.
  * - `firma`              Se autentica por firma, no por sesión.
  * - `requiere-sesion`    Debe exigir sesión antes de servir.
@@ -157,6 +160,14 @@ export const RUTAS = {
   },
   "/sensory": { clase: "requiere-sesion", razon: "Evaluación sensorial, incluida la ciega." },
   "/sensory/[sessionId]": { clase: "requiere-sesion", razon: "Evaluación sensorial." },
+  "/sensory/herramientas/ruedas": {
+    clase: "publica-rueda",
+    razon: "Catálogo educativo: sin sesión sólo lista ruedas isPublic con versión published; el servicio acota antes de consultar.",
+  },
+  "/sensory/herramientas/ruedas/[wheel]": {
+    clase: "publica-rueda",
+    razon: "Detalle educativo: sin sesión exige rueda isPublic y versión published; borradores sólo con permiso sensorial.",
+  },
   "/start": { clase: "requiere-sesion", razon: "Aterrizaje tras iniciar sesión." },
 };
 

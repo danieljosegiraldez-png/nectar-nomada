@@ -99,6 +99,11 @@ const NAV: readonly NavDefinition[] = [
  * session list, so it is not repeated here.
  */
 const SENSORY_TOOLS: readonly NavDefinition[] = [
+  {
+    labelKey: "sensoryWheels",
+    href: "/sensory/herramientas/ruedas",
+    requiresAnyOf: ["sensory:submit_assessment", "sensory:manage_session", "competition:manage"],
+  },
   { labelKey: "competitions", href: "/competitions", requiresAnyOf: ["competition:manage"] },
   { labelKey: "calibration", href: "/calibration", requiresAnyOf: ["sensory:manage_session"] },
   // 2026-09-06. Hasta hoy no había forma de crear una sesión: `sensorySession.create`

@@ -46,6 +46,7 @@
     "sensory:archive-protocol": "tsx scripts/create-sensory-protocol.ts --archivar",
     "apiary:load-protocol": "tsx scripts/cargar-protocolo-de-campo.ts",
     "sensory:record-external": "tsx scripts/record-external-report.ts",
+    "sensory:import-wheels": "tsx scripts/import-sensory-wheels.ts",
     "org:set-contact": "tsx scripts/set-organization-contact.ts",
     "check:state": "node scripts/check-state-budget.mjs",
     "decisiones": "bash scripts/open-decisions.sh",

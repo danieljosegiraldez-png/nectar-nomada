@@ -57,6 +57,27 @@
   --nn-shadow: 0 1px 2px rgba(36, 28, 20, 0.05), 0 1px 1px rgba(36, 28, 20, 0.04);
 }
 
+/* Herramientas sensoriales: rueda ancha y alternativa textual completa. */
+.nn-wheel-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+.nn-wheel-controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-bottom: 1rem; }
+.nn-wheel-controls label { flex: 1 1 16rem; }
+.nn-wheel-controls [role="group"] { display: flex; gap: 0.4rem; }
+.nn-wheel-controls [aria-pressed="true"] { outline: 3px solid var(--nn-accent, #8b5a2b); }
+.nn-wheel { width: min(100%, 42rem); height: auto; display: block; margin-inline: auto; }
+.nn-wheel g[role="button"] { cursor: pointer; }
+.nn-wheel g[role="button"]:focus path { stroke: #111; stroke-width: 5px; }
+.nn-wheel text { pointer-events: none; fill: #111; }
+.nn-wheel-layers section { margin-block: 1rem; }
+@media (max-width: 48rem) {
+  .nn-wheel-layout { grid-template-columns: 1fr; }
+  .nn-wheel { max-height: 70vh; }
+}
+
 /* System sans is drawn for text. At display sizes its default tracking reads
    loose, so headings tighten as they grow. */
 h1,

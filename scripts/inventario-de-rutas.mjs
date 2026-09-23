@@ -101,7 +101,7 @@ const entradas = archivos
 
 // `secreto-de-ruta` (2026-09-18, artefactos de colmena T7): una máquina que se autentica con un
 // secreto portador compartido —la ruta de Notehub—, ni sesión ni firma. No se disfraza de `firma`.
-const CLASES = ["publica-discover", "publica-sin-datos", "flujo-auth", "firma", "secreto-de-ruta", "requiere-sesion"];
+const CLASES = ["publica-discover", "publica-rueda", "publica-sin-datos", "flujo-auth", "firma", "secreto-de-ruta", "requiere-sesion"];
 const VERBOS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const porRuta = new Map(entradas.map((e) => [e.ruta, e.archivo]));
 
@@ -165,6 +165,7 @@ for (const e of entradas) {
   const pideUsuario = /getCurrentUser|resolverPrincipal|permissionKeysAnywhere|requirePermission|\bauth\(\)/.test(src);
   const cortaLaRespuesta = /redirect\("\/login"\)|requirePermission|status:\s*40[13]|new Response\([^)]*40[13]/.test(src);
   const leePublico = /lib\/discover|discover\/service/.test(src);
+  const leeRuedaPublica = /lib\/sensory\/ruedas/.test(src);
   const leeDatos = /prisma\.|lib\/discover|discover\/service/.test(src);
 
   switch (d.clase) {
@@ -175,6 +176,12 @@ for (const e of entradas) {
     case "publica-discover":
       if (!leePublico)
         fallo(`DISCREPA: ${e.ruta} se declara \`publica-discover\` pero no lee por lib/discover/service (${e.archivo}).`);
+      if (pideUsuario && cortaLaRespuesta)
+        fallo(`DISCREPA: ${e.ruta} se declara pública pero exige sesión (${e.archivo}).`);
+      break;
+    case "publica-rueda":
+      if (!leeRuedaPublica)
+        fallo(`DISCREPA: ${e.ruta} se declara \`publica-rueda\` pero no lee por lib/sensory/ruedas (${e.archivo}).`);
       if (pideUsuario && cortaLaRespuesta)
         fallo(`DISCREPA: ${e.ruta} se declara pública pero exige sesión (${e.archivo}).`);
       break;

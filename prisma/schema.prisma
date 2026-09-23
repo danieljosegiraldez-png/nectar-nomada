@@ -328,6 +328,7 @@ model UserAccount {
   storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
   dryingTrayWeighingsCreated DryingTrayWeighing[] @relation("DryingTrayWeighingCreatedBy")
   dryingAmbientReadingsCreated DryingAmbientReading[] @relation("DryingAmbientReadingCreatedBy")
+  sensoryWheelLinksCreated SensoryDescriptorWheelLink[] @relation("SensoryDescriptorWheelLinkCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -2589,9 +2590,147 @@ model SensoryDescriptor {
   // RO1.2 §2b-iii — a field descriptor optionally mapped to this structured
   // vocabulary later, by someone with judgment, never automatic.
   processSensoryObservations ProcessSensoryObservation[]
+  wheelLinks                 SensoryDescriptorWheelLink[]
 
   @@index([protocolVersionId])
   @@map("sensory_descriptor")
+  @@schema("sensory")
+}
+
+enum SensoryWheelDomain {
+  arabica_coffee
+  robusta_coffee
+  honey
+  wine
+  beer
+  mead
+  cider
+
+  @@schema("sensory")
+}
+
+enum SensoryWheelVersionStatus {
+  draft
+  published
+  superseded
+
+  @@schema("sensory")
+}
+
+enum SensoryWheelNodeLevel {
+  family
+  subfamily
+  descriptor
+
+  @@schema("sensory")
+}
+
+enum SensoryWheelReferenceModality {
+  aroma
+  flavor
+  both
+
+  @@schema("sensory")
+}
+
+model SensoryWheel {
+  id        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain    SensoryWheelDomain    @unique
+  title     String
+  isPublic  Boolean               @default(false) @map("is_public")
+  createdAt DateTime              @default(now()) @map("created_at")
+  versions  SensoryWheelVersion[]
+
+  @@map("sensory_wheel")
+  @@schema("sensory")
+}
+
+model SensoryWheelVersion {
+  id              String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wheelId         String                    @map("wheel_id") @db.Uuid
+  wheel           SensoryWheel              @relation(fields: [wheelId], references: [id], onDelete: Restrict)
+  version         Int
+  sourceAuthor    String                    @map("source_author")
+  sourceReference String                    @map("source_reference")
+  license         String
+  permissionNote  String?                   @map("permission_note")
+  status          SensoryWheelVersionStatus @default(draft)
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  nodes           SensoryWheelNode[]
+
+  @@unique([wheelId, version])
+  @@index([wheelId, status])
+  @@map("sensory_wheel_version")
+  @@schema("sensory")
+}
+
+model SensoryWheelNode {
+  id              String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  versionId       String                       @map("version_id") @db.Uuid
+  version         SensoryWheelVersion          @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  key             String
+  parentId        String?                      @map("parent_id") @db.Uuid
+  parentLevel     SensoryWheelNodeLevel?       @map("parent_level")
+  level           SensoryWheelNodeLevel
+  parent          SensoryWheelNode?            @relation("SensoryWheelTree", fields: [versionId, parentId, parentLevel], references: [versionId, id, level], onDelete: Restrict)
+  children        SensoryWheelNode[]           @relation("SensoryWheelTree")
+  termOriginal    String                       @map("term_original")
+  termEs          String?                      @map("term_es")
+  color           String?
+  displayOrder    Int                          @map("display_order")
+  detail          SensoryWheelNodeDetail?
+  references      SensoryWheelReference[]
+  descriptorLinks SensoryDescriptorWheelLink[]
+
+  @@unique([versionId, key])
+  @@unique([versionId, id, level])
+  @@index([versionId, parentId, displayOrder])
+  @@map("sensory_wheel_node")
+  @@schema("sensory")
+}
+
+model SensoryWheelNodeDetail {
+  nodeId          String           @id @map("node_id") @db.Uuid
+  node            SensoryWheelNode @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  definition      String
+  sourceReference String           @map("source_reference")
+  license         String?
+
+  @@map("sensory_wheel_node_detail")
+  @@schema("sensory")
+}
+
+model SensoryWheelReference {
+  id              String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nodeId          String                        @map("node_id") @db.Uuid
+  node            SensoryWheelNode              @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  modality        SensoryWheelReferenceModality
+  reference       String
+  preparation     String?
+  intensity       Decimal?                      @db.Decimal(4, 1)
+  sourceReference String                        @map("source_reference")
+  license         String?
+  displayOrder    Int                           @default(0) @map("display_order")
+
+  @@index([nodeId, displayOrder])
+  @@map("sensory_wheel_reference")
+  @@schema("sensory")
+}
+
+model SensoryDescriptorWheelLink {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  descriptorId String            @map("descriptor_id") @db.Uuid
+  descriptor   SensoryDescriptor @relation(fields: [descriptorId], references: [id], onDelete: Restrict)
+  wheelNodeId  String            @map("wheel_node_id") @db.Uuid
+  wheelNode    SensoryWheelNode  @relation(fields: [wheelNodeId], references: [id], onDelete: Restrict)
+  createdBy    String            @map("created_by") @db.Uuid
+  creator      UserAccount       @relation("SensoryDescriptorWheelLinkCreatedBy", fields: [createdBy], references: [id])
+  createdAt    DateTime          @default(now()) @map("created_at")
+  retiredAt    DateTime?         @map("retired_at")
+
+  @@index([descriptorId, retiredAt])
+  @@index([wheelNodeId, retiredAt])
+  @@map("sensory_descriptor_wheel_link")
   @@schema("sensory")
 }
 
