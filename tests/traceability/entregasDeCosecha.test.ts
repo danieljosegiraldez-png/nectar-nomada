@@ -57,6 +57,7 @@ beforeAll(async () => {
   r1 = await persona("Recolector 1");
   cuentaR1 = await cuenta(r1, "Recolector");
   r2 = await persona("Recolector 2 sin cuenta");
+  await prisma.organizationMembership.createMany({ data: [r1, r2].map((personId) => ({ personId, organizationId: orgId })) });
   const ayer = new Date(hoy.getTime() - 86_400_000);
   await agregarRecolector(capataz, { fincaSiteId: finca, personId: r1, desde: ayer });
   await agregarRecolector(capataz, { fincaSiteId: finca, personId: r2, desde: ayer });
@@ -84,6 +85,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: bloque }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficio, parcela, otraParcela] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: finca }) });

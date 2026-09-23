@@ -162,6 +162,7 @@ describe("finalizeLotAssetUpload", () => {
     const otherPerson = await prisma.person.create({
       data: { givenName: "TEST", familyName: "PhotoTaker", displayName: `TEST PhotoTaker (${RUN_ID})`, locale: "en" },
     });
+    await prisma.organizationMembership.create({ data: { personId: otherPerson.id, organizationId } });
 
     try {
       const asset = await finalizeLotAssetUpload(authorizedUserAccountId, {
@@ -180,6 +181,7 @@ describe("finalizeLotAssetUpload", () => {
       expect(asset.creatorPersonId).not.toBe(uploaderAccount.personId);
       expect(asset.createdBy).toBe(authorizedUserAccountId); // uploader is still createdBy, regardless of who took the photo
     } finally {
+      await prisma.organizationMembership.deleteMany({ where: { personId: otherPerson.id } });
       await prisma.person.delete({ where: { id: otherPerson.id } });
     }
   });

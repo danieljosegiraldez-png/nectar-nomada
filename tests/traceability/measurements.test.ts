@@ -93,6 +93,9 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({
     where: assertDefinedWhere({ id: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
   });
+  await prisma.organizationMembership.deleteMany({
+    where: assertDefinedWhere({ person: { displayName: { contains: RUN_ID } } }),
+  });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: storageLocationId }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: [projectAId, projectBId] } }) });
@@ -356,6 +359,7 @@ describe("T9.5 — provenance is chosen, never defaulted; observer independent o
     const fieldTechnician = await prisma.person.create({
       data: { givenName: "TEST", familyName: "FieldTechnician", displayName: `TEST FieldTechnician (${RUN_ID})`, locale: "es" },
     });
+    await prisma.organizationMembership.create({ data: { personId: fieldTechnician.id, organizationId } });
 
     const measurement = await recordMeasurement(authorizedUserAccountId, {
       provenanceClass: "measured_fact",

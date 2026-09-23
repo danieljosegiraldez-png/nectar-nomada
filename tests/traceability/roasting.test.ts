@@ -79,6 +79,9 @@ beforeAll(async () => {
     data: { givenName: "TEST", familyName: "Maria", displayName: `TEST Maria (${RUN_ID})`, locale: "es" },
   });
   mariaPersonId = maria.id;
+  await prisma.organizationMembership.createMany({
+    data: [gabrielPersonId, mariaPersonId].map((personId) => ({ personId, organizationId })),
+  });
 });
 
 afterAll(async () => {
@@ -113,6 +116,9 @@ afterAll(async () => {
         { roasterPersonId: { in: [gabrielPersonId, mariaPersonId] } },
       ],
     }),
+  });
+  await prisma.organizationMembership.deleteMany({
+    where: assertDefinedWhere({ personId: { in: [gabrielPersonId, mariaPersonId] } }),
   });
 
   // The assertion that would have caught this the first time it happened.
@@ -393,4 +399,3 @@ describe("the row cap is spent on rows the caller can see — ADR-087", () => {
     expect(roomy.truncated).toBe(false);
   });
 });
-

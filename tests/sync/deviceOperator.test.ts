@@ -46,6 +46,9 @@ beforeAll(async () => {
     data: { givenName: "TEST", familyName: n, displayName: `TEST ${n} (${RUN_ID})`, locale: "es" } })).id;
   personaDelAparato = await persona("DuenoDelAparato");
   otraPersona = await persona("OtroOperador");
+  await prisma.organizationMembership.createMany({
+    data: [personaDelAparato, otraPersona].map((personId) => ({ personId, organizationId })),
+  });
 
   const cuenta = await prisma.userAccount.create({
     data: { personId: personaDelAparato, authProvider: "credentials", status: "active" } });
@@ -79,6 +82,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: ids } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: [personaDelAparato, otraPersona] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
@@ -94,11 +98,10 @@ const mut = (sesion: string, n: string, operatorPersonId?: string) => ({
 
 describe("el operador de un aparato no es una llave", () => {
   /**
-   * Atribuir a otra Persona es libre y debe seguir siéndolo: quien hace el
-   * trabajo normalmente NO tiene cuenta, y restringirlo excluiría justo a esa
-   * gente. Es la decisión que §4 del estado lista como «no volver a proponer».
+   * Atribuir a otra Persona de la misma finca sigue siendo independiente del
+   * dueño del aparato: quien hace el trabajo normalmente NO tiene cuenta.
    */
-  it("atribuir a alguien distinto del dueño del aparato funciona sin más", async () => {
+  it("atribuir a alguien de la finca distinto del dueño del aparato funciona", async () => {
     const [r] = await pushFieldEvents(userAccountId, deviceId, [mut(sesionMia, "otro", otraPersona)]);
     expect(r!.status).toBe("applied");
     const fila = await prisma.fieldEvent.findUniqueOrThrow({ where: { clientDraftId: `${RUN_ID}-otro` } });

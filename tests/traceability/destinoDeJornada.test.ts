@@ -66,6 +66,8 @@ beforeAll(async () => {
   manager = await cuenta("Farm Manager", finca);
   receptor = await cuenta("Farm Operator", finca);
   recolector = await persona("Recolector");
+  const { organizationId } = await prisma.location.findUniqueOrThrow({ where: { id: finca }, select: { organizationId: true } });
+  await prisma.organizationMembership.create({ data: { personId: recolector, organizationId: organizationId! } });
   await agregarRecolector(manager, { fincaSiteId: finca, personId: recolector, desde: new Date(hoy.getTime() - 86_400_000) });
 }, 30000);
 
@@ -82,6 +84,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, beneficioAjeno] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
