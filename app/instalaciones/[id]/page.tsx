@@ -76,32 +76,80 @@ export default async function InstalacionPage({ params, searchParams }: {
   const puntoDe = (l: LecturaVigente) => l.rackId
     ? `${nombreDeEstante(l.rackId)}${l.rackLevel != null ? ` · ${t("nivel", { n: l.rackLevel })}` : ""}`
     : l.rackLevel != null ? t("ambienteNivelSinEstante", { n: l.rackLevel }) : t("ambienteGeneral");
-  return <div>
-    <p><Link href="/instalaciones">← {t("volver")}</Link></p>
-    <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
-    <h1>{instalacion.name}</h1>
-    {ok === "guardado" && <p role="status">{t("guardado")}</p>}
+  const posicionesTotal = instalacion.estantes.reduce((total, estante) => total + estante.posiciones.length, 0);
+  const lecturaGeneral = ambiente ? lecturaDelPunto(ambiente.vigentes, { rackId: null, rackLevel: null }) : null;
+  return <div className="nn-installation-page">
+    <nav className="nn-breadcrumb" aria-label={t("rutaInstalacion")}>
+      <Link href="/instalaciones">{t("volver")}</Link>
+      <span aria-hidden="true">/</span>
+      <span>{instalacion.sitio?.name ?? t("sitioNoVisible")}</span>
+    </nav>
+    <header className="nn-installation-header">
+      <div>
+        <h1>{instalacion.name}</h1>
+        <p>{t("instalacionEnSitio", { sitio: instalacion.sitio?.name ?? t("sitioNoVisible") })}</p>
+      </div>
+      <Link className="nn-button nn-installation-primary" href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link>
+    </header>
+    {ok === "guardado" && <p className="nn-notice nn-notice-success" role="status">{t("guardado")}</p>}
     <AvisoDeRutina ok={ok} error={errorCode} t={tEq} />
-    {ok === "ambiente" && <p role="status">{t("ambienteGuardado")}</p>}
-    {!puedeEditar && <p role="alert">{t("sinPermisoEditar")}</p>}
-    {puedeEditar && <FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} />}
-    <h2>{t("camas")}</h2>
-    {!instalacion.camas.length && <p>{t("sinCamas")}</p>}
-    {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
-      <h3>{c.name}</h3>
-      {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
-      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} />
-    </section>)}
-    {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
-    <h2>{t("estantes")}</h2>
-    {instalacion.estantes.map((estante, i) => {
+    {ok === "ambiente" && <p className="nn-notice nn-notice-success" role="status">{t("ambienteGuardado")}</p>}
+    {!puedeEditar && <p className="nn-notice" role="alert">{t("sinPermisoEditar")}</p>}
+
+    <section className="nn-installation-overview" aria-labelledby="resumen-instalacion">
+      <h2 id="resumen-instalacion">{t("resumenInstalacion")}</h2>
+      <dl>
+        <div><dt>{t("ambiente")}</dt><dd>{instalacion.dryingEnvironment ? t(`ambiente_${instalacion.dryingEnvironment}`) : t("noDeclarado")}</dd></div>
+        <div><dt>{t("camas")}</dt><dd>{instalacion.camas.length}</dd></div>
+        <div><dt>{t("estantes")}</dt><dd>{instalacion.estantes.length}</dd></div>
+        <div><dt>{t("posiciones")}</dt><dd>{posicionesTotal}</dd></div>
+      </dl>
+      {ambiente && <div className="nn-installation-reading">
+        <span>{t("ambienteGeneral")}</span>
+        <strong>{lecturaGeneral ? resumen(lecturaGeneral) : t("ambienteSinLectura")}</strong>
+      </div>}
+    </section>
+
+    {puedeEditar && <details className="nn-disclosure" open={ok === "guardado"}>
+      <summary><span>{t("ajustesInstalacion")}</span><small>{t("ajustesInstalacionAyuda")}</small></summary>
+      <div className="nn-disclosure-body"><FormularioUbicacion key={JSON.stringify(instalacion)} tipo="drying_facility" existente={instalacion} /></div>
+    </details>}
+
+    <section className="nn-installation-section" aria-labelledby="estructura-secado">
+      <div className="nn-installation-section-heading">
+        <div><h2 id="estructura-secado">{t("estructuraSecado")}</h2><p>{t("estructuraSecadoAyuda")}</p></div>
+      </div>
+      <div className="nn-installation-subsection">
+        <h3>{t("camas")}</h3>
+        {!instalacion.camas.length && <p className="nn-empty-state">{t("sinCamas")}</p>}
+        <div className="nn-installation-records">{instalacion.camas.map((c, i) => <section key={c.id} className="nn-installation-record">
+          <div><strong>{c.name}</strong><span>{c.rackLevel != null ? t("rackValor", { nivel: c.rackLevel }) : t("rackNoDeclarado")}</span></div>
+          {permisosDeCamas[i] && <details className="nn-inline-disclosure">
+            <summary>{t("editarCama")}</summary>
+            <FormularioUbicacion tipo="drying_bed" existente={c} />
+          </details>}
+          <details className="nn-inline-disclosure nn-location-operations">
+            <summary>{t("rutinasYEquipos")}</summary>
+            <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} />
+          </details>
+        </section>)}</div>
+        {puedeEditar && <details className="nn-disclosure nn-disclosure-compact">
+          <summary><span>{t("crearCama")}</span><small>{t("crearCamaAyuda")}</small></summary>
+          <div className="nn-disclosure-body"><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></div>
+        </details>}
+      </div>
+
+      <div className="nn-installation-subsection">
+        <h3>{t("estantes")}</h3>
+        {!instalacion.estantes.length && <p className="nn-empty-state">{t("sinEstantes")}</p>}
+        {instalacion.estantes.map((estante, i) => {
       // La rejilla es de sólo lectura en este plan (2b pinta qué bandeja hay
       // en cada posición): una fila por nivel, del más alto al más bajo.
       const filas = Array.from({ length: estante.niveles }, (_, idx) => estante.niveles - idx);
       const puestos = Array.from({ length: estante.puestos }, (_, idx) => idx + 1);
-      return <section key={estante.id}>
-        <h3>{estante.name}</h3>
-        <table>
+      return <section key={estante.id} className="nn-rack">
+        <div className="nn-rack-heading"><h3>{estante.name}</h3><span>{t("resumenEstante", { niveles: estante.niveles, puestos: estante.puestos, total: estante.posiciones.length })}</span></div>
+        <div className="nn-table-scroll"><table>
           <tbody>
             {filas.map((nivel) => <tr key={nivel}>
               <th scope="row">{t("nivel", { n: nivel })}</th>
@@ -113,36 +161,53 @@ export default async function InstalacionPage({ params, searchParams }: {
                   </Link>}
                 </td>;
               })}
-              <td>{ambiente
+              <td className="nn-rack-reading">{ambiente
                 ? (() => { const l = lecturaDelPunto(ambiente.vigentes, { rackId: estante.id, rackLevel: nivel }); return l ? resumen(l) : t("ambienteSinLecturaDelNivel"); })()
                 : null}</td>
             </tr>)}
           </tbody>
-        </table>
+        </table></div>
         {posicionSeleccionada?.estanteId === estante.id && puedeEditarPosicion &&
-          <FormularioUbicacion key={JSON.stringify(posicionSeleccionada)} tipo="drying_bed" existente={{
-            id: posicionSeleccionada.id, name: posicionSeleccionada.name, rackLevel: posicionSeleccionada.nivel,
-            shadePercentage: posicionSeleccionada.shadePercentage, shadeDescription: posicionSeleccionada.shadeDescription,
-          }} />}
-        {permisosDeEstantes[i] && <FormularioEstante existente={{ id: estante.id, niveles: estante.niveles, puestos: estante.puestos }} />}
-        <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} />
+          <div className="nn-selected-position"><FormularioUbicacion key={JSON.stringify(posicionSeleccionada)} tipo="drying_bed" existente={{
+              id: posicionSeleccionada.id, name: posicionSeleccionada.name, rackLevel: posicionSeleccionada.nivel,
+              shadePercentage: posicionSeleccionada.shadePercentage, shadeDescription: posicionSeleccionada.shadeDescription,
+            }} /></div>}
+        {permisosDeEstantes[i] && <details className="nn-inline-disclosure">
+          <summary>{t("ampliarEstante")}</summary>
+          <FormularioEstante existente={{ id: estante.id, niveles: estante.niveles, puestos: estante.puestos }} />
+        </details>}
+        <details className="nn-inline-disclosure nn-location-operations">
+          <summary>{t("rutinasYEquipos")}</summary>
+          <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} />
+        </details>
       </section>;
-    })}
-    {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
-    {ambiente && <section>
-      <h2>{t("ambienteTitulo")}</h2>
-      <p className="nn-muted">{t("ambienteIntro")}</p>
-      <p><strong>{t("ambienteGeneral")}:</strong> {(() => { const g = lecturaDelPunto(ambiente.vigentes, { rackId: null, rackLevel: null }); return g ? resumen(g) : t("ambienteSinLectura"); })()}</p>
+        })}
+        {puedeEditar && <details className="nn-disclosure nn-disclosure-compact">
+          <summary><span>{t("crearEstante")}</span><small>{t("crearEstanteAyuda")}</small></summary>
+          <div className="nn-disclosure-body"><FormularioEstante facilityId={id} /></div>
+        </details>}
+      </div>
+    </section>
+
+    {ambiente && <section className="nn-installation-section" aria-labelledby="ambiente-instalacion">
+      <div className="nn-installation-section-heading"><div><h2 id="ambiente-instalacion">{t("ambienteTitulo")}</h2><p>{t("ambienteIntroCorto")}</p></div></div>
       <h3>{t("ambienteRecientes")}</h3>
       {ambiente.recientes.length
-        ? <ul>{ambiente.recientes.map((l) => <li key={l.id}>{puntoDe(l)}: {resumen(l)}</li>)}</ul>
-        : <p>{t("ambienteSinLectura")}</p>}
-      {puedeRegistrarAmbiente && <FormularioAmbiente facilityId={id}
-        estantes={instalacion.estantes.map((e) => ({ id: e.id, name: e.name, niveles: e.niveles }))}
-        nivelesSinEstante={[...new Set(instalacion.camas.map((c) => c.rackLevel).filter((n): n is number => n != null))]}
-        personas={personas} />}
+        ? <ul className="nn-reading-list">{ambiente.recientes.map((l) => <li key={l.id}><strong>{puntoDe(l)}</strong><span>{resumen(l)}</span></li>)}</ul>
+        : <p className="nn-empty-state">{t("ambienteSinLectura")}</p>}
+      {puedeRegistrarAmbiente && <details id="registrar-ambiente" className="nn-disclosure nn-disclosure-compact" open={ok === "ambiente"}>
+        <summary><span>{t("registrarAmbiente")}</span><small>{t("registrarAmbienteAyuda")}</small></summary>
+        <div className="nn-disclosure-body">
+          <p className="nn-muted">{t("ambienteIntro")}</p>
+          <FormularioAmbiente facilityId={id}
+            estantes={instalacion.estantes.map((e) => ({ id: e.id, name: e.name, niveles: e.niveles }))}
+            nivelesSinEstante={[...new Set(instalacion.camas.map((c) => c.rackLevel).filter((n): n is number => n != null))]}
+            personas={personas} />
+        </div>
+      </details>}
     </section>}
-    <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
+    <section className="nn-installation-section nn-installation-support">
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
+    </section>
   </div>;
 }

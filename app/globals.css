@@ -1144,3 +1144,354 @@ a.nn-card-link:active {
 .nn-detail-meta .nn-finca-logo {
   margin-right: -0.5rem;
 }
+
+/* Installation operations: keep the daily state visible and place setup or
+   infrequent data entry behind native, keyboard-friendly disclosures. */
+.nn-installation-page {
+  width: min(100%, 76rem);
+  margin-inline: auto;
+}
+
+.nn-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: var(--nn-ink-muted);
+  font-size: 0.875rem;
+}
+
+.nn-breadcrumb a {
+  color: inherit;
+}
+
+.nn-installation-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.nn-installation-header h1,
+.nn-installation-header p,
+.nn-installation-section-heading h2,
+.nn-installation-section-heading p {
+  margin: 0;
+}
+
+.nn-installation-header p,
+.nn-installation-section-heading p {
+  margin-top: 0.35rem;
+  color: var(--nn-ink-muted);
+}
+
+.nn-installation-primary {
+  flex: 0 0 auto;
+  min-height: var(--nn-tap);
+  text-decoration: none;
+}
+
+.nn-notice {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-bg);
+}
+
+.nn-notice-success {
+  border-color: var(--nn-accent);
+  background: var(--nn-accent-bg);
+}
+
+.nn-installation-overview {
+  margin-block: 1.5rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-surface);
+  box-shadow: var(--nn-shadow);
+}
+
+.nn-installation-overview h2 {
+  margin: 0 0 1rem;
+  font-size: var(--nn-step-1);
+}
+
+.nn-installation-overview dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.nn-installation-overview dl > div {
+  min-width: 0;
+}
+
+.nn-installation-overview dt {
+  color: var(--nn-ink-muted);
+  font-size: 0.8rem;
+}
+
+.nn-installation-overview dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.nn-installation-reading {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.25fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--nn-border);
+}
+
+.nn-installation-reading span {
+  color: var(--nn-ink-muted);
+}
+
+.nn-installation-reading strong {
+  overflow-wrap: anywhere;
+}
+
+.nn-disclosure {
+  margin-block: 1rem;
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-surface);
+}
+
+.nn-disclosure > summary {
+  min-height: var(--nn-tap);
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+}
+
+.nn-disclosure > summary span,
+.nn-disclosure > summary small {
+  display: block;
+}
+
+.nn-disclosure > summary span {
+  font-weight: 650;
+}
+
+.nn-disclosure > summary small {
+  margin-top: 0.2rem;
+  color: var(--nn-ink-muted);
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
+.nn-disclosure > summary:focus-visible,
+.nn-inline-disclosure > summary:focus-visible {
+  outline: 3px solid var(--nn-focus);
+  outline-offset: 2px;
+}
+
+.nn-disclosure-body {
+  padding: 1rem;
+  border-top: 1px solid var(--nn-border);
+}
+
+.nn-installation-page form {
+  display: grid;
+  max-width: 46rem;
+  gap: 0.85rem;
+}
+
+.nn-installation-page form label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.nn-installation-page form input,
+.nn-installation-page form select,
+.nn-installation-page form textarea {
+  width: 100%;
+}
+
+.nn-installation-page form button {
+  justify-self: start;
+}
+
+.nn-installation-section {
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+  padding-top: clamp(1.5rem, 4vw, 2.5rem);
+  border-top: 1px solid var(--nn-border);
+}
+
+.nn-installation-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.nn-installation-subsection + .nn-installation-subsection {
+  margin-top: 2.5rem;
+}
+
+.nn-installation-subsection > h3 {
+  margin-bottom: 0.75rem;
+}
+
+.nn-installation-records,
+.nn-rack,
+.nn-reading-list {
+  border-top: 1px solid var(--nn-border);
+}
+
+.nn-installation-record {
+  padding-block: 1.15rem;
+  border-bottom: 1px solid var(--nn-border);
+}
+
+.nn-installation-record > div:first-child,
+.nn-rack-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nn-installation-record > div:first-child span,
+.nn-rack-heading span {
+  color: var(--nn-ink-muted);
+  font-size: 0.875rem;
+}
+
+.nn-inline-disclosure {
+  margin-top: 0.75rem;
+}
+
+.nn-inline-disclosure > summary {
+  width: fit-content;
+  min-height: var(--nn-tap);
+  padding-block: 0.7rem;
+  color: var(--nn-brand);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.nn-inline-disclosure[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+.nn-location-operations > section {
+  margin-top: 0.25rem !important;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--nn-border);
+}
+
+.nn-disclosure-compact {
+  margin-top: 1rem;
+}
+
+.nn-rack {
+  padding-block: 1.25rem;
+}
+
+.nn-rack-heading h3 {
+  margin: 0;
+}
+
+.nn-table-scroll {
+  margin-top: 1rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.nn-rack table {
+  width: 100%;
+  min-width: 36rem;
+  border-collapse: collapse;
+}
+
+.nn-rack th,
+.nn-rack td {
+  padding: 0.7rem 0.55rem;
+  border-bottom: 1px solid var(--nn-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.nn-rack th {
+  width: 6rem;
+  color: var(--nn-ink-muted);
+  font-size: 0.8rem;
+}
+
+.nn-rack-reading {
+  min-width: 17rem;
+  color: var(--nn-ink-muted);
+  font-size: 0.82rem;
+}
+
+.nn-selected-position {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-bg);
+}
+
+.nn-reading-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nn-reading-list li {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.3fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 0.9rem;
+  border-bottom: 1px solid var(--nn-border);
+}
+
+.nn-reading-list li span {
+  color: var(--nn-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.nn-empty-state {
+  margin-block: 0.75rem;
+  padding: 1rem;
+  border-radius: var(--nn-radius);
+  background: var(--nn-bg);
+  color: var(--nn-ink-muted);
+}
+
+.nn-installation-support > section {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 700px) {
+  .nn-installation-header,
+  .nn-installation-record > div:first-child,
+  .nn-rack-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .nn-installation-primary {
+    width: 100%;
+  }
+
+  .nn-installation-overview dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nn-installation-reading,
+  .nn-reading-list li {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
