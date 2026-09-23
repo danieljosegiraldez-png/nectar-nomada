@@ -6,6 +6,7 @@ import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
+import { NavegacionBeneficio } from "../components/beneficio/NavegacionBeneficio";
 import { destinosDelBeneficio } from "./destinos";
 
 export const dynamic = "force-dynamic";
@@ -64,27 +65,47 @@ export default async function BeneficioPage({
     searchParams,
     listarBeneficios(user.userAccountId),
   ]);
+  const operaciones = destinos.filter((d) => d.href === "/beneficio/recepcion" || d.href === "/beneficio/pedidos");
+  const herramientas = destinos.filter((d) => !operaciones.includes(d));
 
   return (
-    <div>
-      <h1>{t("titulo")}</h1>
-      <p className="nn-muted">{t("intro")}</p>
-      <ul>
-        {destinos.map((d) => (
-          <li key={d.href}>
-            <Link href={d.href}>{t(d.clave)}</Link>
-            <br />
-            <span className="nn-muted">{t(`${d.clave}Ayuda`)}</span>
-          </li>
-        ))}
-      </ul>
-      <AvisoDeRutina ok={ok} error={error} t={tEq} />
-      {beneficios.map((b) => (
-        <div key={b.id}>
-          <h2 style={{ marginTop: "1.5rem" }}>{b.name}</h2>
-          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} />
+    <div className="nn-mill-page">
+      <header className="nn-mill-header">
+        <div><h1>{t("titulo")}</h1><p>{t("intro")}</p></div>
+      </header>
+      <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio" />
+      <section className="nn-mill-primary" aria-labelledby="operaciones-beneficio">
+        <h2 id="operaciones-beneficio">{t("operaciones")}</h2>
+        <div>
+          {operaciones.map((d) => (
+            <Link key={d.href} href={d.href} className="nn-mill-action">
+              <strong>{t(d.clave)}</strong>
+              <span>{t(`${d.clave}Ayuda`)}</span>
+            </Link>
+          ))}
         </div>
-      ))}
+      </section>
+      <section className="nn-mill-tools" aria-labelledby="herramientas-beneficio">
+        <h2 id="herramientas-beneficio">{t("herramientas")}</h2>
+        <div>
+          {herramientas.map((d) => (
+            <Link key={d.href} href={d.href}>
+              <strong>{t(d.clave)}</strong>
+              <span>{t(`${d.clave}Ayuda`)}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <AvisoDeRutina ok={ok} error={error} t={tEq} />
+      {beneficios.length > 0 && <section className="nn-mill-routines" aria-labelledby="rutinas-beneficio">
+        <h2 id="rutinas-beneficio">{t("rutinas")}</h2>
+        {beneficios.map((b) => (
+          <details key={b.id} className="nn-disclosure nn-disclosure-compact">
+            <summary><span>{b.name}</span><small>{t("rutinasAyuda")}</small></summary>
+            <div className="nn-disclosure-body"><RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} /></div>
+          </details>
+        ))}
+      </section>}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { personasDelBeneficio } from "../../../lib/traceability/concesiones";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { FormularioBeneficio } from "./FormularioBeneficio";
 import { Concesiones } from "./Concesiones";
+import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 
 export const dynamic = "force-dynamic";
 export default async function AjustesDelBeneficioPage() {
@@ -43,12 +44,12 @@ export default async function AjustesDelBeneficioPage() {
     if (b.puedeEditar) personasPorBeneficio.set(b.id, await personasDelBeneficio(user.userAccountId, b.id));
   }
 
-  return <div>
-    <h1>{t("ajustesTitulo")}</h1>
-    <p className="nn-muted">{t("ajustesIntro")}</p>
-    <h2>{t("misBeneficios")}</h2>
+  return <div className="nn-mill-page">
+    <header className="nn-mill-header"><div><h1>{t("ajustesTitulo")}</h1><p>{t("ajustesIntro")}</p></div></header>
+    <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/ajustes" />
+    <section className="nn-mill-section"><h2>{t("misBeneficios")}</h2>
     {!beneficios.length && <p>{t("sinBeneficios")}</p>}
-    {beneficios.map((b) => <section key={b.id}>
+    <div className="nn-mill-records">{beneficios.map((b) => <section key={b.id} className="nn-mill-record">
       <h3>{b.name}</h3>
       <p className="nn-muted">{b.sitio ? t("enSitio", { sitio: b.sitio.name }) : t("sitioNoVisible")}</p>
       {b.puedeEditar && <>
@@ -57,11 +58,12 @@ export default async function AjustesDelBeneficioPage() {
         </details>
         <Concesiones beneficioId={b.id} personas={personasPorBeneficio.get(b.id) ?? []} />
       </>}
-    </section>)}
+    </section>)}</div></section>
     {sitios && <>
-      <h2>{t("crear")}</h2>
-      <FormularioBeneficio padres={sitios} />
+      <details className="nn-disclosure nn-mill-task">
+        <summary><span>{t("crear")}</span><small>{t("crearAyuda")}</small></summary>
+        <div className="nn-disclosure-body"><FormularioBeneficio padres={sitios} /></div>
+      </details>
     </>}
-    <p><Link href="/lots">← {t("volverALotes")}</Link></p>
   </div>;
 }

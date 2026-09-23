@@ -7,6 +7,7 @@ import { posicionesParaMover } from "../../../lib/traceability/bandejasDelSecado
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { formatearNumero, medidaEnUnidad } from "./utilidades";
 import { FormularioMoverBandeja, FormularioNuevoTipo, FormularioPesaje, FormularioRegistrarBandejas } from "./Formularios";
+import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 
 export const dynamic = "force-dynamic";
 
@@ -42,15 +43,12 @@ export default async function BandejasPage({
   const posicionesDeMover = esBandejaConocida ? await posicionesParaMover(user.userAccountId, moverId as string) : null;
 
   return (
-    <div>
-      <p>
-        <Link href="/beneficio">← {t("volver")}</Link>
-      </p>
-      <h1>{t("titulo")}</h1>
-      <p className="nn-muted">{t("intro")}</p>
+    <div className="nn-mill-page">
+      <header className="nn-mill-header"><div><h1>{t("titulo")}</h1><p>{t("intro")}</p></div></header>
+      <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/bandejas" />
       {!secciones.length && <p>{t("sinOrganizaciones")}</p>}
       {secciones.map(({ org, tipos, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables, lotesRecortados }) => (
-        <section key={org.id}>
+        <section key={org.id} className="nn-mill-section">
           <h2>{org.name}</h2>
 
           <h3>{t("tiposTitulo")}</h3>
@@ -58,7 +56,7 @@ export default async function BandejasPage({
           {tipos.map((tipo) => {
             const medida = medidaEnUnidad(tipo.widthCm, tipo.lengthCm, tipo.entryUnit as "ft" | "cm");
             return (
-              <div key={tipo.id}>
+              <div key={tipo.id} className="nn-mill-record">
                 <h4>{tipo.nombre}</h4>
                 <p className="nn-muted">
                   {t("medida", { ancho: medida.ancho, largo: medida.largo, unidad: t(`unidadCorta_${medida.unidad}`) })}
@@ -125,17 +123,17 @@ export default async function BandejasPage({
             );
           })}
           {puedeEditar && (
-            <>
-              <h3>{t("nuevoTipoTitulo")}</h3>
-              <FormularioNuevoTipo organizationId={org.id} />
-            </>
+            <details className="nn-disclosure nn-mill-task">
+              <summary><span>{t("nuevoTipoTitulo")}</span><small>{t("nuevoTipoAyuda")}</small></summary>
+              <div className="nn-disclosure-body"><FormularioNuevoTipo organizationId={org.id} /></div>
+            </details>
           )}
 
           {sitiosDisponibles.length > 0 && tipos.length > 0 && (
-            <>
-              <h3>{t("registrarBandejasTitulo")}</h3>
-              <FormularioRegistrarBandejas sitios={sitiosDisponibles} tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} />
-            </>
+            <details className="nn-disclosure nn-mill-task">
+              <summary><span>{t("registrarBandejasTitulo")}</span><small>{t("registrarBandejasAyuda")}</small></summary>
+              <div className="nn-disclosure-body"><FormularioRegistrarBandejas sitios={sitiosDisponibles} tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} /></div>
+            </details>
           )}
 
           {/* A1/F4: el corte silencioso de la paginación se dice, no se calla —
@@ -143,16 +141,16 @@ export default async function BandejasPage({
               condición de abajo para que no dependa de si hay formulario. */}
           {tipos.length > 0 && lotesRecortados && <p className="nn-muted">{t("lotesRecortados")}</p>}
           {lotesGestionables.length > 0 && tipos.length > 0 && (
-            <>
-              <h3>{t("registrarPesajeTitulo")}</h3>
-              <FormularioPesaje tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} lotes={lotesGestionables} />
-            </>
+            <details className="nn-disclosure nn-mill-task">
+              <summary><span>{t("registrarPesajeTitulo")}</span><small>{t("registrarPesajeAyuda")}</small></summary>
+              <div className="nn-disclosure-body"><FormularioPesaje tipos={tipos.map((tp) => ({ id: tp.id, nombre: tp.nombre }))} lotes={lotesGestionables} /></div>
+            </details>
           )}
 
           <h3>{t("bandejasTablaTitulo")}</h3>
           {!bandejas.length && <p>{t("sinBandejas")}</p>}
           {bandejas.length > 0 && (
-            <table>
+            <div className="nn-table-scroll"><table className="nn-mill-table">
               <thead>
                 <tr>
                   <th>{t("columnaNumero")}</th>
@@ -181,7 +179,7 @@ export default async function BandejasPage({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </section>
       ))}

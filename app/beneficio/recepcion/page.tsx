@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
@@ -11,6 +10,7 @@ import { pedidosDeBeneficio } from "../../../lib/traceability/pedidosDeCereza";
 import { proveedoresDeCereza } from "../../../lib/traceability/proveedoresDeCereza";
 import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 import { BeneficioElegido } from "../../components/beneficio/BeneficioElegido";
+import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 import { ArmarLoteForm } from "../../components/beneficio/ArmarLoteForm";
 import { AnularMermaForm, MermaForm } from "../../components/beneficio/MermaForm";
 import {
@@ -39,8 +39,9 @@ export default async function RecepcionPage() {
   const { beneficios, elegido } = await beneficioDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_BENEFICIO)?.value);
   if (!elegido) {
     return (
-      <div>
-        <h1>{t("titulo")}</h1>
+      <div className="nn-mill-page">
+        <header className="nn-mill-header"><div><h1>{t("titulo")}</h1><p>{t("intro")}</p></div></header>
+        <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/recepcion" />
         {beneficios.length ? (
           <BeneficioElegido beneficios={beneficios} elegido={null} volver="/beneficio/recepcion" />
         ) : (
@@ -75,31 +76,23 @@ export default async function RecepcionPage() {
     e.plotBlock ? t("bloque", { nombre: e.plotBlock.name }) : e.specimen ? t("planta", { nombre: e.specimen.commonName }) : (e.location?.name ?? "");
 
   return (
-    <div>
-      <p>
-        <Link href="/beneficio">{t("volver")}</Link>
-      </p>
-      <h1>{t("titulo")}</h1>
+    <div className="nn-mill-page">
+      <header className="nn-mill-header"><div><h1>{t("titulo")}</h1><p>{t("intro")}</p></div></header>
+      <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/recepcion" />
       <BeneficioElegido beneficios={beneficios} elegido={elegido} volver="/beneficio/recepcion" />
-      <p className="nn-muted">{t("intro")}</p>
 
-      <section className="nn-section">
+      <section className="nn-mill-section">
         <h2>{t("pendientesTitulo")}</h2>
         {pendientes.length === 0 ? (
           <p className="nn-muted">{t("sinPendientes")}</p>
         ) : (
-          <ul>
+          <ul className="nn-mill-records">
             {pendientes.map((e) => (
-              <li key={e.id}>
-                <strong>{e.recolector.displayName}</strong>
-                {" — "}
-                {e.jornada.fincaSite.name}, {origen(e)}
-                {" — "}
-                {t("kgFinca", { kg: kg(Number(e.pesoFincaKg)) })}
-                {" — "}
-                {mostrarInstante(e.enviadaAt, null)}
+              <li key={e.id} className="nn-mill-record">
+                <div className="nn-mill-record-heading"><strong>{e.recolector.displayName}</strong><span>{t("kgFinca", { kg: kg(Number(e.pesoFincaKg)) })}</span></div>
+                <p>{e.jornada.fincaSite.name}, {origen(e)} · {mostrarInstante(e.enviadaAt, null)}</p>
                 {gestiona ? (
-                  <RecibirCerezaForm beneficioId={elegido.id} entregaId={e.id} fuenteDeLaEntrega={`F:${e.jornada.fincaSite.id}`} pedidos={abiertos} />
+                  <details className="nn-inline-disclosure"><summary>{t("procesarEntrega")}</summary><RecibirCerezaForm beneficioId={elegido.id} entregaId={e.id} fuenteDeLaEntrega={`F:${e.jornada.fincaSite.id}`} pedidos={abiertos} /></details>
                 ) : null}
               </li>
             ))}
@@ -108,9 +101,9 @@ export default async function RecepcionPage() {
       </section>
 
       {gestiona ? (
-        <section className="nn-section">
-          <h2>{t("deFueraTitulo")}</h2>
-          <p className="nn-muted">{t("deFueraAyuda")}</p>
+        <details className="nn-disclosure nn-mill-task">
+          <summary><span>{t("deFueraTitulo")}</span><small>{t("deFueraAyuda")}</small></summary>
+          <div className="nn-disclosure-body">
           {proveedores.length ? (
             <RecibirCerezaForm beneficioId={elegido.id} proveedores={proveedores} pedidos={abiertos} />
           ) : (
@@ -118,17 +111,17 @@ export default async function RecepcionPage() {
           )}
           {granted.has("cherry_supplier:create") ? (
             <>
-              <h3>{t("nuevoProveedorTitulo")}</h3>
-              <NuevoProveedorForm />
+              <details className="nn-inline-disclosure"><summary>{t("nuevoProveedorTitulo")}</summary><NuevoProveedorForm /></details>
             </>
           ) : null}
-        </section>
+          </div>
+        </details>
       ) : null}
 
       {gestiona ? (
-        <section className="nn-section">
-          <h2>{t("armarTitulo")}</h2>
-          <p className="nn-muted">{t("armarAyuda")}</p>
+        <details className="nn-disclosure nn-mill-task">
+          <summary><span>{t("armarTitulo")}</span><small>{t("armarAyuda")}</small></summary>
+          <div className="nn-disclosure-body">
           {armables.length === 0 ? (
             <p className="nn-muted">{t("sinArmables")}</p>
           ) : (
@@ -142,25 +135,22 @@ export default async function RecepcionPage() {
               }))}
             />
           )}
-        </section>
+          </div>
+        </details>
       ) : null}
 
-      <section className="nn-section">
+      <section className="nn-mill-section">
         <h2>{t("recibidasTitulo")}</h2>
         {recibidas.length === 0 ? (
           <p className="nn-muted">{t("sinRecibidas")}</p>
         ) : (
-          <ul>
+          <ul className="nn-mill-records">
             {recibidas.map((r) => (
-              <li key={r.id}>
-                <strong>{r.entrega ? r.entrega.recolector.displayName : (r.proveedor?.name ?? "")}</strong>
-                {" — "}
-                {t("neto", { kg: kg(Number(r.netoKg)) })}
-                {" — "}
-                {r.comparacion
+              <li key={r.id} className="nn-mill-record">
+                <div className="nn-mill-record-heading"><strong>{r.entrega ? r.entrega.recolector.displayName : (r.proveedor?.name ?? "")}</strong><span>{t("neto", { kg: kg(Number(r.netoKg)) })}</span></div>
+                <p>{r.comparacion
                   ? t(`comparacion_${r.comparacion}`, { dif: kg(Number(r.diferenciaKg)), pct: ((Number(r.diferenciaKg) / Number(r.referenciaKg)) * 100).toFixed(1) })
-                  : t("sinComparacion")}
-                <br />
+                  : t("sinComparacion")}</p>
                 <span className="nn-muted">
                   {t(`estado_${r.estado}`)}
                   {r.motivoRechazo ? `: ${r.motivoRechazo}` : ""}
@@ -174,7 +164,7 @@ export default async function RecepcionPage() {
                   {t("fotos", { n: r._count.assets })}
                 </span>
                 {gestiona && r.estado !== "anulada" ? (
-                  <>
+                  <details className="nn-inline-disclosure"><summary>{t("accionesRecepcion")}</summary>
                     <FotoDeRecepcionForm recepcionId={r.id} />
                     <AnularRecepcionForm recepcionId={r.id} />
                     {r.estado === "recibida" ? (
@@ -191,7 +181,7 @@ export default async function RecepcionPage() {
                           ))}
                       </>
                     ) : null}
-                  </>
+                  </details>
                 ) : null}
               </li>
             ))}

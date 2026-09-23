@@ -10,6 +10,7 @@ import { veredictosDePedidos } from "../../../lib/traceability/veredictoDelLote"
 import { proveedoresDeCereza } from "../../../lib/traceability/proveedoresDeCereza";
 import { listarFincas } from "../../../lib/traceability/fincas";
 import { BeneficioElegido } from "../../components/beneficio/BeneficioElegido";
+import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 import { CerrarPedidoForm, PedidoForm } from "../../components/beneficio/PedidoForm";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +30,9 @@ export default async function PedidosPage() {
   const { beneficios, elegido } = await beneficioDeLaPagina(user.userAccountId, (await cookies()).get(COOKIE_BENEFICIO)?.value);
   if (!elegido) {
     return (
-      <div>
-        <h1>{t("pedidosTitulo")}</h1>
+      <div className="nn-mill-page">
+        <header className="nn-mill-header"><div><h1>{t("pedidosTitulo")}</h1><p>{t("pedidosIntro")}</p></div></header>
+        <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/pedidos" />
         {beneficios.length ? (
           <BeneficioElegido beneficios={beneficios} elegido={null} volver="/beneficio/pedidos" />
         ) : (
@@ -50,26 +52,20 @@ export default async function PedidosPage() {
   const veredictos = await veredictosDePedidos(pedidos.map((p) => p.id));
 
   return (
-    <div>
-      <p>
-        <Link href="/beneficio">{t("volver")}</Link>
-      </p>
-      <h1>{t("pedidosTitulo")}</h1>
+    <div className="nn-mill-page">
+      <header className="nn-mill-header"><div><h1>{t("pedidosTitulo")}</h1><p>{t("pedidosIntro")}</p></div></header>
+      <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/pedidos" />
       <BeneficioElegido beneficios={beneficios} elegido={elegido} volver="/beneficio/pedidos" />
 
-      <section className="nn-section">
+      <section className="nn-mill-section">
         {pedidos.length === 0 ? (
           <p className="nn-muted">{t("sinPedidos")}</p>
         ) : (
-          <ul>
+          <ul className="nn-mill-records">
             {pedidos.map((p) => (
-              <li key={p.id}>
-                <strong>{p.fincaSite?.name ?? p.proveedor?.name ?? ""}</strong>
-                {" — "}
-                {p.fecha.toISOString().slice(0, 10)}
-                {" — "}
-                {t("pedidoCifras", { pedidos: kg(Number(p.kgPedidos)), recibidos: kg(p.recibidoKg), dif: kg(p.diferenciaKg), pct: (p.diferenciaPct * 100).toFixed(1) })}
-                <br />
+              <li key={p.id} className="nn-mill-record">
+                <div className="nn-mill-record-heading"><strong>{p.fincaSite?.name ?? p.proveedor?.name ?? ""}</strong><span>{p.fecha.toISOString().slice(0, 10)}</span></div>
+                <p>{t("pedidoCifras", { pedidos: kg(Number(p.kgPedidos)), recibidos: kg(p.recibidoKg), dif: kg(p.diferenciaKg), pct: (p.diferenciaPct * 100).toFixed(1) })}</p>
                 <span className="nn-muted">
                   {t(p.estado === "abierto" ? "abierto" : "cerrado")}
                   {p.exceso ? ` · ${t("exceso")}` : ""}
@@ -88,7 +84,7 @@ export default async function PedidosPage() {
                     ))}
                   </ul>
                 ) : null}
-                {gestiona && p.estado === "abierto" ? <CerrarPedidoForm pedidoId={p.id} /> : null}
+                {gestiona && p.estado === "abierto" ? <details className="nn-inline-disclosure"><summary>{t("cerrarPedido")}</summary><CerrarPedidoForm pedidoId={p.id} /></details> : null}
               </li>
             ))}
           </ul>
@@ -96,10 +92,10 @@ export default async function PedidosPage() {
       </section>
 
       {gestiona ? (
-        <section className="nn-section">
-          <h2>{t("nuevoPedidoTitulo")}</h2>
-          <PedidoForm beneficioId={elegido.id} fincas={fincas.map((f) => ({ id: f.siteId, name: f.nombre }))} proveedores={proveedores} />
-        </section>
+        <details className="nn-disclosure nn-mill-task">
+          <summary><span>{t("nuevoPedidoTitulo")}</span><small>{t("nuevoPedidoAyuda")}</small></summary>
+          <div className="nn-disclosure-body"><PedidoForm beneficioId={elegido.id} fincas={fincas.map((f) => ({ id: f.siteId, name: f.nombre }))} proveedores={proveedores} /></div>
+        </details>
       ) : null}
     </div>
   );

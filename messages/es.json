@@ -2936,6 +2936,7 @@
     "soloVencidas": "sólo con rutinas vencidas"
   },
   "AjustesDelBeneficio": {
+    "crearAyuda": "Añade un beneficio dentro de un sitio que puedes gestionar.",
     "ajustesTitulo": "Ajustes del beneficio",
     "ajustesIntro": "Configuración: el beneficio como lugar. Las capacidades, los equipos y las recetas llegan aquí cuando exista el tablero.",
     "misBeneficios": "Beneficios",
@@ -2975,6 +2976,11 @@
     "error_conflicto_concurrente": "Alguien más cambió esto al mismo tiempo. Vuelve a intentarlo."
   },
   "SeccionBeneficio": {
+    "navegacion": "Navegación del beneficio",
+    "operaciones": "Hoy en el beneficio",
+    "herramientas": "Planificación y herramientas",
+    "rutinas": "Rutinas del beneficio",
+    "rutinasAyuda": "Abre las rutinas y los equipos de este beneficio.",
     "titulo": "Beneficio",
     "intro": "Todo lo que pasa en el beneficio, desde que entra la cereza hasta que el café queda listo.",
     "recepcion": "Recepción de cereza",
@@ -2997,6 +3003,9 @@
     "ajustesAyuda": "Dar de alta el beneficio y configurarlo. Sólo para quien lo gestiona."
   },
   "Bandejas": {
+    "nuevoTipoAyuda": "Define las medidas de un tipo de bandeja reutilizable.",
+    "registrarBandejasAyuda": "Añade bandejas numeradas de un tipo existente en un sitio.",
+    "registrarPesajeAyuda": "Mide la capacidad real de una bandeja para un estado del material.",
     "volver": "Beneficio",
     "titulo": "Bandejas",
     "intro": "Tipos de bandeja, su capacidad por estado, y el registro numerado de cada bandeja.",
@@ -3216,6 +3225,10 @@
     "proximamente": "Llegan después: rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio."
   },
   "Recepcion": {
+    "procesarEntrega": "Recibir o rechazar entrega",
+    "accionesRecepcion": "Fotos, mermas y correcciones",
+    "pedidosIntro": "Planifica las entregas de cereza y compara lo pedido con lo recibido.",
+    "nuevoPedidoAyuda": "Crea un pedido para una finca o un proveedor externo.",
     "error_brix_invalido": "El Brix tiene que ser un número.",
     "titulo": "Recepción de cereza",
     "pedidosTitulo": "Pedidos de cereza",
