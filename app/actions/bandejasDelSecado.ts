@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { bajarBandeja, BandejaError, cargarBandeja, moverBandeja } from "../../lib/traceability/bandejasDelSecado";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { CantidadDeSecadoInvalida, numeroOpcionalDeSecado } from "../beneficio/bandejas/errorDeSecado";
 
 type Estado = { error?: string };
 
@@ -22,17 +23,8 @@ function textoOVacio(v: FormDataEntryValue | null): string | null {
  * formulario, un `fetch` a mano), así que la validación va aquí, no sólo en
  * el campo. Vacío sigue siendo `null`, nunca un error.
  */
-class CantidadInvalida extends Error {}
-function numeroOVacio(v: FormDataEntryValue | null): number | null {
-  const s = textoOVacio(v);
-  if (s === null) return null;
-  const n = Number(s);
-  if (!Number.isFinite(n)) throw new CantidadInvalida();
-  return n;
-}
-
 function codigo(error: unknown): string {
-  if (error instanceof CantidadInvalida) return "cantidad_invalida";
+  if (error instanceof CantidadDeSecadoInvalida) return "cantidad_invalida";
   if (error instanceof BandejaError) return error.codigo;
   if (error instanceof TraceabilityAccessError) return "sin_acceso";
   throw error;
@@ -66,7 +58,7 @@ export async function bajarBandejaAction(_prev: Estado, formData: FormData): Pro
   // `bajarBandeja` convertido en `NaN` (fix round 1, hallazgo 1).
   let cantidad: number | null;
   try {
-    cantidad = numeroOVacio(formData.get("quantity"));
+    cantidad = numeroOpcionalDeSecado(formData.get("quantity"));
   } catch (error) {
     return { error: codigo(error) };
   }

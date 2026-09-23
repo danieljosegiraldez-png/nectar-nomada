@@ -6,6 +6,7 @@ import { bajarBandejaAction, cargarBandejaAction, moverBandejaAction } from "../
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { CampoNumerico } from "../CampoNumerico";
 import type { BandejaEnCorrida, PosicionParaMover } from "../../../lib/traceability/bandejasDelSecado";
+import { claveDeErrorDeSecado } from "../../beneficio/bandejas/errorDeSecado";
 
 type Fila = Omit<BandejaEnCorrida, "desde" | "hasta"> & { desde: string; hasta: string | null };
 
@@ -97,8 +98,8 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
         )}
       </li>)}
     </ul>}
-    {bajar.error && <p role="alert">{t(`error_${bajar.error}` as "error_bandeja_ocupada")}</p>}
-    {mover.error && <p role="alert">{t(`error_${mover.error}` as "error_bandeja_ocupada")}</p>}
+    {bajar.error && <p role="alert">{t(claveDeErrorDeSecado(bajar.error) as "error_bandeja_ocupada")}</p>}
+    {mover.error && <p role="alert">{t(claveDeErrorDeSecado(mover.error) as "error_bandeja_ocupada")}</p>}
     {puedeRegistrar && (disponibles.length === 0
       ? <p className="nn-muted">{t("sinDisponibles")}</p>
       : <form action={accionCargar} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -110,7 +111,7 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
         </select>
         <BotonDeEnvio className="nn-button">{t("cargar")}</BotonDeEnvio>
       </form>)}
-    {cargar.error && <p role="alert">{t(`error_${cargar.error}` as "error_bandeja_ocupada")}</p>}
+    {cargar.error && <p role="alert">{t(claveDeErrorDeSecado(cargar.error) as "error_bandeja_ocupada")}</p>}
     <p className="nn-muted">{t("comoSeMueve")}</p>
   </section>;
 }

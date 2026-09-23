@@ -203,7 +203,9 @@ describe("qué se puede cargar", () => {
 
   it("una corrida con cama no lleva bandejas: el servicio lo dice con su código", async () => {
     const run = await secado("con-cama");
+    expect((await bandejasDisponibles(operador, run.id)).length).toBeGreaterThan(0); // control positivo
     await prisma.dryingRun.update({ where: { id: run.id }, data: { dryingBedLocationId: (await posicion(9, 9)).id } });
+    expect(await bandejasDisponibles(operador, run.id)).toEqual([]);
     await expect(cargarBandeja(operador, { dryingRunId: run.id, equipmentId: (await bandeja("en-cama")).id, desde: T("2026-09-01T11:00:00Z") }))
       .rejects.toThrow("corrida_con_cama");
   });
@@ -490,6 +492,8 @@ describe("mover una bandeja", () => {
     const camaSuelta = await ubicacion({ name: "TEST Cama suelta", locationType: "drying_bed", organizationId: org, parentLocationId: (await ubicacion({ name: "TEST Patio", locationType: "drying_facility", organizationId: org, parentLocationId: sitio })).id });
     await expect(mover(operador, b.id, camaSuelta.id)).rejects.toThrow("posicion_invalida");                              // no es posición de estante
     const fija = await bandeja("fija"); await prisma.equipment.update({ where: { id: fija.id }, data: { isFixedInPlace: true } });
+    expect((await posicionesParaMover(configurador, b.id)).length).toBeGreaterThan(0); // control positivo
+    expect(await posicionesParaMover(configurador, fija.id)).toEqual([]);
     await expect(mover(configurador, fija.id, p.id)).rejects.toThrow("bandeja_fija");
     await expect(mover(ajeno, b.id, p.id)).rejects.toThrow("bandeja_sin_acceso");
     await mover(operador, b.id, p.id);                                                                                   // control positivo

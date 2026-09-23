@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { crearTipoAction, registrarBandejasAction, registrarPesajeAction, type BandejaFormState } from "../../actions/bandejas";
 import { moverBandejaAction } from "../../actions/bandejasDelSecado";
+import { claveDeErrorDeSecado } from "./errorDeSecado";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { CampoNumerico } from "../../components/CampoNumerico";
 import { TimezoneOffsetField } from "../../components/TimezoneOffsetField";
@@ -211,7 +212,7 @@ export function FormularioMoverBandeja({ equipmentId, posiciones }: { equipmentI
   return (
     <form action={action} style={{ display: "inline-flex", gap: "0.25rem" }}>
       <input type="hidden" name="equipmentId" value={equipmentId} />
-      {state.error && <p role="alert">{t(`error_${state.error}` as "error_bandeja_ocupada")}</p>}
+      {state.error && <p role="alert">{t(claveDeErrorDeSecado(state.error) as "error_bandeja_ocupada")}</p>}
       <select name="posicionId" required defaultValue="">
         <option value="" disabled>{t("moverA")}</option>
         {posiciones.map((p) => (
