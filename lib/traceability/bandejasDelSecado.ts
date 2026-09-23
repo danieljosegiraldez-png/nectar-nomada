@@ -90,6 +90,9 @@ export interface BandejaEnCorrida {
   posicion: Posicion | null;
   conflicto: string[];
   conflictoSinAcceso: number;
+  /** Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no tiene destino
+   *  posible — la pantalla no ofrece "Mover" para él. */
+  fija: boolean;
 }
 
 /**
@@ -392,12 +395,17 @@ export async function bandejasDeCorrida(userAccountId: string, dryingRunId: stri
       id: f.id, equipmentId: f.equipmentId, nombre, desde: f.desde, hasta: f.hasta, posicion,
       conflicto: otros.flatMap((o) => (o.nombre === null ? [] : [o.nombre])),
       conflictoSinAcceso: otros.filter((o) => o.nombre === null).length,
+      fija: f.equipment.isFixedInPlace,
     };
   });
 }
 
 export async function bandejasDisponibles(userAccountId: string, dryingRunId: string) {
-  const { lot } = await corridaConPermiso(userAccountId, dryingRunId);
+  const { run, lot } = await corridaConPermiso(userAccountId, dryingRunId);
+  // Fix round 1 (Tarea 3, hallazgo 2): una corrida CON cama nunca lleva
+  // bandejas — `cargarBandeja` la rechaza con `corrida_con_cama` (mismo
+  // campo, mismo criterio) — así que no hay candidatas que ofrecer.
+  if (run.dryingBedLocationId) return [];
   // SIN `take`: un tope ANTES del filtro de permiso podía devolver una lista vacía
   // teniendo bandejas visibles más abajo (segunda pasada de Codex). La consulta ya
   // está acotada a los recipientes NUMERADOS (D4), libres y activos de UNA organización.
@@ -516,6 +524,10 @@ export async function moverBandeja(userAccountId: string, input: { equipmentId: 
 
 export async function posicionesParaMover(userAccountId: string, equipmentId: string): Promise<PosicionParaMover[]> {
   const equipo = await prisma.equipment.findUniqueOrThrow({ where: { id: equipmentId } });
+  // Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no tiene destino posible
+  // — `moverBandeja` lo rechaza con `bandeja_fija` (mismo campo, mismo
+  // criterio) — así que no hay posiciones que ofrecer.
+  if (equipo.isFixedInPlace) return [];
   const org = equipo.organizationId;
   const carga = await prisma.dryingRunTray.findFirst({ where: { equipmentId, hasta: null }, select: { dryingRunId: true } });
   let porLote = false;

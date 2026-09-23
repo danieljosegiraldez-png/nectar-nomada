@@ -171,7 +171,10 @@ export default async function BandejasPage({
                         se dicen igual: la segunda no es "sin traslado". */}
                     <td>{b.donde ?? (b.dondeOculto ? t("dondeOculto") : t("sinTraslado"))}</td>
                     <td>
-                      {moverId === b.id
+                      {/* Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no
+                          tiene destino posible (`moverBandeja` lo rechaza con
+                          `bandeja_fija`), así que no se ofrece "Mover". */}
+                      {b.fija ? null : moverId === b.id
                         ? <FormularioMoverBandeja equipmentId={b.id} posiciones={posicionesDeMover ?? []} />
                         : <Link href={`/beneficio/bandejas?mover=${b.id}`}>{t("mover")}</Link>}
                     </td>

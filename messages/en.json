@@ -3523,6 +3523,7 @@
     "error_posicion_invalida": "That position is not on this farm.",
     "error_bandeja_fija": "That equipment is marked as fixed in place.",
     "error_bandeja_cambio": "The tray changed meanwhile (loaded or unloaded). Try again.",
-    "error_fecha_antes_del_ultimo_traslado": "That time is before the tray's last move."
+    "error_fecha_antes_del_ultimo_traslado": "That time is before the tray's last move.",
+    "error_cantidad_invalida": "That quantity is not a number."
   }
 }

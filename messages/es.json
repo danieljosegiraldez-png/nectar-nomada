@@ -3523,6 +3523,7 @@
     "error_posicion_invalida": "Esa posición no es de esta finca.",
     "error_bandeja_fija": "Ese equipo está marcado como fijo; no se mueve.",
     "error_bandeja_cambio": "La bandeja cambió mientras tanto (se cargó o se bajó). Vuelve a intentarlo.",
-    "error_fecha_antes_del_ultimo_traslado": "Esa hora es anterior al último movimiento de la bandeja."
+    "error_fecha_antes_del_ultimo_traslado": "Esa hora es anterior al último movimiento de la bandeja.",
+    "error_cantidad_invalida": "Esa cantidad no es un número."
   }
 }

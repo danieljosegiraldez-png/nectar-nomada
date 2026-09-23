@@ -73,7 +73,10 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
             <label>{t("unidad")}<input name="unit" type="text" /></label>
             <BotonDeEnvio className="nn-button">{t("bajarYCerrar")}</BotonDeEnvio>
           </form>)}
-        {puedeRegistrar && f.hasta === null && (
+        {/* Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no tiene destino
+            posible (`moverBandeja` lo rechaza con `bandeja_fija`), así que no
+            se ofrece el formulario de mover. */}
+        {puedeRegistrar && f.hasta === null && !f.fija && (
           <form action={accionMover} style={{ display: "inline-flex", gap: "0.25rem" }}>
             <input type="hidden" name="lotId" value={lotId} />
             <input type="hidden" name="equipmentId" value={f.equipmentId} />

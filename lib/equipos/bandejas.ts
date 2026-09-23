@@ -151,7 +151,12 @@ export async function bandejasDeLaFinca(userAccountId: string, organizationId: s
       if (puedeVerLugar) donde = t.toLocation.name;
       else dondeOculto = true;
     }
-    resultado.push({ id: e.id, numero: numeroDeBandeja(e.trayNumber!), tipo: e.trayType!.name, dondeId: t?.toLocationId ?? null, donde, dondeOculto });
+    resultado.push({
+      id: e.id, numero: numeroDeBandeja(e.trayNumber!), tipo: e.trayType!.name, dondeId: t?.toLocationId ?? null, donde, dondeOculto,
+      // Fix round 1 (Tarea 3, secado-2b, hallazgo 3): un equipo fijo no tiene
+      // destino posible — `/beneficio/bandejas` no ofrece "Mover" para él.
+      fija: e.isFixedInPlace,
+    });
   }
   return resultado;
 }
