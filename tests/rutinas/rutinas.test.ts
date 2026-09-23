@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/db";
 import { registrarEquipo } from "../../lib/equipos/equipos";
@@ -197,5 +197,79 @@ describe("el estado que ve la ficha y la lista", () => {
     expect(paraElOperario.get(e.id)).toBe(2);
     const paraElAjeno = await vencidasPorEquipo(f.ajeno, [e.id], "2026-09-18");
     expect(paraElAjeno.has(e.id)).toBe(false);
+  });
+});
+
+describe("el oráculo de existencia manda `forbidden` igual para un uuid inventado y para una rutina/registro ajenos (arreglo de revisión, item 3)", () => {
+  it("cambiarIntervalo: mismo forbidden para un uuid inventado y para una rutina ajena; el autorizado sí puede", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "limpieza", intervalDays: 7 });
+    await expect(cambiarIntervalo(f.ajeno, randomUUID(), 10)).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(cambiarIntervalo(f.ajeno, r.id, 10)).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(cambiarIntervalo(f.jefeA, r.id, 10)).resolves.toBeUndefined();
+  });
+  it("retirarRutina: igual", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "fumigacion", intervalDays: 7 });
+    await expect(retirarRutina(f.ajeno, randomUUID(), new Date())).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(retirarRutina(f.ajeno, r.id, new Date())).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(retirarRutina(f.jefeA, r.id, new Date())).resolves.toBeUndefined();
+  });
+  it("registrarRealizada: igual", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "mantenimiento", intervalDays: 7 });
+    await expect(
+      registrarRealizada(f.ajeno, { routineId: randomUUID(), performedOn: dia("2026-09-10"), provenanceClass: "original_record" }),
+    ).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(
+      registrarRealizada(f.ajeno, { routineId: r.id, performedOn: dia("2026-09-10"), provenanceClass: "original_record" }),
+    ).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(
+      registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-09-10"), provenanceClass: "original_record" }),
+    ).resolves.toBeTruthy();
+  });
+  it("anularRegistro: igual", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "otra", kindNote: "TEST anular oraculo", intervalDays: 7 });
+    const ev = await registrarRealizada(f.operarioA, { routineId: r.id, performedOn: dia("2026-09-10"), provenanceClass: "original_record" });
+    await expect(anularRegistro(f.ajeno, randomUUID(), "motivo")).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(anularRegistro(f.ajeno, ev.id, "motivo")).rejects.toThrow(new RutinaError("forbidden"));
+    await expect(anularRegistro(f.jefeA, ev.id, "motivo")).resolves.toBeUndefined();
+  });
+});
+
+describe("registrarRealizada: el filtro de organización va en el WHERE de la consulta, no después de leer (Hallazgo B / item 2b)", () => {
+  it("el WHERE que consumableLot.findMany recibe de verdad lleva material.organizationId", async () => {
+    const e = await equipo();
+    const r = await crearRutina(f.jefeA, { equipmentId: e.id, kind: "otra", kindNote: "TEST spy where", intervalDays: 30 });
+    const mat = await prisma.consumableMaterial.create({ data: { name: `TEST mat spy ${f.run}`, defaultUnit: "kg", organizationId: f.orgA } });
+    const lote = await prisma.consumableLot.create({ data: { materialId: mat.id, batchLabel: `TEST lote spy ${f.run}`, receivedAt: dia("2026-08-01") } });
+    await prisma.consumableStockEvent.create({ data: { consumableLotId: lote.id, eventType: "received", quantity: 5, unit: "kg", occurredAt: dia("2026-08-01"), provenanceClass: "original_record" } });
+    const spy = vi.spyOn(prisma.consumableLot, "findMany");
+    let ev: { id: string } | undefined;
+    try {
+      ev = await registrarRealizada(f.operarioA, {
+        routineId: r.id,
+        performedOn: dia("2026-09-01"),
+        provenanceClass: "original_record",
+        insumos: [{ consumableLotId: lote.id, quantity: 1, unit: "kg" }],
+      });
+      const llamada = spy.mock.calls.find((c) => {
+        const arg = c[0] as { where?: { id?: { in?: string[] } } };
+        return arg?.where?.id?.in?.includes(lote.id);
+      });
+      expect(llamada).toBeTruthy();
+      const where = (llamada![0] as { where: { material?: unknown } }).where;
+      expect(where.material).toEqual({ organizationId: f.orgA });
+    } finally {
+      spy.mockRestore();
+      // El consumo (`materialConsumptionEntry`) cuelga tanto del evento como
+      // del lote con RESTRICT: se borra ANTES que los dos, o el `afterAll` de
+      // este archivo revienta al intentar borrar el `careRoutineEvent`.
+      if (ev) await prisma.materialConsumptionEntry.deleteMany({ where: { careRoutineEventId: ev.id } });
+      await prisma.consumableStockEvent.deleteMany({ where: { consumableLotId: lote.id } });
+      await prisma.consumableLot.deleteMany({ where: { id: lote.id } });
+      await prisma.consumableMaterial.deleteMany({ where: { id: mat.id } });
+    }
   });
 });

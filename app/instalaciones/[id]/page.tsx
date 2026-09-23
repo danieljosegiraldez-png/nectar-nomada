@@ -9,7 +9,6 @@ import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
-import { insumosDeLugar } from "../../../lib/rutinas/lugares";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
@@ -50,17 +49,12 @@ export default async function InstalacionPage({ params, searchParams }: {
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
   // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
   // misma lista de Personas activas sea cual sea el lugar, así que se
-  // resuelve UNA vez para toda la página. `insumosDeLugar` NO se hoistea del
-  // mismo modo: gatea sobre `report_condition` del id que recibe, y una cama
-  // puede tener ese permiso sin que lo tenga la instalación (o al revés) —
-  // reutilizar el de la instalación en cada cama devolvía `[]` para quien sí
-  // podía apuntar en su cama, y `RutinasDeLugar` trata `[]` como «ya
-  // resuelto», no como «vacío de verdad» (arreglo de la re-revisión final,
-  // 2026-09-19). Cada `RutinasDeLugar` de cama sigue resolviendo el suyo.
-  const [insumosDeLaInstalacion, personas] = await Promise.all([
-    insumosDeLugar(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
-  ]);
+  // resuelve UNA vez para toda la página. `RutinasDeLugar` ya NO recibe
+  // `insumos` como prop (ronda 2 de la revisión de PR A): resuelve
+  // `insumosDeLugar` ella misma con SU PROPIO `locationId` en cada instancia
+  // —cama, estante e instalación—, así que aquí no hay nada que hoistear ni
+  // que repartir por bloque.
+  const personas = await getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName })));
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
@@ -106,10 +100,11 @@ export default async function InstalacionPage({ params, searchParams }: {
             shadePercentage: posicionSeleccionada.shadePercentage, shadeDescription: posicionSeleccionada.shadeDescription,
           }} />}
         {permisosDeEstantes[i] && <FormularioEstante existente={{ id: estante.id, niveles: estante.niveles, puestos: estante.puestos }} />}
+        <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} personas={personas} />
       </section>;
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} insumos={insumosDeLaInstalacion} personas={personas} />
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} personas={personas} />
   </div>;
 }

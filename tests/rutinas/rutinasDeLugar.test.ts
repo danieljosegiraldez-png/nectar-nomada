@@ -13,7 +13,7 @@ let loteDeInsumo2: string;
 let loteAjeno: string;
 const dia = (s: string) => new Date(`${s}T00:00:00Z`);
 
-async function loc(nombre: string, locationType: "site" | "beneficio" | "drying_facility" | "drying_bed" | "storage_facility" | "plot", parentLocationId: string | null) {
+async function loc(nombre: string, locationType: "site" | "beneficio" | "drying_facility" | "drying_bed" | "storage_facility" | "plot" | "drying_rack", parentLocationId: string | null) {
   const l = await prisma.location.create({ data: { name: `TEST ${nombre} ${f.run}`, locationType, parentLocationId, organizationId: f.orgA, status: "approved", classification: "internal" } });
   L[nombre] = l.id;
   return l.id;
@@ -26,10 +26,23 @@ beforeAll(async () => {
   await loc("cuarto", "drying_facility", L.finca!);
   await loc("cama", "drying_bed", L.cuarto!);
   await loc("bodega", "storage_facility", L.beneficio!);
-  // Cama sin estante de secado (parte 2, drying_rack, aún no existe en el
-  // esquema): cualquier padre que no sea drying_facility dispara
-  // "rutina_en_el_estante", sea cual sea su tipo futuro.
+  // Cama sin estante de secado, con un padre que no es ni drying_facility ni
+  // drying_rack (aquí, una finca): dispara "rutina_en_el_estante" igual,
+  // porque la regla es "cualquier padre que no sea drying_facility", no
+  // "el padre es un estante". Prueba distinta y adicional a la de abajo.
   await loc("camaSuelta", "drying_bed", L.finca!);
+  // Parte 2 (spec §7): el estante en sí (drying_rack) lleva rutina propia; una
+  // posición DENTRO del estante (padre = drying_rack) no — la cubre la del
+  // estante.
+  await loc("estante", "drying_rack", L.cuarto!);
+  // Una posición DENTRO de un estante exige nivel y puesto —trigger
+  // `location_arbol_de_estante`, migración 20260918190500—, así que no puede
+  // salir de `loc()`: se crea aparte, con ambos puestos.
+  L.camaEnEstante = (
+    await prisma.location.create({
+      data: { name: `TEST camaEnEstante ${f.run}`, locationType: "drying_bed", parentLocationId: L.estante!, organizationId: f.orgA, status: "approved", classification: "internal", rackLevel: 1, rackSlot: 1 },
+    })
+  ).id;
   // Lugar sin organización (Location.organizationId es opcional; una bodega de
   // plataforma, no de una finca concreta), para probar que "insumo_ajeno" se
   // dispara igual cuando no hay organización con la que comparar.
@@ -68,7 +81,7 @@ afterAll(async () => {
     () => prisma.consumableMaterial.deleteMany({ where: { name: { contains: f.run } } }),
     () => prisma.careRoutineEvent.deleteMany({ where: { id: { in: evs } } }),
     () => prisma.careRoutine.deleteMany({ where: { id: { in: rs } } }),
-    ...["bodega", "bodegaSinOrg", "camaSuelta", "cama", "cuarto", "beneficio", "finca"].map(
+    ...["bodega", "bodegaSinOrg", "camaSuelta", "camaEnEstante", "estante", "cama", "cuarto", "beneficio", "finca"].map(
       (n) => () => prisma.location.deleteMany({ where: { id: L[n] } }),
     ),
   ];
@@ -88,7 +101,7 @@ afterAll(async () => {
 });
 
 describe("qué lugares llevan rutinas", () => {
-  for (const n of ["beneficio", "cuarto", "cama", "bodega"]) {
+  for (const n of ["beneficio", "cuarto", "cama", "bodega", "estante"]) {
     it(`${n}: sí`, async () => {
       const r = await crearRutina(f.jefeA, { locationId: L[n]!, kind: "limpieza", intervalDays: 7 });
       expect(r.id).toBeTruthy();
@@ -97,8 +110,28 @@ describe("qué lugares llevan rutinas", () => {
   it("una finca: lugar_sin_rutinas", async () => {
     await expect(crearRutina(f.jefeA, { locationId: L.finca!, kind: "limpieza", intervalDays: 7 })).rejects.toThrow(new RutinaError("lugar_sin_rutinas"));
   });
+  it("una cama dentro de un estante: rutina_en_el_estante (la cubre la del estante, Parte 2)", async () => {
+    await expect(crearRutina(f.jefeA, { locationId: L.camaEnEstante!, kind: "limpieza", intervalDays: 7 })).rejects.toThrow(
+      new RutinaError("rutina_en_el_estante"),
+    );
+  });
   it("ni equipo ni lugar, o los dos: una_cosa", async () => {
     await expect(crearRutina(f.jefeA, { kind: "limpieza", intervalDays: 7 })).rejects.toThrow(new RutinaError("una_cosa"));
+  });
+});
+
+describe("el disparador SQL care_routine_lugar_valido: el estante admite, su posición no (Parte 2, arreglo de revisión)", () => {
+  it("INSERT directo en el estante pasa la base; en una posición del estante, la base lo rechaza (control positivo y negativo)", async () => {
+    // Control positivo, a nivel de BASE (no de servicio): un INSERT crudo con
+    // el id del estante pasa el disparador. `kind` distinto de 'limpieza' para
+    // no chocar con la rutina activa que el bloque de arriba ya creó ahí.
+    await prisma.$executeRaw`INSERT INTO "core"."care_routine" ("location_id", "kind", "interval_days", "created_by") VALUES (${L.estante}::uuid, 'mantenimiento', 7, ${f.jefeA}::uuid)`;
+    expect(await prisma.careRoutine.count({ where: { locationId: L.estante!, kind: "mantenimiento" } })).toBe(1);
+    // El hallazgo: una posición DENTRO del estante la rechaza la BASE, no sólo
+    // el servicio — la restricción vive en el disparador, no sólo en TypeScript.
+    await expect(
+      prisma.$executeRaw`INSERT INTO "core"."care_routine" ("location_id", "kind", "interval_days", "created_by") VALUES (${L.camaEnEstante}::uuid, 'mantenimiento', 7, ${f.jefeA}::uuid)`,
+    ).rejects.toThrow(/rutina_lugar_invalido/);
   });
 });
 
@@ -240,6 +273,33 @@ describe("insumosDeLugar: depende del ID que recibe, no de un lugar hermano (re-
     const propios = await insumosDeLugar(f.jefeA, L.cuarto!);
     expect(propios.map((x) => x.batchLabel)).toContain(`TEST L ${f.run}`);
   });
+
+  it("con report_condition SOLO en la cama (no en la instalación): la cama da sus lotes, la instalación da [] — lo que RutinasDeLugar hace ahora SIEMPRE, sin prop `insumos` (ronda 2 de la revisión de PR A)", async () => {
+    // Un ámbito de ubicación alcanza a sus DESCENDIENTES (decisión de Daniel,
+    // 2026-09-16, `lib/rbac/service.ts`), nunca a sus ANCESTROS: un `Scope`
+    // puesto directamente en L.cama da permiso en L.cama y NO en L.cuarto (su
+    // padre). Cuenta nueva, sin la de `f.operarioA` —ésa está bajo `f.sitioA`,
+    // que es ancestro de L.cuarto Y de L.cama, así que ya vería las dos—.
+    const persona = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "SoloCama", displayName: `TEST SoloCama ${f.run}` },
+    });
+    const cuentaSolaCama = await prisma.userAccount.create({
+      data: { personId: persona.id, authProvider: "credentials", status: "active" },
+    });
+    const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: L.cama! } });
+    const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    await prisma.assignment.create({ data: { userAccountId: cuentaSolaCama.id, roleProfileId: perfil.id, scopeId: scope.id } });
+    try {
+      const deLaCama = await insumosDeLugar(cuentaSolaCama.id, L.cama!);
+      expect(deLaCama.map((x) => x.batchLabel)).toContain(`TEST L ${f.run}`);
+      await expect(insumosDeLugar(cuentaSolaCama.id, L.cuarto!)).resolves.toEqual([]);
+    } finally {
+      await prisma.assignment.deleteMany({ where: { userAccountId: cuentaSolaCama.id } });
+      await prisma.scope.deleteMany({ where: { id: scope.id } });
+      await prisma.userAccount.deleteMany({ where: { id: cuentaSolaCama.id } });
+      await prisma.person.deleteMany({ where: { id: persona.id } });
+    }
+  });
 });
 
 describe("lugarConRutinasOVacio: no tumba la página en un lugar sin rutina", () => {
@@ -264,6 +324,9 @@ describe("a dónde vuelve cada lugar", () => {
     expect(rutaDeLugar({ id: "i", locationType: "drying_facility", parentLocationId: "x" })).toBe("/instalaciones/i");
     expect(rutaDeLugar({ id: "c", locationType: "drying_bed", parentLocationId: "i" })).toBe("/instalaciones/i");
     expect(rutaDeLugar({ id: "z", locationType: "beneficio", parentLocationId: "x" })).toBe("/beneficio");
+  });
+  it("un estante (drying_rack): a la instalación que lo contiene, no a sí mismo (Parte 2)", () => {
+    expect(rutaDeLugar({ id: "e", locationType: "drying_rack", parentLocationId: "i" })).toBe("/instalaciones/i");
   });
 });
 
