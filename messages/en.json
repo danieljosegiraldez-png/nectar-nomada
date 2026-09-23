@@ -2936,6 +2936,7 @@
     "soloVencidas": "overdue routines only"
   },
   "AjustesDelBeneficio": {
+    "crearAyuda": "Add a mill under a site you can manage.",
     "ajustesTitulo": "Mill settings",
     "ajustesIntro": "Configuration: the mill as a place. Capacities, equipment and recipes arrive here once the dashboard exists.",
     "misBeneficios": "Mills",
@@ -2975,6 +2976,11 @@
     "error_conflicto_concurrente": "Someone else changed this at the same time. Please try again."
   },
   "SeccionBeneficio": {
+    "navegacion": "Mill navigation",
+    "operaciones": "Today at the mill",
+    "herramientas": "Planning and tools",
+    "rutinas": "Mill routines",
+    "rutinasAyuda": "Open routines and equipment for this mill.",
     "titulo": "Mill",
     "intro": "Everything that happens at the mill, from the cherry coming in to the coffee being ready.",
     "recepcion": "Cherry reception",
@@ -2997,6 +3003,9 @@
     "ajustesAyuda": "Register the mill and configure it. Only for whoever manages it."
   },
   "Bandejas": {
+    "nuevoTipoAyuda": "Define the dimensions of a reusable tray type.",
+    "registrarBandejasAyuda": "Add numbered trays of an existing type at a site.",
+    "registrarPesajeAyuda": "Measure real tray capacity for a material state.",
     "volver": "Mill",
     "titulo": "Trays",
     "intro": "Tray types, their capacity per state, and the numbered register of each tray.",
@@ -3216,6 +3225,10 @@
     "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back."
   },
   "Recepcion": {
+    "procesarEntrega": "Receive or reject delivery",
+    "accionesRecepcion": "Photos, losses and corrections",
+    "pedidosIntro": "Plan expected cherry deliveries and compare them with what arrived.",
+    "nuevoPedidoAyuda": "Create a request for a farm or external supplier.",
     "error_brix_invalido": "The Brix must be a number.",
     "titulo": "Cherry reception",
     "pedidosTitulo": "Cherry orders",
