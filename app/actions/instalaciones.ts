@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { crearUbicacionDeSecado, actualizarUbicacionDeSecado, instalacionDe } from "../../lib/traceability/instalaciones";
 import { LocationAccessError } from "../../lib/traceability/locations";
-import { leerUbicacionDeSecado, SecadoFormError, type SecadoFormState } from "../../lib/traceability/secadoForm";
+import { leerLecturaDeAmbiente, leerUbicacionDeSecado, SecadoFormError, type SecadoFormState } from "../../lib/traceability/secadoForm";
+import { AmbienteError, registrarLecturaDeAmbiente } from "../../lib/traceability/ambiente";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { LocalDateTimeError } from "../../lib/time/localDateTime";
 import { crearEstante, ampliarEstante, EstanteError } from "../../lib/traceability/estantes";
 
 export async function guardarInstalacionFormAction(_state: SecadoFormState, form: FormData): Promise<SecadoFormState> {
@@ -57,4 +60,24 @@ export async function guardarEstanteFormAction(_state: SecadoFormState, form: Fo
   }
   revalidatePath(`/instalaciones/${facilityId}`);
   redirect(`/instalaciones/${facilityId}?ok=guardado`);
+}
+
+export async function registrarAmbienteFormAction(_state: SecadoFormState, form: FormData): Promise<SecadoFormState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  let facilityId: string;
+  try {
+    const input = leerLecturaDeAmbiente(form);
+    facilityId = input.facilityLocationId;
+    await registrarLecturaDeAmbiente(user.userAccountId, input);
+  } catch (error) {
+    // Cada clase de error de validación tiene su rama AQUÍ, en el mismo cambio:
+    // una que falte es un 500 (CLAUDE.md, «Una clase de validación nueva…»).
+    if (error instanceof AmbienteError || error instanceof SecadoFormError) return { error: error.message };
+    if (error instanceof LocalDateTimeError) return { error: "fecha_invalida" };
+    if (error instanceof TraceabilityAccessError) return { error: "sin_acceso" };
+    throw error;
+  }
+  revalidatePath(`/instalaciones/${facilityId}`);
+  redirect(`/instalaciones/${facilityId}?ok=ambiente`);
 }

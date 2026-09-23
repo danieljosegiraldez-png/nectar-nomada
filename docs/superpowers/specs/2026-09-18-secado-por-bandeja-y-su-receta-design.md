@@ -264,7 +264,7 @@ Lo debido de §4.7 entra en la cola del tablero (#363 §4.2) **como una lectura 
 2a. **Instalaciones, estantes, bandejas y capacidad** (§4.1, §4.2, §4.2b): los dos ambientes, la sombra, el estante con sus posiciones generadas, los tipos de bandeja, el registro numerado en tanda, y el pesaje con su capacidad. Sin esto no hay dónde poner una bandeja.
 2b. **El lote en sus bandejas** (§4.3): `DryingRunTray` con sus reglas, cargar y bajar —la última cierra el secado—, dónde está cada una y sus conflictos.
 3. **Humedad y volteos por bandeja** (§4.4).
-4. **Ambiente a mano** (§4.5). Independiente de 2 y 3: puede ir en paralelo.
+4. **Ambiente a mano** (§4.5). Independiente de 2 y 3: puede ir en paralelo. — **plan: `docs/superpowers/plans/2026-09-21-secado-4-ambiente-a-mano.md`; construido en la rama `plan-ambiente-a-mano` (ADR-185)**.
 5. **Tramos, inicio y marcha** (§4.6, §4.7), y su entrada en el tablero (§4.8), que espera a que el tablero (#363) exista.
 6. Fusiones y despliegues: **decisión de Daniel**.
 

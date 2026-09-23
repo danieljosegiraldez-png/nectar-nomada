@@ -41,6 +41,12 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-21 · Secado, paso 4: el ambiente a mano
+
+ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
+enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
+pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
+
 ### 2026-09-21 · El canal de aviso de una persona exige permiso (PR #464)
 
 ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal de cualquier persona sin
@@ -116,17 +122,6 @@ revisión que contó vio alguno. **Sin ver en navegador.**
 ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
 si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
 ver en navegador.** Sigue: «marcos negros» en la inspección.
-
-### 2026-09-19 · Catálogos de referencia, modelos de equipo y rutinas (PR #435)
-
-ADR-172. Contrato común de catálogos (`lib/catalogos/`, guardia `catalogos-con-contrato`): compartidos
-y propios, retirar sin borrar, unicidad sin mayúsculas en la base. Primer catálogo: modelos de equipo
-(`/equipos/modelos`); el equipo gana modelo, serie, código interno, proveedor y garantía; rutinas de
-mantenimiento/limpieza/fumigación que avisan «vencida» y **no bloquean**. Producción migró las dos
-(`catalogos_y_rutinas`, `catalogos_restricciones`). **Siguen**: los demás catálogos (levaduras,
-insumos, azúcares, especies, varietales) y el spec de **instalaciones** — la base ya admite sus
-rutinas, el servicio las rechaza hasta entonces; se solapa con secado por bandeja. Decisiones abiertas
-en la descripción del PR.
 
 ## 3. Bloqueado, y en qué
 

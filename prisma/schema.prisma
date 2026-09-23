@@ -148,6 +148,7 @@ model Person {
   consumableCustodiesResponsible ConsumableCustody[] @relation("ConsumableCustodyResponsible")
   plotInterventionsOperadas PlotIntervention[] @relation("PlotInterventionOperator")
   dryingTrayWeighingsOperated DryingTrayWeighing[] @relation("DryingTrayWeighingOperator")
+  dryingAmbientReadingsOperated DryingAmbientReading[] @relation("DryingAmbientReadingOperator")
 }
 
 enum UserAccountStatus {
@@ -326,6 +327,7 @@ model UserAccount {
   /// ADR-170
   storeAllocationsCancelled StoreAllocation[] @relation("StoreAllocationCancelledBy")
   dryingTrayWeighingsCreated DryingTrayWeighing[] @relation("DryingTrayWeighingCreatedBy")
+  dryingAmbientReadingsCreated DryingAmbientReading[] @relation("DryingAmbientReadingCreatedBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -816,6 +818,8 @@ enum SubdivisionReason {
 
 model Location {
   samplingEvents SamplingEvent[] @relation("SamplingEventBed")
+  ambientReadingsAsFacility DryingAmbientReading[] @relation("DryingAmbientReadingFacility")
+  ambientReadingsAsRack DryingAmbientReading[] @relation("DryingAmbientReadingRack")
   id               String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationType     LocationType                           @map("location_type")
   parentLocationId String?                                @map("parent_location_id") @db.Uuid
@@ -5423,6 +5427,67 @@ model DryingTrayWeighing {
 
   @@index([trayTypeId])
   @@map("drying_tray_weighing")
+  @@schema("traceability")
+}
+
+/// Paso 4 de la spec de secado por bandeja (§4.5): cómo está el cielo. Catálogo
+/// de Daniel, 2026-09-18.
+enum SkyCondition {
+  sunny
+  partly_cloudy
+  cloudy
+  rain
+
+  @@schema("core")
+}
+
+/// Paso 4 (§4.5): cómo está ventilado el lugar. Catálogo de Daniel, 2026-09-18.
+enum DryingVentilation {
+  open
+  semi_open
+  closed
+  fan_or_dehumidifier
+
+  @@schema("core")
+}
+
+/// Lectura a mano del AIRE de una instalación de secado (spec §4.5). No es la
+/// humedad del grano —ésa es `moisture` en `Measurement`—. Inmutable: una
+/// corrección es otra fila que la supersede, como `DryingTrayWeighing`.
+/// Sin estante ni nivel es la lectura GENERAL de la instalación; con ellos, la
+/// de ese punto, y nunca se usa para otro (§4.5: «nunca se interpola»).
+model DryingAmbientReading {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  facilityLocationId   String                @map("facility_location_id") @db.Uuid
+  facility             Location              @relation("DryingAmbientReadingFacility", fields: [facilityLocationId], references: [id], onDelete: Restrict)
+  rackLocationId       String?               @map("rack_location_id") @db.Uuid
+  rack                 Location?             @relation("DryingAmbientReadingRack", fields: [rackLocationId], references: [id], onDelete: Restrict)
+  rackLevel            Int?                  @map("rack_level")
+  occurredAt           DateTime              @map("occurred_at")
+  airTemperatureC      Decimal?              @map("air_temperature_c") @db.Decimal(4, 1)
+  temperatureEntryUnit String?               @map("temperature_entry_unit")
+  relativeHumidityPct  Decimal?              @map("relative_humidity_pct") @db.Decimal(4, 1)
+  skyCondition         SkyCondition?         @map("sky_condition")
+  skyNote              String?               @map("sky_note")
+  ventilation          DryingVentilation?    @map("ventilation")
+  ventilationNote      String?               @map("ventilation_note")
+  sourceType           MeasurementSourceType @default(manual) @map("source_type")
+  provenanceClass      ProvenanceClass       @map("provenance_class")
+  operatorPersonId     String?               @map("operator_person_id") @db.Uuid
+  operator             Person?               @relation("DryingAmbientReadingOperator", fields: [operatorPersonId], references: [id], onDelete: Restrict)
+  supersedesId         String?               @map("supersedes_id") @db.Uuid
+  supersedes           DryingAmbientReading?  @relation("DryingAmbientReadingSupersedes", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy         DryingAmbientReading[] @relation("DryingAmbientReadingSupersedes")
+  supersededAt         DateTime?             @map("superseded_at")
+  correctionReason     String?               @map("correction_reason")
+  // Reloj del SERVIDOR al insertar, como `DryingTrayWeighing.createdAt`: no es
+  // `recordedAt` (reloj del teléfono), que exigiría las columnas de sincronización.
+  createdAt            DateTime              @default(now()) @map("created_at")
+  createdBy            String?               @map("created_by") @db.Uuid
+  creator              UserAccount?          @relation("DryingAmbientReadingCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([facilityLocationId, occurredAt])
+  @@map("drying_ambient_reading")
   @@schema("traceability")
 }
 

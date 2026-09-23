@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { AMBIENTES_DE_SECADO, leerInspeccion, leerUbicacionDeSecado, MATERIALES_DE_SECADO, PAPELES_DE_MUESTRA, ZONAS_DE_MUESTRA } from "../../lib/traceability/secadoForm";
+import { AMBIENTES_DE_SECADO, CIELOS, leerInspeccion, leerLecturaDeAmbiente, leerUbicacionDeSecado, MATERIALES_DE_SECADO, PAPELES_DE_MUESTRA, VENTILACIONES, ZONAS_DE_MUESTRA } from "../../lib/traceability/secadoForm";
 
 function formulario() {
   const form = new FormData();
@@ -72,10 +72,33 @@ describe("el envío manual de secado", () => {
         ...MATERIALES_DE_SECADO.map((v) => `material_${v}`), ...PAPELES_DE_MUESTRA.map((v) => `papel_${v}`),
         ...ZONAS_DE_MUESTRA.map((v) => `zona_${v}`), ...AMBIENTES_DE_SECADO.map((v) => `ambiente_${v}`),
         ...["sin_acceso", "datos_invalidos", "replica_con_zona", "zona_sin_identificar", "fecha_invalida", "rack_invalido", "tipo_invalido", "sombra_invalida"].map((v) => `error_${v}`),
+        ...CIELOS.map((v) => `cielo_${v}`), ...VENTILACIONES.map((v) => `ventilacion_${v}`),
+        ...["lectura_vacia", "nota_sin_valor", "fuera_de_rango", "punto_invalido", "instalacion_invalida"].map((v) => `error_${v}`),
+        "ambienteTitulo", "ambienteIntro", "ambienteGeneral", "ambienteSinLectura", "ambienteSinLecturaDelNivel",
+        "ambienteRecientes", "ambienteGuardado", "ambienteRegistrar", "ambientePunto", "ambientePuntoGeneral",
+        "ambienteNivelOpcional", "ambienteTemperatura", "ambienteUnidad", "ambienteHumedadRelativa", "ambienteCielo",
+        "ambienteNotaCielo", "ambienteVentilacion", "ambienteNotaVentilacion", "haceMin", "haceH", "haceD",
+        "fuente_manual", "ambienteEstanteNoVisible", "ambienteNivelSinEstante",
       ];
       expect(keys.length).toBeGreaterThan(20);
       for (const key of keys) expect(messages[key], `${lang}.${key}`).toEqual(expect.any(String));
     }
+  });
+  it("la lectura de ambiente: vacíos quedan nulos, la temperatura lleva su unidad, y el POST valida los catálogos", () => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries({ facilityLocationId: "cuarto", occurredAt: "2026-09-21T09:30", tzOffsetMinutes: "300",
+      temperatura: "75.2", unidadTemperatura: "F", humedadRelativaPct: "", skyCondition: "cloudy", skyNote: "  bruma  ",
+      ventilation: "", ventilationNote: "", rackLocationId: "", rackLevel: "" })) form.set(k, v);
+    expect(leerLecturaDeAmbiente(form)).toMatchObject({
+      facilityLocationId: "cuarto", occurredAt: new Date("2026-09-21T14:30:00Z"), rackLocationId: null, rackLevel: null,
+      temperatura: { valor: 75.2, unidad: "F" }, humedadRelativaPct: null, cielo: "cloudy", notaCielo: "bruma",
+      ventilacion: null, notaVentilacion: null, operatorPersonId: null,
+    });
+    form.set("temperatura", ""); expect(leerLecturaDeAmbiente(form).temperatura).toBeNull();
+    form.set("skyCondition", "tormenta"); expect(() => leerLecturaDeAmbiente(form)).toThrow("datos_invalidos");
+    form.set("skyCondition", "cloudy"); form.set("unidadTemperatura", "K"); form.set("temperatura", "20");
+    expect(() => leerLecturaDeAmbiente(form)).toThrow("datos_invalidos");
+    form.set("unidadTemperatura", "C"); form.set("rackLevel", "dos"); expect(() => leerLecturaDeAmbiente(form)).toThrow("datos_invalidos");
   });
   it("la sombra: grado de la escala de las parcelas y nota libre; vacías quedan nulas", () => {
     const form = new FormData(); form.set("name", "Cama bajo la guaba");

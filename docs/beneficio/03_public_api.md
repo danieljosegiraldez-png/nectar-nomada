@@ -287,6 +287,19 @@ Plan 2b (2026-09-18/21), Tarea 1 — el lote en sus bandejas:
 |---|---|---|
 | `DryingRunTray` | `traceability.drying_run_tray` | qué bandejas lleva el secado de un lote, desde y hasta |
 
+Paso 4 de la misma spec, el ambiente a mano (§4.5). Nombres aprobados por Daniel el 2026-09-21:
+
+| nombre | dónde | qué es |
+|---|---|---|
+| `DryingAmbientReading` | `traceability.drying_ambient_reading` | lectura a mano del aire de una instalación de secado, general o de un estante y nivel; inmutable, se corrige superseding |
+| `facilityLocationId`, `rackLocationId`, `rackLevel` | `traceability.drying_ambient_reading` | el punto: instalación obligatoria; estante y nivel opcionales |
+| `airTemperatureC`, `temperatureEntryUnit` | ídem | °C con un decimal y la unidad tecleada (`C` o `F`) |
+| `relativeHumidityPct` | ídem | humedad relativa del AIRE, un decimal; no es la del grano |
+| `SkyCondition`: `sunny`, `partly_cloudy`, `cloudy`, `rain` | `core` | cielo, catálogo de Daniel 2026-09-18 |
+| `DryingVentilation`: `open`, `semi_open`, `closed`, `fan_or_dehumidifier` | `core` | ventilación, catálogo de Daniel 2026-09-18 |
+| `skyNote`, `ventilationNote` | `traceability.drying_ambient_reading` | nota libre al lado de su valor, nunca en su lugar |
+| `sourceType` | ídem, enum `MeasurementSourceType` existente | `manual` hoy |
+
 ## 12. Lugares y rutinas (2026-09-19)
 
 - `LocationType.storage_facility` — la bodega; su padre es `beneficio` o `site`.

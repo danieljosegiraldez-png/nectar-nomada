@@ -614,6 +614,10 @@
       "razon": "Módulo de dominio: tipos de bandeja y bandejas numeradas por finca (spec §4.2, plan 2a de secado). `crearTipoDeBandeja` exige `exigeEditarBeneficioEnOrganizacion`; `registrarBandejas` exige `puedeConfigurarEn` sobre el sitio y rechaza un destino que no sea `site`/`beneficio` (revisión final del plan 2a, A4); leer tipos y bandejas exige ver equipo en algún lugar de la organización (`puedeVerEquiposEnOrganizacion`/`can(view, equipment, …)`)."
     },
     {
+      "archivo": "lib/traceability/ambiente.ts",
+      "razon": "Módulo de dominio: la lectura de ambiente a mano de una instalación de secado (spec §4.5, plan del paso 4 de secado). `registrarLecturaDeAmbiente` exige `sample:manage` sobre la instalación (`puedeEn`) ANTES de escribir, y comprueba que estante, nivel y original de una corrección sean de ESA instalación; `ambienteDeInstalacion` exige `sample:manage|view`; `puedeRegistrarAmbienteEn` sólo responde sí/no con la misma comprobación."
+    },
+    {
       "archivo": "lib/traceability/capacidadDeBandeja.ts",
       "razon": "Módulo de dominio: el pesaje de bandeja cargada y la capacidad por estado (spec §4.2b, plan 2a de secado). `registrarPesaje` exige `requireLotAccess(manage)` sobre el lote (y sobre el original, si corrige); `capacidadDeTipo`/`pesajesDeTipo` agregan y muestran SÓLO lo que `requireLotAccess(view)` deja ver por pesaje (RULING de la revisión final del plan 2a, A2: antes agregaba también lo oculto)."
     },
