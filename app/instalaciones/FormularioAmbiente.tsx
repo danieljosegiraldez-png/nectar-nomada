@@ -6,12 +6,13 @@ import { registrarAmbienteFormAction } from "../actions/instalaciones";
 import { BotonDeEnvio } from "../components/BotonDeEnvio";
 import { CampoNumerico } from "../components/CampoNumerico";
 import { TimezoneOffsetField } from "../components/TimezoneOffsetField";
+import { OpcionesDePersona, type OpcionDePersona } from "../components/OpcionesDePersona";
 import { CIELOS, VENTILACIONES } from "../../lib/traceability/secadoForm";
 
 type Estante = { id: string; name: string; niveles: number };
 
 export function FormularioAmbiente({ facilityId, estantes, nivelesSinEstante, personas }: {
-  facilityId: string; estantes: Estante[]; nivelesSinEstante: number[]; personas: { id: string; name: string }[];
+  facilityId: string; estantes: Estante[]; nivelesSinEstante: number[]; personas: readonly OpcionDePersona[];
 }) {
   const t = useTranslations("Secado");
   const [state, action] = useActionState(registrarAmbienteFormAction, {});
@@ -49,7 +50,7 @@ export function FormularioAmbiente({ facilityId, estantes, nivelesSinEstante, pe
     <label>{t("ambienteNotaVentilacion")}<input name="ventilationNote" maxLength={300} /></label>
     <label>{t("operador")}<select name="operatorPersonId" defaultValue="">
       <option value="">{t("noDeclarado")}</option>
-      {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      <OpcionesDePersona personas={personas} />
     </select></label>
     <BotonDeEnvio>{t("ambienteRegistrar")}</BotonDeEnvio>
   </form>;

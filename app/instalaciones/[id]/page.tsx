@@ -9,7 +9,7 @@ import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
-import { TraceabilityAccessError } from "../../../lib/traceability/lots";
+import { TraceabilityAccessError, getObserverCandidates } from "../../../lib/traceability/lots";
 import { ambienteDeInstalacion, puedeRegistrarAmbienteEn } from "../../../lib/traceability/ambiente";
 import { edad, lecturaDelPunto, type LecturaVigente } from "../../../lib/traceability/ambienteVigente";
 import { FormularioAmbiente } from "../FormularioAmbiente";
@@ -58,6 +58,9 @@ export default async function InstalacionPage({ params, searchParams }: {
     throw error;
   });
   const puedeRegistrarAmbiente = ambiente ? await puedeRegistrarAmbienteEn(user.userAccountId, id) : false;
+  const personas = puedeRegistrarAmbiente
+    ? (await getObserverCandidates(user.userAccountId, [{ locationId: id }])).people
+    : [];
   const ahora = new Date();
   const nombreDeEstante = (rackId: string | null) =>
     rackId == null ? null : instalacion.estantes.find((e) => e.id === rackId)?.name ?? t("ambienteEstanteNoVisible");
