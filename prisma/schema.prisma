@@ -228,6 +228,7 @@ model UserAccount {
   processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
   processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
   dryingTurnEventsCreated           DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
+  dryingRunTraysCreated             DryingRunTray[]              @relation("DryingRunTrayCreatedBy")
   storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
   materialConsumptionEntriesCreated MaterialConsumptionEntry[]   @relation("MaterialConsumptionEntryCreatedBy")
@@ -4256,6 +4257,7 @@ model DryingRun {
   creator      UserAccount? @relation("DryingRunCreatedBy", fields: [createdBy], references: [id])
 
   turningEvents              DryingTurnEvent[]
+  trays                      DryingRunTray[]
   measurements               Measurement[]
   transformations            LotTransformation[]
   assets                     Asset[]
@@ -4287,6 +4289,32 @@ model DryingTurnEvent {
 
   @@index([dryingRunId])
   @@map("drying_turn_event")
+  @@schema("traceability")
+}
+
+/// Qué bandejas lleva el secado de un lote (spec de secado por bandeja §4.3).
+/// Un lote se reparte en varias; cada bandeja lleva un solo lote a la vez. La
+/// POSICIÓN no es columna: es el último EquipmentTransfer de la bandeja hacia
+/// una drying_bed. Las reglas viven en la migración `bandejas_de_la_corrida`.
+model DryingRunTray {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dryingRunId     String          @map("drying_run_id") @db.Uuid
+  dryingRun       DryingRun       @relation(fields: [dryingRunId], references: [id], onDelete: Restrict)
+  equipmentId     String          @map("equipment_id") @db.Uuid
+  equipment       Equipment       @relation("DryingRunTrayEquipment", fields: [equipmentId], references: [id], onDelete: Restrict)
+  /// Cuándo se cargó la bandeja con este lote.
+  desde           DateTime
+  /// Cuándo se bajó. Nulo mientras sigue cargada. Bajar NO afirma que llegó a
+  /// meta: la humedad con la que baja es una inspección de la bandeja (paso 3).
+  hasta           DateTime?
+  provenanceClass ProvenanceClass @map("provenance_class")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  createdBy       String?         @map("created_by") @db.Uuid
+  creator         UserAccount?    @relation("DryingRunTrayCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([dryingRunId])
+  @@index([equipmentId])
+  @@map("drying_run_tray")
   @@schema("traceability")
 }
 
@@ -5483,6 +5511,7 @@ model Equipment {
   roastSessions       RoastSession[]      @relation("RoastSessionEquipment")
   storageAssignments  StorageAssignment[] @relation("StorageAssignmentContainer")
   measurements        Measurement[]       @relation("MeasurementInstrument")
+  dryingRunTrays      DryingRunTray[]     @relation("DryingRunTrayEquipment")
   careRoutines CareRoutine[]
   assets       Asset[]       @relation("AssetEquipment")
 

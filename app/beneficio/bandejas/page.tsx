@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { vistaDeBandejas } from "../../../lib/beneficio/vistaDeBandejas";
+import { posicionesParaMover } from "../../../lib/traceability/bandejasDelSecado";
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { formatearNumero, medidaEnUnidad } from "./utilidades";
-import { FormularioNuevoTipo, FormularioPesaje, FormularioRegistrarBandejas } from "./Formularios";
+import { FormularioMoverBandeja, FormularioNuevoTipo, FormularioPesaje, FormularioRegistrarBandejas } from "./Formularios";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,11 @@ export const dynamic = "force-dynamic";
  * `vistaDeBandejas` (`lib/beneficio/vistaDeBandejas.ts`) — esta página sólo
  * pinta, y convierte cm a la unidad tecleada con `medidaEnUnidad`.
  */
-export default async function BandejasPage() {
+export default async function BandejasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mover?: string | string[] }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Bandejas");
@@ -27,6 +32,14 @@ export default async function BandejasPage() {
   const num = (n: number, decimales: number) => formatearNumero(n, decimales, locale);
 
   const secciones = await vistaDeBandejas(user.userAccountId);
+
+  // Paso 3b: el formulario de mover se carga A DEMANDA, para una sola bandeja
+  // —nunca para las 300 de la vista—, y sólo si `mover` nombra una bandeja que
+  // esta misma vista ya enseña (nunca un id arbitrario de la URL).
+  const { mover: moverCrudo } = await searchParams;
+  const moverId = Array.isArray(moverCrudo) ? moverCrudo[0] : moverCrudo;
+  const esBandejaConocida = moverId != null && secciones.some((s) => s.bandejas.some((b) => b.id === moverId));
+  const posicionesDeMover = esBandejaConocida ? await posicionesParaMover(user.userAccountId, moverId as string) : null;
 
   return (
     <div>
@@ -145,6 +158,7 @@ export default async function BandejasPage() {
                   <th>{t("columnaNumero")}</th>
                   <th>{t("columnaTipo")}</th>
                   <th>{t("columnaDonde")}</th>
+                  <th>{t("columnaMover")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -156,6 +170,14 @@ export default async function BandejasPage() {
                         o el lugar no lo autoriza `manage_attributes` a esta cuenta — y no
                         se dicen igual: la segunda no es "sin traslado". */}
                     <td>{b.donde ?? (b.dondeOculto ? t("dondeOculto") : t("sinTraslado"))}</td>
+                    <td>
+                      {/* Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no
+                          tiene destino posible (`moverBandeja` lo rechaza con
+                          `bandeja_fija`), así que no se ofrece "Mover". */}
+                      {b.fija ? null : moverId === b.id
+                        ? <FormularioMoverBandeja equipmentId={b.id} posiciones={posicionesDeMover ?? []} />
+                        : <Link href={`/beneficio/bandejas?mover=${b.id}`}>{t("mover")}</Link>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

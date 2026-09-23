@@ -246,6 +246,10 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/bandejasDelSecado.ts",
+      "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
       "archivo": "lib/traceability/drying.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -816,6 +820,11 @@
       "archivo": "lib/traceability/visitaAbierta.ts",
       "operacion": "ligarAVisitaAbierta",
       "razon": "Recibe la tx del llamador. Lo llaman recordColonyEvent y registrarEventoEnLote (requireColonyEventWriteAccess), recordInspection y registrarConteoDeVarroa (requireApiaryAccess). Era «acotado por construcción» sólo porque sella al actor (`createdBy`/`actorUserAccountId: userAccountId`), que no filtra nada; desde el 2026-09-21 esa forma no cuenta."
+    },
+    {
+      "archivo": "lib/traceability/drying.ts",
+      "operacion": "cerrarCorridaEnTransaccion",
+      "razon": "Ayudante transaccional sin guardia propio. Sólo lo llaman `endDryingRun`, después de `requireLotAccess(\"manage\")`, y `bajarBandeja`, después de `corridaConPermiso` sobre el lote de la corrida. Recibe la transacción y el principal para cerrar el secado, crear la transformación y sellar su AuditEvent como una sola operación; no es una superficie autorizable independiente. Verificado al rebasar secado-2b el 2026-09-22."
     }
   ],
   "dependen_del_llamador": [

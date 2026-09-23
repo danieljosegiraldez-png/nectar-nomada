@@ -37,6 +37,7 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
+import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
   abrirProceso,
@@ -140,7 +141,7 @@ export interface TraceabilityActionState {
 // {detail}) since this is an internal operator tool, not public-facing
 // copy — functional and honest beats a polished translation catalog for
 // every possible internal error code.
-function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): Promise<string> {
   if (error instanceof CondicionDelSitioInvalida) {
     const [clave, ...resto] = error.message.split(":");
     return t(`error_condicion_${clave}` as "error_condicion_otro_sin_decir_cual", { value: resto.join(":") });
@@ -223,6 +224,19 @@ function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: un
   // Dos toques del mismo botón. No es un fallo del operario ni hay nada que
   // corregir en el formulario: lo que hay que decirle es que ya está guardado.
   if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");
+  // A4 (secado por bandeja, ajustes.md): sin esta rama, una bandeja cargada
+  // entre que se pinta la página y se envía el cierre era un 500 — el mismo
+  // caso que ya obligó a las ramas de arriba.
+  //
+  // RULING (Tarea 3): el `detail` es el MENSAJE traducido del código, no el
+  // código crudo — `error.codigo` sin traducir se leería en español en la
+  // pantalla en inglés. `BandejasDelSecado` es donde viven esos `error_<código>`
+  // (los mismos que usa la bandeja del lote), así que se pide ese espacio
+  // aparte, aquí, en vez de duplicar los 19 mensajes en `Traceability`.
+  if (error instanceof BandejaError) {
+    const tb = await getTranslations("BandejasDelSecado");
+    return t("error_bandeja", { detail: tb(`error_${error.codigo}` as "error_bandeja_ocupada") });
+  }
   throw error;
 }
 
@@ -332,7 +346,7 @@ export async function recordHarvestAction(
     });
     lotId = lot.id;
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath("/lots");
@@ -367,7 +381,7 @@ export async function recordReceivingAction(
     });
     lotId = lot.id;
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath("/lots");
@@ -426,7 +440,7 @@ export async function recordMeasurementAction(
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -458,7 +472,7 @@ export async function startFermentationAction(
       provenanceClass: "original_record",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -531,7 +545,7 @@ export async function elegirPerfilDeTuesteAction(
       notes: emptyToNull(formData.get("notes")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -569,7 +583,7 @@ export async function recordRoastSessionAction(
       provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_REGISTRO_DE_CAMPO),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -597,7 +611,7 @@ export async function startDryingAction(
       provenanceClass: "original_record",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -623,15 +637,27 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const lotId = String(formData.get("lotId") ?? "");
-  await endDryingRun(user.userAccountId, {
-    dryingRunId: String(formData.get("dryingRunId") ?? ""),
-    endedAt: new Date(),
-    outputLotCode: String(formData.get("outputLotCode") ?? ""),
-    outputLotType: String(formData.get("outputLotType") ?? "green") as never,
-    quantity: emptyToNullNumber(formData.get("quantity")),
-    unit: emptyToNull(formData.get("unit")),
-    provenanceClass: "original_record",
-  });
+  try {
+    await endDryingRun(user.userAccountId, {
+      dryingRunId: String(formData.get("dryingRunId") ?? ""),
+      endedAt: new Date(),
+      outputLotCode: String(formData.get("outputLotCode") ?? ""),
+      outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+      quantity: emptyToNullNumber(formData.get("quantity")),
+      unit: emptyToNull(formData.get("unit")),
+      provenanceClass: "original_record",
+    });
+  } catch (error) {
+    // A4 (secado por bandeja, ajustes.md): una bandeja cargada entre que se
+    // pinta la página y se envía este formulario ya no es un 500 — vuelve al
+    // lote con el código en la URL, que es lo único que esta acción sin
+    // estado de error propio puede transmitir.
+    if (error instanceof BandejaError) {
+      revalidatePath(`/lots/${lotId}`);
+      redirect(`/lots/${lotId}?error=${error.codigo}`);
+    }
+    throw error;
+  }
 
   revalidatePath(`/lots/${lotId}`);
 }
@@ -656,7 +682,7 @@ export async function recordStorageMoveAction(
       startedAt: new Date(),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -688,7 +714,7 @@ export async function createSampleAction(
       provenanceClass: "original_record",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -762,7 +788,7 @@ export async function recordSelectionFormAction(
       condicionDePesaje: emptyToNull(formData.get("condicionDePesaje")) as "DRAINED" | "WET" | "DRY" | null,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -931,7 +957,7 @@ export async function recordLabourEntryFormAction(
       provenanceClass: "direct_observation",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -961,7 +987,7 @@ export async function recordMaterialConsumptionEntryFormAction(
       provenanceClass: "direct_observation",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -995,7 +1021,7 @@ export async function createRecipeAction(
       targets,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath("/recipes");
@@ -1050,7 +1076,7 @@ export async function updateRecipeAction(
       description: emptyToNull(formData.get("description")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/recipes/${recipeId}`);
@@ -1079,7 +1105,7 @@ export async function createRecipeVersionAction(
       emptyToNullNumber(formData.get("expectedHours")),
     );
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/recipes/${recipeId}`);
@@ -1125,7 +1151,7 @@ export async function updatePlotAttributesAction(
       soilType: emptyToNull(formData.get("soilType")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -1187,7 +1213,7 @@ export async function recordHarvestSourcesFormAction(
   try {
     await recordHarvestSources(user.userAccountId, { harvestEventId, sources });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -1242,7 +1268,7 @@ export async function createPlantingCohortFormAction(
       notes: emptyToNull(formData.get("notes")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -1273,7 +1299,7 @@ export async function updatePlantingCohortFormAction(
       reason: String(formData.get("reason") ?? ""),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -1316,7 +1342,7 @@ export async function recordEnteredProductionFormAction(
     });
     locationId = evento.locationId;
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -1364,7 +1390,7 @@ export async function createPlotBlockFormAction(
     });
   } catch (error) {
     revalidarParcela(locationId);
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidarParcela(locationId);
@@ -1388,7 +1414,7 @@ export async function setPlotBlockTypeFormAction(
     });
   } catch (error) {
     revalidarParcela(locationId);
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidarParcela(locationId);
@@ -1417,7 +1443,7 @@ export async function createTrapFormAction(
     trapNumber = trampa.trapNumber;
   } catch (error) {
     revalidarParcela(locationId);
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidarParcela(locationId);
@@ -1461,7 +1487,7 @@ export async function recordTrapCheckFormAction(
     });
   } catch (error) {
     revalidarParcela(locationId);
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidarParcela(locationId);
@@ -1495,7 +1521,7 @@ export async function saveTrapRuleFormAction(
     });
   } catch (error) {
     revalidarParcela(locationId);
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidarParcela(locationId);
@@ -1544,7 +1570,7 @@ export async function startFieldSessionFormAction(
     });
     sessionId = session.id;
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   // Intencional, y NO es el patrón `volverA` de las otras acciones de esta
@@ -1572,7 +1598,7 @@ export async function recordFieldEventFormAction(
       provenanceClass: "direct_observation",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
@@ -1594,7 +1620,7 @@ export async function endFieldSessionFormAction(
       endedAt: fechaLocal(formData, "endedAt"),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
@@ -1641,7 +1667,7 @@ export async function correctMeasurementFormAction(
       provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_MEDICION),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
@@ -1694,7 +1720,7 @@ export async function recordLabMeasurementAction(
       sourceReference: emptyToNull(formData.get("sourceReference")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   // La ficha del biochar vive en su propia ruta; las muestras, en la del lote.
@@ -1831,7 +1857,7 @@ export async function createBiocharBatchAction(
       ...camposDeBiochar(formData),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath("/biochar");
@@ -1855,7 +1881,7 @@ export async function updateBiocharBatchAction(
       ...soloLoQueVino(formData, camposDeBiochar(formData)),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/biochar/${biocharBatchId}`);
@@ -1901,7 +1927,7 @@ export async function createSoilProfileAction(
       ...camposDeCalicata(formData),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -1938,7 +1964,7 @@ export async function updateSoilProfileAction(
     revalidatePath(`/plots/${perfil.locationId}`);
     revalidatePath(`/plots/${perfil.locationId}/ajustes`);
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   return {};
@@ -1972,7 +1998,7 @@ export async function createSoilSampleAction(
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -2011,7 +2037,7 @@ export async function createFoliarSampleAction(
       dataQuality: emptyToNull(formData.get("dataQuality")) as never,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -2075,7 +2101,7 @@ export async function finalizeLandAssetUploadAction(
       creatorPersonId,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
@@ -2168,7 +2194,7 @@ export async function finalizeTrampaPhotoPorBorradorAction(
     if (error instanceof LandMediaValidationError && error.message === "revision_not_found_yet") {
       return { pendiente: true };
     }
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
   revalidatePath("/finca/trampas/ronda");
   return { ok: true };
@@ -2211,7 +2237,7 @@ export async function abrirProcesoAction(
       provenanceClass: "original_record",
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2235,7 +2261,7 @@ export async function cambiarObjetivoAction(
       emptyToNull(formData.get("razon")),
     );
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2259,7 +2285,7 @@ export async function cambiarIntencionAction(
       emptyToNull(formData.get("razon")),
     );
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2283,7 +2309,7 @@ export async function registrarIntervencionAction(
       notes: emptyToNull(formData.get("notes")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2306,7 +2332,7 @@ export async function cerrarProcesoAction(
       closingMoistureMeasurementId: String(formData.get("closingMoistureMeasurementId") ?? ""),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2325,7 +2351,7 @@ export async function devolverASecadoAction(
   try {
     await devolverASecado(user.userAccountId, { lotId, motivo: String(formData.get("motivo") ?? "") });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}/process`);
@@ -2360,7 +2386,7 @@ export async function confirmarCoordenadasAction(
       reason: String(formData.get("reason") ?? "").trim() || null,
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/apiaries/${locationId}`);
@@ -2393,7 +2419,7 @@ export async function emitirReporteDeVisitaAction(
     if (error instanceof ReporteError) {
       return { error: t(`error_${error.message}` as "error_visita_sin_completar") };
     }
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
@@ -2437,7 +2463,7 @@ export async function publicarEnlaceDeReporteAction(
     if (error instanceof ReporteError) {
       return { error: t(`error_${error.message}` as "error_visita_sin_completar") };
     }
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 }
 
@@ -2464,7 +2490,7 @@ export async function revocarEnlaceDeReporteAction(
     if (error instanceof ReporteError) {
       return { error: t(`error_${error.message}` as "error_publicacion_no_encontrada") };
     }
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}/report`);
@@ -2530,7 +2556,7 @@ export async function completarVisitaAction(
       reason: emptyToNull(formData.get("reason")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
@@ -2569,7 +2595,7 @@ export async function vitalesEnSitioAction(
       siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")),
     });
   } catch (error) {
-    return { error: friendlyError(t, error) };
+    return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
