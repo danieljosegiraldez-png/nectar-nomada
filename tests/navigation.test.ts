@@ -117,9 +117,10 @@ describe("buildNavigation", () => {
     expect(nav).not.toContain("/research");
   });
 
-  it("a plain judge gets the section but neither tool inside it", () => {
-    // Submitting assessments is not managing sessions or competitions.
-    expect(toolHrefs(JUDGE)).toEqual([]);
+  it("a plain judge gets the educational wheel, but not the management tools", () => {
+    // La rueda publicada es una herramienta educativa; enviar evaluaciones basta
+    // para encontrarla. Eso no concede gestión de sesiones ni competencias.
+    expect(toolHrefs(JUDGE)).toEqual(["/sensory/herramientas/ruedas"]);
     // 2026-09-06: se añade "/sensory/new". Hasta entonces NADIE podía crear una
     // sesión de cata —`sensorySession.create` sólo existía en la semilla—, así
     // que el head judge tenía herramientas para dirigir una cata y ninguna para
@@ -128,6 +129,7 @@ describe("buildNavigation", () => {
     // registrar el informe de un Q-grader existía desde el PR #219 y sólo se
     // podía usar por terminal, con un JSON escrito a mano.
     expect(toolHrefs(HEAD_JUDGE)).toEqual([
+      "/sensory/herramientas/ruedas",
       "/competitions",
       "/calibration",
       "/sensory/new",

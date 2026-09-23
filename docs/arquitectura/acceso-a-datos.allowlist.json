@@ -636,6 +636,10 @@
     {
       "archivo": "lib/people/quienLoHizo.ts",
       "razon": "Decisión P-G (2026-09-21): quién puede figurar en «quién lo hizo». `personasPermitidas` sólo LEE lugares, proyectos, membresías, asignaciones y personas, y devuelve `{ id, displayName, grupo }` —nunca correo ni teléfono—; quien la llama ya autorizó la página o la escritura con su propio guardia (`getLotDetail`, `requireLotAccess`, `requireApiaryAccess`…). `exigirPersonaPermitida` es el guardia de la escritura: no escribe nada, sólo rechaza un id de otra finca con `PersonaNoPermitidaError`."
+    },
+    {
+      "archivo": "lib/sensory/ruedas.ts",
+      "razon": "Módulo de lectura de ruedas sensoriales versionadas. Sin cuenta identificada, cada consulta exige EN EL where `isPublic: true` y una versión `published`; el detalle vuelve a comprobar el estado antes de devolverlo. Una cuenta sólo amplía esa lectura a borradores si `permissionKeysAnywhere` confirma alguno de los permisos sensoriales nombrados. No escribe ni publica contenido."
     }
   ],
   "reciben_transaccion": [

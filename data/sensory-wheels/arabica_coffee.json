@@ -1,0 +1,12 @@
+{
+  "domain": "arabica_coffee",
+  "title": "Coffee Taster's Flavor Wheel — Arabica",
+  "edition": {
+    "version": 1,
+    "sourceAuthor": "Specialty Coffee Association / World Coffee Research",
+    "sourceReference": "https://notbadcoffee.com/flavor-wheel-en/",
+    "license": "CC BY-NC-ND 4.0 — publication pending explicit confirmation",
+    "permissionNote": "Technical draft only. Keep isPublic=false until Daniel confirms publication rights for this adaptation.",
+    "nodes": []
+  }
+}

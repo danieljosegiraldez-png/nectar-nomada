@@ -197,7 +197,10 @@ describe("el inventario del router", () => {
     // 108 → 109 el 2026-09-21: /fincas/[siteId]/logotipo, cambiar el logotipo de una finca.
     // Medido con `node scripts/inventario-de-rutas.mjs` sobre el árbol rebasado: 109 entradas
     // (98 páginas, 11 handlers).
-    expect(salida).toContain("109 entradas");
+    // 109 → 111 el 2026-09-23: índice y detalle de ruedas sensoriales. Ambas son
+    // públicas sólo para contenido publicado; los borradores siguen acotados por
+    // permisos sensoriales en lib/sensory/ruedas.ts. Medido: 100 páginas y 11 handlers.
+    expect(salida).toContain("111 entradas");
     expect(codigo, salida).toBe(0);
   });
 
