@@ -119,7 +119,7 @@ export default async function NuevoManejoPage({
         modo="nuevo"
         locationId={location.id}
         productos={productos}
-        observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+        observers={people}
         selfPersonId={selfPersonId}
         specimens={plantas}
         bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}

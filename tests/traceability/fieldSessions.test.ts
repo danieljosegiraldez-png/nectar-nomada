@@ -17,6 +17,7 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { createLot } from "../../lib/traceability/lots";
 import { recordMeasurement } from "../../lib/traceability/measurements";
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `p2-${Date.now()}`;
@@ -86,6 +87,11 @@ beforeAll(async () => {
   // one Task cannot currently express.
   operatorPersonId = await createTestPerson("Picker");
   secondPersonId = await createTestPerson("SecondPicker");
+  // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca del
+  // registro (o al equipo Néctar Nómada); sin esto los dos operadores quedan fuera.
+  await prisma.organizationMembership.createMany({
+    data: [operatorPersonId, secondPersonId].map((personId) => ({ personId, organizationId })),
+  });
 
   authorizedUserAccountId = await createTestUserAccount("Manager");
   await assignFarmOperator(authorizedUserAccountId, plotId);
@@ -117,6 +123,9 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: locationIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userIds } }) });
+  await prisma.organizationMembership.deleteMany({
+    where: assertDefinedWhere({ personId: { in: [operatorPersonId, secondPersonId] } }),
+  });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
@@ -450,6 +459,11 @@ describe("el operador de un evento se comprueba igual que el de la jornada", () 
       provenanceClass: "direct_observation",
     });
 
+    // `exigirPersonaPermitida` corre ANTES que esta comprobación de existencia
+    // (lib/traceability/fieldSessions.ts:499 vs :529), así que una Persona
+    // inexistente ya no llega a `operator_not_found`: no pertenece a ninguna
+    // finca ni al equipo Néctar Nómada, así que simplemente «no está permitida
+    // aquí» — PersonaNoPermitidaError, no un error de existencia.
     await expect(
       recordFieldEvent(authorizedUserAccountId, {
         fieldSessionId: sesion.id,
@@ -458,7 +472,7 @@ describe("el operador de un evento se comprueba igual que el de la jornada", () 
         operatorPersonId: "00000000-0000-0000-0000-000000000000",
         provenanceClass: "direct_observation",
       }),
-    ).rejects.toThrow("operator_not_found");
+    ).rejects.toThrow(PersonaNoPermitidaError);
 
     // Y no dejó nada a medias.
     const eventos = await prisma.fieldEvent.count({ where: { fieldSessionId: sesion.id } });
@@ -520,6 +534,13 @@ describe("Hueco 2: el instante contra el inicio de la jornada se evalúa DESPUÉ
     // así que este último ganaba. La extracción la adelantó en silencio —
     // ningún test cubría la combinación — y con el orden roto este `expect`
     // ve `event_before_session_start` en su lugar.
+    //
+    // `exigirPersonaPermitida` (quienLoHizo.ts) se añadió después y corre ANTES
+    // que las dos comprobaciones de arriba (fieldSessions.ts:499), así que hoy
+    // ninguna de las dos gana: una Persona inexistente no pertenece a ninguna
+    // finca ni al equipo Néctar Nómada, y «no está permitida aquí» sale primero.
+    // La combinación que este test cubría queda igual de protegida —el evento
+    // sigue sin entrar—, sólo cambia cuál de los tres errores se ve.
     await expect(
       recordFieldEvent(authorizedUserAccountId, {
         fieldSessionId: sesion.id,
@@ -528,7 +549,7 @@ describe("Hueco 2: el instante contra el inicio de la jornada se evalúa DESPUÉ
         operatorPersonId: "00000000-0000-0000-0000-000000000000",
         provenanceClass: "direct_observation",
       }),
-    ).rejects.toThrow("operator_not_found");
+    ).rejects.toThrow(PersonaNoPermitidaError);
 
     const eventos = await prisma.fieldEvent.count({ where: { fieldSessionId: sesion.id } });
     expect(eventos).toBe(0);

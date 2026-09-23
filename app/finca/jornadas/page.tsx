@@ -94,7 +94,7 @@ export default async function JornadasPage() {
             {recolectores.length ? <p>{recolectores.map((r) => r.nombre).join(", ")}</p> : <p className="nn-muted">{t("sinRecolectores")}</p>}
             <AgregarRecolectorForm
               fincaSiteId={siteId}
-              personas={(candidatos?.people ?? []).filter((p) => !yaSon.has(p.id)).map((p) => ({ id: p.id, displayName: p.displayName }))}
+              personas={(candidatos?.people ?? []).filter((p) => !yaSon.has(p.id))}
             />
           </section>
         </>

@@ -56,17 +56,23 @@ export async function registrarPesaje(userAccountId: string, input: {
   if (input.supersedesId && !input.correctionReason?.trim()) throw new PesajeError("datos_invalidos");
   const lot = await prisma.lot.findUniqueOrThrow({ where: { id: input.lotId } });
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
-  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
   const tipo = await prisma.dryingTrayType.findUnique({ where: { id: input.trayTypeId } });
   if (!tipo || tipo.organizationId !== lot.organizationId) throw new PesajeError("tipo_no_encontrado");
 
   // Corregir un pesaje exige gestionar SU lote, no sólo el que se presenta: sin
   // esto, quien gestiona L1 retiraba el pesaje de L2 (revisión de Codex del plan 2a).
+  let operadorOriginal: string | null = null;
   if (input.supersedesId) {
     const original = await prisma.dryingTrayWeighing.findUnique({ where: { id: input.supersedesId }, include: { lot: true } });
     if (!original || original.trayTypeId !== tipo.id || original.supersededAt) throw new PesajeError("datos_invalidos");
     await requireLotAccess(userAccountId, "manage", [{ projectId: original.lot.projectId, locationId: original.lot.locationId, classification: original.lot.classification }]);
+    operadorOriginal = original.operatorPersonId;
   }
+  // Después de leer el original (Codex, hallazgo 4): corregir sólo el peso de alguien que ya dejó la
+  // finca conserva a quien pesó, sin comprobarlo otra vez.
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }], {
+    actual: operadorOriginal,
+  });
 
   const densidadKgM3 = input.netKg / (areaM2(tipo) * (media(input.profundidadesCm) / 100));
   return prisma.$transaction(async (tx) => {

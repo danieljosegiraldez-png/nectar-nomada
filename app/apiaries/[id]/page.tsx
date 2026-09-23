@@ -609,7 +609,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           <summary>{tt("fieldSessionStartSummary")}</summary>
           <FieldSessionStartForm
             locationId={apiary.id}
-            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+            people={people}
             selfPersonId={selfPersonId}
           />
         </details>

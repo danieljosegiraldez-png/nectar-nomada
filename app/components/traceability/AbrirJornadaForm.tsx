@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
+import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
 import { abrirJornadaAction, agregarRecolectorAction, type JornadaActionState } from "../../actions/jornadasDeCosecha";
 
 const inicial: JornadaActionState = {};
@@ -72,7 +73,7 @@ export function AbrirJornadaForm({
 }
 
 /** Añadir una persona a la lista de recolectores de la finca, desde una fecha. */
-export function AgregarRecolectorForm({ fincaSiteId, personas }: { fincaSiteId: string; personas: { id: string; displayName: string }[] }) {
+export function AgregarRecolectorForm({ fincaSiteId, personas }: { fincaSiteId: string; personas: readonly OpcionDePersona[] }) {
   const t = useTranslations("Jornadas");
   const [state, formAction, pending] = useActionState(agregarRecolectorAction, inicial);
 
@@ -83,9 +84,7 @@ export function AgregarRecolectorForm({ fincaSiteId, personas }: { fincaSiteId: 
         <label htmlFor="recolector-persona">{t("persona")}</label>
         <select id="recolector-persona" name="personId" required defaultValue="">
           <option value="" disabled>{t("elegir")}</option>
-          {personas.map((p) => (
-            <option key={p.id} value={p.id}>{p.displayName}</option>
-          ))}
+          <OpcionesDePersona personas={personas} />
         </select>
       </div>
       <div className="nn-field">

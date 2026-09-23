@@ -34,7 +34,7 @@ export default async function NuevaJornadaPage({ params }: { params: Promise<{ i
       <h1>{t("fieldSessionStartSummary")}</h1>
       <FieldSessionStartForm
         locationId={detail.location.id}
-        people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+        people={people}
         selfPersonId={selfPersonId}
       />
     </div>

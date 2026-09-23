@@ -223,7 +223,7 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
             <FieldEventForm
               fieldSessionId={session.id}
               eventKinds={eventKinds}
-              people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+              people={people}
               selfPersonId={selfPersonId}
             />
             {/* P4 §11 — la cola vive junto al formulario que la llena, no en

@@ -270,13 +270,23 @@ export async function updateStory(userAccountId: string, storyId: string, input:
   const title = input.title?.trim();
   if (input.title !== undefined && !title) throw new ContentValidationError("title_required");
 
+  // El proyecto y el lugar con que QUEDA la historia. Mover una historia a otro ámbito exige poder
+  // editar también allí (Codex sobre P-G, hallazgo 3): antes sólo se autorizaba el de origen, y
+  // cualquiera con permiso en A podía colgar su historia de B.
+  const destino = {
+    projectId: input.projectId !== undefined ? input.projectId : before.projectId,
+    locationId: input.locationId !== undefined ? input.locationId : before.locationId,
+  };
+  const cambiaDeAmbito = destino.projectId !== before.projectId || destino.locationId !== before.locationId;
+  if (cambiaDeAmbito) await requireContent(userAccountId, "edit", destino, before.classification);
+
   const after = await prisma.$transaction(async (tx) => {
-    // Contra el proyecto y el lugar con que queda la historia, no con los de antes.
-    const ancla = {
-      projectId: input.projectId !== undefined ? input.projectId : before.projectId,
-      locationId: input.locationId !== undefined ? input.locationId : before.locationId,
-    };
-    await exigirPersonaPermitida(userAccountId, input.authorPersonId, [ancla], { db: tx, actual: before.authorPersonId });
+    // Dejar al autor que ya firmaba sólo se exime mientras la historia se queda donde estaba: si
+    // cambia de finca, el autor tiene que valer también en la nueva.
+    await exigirPersonaPermitida(userAccountId, input.authorPersonId, [destino], {
+      db: tx,
+      actual: cambiaDeAmbito ? null : before.authorPersonId,
+    });
     const after = await tx.story.update({
       where: { id: storyId },
       data: {
