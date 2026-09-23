@@ -10,6 +10,7 @@ import { scopeTargetsFor, TraceabilityAccessError } from "./lots";
 import { normalizeToCanonical, UnitValidationError } from "./units";
 import type { ClassificationLevel, DryingVentilation, SkyCondition } from "../../generated/prisma/client";
 import type { LecturaVigente } from "./ambienteVigente";
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 
 export class AmbienteError extends Error {}
 
@@ -107,6 +108,7 @@ export async function registrarLecturaDeAmbiente(userAccountId: string, input: L
   }
 
   return prisma.$transaction(async (tx) => {
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: lugar.id }], { db: tx });
     if (input.supersedesId) {
       const { count } = await tx.dryingAmbientReading.updateMany({ where: { id: input.supersedesId, supersededAt: null }, data: { supersededAt: new Date() } });
       if (count !== 1) throw new AmbienteError("datos_invalidos");

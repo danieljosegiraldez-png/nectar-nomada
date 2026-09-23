@@ -4196,3 +4196,16 @@ Su contenido vive en ADR-080 y en el guardia de `CampoNumerico`; no dirige traba
 ADR-080: la ausencia nunca se guarda como 0. Todo `type="number"` pasa por `CampoNumerico`; lo vigila
 un guardia de arquitectura con flip-test, y se verificó en navegador girando la rueda sobre un campo
 crudo (vacío → 0) y uno protegido (sin cambio).
+
+## Archivado del 2026-09-22 · catálogos y rutinas
+
+### 2026-09-19 · Catálogos de referencia, modelos de equipo y rutinas (PR #435)
+
+ADR-172. Contrato común de catálogos (`lib/catalogos/`, guardia `catalogos-con-contrato`): compartidos
+y propios, retirar sin borrar, unicidad sin mayúsculas en la base. Primer catálogo: modelos de equipo
+(`/equipos/modelos`); el equipo gana modelo, serie, código interno, proveedor y garantía; rutinas de
+mantenimiento/limpieza/fumigación que avisan «vencida» y **no bloquean**. Producción migró las dos
+(`catalogos_y_rutinas`, `catalogos_restricciones`). **Siguen**: los demás catálogos (levaduras,
+insumos, azúcares, especies, varietales) y el spec de **instalaciones** — la base ya admite sus
+rutinas, el servicio las rechaza hasta entonces; se solapa con secado por bandeja. Decisiones abiertas
+en la descripción del PR.

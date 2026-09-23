@@ -4,6 +4,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { AmbienteError, ambienteDeInstalacion, puedeRegistrarAmbienteEn, registrarLecturaDeAmbiente } from "../../lib/traceability/ambiente";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 
 /**
  * Paso 4 del secado por bandeja (spec §4.5): la lectura de ambiente a mano.
@@ -183,6 +184,14 @@ async function rechazaCon(promesa: Promise<unknown>, mensaje: string) {
 const hora = new Date("2026-09-21T15:00:00Z");
 
 describe("registrar una lectura de ambiente", () => {
+  it("rechaza como operador a una persona ajena a la finca", async () => {
+    await expect(registrarLecturaDeAmbiente(m.operario.userAccountId, {
+      facilityLocationId: m.instalacion,
+      occurredAt: hora,
+      cielo: "cloudy",
+      operatorPersonId: m.extrano.personId,
+    })).rejects.toBeInstanceOf(PersonaNoPermitidaError);
+  });
   it("en °F se guarda en °C con un decimal y conserva la unidad tecleada; con medida, measured_fact", async () => {
     const { id } = await registrarLecturaDeAmbiente(m.operario.userAccountId, {
       facilityLocationId: m.instalacion, occurredAt: hora, temperatura: { valor: 75.2, unidad: "F" }, humedadRelativaPct: 61.5,
