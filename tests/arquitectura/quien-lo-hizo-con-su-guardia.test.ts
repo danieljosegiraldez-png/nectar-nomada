@@ -48,6 +48,8 @@ const NO_ES_QUIEN_LO_HIZO: Record<string, string> = {
   "lib/sync/deviceTokens.ts:registrarAparato": "ídem: el aparato no tiene finca",
   "lib/traceability/selection.ts:recordSelection": "no escribe: lo pasa a recordTransformation, que tiene el guardia",
   "lib/traceability/trilla.ts:registrarTrilla": "no escribe: lo pasa a recordTransformation, que tiene el guardia",
+  "lib/traceability/drying.ts:cerrarCorridaEnTransaccion": "ayudante transaccional: endDryingRun y bajarBandeja autorizan y validan a la persona antes de llamarlo",
+  "lib/traceability/operations.ts:crearConsumoEnTx": "ayudante transaccional: recordMaterialConsumptionEntry y registrarRealizada autorizan y validan a la persona antes de llamarlo",
 };
 
 export function escriturasSinGuardia(ruta: string, fuente: string): { sitio: string; linea: number }[] {
@@ -91,5 +93,14 @@ describe("quién lo hizo, con su guardia", () => {
   it("cada excepción sigue existiendo: una excepción muerta se lee como cobertura", () => {
     const vivas = new Set(todos.flatMap(({ ruta, fuente }) => escriturasSinGuardia(ruta, fuente)).map((s) => s.sitio));
     expect(Object.keys(NO_ES_QUIEN_LO_HIZO).filter((k) => !vivas.has(k))).toEqual([]);
+  });
+
+  it("los ayudantes transaccionales nuevos conservan el guardia en sus dos caminos", () => {
+    const bandejas = readFileSync(join(RAIZ, "lib/traceability/bandejasDelSecado.ts"), "utf8");
+    const operaciones = readFileSync(join(RAIZ, "lib/traceability/operations.ts"), "utf8");
+    const rutinas = readFileSync(join(RAIZ, "lib/rutinas/rutinas.ts"), "utf8");
+    expect(bandejas).toMatch(/function bajarBandeja[\s\S]*exigirPersonaPermitida[\s\S]*cerrarCorridaEnTransaccion/);
+    expect(operaciones).toMatch(/function recordMaterialConsumptionEntry[\s\S]*exigirPersonaPermitida[\s\S]*crearConsumoEnTx/);
+    expect(rutinas).toMatch(/function registrarRealizada[\s\S]*exigirPersonaPermitida[\s\S]*crearConsumoEnTx/);
   });
 });
