@@ -20,6 +20,7 @@
  * dedicated view permission is a small, isolated change if a
  * submit-without-view profile is ever needed.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { resolvedPermissionKeys } from "../rbac/service";
@@ -264,6 +265,7 @@ export async function finalizeAssetUpload(userAccountId: string, input: Finalize
   if (!input.storageKey.startsWith(`nectar-originals/partner/${input.projectId}/`)) {
     throw new PartnerAccessError("invalid_storage_key");
   }
+  await exigirPersonaPermitida(userAccountId, input.creatorPersonId, [{ projectId: input.projectId }]);
 
   const userAccount = await prisma.userAccount.findUniqueOrThrow({
     where: { id: userAccountId },

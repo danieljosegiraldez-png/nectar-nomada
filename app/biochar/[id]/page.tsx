@@ -38,7 +38,7 @@ export default async function BiocharBatchPage({ params }: { params: Promise<{ i
   // negarte. Las fotos se filtran por el lote, no sólo por el sitio.
   const [fotos, { people, selfPersonId }] = await Promise.all([
     listLandAssets(user.userAccountId, batch.producedAtLocationId),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: batch.producedAtLocationId }]),
   ]);
   const delLote = fotos.filter((f) => f.biocharBatchId === batch.id);
 

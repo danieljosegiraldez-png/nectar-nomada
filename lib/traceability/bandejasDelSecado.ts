@@ -57,6 +57,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
 import { puedeConfigurarEn } from "../equipos/equipos";
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { cerrarCorridaEnTransaccion, type CierreDelSecado } from "./drying";
 import { BandejaError } from "./bandejaError";
@@ -266,6 +267,11 @@ export async function bajarBandeja(
   if (run.endedAt) throw new BandejaError("secado_cerrado");
   if (fila.hasta) throw new BandejaError("ya_bajada");
   if (input.hasta < fila.desde) throw new BandejaError("fecha_antes_de_cargar");
+  if (input.cierre) {
+    await exigirPersonaPermitida(userAccountId, input.cierre.operatorPersonId, [
+      { projectId: lot.projectId, locationId: lot.locationId },
+    ]);
+  }
 
   try {
     return await prisma.$transaction(async (tx) => {

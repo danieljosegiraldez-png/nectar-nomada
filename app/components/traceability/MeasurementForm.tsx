@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -217,11 +218,7 @@ export function MeasurementForm({
       <div className="nn-field">
         <label htmlFor="operatorPersonId">{t("observerLabel")}</label>
         <select id="operatorPersonId" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
-          {observers.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.id === selfPersonId ? t("observerSelfOption", { name: person.displayName }) : person.displayName}
-            </option>
-          ))}
+          <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
         </select>
       </div>
 

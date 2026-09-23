@@ -46,6 +46,7 @@ afterEach(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIds } }) });
@@ -93,6 +94,11 @@ describe("recordTrapCheckFormAction — observador y procedencia elegibles", () 
       data: { givenName: "TEST", familyName: "Observador", displayName: "TEST Observador (transcrito)", locale: "es" },
     });
     personIds.push(observador.id);
+    // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca
+    // del registro (o al equipo Néctar Nómada); sin esto queda fuera.
+    await prisma.organizationMembership.create({
+      data: { personId: observador.id, organizationId: parcela.organizationId! },
+    });
 
     const resultado = await recordTrapCheckFormAction(
       {},

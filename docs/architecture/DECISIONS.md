@@ -12130,3 +12130,38 @@ finca no basta, hay que coordinarla.
 - Pruebas: `tests/notificaciones/canales.test.ts`, bloque «quién puede declarar
   el canal de una persona».
 
+## ADR-183 — Quién lo hizo acotado a la finca y al equipo Néctar Nómada (P-G)
+
+**Fecha:** 2026-09-21 · **Estado:** aceptado (decisión de Daniel, en sesión) ·
+**Spec:** `docs/superpowers/specs/2026-09-21-quien-lo-hizo-acotado-design.md`
+
+**Contexto.** Daniel: «no se debe acceder data de otras fincas o organizaciones por otras sin
+permisos». Medido ese día: `getObserverCandidates` ofrecía **toda persona activa de la plataforma** en
+16 páginas, y mandaba al navegador la fila entera —correo y teléfono— como prop de componentes de
+cliente. Unos 50 sitios de `lib/` guardaban el `operatorPersonId`/`observerPersonId`/… del formulario
+sin mirar de quién era. La lista de autores de historias tenía el mismo defecto.
+
+**Decisión de Daniel:** aparecen las personas de la finca del registro **y** el equipo Néctar Nómada;
+la propia, preseleccionada; en dos bloques; quien se va deja de aparecer sin perder su historia; sólo
+el nombre llega al navegador. Personas sin cuenta (jornaleros) e invitados de otra finca quedan para
+una segunda entrega con su propio diseño.
+
+**La regla** (`lib/people/quienLoHizo.ts`). Un registro se ancla en la organización de su lugar
+(subiendo por padres), o de su proyecto, o —para un equipo— en su organización dueña. Puede figurar
+una persona activa que sea de esa organización (membresía activa, o asignación activa y vigente sobre
+un proyecto suyo o un lugar que cuelgue de ella), del equipo (membresía en una organización
+`nectar_nomada_partner` o asignación de ámbito `platform`), o la propia cuenta.
+
+**Consecuencias.**
+- `exigirPersonaPermitida` en cada escritura, junto a su guardia de acceso y con el mismo ámbito. En
+  una edición o corrección, dejar a quien ya figuraba no se comprueba (`actual`).
+- `tests/arquitectura/quien-lo-hizo-con-su-guardia.test.ts` falla si un sitio nuevo guarda una
+  persona desde la entrada sin el guardia. Al escribirlo cazó cinco que el inventario a mano no vio.
+  Las excepciones —destinatario de un aviso, evaluador de calibración, dueño de un aparato— van
+  nombradas con su motivo.
+- Las acciones de inspección, historias, recolectores y las tres con `friendlyError` traducen
+  `PersonaNoPermitidaError` a una frase. Las demás la relanzan: sólo se alcanza manipulando el
+  formulario o con una carrera, porque su lista ya sale acotada.
+- **Lo que no se hace aquí:** `declararCanal` (`lib/notificaciones/canales.ts`) deja a cualquier
+  cuenta cambiar la preferencia de aviso de cualquier persona. Es otro defecto, de autorización y no de
+  «quién lo hizo», y queda señalado para su propio arreglo.

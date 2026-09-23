@@ -11,13 +11,12 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-19 al rebasar `secado-2a`, y otra
-## vez el 2026-09-22 al rebasar `secado-2b`
+## Lo medido el 2026-09-05, actualizado el 2026-09-22 al rebasar «quién lo hizo»
 
-**569 operaciones** que tocan la base, en **156 archivos** — regenerado tras el
-rebase sobre `origin/main` (`a7335007`, 2026-09-22), con
-`node scripts/inventario-de-acceso.mjs`: `origin/main` mide 561 operaciones en
-155 archivos. Secado por bandeja suma **+8 operaciones en +1 archivo**:
+**568 operaciones** que tocan la base, en **156 archivos** — regenerado tras el
+rebase sobre `origin/main` (`30e98d48`, 2026-09-22), con
+`node scripts/inventario-de-acceso.mjs`: «quién lo hizo» sustituye
+`getObserverCandidates` y reduce **una operación acotada por construcción**:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -27,7 +26,7 @@ rebase sobre `origin/main` (`a7335007`, 2026-09-22), con
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **428** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
+| **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -725,6 +724,13 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > se autentica con el refresh token y es donde muerde la revocación. Son el
 > equivalente de la clase «flujo-auth» del inventario del router, que este
 > detector no tiene.
+
+> **Y (545→544, acotado por construcción 41→40), 2026-09-21, decisión P-G:**
+> `getObserverCandidates` dejó de consultar la base —era la lista de TODA persona activa— y
+> delega en `personasPermitidas` de `lib/people/quienLoHizo.ts`. Ese módulo nuevo **no suma
+> operaciones**: consulta a través de su parámetro `db` (el cliente o el `tx` de quien llama), una
+> forma que el detector no cuenta. Está inventariado a mano en el allowlist, en
+> `importan_cliente_total` y en `reciben_transaccion`, con su razón.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 

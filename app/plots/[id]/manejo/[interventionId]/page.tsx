@@ -61,7 +61,7 @@ export default async function ManejoDetailPage({
 
   const [productos, { people, selfPersonId }, plantas, trampa, bloques] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listPlantSpecimens(user.userAccountId, id),
     intervencion.motivoObservationId
       ? lecturaDeTrampaQueMotivo(user.userAccountId, intervencion.motivoObservationId)
@@ -230,7 +230,13 @@ export default async function ManejoDetailPage({
             locationId={location.id}
             interventionId={intervencion.id}
             productos={productos}
-            observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+            // Quien la hizo sigue ofrecido aunque haya dejado la finca (Codex, hallazgo 1): sin su
+            // opción, el desplegable caería en «ninguno» y corregir otro dato borraría al operador.
+            observers={
+              intervencion.operatorPersonId && intervencion.operator && !people.some((p) => p.id === intervencion.operatorPersonId)
+                ? [{ id: intervencion.operatorPersonId, displayName: intervencion.operator.displayName }, ...people]
+                : people
+            }
             selfPersonId={selfPersonId}
             specimens={plantas}
             bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}

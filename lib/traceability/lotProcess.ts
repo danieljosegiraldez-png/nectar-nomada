@@ -11,6 +11,7 @@
  * encima de su objetivo no se bloquea ni se marca: esa decisión sigue abierta
  * con el dueño, y construirla por adivinanza es peor que no tenerla.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
@@ -332,7 +333,8 @@ export interface RegistrarIntervencionInput {
 export async function registrarIntervencion(userAccountId: string, input: RegistrarIntervencionInput) {
   const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
   if (!proceso) throw new LotProcessError("process_not_found");
-  await loteGestionable(userAccountId, proceso.lotId);
+  const lote = await loteGestionable(userAccountId, proceso.lotId);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lote.projectId, locationId: lote.locationId }]);
   if (proceso.endedAt !== null) throw new LotProcessError("process_already_closed");
 
   const valor = await prisma.variableCatalogValue.findUnique({

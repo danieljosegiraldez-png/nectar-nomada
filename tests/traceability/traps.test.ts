@@ -26,6 +26,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { createSpecimen, recordSpecimenObservation } from "../../lib/traceability/specimens";
 import { createMicrolot } from "../../lib/traceability/locations";
 import { getPlotDetail } from "../../lib/traceability/plantingCohorts";
@@ -546,10 +547,15 @@ describe("revisión de trampa", () => {
     });
     expect(revision.observerPersonId).toBe(personId);
 
+    // `exigirPersonaPermitida` (quienLoHizo.ts) corre ANTES que la comprobación
+    // de existencia de `traps.ts` (línea 225 vs 252): una Persona inexistente
+    // no pertenece a ninguna finca ni al equipo Néctar Nómada, así que ahora
+    // sale `PersonaNoPermitidaError` — «no está permitida aquí» — en vez de
+    // `TrapValidationError("observer_not_found")`.
     await expect(recordTrapCheck(userAccountId, {
       specimenId: trampa.id, observedAt: new Date("2026-09-16"), brocaLevel: "pocos",
       observerPersonId: "00000000-0000-0000-0000-000000000000", provenanceClass: "direct_observation",
-    })).rejects.toThrow(TrapValidationError);
+    })).rejects.toThrow(PersonaNoPermitidaError);
   });
 
   // Tarea 11 — la ronda viaja sin señal por la cola offline, y un reintento del

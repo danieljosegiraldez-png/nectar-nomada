@@ -20,6 +20,7 @@
  * se leería ocupada para siempre y la limpieza tras una muerte —la más común— quedaría
  * bloqueada: la prueba «una limpieza DESPUÉS de la muerte se acepta» es la que lo vigila.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireApiaryAccess } from "./hives";
@@ -52,6 +53,7 @@ export async function registrarLimpiezaDeCaja(userAccountId: string, input: Limp
   if (!caja) throw new LimpiezaInvalida("caja_no_encontrada");
 
   await requireApiaryAccess(userAccountId, "manage", [{ projectId: caja.projectId, locationId: caja.locationId }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: caja.projectId, locationId: caja.locationId }]);
 
   // **La limpieza es un DÍA, no un instante** —medianoche UTC, la convención de la casa para los
   // campos de día—, así que se normaliza aquí: una hora que se colara por otra vía no debe

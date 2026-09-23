@@ -147,6 +147,11 @@ beforeAll(async () => {
   sinPermiso = await crearCuenta("SinPermiso");
 
   campoPersonId = await crearPersona("Campo");
+  // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca del
+  // registro (o al equipo Néctar Nómada); sin esto el operador de campo queda
+  // fuera en `startFieldSession`. `parcela`, `otraParcela` y `finca` (más
+  // abajo) son todos de `organizationId`.
+  await prisma.organizationMembership.create({ data: { personId: campoPersonId, organizationId } });
 
   fito = (
     await crearMaterial(gestor, {
@@ -443,6 +448,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: idsCuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: ubicaciones } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsCuentas } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: idsPersonas } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: idsPersonas } }) });
 
   // `parcelaHija` referencia a `finca` por `parentLocationId`: se borra ANTES,

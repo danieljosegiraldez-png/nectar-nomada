@@ -7,6 +7,7 @@ import {
   retirarRutinaFormAction,
 } from "../../actions/rutinas";
 import { BotonDeEnvio } from "../BotonDeEnvio";
+import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import type { RutinaConEstado } from "../../../lib/rutinas/rutinas";
 
@@ -34,7 +35,7 @@ export function TarjetaDeRutina({
   puedeGestionar: boolean;
   puedeApuntar: boolean;
   camposOcultos: Record<string, string>;
-  personas: { id: string; name: string }[];
+  personas: readonly OpcionDePersona[];
   insumos?: { id: string; etiqueta: string }[];
   t: T;
 }) {
@@ -73,11 +74,7 @@ export function TarjetaDeRutina({
             {t("rutinaQuien")}
             <select name="performedByPersonId" defaultValue="">
               <option value="" />
-              {personas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              <OpcionesDePersona personas={personas} />
             </select>
           </label>
           <label>

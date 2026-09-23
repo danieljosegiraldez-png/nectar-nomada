@@ -69,7 +69,7 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   const [calicatas, bloques, { people, selfPersonId }, productosDeLaFinca] = await Promise.all([
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     productosFitosanitariosSiPuede(user.userAccountId, farmLocationId),
   ]);
 

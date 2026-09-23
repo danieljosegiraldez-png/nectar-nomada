@@ -14,6 +14,7 @@
  * project/location the same way), and `lot:manage` reused rather than a
  * new permission.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
@@ -111,11 +112,13 @@ export async function recordLabourEntry(userAccountId: string, input: RecordLabo
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
     await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.parent.locationId }]);
   } else {
     if (!input.lotId) throw new LabourValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
     await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
   }
 
   const labourEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
@@ -322,6 +325,7 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     const location = await prisma.location.findUnique({ where: { id: input.parent.locationId } });
     if (!location) throw new TraceabilityAccessError("location_not_found");
     await requireLotAccess(userAccountId, "manage", [{ locationId: input.parent.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.parent.locationId }]);
   } else if (input.parent.kind === "fieldSession") {
     // El ámbito sale de DÓNDE ocurrió la jornada. Una visita no lleva permisos
     // propios, y sin esta lectura cualquiera podría declarar consumos en el
@@ -334,11 +338,13 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     await requireLotAccess(userAccountId, "manage", [
       { locationId: jornada.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
     ]);
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: jornada.locationId }]);
   } else {
     if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
     await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+    await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
   }
 
   const materialConsumptionEntry = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {

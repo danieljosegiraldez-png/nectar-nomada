@@ -8,6 +8,7 @@
  *
  * RBAC resolves via the parent Colony's own Hive, same as ./inspections.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
@@ -199,6 +200,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
 
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [scope]);
 
   if (input.clientDraftId) {
     const existing = await prisma.colonyEvent.findUnique({ where: { clientDraftId: input.clientDraftId } });
@@ -442,6 +444,7 @@ export async function registrarEventoEnLote(userAccountId: string, input: Evento
     colonias.map((c) => [`${c.hive.projectId ?? ""}|${c.hive.locationId}`, { projectId: c.hive.projectId, locationId: c.hive.locationId }]),
   ).values()];
   await requireColonyEventWriteAccess(userAccountId, candidatos);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, candidatos);
 
   const claveDe = (colonyId: string) =>
     input.loteDeClienteId ? `${input.loteDeClienteId}:${colonyId}` : null;

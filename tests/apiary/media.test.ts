@@ -227,6 +227,7 @@ describe("finalizeApiaryAssetUpload", () => {
     const otherPerson = await prisma.person.create({
       data: { givenName: "TEST", familyName: "PhotoTaker", displayName: `TEST PhotoTaker (${RUN_ID})`, locale: "en" },
     });
+    await prisma.organizationMembership.create({ data: { personId: otherPerson.id, organizationId } });
     try {
       const overridden = await finalizeApiaryAssetUpload(authorizedUserAccountId, {
         parent: { kind: "hive", hiveId },
@@ -240,6 +241,7 @@ describe("finalizeApiaryAssetUpload", () => {
       expect(overridden.creatorPersonId).toBe(otherPerson.id);
       expect(overridden.createdBy).toBe(authorizedUserAccountId);
     } finally {
+      await prisma.organizationMembership.deleteMany({ where: { personId: otherPerson.id } });
       await prisma.person.delete({ where: { id: otherPerson.id } });
     }
   });

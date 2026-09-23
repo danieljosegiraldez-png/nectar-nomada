@@ -25,6 +25,7 @@
  * T10's Active Operations view), not something reconstructed only once a
  * run ends.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
@@ -66,6 +67,7 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
   const result = await prisma.$transaction(async (tx) => {
     const run = await tx.fermentationRun.create({
@@ -160,6 +162,7 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
 
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
   const provenanceClass = input.provenanceClass;
 

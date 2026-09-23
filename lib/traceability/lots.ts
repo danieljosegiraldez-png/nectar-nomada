@@ -29,6 +29,7 @@ import { settleMassBalance } from "./balance";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
+import { exigirPersonaPermitida, personasPermitidas, type Ancla } from "../people/quienLoHizo";
 
 export class TraceabilityAccessError extends Error {}
 
@@ -294,6 +295,12 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     userAccountId,
     "manage",
     inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification })),
+  );
+  // Selección y trilla llegan aquí también (`selection.ts`, `trilla.ts`): este guardia es el suyo.
+  await exigirPersonaPermitida(
+    userAccountId,
+    input.operatorPersonId,
+    inputLots.map((lot) => ({ projectId: lot.projectId, locationId: lot.locationId })),
   );
 
   // P0 §6 — the override is authorized before the transaction opens, not
@@ -1184,37 +1191,17 @@ export async function getManageableContext(userAccountId: string) {
 }
 
 /**
- * Candidate observers for the measurement-entry "who actually took this
- * reading" override (T9.5 §3(c)) — every active Person, system-wide, plus
- * which one is this user's own. Same reasoning as getManageableContext's
- * Location dropdown above: a convenience for a two-tap override, not a
- * security boundary — operatorPersonId carries no RBAC weight of its own.
+ * Quién puede figurar en «quién lo hizo» en un formulario anclado en `anclas` — el lote, la
+ * parcela, el apiario o la finca de la página.
+ *
+ * Hasta el 2026-09-21 devolvía **toda persona activa de la plataforma**, con la fila entera
+ * (correo y teléfono) camino del navegador, y su comentario decía que no era una frontera de
+ * seguridad. Lo era: un operario veía los nombres de otras fincas y podía guardar a cualquiera.
+ * Decisión P-G de Daniel: la regla vive en `lib/people/quienLoHizo.ts`, y el orden de ADR-080
+ * —yo primero, porque la respuesta abrumadora a «quién tomó esta lectura» es «yo»— se conserva.
  */
-export async function getObserverCandidates(userAccountId: string) {
-  const [account, people] = await Promise.all([
-    prisma.userAccount.findUnique({ where: { id: userAccountId }, select: { personId: true } }),
-    prisma.person.findMany({ where: { status: "active" } }),
-  ]);
-  const selfPersonId = account?.personId ?? null;
-
-  // Self first, then everyone else in natural order (ADR-080).
-  //
-  // Every consumer renders `observers` in array order, so the ordering decided
-  // here is the ordering a person scrolls. Sorted purely by name, "Yo (Daniel
-  // Giráldez)" sat seventh of seventeen — and the overwhelmingly common answer
-  // to "who took this reading" is "I did", entered on a phone, outdoors, often
-  // with wet hands.
-  //
-  // The remainder uses the locale-aware comparator rather than the query's
-  // `ORDER BY displayName`, so "Chayanne López" and "Kenis Abdiel Rodríguez
-  // Núñez" sort where a Spanish reader expects (ADR-078).
-  const self = selfPersonId ? people.find((person) => person.id === selfPersonId) : undefined;
-  const others = sortByName(
-    people.filter((person) => person.id !== selfPersonId),
-    (person) => person.displayName,
-  );
-
-  return { people: self ? [self, ...others] : others, selfPersonId };
+export async function getObserverCandidates(userAccountId: string, anclas: readonly Ancla[]) {
+  return personasPermitidas(userAccountId, anclas);
 }
 
 /** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */

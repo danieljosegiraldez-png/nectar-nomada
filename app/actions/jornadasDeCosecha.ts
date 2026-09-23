@@ -1,5 +1,6 @@
 "use server";
 
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -45,6 +46,7 @@ async function traducir(error: unknown): Promise<JornadaActionState> {
     return { error: codigo ? t(`error_${codigo}`) : t("error_generico") };
   }
   if (error instanceof TraceabilityAccessError) return { error: t("error_sin_permiso") };
+  if (error instanceof PersonaNoPermitidaError) return { error: t("error_persona_no_permitida") };
   if (error instanceof LocalDateTimeError || error instanceof FechaDeDiaInvalida) return { error: t("error_fecha_invalida") };
   throw error;
 }

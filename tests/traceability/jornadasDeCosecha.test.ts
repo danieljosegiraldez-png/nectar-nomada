@@ -68,6 +68,8 @@ beforeAll(async () => {
   operarioB = await cuenta("Farm Operator", B);
   recolector1 = await persona("Recolector 1");
   noRecolector = await persona("No recolector");
+  const { organizationId } = await prisma.location.findUniqueOrThrow({ where: { id: A }, select: { organizationId: true } });
+  await prisma.organizationMembership.createMany({ data: [recolector1, noRecolector].map((personId) => ({ personId, organizationId: organizationId! })) });
   await agregarRecolector(managerA, { fincaSiteId: A, personId: recolector1, desde: new Date(hoy.getTime() - 86_400_000) });
 }, 30000);
 
@@ -82,6 +84,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, parcelaA, parcelaB] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [A, B] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });

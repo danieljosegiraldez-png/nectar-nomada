@@ -44,6 +44,9 @@ beforeAll(async () => {
   plotId = plot.id;
 
   operatorPersonId = await createTestPerson("Picker");
+  // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca del
+  // registro (o al equipo Néctar Nómada); sin esto el operador queda fuera.
+  await prisma.organizationMembership.create({ data: { personId: operatorPersonId, organizationId } });
   const managerPersonId = await createTestPerson("Manager");
   const account = await prisma.userAccount.create({
     data: { personId: managerPersonId, authProvider: "credentials", status: "active" },
@@ -80,6 +83,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: plotId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: operatorPersonId }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });

@@ -18,6 +18,7 @@
  * escala»). La foto general de un bloque cabe en `Asset.locationId`, que existe
  * desde el principio.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
@@ -214,6 +215,7 @@ async function exigirPadreDeEsaLocation(parent: LandAssetParent, locationId: str
 
 export async function finalizeLandAssetUpload(userAccountId: string, input: FinalizeLandAssetUploadInput) {
   await requireLocationAttributeAccess(userAccountId, input.locationId);
+  await exigirPersonaPermitida(userAccountId, input.creatorPersonId, [{ locationId: input.locationId }]);
   // F5 fix-final — colgar una foto de una revisión de trampa es tocar un
   // Specimen, gateado igual que `createTrap`/`recordTrapCheck`
   // (`requireTrapAccess`, `specimen:manage`). Sin esto, `location:manage_

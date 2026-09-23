@@ -42,9 +42,9 @@ async function assignFarmOperator(userAccountId: string, projectId: string) {
 
 beforeAll(async () => {
   organizationId = await createTestOrganization(RUN_ID);
-  const projectA = await prisma.project.create({ data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const projectA = await prisma.project.create({ data: { name: `TEST Project A (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   projectAId = projectA.id;
-  const projectB = await prisma.project.create({ data: { name: `TEST Project B (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const projectB = await prisma.project.create({ data: { name: `TEST Project B (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   projectBId = projectB.id;
 
   authorizedUserAccountId = await createTestUserAccount("AuthorizedOperator");
@@ -162,6 +162,7 @@ describe("finalizeLotAssetUpload", () => {
     const otherPerson = await prisma.person.create({
       data: { givenName: "TEST", familyName: "PhotoTaker", displayName: `TEST PhotoTaker (${RUN_ID})`, locale: "en" },
     });
+    await prisma.organizationMembership.create({ data: { personId: otherPerson.id, organizationId } });
 
     try {
       const asset = await finalizeLotAssetUpload(authorizedUserAccountId, {
@@ -180,6 +181,7 @@ describe("finalizeLotAssetUpload", () => {
       expect(asset.creatorPersonId).not.toBe(uploaderAccount.personId);
       expect(asset.createdBy).toBe(authorizedUserAccountId); // uploader is still createdBy, regardless of who took the photo
     } finally {
+      await prisma.organizationMembership.deleteMany({ where: { personId: otherPerson.id } });
       await prisma.person.delete({ where: { id: otherPerson.id } });
     }
   });

@@ -24,7 +24,7 @@ export default async function NuevaJornadaPage({ params }: { params: Promise<{ i
     if (error instanceof LocationAccessError) notFound();
     throw error;
   }
-  const { people, selfPersonId } = await getObserverCandidates(user.userAccountId);
+  const { people, selfPersonId } = await getObserverCandidates(user.userAccountId, [{ locationId: id }]);
 
   return (
     <div>
@@ -34,7 +34,7 @@ export default async function NuevaJornadaPage({ params }: { params: Promise<{ i
       <h1>{t("fieldSessionStartSummary")}</h1>
       <FieldSessionStartForm
         locationId={detail.location.id}
-        people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+        people={people}
         selfPersonId={selfPersonId}
       />
     </div>

@@ -14,6 +14,7 @@
  * privados — se duplican aquí, sin exportarlos, en vez de forzar su export
  * desde un archivo `"use server"`.
  */
+import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
@@ -69,6 +70,7 @@ const fechaLocal = (formData: FormData, campo: string) =>
  * `tests/arquitectura/acciones-traducen-sus-errores.test.ts`.
  */
 function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, error: unknown): string {
+  if (error instanceof PersonaNoPermitidaError) return t("error_persona_no_permitida");
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
   if (error instanceof IntervencionValidationError) return t("error_manejo", { detail: error.message });
   if (error instanceof LocalDateTimeError) return t("error_datetime", { detail: error.message });

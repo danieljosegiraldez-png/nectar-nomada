@@ -15,6 +15,7 @@
  *     LotTransformation (same input lot, output: a new Lot at the next
  *     stage — green, per §8.3's lineage diagram).
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
@@ -53,6 +54,7 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
   const result = await prisma.$transaction(async (tx) => {
     const run = await tx.dryingRun.create({
@@ -113,6 +115,7 @@ export interface RecordDryingTurnEventInput {
 export async function recordDryingTurnEvent(userAccountId: string, input: RecordDryingTurnEventInput) {
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
   return prisma.dryingTurnEvent.create({
     data: {
@@ -257,6 +260,7 @@ export async function endDryingRun(userAccountId: string, input: EndDryingRunInp
 
   const sourceLot = await resolveRunSourceLot(input.dryingRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
 
   // DESPUÉS del permiso: a quien no gestiona el lote no se le dice si hay bandejas
   // (revisión de Codex del plan). El secado termina bandeja a bandeja (Daniel,

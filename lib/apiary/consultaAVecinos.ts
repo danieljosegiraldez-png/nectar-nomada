@@ -27,6 +27,7 @@
  * traducir. Probado que los `CHECK` disparan de verdad —tres rechazos y dos aceptaciones,
  * con control positivo— y está en ADR-127.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { esSitioDeAbejas } from "./sitioDeAbejas";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
@@ -75,6 +76,7 @@ export async function registrarConsultaAVecinos(userAccountId: string, input: Re
   await requireApiaryAccess(userAccountId, "manage", [
     { projectId: sitio.hives[0]?.projectId ?? null, locationId: sitio.id },
   ]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sitio.hives[0]?.projectId ?? null, locationId: sitio.id }]);
 
   const vecino = await prisma.organization.findUnique({
     where: { id: input.neighbourOrganizationId },

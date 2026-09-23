@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona } from "../OpcionesDePersona";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -98,11 +99,7 @@ export function ApiaryPhotoUploadForm({
         <div className="nn-field">
           <label htmlFor={fieldId}>{t("photographedByLabel")}</label>
           <select id={fieldId} value={creatorPersonId} onChange={(e) => setCreatorPersonId(e.target.value)}>
-            {observers.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.id === selfPersonId ? t("observerSelfOption", { name: person.displayName }) : person.displayName}
-              </option>
-            ))}
+            <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
           </select>
         </div>
       ) : null}

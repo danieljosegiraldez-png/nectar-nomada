@@ -43,6 +43,7 @@
  * esta función exige un `ProtocolVersion`, así que por construcción sólo pasa
  * por ella lo que es un acto experimental.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireResearchAccess, ResearchAccessError } from "./access";
@@ -239,6 +240,8 @@ export async function applyAmendment(userAccountId: string, input: ApplyAmendmen
   await requireResearchAccess(userAccountId, "execute_protocol", [
     { projectId: null, locationId: input.locationId },
   ]);
+
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.locationId }]);
 
   // Coherencia de ámbitos: el lote de biochar tiene que ser de la misma
   // organización que el terreno tratado. Antes sólo se comprobaba que el UUID

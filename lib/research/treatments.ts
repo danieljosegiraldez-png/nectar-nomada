@@ -7,6 +7,7 @@
  * measurements (§9.5). "El sistema sabe qué medir" is this function, not a
  * comment.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { recordAuditEvent } from "../audit";
@@ -104,6 +105,7 @@ export async function createTreatmentBatch(userAccountId: string, input: CreateT
     locationId = lot.locationId;
   }
   await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId, locationId }]);
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId, locationId }]);
 
   const variablesById = new Map(version.variables.map((v) => [v.id, v]));
   for (const value of input.variableValues) {
@@ -490,6 +492,9 @@ export async function recordProcessSensoryObservation(
   });
   if (!stage) throw new ResearchAccessError("processing_stage_not_found");
   await requireResearchAccess(userAccountId, "execute_protocol", [{ projectId: stage.treatmentBatch.projectId }]);
+  await exigirPersonaPermitida(userAccountId, input.observerPersonId, [
+    { projectId: stage.treatmentBatch.projectId, locationId: stage.treatmentBatch.locationId },
+  ]);
 
   if (!input.freeTextDescriptor.trim()) {
     throw new TreatmentBatchValidationError("free_text_descriptor_required");

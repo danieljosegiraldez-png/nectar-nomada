@@ -104,7 +104,7 @@ export default async function LotDetailPage({
   const harvestSources = detail.harvestEvent
     ? await getHarvestSourceContext(user.userAccountId, detail.harvestEvent.id)
     : null;
-  const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId);
+  const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId, [{ projectId: detail.lot.projectId, locationId: detail.lot.locationId }]);
   // T12.6: organizations for the labour form's "provided in-kind by" toggle
   // — same convenience-not-security-boundary reasoning as getManageableContext's
   // other dropdowns (lots.ts), reused here rather than a new query.

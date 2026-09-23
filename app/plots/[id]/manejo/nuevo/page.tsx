@@ -59,7 +59,7 @@ export default async function NuevoManejoPage({
 
   const [productos, { people, selfPersonId }, plantas, bloques, motivoValido] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listPlantSpecimens(user.userAccountId, id),
     // Ronda de arreglos 1 (hallazgo crítico): los bloques de manejo se leen
     // con el MISMO permiso (`lot:view`/`manage`) que ya exige esta página,
@@ -119,7 +119,7 @@ export default async function NuevoManejoPage({
         modo="nuevo"
         locationId={location.id}
         productos={productos}
-        observers={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+        observers={people}
         selfPersonId={selfPersonId}
         specimens={plantas}
         bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}

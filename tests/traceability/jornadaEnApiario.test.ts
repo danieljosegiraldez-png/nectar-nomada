@@ -104,6 +104,9 @@ beforeAll(async () => {
   colonyId = colony.id;
 
   operatorPersonId = await crearPersona("Apicultor");
+  // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca del
+  // registro (o al equipo Néctar Nómada); sin esto el operador queda fuera.
+  await prisma.organizationMembership.create({ data: { personId: operatorPersonId, organizationId } });
 
   registradorPorSitio = await crearCuenta("RegistradorSitio");
   await asignar(registradorPorSitio, "Apiary Colony Event Recorder", "location", apiarioId);
@@ -166,6 +169,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [...locationIds, projectId] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: operatorPersonId }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });

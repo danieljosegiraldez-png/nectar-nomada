@@ -1,3 +1,4 @@
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
@@ -148,6 +149,9 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
     });
     if (!persona) throw new FieldMediaError("operator_not_found");
   }
+  // Atribución, no autoridad — pero desde P-G (2026-09-21) acotada: tiene que ser alguien de la
+  // finca de la jornada o del equipo Néctar Nómada, no cualquier persona de la plataforma.
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: sesion.locationId }]);
 
   const cuenta = await prisma.userAccount.findUniqueOrThrow({
     where: { id: userAccountId },

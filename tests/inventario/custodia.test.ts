@@ -63,6 +63,12 @@ beforeAll(async () => {
   materialId = m.id;
   bob = await persona("Bob");
   kenis = await persona("Kenis");
+  // `exigirPersonaPermitida` sólo deja figurar a quien pertenece a la finca del
+  // registro (o al equipo Néctar Nómada); sin esto los dos responsables quedan
+  // fuera de `moverACustodia`.
+  await prisma.organizationMembership.createMany({
+    data: [bob, kenis].map((personId) => ({ personId, organizationId })),
+  });
 }, 30000);
 
 afterAll(async () => {
@@ -80,6 +86,7 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cid } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: finca }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cid } }) });
+  await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: pid } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: pid } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [bodega, apiario] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
@@ -135,6 +142,9 @@ describe("la custodia de un frasco", () => {
   it("el responsable es una PERSONA sin cuenta, y se acepta", async () => {
     // Como `operatorPersonId`: quien guarda el frasco a menudo no tiene cuenta.
     const sinCuenta = await persona("Bodeguero");
+    // Igual que `bob`/`kenis` en `beforeAll`: sin esto `exigirPersonaPermitida`
+    // la rechaza por no pertenecer a la finca del registro.
+    await prisma.organizationMembership.create({ data: { personId: sinCuenta, organizationId } });
     const l = await loteDe(5, "sincuenta");
     const c = await moverACustodia(gestorId, { consumableLotId: l.id, locationId: bodega, responsiblePersonId: sinCuenta, desde: hace(1) });
     expect(c.responsiblePersonId).toBe(sinCuenta);

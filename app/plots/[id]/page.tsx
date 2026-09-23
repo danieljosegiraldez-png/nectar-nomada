@@ -75,7 +75,7 @@ export default async function PlotDetailPage({
   const rendimiento = detail.yield;
   const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listSoilProfilesForLocation(user.userAccountId, id),
     listPlotBlocks(user.userAccountId, id),
   ]);

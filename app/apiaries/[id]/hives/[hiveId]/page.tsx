@@ -80,9 +80,8 @@ export default async function HiveDetailPage({
    * rechazaría — el fallo menos malo de los dos, y el que ya se corre en el
    * resto de la aplicación.
    */
-  const [hive, { people: observers, selfPersonId }, origenes, causas, irregularidades, granted] = await Promise.all([
+  const [hive, origenes, causas, irregularidades, granted] = await Promise.all([
     getHive(user.userAccountId, hiveId),
-    getObserverCandidates(user.userAccountId),
     // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
     // lista escrita a mano en el formulario.
     origenesDeColonia(),
@@ -94,6 +93,11 @@ export default async function HiveDetailPage({
   // no autoriza, y `getHive` —que sí— lanza si no hay permiso de ver. Se usa `hive.id`, el de la
   // caja ya autorizada, no el parámetro crudo de la URL.
   const limpiezas = await limpiezasDeCaja(hive.id);
+  // «Quién lo hizo», también después de `getHive` y con la caja ya autorizada: el `apiaryId` de la
+  // URL no lo comprueba nadie, y anclar en él enseñaría los nombres de otra finca.
+  const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId, [
+    { projectId: hive.projectId, locationId: hive.locationId },
+  ]);
   // Artefactos de colmena, Tarea 8. Después de `getHive`, que ya autorizó ver esta caja; y con
   // su propio `requireApiaryAccess` dentro, que no depende de este orden.
   const historia = await historiaDeArtefactos(user.userAccountId, hive.id);

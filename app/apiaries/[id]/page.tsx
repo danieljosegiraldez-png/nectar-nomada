@@ -63,7 +63,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
     getApiaryDetail(user.userAccountId, id),
     getManageableApiaryProjects(user.userAccountId),
     listFieldSessions(user.userAccountId, id),
-    getObserverCandidates(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ locationId: id }]),
   ]);
 
   // `getApiaryDetail` ya autorizó este sitio; esto lee hechos del id concedido.
@@ -572,7 +572,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             <ConsultaAVecinosForm
               locationId={apiary.id}
               vecinos={vecinos}
-              personas={people.map((p) => ({ id: p.id, name: p.displayName }))}
+              personas={people}
               selfPersonId={selfPersonId}
               hoy={ahora.toISOString().slice(0, 10)}
             />
@@ -609,7 +609,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           <summary>{tt("fieldSessionStartSummary")}</summary>
           <FieldSessionStartForm
             locationId={apiary.id}
-            people={people.map((p) => ({ id: p.id, displayName: p.displayName }))}
+            people={people}
             selfPersonId={selfPersonId}
           />
         </details>

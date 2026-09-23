@@ -17,6 +17,7 @@
  * `correctsId` y `correctionReason`; la original queda intacta y no se corrige
  * lo ya corregido.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
@@ -389,6 +390,9 @@ export async function registrarIntervencion(
   await requireLotAccess(userAccountId, "manage", [
     { locationId: input.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
   ]);
+  // También vale para el `FieldEvent` espejo de abajo: es la misma persona, y la jornada cuelga de
+  // esta misma finca (`validarReferencias`).
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: input.locationId }]);
 
   await validarReferencias(parcela, input);
 
@@ -523,6 +527,7 @@ export async function corregirIntervencion(
   await requireLotAccess(userAccountId, "manage", [
     { locationId: original.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
   ]);
+  await exigirPersonaPermitida(userAccountId, input.nueva.operatorPersonId, [{ locationId: original.locationId }], { actual: original.operatorPersonId });
 
   // «Ya tiene corrección» va DESPUÉS del permiso: es un error de negocio, no
   // uno de acceso, y sólo se revela a quien ya demostró tener permiso sobre

@@ -19,6 +19,7 @@
  * of not inventing one when an existing permission already expresses the
  * right authority.
  */
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { objectStorageProvider } from "../integrations/storage";
@@ -136,6 +137,7 @@ export async function finalizeLotAssetUpload(userAccountId: string, input: Final
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
+  await exigirPersonaPermitida(userAccountId, input.creatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
   if (!input.storageKey.startsWith(`nectar-originals/traceability/${input.lotId}/`)) {
     throw new TraceabilityAccessError("invalid_storage_key");

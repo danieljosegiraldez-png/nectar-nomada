@@ -83,9 +83,9 @@ export default async function EquipoPage({
       proveedoresPosibles(user.userAccountId),
       modelosParaElegir(user.userAccountId, equipo.organizationId, equipo.kind),
       rutinasDeEquipo(user.userAccountId, id, hoy),
-      getObserverCandidates(user.userAccountId),
+      getObserverCandidates(user.userAccountId, [{ organizationId: equipo.organizationId }]),
     ]);
-  const personas = observadores.people.map((p) => ({ id: p.id, name: p.displayName }));
+  const personas = observadores.people;
   const modeloActualElegible = [...modelosElegibles.compartidos, ...modelosElegibles.propios].some((m) => m.id === equipo.modelId);
   const patrones = equipo.checkRequirements;
   const esInstrumento = equipo.kind === "instrument";
