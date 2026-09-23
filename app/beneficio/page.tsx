@@ -6,7 +6,6 @@ import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
-import { getObserverCandidates } from "../../lib/traceability/lots";
 import { destinosDelBeneficio } from "./destinos";
 
 export const dynamic = "force-dynamic";
@@ -66,14 +65,6 @@ export default async function BeneficioPage({
     listarBeneficios(user.userAccountId),
   ]);
 
-  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
-  // misma lista de Personas activas, sea cual sea el beneficio, así que se
-  // resuelve UNA vez para todos. `RutinasDeLugar` ya NO recibe `insumos` como
-  // prop (ronda 2 de la revisión de PR A): cada instancia resuelve
-  // `insumosDeLugar` ella misma con el id DE SU PROPIO beneficio, así que aquí
-  // no hay nada que resolver ni repartir por adelantado.
-  const personas = await getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName })));
-
   return (
     <div>
       <h1>{t("titulo")}</h1>
@@ -91,7 +82,7 @@ export default async function BeneficioPage({
       {beneficios.map((b) => (
         <div key={b.id}>
           <h2 style={{ marginTop: "1.5rem" }}>{b.name}</h2>
-          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} personas={personas} />
+          <RutinasDeLugar userAccountId={user.userAccountId} locationId={b.id} />
         </div>
       ))}
     </div>

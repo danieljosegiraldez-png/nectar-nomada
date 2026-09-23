@@ -9,7 +9,6 @@ import { FormularioUbicacion } from "../FormularioUbicacion";
 import { FormularioEstante } from "../FormularioEstante";
 import { AvisoDeRutina } from "../../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../../components/rutinas/RutinasDeLugar";
-import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
 export default async function InstalacionPage({ params, searchParams }: {
@@ -47,14 +46,6 @@ export default async function InstalacionPage({ params, searchParams }: {
     ? instalacion.estantes.flatMap((e) => e.posiciones.map((p) => ({ ...p, estanteId: e.id }))).find((p) => p.id === posicion)
     : undefined;
   const puedeEditarPosicion = posicionSeleccionada ? await puedeEditarBeneficioEn(user.userAccountId, posicionSeleccionada.id) : false;
-  // Hallazgo 4 (revisión final, 2026-09-19): `getObserverCandidates` es la
-  // misma lista de Personas activas sea cual sea el lugar, así que se
-  // resuelve UNA vez para toda la página. `RutinasDeLugar` ya NO recibe
-  // `insumos` como prop (ronda 2 de la revisión de PR A): resuelve
-  // `insumosDeLugar` ella misma con SU PROPIO `locationId` en cada instancia
-  // —cama, estante e instalación—, así que aquí no hay nada que hoistear ni
-  // que repartir por bloque.
-  const personas = await getObserverCandidates(user.userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName })));
   return <div>
     <p><Link href="/instalaciones">← {t("volver")}</Link></p>
     <p>{instalacion.sitio?.name ?? t("sitioNoVisible")} → {instalacion.name}</p>
@@ -68,7 +59,7 @@ export default async function InstalacionPage({ params, searchParams }: {
     {instalacion.camas.map((c, i) => <section key={JSON.stringify(c)}>
       <h3>{c.name}</h3>
       {permisosDeCamas[i] && <FormularioUbicacion tipo="drying_bed" existente={c} />}
-      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} personas={personas} />
+      <RutinasDeLugar userAccountId={user.userAccountId} locationId={c.id} />
     </section>)}
     {puedeEditar && <><h2>{t("crearCama")}</h2><FormularioUbicacion tipo="drying_bed" parentLocationId={id} /></>}
     <h2>{t("estantes")}</h2>
@@ -100,11 +91,11 @@ export default async function InstalacionPage({ params, searchParams }: {
             shadePercentage: posicionSeleccionada.shadePercentage, shadeDescription: posicionSeleccionada.shadeDescription,
           }} />}
         {permisosDeEstantes[i] && <FormularioEstante existente={{ id: estante.id, niveles: estante.niveles, puestos: estante.puestos }} />}
-        <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} personas={personas} />
+        <RutinasDeLugar userAccountId={user.userAccountId} locationId={estante.id} />
       </section>;
     })}
     {puedeEditar && <><h2>{t("crearEstante")}</h2><FormularioEstante facilityId={id} /></>}
     <p><Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link></p>
-    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} personas={personas} />
+    <RutinasDeLugar userAccountId={user.userAccountId} locationId={id} />
   </div>;
 }

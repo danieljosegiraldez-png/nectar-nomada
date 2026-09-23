@@ -48,9 +48,9 @@ beforeAll(async () => {
   });
   organizationId = organization.id;
 
-  const project = await prisma.project.create({ data: { name: `TEST R1 Project (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const project = await prisma.project.create({ data: { name: `TEST R1 Project (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   projectId = project.id;
-  const otherProject = await prisma.project.create({ data: { name: `TEST R1 Other Project (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const otherProject = await prisma.project.create({ data: { name: `TEST R1 Other Project (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   otherProjectId = otherProject.id;
 
   const greenLot = await prisma.lot.create({

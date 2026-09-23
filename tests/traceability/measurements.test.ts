@@ -43,13 +43,18 @@ async function assignFarmOperator(userAccountId: string, scope: { scopeType: "pr
 }
 
 beforeAll(async () => {
+  const organization = await prisma.organization.create({
+    data: { organizationType: "farm", name: `TEST Farm (${RUN_ID})`, status: "approved", classification: "internal" },
+  });
+  organizationId = organization.id;
+
   const projectA = await prisma.project.create({
-    data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" },
+    data: { name: `TEST Project A (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
   });
   projectAId = projectA.id;
 
   const projectB = await prisma.project.create({
-    data: { name: `TEST Project B (${RUN_ID})`, status: "approved", classification: "internal" },
+    data: { name: `TEST Project B (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
   });
   projectBId = projectB.id;
 
@@ -59,10 +64,6 @@ beforeAll(async () => {
   wrongProjectUserAccountId = await createTestUserAccount("WrongProjectOperator");
   await assignFarmOperator(wrongProjectUserAccountId, { scopeType: "project", scopeRefId: projectBId });
 
-  const organization = await prisma.organization.create({
-    data: { organizationType: "farm", name: `TEST Farm (${RUN_ID})`, status: "approved", classification: "internal" },
-  });
-  organizationId = organization.id;
   const storageLocation = await prisma.location.create({
     data: { locationType: "site", name: `TEST Warehouse (${RUN_ID})`, organizationId, status: "approved", classification: "internal" },
   });

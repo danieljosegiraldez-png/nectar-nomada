@@ -42,9 +42,9 @@ async function assignFarmOperator(userAccountId: string, projectId: string) {
 
 beforeAll(async () => {
   organizationId = await createTestOrganization(RUN_ID);
-  const projectA = await prisma.project.create({ data: { name: `TEST Project A (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const projectA = await prisma.project.create({ data: { name: `TEST Project A (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   projectAId = projectA.id;
-  const projectB = await prisma.project.create({ data: { name: `TEST Project B (${RUN_ID})`, status: "approved", classification: "internal" } });
+  const projectB = await prisma.project.create({ data: { name: `TEST Project B (${RUN_ID})`, organizationId, status: "approved", classification: "internal" } });
   projectBId = projectB.id;
 
   authorizedUserAccountId = await createTestUserAccount("AuthorizedOperator");

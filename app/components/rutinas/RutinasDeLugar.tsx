@@ -30,18 +30,16 @@ import { diaDeHoy } from "../../../lib/time/diaDeHoy";
  * revisión independiente lo demostraron, tests/arquitectura/insumos-por-bloque
  * ya no existe). Cada bloque resuelve SIEMPRE `insumosDeLugar` con SU PROPIO
  * `locationId`, así que pasar el de otro lugar ya no compila — el tipo del
- * componente no tiene ese hueco. `personas` (observadores) sí sigue siendo
- * prop: es la misma lista de Personas activas sea cual sea el lugar, así que
- * hoistearla en el llamador evita el N+1 sin ningún riesgo de mezclar lugares.
+ * componente no tiene ese hueco. Las personas elegibles también se resuelven
+ * aquí con el lugar concreto: desde que «quién lo hizo» está acotado por finca,
+ * reutilizar una lista de otro lugar podría mostrar personas no permitidas.
  */
 export async function RutinasDeLugar({
   userAccountId,
   locationId,
-  personas: personasDelLlamador,
 }: {
   userAccountId: string;
   locationId: string;
-  personas?: { id: string; name: string }[];
 }) {
   const [t, lugar, puedeVer, puedeGestionar, puedeApuntar] = await Promise.all([
     getTranslations("Equipos"),
@@ -56,9 +54,7 @@ export async function RutinasDeLugar({
     rutinasDeLugar(userAccountId, locationId, hoy),
     insumosDeLugar(userAccountId, locationId),
     equiposAqui(userAccountId, locationId),
-    personasDelLlamador
-      ? Promise.resolve(personasDelLlamador)
-      : getObserverCandidates(userAccountId).then((o) => o.people.map((p) => ({ id: p.id, name: p.displayName }))),
+    getObserverCandidates(userAccountId, [{ locationId }]).then((o) => o.people),
   ]);
   return (
     <section style={{ marginTop: "1.5rem" }}>
