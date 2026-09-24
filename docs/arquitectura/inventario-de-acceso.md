@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
 
-**574 operaciones** que tocan la base, en **158 archivos** — regenerado tras el
+**575 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
 rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
 **+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
 contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
@@ -26,7 +26,7 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **434** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **435** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -37,6 +37,11 @@ un permiso sensorial:
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **Selección verde por mallas (2026-09-24): 574→575, 158→159 archivos y guardia
+> directo 434→435.** `recordGreenGrading` verifica que el origen sea verde y delega
+> autorización, genealogía y balance a `recordTransformation`; cada fracción sigue
+> siendo un lote del inventario, no una tabla paralela de existencias.
 
 > **Un sello de actor no es un filtro (2026-09-21): tras fusionar #464, 41→28 acotado por construcción, 5→18
 > sin guardia visible; el total no cambia, 557.** La regla tenía una segunda forma,

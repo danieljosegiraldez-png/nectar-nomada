@@ -14,6 +14,7 @@ import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceabil
 import { recordSelection, getSelectionOutturn, SelectionValidationError } from "../../lib/traceability/selection";
 import { conservesMass } from "../../lib/traceability/balance";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { recordGreenGrading } from "../../lib/traceability/greenGrading";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `p3-${Date.now()}`;
@@ -67,6 +68,17 @@ async function cherryLot(code: string, kg: number) {
     unit: "kg",
     occurredAt: new Date(),
     provenanceClass: "measured_fact",
+  });
+  return lot;
+}
+
+async function greenLot(code: string, kg: number) {
+  const lot = await createLot(operatorUserAccountId, {
+    lotCode: `${RUN_ID}-${code}`, lotType: "green", organizationId, projectId, locationId,
+  });
+  await recordQuantityEvent(operatorUserAccountId, {
+    lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
+    occurredAt: new Date(), provenanceClass: "measured_fact",
   });
   return lot;
 }
@@ -132,6 +144,26 @@ afterAll(async () => {
 });
 
 describe("selection conserves mass", () => {
+  it("separa varias mallas verdes y conserva sus datos y balance", async () => {
+    const source = await greenLot("green-screen", 10);
+    const result = await recordGreenGrading(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantityKg: 10,
+      fractions: [
+        { lotCode: `${RUN_ID}-screen-17-18`, quantityKg: 6, screenMin: 17, screenMax: 18, screenSystem: "international_round_screen", screenStatus: "measured", uniformityPct: 94 },
+        { lotCode: `${RUN_ID}-screen-15-16`, quantityKg: 3, screenMin: 15, screenMax: 16, screenSystem: "international_round_screen", screenStatus: "measured" },
+      ],
+      defectLots: [{ lotCode: `${RUN_ID}-green-defects`, quantityKg: 0.8, rejectionCategoryValueId: flotadoresId }],
+      declaredLossKg: 0.2,
+      occurredAt: new Date(), provenanceClass: "measured_fact",
+    });
+
+    expect(result.reconciliation?.unexplained?.toNumber()).toBe(0);
+    const large = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-screen-17-18` } });
+    expect([large.greenScreenMin, large.greenScreenMax, Number(large.greenUniformityPct)]).toEqual([17, 18, 94]);
+    expect(large.greenScreenStatus).toBe("measured");
+  });
+
   it("is registered as a conserving type", () => {
     // The load-bearing line of the whole ticket.
     expect(conservesMass("selection")).toBe(true);

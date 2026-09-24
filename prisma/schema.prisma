@@ -3261,6 +3261,15 @@ enum LotType {
   @@schema("traceability")
 }
 
+enum GreenScreenDataStatus {
+  measured
+  supplier_declared
+  qualitative
+  unknown
+
+  @@schema("traceability")
+}
+
 model Lot {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // P0 (41_P0_MASS_BALANCE.md §7): scoped per organization, not globally
@@ -3316,6 +3325,14 @@ model Lot {
   // figure known to be wrong. Nullable and unset for every other lot —
   // absence means "no reason to doubt it", never "verified".
   dataQuality    DataQuality?        @map("data_quality")
+  /// Clasificación física del verde. Nulos fuera de lotes verdes o cuando no
+  /// se evaluó; `greenScreenStatus=unknown` conserva el desconocimiento explícito.
+  greenScreenMin      Int?                   @map("green_screen_min")
+  greenScreenMax      Int?                   @map("green_screen_max")
+  greenScreenSystem   String?                @map("green_screen_system")
+  greenScreenStatus   GreenScreenDataStatus? @map("green_screen_status")
+  greenGradeNote      String?                @map("green_grade_note")
+  greenUniformityPct  Decimal?               @map("green_uniformity_pct") @db.Decimal(5, 2)
   // P3 (44_P3_SELECTION.md §3) — why this lot was rejected, when it was.
   //
   // Deliberately NOT a new `LotType` value, diverging from the audit's §25.
