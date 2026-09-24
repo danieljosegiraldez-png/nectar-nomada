@@ -128,12 +128,14 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const vitalesColmena = await vitalesDeColmenas(apiary.hives.map((h) => h.id), ahora);
 
   return (
-    <div>
-      <p>
-        <Link href="/apiaries">{t("backToApiaries")}</Link>
-      </p>
-      <span className="nn-badge">{t("badge")}</span>
-      <h1>{apiary.name}</h1>
+    <div className="nn-apiary-page">
+      <header className="nn-apiary-header"><div><Link href="/apiaries">{t("backToApiaries")}</Link><span className="nn-badge">{t("badge")}</span><h1>{apiary.name}</h1></div></header>
+      <nav className="nn-apiary-nav" aria-label={t("apiaryNavLabel")}>
+        <a href="#colmenas">{t("hivesHeading")}</a>
+        <a href="#avisos">{t("apiaryNavAlerts")}</a>
+        <a href="#jornadas">{tt("fieldSessionsHeading")}</a>
+        <a href="#materiales">{t("apiaryNavMaterials")}</a>
+      </nav>
       <AvisosDeBotiquin userAccountId={user.userAccountId} />
 
       {/* **El inventario va PRIMERO.** Anexo E §3: «Inventario primero, porque decide la
@@ -167,7 +169,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
         </section>
       ) : null}
 
-      <section className="nn-section">
+      <section className="nn-section" id="colmenas">
         <h2>{t("hivesHeading")}</h2>
         {/* **Dónde está la inspección.** Esta línea existe porque el dueño no
             encontró la inspección estructurada: está construida, pero DENTRO de
@@ -292,8 +294,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           equivoca por decenas de metros. Sin propuesta los campos salen
           vacíos y se teclean a mano, que es justo lo que faltaba; con
           propuesta salen rellenos y editables, que es lo que ya hacían. */}
-      <section className="nn-section">
-        <h2>{tt("coordsHeading")}</h2>
+      <details className="nn-disclosure nn-apiary-secondary">
+        <summary><span>{tt("coordsHeading")}</span><small>{t("coordsDisclosureHelp")}</small></summary>
+        <div className="nn-disclosure-body">
         <p className="nn-detail-meta">
           <span>
             {coordenadas.yaDeclaradas
@@ -322,7 +325,8 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           propuesta={coordenadas.propuesta}
           distanciaALoDeclaradoM={coordenadas.distanciaALoDeclaradoM}
         />
-      </section>
+        </div>
+      </details>
 
 
       {/* A9.9 (D6) — el compromiso de polinización, que es el único número que
@@ -406,6 +410,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           en la casa —semanas después de aplicar— y no en el campo: es la única
           escritura del apiario que NO pasa por la cola offline, y su fila de
           auditoría lo dice con `sourceInterface = "apiary.close"`. */}
+      <div id="avisos" className="nn-anchor-target" />
       {retiros.length > 0 ? (
         <section className="nn-section">
           <h2>{t("retirosHeading")}</h2>
@@ -585,7 +590,7 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           `Inspection` y ningún registro del viaje; con una visita abierta, lo
           que se registre entra en ella sin un toque más
           (`lib/traceability/visitaAbierta.ts`). */}
-      <section className="nn-section">
+      <section className="nn-section" id="jornadas">
         <h2>{tt("fieldSessionsHeading")}</h2>
         {jornadas.length === 0 ? (
           <p className="nn-muted">{tt("fieldSessionsNone")}</p>
@@ -617,8 +622,10 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
 
       {/* Alzas con marca — spec 2026-09-18 §4.4. La «ficha del alza» es el desplegable de cada
           una: por dónde pasó y en qué cosechas salió. Lo de otro apiario, sin nombre de caja. */}
-      <section className="nn-section" id="alzas">
-        <h2>{t("alzasHeading")}</h2>
+      <div id="materiales" className="nn-apiary-materials">
+      <details className="nn-disclosure nn-apiary-secondary">
+        <summary><span>{t("alzasHeading")}</span><small>{t("materialsDisclosureHelp")}</small></summary>
+        <div className="nn-disclosure-body">
         <p className="nn-muted">{t("alzasIntro")}</p>
         {alzas.length === 0 ? (
           <p className="nn-muted">{t("alzasNinguna")}</p>
@@ -706,13 +713,14 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             </form>
           </details>
         ) : null}
-      </section>
+        </div>
+      </details>
 
       {/* Cera con el color de su año — spec 2026-09-18 §5.3. El color dice la edad del marco,
           esté donde esté; aquí sólo se lee la leyenda y se anotan entradas y salidas. */}
-      <section className="nn-section" id="cera">
-        <h2>{t("ceraHeading")}</h2>
-        <p className="nn-muted">{t("ceraIntro")}</p>
+      <details className="nn-disclosure nn-apiary-secondary">
+        <summary><span>{t("ceraHeading")}</span><small>{t("ceraIntro")}</small></summary>
+        <div className="nn-disclosure-body">
         <p>
           <strong>{t("ceraEsteAno", { color: t(`color_${colorDelAño(añoEnCurso)}`) })}</strong>
         </p>
@@ -851,13 +859,14 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             </details>
           </>
         ) : null}
-      </section>
+        </div>
+      </details>
 
       {/* Spec 2026-09-19 §4.3 — la cera del desopercular. Va aquí, con la del apiario, porque su
           origen es el sitio y una ventana: no se sabe de qué colmena salió, y no se inventa. */}
-      <section className="nn-section">
-        <h2>{t("ceraExtraccionHeading")}</h2>
-        <p className="nn-muted">{t("ceraExtraccionIntro")}</p>
+      <details className="nn-disclosure nn-apiary-secondary">
+        <summary><span>{t("ceraExtraccionHeading")}</span><small>{t("ceraExtraccionIntro")}</small></summary>
+        <div className="nn-disclosure-body">
         {ceraDeExtraccion.length === 0 ? (
           <p className="nn-muted">{t("ceraExtraccionVacio")}</p>
         ) : (
@@ -921,10 +930,13 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
             </form>
           </details>
         ) : null}
-      </section>
+        </div>
+      </details>
+      </div>
 
-      <section className="nn-section">
-        <h2>{t("newHiveHeading")}</h2>
+      <details className="nn-disclosure nn-apiary-secondary">
+        <summary><span>{t("newHiveHeading")}</span><small>{t("newHiveDisclosureHelp")}</small></summary>
+        <div className="nn-disclosure-body">
         <NewHiveForm locationId={apiary.id} projects={projects} />
         {/* El alta en lote va PLEGADA y debajo de la de una: dar de alta el inventario de un
             sitio se hace una vez, y el camino de todos los dias es la colmena suelta. */}
@@ -932,7 +944,8 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           <summary>{t("loteAltaHeading")}</summary>
           <AltaEnLoteForm locationId={apiary.id} projects={projects} origenes={origenes} />
         </details>
-      </section>
+        </div>
+      </details>
     </div>
   );
 }

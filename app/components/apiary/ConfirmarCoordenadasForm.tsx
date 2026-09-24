@@ -25,7 +25,7 @@ export function ConfirmarCoordenadasForm({
   propuesta: { latitude: number; longitude: number } | null;
   distanciaALoDeclaradoM: number | null;
 }) {
-  const tt = useTranslations("Apiary");
+  const tt = useTranslations("Traceability");
   const [state, formAction] = useActionState(confirmarCoordenadasAction, {} as TraceabilityActionState);
 
   return (

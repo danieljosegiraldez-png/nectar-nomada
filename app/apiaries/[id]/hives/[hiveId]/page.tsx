@@ -212,19 +212,17 @@ export default async function HiveDetailPage({
   );
 
   return (
-    <div>
-      <p>
-        <Link href={`/apiaries/${apiaryId}`}>{t("backToApiary")}</Link>
-      </p>
-      <span className="nn-badge">{t("badge")}</span>
-      <h1>{hive.identifier}</h1>
-      <p className="nn-muted">{t(`hiveStatus_${hive.status}`)}</p>
-      <ApiaryPhotoUploadForm
-        parent={{ kind: "hive", hiveId: hive.id }}
-        revalidationPath={revalidationPath}
-        observers={observers}
-        selfPersonId={selfPersonId}
-      />
+    <div className="nn-apiary-page nn-hive-page">
+      <header className="nn-apiary-header"><div><Link href={`/apiaries/${apiaryId}`}>{t("backToApiary")}</Link><span className="nn-badge">{t("badge")}</span><h1>{hive.identifier}</h1><p>{t(`hiveStatus_${hive.status}`)}</p></div></header>
+      <details className="nn-inline-disclosure nn-hive-photo">
+        <summary>{t("photosHeading")}</summary>
+        <ApiaryPhotoUploadForm
+          parent={{ kind: "hive", hiveId: hive.id }}
+          revalidationPath={revalidationPath}
+          observers={observers}
+          selfPersonId={selfPersonId}
+        />
+      </details>
 
       {!colony ? (
         <section className="nn-section">
@@ -240,25 +238,22 @@ export default async function HiveDetailPage({
         <>
           {/* La fila de faenas. Elegir una abre su sección y pliega las demás —plegadas,
               no ocultas—; sin elegir, la pantalla de siempre. El ancla lleva a la sección. */}
-          <nav className="nn-section" aria-label={t("faenaPregunta")}>
-            <p>
-              <strong>{t("faenaPregunta")}</strong>{" "}
+          <nav className="nn-hive-tasks" aria-label={t("faenaPregunta")}>
+            <p><strong>{t("faenaPregunta")}</strong></p>
+            <div>
               {FAENAS.map((f) => (
-                <span key={f}>
-                  <Link
-                    href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=${f}#faena-${f}`}
-                    aria-current={faena === f ? "page" : undefined}
-                    style={faena === f ? { fontWeight: 700 } : undefined}
-                  >
-                    {t(`faena_${f}`)}
-                  </Link>
-                  {" · "}
-                </span>
+                <Link
+                  key={f}
+                  href={`/apiaries/${apiaryId}/hives/${hiveId}?faena=${f}#faena-${f}`}
+                  aria-current={faena === f ? "page" : undefined}
+                >
+                  {t(`faena_${f}`)}
+                </Link>
               ))}
               <Link href={`/apiaries/${apiaryId}/hives/${hiveId}`} aria-current={faena === null ? "page" : undefined}>
                 {t("faenaTodo")}
               </Link>
-            </p>
+            </div>
             {faena ? <p className="nn-muted">{t("faenaAyuda")}</p> : null}
           </nav>
 
@@ -295,12 +290,15 @@ export default async function HiveDetailPage({
             ) : (
               <p className="nn-muted">{t("sinPermisoGestion")}</p>
             )}
-            <ApiaryPhotoUploadForm
-              parent={{ kind: "colony", colonyId: colony.id }}
-              revalidationPath={revalidationPath}
-              observers={observers}
-              selfPersonId={selfPersonId}
-            />
+            <details className="nn-inline-disclosure nn-hive-photo">
+              <summary>{t("photosHeading")}</summary>
+              <ApiaryPhotoUploadForm
+                parent={{ kind: "colony", colonyId: colony.id }}
+                revalidationPath={revalidationPath}
+                observers={observers}
+                selfPersonId={selfPersonId}
+              />
+            </details>
           </section>
 
           <section className="nn-section">
