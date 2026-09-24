@@ -370,6 +370,14 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/greenGrading.ts",
+      "razon": "Módulo de dominio: valida que el origen sea café verde y la persona permitida; delega autorización, genealogía, libro de cantidades, balance y auditoría atómica en recordTransformation. Su lectura previa no devuelve datos: sólo establece las reglas físicas antes de delegar."
+    },
+    {
+      "archivo": "lib/traceability/trilla.ts",
+      "razon": "Módulo de dominio: valida que el origen sea pergamino o cereza seca y delega autorización, genealogía, libro de cantidades, balance y auditoría atómica en recordTransformation. Después relee únicamente la transformación y su subproducto recién creados para devolver el resultado confirmado."
+    },
+    {
       "archivo": "lib/traceability/specimens.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },

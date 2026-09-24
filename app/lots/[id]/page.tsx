@@ -401,7 +401,10 @@ export default async function LotDetailPage({
     // operación que exista. `lotType` es físico a propósito (P3 §3), así que
     // preguntar por él aquí es preguntar por el estado real del lote.
     ...(lot.lotType === "green"
-      ? [{ action: "roast" as const, href: `/lots/${lot.id}/roast/new`, label: t("recordRoastButton") }]
+      ? ([
+          { action: "green_grading", href: `/lots/${lot.id}/green-selection/new`, label: t("greenGradingAction") },
+          { action: "roast", href: `/lots/${lot.id}/roast/new`, label: t("recordRoastButton") },
+        ] as const)
       : []),
     ...(["parchment", "dry_cherry"].includes(lot.lotType)
       ? [{ action: "hulling" as const, href: `/lots/${lot.id}/hulling/new`, label: t("hullingAction") }]
@@ -410,7 +413,7 @@ export default async function LotDetailPage({
     // para que bodega deje pasar el lote (`exigeSecadoTerminado`).
     ...(esMiel ? [] : [{ action: "process" as const, href: `/lots/${lot.id}/process`, label: t("viewProcessButton") }]),
     { action: "storage", href: `/lots/${lot.id}/storage/new`, label: t("moveStorageButton") },
-    { action: "sample", href: `/lots/${lot.id}/samples/new`, label: t("createSampleButton") },
+    { action: "sample", href: `/lots/${lot.id}/samples/new`, label: lot.lotType === "green" ? t("greenSampleSubmit") : t("createSampleButton") },
     { action: "report", href: `/lots/${lot.id}/report`, label: t("viewReportButton") },
   ];
 
@@ -478,6 +481,19 @@ export default async function LotDetailPage({
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
+
+      {lot.lotType === "green" && lot.greenScreenStatus ? (
+        <section className="nn-section">
+          <h2>{t("greenGradingResultHeading")}</h2>
+          <dl className="nn-definition-grid">
+            <div><dt>{t("greenGradingDataStatus")}</dt><dd>{t(`greenGradingStatus_${lot.greenScreenStatus}`)}</dd></div>
+            <div><dt>{t("greenGradingScreenRange")}</dt><dd>{lot.greenScreenMin != null || lot.greenScreenMax != null ? `${lot.greenScreenMin ?? "?"}–${lot.greenScreenMax ?? "?"}` : t("selectionOutturnUnknown")}</dd></div>
+            {lot.greenScreenSystem ? <div><dt>{t("greenGradingScreenSystem")}</dt><dd>{lot.greenScreenSystem}</dd></div> : null}
+            {lot.greenUniformityPct != null ? <div><dt>{t("greenGradingUniformity")}</dt><dd>{Number(lot.greenUniformityPct)}%</dd></div> : null}
+          </dl>
+          {lot.greenGradeNote ? <p>{lot.greenGradeNote}</p> : null}
+        </section>
+      ) : null}
 
       {mensajeDeErrorDeBandeja ? <p role="alert">{mensajeDeErrorDeBandeja}</p> : null}
 

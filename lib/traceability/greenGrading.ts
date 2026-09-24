@@ -1,6 +1,7 @@
 import { recordTransformation } from "./lots";
 import { prisma } from "../db";
 import type { ProvenanceClass } from "../../generated/prisma/client";
+import { exigirPersonaPermitida } from "../people/quienLoHizo";
 
 export class GreenGradingValidationError extends Error {}
 
@@ -29,9 +30,15 @@ export interface RecordGreenGradingInput {
 }
 
 export async function recordGreenGrading(userAccountId: string, input: RecordGreenGradingInput) {
-  const source = await prisma.lot.findUnique({ where: { id: input.inputLotId }, select: { lotType: true } });
+  const source = await prisma.lot.findUnique({
+    where: { id: input.inputLotId },
+    select: { lotType: true, projectId: true, locationId: true },
+  });
   if (!source) throw new GreenGradingValidationError("lot_not_found");
   if (source.lotType !== "green") throw new GreenGradingValidationError("green_lot_required");
+  await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [
+    { projectId: source.projectId, locationId: source.locationId },
+  ]);
   if (!(input.inputQuantityKg > 0)) throw new GreenGradingValidationError("input_quantity_required");
   if (input.fractions.length === 0) throw new GreenGradingValidationError("fraction_required");
   for (const fraction of input.fractions) {

@@ -41,6 +41,7 @@ import { startDryingRun, recordDryingTurnEvent, endDryingRun, DryingValidationEr
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
+import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
 import {
   abrirProceso,
   cambiarIntencion,
@@ -217,6 +218,7 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
   if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
+  if (error instanceof GreenGradingValidationError) return t("error_green_grading", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
   if (error instanceof MaterialConsumptionValidationError) {
@@ -707,14 +709,15 @@ export async function createSampleAction(
   const t = await getTranslations("Traceability");
 
   const lotId = String(formData.get("lotId") ?? "");
+  const quantityGrams = emptyToNullNumber(formData.get("quantityGrams"));
   try {
     await createSampleFromLot(user.userAccountId, {
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampleType: String(formData.get("sampleType") ?? ""),
       materialState: emptyToNull(formData.get("materialState")) as import("../../generated/prisma/client").MaterialState | null,
       sourceLotId: lotId,
-      quantity: emptyToNullNumber(formData.get("quantity")),
-      unit: emptyToNull(formData.get("unit")),
+      quantity: quantityGrams == null ? emptyToNullNumber(formData.get("quantity")) : quantityGrams / 1000,
+      unit: quantityGrams == null ? emptyToNull(formData.get("unit")) : "kg",
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
       // T9.5 §3(b): extracting a sample is an action taken against the lot.
@@ -761,6 +764,70 @@ export async function recordHullingAction(
   }
   revalidatePath(`/lots/${lotId}`);
   redirect(`/lots/${greenLotId}`);
+}
+
+// --- Clasificacion del cafe verde por mallas -------------------------------
+
+export async function recordGreenGradingAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const lotId = String(formData.get("lotId") ?? "");
+
+  const fractions = [];
+  const lastFraction = maxIndiceDeFilas(formData, "fractionQuantity");
+  for (let i = 0; i <= lastFraction; i++) {
+    const quantityKg = emptyToNullNumber(formData.get(`fractionQuantity.${i}`));
+    const lotCode = emptyToNull(formData.get(`fractionLotCode.${i}`));
+    if (quantityKg == null && !lotCode) continue;
+    fractions.push({
+      lotCode: lotCode ?? "",
+      quantityKg: quantityKg ?? 0,
+      screenMin: emptyToNullNumber(formData.get(`fractionScreenMin.${i}`)),
+      screenMax: emptyToNullNumber(formData.get(`fractionScreenMax.${i}`)),
+      screenSystem: emptyToNull(formData.get(`fractionScreenSystem.${i}`)),
+      screenStatus: String(formData.get(`fractionScreenStatus.${i}`) ?? "unknown") as "measured" | "supplier_declared" | "qualitative" | "unknown",
+      gradeNote: emptyToNull(formData.get(`fractionGradeNote.${i}`)),
+      uniformityPct: emptyToNullNumber(formData.get(`fractionUniformityPct.${i}`)),
+    });
+  }
+
+  const defectLots = [];
+  const lastDefect = maxIndiceDeFilas(formData, "defectQuantity");
+  for (let i = 0; i <= lastDefect; i++) {
+    const quantityKg = emptyToNullNumber(formData.get(`defectQuantity.${i}`));
+    const lotCode = emptyToNull(formData.get(`defectLotCode.${i}`));
+    const rejectionCategoryValueId = emptyToNull(formData.get(`defectCategory.${i}`));
+    if (quantityKg == null && !lotCode && !rejectionCategoryValueId) continue;
+    if (quantityKg == null || !lotCode || !rejectionCategoryValueId) {
+      return { error: t("error_green_grading", { detail: "defect_incomplete" }) };
+    }
+    defectLots.push({ lotCode, quantityKg, rejectionCategoryValueId });
+  }
+
+  let firstFractionId: string;
+  try {
+    const result = await recordGreenGrading(user.userAccountId, {
+      inputLotId: lotId,
+      inputQuantityKg: Number(formData.get("inputQuantityKg") ?? 0),
+      fractions,
+      defectLots,
+      declaredLossKg: emptyToNullNumber(formData.get("declaredLossKg")),
+      occurredAt: fechaLocal(formData, "occurredAt"),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: "original_record",
+      sourceReference: emptyToNull(formData.get("sourceReference")),
+    });
+    firstFractionId = result.outputLots[0]?.id ?? lotId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  redirect(`/lots/${firstFractionId}`);
 }
 
 // --- P3: selección (44_P3_SELECTION.md §6) ---------------------------------

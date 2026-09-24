@@ -86,6 +86,8 @@ export const RUTAS = {
   "/lots/[id]/report": { clase: "requiere-sesion", razon: "Informe de lote." },
   "/lots/[id]/drying/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/fermentation/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
+  "/lots/[id]/green-selection/new": { clase: "requiere-sesion", razon: "Clasificación de café verde; la página exige sesión y el servicio vuelve a autorizar el lote de entrada." },
+  "/lots/[id]/hulling/new": { clase: "requiere-sesion", razon: "Trilla de café almacenado; la página exige sesión y el servicio vuelve a autorizar el lote de entrada." },
   "/lots/[id]/process": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/reports/proceso": { clase: "requiere-sesion", razon: "Reporte transversal de lotes: proceso, tueste y taza." },
   "/lots/[id]/roast/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },

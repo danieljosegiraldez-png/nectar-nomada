@@ -42,6 +42,7 @@ export type BatchAction =
   | "storage"
   | "sample"
   | "hulling"
+  | "green_grading"
   | "roast"
   // ADR-161 — los dos pasos de un lote de miel.
   | "honey_process"
