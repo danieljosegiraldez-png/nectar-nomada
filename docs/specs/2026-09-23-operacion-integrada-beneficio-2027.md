@@ -189,6 +189,49 @@ La muestra verde es la identidad estable del café; el tueste es una preparació
 
 La curva no se reduce a una imagen. Una imagen o archivo puede adjuntarse como evidencia, pero los puntos utilizados en comparaciones deben permanecer consultables.
 
+#### Decisiones operativas confirmadas para la selección verde
+
+El recorrido comienza desde café almacenado. Si está en pergamino o cereza seca se trilla una cantidad mayor; si ya está trillado se continúa desde el inventario verde. No existe una muestra lista para tueste antes de obtener café verde.
+
+Después de la trilla se selecciona el verde, no la cereza:
+
+- las mallas y rangos siguen el catálogo internacional SCA y son la identificación principal;
+- grado o calidad es una clasificación adicional documentada;
+- cada fracción conserva inventario, peso, porcentaje, defectos y genealogía propios;
+- las fracciones pueden combinarse después mediante una transformación explícita con cantidades, responsable y motivo;
+- se puede registrar una secuencia de mallas, un resultado resumido o una bolsa recibida ya seleccionada externamente;
+- el dato distingue medido, declarado por proveedor, revisado cualitativamente y desconocido;
+- etiquetas, fotografías y documentos del proveedor son evidencia opcional;
+- uniformidad y tolerancia fuera de malla pueden medirse; desconocido nunca equivale a cero ni bloquea tueste/cata.
+
+El peso total retirado como defecto es necesario para balance; clasificarlo es opcional. Cuando se clasifica puede conservar tipo, peso o conteo, fotografía y comentario. La observación real se guarda separada de cualquier interpretación. Una regla predefinida puede notificar o crear una tarea; Daniel o el responsable del beneficio pueden configurar esa regla o convertir una alerta en tarea. Una sugerencia de IA sólo aparece cuando alguien la solicita y nunca se guarda como diagnóstico automático.
+
+El color verde se registra visualmente como guía opcional (`verde azulado`, `verde intenso`, `verde`, `verde pálido`, `amarillento`, `marrón`, `blanquecino/decolorado`, `desigual/mixto`, `otro`, `no evaluado`), con iluminación, fondo, fotografía y método cuando estén disponibles. Las posibles interpretaciones se muestran sólo al solicitar una guía fija o una consulta de IA. Humedad, densidad y color son mediciones opcionales habituales; actividad de agua no aparece en el formulario operativo normal.
+
+#### Decisiones confirmadas para muestra y tueste
+
+- muestra verde habitual: 100–1.000 g;
+- carga habitual por tueste de muestra: 80–250 g;
+- el sistema muestra masa inicial, consumida y disponible, sin recomendar cuántos tuestes hacer;
+- cada tostador puede declarar capacidad mínima, máxima y nominal; salir del rango avisa, pero permite continuar con justificación;
+- un perfil conserva objetivos por etapas y curva de referencia; la ejecución conserva su curva real por separado;
+- potencia/gas, aire, compuerta, tambor y otros controles aparecen sólo cuando la persona indica que los registró;
+- la curva admite captura manual, archivo exportado o integración; el original se conserva y los datos interpretables quedan estructurados;
+- una imagen sola se admite como evidencia y se marca `curva visual, sin datos estructurados`;
+- las curvas de referencia y ejecución se comparan al finalizar, nunca superpuestas durante el tueste salvo solicitud futura distinta;
+- las anotaciones y correcciones sobre curva conservan autor, instante, valor anterior y motivo;
+- una persona autorizada por las reglas del área de tueste puede concluir `replicado`, `casi replicado` o `fuera de referencia`.
+
+La ventana habitual entre tueste y cata es 2–14 días y puede ser afinada por perfil/protocolo. Cada resultado muestra el tiempo exacto; fuera de ventana se permite con divergencia y se compara con reservas.
+
+#### Porciones, entrega y evaluación externa
+
+Un tueste de muestra puede dividirse en una o varias porciones selladas. Cada porción tiene código y QR, masa inicial/restante, envase, ubicación, fecha, destino y custodia; puede consumirse en cata o entregarse a cliente, laboratorio o competencia sin perder la sesión de tueste y su curva.
+
+Una entrega a cliente puede ser abierta, ciega, ciega hasta evaluar o de revelación manual. El enlace controlado permite confirmar recepción y responder el mismo protocolo sensorial autorizado. La evaluación entra como externa pendiente de revisión; al aprobarse se incorpora automáticamente a la vista consolidada, siempre identificada como externa. El consolidado muestra promedio, mínimo, máximo, dispersión y diferencias entre grupos.
+
+Daniel configura ponderaciones globales por tipo de evaluador y excepciones versionadas por protocolo/proyecto. Una cata individual no las cambia sin excepción explícita de Daniel. El jefe de cata registra la decisión final después de los puntajes e indica consenso, mayoría o decisión técnica. Confirmar un tueste preferido vuelve su perfil recomendado únicamente para esa selección/lote; reutilizarlo en cafés similares queda para otra fase.
+
 ## 8. Comparación longitudinal y decisión de calidad
 
 La unidad primaria de comparación, mientras no se operen microparcelas, es **finca + variedad**. La vista longitudinal cruza meses y años de cosecha.
