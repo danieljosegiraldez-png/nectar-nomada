@@ -166,6 +166,29 @@ Un mismo lote puede producir muestras en distintos momentos. Cada muestra regist
 
 Dos resultados sólo se presentan como comparables cuando coinciden o se controlan proceso/receta, ventana de reposo, estado material, preparación de muestra y protocolo de cata. En caso contrario se muestran como **comparables con reservas** y se explican las diferencias.
 
+### 7.5 De almacenamiento a muestra verde, tueste de muestra y cata
+
+La persona puede iniciar **Preparar muestra verde** desde Trilla, desde el lote almacenado o desde su ficha de existencias. La interfaz presenta un solo recorrido y el sistema conserva cada hecho físico por separado:
+
+1. **Apartar la muestra.** Se registra cuánto material se retira del lote almacenado, quién lo hizo, cuándo, humedad y estado de origen. La cantidad se descuenta una sola vez del lote.
+2. **Trillar la muestra, cuando corresponda.** Si el lote está en pergamino o cereza seca, se registra una trilla de muestra con masa de entrada, verde obtenido, cascarilla y merma. Si el lote ya es verde, este paso se omite; nunca se inventa una segunda trilla.
+3. **Confirmar la muestra verde.** La muestra canónica conserva el lote de origen, la transformación que la produjo, edad de reposo, fecha/método/lugar de trilla, humedad, masa verde y responsable.
+4. **Preparar uno o varios tuestes de muestra.** Cada ejecución parte de la misma muestra verde, pero tiene identidad propia. Registra propósito `sample`, perfil/version de tueste —o «sin perfil» durante exploración—, tostador, equipo, pesos de carga y descarga, inicio/fin, primer y segundo crack, nivel, notas y puntos de curva.
+5. **Enviar a cata.** Un código ciego representa una preparación tostada concreta: muestra verde + sesión de tueste. No basta con apuntar sólo a la muestra verde cuando existen dos tuestes diferentes del mismo café.
+6. **Comparar.** La vista permite comparar perfiles, tostadores, equipos y curvas contra los resultados sensoriales, manteniendo oculto el mapeo durante la cata.
+
+La muestra verde es la identidad estable del café; el tueste es una preparación repetible de esa muestra. No se crea una muestra verde nueva sólo por cambiar de perfil de tueste. Tampoco se descuenta nuevamente del lote principal al tostar: la extracción ya movió físicamente esa cantidad fuera del lote.
+
+#### Datos mínimos de una curva de tueste
+
+- tiempo transcurrido y temperatura, indicando sensor/variable (grano, aire, ambiente u otra declarada);
+- carga, punto de retorno cuando se mida, cambios de energía/aire cuando se documenten, primer crack, segundo crack si ocurre y descarga;
+- origen del dato: manual, archivo del tostador o integración;
+- unidad, instrumento/equipo, autor y hora;
+- archivo original opcional, sin sustituir los puntos estructurados necesarios para comparar.
+
+La curva no se reduce a una imagen. Una imagen o archivo puede adjuntarse como evidencia, pero los puntos utilizados en comparaciones deben permanecer consultables.
+
 ## 8. Comparación longitudinal y decisión de calidad
 
 La unidad primaria de comparación, mientras no se operen microparcelas, es **finca + variedad**. La vista longitudinal cruza meses y años de cosecha.
@@ -257,8 +280,11 @@ Estas son brechas de implementación, no permiso para corregirlas durante la apr
 5. **P1 — informe diario derivado.** Los eventos existen dispersos, pero no hay una vista diaria consolidada plan/real/variación.
 6. **P1 — muestras longitudinales comparables.** Existen lotes, muestras y sensorial, pero falta el contrato que determina comparabilidad y la serie finca + variedad entre cosechas.
 7. **P1 — reservas de competencia en kg.** Falta verificar una reserva que reduzca saldo disponible sin romper identidad ciega.
-8. **P2 — portada por rol.** Las rutas existen, pero la primera pantalla todavía no conduce a finca o beneficio según responsabilidad y urgencia.
-9. **P2 — navegación integrada.** Pedidos, recepción, bandejas, lotes, recetas, bodega, sensorial y tueste existen como rutas separadas; falta la agrupación operativa aquí definida.
+8. **P1 — trilla operable desde la app.** Existe `registrarTrilla` con balance, subproducto y custodia, pero no una ruta/formulario que lo ejecute.
+9. **P1 — muestra verde → tueste → cata.** `Sample` ya conserva lote y transformación de origen; `RoastSession` ya conserva propósito, perfil, tostador, equipo, pesos, cracks y mediciones de curva; Sensory ya mapea códigos ciegos a `Sample`. Falta vincular cada tueste de muestra con su `Sample` de entrada y cada preparación catada con la `RoastSession` específica.
+10. **P2 — captura de curva.** El modelo admite mediciones por sesión de tueste, pero el formulario actual no permite capturar/importar la curva ni escoger el equipo canónico; sólo ofrece una nota libre de equipo.
+11. **P2 — portada por rol.** Las rutas existen, pero la primera pantalla todavía no conduce a finca o beneficio según responsabilidad y urgencia.
+12. **P2 — navegación integrada.** Pedidos, recepción, bandejas, lotes, recetas, bodega, sensorial y tueste existen como rutas separadas; falta la agrupación operativa aquí definida.
 
 ## 14. Secuencia de implementación segura
 
@@ -295,8 +321,11 @@ Estas son brechas de implementación, no permiso para corregirlas durante la apr
 - ventanas por receta;
 - muestras múltiples y comparabilidad;
 - custodia y balance de trilla.
+- recorrido desde almacenamiento para apartar y trillar una muestra verde;
+- tuestes de muestra vinculados a la muestra, con tostador, equipo, perfil y curva;
+- preparación tostada específica vinculada a la cata ciega.
 
-**Aceptación:** una muestra informa edad de reposo y preparación completa; verde sólo nace de transformación; una comparación incompatible se etiqueta con reservas.
+**Aceptación:** una muestra informa edad de reposo y preparación completa; verde sólo nace de transformación; una comparación incompatible se etiqueta con reservas. Desde un lote en pergamino se puede preparar una muestra verde sin doble descuento, tostarla dos veces con equipos/perfiles distintos y llevar ambas preparaciones a una cata ciega; al revelar, cada resultado llega a su curva y al mismo origen.
 
 ### Ola 4 — calidad longitudinal y competencia
 
