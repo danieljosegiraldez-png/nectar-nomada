@@ -31,9 +31,30 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
+import { listarEquipos } from "../equipos/equipos";
 import type { Prisma, ProvenanceClass, RoastPurpose } from "../../generated/prisma/client";
 
 export class RoastSessionValidationError extends Error {}
+
+export async function listGreenSamplesForRoast(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [{
+    projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification,
+  }]);
+  const muestras = await prisma.sample.findMany({
+    where: { sourceLotId: lotId, materialState: "GREEN", retiredAt: null },
+    include: { roastSessions: { select: { chargeWeightKg: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return muestras.map((m) => ({
+    id: m.id,
+    label: m.sampleCode,
+    disponibleKg: m.massUnitAtExtraction === "kg" && m.massAtExtraction != null
+      ? Math.max(0, Number(m.massAtExtraction) - m.roastSessions.reduce((s, r) => s + Number(r.chargeWeightKg ?? 0), 0))
+      : null,
+  })).filter((m) => m.disponibleKg == null || m.disponibleKg > 0);
+}
 
 export interface RecordRoastSessionInput {
   lotId: string;
@@ -91,6 +112,12 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     });
     if (Number(usado._sum.chargeWeightKg ?? 0) + input.chargeWeightKg > Number(sourceSample.massAtExtraction)) {
       throw new RoastSessionValidationError("sample_mass_exceeded");
+    }
+  }
+  if (input.equipmentId) {
+    const equipos = await listarEquipos(userAccountId);
+    if (!equipos.some((equipo) => equipo.id === input.equipmentId && equipo.lifecycleStatus === "active")) {
+      throw new RoastSessionValidationError("equipment_not_available");
     }
   }
 

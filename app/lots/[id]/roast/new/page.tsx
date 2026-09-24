@@ -4,7 +4,9 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
+import { listGreenSamplesForRoast } from "../../../../../lib/traceability/roasting";
 import { RoastSessionForm } from "../../../../components/traceability/RoastSessionForm";
+import { listarEquipos } from "../../../../../lib/equipos/equipos";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,14 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
     id: v.id,
     label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
   }));
+  const [muestras, equiposVisibles] = await Promise.all([
+    listGreenSamplesForRoast(user.userAccountId, id),
+    listarEquipos(user.userAccountId),
+  ]);
+  const muestrasVerdes = muestras;
+  const equipos = equiposVisibles
+    .filter((e) => e.lifecycleStatus === "active")
+    .map((e) => ({ id: e.id, label: e.model ? `${e.name} · ${e.model.manufacturer} ${e.model.modelName}` : e.name }));
 
   return (
     <div>
@@ -49,7 +59,7 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1>{t("recordRoastButton")}</h1>
       <p className="nn-muted">{t("recordRoastIntro")}</p>
-      <RoastSessionForm lotId={id} perfiles={perfiles} />
+      <RoastSessionForm lotId={id} perfiles={perfiles} muestras={muestrasVerdes} equipos={equipos} />
     </div>
   );
 }
