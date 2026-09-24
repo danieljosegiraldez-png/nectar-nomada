@@ -28,6 +28,7 @@ let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
 let m1: string, m2: string, m3: string, m3Code: string;
+const tuestesDePrueba: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -114,6 +115,7 @@ afterAll(async () => {
   const ids = [gestor, sinPermiso];
   const sesiones = await prisma.sensorySession.findMany({ where: assertDefinedWhere({ createdBy: { in: ids } }), select: { id: true } });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: { in: tuestesDePrueba } }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
   for (const v of [versionOk, versionSinAtributos, versionArchivada]) {
     const ver = await prisma.sensoryProtocolVersion.findUnique({ where: { id: v } });
@@ -131,6 +133,27 @@ afterAll(async () => {
 });
 
 describe("crear una sesión de cata", () => {
+  it("permite catar dos tuestes distintos de la misma muestra y conserva cuál se sirvió", async () => {
+    const [a, b] = await Promise.all([
+      prisma.roastSession.create({ data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor } }),
+      prisma.roastSession.create({ data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor } }),
+    ]);
+    tuestesDePrueba.push(a.id, b.id);
+
+    const sesion = await crearSesionDeCata(gestor, {
+      name: `Dos tuestes ${RUN}`,
+      protocolVersionId: versionOk,
+      muestras: [m1, m1],
+      roastSessions: [a.id, b.id],
+    });
+    const mapeos = await prisma.sensoryBlindMapping.findMany({
+      where: { blindSample: { flight: { sessionId: sesion.id } } },
+      orderBy: { blindSample: { blindCode: "asc" } },
+    });
+    expect(mapeos.map((m) => m.sampleId)).toEqual([m1, m1]);
+    expect(mapeos.map((m) => m.roastSessionId)).toEqual([a.id, b.id]);
+  });
+
   it("crea sesión, vuelo, muestras ciegas Y su mapeo — las cuatro cosas", async () => {
     const s = await crearSesionDeCata(gestor, {
       name: `Cata ${RUN}`,

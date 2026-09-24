@@ -206,6 +206,9 @@ export interface CrearSesionInput {
   protocolVersionId: string;
   /** Los ids de las muestras, en el orden en que se van a servir. */
   muestras: string[];
+  /** Tueste concreto servido por posición. `null` conserva el flujo histórico
+   *  para muestras que todavía no tienen preparación registrada. */
+  roastSessions?: Array<string | null>;
   /** Para qué se cata. Ya estaba modelado y el primer formulario no lo pedía:
    *  sin él, una cata de competencia y una de control de calidad se guardan
    *  iguales y después no se pueden distinguir para reportar. */
@@ -225,7 +228,14 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   if (input.muestras.length === 0) throw new SesionDeCataError("samples_required");
 
   const repetidas = input.muestras.length !== new Set(input.muestras).size;
-  if (repetidas) throw new SesionDeCataError("duplicate_samples");
+  // La misma muestra sí puede aparecer dos veces cuando se sirven dos tuestes
+  // distintos. Sin preparación sigue siendo un duplicado accidental.
+  const preparaciones = input.roastSessions ?? input.muestras.map(() => null);
+  if (preparaciones.length !== input.muestras.length) throw new SesionDeCataError("roast_preparations_mismatch");
+  const claves = input.muestras.map((sampleId, i) => `${sampleId}:${preparaciones[i] ?? ""}`);
+  if (claves.length !== new Set(claves).size || (repetidas && preparaciones.some((id) => !id))) {
+    throw new SesionDeCataError("duplicate_samples");
+  }
 
   const version = await prisma.sensoryProtocolVersion.findUnique({
     where: { id: input.protocolVersionId },
@@ -257,6 +267,20 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   const ajenas = input.muestras.filter((id) => !alcanzables.has(id));
   if (ajenas.length > 0) throw new SesionDeCataError("sample_not_accessible");
 
+  const idsDeTueste = preparaciones.filter((id): id is string => Boolean(id));
+  const tuestes = await prisma.roastSession.findMany({
+    where: { id: { in: idsDeTueste } },
+    select: { id: true, sourceSampleId: true, purpose: true },
+  });
+  const porId = new Map(tuestes.map((r) => [r.id, r]));
+  for (const [i, roastSessionId] of preparaciones.entries()) {
+    if (!roastSessionId) continue;
+    const tueste = porId.get(roastSessionId);
+    if (!tueste || tueste.purpose !== "sample" || tueste.sourceSampleId !== input.muestras[i]) {
+      throw new SesionDeCataError("roast_preparation_not_available");
+    }
+  }
+
   const creada = await prisma.$transaction(async (tx) => {
     const session = await tx.sensorySession.create({
       data: {
@@ -280,7 +304,9 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
       const ciega = await tx.sensoryBlindSample.create({
         data: { flightId: flight.id, blindCode: codigoCiego(i) },
       });
-      await tx.sensoryBlindMapping.create({ data: { blindSampleId: ciega.id, sampleId } });
+      await tx.sensoryBlindMapping.create({
+        data: { blindSampleId: ciega.id, sampleId, roastSessionId: preparaciones[i] },
+      });
     }
 
     // El audit va DENTRO, con su `tx`. Fuera, un fallo al escribirlo dejaría la

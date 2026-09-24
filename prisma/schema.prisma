@@ -1399,6 +1399,7 @@ model Sample {
   sourceTransformation   LotTransformation? @relation(fields: [sourceTransformationId], references: [id])
 
   blindMappings      SensoryBlindMapping[]
+  roastSessions      RoastSession[]
   competitionEntries Entry[]
   measurements       Measurement[]
   assets             Asset[]
@@ -2453,8 +2454,13 @@ model SensoryBlindMapping {
   blindSample   SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
   sampleId      String             @map("sample_id") @db.Uuid
   sample        Sample             @relation(fields: [sampleId], references: [id])
+  /// Preparación exacta servida. Anulable para conservar catas históricas que
+  /// sólo identificaban la muestra verde.
+  roastSessionId String?           @map("roast_session_id") @db.Uuid
+  roastSession   RoastSession?     @relation(fields: [roastSessionId], references: [id], onDelete: SetNull)
   revealedAt    DateTime?          @map("revealed_at")
 
+  @@index([roastSessionId])
   @@map("sensory_blind_mapping")
   @@schema("sensory")
 }
@@ -4560,6 +4566,10 @@ model RoastSession {
   secondCrackAt     DateTime?    @map("second_crack_at")
   notes             String?
   purpose           RoastPurpose @map("purpose")
+  /// En tuestes de muestra identifica el café físico ya apartado del inventario.
+  /// Los tuestes de producción continúan entrando por el lote y dejan esto nulo.
+  sourceSampleId    String?      @map("source_sample_id") @db.Uuid
+  sourceSample      Sample?      @relation(fields: [sourceSampleId], references: [id], onDelete: SetNull)
   // El perfil que se siguió. Anulable: un tueste puede hacerse sin perfil —de
   // hecho los primeros de muestra se hacen así, que es como se encuentra uno—.
   // Reusa `ProcessRecipeVersion` en vez de una entidad propia (decisión de
@@ -4573,8 +4583,10 @@ model RoastSession {
 
   measurements    Measurement[]
   transformations LotTransformation[]
+  blindMappings   SensoryBlindMapping[]
 
   @@index([roasterPersonId])
+  @@index([sourceSampleId])
   /// Junto a `equipmentNote`, nunca en su lugar. Ver `FermentationRun.vesselEquipmentId`.
   equipmentId String?    @map("equipment_id") @db.Uuid
   equipment   Equipment? @relation("RoastSessionEquipment", fields: [equipmentId], references: [id])
