@@ -403,6 +403,9 @@ export default async function LotDetailPage({
     ...(lot.lotType === "green"
       ? [{ action: "roast" as const, href: `/lots/${lot.id}/roast/new`, label: t("recordRoastButton") }]
       : []),
+    ...(["parchment", "dry_cherry"].includes(lot.lotType)
+      ? [{ action: "hulling" as const, href: `/lots/${lot.id}/hulling/new`, label: t("hullingAction") }]
+      : []),
     // El proceso va ANTES de bodega a propósito: es lo que hay que haber hecho
     // para que bodega deje pasar el lote (`exigeSecadoTerminado`).
     ...(esMiel ? [] : [{ action: "process" as const, href: `/lots/${lot.id}/process`, label: t("viewProcessButton") }]),

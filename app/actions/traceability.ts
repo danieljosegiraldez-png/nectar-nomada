@@ -40,6 +40,7 @@ import {
 import { startDryingRun, recordDryingTurnEvent, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import {
   abrirProceso,
   cambiarIntencion,
@@ -215,6 +216,7 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof ByproductValidationError) return t("error_subproducto", { detail: error.message });
   if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
+  if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
   if (error instanceof MaterialConsumptionValidationError) {
@@ -724,6 +726,41 @@ export async function createSampleAction(
 
   revalidatePath(`/lots/${lotId}`);
   redirect(`/lots/${lotId}`);
+}
+
+// --- Trilla desde almacenamiento -------------------------------------------
+
+export async function recordHullingAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const lotId = String(formData.get("lotId") ?? "");
+
+  let greenLotId: string;
+  try {
+    const result = await registrarTrilla(user.userAccountId, {
+      lotePergaminoId: lotId,
+      masaEntradaKg: Number(formData.get("masaEntradaKg")),
+      loteVerde: {
+        lotCode: String(formData.get("lotCode") ?? "").trim(),
+        masaKg: Number(formData.get("masaVerdeKg")),
+      },
+      cascarillaKg: Number(formData.get("cascarillaKg")),
+      mermaKg: Number(formData.get("mermaKg")),
+      producedAtLocationId: String(formData.get("producedAtLocationId") ?? ""),
+      occurredAt: fechaLocal(formData, "occurredAt"),
+      provenanceClass: "original_record",
+      notes: emptyToNull(formData.get("notes")),
+    });
+    greenLotId = result.loteVerde.id;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+  revalidatePath(`/lots/${lotId}`);
+  redirect(`/lots/${greenLotId}`);
 }
 
 // --- P3: selección (44_P3_SELECTION.md §6) ---------------------------------
