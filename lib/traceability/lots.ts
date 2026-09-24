@@ -107,7 +107,7 @@ export interface CreateLotInput {
   // kept in sync here rather than left stale — a caller creating or
   // filtering a honey Lot through the generic createLot()/getLotList()
   // path needs this widened, same as every prior lotType addition.
-  lotType: "cherry" | "processing" | "drying" | "green" | "roast" | "sample" | "other" | "honey";
+  lotType: "cherry" | "processing" | "drying" | "parchment" | "dry_cherry" | "green" | "roast" | "sample" | "other" | "honey";
   // P0 §7 — required, matching Lot.organizationId. A batch belongs to whoever
   // owns it, and the per-organization lotCode uniqueness has nothing to scope
   // against without it.

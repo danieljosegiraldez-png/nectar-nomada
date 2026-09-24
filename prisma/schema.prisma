@@ -3238,6 +3238,10 @@ enum LotType {
   cherry
   processing
   drying
+  /// Café lavado o honey que terminó el secado conservando el pergamino.
+  parchment
+  /// Natural que terminó el secado como cereza seca, antes de la trilla.
+  dry_cherry
   green
   roast
   sample

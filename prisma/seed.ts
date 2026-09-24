@@ -893,7 +893,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
       dryingRunId: dryingRun.id,
       endedAt: new Date("2027-02-04T11:00:00Z"),
       outputLotCode: `DCL-2027-GREEN-${suffix}`,
-      outputLotType: "green",
+      outputLotType: "parchment",
       quantity: 320,
       unit: "kg",
       provenanceClass: "original_record",

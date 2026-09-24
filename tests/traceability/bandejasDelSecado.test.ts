@@ -22,7 +22,7 @@ let tipoId: string; let tipoOtra: string; let trayCounter = 0;
 let operador: string; let ajeno: string; let configurador: string;
 const equipos: string[] = []; const ubicaciones: string[] = []; // hijos antes que padres
 const tipos: string[] = [];
-const cierre = (codigo: string) => ({ outputLotCode: `${RUN_ID}-${codigo}-verde`, outputLotType: "green" as const, provenanceClass: "original_record" as const });
+const cierre = (codigo: string) => ({ outputLotCode: `${RUN_ID}-${codigo}-pergamino`, outputLotType: "parchment" as const, provenanceClass: "original_record" as const });
 
 async function ubicacion(data: { name: string; locationType: "site" | "drying_facility" | "drying_rack" | "drying_bed"; organizationId: string; parentLocationId?: string; rackLevel?: number; rackSlot?: number }) {
   const l = await prisma.location.create({ data: { ...data, name: `${data.name} (${RUN_ID})` } });
@@ -101,7 +101,7 @@ afterAll(async () => {
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...runIds, ...trayIds, ...transferIds] } }) });
   await prisma.dryingRunTray.deleteMany({ where: assertDefinedWhere({ id: { in: trayIds } }) });
   await prisma.equipmentTransfer.deleteMany({ where: assertDefinedWhere({ equipmentId: { in: equipos } }) });
-  // El lote de salida del cierre se llama `${RUN_ID}-…-verde`: ya está en `lotIds`.
+  // El lote de salida del cierre se llama `${RUN_ID}-…-pergamino`: ya está en `lotIds`.
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
@@ -136,7 +136,7 @@ describe("el secado termina bandeja a bandeja", () => {
     expect(await bajarBandeja(operador, { dryingRunTrayId: tb.id, hasta: T("2026-09-05T11:00:00Z"), cierre: cierre("ciclo") })).toEqual({ id: tb.id, cerro: true });
     const cerrada = await prisma.dryingRun.findUniqueOrThrow({ where: { id: run.id } });
     expect(cerrada.endedAt).toEqual(T("2026-09-05T11:00:00Z"));
-    expect(await prisma.lot.findFirst({ where: { lotCode: `${RUN_ID}-ciclo-verde`, lotType: "green" } })).not.toBeNull();
+    expect(await prisma.lot.findFirst({ where: { lotCode: `${RUN_ID}-ciclo-pergamino`, lotType: "parchment" } })).not.toBeNull();
   });
 
   // Fix round 1, hallazgo 4: bajar la última bandeja no puede adelantar el

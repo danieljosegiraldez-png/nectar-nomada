@@ -295,7 +295,7 @@ describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09
       endedAt: new Date(),
       endedOutcome: "target_reached",
       outputLotCode: `${RUN_ID}-verde-reposo-salida`,
-      outputLotType: "green",
+      outputLotType: "parchment",
       provenanceClass: "original_record",
     });
 

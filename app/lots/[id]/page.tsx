@@ -57,12 +57,13 @@ import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { DividirMielForm, EnvasarMielForm, ProcesarMielForm } from "../../components/apiary/PasosDeMielForm";
 import { AnularAsignacionForm, AsignarATiendaForm } from "../../components/commerce/TiendaForms";
 import { asignacionesDeLote, variantesParaAsignar } from "../../../lib/commerce/tienda";
+import { DRYING_OUTPUT_LOT_TYPES } from "../../../lib/traceability/drying";
 
 export const dynamic = "force-dynamic";
 
 const FERMENTATION_INTERVENTION_TYPES = ["inoculation", "agitation", "purge", "addition", "sample", "transfer", "termination", "other"] as const;
 const DRYING_TURN_TYPES = ["turned", "covered", "uncovered", "other"] as const;
-const LOT_TYPES = ["cherry", "processing", "drying", "green", "roast", "sample", "other"] as const;
+const LOT_TYPES = ["cherry", "processing", "drying", "parchment", "dry_cherry", "green", "roast", "sample", "other"] as const;
 
 export default async function LotDetailPage({
   params,
@@ -1100,7 +1101,7 @@ export default async function LotDetailPage({
               filas={bandejas.map((b) => ({ ...b, desde: b.desde.toISOString(), hasta: b.hasta?.toISOString() ?? null }))}
               disponibles={bandejasLibres}
               puedeRegistrar={puedeRegistrar}
-              tiposDeSalida={LOT_TYPES.map((type) => ({ valor: type, etiqueta: t(`lotType_${type}` as "lotType_cherry") }))}
+              tiposDeSalida={DRYING_OUTPUT_LOT_TYPES.map((type) => ({ valor: type, etiqueta: t(`lotType_${type}` as "lotType_cherry") }))}
               posicionesPorBandeja={posicionesPorBandeja}
             />
 
@@ -1129,14 +1130,16 @@ export default async function LotDetailPage({
                   <input id="dry-output-code" name="outputLotCode" type="text" required />
                 </div>
                 <div className="nn-field">
-                  <label htmlFor="dry-output-type">{t("outputLotTypeLabel")}</label>
-                  <select id="dry-output-type" name="outputLotType" defaultValue="green">
-                    {LOT_TYPES.map((type) => (
+                  <label htmlFor="dry-output-type">{t("dryingOutputMaterialLabel")}</label>
+                  <select id="dry-output-type" name="outputLotType" defaultValue="" required aria-describedby="dry-output-help">
+                    <option value="" disabled>{t("dryingOutputMaterialPlaceholder")}</option>
+                    {DRYING_OUTPUT_LOT_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {t(`lotType_${type}` as "lotType_cherry")}
                       </option>
                     ))}
                   </select>
+                  <p id="dry-output-help" className="nn-muted">{t("dryingOutputMaterialHelp")}</p>
                 </div>
                 <div className="nn-field">
                   <label htmlFor="dry-output-quantity">{t("quantityLabel")}</label>

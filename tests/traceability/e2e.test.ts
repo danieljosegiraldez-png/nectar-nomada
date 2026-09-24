@@ -139,7 +139,7 @@ beforeAll(async () => {
     dryingRunId,
     endedAt: new Date("2027-01-30T11:00:00Z"),
     outputLotCode: `${RUN_ID}-green`,
-    outputLotType: "green",
+      outputLotType: "parchment",
     quantity: 400,
     unit: "kg",
     provenanceClass: "original_record",

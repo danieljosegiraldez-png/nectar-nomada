@@ -21,7 +21,7 @@ import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { BandejaError } from "./bandejaError";
-import type { DryingOutcome, Lot, LotType, ProvenanceClass } from "../../generated/prisma/client";
+import type { DryingOutcome, Lot, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
   const transformation = await prisma.lotTransformation.findFirst({
@@ -133,7 +133,7 @@ export interface EndDryingRunInput {
   dryingRunId: string;
   endedAt: Date;
   outputLotCode: string;
-  outputLotType: LotType;
+  outputLotType: DryingOutputLotType;
   quantity?: number | null;
   unit?: string | null;
   operatorPersonId?: string | null;
@@ -150,6 +150,21 @@ export interface EndDryingRunInput {
   endedOutcome?: DryingOutcome | null;
 }
 
+export const DRYING_OUTPUT_LOT_TYPES = ["parchment", "dry_cherry"] as const;
+export type DryingOutputLotType = (typeof DRYING_OUTPUT_LOT_TYPES)[number];
+
+export class DryingValidationError extends Error {
+  constructor(readonly code: "invalid_output_lot_type") {
+    super(code);
+  }
+}
+
+function requireDryingOutputLotType(value: string): asserts value is DryingOutputLotType {
+  if (!(DRYING_OUTPUT_LOT_TYPES as readonly string[]).includes(value)) {
+    throw new DryingValidationError("invalid_output_lot_type");
+  }
+}
+
 export type CierreDelSecado = Omit<EndDryingRunInput, "dryingRunId" | "endedAt">;
 
 /**
@@ -164,6 +179,9 @@ export async function cerrarCorridaEnTransaccion(
   sourceLot: Lot,
   input: EndDryingRunInput,
 ) {
+  // Secar cambia la condición del material, pero no retira el pergamino ni la
+  // cáscara. El verde sólo puede nacer después en una transformación de trilla.
+  requireDryingOutputLotType(input.outputLotType);
   const provenanceClass = input.provenanceClass;
 
   const endedRun = await tx.dryingRun.update({

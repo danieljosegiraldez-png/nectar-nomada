@@ -90,6 +90,8 @@ export function nextActionFor(lotType: LotType, hasActiveRun: boolean, alreadySe
     case "processing":
       return "drying";
     case "drying":
+    case "parchment":
+    case "dry_cherry":
       return "storage";
     // Green and roasted coffee is waiting to be tasted. Both land on the same
     // action for the same reason, and are listed separately rather than

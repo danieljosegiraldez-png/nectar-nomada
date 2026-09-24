@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
-import { endDryingRun, recordDryingTurnEvent, startDryingRun } from "../../lib/traceability/drying";
+import { DryingValidationError, endDryingRun, recordDryingTurnEvent, startDryingRun } from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -129,15 +129,15 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       provenanceClass: "original_record",
       dryingRunId: run.id,
       endedAt: new Date("2026-01-15"),
-      outputLotCode: `${RUN_ID}-cycle-green`,
-      outputLotType: "green",
+      outputLotCode: `${RUN_ID}-cycle-parchment`,
+      outputLotType: "parchment",
       quantity: 75,
       unit: "kg",
     });
 
     expect(endedRun.endedAt).toEqual(new Date("2026-01-15"));
     expect(endTransformation.dryingRunId).toBe(run.id);
-    expect(outputLot.lotType).toBe("green");
+    expect(outputLot.lotType).toBe("parchment");
 
     const endInputs = await prisma.lotTransformationInput.findMany({ where: { transformationId: endTransformation.id } });
     expect(endInputs).toHaveLength(1);
@@ -214,7 +214,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       dryingRunId: run.id,
       endedAt: new Date(),
       outputLotCode: `${RUN_ID}-double-end-output`,
-      outputLotType: "green",
+      outputLotType: "parchment",
     });
 
     await expect(
@@ -223,9 +223,34 @@ describe("Drying — full start/turn/measure/end cycle", () => {
         dryingRunId: run.id,
         endedAt: new Date(),
         outputLotCode: `${RUN_ID}-double-end-output-2`,
-        outputLotType: "green",
+        outputLotType: "parchment",
       }),
     ).rejects.toThrow(TraceabilityAccessError);
+  });
+
+  it("no convierte el café en verde al cerrar el secado", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-no-verde-directo`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(),
+      provenanceClass: "original_record",
+    });
+
+    await expect(endDryingRun(authorizedUserAccountId, {
+      dryingRunId: run.id,
+      endedAt: new Date(),
+      outputLotCode: `${RUN_ID}-verde-imposible`,
+      outputLotType: "green" as never,
+      provenanceClass: "original_record",
+    })).rejects.toBeInstanceOf(DryingValidationError);
+
+    expect(await prisma.lot.findFirst({ where: { lotCode: `${RUN_ID}-verde-imposible` } })).toBeNull();
+    expect((await prisma.dryingRun.findUniqueOrThrow({ where: { id: run.id } })).endedAt).toBeNull();
   });
 });
 
@@ -270,8 +295,8 @@ describe("Secado — el desenlace, no solo la fecha", () => {
       dryingRunId: run.id,
       endedAt: new Date("2026-02-20"),
       endedOutcome: "target_reached",
-      outputLotCode: `${RUN_ID}-desenlace-ok-verde`,
-      outputLotType: "green",
+      outputLotCode: `${RUN_ID}-desenlace-ok-pergamino`,
+      outputLotType: "parchment",
       quantity: 80,
       unit: "kg",
     });
@@ -287,8 +312,8 @@ describe("Secado — el desenlace, no solo la fecha", () => {
       provenanceClass: "original_record",
       dryingRunId: run.id,
       endedAt: new Date("2026-02-20"),
-      outputLotCode: `${RUN_ID}-desenlace-sin-verde`,
-      outputLotType: "green",
+      outputLotCode: `${RUN_ID}-desenlace-sin-pergamino`,
+      outputLotType: "parchment",
       quantity: 80,
       unit: "kg",
     });
@@ -306,8 +331,8 @@ describe("Secado — el desenlace, no solo la fecha", () => {
       dryingRunId: run.id,
       endedAt: new Date("2026-02-20"),
       endedOutcome: "abandoned",
-      outputLotCode: `${RUN_ID}-desenlace-abandono-verde`,
-      outputLotType: "green",
+      outputLotCode: `${RUN_ID}-desenlace-abandono-pergamino`,
+      outputLotType: "parchment",
       quantity: 80,
       unit: "kg",
     });

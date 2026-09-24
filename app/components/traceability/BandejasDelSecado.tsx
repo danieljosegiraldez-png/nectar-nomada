@@ -16,7 +16,7 @@ type Props = {
   filas: Fila[];
   disponibles: { id: string; nombre: string }[];
   puedeRegistrar: boolean;
-  /** Los mismos tipos de lote que ofrece el cierre de siempre, ya traducidos por la página: una sola lista. */
+  /** Los dos estados materiales válidos al terminar secado, ya traducidos por la página. */
   tiposDeSalida: { valor: string; etiqueta: string }[];
   /** Paso 3b: las posiciones a las que se puede mover cada bandeja CARGADA (ya filtradas a las que esta cuenta ve). */
   posicionesPorBandeja: Record<string, PosicionParaMover[]>;
@@ -67,9 +67,11 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
             <input type="hidden" name="dryingRunTrayId" value={f.id} />
             <input type="hidden" name="esUltima" value="1" />
             <label>{t("codigoSalida")}<input name="outputLotCode" type="text" required /></label>
-            <label>{t("tipoSalida")}<select name="outputLotType" defaultValue="green">
+            <label>{t("tipoSalida")}<select name="outputLotType" defaultValue="" required aria-describedby="salida-secado-ayuda">
+              <option value="" disabled>{t("elegirTipoSalida")}</option>
               {tiposDeSalida.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
             </select></label>
+            <p id="salida-secado-ayuda" className="nn-muted">{t("tipoSalidaAyuda")}</p>
             <label>{t("cantidad")}<CampoNumerico name="quantity" inputMode="decimal" step="any" min={0} /></label>
             <label>{t("unidad")}<input name="unit" type="text" /></label>
             <BotonDeEnvio className="nn-button">{t("bajarYCerrar")}</BotonDeEnvio>

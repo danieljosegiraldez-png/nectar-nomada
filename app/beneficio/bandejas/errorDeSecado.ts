@@ -20,6 +20,7 @@ export const ERRORES_DE_BANDEJA = [
   "bandeja_cambio",
   "fecha_antes_del_ultimo_traslado",
   "cantidad_invalida",
+  "estado_salida_invalido",
 ] as const;
 
 const CONOCIDOS = new Set<string>(ERRORES_DE_BANDEJA);

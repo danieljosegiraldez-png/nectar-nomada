@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { bajarBandeja, BandejaError, cargarBandeja, moverBandeja } from "../../lib/traceability/bandejasDelSecado";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { DryingValidationError } from "../../lib/traceability/drying";
 import { CantidadDeSecadoInvalida, numeroOpcionalDeSecado } from "../beneficio/bandejas/errorDeSecado";
 
 type Estado = { error?: string };
@@ -25,6 +26,7 @@ function textoOVacio(v: FormDataEntryValue | null): string | null {
  */
 function codigo(error: unknown): string {
   if (error instanceof CantidadDeSecadoInvalida) return "cantidad_invalida";
+  if (error instanceof DryingValidationError) return "estado_salida_invalido";
   if (error instanceof BandejaError) return error.codigo;
   if (error instanceof TraceabilityAccessError) return "sin_acceso";
   throw error;
@@ -68,8 +70,9 @@ export async function bajarBandejaAction(_prev: Estado, formData: FormData): Pro
       hasta: new Date(),
       cierre: esUltima ? {
         outputLotCode: String(formData.get("outputLotCode") ?? ""),
-        // Mismo tratamiento que `endDryingFormAction`: el valor sale de la lista LOT_TYPES del formulario.
-        outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+        // Mismo tratamiento que `endDryingFormAction`: el servicio valida los
+        // dos únicos estados materiales que realmente pueden salir del secado.
+        outputLotType: String(formData.get("outputLotType") ?? "") as never,
         quantity: cantidad,
         unit: textoOVacio(formData.get("unit")),
         provenanceClass: "original_record",

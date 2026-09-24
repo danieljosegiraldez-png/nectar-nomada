@@ -37,7 +37,7 @@ import {
   updateRecipeMetadata,
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
-import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
+import { startDryingRun, recordDryingTurnEvent, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
@@ -644,7 +644,7 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
       dryingRunId: String(formData.get("dryingRunId") ?? ""),
       endedAt: new Date(),
       outputLotCode: String(formData.get("outputLotCode") ?? ""),
-      outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+      outputLotType: String(formData.get("outputLotType") ?? "") as never,
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
       provenanceClass: "original_record",
@@ -654,9 +654,10 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
     // pinta la página y se envía este formulario ya no es un 500 — vuelve al
     // lote con el código en la URL, que es lo único que esta acción sin
     // estado de error propio puede transmitir.
-    if (error instanceof BandejaError) {
+    if (error instanceof BandejaError || error instanceof DryingValidationError) {
       revalidatePath(`/lots/${lotId}`);
-      redirect(`/lots/${lotId}?error=${error.codigo}`);
+      const codigo = error instanceof BandejaError ? error.codigo : "estado_salida_invalido";
+      redirect(`/lots/${lotId}?error=${codigo}`);
     }
     throw error;
   }

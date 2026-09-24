@@ -1,6 +1,6 @@
 # Operación integrada del beneficio — temporada 2026–2027
 
-**Estado:** borrador confirmado por conversación; requiere una última lectura de Daniel antes de escribir código.  
+**Estado:** aprobado por Daniel el 2026-09-23; implementación por olas, con revisión UX en cada superficie.
 **Autoridad:** esta especificación reconcilia y, donde lo indica expresamente, corrige las specs anteriores de recepción, lotes, secado, reposo/trilla y tablero del beneficio.  
 **Alcance:** Finca Rosina, Beneficio Las Nubes y las entregas externas previstas para enero–marzo de 2027. No rediseña los módulos de finca, apiarios, sensorial ni comercio.
 
