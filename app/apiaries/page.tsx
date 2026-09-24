@@ -90,18 +90,12 @@ export default async function ApiariesPage() {
   const sinCoordenadas = apiaries.length - enElMapa.length;
 
   return (
-    <div>
-      <span className="nn-badge">{t("badge")}</span>
-      <h1>{t("apiariesTitle")}</h1>
-      <p className="nn-muted">{t("apiariesIntro")}</p>
+    <div className="nn-apiary-page">
+      <header className="nn-apiary-header">
+        <div><span className="nn-badge">{t("badge")}</span><h1>{t("apiariesTitle")}</h1><p>{t("apiariesIntro")}</p></div>
+        <Link href="/apiaries/new" className="nn-apiary-primary-action">{t("apiaryCreateHeading")}</Link>
+      </header>
       <AvisosDeBotiquin userAccountId={user.userAccountId} />
-
-      {/* La puerta que faltaba: hasta el 2026-09-09 no habia forma de crear un
-          apiario desde la aplicacion, solo colmenas dentro de uno que ya
-          existiera. Va arriba porque es lo primero que hace quien empieza. */}
-      <p>
-        <Link href="/apiaries/new">{t("apiaryCreateHeading")}</Link>
-      </p>
 
       {/* ADR-087 — a cut-off list says so. */}
       {truncated ? <p className="nn-muted">{t("listTruncated", { limit })}</p> : null}
@@ -117,13 +111,15 @@ export default async function ApiariesPage() {
           coordenadas sí llevan mapa, porque ahí la línea de abajo —«faltan
           dos»— es información y no un hueco. */}
       {apiaries.length > 1 ? (
-        <section className="nn-section">
-          <h2>{t("mapaHeading")}</h2>
+        <details className="nn-disclosure nn-apiary-map">
+          <summary><span>{t("mapaHeading")}</span><small>{t("mapaAyuda")}</small></summary>
+          <div className="nn-disclosure-body">
           {enElMapa.length > 0 ? <MapaDeSitios sitios={enElMapa} /> : null}
           {sinCoordenadas > 0 ? (
             <p className="nn-muted">{t("mapaSinCoordenadas", { count: sinCoordenadas })}</p>
           ) : null}
-        </section>
+          </div>
+        </details>
       ) : null}
 
       {/* Segunda lente: «no hay» y «no puedes ver» no son el mismo hecho. Esta
@@ -149,7 +145,7 @@ export default async function ApiariesPage() {
               a un apiario crítico al que le falta el padre no se le entierra por un dato que
               falta. */}
           {grupos.map((grupo) => (
-            <section className="nn-section" key={grupo.id ?? "sin-lugar"}>
+            <section className="nn-section nn-apiary-group" key={grupo.id ?? "sin-lugar"}>
               <h2>{grupo.nombre ?? t("grupoSinLugar")}</h2>
               <p className="nn-detail-meta">
                 {grupo.organizacion ? `${grupo.organizacion} · ` : ""}
