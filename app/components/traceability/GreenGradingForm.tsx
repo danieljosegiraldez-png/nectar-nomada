@@ -1,5 +1,6 @@
 "use client";
 
+import { SISTEMAS_DE_MALLA } from "../../../lib/traceability/vocabularioDeMalla";
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordGreenGradingAction, type TraceabilityActionState } from "../../actions/traceability";
@@ -84,7 +85,18 @@ export function GreenGradingForm({ lotId, lotCode, usedCodes, currentQuantityKg,
               <div className="nn-green-grading-grid">
                 <div className="nn-field"><label htmlFor={`gg-min-${row.key}`}>{t("greenGradingScreenMin")}</label><CampoNumerico id={`gg-min-${row.key}`} name={`fractionScreenMin.${index}`} min="1" max="30" step="1" value={row.min} onChange={(e) => updateFraction(row.key, { min: e.target.value })} /></div>
                 <div className="nn-field"><label htmlFor={`gg-max-${row.key}`}>{t("greenGradingScreenMax")}</label><CampoNumerico id={`gg-max-${row.key}`} name={`fractionScreenMax.${index}`} min="1" max="30" step="1" value={row.max} onChange={(e) => updateFraction(row.key, { max: e.target.value })} /></div>
-                <div className="nn-field"><label htmlFor={`gg-system-${row.key}`}>{t("greenGradingScreenSystem")}</label><input id={`gg-system-${row.key}`} name={`fractionScreenSystem.${index}`} defaultValue="international_screen" /></div>
+                <div className="nn-field">
+                  <label htmlFor={`gg-system-${row.key}`}>{t("greenGradingScreenSystem")}</label>
+                  {/* Lista fija (decisión de Daniel, 2026-09-25): con texto libre, dos fracciones del
+                      mismo lote no se agrupaban nunca. «Otro» obliga a escribir cuál en la nota. */}
+                  <select id={`gg-system-${row.key}`} name={`fractionScreenSystem.${index}`} defaultValue="redonda_internacional">
+                    {SISTEMAS_DE_MALLA.map((s) => (
+                      <option key={s} value={s}>
+                        {t(`greenGradingScreenSystem_${s}` as "greenGradingScreenSystem_redonda_internacional")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ) : null}
             <details>

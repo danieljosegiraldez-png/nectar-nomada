@@ -12178,3 +12178,29 @@ un proyecto suyo o un lugar que cuelgue de ella), del equipo (membresía en una 
 - Permiso: `sample:manage` para registrar y `sample:manage|view` para ver, sobre la instalación, como una inspección de cama. Es una elección técnica; si Daniel quiere otro, es un cambio de una función (`puedeEn` en `lib/traceability/ambiente.ts`).
 - Fuera: la bandeja viendo su lectura (espera al 2b), corregir desde la pantalla (el servicio ya corrige) y el acotado de «quién lo hizo» (P-G).
 - **La migración se aplicó en `nectar_test` el 2026-09-21 a las 12:11 -05, antes de fusionar.** La sesión coordinadora decidió dejarla ahí: no se edita, y cualquier cambio va en una migración nueva.
+
+## ADR-186 — Los sistemas de malla son una lista fija de tres, y «otro» dice cuál
+
+**Fecha:** 2026-09-25 · **Estado:** aceptado (decisión de Daniel, en sesión)
+
+**Contexto.** La selección de café verde guardaba `greenScreenSystem` como **texto libre**. La
+revisión adversarial del 2026-09-25 midió el coste: dos fracciones del mismo lote podían quedar con
+`international_screen` y `international_round_screen`, y ningún informe las agrupa nunca. La
+especificación de operación integrada (§7.5) pedía «el catálogo internacional SCA» y el código no
+imponía ninguno. Preguntado Daniel, confirmó que la selección en cuestión es **la del café verde,
+antes de tostar**, y que quiere «mallas con numeración y ver pesos de descarte, defectos y tamaños».
+
+**Decisión.** Tres sistemas, cerrados: `redonda_internacional` (la SCA, 8–20), `plana_oblonga`
+—caracolillo y granos alargados— y `otro`, que **obliga a escribir cuál** en la nota de la fracción.
+La numeración de malla (mínimo y máximo, 1–30) y los pesos por fracción y por lote de defecto ya
+existían y no cambian.
+
+**Consecuencias.**
+- `SISTEMAS_DE_MALLA` vive en `lib/traceability/greenGrading.ts` y el formulario ofrece un selector,
+  no un campo libre: la pantalla ya no puede escribir un sistema que el informe no sepa agrupar.
+- Dos errores nuevos con su frase: sistema fuera de la lista, y «otro» sin nota.
+- **Las filas viejas no se reescriben.** En producción no hay lotes verdes clasificados todavía
+  (medido: la copia restaurada no tiene ninguno), así que no hay nada que migrar; si apareciera una
+  fila con el texto viejo, se lee tal cual y se corrige al editarla, no con un backfill silencioso.
+- Queda pendiente, y es trabajo aparte con su propio diseño: las tres lecturas que Daniel pidió en
+  pantalla —peso y porcentaje por malla, defectos por categoría, y comparar lotes entre sí—.

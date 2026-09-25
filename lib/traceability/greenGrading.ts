@@ -1,4 +1,5 @@
 import { recordTransformation } from "./lots";
+import { SISTEMAS_DE_MALLA } from "./vocabularioDeMalla";
 import { requireLotAccess } from "./lots";
 import { prisma } from "../db";
 import type { ProvenanceClass } from "../../generated/prisma/client";
@@ -30,6 +31,8 @@ export interface RecordGreenGradingInput {
   sourceReference?: string | null;
 }
 
+export { SISTEMAS_DE_MALLA, type SistemaDeMalla } from "./vocabularioDeMalla";
+
 export async function recordGreenGrading(userAccountId: string, input: RecordGreenGradingInput) {
   const source = await prisma.lot.findUnique({
     where: { id: input.inputLotId },
@@ -56,6 +59,15 @@ export async function recordGreenGrading(userAccountId: string, input: RecordGre
     if (fraction.screenMax != null && (fraction.screenMax < 1 || fraction.screenMax > 30)) throw new GreenGradingValidationError("screen_invalid");
     if (fraction.screenMin != null && fraction.screenMax != null && fraction.screenMin > fraction.screenMax) throw new GreenGradingValidationError("screen_range_invalid");
     if (fraction.uniformityPct != null && (fraction.uniformityPct < 0 || fraction.uniformityPct > 100)) throw new GreenGradingValidationError("uniformity_invalid");
+    if (fraction.screenSystem != null) {
+      if (!(SISTEMAS_DE_MALLA as readonly string[]).includes(fraction.screenSystem)) {
+        throw new GreenGradingValidationError("screen_system_invalid");
+      }
+      // «Otro» sin decir cuál es texto libre por la puerta de atrás.
+      if (fraction.screenSystem === "otro" && !fraction.gradeNote?.trim()) {
+        throw new GreenGradingValidationError("screen_system_other_needs_note");
+      }
+    }
   }
   // La categoría de rechazo, canonizada: un alias se guarda como su fila canónica, la regla que
   // ADR-095 fijó para los cultivares. Sin esto el mismo defecto se reparte entre dos escrituras y

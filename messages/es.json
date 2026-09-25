@@ -1719,7 +1719,12 @@
     "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista.",
     "error_sample_exceeds_available": "La muestra pide más café del que queda en el lote. Mira el saldo disponible antes de apartarla.",
     "error_sample_quantity_positive": "La cantidad de la muestra tiene que ser mayor que cero.",
-    "error_sample_mixed_units": "La muestra se pide en otra unidad que el libro del lote. Usa la misma unidad."
+    "error_sample_mixed_units": "La muestra se pide en otra unidad que el libro del lote. Usa la misma unidad.",
+    "greenGradingScreenSystem_redonda_internacional": "Malla redonda internacional (SCA)",
+    "greenGradingScreenSystem_plana_oblonga": "Malla plana u oblonga",
+    "greenGradingScreenSystem_otro": "Otro sistema (dilo en la nota)",
+    "error_green_grading_screen_system_invalid": "Ese sistema de malla no está en la lista.",
+    "error_green_grading_screen_system_other_needs_note": "Elegiste «otro sistema»: escribe cuál en la nota de la fracción."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

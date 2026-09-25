@@ -227,6 +227,12 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
   if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
+  if (error instanceof GreenGradingValidationError && error.message === "screen_system_invalid") {
+    return t("error_green_grading_screen_system_invalid");
+  }
+  if (error instanceof GreenGradingValidationError && error.message === "screen_system_other_needs_note") {
+    return t("error_green_grading_screen_system_other_needs_note");
+  }
   if (error instanceof GreenGradingValidationError) return t("error_green_grading", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });

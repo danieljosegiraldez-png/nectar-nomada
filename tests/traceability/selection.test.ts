@@ -150,6 +150,46 @@ describe("clasificación verde: alias de catálogo y orden de permisos (2026-09-
    * que no lo hacía, así que el mismo defecto se repartía entre dos escrituras. El segundo es un
    * oráculo: sin permiso se distinguía «no existe» de «existe y no es verde».
    */
+  it("rechaza un sistema de malla que no está en la lista", async () => {
+    // Era texto libre: dos fracciones del mismo lote podían decir `international_screen` y
+    // `international_round_screen` y ningún informe las agrupaba (Daniel, 2026-09-25).
+    const source = await greenLot("malla-mala", 5);
+    await expect(
+      recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-malla-mala-f`, quantityKg: 4, screenSystem: "SCA", screenStatus: "measured" }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(/screen_system_invalid/);
+  }, 30000);
+
+  it("«otro sistema» sin decir cuál no pasa; con la nota sí", async () => {
+    const source = await greenLot("malla-otro", 5);
+    await expect(
+      recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-otro-sin-nota`, quantityKg: 4, screenSystem: "otro", screenStatus: "measured" }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(/screen_system_other_needs_note/);
+
+    const otro = await greenLot("malla-otro-ok", 5);
+    const r = await recordGreenGrading(operatorUserAccountId, {
+      inputLotId: otro.id,
+      inputQuantityKg: 5,
+      fractions: [
+        { lotCode: `${RUN_ID}-otro-con-nota`, quantityKg: 4, screenSystem: "otro", gradeNote: "zaranda del beneficio, 6,5 mm", screenStatus: "measured" },
+      ],
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+    });
+    expect(r.transformation.transformationType).toBe("selection");
+  }, 30000);
+
   it("un alias de categoría de rechazo se guarda como su fila canónica", async () => {
     const canonico = await prisma.variableCatalogValue.findFirstOrThrow({
       where: { id: flotadoresId },
@@ -221,8 +261,8 @@ describe("selection conserves mass", () => {
       inputLotId: source.id,
       inputQuantityKg: 10,
       fractions: [
-        { lotCode: `${RUN_ID}-screen-17-18`, quantityKg: 6, screenMin: 17, screenMax: 18, screenSystem: "international_round_screen", screenStatus: "measured", uniformityPct: 94 },
-        { lotCode: `${RUN_ID}-screen-15-16`, quantityKg: 3, screenMin: 15, screenMax: 16, screenSystem: "international_round_screen", screenStatus: "measured" },
+        { lotCode: `${RUN_ID}-screen-17-18`, quantityKg: 6, screenMin: 17, screenMax: 18, screenSystem: "redonda_internacional", screenStatus: "measured", uniformityPct: 94 },
+        { lotCode: `${RUN_ID}-screen-15-16`, quantityKg: 3, screenMin: 15, screenMax: 16, screenSystem: "redonda_internacional", screenStatus: "measured" },
       ],
       defectLots: [{ lotCode: `${RUN_ID}-green-defects`, quantityKg: 0.8, rejectionCategoryValueId: flotadoresId }],
       declaredLossKg: 0.2,
