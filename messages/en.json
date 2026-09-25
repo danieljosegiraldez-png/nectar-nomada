@@ -363,7 +363,10 @@
     "sessionScheduledAtLabel": "Planned cupping date and time",
     "sessionScheduledAtHelp": "Used to calculate the exact time between roast and cupping. If left blank, session creation is used as the reference.",
     "error_session_datetime": "Check the planned cupping date and time.",
-    "sampleRemove": "Remove"
+    "sampleRemove": "Remove",
+    "externalReportNoRoast": "roast not recorded",
+    "externalReportRoastOn": "roasted on {fecha}",
+    "error_roast_preparation_not_available": "That roast is not a preparation of that sample."
   },
   "SensoryWheels": {
     "badge": "Sensory tool",

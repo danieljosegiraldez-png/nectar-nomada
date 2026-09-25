@@ -355,7 +355,7 @@ puede afirmar cada pantalla— y sigue sin tomarse.
 
 ### 2026-09-24 · Flujo verde, tueste y cata
 
-- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; toda cata nueva exige el tueste exacto, mientras las históricas incompletas permanecen legibles.
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
 - Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
 - Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 

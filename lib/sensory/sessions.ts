@@ -233,6 +233,26 @@ export interface CrearSesionInput {
   preparationMethod?: string | null;
 }
 
+/**
+ * ¿Ese tueste es una preparación de ESA muestra?
+ *
+ * Vive aquí y se exporta porque hay DOS escritores de sesiones de cata —ésta y el informe externo
+ * (`lib/sensory/informeExterno.ts`)— y la revisión adversarial del 2026-09-25 encontró que el
+ * segundo no preguntaba nada. Una copia de la regla es cómo los dos vuelven a divergir.
+ */
+export async function esTuesteDeLaMuestra(roastSessionId: string, sampleId: string): Promise<boolean> {
+  const tueste = await prisma.roastSession.findUnique({
+    where: { id: roastSessionId },
+    select: { sourceSampleId: true, purpose: true },
+  });
+  return tueste != null && tueste.purpose === "sample" && tueste.sourceSampleId === sampleId;
+}
+
+/** ¿La muestra tiene alguna preparación tostada registrada? */
+export async function tienePreparacionTostada(sampleId: string): Promise<boolean> {
+  return (await prisma.roastSession.count({ where: { sourceSampleId: sampleId, purpose: "sample" } })) > 0;
+}
+
 export async function crearSesionDeCata(userAccountId: string, input: CrearSesionInput) {
   await requireManageSession(userAccountId);
 
@@ -285,16 +305,9 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   // nunca puede romper el eslabón muestra verde → tueste → cata.
   if (preparaciones.some((id) => !id)) throw new SesionDeCataError("roast_preparation_required");
 
-  const idsDeTueste = preparaciones.filter((id): id is string => Boolean(id));
-  const tuestes = await prisma.roastSession.findMany({
-    where: { id: { in: idsDeTueste } },
-    select: { id: true, sourceSampleId: true, purpose: true },
-  });
-  const porId = new Map(tuestes.map((r) => [r.id, r]));
   for (const [i, roastSessionId] of preparaciones.entries()) {
     if (!roastSessionId) continue;
-    const tueste = porId.get(roastSessionId);
-    if (!tueste || tueste.purpose !== "sample" || tueste.sourceSampleId !== input.muestras[i]) {
+    if (!(await esTuesteDeLaMuestra(roastSessionId, input.muestras[i]!))) {
       throw new SesionDeCataError("roast_preparation_not_available");
     }
   }

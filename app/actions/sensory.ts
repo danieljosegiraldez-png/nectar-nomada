@@ -224,7 +224,10 @@ export async function registrarInformeExternoAction(
 
   try {
     await registrarInformeExterno(user.userAccountId, {
-      sampleId: String(formData.get("sampleId") ?? ""),
+      // `muestra|tueste`, tal como la pantalla arma cada preparación. El tueste vacío significa
+      // «no registrado», y el servicio decide si eso se acepta para esta muestra.
+      sampleId: String(formData.get("sampleId") ?? "").split("|")[0] ?? "",
+      roastSessionId: String(formData.get("sampleId") ?? "").split("|")[1] || null,
       protocolVersionId: String(formData.get("protocolVersionId") ?? ""),
       evaluadorPersonId: String(formData.get("evaluadorPersonId") ?? ""),
       sourceReference: String(formData.get("sourceReference") ?? ""),

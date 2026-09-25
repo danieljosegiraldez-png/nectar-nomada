@@ -363,7 +363,10 @@
     "sessionScheduledAtLabel": "Fecha y hora prevista de la cata",
     "sessionScheduledAtHelp": "Permite calcular el tiempo exacto entre tueste y cata. Si se deja vacío, se usa la creación de la sesión como referencia.",
     "error_session_datetime": "Revisa la fecha y hora prevista de la cata.",
-    "sampleRemove": "Quitar"
+    "sampleRemove": "Quitar",
+    "externalReportNoRoast": "tueste no registrado",
+    "externalReportRoastOn": "tostado el {fecha}",
+    "error_roast_preparation_not_available": "Ese tueste no es una preparación de esa muestra."
   },
   "SensoryWheels": {
     "badge": "Herramienta sensorial",

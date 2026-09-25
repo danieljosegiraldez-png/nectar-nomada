@@ -25,6 +25,7 @@
  * un atributo que el protocolo no tiene» en un error con nombre, en vez de en un
  * puntaje calculado sobre lo que sí casó.
  */
+import { esTuesteDeLaMuestra, tienePreparacionTostada } from "./sessions";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { permissionKey } from "../rbac/types";
@@ -43,6 +44,13 @@ export interface RespuestaDeInforme {
 export interface InformeExterno {
   /** La muestra real que se cató. */
   sampleId: string;
+  /**
+   * El tueste servido, cuando se sabe. Decisión de Daniel, 2026-09-25: en un informe externo se
+   * **exige sólo si la muestra tiene tuestes registrados**; si no tiene ninguno —lo tostó el
+   * laboratorio de fuera y nadie lo anotó aquí— el informe se acepta y queda marcado «tueste no
+   * registrado», que se lee y se compara con su aviso. Fingir un tueste sería inventar un hecho.
+   */
+  roastSessionId?: string | null;
   protocolVersionId: string;
   /** Quién firmó el informe. Una `Person` sin cuenta es lo normal aquí. */
   evaluadorPersonId: string;
@@ -93,6 +101,15 @@ export async function registrarInformeExterno(userAccountId: string, informe: In
 
   const muestra = await prisma.sample.findUnique({ where: { id: informe.sampleId } });
   if (!muestra) throw new InformeExternoError("sample_not_found");
+
+  // La MISMA regla que `crearSesionDeCata`, no una copia: `esTuesteDeLaMuestra` vive en sessions.ts.
+  if (informe.roastSessionId) {
+    if (!(await esTuesteDeLaMuestra(informe.roastSessionId, muestra.id))) {
+      throw new InformeExternoError("roast_preparation_not_available");
+    }
+  } else if (await tienePreparacionTostada(muestra.id)) {
+    throw new InformeExternoError("roast_preparation_required");
+  }
 
   const persona = await prisma.person.findUnique({ where: { id: informe.evaluadorPersonId } });
   if (!persona) throw new InformeExternoError("person_not_found");
@@ -164,7 +181,7 @@ export async function registrarInformeExterno(userAccountId: string, informe: In
     // No hubo ciego: quien cató sabía qué café era. El mapeo se crea igual
     // porque es lo único que ata el puntaje a la muestra real.
     await tx.sensoryBlindMapping.create({
-      data: { blindSampleId: ciega.id, sampleId: muestra.id },
+      data: { blindSampleId: ciega.id, sampleId: muestra.id, roastSessionId: informe.roastSessionId ?? null },
     });
 
     const valoracion = await tx.assessment.create({

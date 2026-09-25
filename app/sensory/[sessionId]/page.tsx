@@ -116,7 +116,7 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                           </span>
                         ) : null}
                       </>
-                    ) : <span>{t("sampleWithoutRoast")}</span>}
+                    ) : <span className="nn-roast-age-warning">{t("sampleWithoutRoast")}</span>}
                   </div>
                 ) : null}
 
