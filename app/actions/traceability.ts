@@ -179,6 +179,12 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SampleFromLotValidationError && error.message === "green_sample_before_reposo") {
     return t("error_sample_green_before_reposo");
   }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_exceeds_available") {
+    return t("error_sample_exceeds_available");
+  }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_quantity_must_be_positive") {
+    return t("error_sample_quantity_positive");
+  }
   if (error instanceof SampleFromLotValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });

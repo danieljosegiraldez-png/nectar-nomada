@@ -1712,7 +1712,9 @@
     "condicion_DRAINED": "Escurrida",
     "condicion_WET": "Mojada",
     "condicion_DRY": "Seca",
-    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista.",
+    "error_sample_exceeds_available": "La muestra pide más café del que queda en el lote. Mira el saldo disponible antes de apartarla.",
+    "error_sample_quantity_positive": "La cantidad de la muestra tiene que ser mayor que cero."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

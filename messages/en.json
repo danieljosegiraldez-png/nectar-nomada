@@ -1712,7 +1712,9 @@
     "condicion_DRAINED": "Drained",
     "condicion_WET": "Wet",
     "condicion_DRY": "Dry",
-    "error_persona_no_permitida": "That person is not from this farm or the Néctar Nómada team. Choose someone from the list."
+    "error_persona_no_permitida": "That person is not from this farm or the Néctar Nómada team. Choose someone from the list.",
+    "error_sample_exceeds_available": "The sample asks for more coffee than the lot has left. Check the available balance first.",
+    "error_sample_quantity_positive": "The sample quantity must be greater than zero."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

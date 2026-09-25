@@ -18,6 +18,8 @@
  * project/location, the same leaf-scope containment check every other
  * traceability write path in this module uses.
  */
+import { Prisma } from "../../generated/prisma/client";
+import { computeLotBalance } from "./balance";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
@@ -129,6 +131,26 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
+    // El saldo, con el mismo criterio que `applyInputDecrements` usa para toda transformación
+    // parcial (`input_exceeds_available`). Aquí faltaba, y la revisión adversarial del 2026-09-25 lo
+    // midió: se podía sacar más de lo que hay y, peor, una cantidad NEGATIVA —restada de un saldo—
+    // **fabricaba** café, porque `sample_removed` es un evento sustractivo.
+    //
+    // Dentro de la transacción y no antes: es el mismo `tx` que escribe el evento, así que entre
+    // leer el saldo y restarlo no cabe otra extracción.
+    if (input.quantity != null && input.unit) {
+      if (!(input.quantity > 0)) throw new SampleValidationError("sample_quantity_must_be_positive");
+      const saldo = await computeLotBalance(tx, input.sourceLotId);
+      // Un lote sin libro de cantidades no se puede comparar con nada: «nunca se pesó» no es cero
+      // (ADR-080). Se deja pasar, como hace el resto del código, en vez de inventar un saldo.
+      if (saldo.recorded) {
+        if (saldo.unit !== input.unit) throw new SampleValidationError("sample_mixed_units");
+        if (new Prisma.Decimal(input.quantity).greaterThan(saldo.quantity)) {
+          throw new SampleValidationError("sample_exceeds_available");
+        }
+      }
+    }
+
     const transformation = await tx.lotTransformation.create({
       data: {
         transformationType: "sample_extraction",

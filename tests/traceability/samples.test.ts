@@ -232,6 +232,114 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
   });
 });
 
+describe("createSampleFromLot — la cantidad no puede inventar ni gastar de más (2026-09-25)", () => {
+  /**
+   * Hallazgo de la revisión adversarial del 2026-09-25: `createSampleFromLot` escribía el evento
+   * `sample_removed` sin mirar el saldo, mientras `applyInputDecrements` sí lo exige para toda
+   * transformación parcial. Dos consecuencias, y la segunda es peor: se podía sacar más de lo que
+   * hay, y una cantidad NEGATIVA —restada de un saldo— **fabricaba** café.
+   */
+  async function loteCon(kg: number, sufijo: string) {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-saldo-${sufijo}`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      lotId: lot.id,
+      eventType: "received",
+      quantity: kg,
+      unit: "kg",
+      occurredAt: new Date("2026-01-01"),
+    });
+    return lot;
+  }
+
+  it("rechaza una cantidad negativa, que restada al saldo lo aumentaría", async () => {
+    const lot = await loteCon(10, "negativa");
+    await expect(
+      createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-neg`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        quantity: -5,
+        unit: "kg",
+        occurredAt: new Date("2026-01-02"),
+      }),
+    ).rejects.toThrow(/sample_quantity_must_be_positive/);
+    // Control: el saldo quedó intacto, no aumentado.
+    const q = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
+    expect(q.quantity.toNumber()).toBe(10);
+  });
+
+  it("rechaza sacar más de lo disponible", async () => {
+    const lot = await loteCon(10, "excede");
+    await expect(
+      createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-exc`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        quantity: 25,
+        unit: "kg",
+        occurredAt: new Date("2026-01-02"),
+      }),
+    ).rejects.toThrow(/sample_exceeds_available/);
+    const q = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
+    expect(q.quantity.toNumber()).toBe(10);
+  });
+
+  it("rechaza una unidad distinta a la del libro del lote", async () => {
+    const lot = await loteCon(10, "unidad");
+    await expect(
+      createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-uni`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        quantity: 1,
+        unit: "g",
+        occurredAt: new Date("2026-01-02"),
+      }),
+    ).rejects.toThrow(/sample_mixed_units/);
+  });
+
+  it("control positivo: lo que cabe en el saldo sí entra, y el saldo baja", async () => {
+    const lot = await loteCon(10, "cabe");
+    await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-cabe`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      quantity: 2,
+      unit: "kg",
+      occurredAt: new Date("2026-01-02"),
+    });
+    const q = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
+    expect(q.quantity.toNumber()).toBe(8);
+  });
+
+  it("un lote sin libro de cantidades no se puede comparar, y la muestra sin cantidad pasa igual", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-saldo-sin-libro`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-sin-libro`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      occurredAt: new Date("2026-01-02"),
+    });
+    expect(sample.id).toBeTruthy();
+  });
+});
+
 describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09-18)", () => {
   it("rechaza una muestra verde si el lote nunca terminó de secar", async () => {
     const lot = await createLot(authorizedUserAccountId, {
