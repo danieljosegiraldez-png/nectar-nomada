@@ -351,6 +351,8 @@
     "sampleSearchMore": "Showing {n}; there are more. Search by code, batch or farm to narrow it down.",
     "sampleSelectedTitle": "Selected ({n})",
     "sampleSelectedNone": "None yet. Tick samples in the results; you can search several times.",
+    "noRoastedSamplesAvailable": "Green samples exist, but none has a sample roast recorded yet. Record the roast before creating the cupping.",
+    "error_roast_preparation_required": "Every sample must have a linked sample roast before it enters a new cupping.",
     "sampleWithoutRoast": "No specific roast recorded",
     "sampleRoastNoProfile": "No profile",
     "sampleRoastNoEquipment": "No equipment declared",

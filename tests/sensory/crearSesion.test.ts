@@ -28,6 +28,7 @@ let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
 let m1: string, m2: string, m3: string, m3Code: string;
+let roast1: string, roast2: string;
 const tuestesDePrueba: string[] = [];
 
 async function cuenta(label: string) {
@@ -95,6 +96,13 @@ beforeAll(async () => {
     })).id;
   m1 = await muestra("M1");
   m2 = await muestra("M2");
+  roast1 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor },
+  })).id;
+  roast2 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m2, startedAt: new Date(), createdBy: gestor },
+  })).id;
+  tuestesDePrueba.push(roast1, roast2);
 
   m3Code = `M3-${RUN}`;
   m3 = (await prisma.sample.create({
@@ -162,6 +170,7 @@ describe("crear una sesión de cata", () => {
       name: `Cata ${RUN}`,
       protocolVersionId: versionOk,
       muestras: [m1, m2],
+      roastSessions: [roast1, roast2],
     });
 
     const completa = await prisma.sensorySession.findUniqueOrThrow({
@@ -186,6 +195,12 @@ describe("crear una sesión de cata", () => {
     await expect(
       crearSesionDeCata(sinPermiso, { name: "No", protocolVersionId: versionOk, muestras: [m1] }),
     ).rejects.toBeInstanceOf(SesionDeCataError);
+  });
+
+  it("rechaza una muestra verde sin el tueste concreto que llegará a la taza", async () => {
+    await expect(
+      crearSesionDeCata(gestor, { name: `Sin tueste ${RUN}`, protocolVersionId: versionOk, muestras: [m1] }),
+    ).rejects.toThrow(/roast_preparation_required/);
   });
 
   it("rechaza un protocolo sin atributos: el juez no tendría nada que puntuar", async () => {
@@ -338,6 +353,7 @@ describe("listarMuestrasParaCata — el batch de origen", () => {
 describe("crear una cata con una muestra que la lista no enseña", () => {
   let tapon: string[] = [];
   let lejana: string;
+  let tuesteLejana: string;
 
   beforeAll(async () => {
     await prisma.sample.createMany({
@@ -370,6 +386,9 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
         },
       })
     ).id;
+    tuesteLejana = (await prisma.roastSession.create({
+      data: { purpose: "sample", sourceSampleId: lejana, startedAt: new Date(), createdBy: gestor },
+    })).id;
   });
 
   afterAll(async () => {
@@ -380,6 +399,7 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
     await prisma.sensorySession.deleteMany({
       where: assertDefinedWhere({ id: { in: sesiones.map((m) => m.blindSample.flight.sessionId) } }),
     });
+    await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: tuesteLejana }) });
     await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: { in: [...tapon, lejana] } }) });
   });
 
@@ -390,7 +410,12 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
   });
 
   it("y aun así la cata la acepta", async () => {
-    const s = await crearSesionDeCata(gestor, { name: `Lejana ${RUN}`, protocolVersionId: versionOk, muestras: [lejana] });
+    const s = await crearSesionDeCata(gestor, {
+      name: `Lejana ${RUN}`,
+      protocolVersionId: versionOk,
+      muestras: [lejana],
+      roastSessions: [tuesteLejana],
+    });
     expect(s.id).toBeTruthy();
   });
 

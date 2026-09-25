@@ -218,8 +218,9 @@ export interface CrearSesionInput {
   protocolVersionId: string;
   /** Los ids de las muestras, en el orden en que se van a servir. */
   muestras: string[];
-  /** Tueste concreto servido por posición. `null` conserva el flujo histórico
-   *  para muestras que todavía no tienen preparación registrada. */
+  /** Tueste de muestra concreto servido por posición. La forma sigue aceptando
+   *  clientes antiguos, pero el servicio rechaza ausencia/null en toda sesión
+   *  nueva; los null que ya existen sólo se conservan para lectura. */
   roastSessions?: Array<string | null>;
   /** Para qué se cata. Ya estaba modelado y el primer formulario no lo pedía:
    *  sin él, una cata de competencia y una de control de calidad se guardan
@@ -278,6 +279,11 @@ export async function crearSesionDeCata(userAccountId: string, input: CrearSesio
   for (const m of pedidas) if (await puedeVerMuestra(userAccountId, m)) alcanzables.add(m.id);
   const ajenas = input.muestras.filter((id) => !alcanzables.has(id));
   if (ajenas.length > 0) throw new SesionDeCataError("sample_not_accessible");
+
+  // Una muestra verde es materia prima para el tueste, no para la taza. Los
+  // mapeos históricos sin tueste siguen siendo legibles, pero una sesión nueva
+  // nunca puede romper el eslabón muestra verde → tueste → cata.
+  if (preparaciones.some((id) => !id)) throw new SesionDeCataError("roast_preparation_required");
 
   const idsDeTueste = preparaciones.filter((id): id is string => Boolean(id));
   const tuestes = await prisma.roastSession.findMany({

@@ -28,7 +28,6 @@ export interface OpcionDePreparacion {
 export function opcionesDePreparacion(
   muestra: MuestraConPreparaciones,
   textos: {
-    sinTueste: string;
     sinPerfil: string;
     sinEquipo: string;
     describirTueste: (datos: { date: string; profile: string; equipment: string }) => string;
@@ -36,7 +35,7 @@ export function opcionesDePreparacion(
 ): OpcionDePreparacion[] {
   const base = etiquetaDeMuestra(muestra);
   if (muestra.roastSessions.length === 0) {
-    return [{ key: muestra.id, sampleId: muestra.id, roastSessionId: null, label: `${base} · ${textos.sinTueste}` }];
+    return [];
   }
   return muestra.roastSessions.map((roast) => ({
     key: `${muestra.id}:${roast.id}`,

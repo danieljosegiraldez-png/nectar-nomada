@@ -351,6 +351,8 @@
     "sampleSearchMore": "Se muestran {n}; hay más. Busca por código, batch o finca para afinar.",
     "sampleSelectedTitle": "Seleccionadas ({n})",
     "sampleSelectedNone": "Todavía ninguna. Marca muestras en los resultados; puedes buscar varias veces.",
+    "noRoastedSamplesAvailable": "Hay muestras verdes, pero ninguna tiene todavía un tueste de muestra registrado. Registra el tueste antes de crear la cata.",
+    "error_roast_preparation_required": "Cada muestra debe tener un tueste de muestra vinculado antes de entrar a una cata nueva.",
     "sampleWithoutRoast": "Sin tueste específico registrado",
     "sampleRoastNoProfile": "Sin perfil",
     "sampleRoastNoEquipment": "Sin equipo declarado",

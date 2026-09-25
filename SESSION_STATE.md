@@ -355,8 +355,8 @@ puede afirmar cada pantalla— y sigue sin tomarse.
 
 ### 2026-09-24 · Flujo verde, tueste y cata
 
-- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; cata vinculada al tueste exacto.
-- Commits locales `9357b297` y `cf538961`; el cierre sensorial queda en el commit siguiente. Rama aún sin push.
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; toda cata nueva exige el tueste exacto, mientras las históricas incompletas permanecen legibles.
+- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
 - Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 
 ## 5. Al cerrar la sesión

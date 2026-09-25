@@ -156,7 +156,6 @@ export async function buscarMuestrasParaCataAction(
 
 function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Sensory">>>) {
   return {
-    sinTueste: t("sampleWithoutRoast"),
     sinPerfil: t("sampleRoastNoProfile"),
     sinEquipo: t("sampleRoastNoEquipment"),
     describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),

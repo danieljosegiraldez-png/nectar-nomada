@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { opcionesDePreparacion } from "../../lib/sensory/opcionesDePreparacion";
 
 const textos = {
-  sinTueste: "sin tueste",
   sinPerfil: "sin perfil",
   sinEquipo: "sin equipo",
   describirTueste: ({ date, profile, equipment }: { date: string; profile: string; equipment: string }) =>
@@ -20,10 +19,8 @@ const muestra = {
 };
 
 describe("opciones de preparación para cata", () => {
-  it("conserva una muestra histórica sin tueste específico", () => {
-    expect(opcionesDePreparacion({ ...muestra, roastSessions: [] }, textos)).toEqual([
-      expect.objectContaining({ key: "sample-1", sampleId: "sample-1", roastSessionId: null }),
-    ]);
+  it("no ofrece una muestra sin tueste para una cata nueva", () => {
+    expect(opcionesDePreparacion({ ...muestra, roastSessions: [] }, textos)).toEqual([]);
   });
 
   it("ofrece por separado dos tuestes de la misma muestra", () => {

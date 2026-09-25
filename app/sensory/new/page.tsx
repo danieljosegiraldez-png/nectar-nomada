@@ -27,6 +27,7 @@ export default async function NuevaSesionPage() {
   let protocolos: { id: string; label: string }[];
   let muestras: Array<{ key: string; sampleId: string; roastSessionId: string | null; label: string }>;
   let hayMas: boolean;
+  let hayMuestrasSinTueste = false;
   try {
     const [ps, ms] = await Promise.all([
       listarProtocolosParaCata(user.userAccountId),
@@ -36,6 +37,7 @@ export default async function NuevaSesionPage() {
     ]);
     protocolos = ps;
     muestras = ms.muestras.flatMap((m) => opcionesDePreparacion(m, textosDePreparacion(t)));
+    hayMuestrasSinTueste = ms.muestras.length > 0 && muestras.length === 0;
     hayMas = ms.hayMas;
   } catch (error) {
     if (error instanceof SesionDeCataError) redirect("/sensory");
@@ -55,7 +57,7 @@ export default async function NuevaSesionPage() {
       {protocolos.length === 0 ? (
         <p className="nn-muted">{t("noProtocolsAvailable")}</p>
       ) : muestras.length === 0 ? (
-        <p className="nn-muted">{t("noSamplesAvailable")}</p>
+        <p className="nn-muted">{t(hayMuestrasSinTueste ? "noRoastedSamplesAvailable" : "noSamplesAvailable")}</p>
       ) : (
         <CrearSesionForm protocolos={protocolos} muestras={muestras} hayMas={hayMas} />
       )}
@@ -65,7 +67,6 @@ export default async function NuevaSesionPage() {
 
 function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Sensory">>>) {
   return {
-    sinTueste: t("sampleWithoutRoast"),
     sinPerfil: t("sampleRoastNoProfile"),
     sinEquipo: t("sampleRoastNoEquipment"),
     describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),

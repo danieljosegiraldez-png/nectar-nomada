@@ -32,6 +32,7 @@ const RUN = `host-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
 let anfitrion: string, catador: string, ajeno: string;
 let versionId: string, m1: string, m2: string, sesionId: string;
+let roast1: string, roast2: string;
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -93,6 +94,12 @@ beforeAll(async () => {
     })).id;
   m1 = await muestra("H1");
   m2 = await muestra("H2");
+  roast1 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: anfitrion },
+  })).id;
+  roast2 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m2, startedAt: new Date(), createdBy: anfitrion },
+  })).id;
 });
 
 afterAll(async () => {
@@ -102,6 +109,7 @@ afterAll(async () => {
     await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeType: "session" as const, scopeRefId: sesionId }) });
     await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: sesionId }) });
   }
+  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: { in: [roast1, roast2] } }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
   const ver = await prisma.sensoryProtocolVersion.findUnique({ where: { id: versionId } });
   await prisma.sensoryAttribute.deleteMany({ where: assertDefinedWhere({ protocolVersionId: versionId }) });
@@ -128,6 +136,7 @@ describe("el anfitrión de cata monta la cata", () => {
       name: `Cata ${RUN}`,
       protocolVersionId: versionId,
       muestras: [m1, m2],
+      roastSessions: [roast1, roast2],
       purpose: "characterize",
       subject: "intermediate_product",
     });
