@@ -109,6 +109,11 @@ export interface CreateSampleFromLotInput {
   sourceReference?: string | null;
 }
 
+/** Tres decimales, los que la columna `Decimal(10,3)` guarda sin redondear. */
+function noExcedeTresDecimales(n: number): boolean {
+  return Number.isInteger(Math.round(n * 1000)) && Math.abs(n * 1000 - Math.round(n * 1000)) < 1e-9;
+}
+
 export async function createSampleFromLot(userAccountId: string, input: CreateSampleFromLotInput) {
   const sourceLot = await prisma.lot.findUnique({ where: { id: input.sourceLotId } });
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
@@ -138,11 +143,19 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
     //
     // Dentro de la transacción y no antes: es el mismo `tx` que escribe el evento, así que entre
     // leer el saldo y restarlo no cabe otra extracción.
+    let conLibro = false;
     if (input.quantity != null && input.unit) {
-      if (!(input.quantity > 0)) throw new SampleValidationError("sample_quantity_must_be_positive");
+      // La columna es `Decimal(10,3)`: 0,0004 kg se guardaría como cero, o sea una medición borrada
+      // en silencio. Se rechaza en vez de redondear (revisión de Codex, hallazgo 4).
+      if (!(Number.isFinite(input.quantity) && input.quantity > 0) || !noExcedeTresDecimales(input.quantity)) {
+        throw new SampleValidationError("sample_quantity_must_be_positive");
+      }
+      // Bloqueo de fila antes de leer el saldo, el mismo protocolo que `bloquearCosechaEn`: estar
+      // dentro de una transacción NO basta, porque el aislamiento por defecto de Postgres es
+      // `Read Committed` y dos extracciones simultáneas leerían el mismo saldo (Codex, hallazgo 2).
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${input.sourceLotId}::uuid FOR UPDATE`;
       const saldo = await computeLotBalance(tx, input.sourceLotId);
-      // Un lote sin libro de cantidades no se puede comparar con nada: «nunca se pesó» no es cero
-      // (ADR-080). Se deja pasar, como hace el resto del código, en vez de inventar un saldo.
+      conLibro = saldo.recorded;
       if (saldo.recorded) {
         if (saldo.unit !== input.unit) throw new SampleValidationError("sample_mixed_units");
         if (new Prisma.Decimal(input.quantity).greaterThan(saldo.quantity)) {
@@ -189,7 +202,11 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
       },
     });
 
-    if (input.quantity != null && input.unit) {
+    // Sin libro no se escribe asiento, exactamente como `applyInputDecrements`: inventar el primer
+    // movimiento en negativo convertiría «nunca se pesó» en «pesado y en −2 kg», y dejaría fuera la
+    // siguiente muestra legítima (Codex, hallazgo 1). La cantidad declarada se conserva en el
+    // `LotTransformationInput` de arriba, que es donde dice lo que se sacó.
+    if (input.quantity != null && input.unit && conLibro) {
       await tx.quantityEvent.create({
         data: {
           lotId: input.sourceLotId,

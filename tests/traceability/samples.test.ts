@@ -322,6 +322,51 @@ describe("createSampleFromLot — la cantidad no puede inventar ni gastar de má
     expect(q.quantity.toNumber()).toBe(8);
   });
 
+  it("sin libro, DOS muestras con cantidad entran las dos y no se inventa un saldo negativo", async () => {
+    // Hallazgo 1 de Codex sobre el primer arreglo: escribir el asiento sobre un lote sin libro
+    // convertía «nunca se pesó» en «pesado y en negativo», y la segunda muestra legítima quedaba
+    // rechazada. `applyInputDecrements` omite el asiento en ese caso; aquí se hace igual.
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-saldo-sin-libro-dos`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    for (const n of [1, 2]) {
+      await createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-sinlibro-${n}`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        quantity: 2,
+        unit: "kg",
+        occurredAt: new Date("2026-01-0" + n),
+      });
+    }
+    const q = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
+    expect(q.recorded).toBe(false);
+    const eventos = await prisma.quantityEvent.findMany({ where: { lotId: lot.id } });
+    expect(eventos).toHaveLength(0);
+    // Y lo declarado no se pierde: vive en la entrada de la transformación.
+    const entradas = await prisma.lotTransformationInput.findMany({ where: { lotId: lot.id } });
+    expect(entradas.map((e) => Number(e.quantity))).toEqual([2, 2]);
+  });
+
+  it("rechaza una cantidad que la columna redondearía a cero", async () => {
+    const lot = await loteCon(10, "precision");
+    await expect(
+      createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-prec`,
+        sampleType: "green_coffee",
+        sourceLotId: lot.id,
+        quantity: 0.0004,
+        unit: "kg",
+        occurredAt: new Date("2026-01-02"),
+      }),
+    ).rejects.toThrow(/sample_quantity_must_be_positive/);
+  });
+
   it("un lote sin libro de cantidades no se puede comparar, y la muestra sin cantidad pasa igual", async () => {
     const lot = await createLot(authorizedUserAccountId, {
       lotCode: `${RUN_ID}-saldo-sin-libro`,

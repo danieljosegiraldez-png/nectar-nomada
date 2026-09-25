@@ -1714,7 +1714,8 @@
     "condicion_DRY": "Seca",
     "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista.",
     "error_sample_exceeds_available": "La muestra pide más café del que queda en el lote. Mira el saldo disponible antes de apartarla.",
-    "error_sample_quantity_positive": "La cantidad de la muestra tiene que ser mayor que cero."
+    "error_sample_quantity_positive": "La cantidad de la muestra tiene que ser mayor que cero.",
+    "error_sample_mixed_units": "La muestra se pide en otra unidad que el libro del lote. Usa la misma unidad."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

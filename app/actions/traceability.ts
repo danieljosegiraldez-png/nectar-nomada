@@ -182,6 +182,9 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SampleFromLotValidationError && error.message === "sample_exceeds_available") {
     return t("error_sample_exceeds_available");
   }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_mixed_units") {
+    return t("error_sample_mixed_units");
+  }
   if (error instanceof SampleFromLotValidationError && error.message === "sample_quantity_must_be_positive") {
     return t("error_sample_quantity_positive");
   }
