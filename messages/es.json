@@ -351,6 +351,16 @@
     "sampleSearchMore": "Se muestran {n}; hay más. Busca por código, batch o finca para afinar.",
     "sampleSelectedTitle": "Seleccionadas ({n})",
     "sampleSelectedNone": "Todavía ninguna. Marca muestras en los resultados; puedes buscar varias veces.",
+    "sampleWithoutRoast": "Sin tueste específico registrado",
+    "sampleRoastNoProfile": "Sin perfil",
+    "sampleRoastNoEquipment": "Sin equipo declarado",
+    "sampleRoastOption": "Tueste {date} · {profile} · {equipment}",
+    "servedRoastDate": "Tueste servido: {date}",
+    "roastAgeAtCupping": "Edad al crear la cata: {days} d {hours} h",
+    "roastAgeOutsideWindow": "fuera de la guía de 2–14 días",
+    "sessionScheduledAtLabel": "Fecha y hora prevista de la cata",
+    "sessionScheduledAtHelp": "Permite calcular el tiempo exacto entre tueste y cata. Si se deja vacío, se usa la creación de la sesión como referencia.",
+    "error_session_datetime": "Revisa la fecha y hora prevista de la cata.",
     "sampleRemove": "Quitar"
   },
   "SensoryWheels": {

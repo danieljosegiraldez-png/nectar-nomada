@@ -11,8 +11,9 @@ import {
   invitarParticipante,
   SesionDeCataError,
 } from "../../lib/sensory/sessions";
-import { etiquetaDeMuestra } from "../../lib/sensory/muestraEnCata";
+import { opcionesDePreparacion } from "../../lib/sensory/opcionesDePreparacion";
 import { registrarInformeExterno, InformeExternoError } from "../../lib/sensory/informeExterno";
+import { parseOptionalLocalDateTime, LocalDateTimeError, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 
 export interface SensoryActionState {
   error?: string;
@@ -101,19 +102,26 @@ export async function crearSesionDeCataAction(
   const t = await getTranslations("Sensory");
 
   const muestras = formData.getAll("muestras").map((v) => String(v)).filter(Boolean);
+  const roastSessions = formData.getAll("roastSessions").map((v) => String(v).trim() || null);
   let sesionId: string;
   try {
     const sesion = await crearSesionDeCata(user.userAccountId, {
       name: String(formData.get("name") ?? ""),
       protocolVersionId: String(formData.get("protocolVersionId") ?? ""),
       muestras,
+      roastSessions,
       purpose: (String(formData.get("purpose") ?? "").trim() || null) as never,
       subject: (String(formData.get("subject") ?? "").trim() || null) as never,
       preparationMethod: (String(formData.get("preparationMethod") ?? "").trim() || null),
+      scheduledAt: parseOptionalLocalDateTime(
+        String(formData.get("scheduledAt") ?? ""),
+        String(formData.get(TZ_OFFSET_FIELD) ?? ""),
+      ),
     });
     sesionId = sesion.id;
   } catch (error) {
     if (error instanceof SesionDeCataError) return { error: t(`error_${error.message}` as "error_name_required") };
+    if (error instanceof LocalDateTimeError) return { error: t("error_session_datetime") };
     if (error instanceof SensoryAccessError) return { error: t("error_no_access") };
     throw error;
   }
@@ -133,17 +141,26 @@ export async function crearSesionDeCataAction(
  */
 export async function buscarMuestrasParaCataAction(
   texto: string,
-): Promise<{ muestras: { id: string; label: string }[]; hayMas: boolean } | { error: string }> {
+): Promise<{ muestras: Array<{ key: string; sampleId: string; roastSessionId: string | null; label: string }>; hayMas: boolean } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Sensory");
   try {
     const r = await buscarMuestrasParaCata(user.userAccountId, String(texto ?? "").slice(0, 100));
-    return { muestras: r.muestras.map((m) => ({ id: m.id, label: etiquetaDeMuestra(m) })), hayMas: r.hayMas };
+    return { muestras: r.muestras.flatMap((m) => opcionesDePreparacion(m, textosDePreparacion(t))), hayMas: r.hayMas };
   } catch (error) {
     if (error instanceof SesionDeCataError) return { error: t(`error_${error.message}` as "error_name_required") };
     throw error;
   }
+}
+
+function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Sensory">>>) {
+  return {
+    sinTueste: t("sampleWithoutRoast"),
+    sinPerfil: t("sampleRoastNoProfile"),
+    sinEquipo: t("sampleRoastNoEquipment"),
+    describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),
+  };
 }
 
 export async function invitarParticipanteAction(

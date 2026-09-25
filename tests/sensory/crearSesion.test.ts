@@ -152,6 +152,9 @@ describe("crear una sesión de cata", () => {
     });
     expect(mapeos.map((m) => m.sampleId)).toEqual([m1, m1]);
     expect(mapeos.map((m) => m.roastSessionId)).toEqual([a.id, b.id]);
+
+    const ofrecida = (await buscarMuestrasParaCata(gestor, RUN)).muestras.find((m) => m.id === m1);
+    expect(ofrecida?.roastSessions.map((r) => r.id)).toEqual(expect.arrayContaining([a.id, b.id]));
   });
 
   it("crea sesión, vuelo, muestras ciegas Y su mapeo — las cuatro cosas", async () => {

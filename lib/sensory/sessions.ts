@@ -126,6 +126,17 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
         projectId: true,
         locationId: true,
         classification: true,
+        roastSessions: {
+          where: { purpose: "sample" },
+          select: {
+            id: true,
+            startedAt: true,
+            endedAt: true,
+            equipment: { select: { name: true } },
+            recipeVersion: { select: { version: true, recipe: { select: { name: true } } } },
+          },
+          orderBy: { startedAt: "desc" },
+        },
         sourceLot: {
           select: {
             lotCode: true,
@@ -151,7 +162,7 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
   const hayMas = visibles.length > limite;
   return {
     hayMas,
-    muestras: visibles.slice(0, limite).map(({ id, sampleCode, sampleType, description, sourceLot }) => ({
+    muestras: visibles.slice(0, limite).map(({ id, sampleCode, sampleType, description, sourceLot, roastSessions }) => ({
       id,
       sampleCode,
       sampleType,
@@ -162,6 +173,7 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
       lotCode: sourceLot?.lotCode ?? null,
       organizationName: sourceLot?.organization?.name ?? null,
       processGrade: sourceLot?.lotProcesses[0]?.processGradeValue?.value ?? null,
+      roastSessions,
     })),
   };
 }

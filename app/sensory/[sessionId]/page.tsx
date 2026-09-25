@@ -90,6 +90,8 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
           {flight.blindSamples.map((blindSample) => {
             const alreadySubmitted = blindSample.assessments.length > 0;
             const headJudgeSample = headJudgeSamplesByFlight.get(flight.id)?.find((s) => s.id === blindSample.id);
+            const preparacion = headJudgeSample?.blindMapping?.roastSession ?? null;
+            const edadDelTueste = preparacion ? edadEntre(preparacion.endedAt ?? preparacion.startedAt, session.scheduledAt ?? session.createdAt) : null;
 
             return (
               <div key={blindSample.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
@@ -102,6 +104,19 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                         code: headJudgeSample.blindMapping?.sample.sampleCode ?? t("noMapping"),
                       })}
                     </span>
+                    {preparacion ? (
+                      <>
+                        <span>{t("servedRoastDate", { date: preparacion.startedAt.toISOString().slice(0, 10) })}</span>
+                        <span>{preparacion.recipeVersion ? `${preparacion.recipeVersion.recipe.name} · v${preparacion.recipeVersion.version}` : t("sampleRoastNoProfile")}</span>
+                        <span>{preparacion.equipment?.name ?? t("sampleRoastNoEquipment")}</span>
+                        {edadDelTueste ? (
+                          <span className={edadDelTueste.fuera ? "nn-roast-age-warning" : undefined}>
+                            {t("roastAgeAtCupping", { days: edadDelTueste.dias, hours: edadDelTueste.horas })}
+                            {edadDelTueste.fuera ? ` · ${t("roastAgeOutsideWindow")}` : ""}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : <span>{t("sampleWithoutRoast")}</span>}
                   </div>
                 ) : null}
 
@@ -157,4 +172,9 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
       ))}
     </div>
   );
+}
+
+function edadEntre(tueste: Date, cata: Date) {
+  const totalHoras = Math.max(0, Math.floor((cata.getTime() - tueste.getTime()) / 3_600_000));
+  return { dias: Math.floor(totalHoras / 24), horas: totalHoras % 24, fuera: totalHoras < 48 || totalHoras > 14 * 24 };
 }

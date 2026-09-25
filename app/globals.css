@@ -246,6 +246,10 @@ form.nn-form {
 .nn-definition-grid div { min-width: 0; }
 .nn-definition-grid dt { color: var(--nn-ink-muted); font-size: 0.85rem; }
 .nn-definition-grid dd { margin: 0.2rem 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.nn-sensory-sample-option { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.65rem 0; border-bottom: 1px solid var(--nn-border); cursor: pointer; }
+.nn-sensory-sample-option input { width: auto; margin-top: 0.2rem; flex: 0 0 auto; }
+.nn-sensory-selected-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 0.65rem; align-items: start; padding: 0.55rem 0; }
+.nn-roast-age-warning { color: var(--nn-warning-ink, #6a4800); font-weight: 650; }
 
 @media (max-width: 680px) {
   .nn-green-grading-lead,

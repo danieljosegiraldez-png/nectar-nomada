@@ -6,7 +6,9 @@ import { buscarMuestrasParaCataAction } from "../../actions/sensory";
 import { codigoCiego } from "../../../lib/sensory/muestraEnCata";
 
 interface Opcion {
-  id: string;
+  key: string;
+  sampleId: string;
+  roastSessionId: string | null;
   label: string;
 }
 
@@ -33,9 +35,9 @@ export function SelectorDeMuestras({ iniciales, hayMasInicial }: { iniciales: Op
   const [seleccionadas, setSeleccionadas] = useState<Opcion[]>([]);
   const [buscando, startTransition] = useTransition();
 
-  const marcada = (id: string) => seleccionadas.some((s) => s.id === id);
+  const marcada = (key: string) => seleccionadas.some((s) => s.key === key);
   const alternar = (o: Opcion) =>
-    setSeleccionadas((prev) => (prev.some((s) => s.id === o.id) ? prev.filter((s) => s.id !== o.id) : [...prev, o]));
+    setSeleccionadas((prev) => (prev.some((s) => s.key === o.key) ? prev.filter((s) => s.key !== o.key) : [...prev, o]));
 
   const buscar = () =>
     startTransition(async () => {
@@ -87,8 +89,8 @@ export function SelectorDeMuestras({ iniciales, hayMasInicial }: { iniciales: Op
           <p className="nn-muted">{t("sampleSearchNoResults", { texto: buscadoCon ?? "" })}</p>
         ) : (
           resultados.map((m) => (
-            <label key={m.id} style={{ display: "block" }}>
-              <input type="checkbox" checked={marcada(m.id)} onChange={() => alternar(m)} /> {m.label}
+            <label key={m.key} className="nn-sensory-sample-option">
+              <input type="checkbox" checked={marcada(m.key)} onChange={() => alternar(m)} /> <span>{m.label}</span>
             </label>
           ))
         )}
@@ -102,13 +104,14 @@ export function SelectorDeMuestras({ iniciales, hayMasInicial }: { iniciales: Op
       ) : (
         <ol style={{ listStyle: "none", padding: 0 }}>
           {seleccionadas.map((s, i) => (
-            <li key={s.id} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+            <li key={s.key} className="nn-sensory-selected-row">
               <strong>{codigoCiego(i)}</strong>
               <span style={{ flex: 1 }}>{s.label}</span>
               <button type="button" className="nn-link-button" onClick={() => alternar(s)}>
                 {t("sampleRemove")}
               </button>
-              <input type="hidden" name="muestras" value={s.id} />
+              <input type="hidden" name="muestras" value={s.sampleId} />
+              <input type="hidden" name="roastSessions" value={s.roastSessionId ?? ""} />
             </li>
           ))}
         </ol>

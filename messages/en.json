@@ -351,6 +351,16 @@
     "sampleSearchMore": "Showing {n}; there are more. Search by code, batch or farm to narrow it down.",
     "sampleSelectedTitle": "Selected ({n})",
     "sampleSelectedNone": "None yet. Tick samples in the results; you can search several times.",
+    "sampleWithoutRoast": "No specific roast recorded",
+    "sampleRoastNoProfile": "No profile",
+    "sampleRoastNoEquipment": "No equipment declared",
+    "sampleRoastOption": "Roast {date} · {profile} · {equipment}",
+    "servedRoastDate": "Served roast: {date}",
+    "roastAgeAtCupping": "Age when session was created: {days} d {hours} h",
+    "roastAgeOutsideWindow": "outside the 2–14 day guide",
+    "sessionScheduledAtLabel": "Planned cupping date and time",
+    "sessionScheduledAtHelp": "Used to calculate the exact time between roast and cupping. If left blank, session creation is used as the reference.",
+    "error_session_datetime": "Check the planned cupping date and time.",
     "sampleRemove": "Remove"
   },
   "SensoryWheels": {

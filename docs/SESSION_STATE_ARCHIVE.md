@@ -4209,3 +4209,17 @@ mantenimiento/limpieza/fumigación que avisan «vencida» y **no bloquean**. Pro
 insumos, azúcares, especies, varietales) y el spec de **instalaciones** — la base ya admite sus
 rutinas, el servicio las rechaza hasta entonces; se solapa con secado por bandeja. Decisiones abiertas
 en la descripción del PR.
+
+## Archivado del 2026-09-24 · flujo verde, tueste y cata
+
+### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
+
+ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
+si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
+ver en navegador.** Sigue: «marcos negros» en la inspección.
+
+### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
+
+ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
+la cola sin conexión (lo encolado antes llega nulo). «Cera por año» lista las colmenas cuya última
+revisión que contó vio alguno. **Sin ver en navegador.**

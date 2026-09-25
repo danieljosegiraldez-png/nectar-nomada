@@ -316,16 +316,16 @@ Cuando haya contradicción, prevalece este documento en los puntos expresamente 
 
 Estas son brechas de implementación, no permiso para corregirlas durante la aprobación de esta spec:
 
-1. **P0 — salida de secado semánticamente incorrecta en UI.** `prisma/schema.prisma` declara que `PARCHMENT` y `GREEN` son estados distintos y que verde es posterior al reposo/trilla, pero `app/lots/[id]/page.tsx` ofrece `green` como salida predeterminada del cierre de secado. `lib/traceability/drying.ts` acepta el tipo suministrado sin derivar/validar el estado según el proceso.
+1. **DONE — salida física de secado.** El cierre produce pergamino o cereza seca; verde nace después mediante trilla. Las pruebas cubren lavado, honey y natural sin reescribir historia.
 2. **P1 — receta prevista en pedidos y reparto en kg.** `PedidoDeCereza` conserva kg pedidos y calidad, pero no expresa todavía la asignación prevista a versiones de receta ni la unidad comercial original.
 3. **P1 — revisión efectiva durante la ejecución.** Hay receta versionada e intención de proceso, pero falta verificar y completar un cambio operativo temporal con vigencia, notificación y comparación plan original/efectivo.
 4. **P1 — programa estacional y reservas de capacidad.** El tablero existente calcula ocupación; falta el plan enero–marzo, demanda futura y reserva de recursos.
 5. **P1 — informe diario derivado.** Los eventos existen dispersos, pero no hay una vista diaria consolidada plan/real/variación.
 6. **P1 — muestras longitudinales comparables.** Existen lotes, muestras y sensorial, pero falta el contrato que determina comparabilidad y la serie finca + variedad entre cosechas.
 7. **P1 — reservas de competencia en kg.** Falta verificar una reserva que reduzca saldo disponible sin romper identidad ciega.
-8. **P1 — trilla operable desde la app.** Existe `registrarTrilla` con balance, subproducto y custodia, pero no una ruta/formulario que lo ejecute.
-9. **P1 — muestra verde → tueste → cata.** `Sample` ya conserva lote y transformación de origen; `RoastSession` ya conserva propósito, perfil, tostador, equipo, pesos, cracks y mediciones de curva; Sensory ya mapea códigos ciegos a `Sample`. Falta vincular cada tueste de muestra con su `Sample` de entrada y cada preparación catada con la `RoastSession` específica.
-10. **P2 — captura de curva.** El modelo admite mediciones por sesión de tueste, pero el formulario actual no permite capturar/importar la curva ni escoger el equipo canónico; sólo ofrece una nota libre de equipo.
+8. **DONE — trilla operable desde la app.** `/lots/[id]/hulling/new` registra balance, cascarilla, merma, ubicación y abre el lote verde trazable.
+9. **DONE — muestra verde → tueste → cata.** La muestra se aparta en gramos desde una fracción verde; cada tueste conserva `sourceSampleId`; la cata selecciona la preparación específica y el mapeo ciego conserva `roastSessionId`. El jefe de cata ve perfil, equipo y edad exacta; el juez no ve el mapeo.
+10. **P2 — captura de curva y porciones.** Ya se escoge equipo canónico y perfil. Falta captura/importación de puntos de curva y dividir el tueste en porciones con QR, custodia y saldo.
 11. **P2 — portada por rol.** Las rutas existen, pero la primera pantalla todavía no conduce a finca o beneficio según responsabilidad y urgencia.
 12. **P2 — navegación integrada.** Pedidos, recepción, bandejas, lotes, recetas, bodega, sensorial y tueste existen como rutas separadas; falta la agrupación operativa aquí definida.
 

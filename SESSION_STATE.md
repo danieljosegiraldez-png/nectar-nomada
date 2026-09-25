@@ -111,18 +111,6 @@ una por pregunta, quedan en 19 apartados** (ADR-181): receta manda, sin receta n
 los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
 del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 
-### 2026-09-19 · Marcos negros en la inspección, y el aviso del apiario
-
-ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
-la cola sin conexión (lo encolado antes llega nulo). «Cera por año» lista las colmenas cuya última
-revisión que contó vio alguno. **Sin ver en navegador.**
-
-### 2026-09-19 · La reina guarda el año en que nació; su color es el apodo
-
-ADR-175. Daniel: el color del año es sólo apodo, las reinas no se pintan. `queen.birth_year` (nulo
-si no se sabe), no posterior a su llegada; la historia de reinas dice «la blanca de 2026». **Sin
-ver en navegador.** Sigue: «marcos negros» en la inspección.
-
 ## 3. Bloqueado, y en qué
 
 #### Recolectores: darles su perfil (de Daniel)
@@ -362,9 +350,14 @@ puede afirmar cada pantalla— y sigue sin tomarse.
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
-| Restringir por ámbito RBAC quién puede figurar como `operatorPersonId` | Lo propuso la segunda revisión independiente (2026-08-31) creyendo que el desplegable filtraba y era «la única barrera». No filtra: `getObserverCandidates` devuelve toda Persona activa **a propósito** — T9.5 §3(c) dice que no es una frontera de seguridad y que `operatorPersonId` no lleva peso RBAC. El operador es una Persona que normalmente **no tiene cuenta**, así que restringir por ámbito excluiría justo a quien hace el trabajo. Sí se arregló lo que era un fallo real: `recordFieldEvent` no comprobaba ni que la Persona existiera, y `startFieldSession` sí. Hay un test que **rompe** si alguien lo endurece por descuido |
 
 ---
+
+### 2026-09-24 · Flujo verde, tueste y cata
+
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; cata vinculada al tueste exacto.
+- Commits locales `9357b297` y `cf538961`; el cierre sensorial queda en el commit siguiente. Rama aún sin push.
+- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 
 ## 5. Al cerrar la sesión
 
