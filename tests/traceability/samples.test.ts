@@ -10,6 +10,7 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { createSampleFromLot, retirarMuestra, SampleValidationError } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
+import { registrarTrilla } from "../../lib/traceability/trilla";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -23,6 +24,7 @@ let projectBId: string;
 let authorizedUserAccountId: string; // Farm Operator, scope: project A
 let wrongProjectUserAccountId: string; // Farm Operator, scope: project B
 let unauthorizedUserAccountId: string; // no Assignment at all
+let beneficioLocationId: string;
 
 async function createTestUserAccount(label: string) {
   const person = await prisma.person.create({
@@ -61,6 +63,13 @@ beforeAll(async () => {
   await assignFarmOperator(wrongProjectUserAccountId, { scopeType: "project", scopeRefId: projectBId });
 
   unauthorizedUserAccountId = await createTestUserAccount("Unauthorized");
+
+  // La trilla exige un lugar de producción; sólo la usa la prueba del lote verde de abajo.
+  beneficioLocationId = (
+    await prisma.location.create({
+      data: { name: `TEST Beneficio (${RUN_ID})`, locationType: "beneficio", organizationId, classification: "internal" },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -75,11 +84,15 @@ afterAll(async () => {
 
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ sampleCode: { startsWith: RUN_ID } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.byproductBatch.deleteMany({
+    where: assertDefinedWhere({ transformation: { OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] } }),
+  });
   await prisma.lotTransformation.deleteMany({
     where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] }),
   });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: dryingRunIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
+  if (beneficioLocationId) await prisma.location.deleteMany({ where: assertDefinedWhere({ id: beneficioLocationId }) });
 
   await prisma.assignment.deleteMany({
     where: assertDefinedWhere({ userAccountId: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } }),
@@ -230,6 +243,55 @@ describe("createSampleFromLot — lineage, RBAC, quantity accounting", () => {
     const events = await prisma.quantityEvent.findMany({ where: { lotId: lot.id } });
     expect(events).toHaveLength(0);
   });
+});
+
+describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-25)", () => {
+  /**
+   * Hallazgo de la revisión adversarial: el formulario «Preparar muestra verde» falla SIEMPRE. Pide
+   * la fase «reposo», que se calcula desde las corridas de secado del propio lote; un lote verde
+   * nace de la trilla y nunca tiene corrida propia. La precondición de la trilla —pergamino o
+   * cereza seca, los tipos que sólo salen de un secado terminado— ya garantiza el almacenamiento.
+   */
+  it("acepta la muestra verde de un lote verde nacido de trilla", async () => {
+    const pergamino = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-trilla-perg`,
+      lotType: "parchment",
+      organizationId,
+      projectId: projectAId,
+      locationId: beneficioLocationId,
+    });
+    await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      lotId: pergamino.id,
+      eventType: "received",
+      quantity: 100,
+      unit: "kg",
+      occurredAt: new Date("2026-04-01"),
+    });
+    const { loteVerde } = await registrarTrilla(authorizedUserAccountId, {
+      lotePergaminoId: pergamino.id,
+      masaEntradaKg: 100,
+      loteVerde: { lotCode: `${RUN_ID}-trilla-verde`, masaKg: 80 },
+      cascarillaKg: 18,
+      mermaKg: 2,
+      producedAtLocationId: beneficioLocationId,
+      occurredAt: new Date("2026-04-10"),
+      provenanceClass: "original_record",
+    });
+    expect(loteVerde.lotType).toBe("green");
+
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-verde-trillado`,
+      sampleType: "green_coffee",
+      materialState: "GREEN",
+      sourceLotId: loteVerde.id,
+      quantity: 0.3,
+      unit: "kg",
+      occurredAt: new Date("2026-04-11"),
+    });
+    expect(sample.materialState).toBe("GREEN");
+  }, 30000);
 });
 
 describe("createSampleFromLot — la cantidad no puede inventar ni gastar de más (2026-09-25)", () => {

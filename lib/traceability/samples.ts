@@ -126,7 +126,24 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   // almacenamiento — secado terminado con humedad objetivo, la fase "reposo"
   // que `faseDelLote` ya calcula. Bloquea, sin permiso de anulación: una
   // muestra tomada antes es de humedad o de proceso, no verde.
-  if (input.materialState === "GREEN") {
+  //
+  // **Sólo se le pregunta a un lote que TODAVÍA no es verde** (2026-09-25). Un lote `green` no tiene
+  // corrida de secado propia —nace de la trilla, o de clasificar otro verde—, así que `faseActualDeLote`
+  // devolvía `null` para todos y el formulario «Preparar muestra verde» fallaba SIEMPRE, además con un
+  // mensaje falso («el secado no ha terminado») para café ya trillado. Que esté almacenado lo garantiza
+  // la precondición de la trilla: exige pergamino o cereza seca, los dos únicos tipos que salen de un
+  // secado terminado (`hulling_requires_parchment_or_dry_cherry`, lib/traceability/trilla.ts).
+  //
+  // **No basta con que el TIPO sea `green`**: un lote verde creado a mano no demuestra nada, y esa
+  // prueba existe desde el 2026-09-18 («rechaza una muestra verde si el lote nunca terminó de
+  // secar»). Lo que exime es su procedencia: ser salida de una trilla o de una clasificación.
+  const nacidoDeTrillaOClasificacion =
+    sourceLot.lotType === "green" &&
+    (await prisma.lotTransformation.findFirst({
+      where: { transformationType: { in: ["hulling", "selection"] }, outputs: { some: { lotId: sourceLot.id } } },
+      select: { id: true },
+    })) != null;
+  if (input.materialState === "GREEN" && !nacidoDeTrillaOClasificacion) {
     const fase = await faseActualDeLote(input.sourceLotId);
     if (fase?.tipo !== "reposo") {
       throw new SampleValidationError("green_sample_before_reposo");
