@@ -1,4 +1,5 @@
 import { recordTransformation } from "./lots";
+import { requireLotAccess } from "./lots";
 import { prisma } from "../db";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
@@ -32,9 +33,16 @@ export interface RecordGreenGradingInput {
 export async function recordGreenGrading(userAccountId: string, input: RecordGreenGradingInput) {
   const source = await prisma.lot.findUnique({
     where: { id: input.inputLotId },
-    select: { lotType: true, projectId: true, locationId: true },
+    select: { lotType: true, projectId: true, locationId: true, classification: true },
   });
   if (!source) throw new GreenGradingValidationError("lot_not_found");
+  // El permiso ANTES de decir de qué tipo es el lote (revisión de Codex, hallazgo 5). Antes, quien
+  // no tenía acceso distinguía tres respuestas —no existe / existe y no es verde / existe, es verde
+  // y no te toca—, un oráculo sobre los lotes de otra organización. `recordTransformation` autoriza
+  // igual más abajo, pero para entonces ya se había contestado.
+  await requireLotAccess(userAccountId, "manage", [
+    { projectId: source.projectId, locationId: source.locationId, classification: source.classification },
+  ]);
   if (source.lotType !== "green") throw new GreenGradingValidationError("green_lot_required");
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [
     { projectId: source.projectId, locationId: source.locationId },
@@ -49,6 +57,11 @@ export async function recordGreenGrading(userAccountId: string, input: RecordGre
     if (fraction.screenMin != null && fraction.screenMax != null && fraction.screenMin > fraction.screenMax) throw new GreenGradingValidationError("screen_range_invalid");
     if (fraction.uniformityPct != null && (fraction.uniformityPct < 0 || fraction.uniformityPct > 100)) throw new GreenGradingValidationError("uniformity_invalid");
   }
+  // La categoría de rechazo, canonizada: un alias se guarda como su fila canónica, la regla que
+  // ADR-095 fijó para los cultivares. Sin esto el mismo defecto se reparte entre dos escrituras y
+  // ningún informe los suma (revisión de Codex, hallazgo 4; `requireCatalogValue` en selection.ts
+  // ya lo hacía y esta copia no).
+  const categoriaCanonica = new Map<string, string>();
   for (const defect of input.defectLots ?? []) {
     if (!(defect.quantityKg >= 0) || !defect.lotCode.trim()) throw new GreenGradingValidationError("defect_invalid");
     const category = await prisma.variableCatalogValue.findUnique({
@@ -57,6 +70,7 @@ export async function recordGreenGrading(userAccountId: string, input: RecordGre
     if (!category || category.catalog.key !== "rechazo_categoria") {
       throw new GreenGradingValidationError("defect_category_invalid");
     }
+    categoriaCanonica.set(defect.rejectionCategoryValueId, category.aliasOfId ?? category.id);
   }
   const codes = [...input.fractions.map((f) => f.lotCode), ...(input.defectLots ?? []).map((d) => d.lotCode)];
   if (new Set(codes).size !== codes.length) throw new GreenGradingValidationError("duplicate_output_lot_codes");
@@ -78,7 +92,7 @@ export async function recordGreenGrading(userAccountId: string, input: RecordGre
       })),
       ...(input.defectLots ?? []).map((d) => ({
         lotCode: d.lotCode.trim(), lotType: "green" as const, quantity: d.quantityKg, unit: "kg",
-        rejectionCategoryValueId: d.rejectionCategoryValueId,
+        rejectionCategoryValueId: categoriaCanonica.get(d.rejectionCategoryValueId) ?? d.rejectionCategoryValueId,
       })),
     ],
     declaredLossQuantity: input.declaredLossKg ?? null,

@@ -366,7 +366,8 @@
     "sampleRemove": "Quitar",
     "externalReportNoRoast": "tueste no registrado",
     "externalReportRoastOn": "tostado el {fecha}",
-    "error_roast_preparation_not_available": "Ese tueste no es una preparación de esa muestra."
+    "error_roast_preparation_not_available": "Ese tueste no es una preparación de esa muestra.",
+    "error_roast_preparations_mismatch": "La lista de tuestes no cuadra con la de muestras. Vuelve a elegir las preparaciones."
   },
   "SensoryWheels": {
     "badge": "Herramienta sensorial",

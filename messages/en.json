@@ -366,7 +366,8 @@
     "sampleRemove": "Remove",
     "externalReportNoRoast": "roast not recorded",
     "externalReportRoastOn": "roasted on {fecha}",
-    "error_roast_preparation_not_available": "That roast is not a preparation of that sample."
+    "error_roast_preparation_not_available": "That roast is not a preparation of that sample.",
+    "error_roast_preparations_mismatch": "The roast list does not match the sample list. Pick the preparations again."
   },
   "SensoryWheels": {
     "badge": "Sensory tool",

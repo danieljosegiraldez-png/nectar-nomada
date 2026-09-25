@@ -203,6 +203,31 @@ describe("crear una sesión de cata", () => {
     ).rejects.toThrow(/roast_preparation_required/);
   });
 
+  it("rechaza el tueste de OTRA muestra puesto en esta posición", async () => {
+    // Revisión adversarial del 2026-09-25: esta rama (`roast_preparation_not_available`) no tenía
+    // ninguna prueba. Es el caso de manipulación: el formulario manda pares alineados, pero un envío
+    // a mano puede cruzarlos, y ahí se decide qué café representa cada código ciego.
+    await expect(
+      crearSesionDeCata(gestor, {
+        name: `Cruzado ${RUN}`,
+        protocolVersionId: versionOk,
+        muestras: [m1],
+        roastSessions: [roast2],
+      }),
+    ).rejects.toThrow(/roast_preparation_not_available/);
+  });
+
+  it("rechaza una lista de tuestes que no cuadra con la de muestras", async () => {
+    await expect(
+      crearSesionDeCata(gestor, {
+        name: `Desalineado ${RUN}`,
+        protocolVersionId: versionOk,
+        muestras: [m1, m2],
+        roastSessions: [roast1],
+      }),
+    ).rejects.toThrow(/roast_preparations_mismatch/);
+  });
+
   it("rechaza un protocolo sin atributos: el juez no tendría nada que puntuar", async () => {
     await expect(
       crearSesionDeCata(gestor, { name: "Vacío", protocolVersionId: versionSinAtributos, muestras: [m1] }),

@@ -143,6 +143,77 @@ afterAll(async () => {
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
+describe("clasificación verde: alias de catálogo y orden de permisos (2026-09-25)", () => {
+  /**
+   * Dos hallazgos de la revisión adversarial. El primero es el defecto que ADR-095 dice haber
+   * cerrado: `selection.ts` canoniza un alias a su fila canónica y `greenGrading.ts` era una copia
+   * que no lo hacía, así que el mismo defecto se repartía entre dos escrituras. El segundo es un
+   * oráculo: sin permiso se distinguía «no existe» de «existe y no es verde».
+   */
+  it("un alias de categoría de rechazo se guarda como su fila canónica", async () => {
+    const canonico = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { id: flotadoresId },
+      select: { id: true, catalogId: true },
+    });
+    const alias = await prisma.variableCatalogValue.create({
+      data: { catalogId: canonico.catalogId, value: `flotadores-alias-${RUN_ID}`, aliasOfId: canonico.id },
+    });
+    try {
+      const source = await greenLot("alias-src", 5);
+      const r = await recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-alias-frac`, quantityKg: 4, screenStatus: "unknown" }],
+        defectLots: [{ lotCode: `${RUN_ID}-alias-def`, quantityKg: 1, rejectionCategoryValueId: alias.id }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      });
+      const defecto = await prisma.lot.findFirstOrThrow({
+        where: { lotCode: `${RUN_ID}-alias-def` },
+        select: { rejectionCategoryValueId: true },
+      });
+      expect(r.transformation.transformationType).toBe("selection");
+      // Lo que importa: NO se guardó el alias.
+      expect(defecto.rejectionCategoryValueId).toBe(canonico.id);
+      expect(defecto.rejectionCategoryValueId).not.toBe(alias.id);
+    } finally {
+      // El lote lo borra el `afterAll` del archivo, que ya sabe el orden con las transformaciones.
+      // Aquí sólo el alias, que nadie referencia: la fila guardada apunta a la canónica.
+      await prisma.variableCatalogValue.deleteMany({ where: { id: alias.id } });
+    }
+  }, 30000);
+
+  it("sin permiso no se puede averiguar si el lote de otra finca es verde", async () => {
+    // **El lote NO es verde a propósito.** Con uno verde esta prueba no discrimina: `recordTransformation`
+    // autoriza más abajo y la cuenta de fuera recibía el error de acceso igual. Lo que distingue el
+    // arreglo es CUÁL error llega primero con un lote no verde: antes, «no es verde» —o sea, la
+    // respuesta contaba de qué tipo es un lote ajeno—; ahora, el de acceso.
+    const source = await cherryLot("oraculo", 5);
+    const fuera = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "SinAcceso", displayName: `TEST SinAcceso (${RUN_ID})` },
+    });
+    const cuentaFuera = await prisma.userAccount.create({
+      data: { personId: fuera.id, authProvider: "credentials", status: "active" },
+    });
+    try {
+      await expect(
+        recordGreenGrading(cuentaFuera.id, {
+          inputLotId: source.id,
+          inputQuantityKg: 5,
+          fractions: [{ lotCode: `${RUN_ID}-oraculo-frac`, quantityKg: 4, screenStatus: "unknown" }],
+          occurredAt: new Date(),
+          provenanceClass: "measured_fact",
+        }),
+      ).rejects.toBeInstanceOf(TraceabilityAccessError);
+    } finally {
+      // Esta cuenta no está en la lista del `afterAll`, así que se limpia sola: si no, su persona
+      // queda referenciada y la limpieza del archivo entero revienta.
+      await prisma.userAccount.deleteMany({ where: { id: cuentaFuera.id } });
+      await prisma.person.deleteMany({ where: { id: fuera.id } });
+    }
+  }, 30000);
+});
+
 describe("selection conserves mass", () => {
   it("separa varias mallas verdes y conserva sus datos y balance", async () => {
     const source = await greenLot("green-screen", 10);
