@@ -100,6 +100,12 @@ const RANGO_DE_ESTADO: Record<GreenScreenDataStatus, number> = {
 /**
  * El PEOR de los estados presentes. Un lote cuyo 17/18 pesó la finca y cuyo 15/16 dijo el
  * proveedor no puede presentarse como medido (decisión de Daniel, 2026-09-25).
+ *
+ * **No lo pinta ninguna pantalla desde el 2026-09-26** —Daniel vio la columna «Dato» y dijo que
+ * sobraba— pero se sigue calculando, con sus pruebas, **a propósito**: hoy todo su café es medido y
+ * la columna era ruido; el día que entre café comprado con la malla declarada por el vendedor, el
+ * dato está y volver a enseñarlo es sólo interfaz. Esto NO es código muerto: es la decisión 5 de la
+ * spec, que sigue viva en los datos aunque no en la pantalla.
  */
 export function peorEstado(estados: readonly GreenScreenDataStatus[]): GreenScreenDataStatus | null {
   if (estados.length === 0) return null;
