@@ -577,6 +577,30 @@ export interface LotVisibility {
   locationIds: string[];
 }
 
+/**
+ * Los ids dados más todo lo que cuelga de ellos, bajando por `parentLocationId`.
+ *
+ * Es la mitad que faltaba de ADR-144: `conAncestros` (lib/rbac/service.ts) sube desde el recurso
+ * para decidir si UN ámbito lo cubre; esto baja desde el ámbito para construir la LISTA de lo que
+ * alcanza. El tope de profundidad no es adorno: un `parentLocationId` en ciclo —nada en el esquema
+ * lo impide— colgaría el punto por el que pasa toda la visibilidad de lotes.
+ */
+const PROFUNDIDAD_MAXIMA_DE_UBICACION = 12;
+async function conDescendientes(ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const todos = new Set(ids);
+  let frontera = [...ids];
+  for (let nivel = 0; nivel < PROFUNDIDAD_MAXIMA_DE_UBICACION && frontera.length > 0; nivel += 1) {
+    const hijos = await prisma.location.findMany({
+      where: { parentLocationId: { in: frontera } },
+      select: { id: true },
+    });
+    frontera = hijos.map((h) => h.id).filter((id) => !todos.has(id));
+    for (const id of frontera) todos.add(id);
+  }
+  return [...todos];
+}
+
 export async function resolveLotVisibility(
   userAccountId: string,
   // "export" reuses this resolver rather than growing a second one: the
@@ -611,7 +635,7 @@ export async function resolveLotVisibility(
         .filter((id): id is string => id != null),
     ),
   ];
-  const locationIds = [
+  const asignadas = [
     ...new Set(
       viewGranting
         .filter((a) => a.scope.scopeType === "location")
@@ -619,6 +643,15 @@ export async function resolveLotVisibility(
         .filter((id): id is string => id != null),
     ),
   ];
+  // **Y todo lo que cuelga de ellas.** `can()` sube por los ancestros del recurso desde ADR-144
+  // —quien manda en la finca manda en lo que hay dentro—, pero esta LISTA miraba sólo el id exacto.
+  // Las dos mitades discrepaban: la ficha de una parcela autorizaba y la lista no la enseñaba.
+  //
+  // Medido el 2026-09-25 con una cuenta Farm Manager de ámbito «Finca Rosina»: la finca tiene seis
+  // parcelas y `getManageableContext` devolvía CERO, así que /plots salía vacío y parecía que las
+  // parcelas hubieran desaparecido. No es ensanchar permisos: es reconocer la misma contención que
+  // la comprobación por recurso ya aplica. Un HERMANO sigue fuera.
+  const locationIds = await conDescendientes(asignadas);
 
   if (projectIds.length === 0 && locationIds.length === 0) {
     return { mode: "none", projectIds: [], locationIds: [] };

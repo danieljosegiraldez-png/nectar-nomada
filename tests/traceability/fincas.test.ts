@@ -12,6 +12,7 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { TODAS, puedeSubdividirParcela, crearFinca, crearParcela, idsBajoLaFinca, ordenarParcelas, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
 import { createMicrolot } from "../../lib/traceability/locations";
+import { getManageableContext } from "../../lib/traceability/lots";
 import { recordHarvestEvent } from "../../lib/traceability/harvest";
 
 const RUN = `fin-${Date.now()}`;
@@ -387,5 +388,38 @@ describe("subdividir una parcela: el botón pregunta lo que el servicio exige (2
   it("un sitio no es una parcela, y un id que no existe tampoco", async () => {
     expect(await puedeSubdividirParcela(admin, A.site)).toBe(false);
     expect(await puedeSubdividirParcela(admin, "00000000-0000-0000-0000-000000000000")).toBe(false);
+  });
+});
+
+describe("un ámbito de lugar alcanza lo que cuelga de él, también en las LISTAS (ADR-144, 2026-09-25)", () => {
+  /**
+   * `can()` sube por los ancestros del recurso desde ADR-144, pero `resolveLotVisibility` miraba
+   * sólo el id exacto del ámbito. Medido con una cuenta Farm Manager de ámbito «Finca Rosina»: la
+   * finca tenía SEIS parcelas y `getManageableContext` devolvía CERO. La ficha autorizaba y la lista
+   * no enseñaba, así que parecía que las parcelas hubieran desaparecido.
+   */
+  it("quien tiene la finca ve sus parcelas y microparcelas en la lista", async () => {
+    const ctx = await getManageableContext(managerA);
+    const ids = ctx.locations.map((l) => l.id);
+    expect(ids, "la finca").toContain(A.site);
+    expect(ids, "su parcela").toContain(P1);
+    expect(ids, "la microparcela que cuelga de la parcela").toContain(M1);
+    expect(ctx.plotLocations.map((p) => p.id)).toContain(P1);
+  });
+
+  it("y NO ve la parcela de otra finca: baja, no se ensancha", async () => {
+    const ctx = await getManageableContext(managerA);
+    expect(ctx.locations.map((l) => l.id)).not.toContain(Q1);
+    expect(ctx.locations.map((l) => l.id)).not.toContain(B.site);
+  });
+
+  it("quien tiene sólo una parcela ve su microparcela, pero no la finca ni la parcela hermana", async () => {
+    const soloP1 = await cuenta("Farm Operator", { scopeType: "location", scopeRefId: P1 });
+    const ctx = await getManageableContext(soloP1);
+    const ids = ctx.locations.map((l) => l.id);
+    expect(ids, "su parcela").toContain(P1);
+    expect(ids, "lo que cuelga de ella").toContain(M1);
+    expect(ids, "la finca de arriba NO").not.toContain(A.site);
+    expect(ids, "la parcela de otra finca NO").not.toContain(Q1);
   });
 });

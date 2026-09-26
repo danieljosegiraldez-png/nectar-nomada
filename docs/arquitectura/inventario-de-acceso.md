@@ -26,8 +26,8 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **437** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
+| **444** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -760,6 +760,21 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > (`lib/traceability/fincas.ts`), el predicado que pinta «Nueva microparcela». Llama a `can()` con el
 > principal y el mismo permiso que exige `createMicrolot`, así que entra como guardia directo. Existe
 > porque el botón se pintaba sin comprobar nada.
+
+> **Y (579 igual, «guardia directo» 437→444, «acotado por construcción» 27→20), 2026-09-25:**
+> `resolveLotVisibility` baja a los descendientes de un ámbito de lugar (`conDescendientes`), la
+> mitad que faltaba de ADR-144. **Siete operaciones cambian de clase sin cambiar su autorización**:
+> `resolveLotVisibility`, `getLotList`, `getActiveOperations` y `getManageableContext` (lots.ts),
+> `buildProducerExport`, `reporteDeProceso` y `listRoastSessions`. Pasan de «acotado por
+> construcción» a «guardia directo» porque la caminata hacia abajo añade una consulta que no filtra
+> por el principal, y el detector reconoce **formas**: ya no ve el patrón de acotado, ve el guardia
+> que esas funciones siempre tuvieron. Lo que se ve en pantalla sí cambia, y para eso están sus
+> pruebas; la autorización por recurso es la misma de antes.
+>
+> **Y una lección de medición, porque casi la firmo mal:** al aislar el efecto alterné SÓLO la línea
+> del `conDescendientes` y las dos corridas dieron lo mismo, así que concluí que mi cambio no movía
+> las cifras. Falso: lo que las mueve es el diff completo —el ayudante nuevo en el archivo—. Aislar
+> una línea de un cambio de varias no aísla nada.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 
