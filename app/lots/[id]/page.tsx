@@ -376,7 +376,21 @@ export default async function LotDetailPage({
   // Las tres lecturas de la clasificación de verde (spec 2026-09-25). En un lote verde clasificado
   // este bloque SUSTITUYE a la tabla genérica de cuajado: las dos pintan las mismas cifras, y la
   // genérica las rotula «aceptado / rechazado», que es vocabulario de la selección de cereza.
-  const clasificacionVerde = lot.lotType === "green" ? await clasificacionDeLote(user.userAccountId, lot.id) : null;
+  //
+  // **Sólo se pregunta si hay alguna selección en juego**, y no por cada lote verde: toda
+  // clasificación ES una transformación de tipo `selection`, así que sin ninguna la respuesta sería
+  // `null` seguro y son tres consultas y una comprobación de permiso tiradas en cada ficha verde
+  // (Codex, 2026-09-26).
+  const clasificacionVerde =
+    lot.lotType === "green" && selectionTransformation
+      ? await clasificacionDeLote(user.userAccountId, lot.id)
+      : null;
+  // **Y se suprime el cuajado sólo si es EL MISMO evento.** `selectionTransformation` es la PRIMERA
+  // selección en la que este lote aparece —como entrada **o como salida**— y `clasificacionDeLote`
+  // devuelve la ÚLTIMA en la que es entrada: pueden ser transformaciones distintas. Comparando sólo
+  // «¿hay clasificación?» se escondían las cifras de un evento por la existencia de otro — por
+  // ejemplo un lote que salió de una clasificación y después entró en otra (Codex, 2026-09-26).
+  const cuajadoEsElMismoEvento = clasificacionVerde?.transformationId === selectionTransformation?.id;
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
@@ -943,7 +957,7 @@ export default async function LotDetailPage({
 
       {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} /> : null}
 
-      {outturn && !clasificacionVerde ? (
+      {outturn && !cuajadoEsElMismoEvento ? (
         <section className="nn-section">
           <h2>{t("selectionOutturnHeading")}</h2>
           {outturn.method ? <p className="nn-muted">{t("selectionOutturnMethod", { method: outturn.method })}</p> : null}

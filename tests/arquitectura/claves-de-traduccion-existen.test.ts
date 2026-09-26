@@ -25,12 +25,13 @@ const en = JSON.parse(readFileSync("messages/en.json", "utf8")) as Record<string
 /**
  * **Excepciones, y cada una es una deuda con dueño — no una forma de callar al guardia.**
  *
- * - `Recepcion.cerrarPedido` (`app/beneficio/pedidos/page.tsx:87`): el rótulo del desplegable que
- *   cierra un pedido. Falta en los DOS idiomas desde antes de este guardia, así que esa pantalla
- *   enseña hoy el nombre crudo de la clave a quien gestiona el beneficio. Se deja anotado en vez de
- *   inventarle el texto: el rótulo de un botón que el dueño usa a diario lo escribe él.
+ * **Ahora mismo está vacía, y así debería quedarse.** La estrenó y la cerró el mismo día
+ * `Recepcion.cerrarPedido` (`app/beneficio/pedidos/page.tsx:87`), el rótulo del desplegable que
+ * cierra un pedido: faltaba en los dos idiomas desde antes de este guardia, así que esa pantalla
+ * enseñaba el nombre crudo de la clave a quien gestiona el beneficio. No se le inventó el texto —
+ * Daniel lo decidió el 2026-09-26: «Cerrar pedido» / «Close order».
  */
-const DEUDA_CONOCIDA = new Set(["Recepcion.cerrarPedido"]);
+const DEUDA_CONOCIDA = new Set<string>([]);
 
 function archivosDeApp(dir = "app"): string[] {
   const salida: string[] = [];
@@ -76,15 +77,14 @@ describe("las claves de traducción que piden las pantallas existen", () => {
     expect(faltan, "estas pantallas piden claves que no existen; saldría el nombre crudo de la clave").toEqual([]);
   });
 
-  it("la deuda conocida sigue siendo deuda, y no una excepción que ya sobra", () => {
-    // Si alguien pone la clave, esta prueba cae y recuerda quitarla de DEUDA_CONOCIDA — una
-    // excepción olvidada es un agujero permanente con aspecto de decisión.
-    for (const nombre of DEUDA_CONOCIDA) {
-      const [espacio, clave] = nombre.split(".");
-      const puesta =
-        Object.prototype.hasOwnProperty.call(es[espacio!] ?? {}, clave!) &&
-        Object.prototype.hasOwnProperty.call(en[espacio!] ?? {}, clave!);
-      expect(puesta, `${nombre} ya está traducida: quítala de DEUDA_CONOCIDA`).toBe(false);
-    }
+  it("no hay ninguna excepción pendiente", () => {
+    // **Un bucle sobre un conjunto vacío pasa sin comprobar nada**, así que la afirmación es que el
+    // conjunto está VACÍO. Añadir una excepción obliga entonces a tocar esta prueba a propósito, y
+    // a justificarlo en la revisión — que es exactamente el coste que debe tener silenciar a un
+    // guardia. Si alguna vez hay deuda de verdad, aquí se comprueba además que siga sin traducir.
+    expect(
+      [...DEUDA_CONOCIDA],
+      "hay claves excusadas: si la excepción es legítima, cámbiala aquí a propósito y di por qué",
+    ).toEqual([]);
   });
 });

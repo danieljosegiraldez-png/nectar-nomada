@@ -25,16 +25,18 @@ export async function ClasificacionPorMalla({
       <h2>{t("clasificacionMallaHeading")}</h2>
       <p className="nn-muted">
         {t("clasificacionMallaEntrada")}: {clasificacion.entradaKg} kg
+        {" · "}
+        {t("clasificacionMallaFecha", { fecha: clasificacion.clasificadoEl.toISOString().slice(0, 10) })}
       </p>
 
       <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
         <thead>
           <tr>
-            <th>{t("clasificacionMallaColumnaMalla")}</th>
-            <th>{t("clasificacionMallaColumnaSistema")}</th>
-            <th>{t("clasificacionMallaColumnaDato")}</th>
-            <th>{t("clasificacionMallaColumnaPeso")}</th>
-            <th>{t("clasificacionMallaColumnaShare")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaMalla")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaSistema")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaDato")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaPeso")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaShare")}</th>
           </tr>
         </thead>
         <tbody>
@@ -46,7 +48,12 @@ export async function ClasificacionPorMalla({
                 {m.sinRango ? t("clasificacionMallaSinRango") : `${m.rangoMin ?? "?"}–${m.rangoMax ?? "?"}`}
                 {m.uniformidadPct != null ? ` · ${t("clasificacionMallaUniformidad", { pct: m.uniformidadPct })}` : ""}
               </td>
-              <td>{m.sistema ?? t("selectionOutturnUnknown")}</td>
+              <td>
+                {m.sistema ?? t("selectionOutturnUnknown")}
+                {/* Con sistema `otro`, `recordGreenGrading` EXIGE la nota para decir cuál es:
+                    enseñar «otro» y callarla deja el dato sin significado. */}
+                {m.nota ? <div className="nn-muted">{m.nota}</div> : null}
+              </td>
               <td>{t(`estadoDelDato_${m.estado}` as "estadoDelDato_measured")}</td>
               <td>{m.kg} kg</td>
               <td>{share(m.pct)}</td>
@@ -60,11 +67,31 @@ export async function ClasificacionPorMalla({
         <p className="nn-muted">{t("clasificacionMallaSinDefectos")}</p>
       ) : (
         <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+          <thead>
+            <tr>
+              <th scope="col">{t("clasificacionMallaColumnaCategoria")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaLotes")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaPeso")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaShare")}</th>
+            </tr>
+          </thead>
           <tbody>
             {clasificacion.defectos.map((d) => (
               <tr key={d.categoriaValueId}>
-                <td>{d.categoria ?? t("selectionOutturnUnknown")}</td>
-                <td className="nn-muted">{t("clasificacionMallaDefectoLotes", { count: d.lotes.length })}</td>
+                <th scope="row">{d.categoria ?? t("selectionOutturnUnknown")}</th>
+                {/* **Agrupar no es perder el rastro.** La suma por categoría es la lectura que pidió
+                    Daniel, pero cada lote de defecto sigue siendo un lote del inventario con su
+                    código: quitarle el enlace convertiría una plataforma de trazabilidad en un
+                    informe (Codex, 2026-09-26). */}
+                <td>
+                  {d.lotes.map((l, i) => (
+                    <span key={l.lotId}>
+                      {i > 0 ? ", " : ""}
+                      <Link href={`/lots/${l.lotId}`} className="nn-code">{l.lotCode}</Link>
+                      <span className="nn-muted"> {l.kg} kg</span>
+                    </span>
+                  ))}
+                </td>
                 <td>{d.kg} kg</td>
                 <td>{share(d.pct)}</td>
               </tr>
@@ -74,14 +101,20 @@ export async function ClasificacionPorMalla({
       )}
 
       <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <thead>
+          <tr>
+            <th scope="col">{t("clasificacionMallaColumnaConcepto")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaCantidad")}</th>
+          </tr>
+        </thead>
         <tbody>
           <tr>
-            <td>{t("clasificacionMallaMerma")}</td>
+            <th scope="row">{t("clasificacionMallaMerma")}</th>
             <td>{clasificacion.mermaDeclaradaKg != null ? `${clasificacion.mermaDeclaradaKg} kg` : t("selectionOutturnUnknown")}</td>
           </tr>
           <tr>
             {/* null es «desconocido», nunca 0 — ADR-080, la misma distinción que la tabla de cereza. */}
-            <td>{t("clasificacionMallaSinExplicar")}</td>
+            <th scope="row">{t("clasificacionMallaSinExplicar")}</th>
             <td>{clasificacion.noExplicadoKg != null ? `${clasificacion.noExplicadoKg} kg` : t("selectionOutturnUnknown")}</td>
           </tr>
         </tbody>

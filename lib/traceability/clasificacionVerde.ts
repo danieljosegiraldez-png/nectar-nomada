@@ -152,8 +152,16 @@ type TransformacionClasificada = Prisma.LotTransformationGetPayload<{
   include: { inputs: true; outputs: typeof SALIDAS_CON_MALLA };
 }>;
 
+/**
+ * Los pesos del esquema son `Decimal(10, 3)`. Sumarlos como `number` mete error binario —`0,1 +
+ * 0,2` es `0.30000000000000004`— y eso llega crudo a la pantalla como precisión que nadie midió
+ * (Codex, 2026-09-26). Redondear a los tres decimales que la base guarda no inventa nada: devuelve
+ * la suma a la exactitud que el dato ya tenía.
+ */
+const enKg = (n: number) => Number(n.toFixed(3));
+
 function armarClasificacion(tr: TransformacionClasificada): ClasificacionDeLote {
-  const entradaKg = tr.inputs.reduce((suma, i) => suma + Number(i.quantity ?? 0), 0);
+  const entradaKg = enKg(tr.inputs.reduce((suma, i) => suma + Number(i.quantity ?? 0), 0));
   const pct = (kg: number) => (entradaKg > 0 ? Number(((kg / entradaKg) * 100).toFixed(2)) : null);
 
   // **Precedencia explícita.** Si una salida lleva categoría de rechazo es un defecto, aunque su
@@ -203,7 +211,7 @@ function armarClasificacion(tr: TransformacionClasificada): ClasificacionDeLote 
     porCategoria.set(categoriaValueId, fila);
   }
   const defectos = [...porCategoria.values()]
-    .map((d) => ({ ...d, pct: pct(d.kg) }))
+    .map((d) => ({ ...d, kg: enKg(d.kg), pct: pct(d.kg) }))
     .sort((a, b) => b.kg - a.kg);
 
   return {
@@ -342,7 +350,7 @@ export async function compararClasificacionVerde(
       // 0,03 %.
       defectosPct:
         c.entradaKg > 0
-          ? Number(((c.defectos.reduce((suma, d) => suma + d.kg, 0) / c.entradaKg) * 100).toFixed(2))
+          ? Number(((enKg(c.defectos.reduce((suma, d) => suma + d.kg, 0)) / c.entradaKg) * 100).toFixed(2))
           : null,
       estadoDelDato: c.estadoDelDato,
     });
