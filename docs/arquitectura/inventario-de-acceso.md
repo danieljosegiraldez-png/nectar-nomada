@@ -11,16 +11,11 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-25 con la clasificación de verde
+## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
 **581 operaciones** que tocan la base, en **160 archivos** — medido con
-`node scripts/inventario-de-acceso.mjs` sobre `origin/main` (`068f7da4`) más la
-rama de la clasificación de verde por malla. Suma **+2 operaciones en +1 archivo**
-sobre las 579 del 2026-09-23 (ruedas sensoriales, rebase `70c74be3`), y cada una
-cae en un patrón distinto: `clasificacionDeLote` es **guardia directo** —exige
-`requireLotAccess(view)` antes de leer— y `compararClasificacionVerde` es
-**acotado por construcción**, porque su `where` sale de `resolveLotVisibility` y
-no puede devolver lo ajeno:
+`node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
+(`de3ead69`) con la rama de las lecturas de la clasificación de verde por malla:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -29,8 +24,8 @@ no puede devolver lo ajeno:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **438** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
+| **446** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
@@ -40,6 +35,20 @@ no puede devolver lo ajeno:
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **Las tres lecturas de la clasificación de verde (2026-09-26): 579→581, 159→160
+> archivos y guardia directo 444→446.** `clasificacionDeLote` y
+> `compararClasificacionVerde` (`lib/traceability/clasificacionVerde.ts`) sólo leen: la
+> primera exige `requireLotAccess(view)` antes de mirar nada; la segunda recorta con
+> `resolveLotVisibility` y devuelve `sinAmbito` en vez de una lista vacía cuando la cuenta
+> no alcanza ningún lote.
+>
+> **Y aquí se cazó una afirmación que el merge volvió falsa.** Antes de fusionar
+> `conDescendientes`, la segunda salía **acotada por construcción** y así lo escribí. Al
+> fusionar pasó a **guardia directo** —es una de las siete que la cita de abajo predice—,
+> así que la clase de una operación no es suya: depende del árbol en que se mide. La
+> discrepancia la enseñó volver a correr el script sobre el árbol fusionado; ni mi rama ni
+> `origin/main` por separado daban 446/20.
 
 > **Selección verde por mallas (2026-09-24): 574→575, 158→159 archivos y guardia
 > directo 434→435.** `recordGreenGrading` verifica que el origen sea verde y delega
@@ -763,6 +772,21 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > (`lib/traceability/fincas.ts`), el predicado que pinta «Nueva microparcela». Llama a `can()` con el
 > principal y el mismo permiso que exige `createMicrolot`, así que entra como guardia directo. Existe
 > porque el botón se pintaba sin comprobar nada.
+
+> **Y (579 igual, «guardia directo» 437→444, «acotado por construcción» 27→20), 2026-09-25:**
+> `resolveLotVisibility` baja a los descendientes de un ámbito de lugar (`conDescendientes`), la
+> mitad que faltaba de ADR-144. **Siete operaciones cambian de clase sin cambiar su autorización**:
+> `resolveLotVisibility`, `getLotList`, `getActiveOperations` y `getManageableContext` (lots.ts),
+> `buildProducerExport`, `reporteDeProceso` y `listRoastSessions`. Pasan de «acotado por
+> construcción» a «guardia directo» porque la caminata hacia abajo añade una consulta que no filtra
+> por el principal, y el detector reconoce **formas**: ya no ve el patrón de acotado, ve el guardia
+> que esas funciones siempre tuvieron. Lo que se ve en pantalla sí cambia, y para eso están sus
+> pruebas; la autorización por recurso es la misma de antes.
+>
+> **Y una lección de medición, porque casi la firmo mal:** al aislar el efecto alterné SÓLO la línea
+> del `conDescendientes` y las dos corridas dieron lo mismo, así que concluí que mi cambio no movía
+> las cifras. Falso: lo que las mueve es el diff completo —el ayudante nuevo en el archivo—. Aislar
+> una línea de un cambio de varias no aísla nada.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 
