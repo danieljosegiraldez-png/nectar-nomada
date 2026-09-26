@@ -15,14 +15,37 @@
  * decides which lots the caller may export, asked of `lot:export` rather than
  * `lot:view`, so the export can never contain more than an Assignment allows.
  *
- * **Classification, deliberately not gated — see ADR-059.** Every Lot on this
- * platform is `internal` and Farm Operator holds only `classification:
- * clear_partner`, so an AND-gate here would return nothing to precisely the
- * person this feature exists for. The traceability read path does not apply
- * one either (`lots.ts`'s note above `getSensoryLinkageForSamples`). Matching
- * it keeps the export honest — it contains exactly what the app already shows
- * — rather than inventing a stricter rule in one corner. The underlying
- * inconsistency is recorded as a known gap, not silently inherited.
+ * **Classification, deliberately not gated — see ADR-059.** The traceability
+ * read path does not apply one either (`lots.ts`'s note above
+ * `getSensoryLinkageForSamples`). Matching it keeps the export honest — it
+ * contains exactly what the app already shows — rather than inventing a
+ * stricter rule in one corner. The underlying inconsistency is recorded as a
+ * known gap, not silently inherited.
+ *
+ * **CORREGIDO EL 2026-09-26: la razón que este párrafo daba había caducado.**
+ * Decía *«Every Lot on this platform is `internal` and Farm Operator holds only
+ * `classification:clear_partner`, so an AND-gate here would return nothing to
+ * precisely the person this feature exists for»*. ADR-063 le dio `clear_internal`
+ * a Farm Operator, así que esa frase dejó de ser cierta el día que se fusionó y
+ * siguió aquí justificando la omisión. Medido el 2026-09-26: los tres perfiles
+ * no-admin con `lot:view` —Farm Manager, Farm Operator, Project Viewer— tienen
+ * `clear_internal` y `clear_partner`, y `resolve.ts` compara el nivel EXACTO, sin
+ * jerarquía. Una compuerta aquí ya no devolvería un archivo vacío.
+ *
+ * **No gatearla sigue decidido (Daniel, 2026-09-26), por otro motivo: hoy sería
+ * un no-op.** Ningún camino del código puede crear un lote que no sea `internal`
+ * — `CreateLotInput` no acepta `classification`, ninguna de las diez escrituras
+ * a `Lot` la pasa, y los dos sitios que escriben `padre.classification` crean
+ * `Location`. En la base restaurada del último backup verificado, 45 de 45 son
+ * `internal`. La divergencia está DORMIDA por ausencia de camino, no por hábito.
+ *
+ * **Lo que la despertaría, dicho aquí porque es donde más costaría:** las listas
+ * recortan por ÁMBITO y no por confidencialidad (`scopeOrClauses` en `lots.ts`
+ * no mira `classification` en ninguna línea), así que un lote por encima de la
+ * clearance saldría en la lista y su ficha lo negaría. Y este archivo **no
+ * re-comprueba por fila** — no hay ni un `requireLotAccess` en él, a diferencia
+ * del camino del detalle. El día que algo pueda clasificar un lote por encima de
+ * `internal`, esto escribe esas filas a un archivo.
  */
 
 import { prisma } from "../db";
