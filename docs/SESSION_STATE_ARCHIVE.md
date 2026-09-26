@@ -4233,3 +4233,11 @@ Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores n
 una por pregunta, quedan en 19 apartados** (ADR-181): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
 los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
 del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
+
+### 2026-09-19 · La miel se pesa por recipiente (Q28, rebanada 1)
+
+ADR-181. Cada cosecha puede llevar sus recipientes —bruto y tara, el neto se calcula— y entonces
+su peso es la suma, asentada en el libro del lote por el mismo camino que el peso a mano. Codex
+encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
+y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
+**Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
