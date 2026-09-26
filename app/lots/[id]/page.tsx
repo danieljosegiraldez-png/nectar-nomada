@@ -47,6 +47,8 @@ import { LabourEntryForm } from "../../components/traceability/LabourEntryForm";
 import { MaterialConsumptionForm } from "../../components/traceability/MaterialConsumptionForm";
 import { SelectionForm } from "../../components/traceability/SelectionForm";
 import { getSelectionCatalogs, getSelectionOutturn, codigosYaDerivadosDe } from "../../../lib/traceability/selection";
+import { clasificacionDeLote } from "../../../lib/traceability/clasificacionVerde";
+import { ClasificacionPorMalla } from "../../components/traceability/ClasificacionPorMalla";
 import { getPerfilDeTuesteElegido } from "../../../lib/traceability/roasting";
 import { listRecipeVersionsForLot } from "../../../lib/traceability/processTargets";
 import { PerfilOptimoForm } from "../../components/traceability/PerfilOptimoForm";
@@ -370,6 +372,11 @@ export default async function LotDetailPage({
   // a different decision an operator would make deliberately, not a next step.
   const alreadySelected = selectionTransformation != null;
   const outturn = selectionTransformation ? await getSelectionOutturn(selectionTransformation.id) : null;
+
+  // Las tres lecturas de la clasificación de verde (spec 2026-09-25). En un lote verde clasificado
+  // este bloque SUSTITUYE a la tabla genérica de cuajado: las dos pintan las mismas cifras, y la
+  // genérica las rotula «aceptado / rechazado», que es vocabulario de la selección de cereza.
+  const clasificacionVerde = lot.lotType === "green" ? await clasificacionDeLote(user.userAccountId, lot.id) : null;
 
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
@@ -934,7 +941,9 @@ export default async function LotDetailPage({
         ) : null}
       </section>
 
-      {outturn ? (
+      {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} /> : null}
+
+      {outturn && !clasificacionVerde ? (
         <section className="nn-section">
           <h2>{t("selectionOutturnHeading")}</h2>
           {outturn.method ? <p className="nn-muted">{t("selectionOutturnMethod", { method: outturn.method })}</p> : null}
