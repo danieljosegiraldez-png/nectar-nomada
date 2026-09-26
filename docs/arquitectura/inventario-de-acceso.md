@@ -11,13 +11,16 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
+## Lo medido el 2026-09-05, actualizado el 2026-09-25 con la clasificación de verde
 
-**579 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
-rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
-**+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
-contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
-un permiso sensorial:
+**581 operaciones** que tocan la base, en **160 archivos** — medido con
+`node scripts/inventario-de-acceso.mjs` sobre `origin/main` (`068f7da4`) más la
+rama de la clasificación de verde por malla. Suma **+2 operaciones en +1 archivo**
+sobre las 579 del 2026-09-23 (ruedas sensoriales, rebase `70c74be3`), y cada una
+cae en un patrón distinto: `clasificacionDeLote` es **guardia directo** —exige
+`requireLotAccess(view)` antes de leer— y `compararClasificacionVerde` es
+**acotado por construcción**, porque su `where` sale de `resolveLotVisibility` y
+no puede devolver lo ajeno:
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -26,8 +29,8 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **437** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
+| **438** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **28** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
