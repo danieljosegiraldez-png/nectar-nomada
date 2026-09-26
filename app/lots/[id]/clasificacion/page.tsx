@@ -62,7 +62,7 @@ export default async function ComparacionDeClasificacionPage({
         <p className="nn-muted">{t("compararMallaVacio")}</p>
       ) : (
         <div className="nn-table-scroll">
-        <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <table className="nn-table nn-comparacion-mallas" style={{ fontVariantNumeric: "tabular-nums" }}>
           <thead>
             <tr>
               <th scope="col">{t("compararMallaColumnaLote")}</th>

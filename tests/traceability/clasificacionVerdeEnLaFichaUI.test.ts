@@ -54,6 +54,17 @@ describe("clasificación por malla en la ficha del lote", () => {
     }
   });
 
+  it("el resaltado de la fila cuelga del propio aria-current, no de una clase aparte", () => {
+    // Decisión 3 de Daniel: «con éste resaltado». Hasta el 2026-09-26 el resaltado era SÓLO
+    // semántico —`aria-current` no pinta nada— y con 150 filas encontrar la tuya era leer texto.
+    // Se vio mirando la pantalla, no en ninguna prueba. El estilo cuelga del atributo y no de una
+    // clase para que lo que se ve y lo que anuncia un lector no puedan separarse con el tiempo.
+    const css = readFileSync(join(raiz, "app/globals.css"), "utf8");
+    expect(comparacion).toContain('aria-current={f.lotId === id ? "true" : undefined}');
+    expect(comparacion).toContain("nn-comparacion-mallas");
+    expect(css).toContain('.nn-comparacion-mallas tbody tr[aria-current="true"]');
+  });
+
   it("la tabla ancha de la comparación va en un contenedor con desplazamiento", () => {
     // Es la tabla con más columnas de la aplicación —una por rango declarado— y `.nn-table` no
     // tiene ninguna regla en globals.css: el único contenedor real es `.nn-table-scroll`.

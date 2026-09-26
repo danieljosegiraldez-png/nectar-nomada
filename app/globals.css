@@ -1431,6 +1431,15 @@ a.nn-card-link:active {
   margin: 0;
 }
 
+/* La fila del lote desde el que se llegó, en la comparación de clasificación por malla.
+   El resaltado cuelga del propio `aria-current` y no de una clase aparte: así lo que se ve y lo
+   que anuncia un lector de pantalla no pueden separarse con el tiempo. Medido el 2026-09-26
+   mirándola: con 150 filas, `aria-current` solo no resalta nada y encontrar la tuya era leer. */
+.nn-comparacion-mallas tbody tr[aria-current="true"] {
+  background: var(--nn-accent-bg);
+  box-shadow: inset 3px 0 0 var(--nn-accent);
+}
+
 .nn-table-scroll {
   margin-top: 1rem;
   overflow-x: auto;
