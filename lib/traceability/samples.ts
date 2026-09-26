@@ -18,6 +18,8 @@
  * project/location, the same leaf-scope containment check every other
  * traceability write path in this module uses.
  */
+import { Prisma } from "../../generated/prisma/client";
+import { computeLotBalance } from "./balance";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
@@ -107,6 +109,30 @@ export interface CreateSampleFromLotInput {
   sourceReference?: string | null;
 }
 
+/**
+ * ¿Algún antepasado de este lote terminó su secado? Sube por las transformaciones que lo produjeron
+ * —trilla, clasificación, lo que sea— y pregunta la fase de cada entrada. Tope de profundidad: un
+ * lote real no tiene diez generaciones, y un ciclo colgaría el bucle.
+ */
+async function tieneSecadoTerminadoArriba(lotId: string, profundidad = 6): Promise<boolean> {
+  const vistos = new Set<string>([lotId]);
+  let frontera = [lotId];
+  for (let nivel = 0; nivel < profundidad && frontera.length > 0; nivel++) {
+    const transformaciones = await prisma.lotTransformation.findMany({
+      where: { outputs: { some: { lotId: { in: frontera } } } },
+      select: { inputs: { select: { lotId: true } } },
+    });
+    const padres = [...new Set(transformaciones.flatMap((t) => t.inputs.map((i) => i.lotId)))].filter((id) => !vistos.has(id));
+    for (const padre of padres) {
+      const fase = await faseActualDeLote(padre);
+      if (fase?.tipo === "reposo") return true;
+      vistos.add(padre);
+    }
+    frontera = padres;
+  }
+  return false;
+}
+
 export async function createSampleFromLot(userAccountId: string, input: CreateSampleFromLotInput) {
   const sourceLot = await prisma.lot.findUnique({ where: { id: input.sourceLotId } });
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
@@ -119,7 +145,21 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   // almacenamiento — secado terminado con humedad objetivo, la fase "reposo"
   // que `faseDelLote` ya calcula. Bloquea, sin permiso de anulación: una
   // muestra tomada antes es de humedad o de proceso, no verde.
-  if (input.materialState === "GREEN") {
+  //
+  // **Sólo se le pregunta a un lote que TODAVÍA no es verde** (2026-09-25). Un lote `green` no tiene
+  // corrida de secado propia —nace de la trilla, o de clasificar otro verde—, así que `faseActualDeLote`
+  // devolvía `null` para todos y el formulario «Preparar muestra verde» fallaba SIEMPRE, además con un
+  // mensaje falso («el secado no ha terminado») para café ya trillado. Que esté almacenado lo garantiza
+  // la precondición de la trilla: exige pergamino o cereza seca, los dos únicos tipos que salen de un
+  // secado terminado (`hulling_requires_parchment_or_dry_cherry`, lib/traceability/trilla.ts).
+  //
+  // **No basta con que el TIPO sea `green`**, y tampoco con ser salida de una trilla: la revisión de
+  // Codex del 2026-09-25 lo midió sobre mi propia prueba —un lote de pergamino creado a mano, sin
+  // ninguna corrida de secado, se trillaba y la muestra verde entraba—. La trilla exige pergamino o
+  // cereza seca, pero ese TIPO se puede escribir a mano; no es evidencia de nada. Lo que exime es el
+  // secado terminado en la ASCENDENCIA del lote, que es lo que la decisión del 2026-09-18 pedía.
+  const secadoEnLaAscendencia = sourceLot.lotType === "green" ? await tieneSecadoTerminadoArriba(sourceLot.id) : false;
+  if (input.materialState === "GREEN" && !secadoEnLaAscendencia) {
     const fase = await faseActualDeLote(input.sourceLotId);
     if (fase?.tipo !== "reposo") {
       throw new SampleValidationError("green_sample_before_reposo");
@@ -129,6 +169,40 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   const provenanceClass = input.provenanceClass;
 
   return prisma.$transaction(async (tx) => {
+    // El saldo, con el mismo criterio que `applyInputDecrements` usa para toda transformación
+    // parcial (`input_exceeds_available`). Aquí faltaba, y la revisión adversarial del 2026-09-25 lo
+    // midió: se podía sacar más de lo que hay. Una cantidad negativa ya la rechazaba la base
+    // —`CHECK (quantity >= 0)`—, con un error opaco: aquí sale como frase.
+    //
+    // Dentro de la transacción y no antes: es el mismo `tx` que escribe el evento, así que entre
+    // leer el saldo y restarlo no cabe otra extracción.
+    let conLibro = false;
+    if (input.quantity != null && input.unit) {
+      // La columna es `Decimal(10,3)`: 0,0004 kg se guardaría como cero, o sea una medición borrada
+      // en silencio. Se rechaza en vez de redondear (revisión de Codex, hallazgo 4).
+      if (!(Number.isFinite(input.quantity) && input.quantity > 0)) {
+        throw new SampleValidationError("sample_quantity_must_be_positive");
+      }
+      // La columna es `Decimal(10,3)`: 0,0004 kg se guardaría como cero, o sea una medición borrada
+      // en silencio. Se pregunta al decimal, no a la coma flotante: mi primera versión multiplicaba
+      // por mil y rechazaba `65536.001`, que es válido (lo midió Codex ejecutándolo).
+      if (new Prisma.Decimal(input.quantity).decimalPlaces() > 3) {
+        throw new SampleValidationError("sample_quantity_precision");
+      }
+      // Bloqueo de fila antes de leer el saldo, el mismo protocolo que `bloquearCosechaEn`: estar
+      // dentro de una transacción NO basta, porque el aislamiento por defecto de Postgres es
+      // `Read Committed` y dos extracciones simultáneas leerían el mismo saldo (Codex, hallazgo 2).
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${input.sourceLotId}::uuid FOR UPDATE`;
+      const saldo = await computeLotBalance(tx, input.sourceLotId);
+      conLibro = saldo.recorded;
+      if (saldo.recorded) {
+        if (saldo.unit !== input.unit) throw new SampleValidationError("sample_mixed_units");
+        if (new Prisma.Decimal(input.quantity).greaterThan(saldo.quantity)) {
+          throw new SampleValidationError("sample_exceeds_available");
+        }
+      }
+    }
+
     const transformation = await tx.lotTransformation.create({
       data: {
         transformationType: "sample_extraction",
@@ -167,7 +241,11 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
       },
     });
 
-    if (input.quantity != null && input.unit) {
+    // Sin libro no se escribe asiento, exactamente como `applyInputDecrements`: inventar el primer
+    // movimiento en negativo convertiría «nunca se pesó» en «pesado y en −2 kg», y dejaría fuera la
+    // siguiente muestra legítima (Codex, hallazgo 1). La cantidad declarada se conserva en el
+    // `LotTransformationInput` de arriba, que es donde dice lo que se sacó.
+    if (input.quantity != null && input.unit && conLibro) {
       await tx.quantityEvent.create({
         data: {
           lotId: input.sourceLotId,

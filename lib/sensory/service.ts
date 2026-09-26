@@ -462,7 +462,17 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
           blindSamples: {
             orderBy: { blindCode: "asc" },
             include: {
-              blindMapping: { include: { sample: true } },
+              blindMapping: {
+                include: {
+                  sample: true,
+                  roastSession: {
+                    include: {
+                      equipment: { select: { name: true } },
+                      recipeVersion: { include: { recipe: { select: { name: true } } } },
+                    },
+                  },
+                },
+              },
               assessments: {
                 where: { status: "submitted" },
                 include: { evaluator: { include: { person: true } }, attributeResponses: true },

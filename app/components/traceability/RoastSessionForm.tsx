@@ -1,7 +1,7 @@
 "use client";
 
 import { CampoNumerico } from "../CampoNumerico";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordRoastSessionAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
@@ -34,9 +34,15 @@ interface PerfilOption {
   label: string;
 }
 
-export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles: PerfilOption[] }) {
+interface Opcion { id: string; label: string }
+interface MuestraOption extends Opcion { disponibleKg: number | null }
+
+export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
+  lotId: string; perfiles: PerfilOption[]; muestras: MuestraOption[]; equipos: Opcion[];
+}) {
   const [state, formAction, pending] = useActionState(recordRoastSessionAction, initialState);
   const t = useTranslations("Traceability");
+  const [purpose, setPurpose] = useState("sample");
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
@@ -50,11 +56,26 @@ export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles:
           registran igual y después son indistinguibles si no se dice. */}
       <div className="nn-field">
         <label htmlFor="r-purpose">{t("roastPurposeLabel")}</label>
-        <select id="r-purpose" name="purpose" defaultValue="sample" required>
+        <select id="r-purpose" name="purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} required>
           <option value="sample">{t("roastPurpose_sample")}</option>
           <option value="production">{t("roastPurpose_production")}</option>
         </select>
       </div>
+
+      {purpose === "sample" && muestras.length > 0 ? (
+        <div className="nn-field">
+          <label htmlFor="r-sourceSampleId">{t("roastSourceSampleLabel")}</label>
+          <select id="r-sourceSampleId" name="sourceSampleId" defaultValue="">
+            <option value="">{t("roastSourceSampleNoneOption")}</option>
+            {muestras.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}{m.disponibleKg == null ? "" : ` · ${m.disponibleKg.toFixed(3)} kg`}
+              </option>
+            ))}
+          </select>
+          <small className="nn-muted">{t("roastSourceSampleHelp")}</small>
+        </div>
+      ) : null}
 
       {/* Sólo si hay perfiles aprobados para este lote. Sin ellos no se pinta un
           desplegable vacío: los primeros tuestes de muestra se hacen SIN perfil,
@@ -107,9 +128,19 @@ export function RoastSessionForm({ lotId, perfiles }: { lotId: string; perfiles:
         <input id="r-secondCrackAt" name="secondCrackAt" type="datetime-local" />
       </div>
       <div className="nn-field">
-        <label htmlFor="r-equipmentNote">{t("roastEquipmentLabel")}</label>
-        <input id="r-equipmentNote" name="equipmentNote" type="text" />
+        <label htmlFor="r-equipmentId">{t("roastEquipmentLabel")}</label>
+        <select id="r-equipmentId" name="equipmentId" defaultValue="">
+          <option value="">{t("roastEquipmentNoneOption")}</option>
+          {equipos.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+        </select>
       </div>
+      <details>
+        <summary>{t("roastEquipmentOtherSummary")}</summary>
+        <div className="nn-field">
+          <label htmlFor="r-equipmentNote">{t("roastEquipmentNoteLabel")}</label>
+          <input id="r-equipmentNote" name="equipmentNote" type="text" />
+        </div>
+      </details>
       <div className="nn-field">
         <label htmlFor="r-provenanceClass">{t("provenanceClassLabel")}</label>
         <select id="r-provenanceClass" name="provenanceClass" defaultValue="original_record" required>

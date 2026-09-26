@@ -19,6 +19,7 @@ let projectId: string;
 let otherProjectId: string;
 let greenLotId: string;
 let wrongProjectLotId: string;
+let greenSampleId: string;
 let authorizedUserAccountId: string;
 let wrongProjectUserAccountId: string;
 let gabrielPersonId: string;
@@ -57,6 +58,14 @@ beforeAll(async () => {
     data: { lotCode: `${RUN_ID}-green`, lotType: "green", organizationId, projectId },
   });
   greenLotId = greenLot.id;
+  const greenSample = await prisma.sample.create({
+    data: {
+      sampleCode: `${RUN_ID}-sample`, sampleType: "green_coffee", materialState: "GREEN",
+      massAtExtraction: 0.3, massUnitAtExtraction: "kg", sourceLotId: greenLot.id,
+      organizationId, projectId,
+    },
+  });
+  greenSampleId = greenSample.id;
 
   // Lives here, not in the test that uses it: created inside the test body it
   // was tracked by nothing and leaked one row per run — the very defect
@@ -129,6 +138,7 @@ afterAll(async () => {
   // create RoastSessions and vitest runs files in parallel, so a total would be
   // measuring them too.
   expect(await prisma.roastSession.count({ where: { createdBy: { in: roastSessionOwners } } })).toBe(0);
+  await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: greenSampleId }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [greenLotId, wrongProjectLotId, ...outputLotIds] } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];
@@ -150,6 +160,32 @@ afterAll(async () => {
 });
 
 describe("recordRoastSession — validation and access", () => {
+  it("tuesta una muestra sin descontar por segunda vez el lote y limita su masa", async () => {
+    const antes = await prisma.quantityEvent.count({ where: { lotId: greenLotId } });
+    const { roastSession, transformation, outputLot, reconciliation } = await recordRoastSession(authorizedUserAccountId, {
+      purpose: "sample",
+      sourceSampleId: greenSampleId,
+      lotId: greenLotId,
+      outputLotCode: `${RUN_ID}-sample-roast`,
+      chargeWeightKg: 0.2,
+      dischargeWeightKg: 0.17,
+      startedAt: new Date("2027-01-10T07:00:00Z"),
+      provenanceClass: "direct_observation",
+    });
+    outputLotIds.push(outputLot.id);
+
+    expect(roastSession.sourceSampleId).toBe(greenSampleId);
+    expect(reconciliation).toBeNull();
+    expect(transformation.id).toBeTruthy();
+    expect(await prisma.quantityEvent.count({ where: { lotId: greenLotId } })).toBe(antes);
+
+    await expect(recordRoastSession(authorizedUserAccountId, {
+      purpose: "sample", sourceSampleId: greenSampleId, lotId: greenLotId,
+      outputLotCode: `${RUN_ID}-sample-over`, chargeWeightKg: 0.11, dischargeWeightKg: 0.09,
+      startedAt: new Date("2027-01-10T07:30:00Z"), provenanceClass: "direct_observation",
+    })).rejects.toThrow(/sample_mass_exceeded/);
+  });
+
   it("rejects a user with no access to the source lot's project", async () => {
     await expect(
       recordRoastSession(wrongProjectUserAccountId, {
@@ -221,7 +257,9 @@ describe("§4.1 — one green lot roasted three ways, queryable by profile", () 
     // has three children from one parent, even though each is its own
     // stage_change transformation rather than one shared split.
     const { items: allFromThisLot } = await listRoastSessions(authorizedUserAccountId, {});
-    const ourSessions = allFromThisLot.filter((s) => s.transformations.some((t) => t.inputs.some((i) => i.lot.id === greenLotId)));
+    const ourSessions = allFromThisLot.filter((s) =>
+      s.purpose === "production" && s.transformations.some((t) => t.inputs.some((i) => i.lot.id === greenLotId)),
+    );
     expect(ourSessions.length).toBe(3);
   });
 });

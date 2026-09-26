@@ -200,7 +200,9 @@ describe("el inventario del router", () => {
     // 109 → 111 el 2026-09-23: índice y detalle de ruedas sensoriales. Ambas son
     // públicas sólo para contenido publicado; los borradores siguen acotados por
     // permisos sensoriales en lib/sensory/ruedas.ts. Medido: 100 páginas y 11 handlers.
-    expect(salida).toContain("111 entradas");
+    // 111 → 113 el 2026-09-24: trilla y clasificación verde por mallas,
+    // las dos con sesión y autorización repetida en el servicio.
+    expect(salida).toContain("113 entradas");
     expect(codigo, salida).toBe(0);
   });
 

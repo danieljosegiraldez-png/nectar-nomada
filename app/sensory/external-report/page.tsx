@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { opcionesParaInforme, InformeExternoError } from "../../../lib/sensory/informeExterno";
 import { listarMuestrasParaCata } from "../../../lib/sensory/sessions";
 import { InformeExternoForm } from "../../components/sensory/InformeExternoForm";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +46,19 @@ export default async function InformeExternoPage({
       listarMuestrasParaCata(user.userAccountId),
     ]);
     opciones = o;
-    muestras = ms.map((m) => ({
-      id: m.id,
-      label: [m.sampleCode, m.sampleType, m.description].filter(Boolean).join(" · "),
-    }));
+    // Una opción por PREPARACIÓN, no por muestra: así la pantalla no puede mandar una muestra con
+    // el tueste de otra, ni omitir el tueste de una muestra que sí lo tiene (decisión de Daniel,
+    // 2026-09-25). Una muestra sin ningún tueste registrado ofrece su opción, marcada.
+    muestras = ms.flatMap((m) => {
+      const base = [m.sampleCode, m.sampleType, m.description].filter(Boolean).join(" · ");
+      if (m.roastSessions.length === 0) {
+        return [{ id: `${m.id}|`, label: `${base} · ${t("externalReportNoRoast")}` }];
+      }
+      return m.roastSessions.map((r) => ({
+        id: `${m.id}|${r.id}`,
+        label: `${base} · ${t("externalReportRoastOn", { fecha: mostrarFecha(r.startedAt, null) })}`,
+      }));
+    });
   } catch (error) {
     if (error instanceof InformeExternoError) redirect("/sensory");
     throw error;

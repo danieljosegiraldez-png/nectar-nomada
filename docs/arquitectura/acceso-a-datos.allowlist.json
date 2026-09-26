@@ -370,6 +370,14 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/greenGrading.ts",
+      "razon": "Módulo de dominio: valida que el origen sea café verde y la persona permitida; delega autorización, genealogía, libro de cantidades, balance y auditoría atómica en recordTransformation. Su lectura previa no devuelve datos: sólo establece las reglas físicas antes de delegar."
+    },
+    {
+      "archivo": "lib/traceability/trilla.ts",
+      "razon": "Módulo de dominio: valida que el origen sea pergamino o cereza seca y delega autorización, genealogía, libro de cantidades, balance y auditoría atómica en recordTransformation. Después relee únicamente la transformación y su subproducto recién creados para devolver el resultado confirmado."
+    },
+    {
       "archivo": "lib/traceability/specimens.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
@@ -1323,6 +1331,18 @@
       "operacion": "urlDelLogotipo",
       "razon": "Firma la URL de lectura del logotipo a partir de un `logoAssetId` que el llamador ya obtuvo de `listarFincas`, que parte de `getManageableContext`: sólo llega el logotipo de fincas que quien mira ya ve. Mismo molde que `listLandAssets`.",
       "verificado": "2026-09-21"
+    },
+    {
+      "archivo": "lib/sensory/sessions.ts",
+      "operacion": "esTuesteDeLaMuestra",
+      "razon": "Decisión de Daniel, 2026-09-25: ¿ese tueste es una preparación de esa muestra? Sólo LEE `roastSession` por su id y compara `sourceSampleId` y `purpose`. No recibe principal porque sus dos llamadores ya autorizaron: `crearSesionDeCata` exige `sensory:manage_session` y comprueba antes que la muestra sea alcanzable (`sample_not_accessible`), y `registrarInformeExterno` exige el mismo permiso y carga la muestra antes. Se exporta a propósito para que los DOS escritores de sesiones de cata usen UNA regla: la revisión adversarial de ese día encontró que el informe externo no preguntaba nada, y una copia de la regla es cómo vuelven a divergir.",
+      "verificado": "2026-09-25"
+    },
+    {
+      "archivo": "lib/sensory/sessions.ts",
+      "operacion": "tienePreparacionTostada",
+      "razon": "Decisión de Daniel, 2026-09-25: ¿la muestra tiene algún tueste registrado? Un `count` sobre `roastSession`, sin devolver ningún dato de la fila. Decide si un informe externo DEBE nombrar el tueste servido o si entra marcado «tueste no registrado». Mismo razonamiento que `esTuesteDeLaMuestra`: quien llama ya autorizó la muestra.",
+      "verificado": "2026-09-25"
     }
   ]
 }

@@ -31,12 +31,35 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
+import { listarEquipos } from "../equipos/equipos";
 import type { Prisma, ProvenanceClass, RoastPurpose } from "../../generated/prisma/client";
 
 export class RoastSessionValidationError extends Error {}
 
+export async function listGreenSamplesForRoast(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [{
+    projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification,
+  }]);
+  const muestras = await prisma.sample.findMany({
+    where: { sourceLotId: lotId, materialState: "GREEN", retiredAt: null },
+    include: { roastSessions: { select: { chargeWeightKg: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  return muestras.map((m) => ({
+    id: m.id,
+    label: m.sampleCode,
+    disponibleKg: m.massUnitAtExtraction === "kg" && m.massAtExtraction != null
+      ? Math.max(0, Number(m.massAtExtraction) - m.roastSessions.reduce((s, r) => s + Number(r.chargeWeightKg ?? 0), 0))
+      : null,
+  })).filter((m) => m.disponibleKg == null || m.disponibleKg > 0);
+}
+
 export interface RecordRoastSessionInput {
   lotId: string;
+  /** Muestra verde ya apartada. Presente sólo para tuestes de muestra. */
+  sourceSampleId?: string | null;
   // Para qué se tostó. Obligatorio y sin valor por defecto, como
   // `provenanceClass`: suponer `production` convertiría cada muestra en
   // producción en silencio, y es justo la distinción que este campo existe para
@@ -49,6 +72,7 @@ export interface RecordRoastSessionInput {
   outputLotCode: string;
   roastLevel?: string | null;
   equipmentNote?: string | null;
+  equipmentId?: string | null;
   roasterPersonId?: string | null;
   chargeWeightKg?: number | null;
   dischargeWeightKg?: number | null;
@@ -69,6 +93,33 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
   if (!sourceLot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
   await exigirPersonaPermitida(userAccountId, input.roasterPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
+
+  const sourceSample = input.sourceSampleId
+    ? await prisma.sample.findUnique({ where: { id: input.sourceSampleId } })
+    : null;
+  if (input.sourceSampleId && !sourceSample) throw new RoastSessionValidationError("sample_not_found");
+  if (sourceSample) {
+    if (input.purpose !== "sample") throw new RoastSessionValidationError("sample_source_requires_sample_purpose");
+    if (sourceSample.sourceLotId !== sourceLot.id) throw new RoastSessionValidationError("sample_source_lot_mismatch");
+    if (sourceSample.materialState !== "GREEN") throw new RoastSessionValidationError("sample_must_be_green");
+    if (input.chargeWeightKg == null) throw new RoastSessionValidationError("sample_charge_weight_required");
+    if (sourceSample.massUnitAtExtraction !== "kg" || sourceSample.massAtExtraction == null) {
+      throw new RoastSessionValidationError("sample_mass_in_kg_required");
+    }
+    const usado = await prisma.roastSession.aggregate({
+      where: { sourceSampleId: sourceSample.id },
+      _sum: { chargeWeightKg: true },
+    });
+    if (Number(usado._sum.chargeWeightKg ?? 0) + input.chargeWeightKg > Number(sourceSample.massAtExtraction)) {
+      throw new RoastSessionValidationError("sample_mass_exceeded");
+    }
+  }
+  if (input.equipmentId) {
+    const equipos = await listarEquipos(userAccountId);
+    if (!equipos.some((equipo) => equipo.id === input.equipmentId && equipo.lifecycleStatus === "active")) {
+      throw new RoastSessionValidationError("equipment_not_available");
+    }
+  }
 
   if (input.endedAt && input.endedAt < input.startedAt) {
     throw new RoastSessionValidationError("ended_before_started");
@@ -116,7 +167,9 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
         secondCrackAt: input.secondCrackAt ?? null,
         notes: input.notes ?? null,
         purpose: input.purpose,
+        sourceSampleId: sourceSample?.id ?? null,
         recipeVersionId: input.recipeVersionId ?? null,
+        equipmentId: input.equipmentId ?? null,
         createdBy: userAccountId,
       },
     });
@@ -135,8 +188,10 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
           create: [
             {
               lotId: input.lotId,
-              quantity: input.chargeWeightKg ?? null,
-              unit: input.chargeWeightKg != null ? "kg" : null,
+              // La extracción ya descontó la muestra del lote. Esta arista
+              // conserva genealogía, pero no vuelve a mover inventario.
+              quantity: sourceSample ? null : input.chargeWeightKg ?? null,
+              unit: sourceSample ? null : input.chargeWeightKg != null ? "kg" : null,
             },
           ],
         },
@@ -184,7 +239,7 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
 
     // P0 — decrement the green lot by what was actually charged. A roast
     // always has an output, so this always settles.
-    const reconciliation = await settleMassBalance(tx, {
+    const reconciliation = sourceSample ? null : await settleMassBalance(tx, {
       transformationId: transformation.id,
       transformationType: "stage_change",
       organizationId: sourceLot.organizationId,

@@ -14,6 +14,7 @@ import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceabil
 import { recordSelection, getSelectionOutturn, SelectionValidationError } from "../../lib/traceability/selection";
 import { conservesMass } from "../../lib/traceability/balance";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { recordGreenGrading } from "../../lib/traceability/greenGrading";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `p3-${Date.now()}`;
@@ -67,6 +68,17 @@ async function cherryLot(code: string, kg: number) {
     unit: "kg",
     occurredAt: new Date(),
     provenanceClass: "measured_fact",
+  });
+  return lot;
+}
+
+async function greenLot(code: string, kg: number) {
+  const lot = await createLot(operatorUserAccountId, {
+    lotCode: `${RUN_ID}-${code}`, lotType: "green", organizationId, projectId, locationId,
+  });
+  await recordQuantityEvent(operatorUserAccountId, {
+    lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
+    occurredAt: new Date(), provenanceClass: "measured_fact",
   });
   return lot;
 }
@@ -131,7 +143,138 @@ afterAll(async () => {
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
 });
 
+describe("clasificación verde: alias de catálogo y orden de permisos (2026-09-25)", () => {
+  /**
+   * Dos hallazgos de la revisión adversarial. El primero es el defecto que ADR-095 dice haber
+   * cerrado: `selection.ts` canoniza un alias a su fila canónica y `greenGrading.ts` era una copia
+   * que no lo hacía, así que el mismo defecto se repartía entre dos escrituras. El segundo es un
+   * oráculo: sin permiso se distinguía «no existe» de «existe y no es verde».
+   */
+  it("rechaza un sistema de malla que no está en la lista", async () => {
+    // Era texto libre: dos fracciones del mismo lote podían decir `international_screen` y
+    // `international_round_screen` y ningún informe las agrupaba (Daniel, 2026-09-25).
+    const source = await greenLot("malla-mala", 5);
+    await expect(
+      recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-malla-mala-f`, quantityKg: 4, screenSystem: "SCA", screenStatus: "measured" }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(/screen_system_invalid/);
+  }, 30000);
+
+  it("«otro sistema» sin decir cuál no pasa; con la nota sí", async () => {
+    const source = await greenLot("malla-otro", 5);
+    await expect(
+      recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-otro-sin-nota`, quantityKg: 4, screenSystem: "otro", screenStatus: "measured" }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      }),
+    ).rejects.toThrow(/screen_system_other_needs_note/);
+
+    const otro = await greenLot("malla-otro-ok", 5);
+    const r = await recordGreenGrading(operatorUserAccountId, {
+      inputLotId: otro.id,
+      inputQuantityKg: 5,
+      fractions: [
+        { lotCode: `${RUN_ID}-otro-con-nota`, quantityKg: 4, screenSystem: "otro", gradeNote: "zaranda del beneficio, 6,5 mm", screenStatus: "measured" },
+      ],
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+    });
+    expect(r.transformation.transformationType).toBe("selection");
+  }, 30000);
+
+  it("un alias de categoría de rechazo se guarda como su fila canónica", async () => {
+    const canonico = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { id: flotadoresId },
+      select: { id: true, catalogId: true },
+    });
+    const alias = await prisma.variableCatalogValue.create({
+      data: { catalogId: canonico.catalogId, value: `flotadores-alias-${RUN_ID}`, aliasOfId: canonico.id },
+    });
+    try {
+      const source = await greenLot("alias-src", 5);
+      const r = await recordGreenGrading(operatorUserAccountId, {
+        inputLotId: source.id,
+        inputQuantityKg: 5,
+        fractions: [{ lotCode: `${RUN_ID}-alias-frac`, quantityKg: 4, screenStatus: "unknown" }],
+        defectLots: [{ lotCode: `${RUN_ID}-alias-def`, quantityKg: 1, rejectionCategoryValueId: alias.id }],
+        occurredAt: new Date(),
+        provenanceClass: "measured_fact",
+      });
+      const defecto = await prisma.lot.findFirstOrThrow({
+        where: { lotCode: `${RUN_ID}-alias-def` },
+        select: { rejectionCategoryValueId: true },
+      });
+      expect(r.transformation.transformationType).toBe("selection");
+      // Lo que importa: NO se guardó el alias.
+      expect(defecto.rejectionCategoryValueId).toBe(canonico.id);
+      expect(defecto.rejectionCategoryValueId).not.toBe(alias.id);
+    } finally {
+      // El lote lo borra el `afterAll` del archivo, que ya sabe el orden con las transformaciones.
+      // Aquí sólo el alias, que nadie referencia: la fila guardada apunta a la canónica.
+      await prisma.variableCatalogValue.deleteMany({ where: { id: alias.id } });
+    }
+  }, 30000);
+
+  it("sin permiso no se puede averiguar si el lote de otra finca es verde", async () => {
+    // **El lote NO es verde a propósito.** Con uno verde esta prueba no discrimina: `recordTransformation`
+    // autoriza más abajo y la cuenta de fuera recibía el error de acceso igual. Lo que distingue el
+    // arreglo es CUÁL error llega primero con un lote no verde: antes, «no es verde» —o sea, la
+    // respuesta contaba de qué tipo es un lote ajeno—; ahora, el de acceso.
+    const source = await cherryLot("oraculo", 5);
+    const fuera = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "SinAcceso", displayName: `TEST SinAcceso (${RUN_ID})` },
+    });
+    const cuentaFuera = await prisma.userAccount.create({
+      data: { personId: fuera.id, authProvider: "credentials", status: "active" },
+    });
+    try {
+      await expect(
+        recordGreenGrading(cuentaFuera.id, {
+          inputLotId: source.id,
+          inputQuantityKg: 5,
+          fractions: [{ lotCode: `${RUN_ID}-oraculo-frac`, quantityKg: 4, screenStatus: "unknown" }],
+          occurredAt: new Date(),
+          provenanceClass: "measured_fact",
+        }),
+      ).rejects.toBeInstanceOf(TraceabilityAccessError);
+    } finally {
+      // Esta cuenta no está en la lista del `afterAll`, así que se limpia sola: si no, su persona
+      // queda referenciada y la limpieza del archivo entero revienta.
+      await prisma.userAccount.deleteMany({ where: { id: cuentaFuera.id } });
+      await prisma.person.deleteMany({ where: { id: fuera.id } });
+    }
+  }, 30000);
+});
+
 describe("selection conserves mass", () => {
+  it("separa varias mallas verdes y conserva sus datos y balance", async () => {
+    const source = await greenLot("green-screen", 10);
+    const result = await recordGreenGrading(operatorUserAccountId, {
+      inputLotId: source.id,
+      inputQuantityKg: 10,
+      fractions: [
+        { lotCode: `${RUN_ID}-screen-17-18`, quantityKg: 6, screenMin: 17, screenMax: 18, screenSystem: "redonda_internacional", screenStatus: "measured", uniformityPct: 94 },
+        { lotCode: `${RUN_ID}-screen-15-16`, quantityKg: 3, screenMin: 15, screenMax: 16, screenSystem: "redonda_internacional", screenStatus: "measured" },
+      ],
+      defectLots: [{ lotCode: `${RUN_ID}-green-defects`, quantityKg: 0.8, rejectionCategoryValueId: flotadoresId }],
+      declaredLossKg: 0.2,
+      occurredAt: new Date(), provenanceClass: "measured_fact",
+    });
+
+    expect(result.reconciliation?.unexplained?.toNumber()).toBe(0);
+    const large = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-screen-17-18` } });
+    expect([large.greenScreenMin, large.greenScreenMax, Number(large.greenUniformityPct)]).toEqual([17, 18, 94]);
+    expect(large.greenScreenStatus).toBe("measured");
+  });
+
   it("is registered as a conserving type", () => {
     // The load-bearing line of the whole ticket.
     expect(conservesMass("selection")).toBe(true);

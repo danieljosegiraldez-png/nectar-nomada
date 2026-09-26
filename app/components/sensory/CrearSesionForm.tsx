@@ -4,11 +4,19 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { crearSesionDeCataAction, type SensoryActionState } from "../../actions/sensory";
 import { SelectorDeMuestras } from "./SelectorDeMuestras";
+import { TimezoneOffsetField } from "../TimezoneOffsetField";
 
 const initialState: SensoryActionState = {};
 
-interface Opcion {
+interface OpcionDeProtocolo {
   id: string;
+  label: string;
+}
+
+interface OpcionDePreparacion {
+  key: string;
+  sampleId: string;
+  roastSessionId: string | null;
   label: string;
 }
 
@@ -26,8 +34,8 @@ export function CrearSesionForm({
   muestras,
   hayMas,
 }: {
-  protocolos: Opcion[];
-  muestras: Opcion[];
+  protocolos: OpcionDeProtocolo[];
+  muestras: OpcionDePreparacion[];
   hayMas: boolean;
 }) {
   const [state, formAction, pending] = useActionState(crearSesionDeCataAction, initialState);
@@ -35,6 +43,7 @@ export function CrearSesionForm({
 
   return (
     <form action={formAction} className="nn-form" style={{ maxWidth: 560 }}>
+      <TimezoneOffsetField />
       <div className="nn-field">
         <label htmlFor="cs-name">{t("sessionNameLabel")}</label>
         <input id="cs-name" name="name" type="text" required maxLength={200} />
@@ -84,6 +93,12 @@ export function CrearSesionForm({
       <div className="nn-field">
         <label htmlFor="cs-preparation">{t("sessionPreparationLabel")}</label>
         <input id="cs-preparation" name="preparationMethod" type="text" />
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="cs-scheduledAt">{t("sessionScheduledAtLabel")}</label>
+        <input id="cs-scheduledAt" name="scheduledAt" type="datetime-local" />
+        <span className="nn-muted">{t("sessionScheduledAtHelp")}</span>
       </div>
 
       <SelectorDeMuestras iniciales={muestras} hayMasInicial={hayMas} />

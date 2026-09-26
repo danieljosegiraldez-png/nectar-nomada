@@ -227,6 +227,36 @@ form.nn-form {
   gap: 1rem;
 }
 
+.nn-green-grading-form { max-width: 760px; }
+.nn-green-grading-lead,
+.nn-green-grading-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+.nn-green-grading-lead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nn-green-grading-group { border: 1px solid var(--nn-border); border-radius: 10px; padding: 1rem; }
+.nn-green-grading-group > legend { font-weight: 700; padding: 0 0.35rem; }
+.nn-green-fraction + .nn-green-fraction { border-top: 1px solid var(--nn-border); margin-top: 1rem; padding-top: 1rem; }
+.nn-green-fraction-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; }
+.nn-green-wide { grid-column: span 2; }
+.nn-green-remove { align-self: end; min-height: var(--nn-tap); }
+.nn-details-body { margin-top: 0.75rem; display: grid; gap: 0.75rem; }
+.nn-green-balance { margin: 0; padding: 0.75rem 1rem; border: 1px solid; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.nn-green-balance-ok { background: var(--nn-ok-bg, #f2f8f1); border-color: var(--nn-ok-border, #b7d7b0); }
+.nn-green-balance-warning { background: var(--nn-warn-bg, #fdf6e6); border-color: var(--nn-warn-border, #e0c07a); }
+.nn-green-sample-warning { color: var(--nn-warning-ink, #6a4800); background: var(--nn-warn-bg, #fdf6e6); border: 1px solid var(--nn-warn-border, #e0c07a); border-radius: 6px; padding: 0.5rem 0.75rem; }
+.nn-definition-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem 1.25rem; margin: 0; }
+.nn-definition-grid div { min-width: 0; }
+.nn-definition-grid dt { color: var(--nn-ink-muted); font-size: 0.85rem; }
+.nn-definition-grid dd { margin: 0.2rem 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.nn-sensory-sample-option { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.65rem 0; border-bottom: 1px solid var(--nn-border); cursor: pointer; }
+.nn-sensory-sample-option input { width: auto; margin-top: 0.2rem; flex: 0 0 auto; }
+.nn-sensory-selected-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 0.65rem; align-items: start; padding: 0.55rem 0; }
+.nn-roast-age-warning { color: var(--nn-warning-ink, #6a4800); font-weight: 650; }
+
+@media (max-width: 680px) {
+  .nn-green-grading-lead,
+  .nn-green-grading-grid { grid-template-columns: 1fr; }
+  .nn-green-wide { grid-column: auto; }
+}
+
 .nn-field {
   display: flex;
   flex-direction: column;

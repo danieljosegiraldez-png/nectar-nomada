@@ -28,6 +28,8 @@ let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
 let m1: string, m2: string, m3: string, m3Code: string;
+let roast1: string, roast2: string;
+const tuestesDePrueba: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({
@@ -94,6 +96,13 @@ beforeAll(async () => {
     })).id;
   m1 = await muestra("M1");
   m2 = await muestra("M2");
+  roast1 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor },
+  })).id;
+  roast2 = (await prisma.roastSession.create({
+    data: { purpose: "sample", sourceSampleId: m2, startedAt: new Date(), createdBy: gestor },
+  })).id;
+  tuestesDePrueba.push(roast1, roast2);
 
   m3Code = `M3-${RUN}`;
   m3 = (await prisma.sample.create({
@@ -114,6 +123,7 @@ afterAll(async () => {
   const ids = [gestor, sinPermiso];
   const sesiones = await prisma.sensorySession.findMany({ where: assertDefinedWhere({ createdBy: { in: ids } }), select: { id: true } });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
+  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: { in: tuestesDePrueba } }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ createdBy: { in: ids } }) });
   for (const v of [versionOk, versionSinAtributos, versionArchivada]) {
     const ver = await prisma.sensoryProtocolVersion.findUnique({ where: { id: v } });
@@ -131,11 +141,36 @@ afterAll(async () => {
 });
 
 describe("crear una sesión de cata", () => {
+  it("permite catar dos tuestes distintos de la misma muestra y conserva cuál se sirvió", async () => {
+    const [a, b] = await Promise.all([
+      prisma.roastSession.create({ data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor } }),
+      prisma.roastSession.create({ data: { purpose: "sample", sourceSampleId: m1, startedAt: new Date(), createdBy: gestor } }),
+    ]);
+    tuestesDePrueba.push(a.id, b.id);
+
+    const sesion = await crearSesionDeCata(gestor, {
+      name: `Dos tuestes ${RUN}`,
+      protocolVersionId: versionOk,
+      muestras: [m1, m1],
+      roastSessions: [a.id, b.id],
+    });
+    const mapeos = await prisma.sensoryBlindMapping.findMany({
+      where: { blindSample: { flight: { sessionId: sesion.id } } },
+      orderBy: { blindSample: { blindCode: "asc" } },
+    });
+    expect(mapeos.map((m) => m.sampleId)).toEqual([m1, m1]);
+    expect(mapeos.map((m) => m.roastSessionId)).toEqual([a.id, b.id]);
+
+    const ofrecida = (await buscarMuestrasParaCata(gestor, RUN)).muestras.find((m) => m.id === m1);
+    expect(ofrecida?.roastSessions.map((r) => r.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+  });
+
   it("crea sesión, vuelo, muestras ciegas Y su mapeo — las cuatro cosas", async () => {
     const s = await crearSesionDeCata(gestor, {
       name: `Cata ${RUN}`,
       protocolVersionId: versionOk,
       muestras: [m1, m2],
+      roastSessions: [roast1, roast2],
     });
 
     const completa = await prisma.sensorySession.findUniqueOrThrow({
@@ -160,6 +195,37 @@ describe("crear una sesión de cata", () => {
     await expect(
       crearSesionDeCata(sinPermiso, { name: "No", protocolVersionId: versionOk, muestras: [m1] }),
     ).rejects.toBeInstanceOf(SesionDeCataError);
+  });
+
+  it("rechaza una muestra verde sin el tueste concreto que llegará a la taza", async () => {
+    await expect(
+      crearSesionDeCata(gestor, { name: `Sin tueste ${RUN}`, protocolVersionId: versionOk, muestras: [m1] }),
+    ).rejects.toThrow(/roast_preparation_required/);
+  });
+
+  it("rechaza el tueste de OTRA muestra puesto en esta posición", async () => {
+    // Revisión adversarial del 2026-09-25: esta rama (`roast_preparation_not_available`) no tenía
+    // ninguna prueba. Es el caso de manipulación: el formulario manda pares alineados, pero un envío
+    // a mano puede cruzarlos, y ahí se decide qué café representa cada código ciego.
+    await expect(
+      crearSesionDeCata(gestor, {
+        name: `Cruzado ${RUN}`,
+        protocolVersionId: versionOk,
+        muestras: [m1],
+        roastSessions: [roast2],
+      }),
+    ).rejects.toThrow(/roast_preparation_not_available/);
+  });
+
+  it("rechaza una lista de tuestes que no cuadra con la de muestras", async () => {
+    await expect(
+      crearSesionDeCata(gestor, {
+        name: `Desalineado ${RUN}`,
+        protocolVersionId: versionOk,
+        muestras: [m1, m2],
+        roastSessions: [roast1],
+      }),
+    ).rejects.toThrow(/roast_preparations_mismatch/);
   });
 
   it("rechaza un protocolo sin atributos: el juez no tendría nada que puntuar", async () => {
@@ -312,6 +378,7 @@ describe("listarMuestrasParaCata — el batch de origen", () => {
 describe("crear una cata con una muestra que la lista no enseña", () => {
   let tapon: string[] = [];
   let lejana: string;
+  let tuesteLejana: string;
 
   beforeAll(async () => {
     await prisma.sample.createMany({
@@ -344,6 +411,9 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
         },
       })
     ).id;
+    tuesteLejana = (await prisma.roastSession.create({
+      data: { purpose: "sample", sourceSampleId: lejana, startedAt: new Date(), createdBy: gestor },
+    })).id;
   });
 
   afterAll(async () => {
@@ -354,6 +424,7 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
     await prisma.sensorySession.deleteMany({
       where: assertDefinedWhere({ id: { in: sesiones.map((m) => m.blindSample.flight.sessionId) } }),
     });
+    await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: tuesteLejana }) });
     await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: { in: [...tapon, lejana] } }) });
   });
 
@@ -364,7 +435,12 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
   });
 
   it("y aun así la cata la acepta", async () => {
-    const s = await crearSesionDeCata(gestor, { name: `Lejana ${RUN}`, protocolVersionId: versionOk, muestras: [lejana] });
+    const s = await crearSesionDeCata(gestor, {
+      name: `Lejana ${RUN}`,
+      protocolVersionId: versionOk,
+      muestras: [lejana],
+      roastSessions: [tuesteLejana],
+    });
     expect(s.id).toBeTruthy();
   });
 

@@ -27,8 +27,9 @@ export default async function NewSamplePage({ params }: { params: Promise<{ id: 
       <Link href={`/lots/${id}`} className="nn-back-link">
         {t("backToLot", { lotCode: lot.lotCode })}
       </Link>
-      <h1>{t("createSampleButton")}</h1>
-      <SampleForm lotId={id} />
+      <h1>{lot.lotType === "green" ? t("greenSampleTitle") : t("createSampleButton")}</h1>
+      {lot.lotType === "green" ? <p className="nn-muted">{t("greenSampleIntro")}</p> : null}
+      <SampleForm lotId={id} greenCoffee={lot.lotType === "green"} />
     </div>
   );
 }

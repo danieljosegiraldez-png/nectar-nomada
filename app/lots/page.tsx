@@ -12,6 +12,8 @@ const LOT_TYPES: NonNullable<LotListFilters["lotType"]>[] = [
   "cherry",
   "processing",
   "drying",
+  "parchment",
+  "dry_cherry",
   "green",
   "roast",
   "sample",

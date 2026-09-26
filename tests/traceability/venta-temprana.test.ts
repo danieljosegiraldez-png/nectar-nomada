@@ -67,7 +67,7 @@ async function loteConReposoDe(dias: number, sufijo: string) {
     endedAt: haceDias(dias),
     endedOutcome: "target_reached",
     outputLotCode: `${RUN_ID}-${sufijo}-verde`,
-    outputLotType: "green",
+    outputLotType: "parchment",
     quantity: 80,
     unit: "kg",
   });

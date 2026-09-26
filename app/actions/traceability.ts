@@ -37,9 +37,11 @@ import {
   updateRecipeMetadata,
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
-import { startDryingRun, recordDryingTurnEvent, endDryingRun } from "../../lib/traceability/drying";
+import { startDryingRun, recordDryingTurnEvent, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
+import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
 import {
   abrirProceso,
   cambiarIntencion,
@@ -177,6 +179,18 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SampleFromLotValidationError && error.message === "green_sample_before_reposo") {
     return t("error_sample_green_before_reposo");
   }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_exceeds_available") {
+    return t("error_sample_exceeds_available");
+  }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_mixed_units") {
+    return t("error_sample_mixed_units");
+  }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_quantity_precision") {
+    return t("error_sample_quantity_precision");
+  }
+  if (error instanceof SampleFromLotValidationError && error.message === "sample_quantity_must_be_positive") {
+    return t("error_sample_quantity_positive");
+  }
   if (error instanceof SampleFromLotValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof SampleValidationError) return t("error_sample", { detail: error.message });
   if (error instanceof LandMediaValidationError) return t("error_land_media", { detail: error.message });
@@ -215,6 +229,14 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof ByproductValidationError) return t("error_subproducto", { detail: error.message });
   if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
+  if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
+  if (error instanceof GreenGradingValidationError && error.message === "screen_system_invalid") {
+    return t("error_green_grading_screen_system_invalid");
+  }
+  if (error instanceof GreenGradingValidationError && error.message === "screen_system_other_needs_note") {
+    return t("error_green_grading_screen_system_other_needs_note");
+  }
+  if (error instanceof GreenGradingValidationError) return t("error_green_grading", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
   if (error instanceof MaterialConsumptionValidationError) {
@@ -570,9 +592,11 @@ export async function recordRoastSessionAction(
       // Sin valor por defecto aquí tampoco: si la pantalla no lo manda, el
       // servicio debe quejarse, no adivinar.
       purpose: String(formData.get("purpose") ?? "") as never,
+      sourceSampleId: emptyToNull(formData.get("sourceSampleId")),
       recipeVersionId: emptyToNull(formData.get("recipeVersionId")),
       roastLevel: emptyToNull(formData.get("roastLevel")),
       equipmentNote: emptyToNull(formData.get("equipmentNote")),
+      equipmentId: emptyToNull(formData.get("equipmentId")),
       chargeWeightKg: emptyToNullNumber(formData.get("chargeWeightKg")),
       dischargeWeightKg: emptyToNullNumber(formData.get("dischargeWeightKg")),
       startedAt: fechaLocal(formData, "startedAt"),
@@ -644,7 +668,7 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
       dryingRunId: String(formData.get("dryingRunId") ?? ""),
       endedAt: new Date(),
       outputLotCode: String(formData.get("outputLotCode") ?? ""),
-      outputLotType: String(formData.get("outputLotType") ?? "green") as never,
+      outputLotType: String(formData.get("outputLotType") ?? "") as never,
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
       provenanceClass: "original_record",
@@ -654,9 +678,10 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
     // pinta la página y se envía este formulario ya no es un 500 — vuelve al
     // lote con el código en la URL, que es lo único que esta acción sin
     // estado de error propio puede transmitir.
-    if (error instanceof BandejaError) {
+    if (error instanceof BandejaError || error instanceof DryingValidationError) {
       revalidatePath(`/lots/${lotId}`);
-      redirect(`/lots/${lotId}?error=${error.codigo}`);
+      const codigo = error instanceof BandejaError ? error.codigo : "estado_salida_invalido";
+      redirect(`/lots/${lotId}?error=${codigo}`);
     }
     throw error;
   }
@@ -702,14 +727,15 @@ export async function createSampleAction(
   const t = await getTranslations("Traceability");
 
   const lotId = String(formData.get("lotId") ?? "");
+  const quantityGrams = emptyToNullNumber(formData.get("quantityGrams"));
   try {
     await createSampleFromLot(user.userAccountId, {
       sampleCode: String(formData.get("sampleCode") ?? ""),
       sampleType: String(formData.get("sampleType") ?? ""),
       materialState: emptyToNull(formData.get("materialState")) as import("../../generated/prisma/client").MaterialState | null,
       sourceLotId: lotId,
-      quantity: emptyToNullNumber(formData.get("quantity")),
-      unit: emptyToNull(formData.get("unit")),
+      quantity: quantityGrams == null ? emptyToNullNumber(formData.get("quantity")) : quantityGrams / 1000,
+      unit: quantityGrams == null ? emptyToNull(formData.get("unit")) : "kg",
       occurredAt: new Date(),
       notes: emptyToNull(formData.get("notes")),
       // T9.5 §3(b): extracting a sample is an action taken against the lot.
@@ -721,6 +747,105 @@ export async function createSampleAction(
 
   revalidatePath(`/lots/${lotId}`);
   redirect(`/lots/${lotId}`);
+}
+
+// --- Trilla desde almacenamiento -------------------------------------------
+
+export async function recordHullingAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const lotId = String(formData.get("lotId") ?? "");
+
+  let greenLotId: string;
+  try {
+    const result = await registrarTrilla(user.userAccountId, {
+      lotePergaminoId: lotId,
+      masaEntradaKg: Number(formData.get("masaEntradaKg")),
+      loteVerde: {
+        lotCode: String(formData.get("lotCode") ?? "").trim(),
+        masaKg: Number(formData.get("masaVerdeKg")),
+      },
+      cascarillaKg: Number(formData.get("cascarillaKg")),
+      mermaKg: Number(formData.get("mermaKg")),
+      producedAtLocationId: String(formData.get("producedAtLocationId") ?? ""),
+      occurredAt: fechaLocal(formData, "occurredAt"),
+      provenanceClass: "original_record",
+      notes: emptyToNull(formData.get("notes")),
+    });
+    greenLotId = result.loteVerde.id;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+  revalidatePath(`/lots/${lotId}`);
+  redirect(`/lots/${greenLotId}`);
+}
+
+// --- Clasificacion del cafe verde por mallas -------------------------------
+
+export async function recordGreenGradingAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const lotId = String(formData.get("lotId") ?? "");
+
+  const fractions = [];
+  const lastFraction = maxIndiceDeFilas(formData, "fractionQuantity");
+  for (let i = 0; i <= lastFraction; i++) {
+    const quantityKg = emptyToNullNumber(formData.get(`fractionQuantity.${i}`));
+    const lotCode = emptyToNull(formData.get(`fractionLotCode.${i}`));
+    if (quantityKg == null && !lotCode) continue;
+    fractions.push({
+      lotCode: lotCode ?? "",
+      quantityKg: quantityKg ?? 0,
+      screenMin: emptyToNullNumber(formData.get(`fractionScreenMin.${i}`)),
+      screenMax: emptyToNullNumber(formData.get(`fractionScreenMax.${i}`)),
+      screenSystem: emptyToNull(formData.get(`fractionScreenSystem.${i}`)),
+      screenStatus: String(formData.get(`fractionScreenStatus.${i}`) ?? "unknown") as "measured" | "supplier_declared" | "qualitative" | "unknown",
+      gradeNote: emptyToNull(formData.get(`fractionGradeNote.${i}`)),
+      uniformityPct: emptyToNullNumber(formData.get(`fractionUniformityPct.${i}`)),
+    });
+  }
+
+  const defectLots = [];
+  const lastDefect = maxIndiceDeFilas(formData, "defectQuantity");
+  for (let i = 0; i <= lastDefect; i++) {
+    const quantityKg = emptyToNullNumber(formData.get(`defectQuantity.${i}`));
+    const lotCode = emptyToNull(formData.get(`defectLotCode.${i}`));
+    const rejectionCategoryValueId = emptyToNull(formData.get(`defectCategory.${i}`));
+    if (quantityKg == null && !lotCode && !rejectionCategoryValueId) continue;
+    if (quantityKg == null || !lotCode || !rejectionCategoryValueId) {
+      return { error: t("error_green_grading", { detail: "defect_incomplete" }) };
+    }
+    defectLots.push({ lotCode, quantityKg, rejectionCategoryValueId });
+  }
+
+  let firstFractionId: string;
+  try {
+    const result = await recordGreenGrading(user.userAccountId, {
+      inputLotId: lotId,
+      inputQuantityKg: Number(formData.get("inputQuantityKg") ?? 0),
+      fractions,
+      defectLots,
+      declaredLossKg: emptyToNullNumber(formData.get("declaredLossKg")),
+      occurredAt: fechaLocal(formData, "occurredAt"),
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: "original_record",
+      sourceReference: emptyToNull(formData.get("sourceReference")),
+    });
+    firstFractionId = result.outputLots[0]?.id ?? lotId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/lots/${lotId}`);
+  redirect(`/lots/${firstFractionId}`);
 }
 
 // --- P3: selección (44_P3_SELECTION.md §6) ---------------------------------

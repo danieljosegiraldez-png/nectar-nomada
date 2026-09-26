@@ -171,6 +171,9 @@ afterAll(async () => {
     await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id }) });
     await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: ver.protocolId }) });
   }
+  // Los tuestes que crean las pruebas del tueste servido (2026-09-25). Van antes que las muestras;
+  // el mapeo ciego los suelta con `SetNull`, así que este orden no rompe nada.
+  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ createdBy: admin }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [admin, sinPermiso] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [admin, sinPermiso] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
@@ -188,6 +191,86 @@ const base = (sampleId: string) => ({
     { attributeName: "Flavor", value: 7.5 },
   ],
   overallScore: 8,
+});
+
+describe("el tueste servido en un informe externo (decisión de Daniel, 2026-09-25)", () => {
+  /**
+   * La revisión adversarial encontró que este camino creaba una sesión de cata completa SIN tueste,
+   * mientras `crearSesionDeCata` lo exigía — y `SESSION_STATE.md` afirmaba «toda cata nueva exige el
+   * tueste exacto», que era falso. Decisión: se exige **sólo si la muestra tiene tuestes**; sin
+   * ninguno, el informe entra marcado «tueste no registrado», porque el laboratorio de fuera pudo
+   * tostarlo sin que nadie lo anotara aquí, y fingirlo sería inventar un hecho.
+   */
+  // Muestras PROPIAS: la primera versión de estas pruebas creó tuestes sobre m3/m5/m6, que otras
+  // tres pruebas de este archivo usan sin tueste, y las tumbó. Un fixture compartido no se ensucia.
+  let sinTueste: string;
+  let conTueste: string;
+  let conTuesteB: string;
+  let ajena: string;
+  beforeAll(async () => {
+    const propia = async (codigo: string) =>
+      (
+        await prisma.sample.create({
+          data: {
+            sampleCode: `${codigo}-${RUN}`,
+            sampleType: "green",
+            organizationId: orgId,
+            locationId: plotId,
+            status: "approved",
+            classification: "internal",
+            createdBy: admin,
+          },
+        })
+      ).id;
+    sinTueste = await propia("T-sin");
+    conTueste = await propia("T-con");
+    conTuesteB = await propia("T-conB");
+    ajena = await propia("T-ajena");
+  });
+
+  const mapeoDe = async (blindSampleId: string) =>
+    prisma.sensoryBlindMapping.findFirstOrThrow({ where: { blindSampleId }, select: { roastSessionId: true } });
+
+  it("rechaza una muestra retirada: existir no es poder usarla", async () => {
+    // Codex, 2026-09-25: este camino sólo comprobaba existencia, mientras la cata interna comprueba
+    // visibilidad y retiro. Ahora los dos preguntan lo mismo.
+    const retirada = await prisma.sample.create({
+      data: {
+        sampleCode: `T-retirada-${RUN}`, sampleType: "green", organizationId: orgId, locationId: plotId,
+        status: "approved", classification: "internal", createdBy: admin, retiredAt: new Date("2026-03-04"),
+      },
+    });
+    await expect(registrarInformeExterno(admin, base(retirada.id))).rejects.toThrow(/sample_retired/);
+  });
+
+  it("una muestra SIN tueste registrado entra, y queda marcada como tal", async () => {
+    const v = await registrarInformeExterno(admin, base(sinTueste));
+    expect((await mapeoDe(v.blindSampleId!)).roastSessionId).toBeNull();
+  });
+
+  it("si la muestra TIENE tueste, hay que decir cuál", async () => {
+    await prisma.roastSession.create({
+      data: { purpose: "sample", sourceSampleId: conTueste, startedAt: new Date("2026-03-01"), createdBy: admin },
+    });
+    await expect(registrarInformeExterno(admin, base(conTueste))).rejects.toThrow(/roast_preparation_required/);
+  });
+
+  it("acepta el tueste de esa muestra y lo guarda en el mapeo", async () => {
+    const tueste = await prisma.roastSession.create({
+      data: { purpose: "sample", sourceSampleId: conTuesteB, startedAt: new Date("2026-03-02"), createdBy: admin },
+    });
+    const v = await registrarInformeExterno(admin, { ...base(conTuesteB), roastSessionId: tueste.id });
+    expect((await mapeoDe(v.blindSampleId!)).roastSessionId).toBe(tueste.id);
+  });
+
+  it("rechaza el tueste de OTRA muestra", async () => {
+    const tueste = await prisma.roastSession.create({
+      data: { purpose: "sample", sourceSampleId: ajena, startedAt: new Date("2026-03-03"), createdBy: admin },
+    });
+    await expect(registrarInformeExterno(admin, { ...base(sinTueste), roastSessionId: tueste.id })).rejects.toThrow(
+      /roast_preparation_not_available/,
+    );
+  });
 });
 
 describe("registrar el informe de un evaluador sin cuenta", () => {

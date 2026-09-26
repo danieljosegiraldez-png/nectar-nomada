@@ -27,6 +27,8 @@ describe("nextActionFor", () => {
     expect(nextActionFor("cherry", true, false)).toBe("measurement");
     expect(nextActionFor("processing", false)).toBe("drying");
     expect(nextActionFor("drying", false)).toBe("storage");
+    expect(nextActionFor("parchment", false)).toBe("storage");
+    expect(nextActionFor("dry_cherry", false)).toBe("storage");
   });
 
   it("sends green and roasted coffee to be tasted", () => {
@@ -58,7 +60,7 @@ describe("nextActionFor", () => {
     // The guard that matters when a stage is added: this file is a switch over
     // the enum, and a new member must be a deliberate decision rather than an
     // accidental `undefined` reaching the page.
-    const allTypes: LotType[] = ["cherry", "processing", "drying", "green", "roast", "sample", "other", "honey"];
+    const allTypes: LotType[] = ["cherry", "processing", "drying", "parchment", "dry_cherry", "green", "roast", "sample", "other", "honey"];
     for (const t of allTypes) {
       const result = nextActionFor(t, false);
       expect(result === null || typeof result === "string").toBe(true);

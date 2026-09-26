@@ -14,6 +14,7 @@
  * Spec: docs/superpowers/specs/2026-09-16-reposo-trilla-y-subproductos-design.md §B
  */
 import { recordTransformation } from "./lots";
+import { prisma } from "../db";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export interface RegistrarTrillaInput {
@@ -36,7 +37,24 @@ export interface RegistrarTrillaInput {
   readonly notes?: string | null;
 }
 
+export class TrillaValidationError extends Error {}
+
 export async function registrarTrilla(userAccountId: string, input: RegistrarTrillaInput) {
+  const lote = await prisma.lot.findUnique({ where: { id: input.lotePergaminoId }, select: { lotType: true } });
+  if (!lote) throw new TrillaValidationError("lot_not_found");
+  if (lote.lotType !== "parchment" && lote.lotType !== "dry_cherry") {
+    throw new TrillaValidationError("hulling_requires_parchment_or_dry_cherry");
+  }
+  for (const [campo, valor] of [["input", input.masaEntradaKg], ["green", input.loteVerde.masaKg]] as const) {
+    if (!Number.isFinite(valor) || valor <= 0) {
+      throw new TrillaValidationError(`${campo}_mass_invalid`);
+    }
+  }
+  if (!Number.isFinite(input.cascarillaKg) || !Number.isFinite(input.mermaKg)) {
+    throw new TrillaValidationError("balance_mass_invalid");
+  }
+  if (!input.loteVerde.lotCode.trim()) throw new TrillaValidationError("green_lot_code_required");
+
   const { transformation, outputLots } = await recordTransformation(userAccountId, {
     transformationType: "hulling",
     occurredAt: input.occurredAt,
@@ -67,7 +85,6 @@ export async function registrarTrilla(userAccountId: string, input: RegistrarTri
     declaredLossReason: "merma de trilla — la cascarilla va como subproducto, no aquí",
   });
 
-  const { prisma } = await import("../db");
   const subproducto = await prisma.byproductBatch.findFirstOrThrow({
     where: { transformationId: transformation.id },
   });

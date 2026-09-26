@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { listarProtocolosParaCata, buscarMuestrasParaCata, SesionDeCataError } from "../../../lib/sensory/sessions";
-import { etiquetaDeMuestra } from "../../../lib/sensory/muestraEnCata";
+import { opcionesDePreparacion } from "../../../lib/sensory/opcionesDePreparacion";
 import { CrearSesionForm } from "../../components/sensory/CrearSesionForm";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,9 @@ export default async function NuevaSesionPage() {
   // vuelve a la lista en vez de pintar un formulario que el servidor va a
   // rechazar — la lente de los formularios que ofrecen lo que el servicio niega.
   let protocolos: { id: string; label: string }[];
-  let muestras: { id: string; label: string }[];
+  let muestras: Array<{ key: string; sampleId: string; roastSessionId: string | null; label: string }>;
   let hayMas: boolean;
+  let hayMuestrasSinTueste = false;
   try {
     const [ps, ms] = await Promise.all([
       listarProtocolosParaCata(user.userAccountId),
@@ -35,7 +36,8 @@ export default async function NuevaSesionPage() {
       buscarMuestrasParaCata(user.userAccountId, ""),
     ]);
     protocolos = ps;
-    muestras = ms.muestras.map((m) => ({ id: m.id, label: etiquetaDeMuestra(m) }));
+    muestras = ms.muestras.flatMap((m) => opcionesDePreparacion(m, textosDePreparacion(t)));
+    hayMuestrasSinTueste = ms.muestras.length > 0 && muestras.length === 0;
     hayMas = ms.hayMas;
   } catch (error) {
     if (error instanceof SesionDeCataError) redirect("/sensory");
@@ -55,10 +57,18 @@ export default async function NuevaSesionPage() {
       {protocolos.length === 0 ? (
         <p className="nn-muted">{t("noProtocolsAvailable")}</p>
       ) : muestras.length === 0 ? (
-        <p className="nn-muted">{t("noSamplesAvailable")}</p>
+        <p className="nn-muted">{t(hayMuestrasSinTueste ? "noRoastedSamplesAvailable" : "noSamplesAvailable")}</p>
       ) : (
         <CrearSesionForm protocolos={protocolos} muestras={muestras} hayMas={hayMas} />
       )}
     </div>
   );
+}
+
+function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Sensory">>>) {
+  return {
+    sinPerfil: t("sampleRoastNoProfile"),
+    sinEquipo: t("sampleRoastNoEquipment"),
+    describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),
+  };
 }

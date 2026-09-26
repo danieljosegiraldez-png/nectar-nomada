@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
 
-**573 operaciones** que tocan la base, en **158 archivos** — regenerado tras el
+**578 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
 rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
 **+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
 contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
@@ -26,12 +26,22 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **433** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **436** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **80** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **19** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
+
+> **Muestras verdes disponibles para tueste (2026-09-23): 573→574 y guardia directo
+> 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
+> sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
+> de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **Selección verde por mallas (2026-09-24): 574→575, 158→159 archivos y guardia
+> directo 434→435.** `recordGreenGrading` verifica que el origen sea verde y delega
+> autorización, genealogía y balance a `recordTransformation`; cada fracción sigue
+> siendo un lote del inventario, no una tabla paralela de existencias.
 
 > **Un sello de actor no es un filtro (2026-09-21): tras fusionar #464, 41→28 acotado por construcción, 5→18
 > sin guardia visible; el total no cambia, 557.** La regla tenía una segunda forma,
@@ -739,11 +749,23 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > forma que el detector no cuenta. Está inventariado a mano en el allowlist, en
 > `importan_cliente_total` y en `reciben_transaccion`, con su razón.
 
+> **Y (577→578, «guardia directo» 435→436), 2026-09-25:** `exigirMuestraUsable`
+> (`lib/sensory/sessions.ts`), la comprobación de que una muestra es visible y no está retirada,
+> extraída para que el informe externo pregunte lo mismo que la cata interna. Llama a `can()` con el
+> principal, así que entra como guardia directo. La caminata de ascendencia de
+> `tieneSecadoTerminadoArriba` (`samples.ts`) no suma: es privada y consulta con el cliente del
+> módulo, que ya está inventariado.
+
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 
 > **Hoy queda una.** `authConfig()` y `addToCart()` dejaron de ser excepciones esa misma
 > tarde, al mejorar el detector — no porque cambiara su código. Se conservan aquí porque
 > el razonamiento a mano sigue siendo el que sostiene la clasificación automática.
+
+> **Y (575→577, «depende del llamador» 80→82), 2026-09-25:** `esTuesteDeLaMuestra` y
+> `tienePreparacionTostada` (`lib/sensory/sessions.ts`), la regla del tueste servido extraída para
+> que la usen los DOS escritores de sesiones de cata. Sólo leen; quien llama ya autorizó la muestra
+> y exige `sensory:manage_session`. Están en el allowlist con su razón.
 
 - **`lib/auth/config.ts authConfig()`** — es la configuración de Auth.js: el
   propio flujo de autenticación, previo a que exista sesión.

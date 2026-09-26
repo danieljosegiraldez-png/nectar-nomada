@@ -30,7 +30,7 @@ let operarioId: string;
 async function pergamino(sufijo: string, kg: number) {
   const lot = await createLot(operarioId, {
     lotCode: `${RUN_ID}-${sufijo}`,
-    lotType: "drying",
+    lotType: "parchment",
     organizationId,
     projectId,
     locationId,

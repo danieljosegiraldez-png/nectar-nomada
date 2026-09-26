@@ -107,7 +107,7 @@ export interface CreateLotInput {
   // kept in sync here rather than left stale — a caller creating or
   // filtering a honey Lot through the generic createLot()/getLotList()
   // path needs this widened, same as every prior lotType addition.
-  lotType: "cherry" | "processing" | "drying" | "green" | "roast" | "sample" | "other" | "honey";
+  lotType: "cherry" | "processing" | "drying" | "parchment" | "dry_cherry" | "green" | "roast" | "sample" | "other" | "honey";
   // P0 §7 — required, matching Lot.organizationId. A batch belongs to whoever
   // owns it, and the per-organization lotCode uniqueness has nothing to scope
   // against without it.
@@ -187,6 +187,12 @@ export interface RecordTransformationInput {
     // P3 §3 — set on a rejection stream. Its presence is what marks the
     // resulting Lot as a reject; `lotType` still states the material's stage.
     rejectionCategoryValueId?: string | null;
+    greenScreenMin?: number | null;
+    greenScreenMax?: number | null;
+    greenScreenSystem?: string | null;
+    greenScreenStatus?: "measured" | "supplier_declared" | "qualitative" | "unknown" | null;
+    greenGradeNote?: string | null;
+    greenUniformityPct?: number | null;
   }>;
   // P0 (§4) — material that leaves without becoming an output lot: mucilage,
   // water, handling. Declaring it is what turns an unexplained difference
@@ -364,6 +370,12 @@ export async function recordTransformation(userAccountId: string, input: RecordT
           projectId: sourceLot.projectId,
           locationId: sourceLot.locationId,
           rejectionCategoryValueId: output.rejectionCategoryValueId ?? null,
+          greenScreenMin: output.greenScreenMin ?? null,
+          greenScreenMax: output.greenScreenMax ?? null,
+          greenScreenSystem: output.greenScreenSystem ?? null,
+          greenScreenStatus: output.greenScreenStatus ?? null,
+          greenGradeNote: output.greenGradeNote ?? null,
+          greenUniformityPct: output.greenUniformityPct ?? null,
           createdBy: userAccountId,
         },
       });

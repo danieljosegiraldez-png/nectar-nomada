@@ -1399,6 +1399,7 @@ model Sample {
   sourceTransformation   LotTransformation? @relation(fields: [sourceTransformationId], references: [id])
 
   blindMappings      SensoryBlindMapping[]
+  roastSessions      RoastSession[]
   competitionEntries Entry[]
   measurements       Measurement[]
   assets             Asset[]
@@ -2453,8 +2454,13 @@ model SensoryBlindMapping {
   blindSample   SensoryBlindSample @relation(fields: [blindSampleId], references: [id], onDelete: Cascade)
   sampleId      String             @map("sample_id") @db.Uuid
   sample        Sample             @relation(fields: [sampleId], references: [id])
+  /// Preparación exacta servida. Anulable para conservar catas históricas que
+  /// sólo identificaban la muestra verde.
+  roastSessionId String?           @map("roast_session_id") @db.Uuid
+  roastSession   RoastSession?     @relation(fields: [roastSessionId], references: [id], onDelete: SetNull)
   revealedAt    DateTime?          @map("revealed_at")
 
+  @@index([roastSessionId])
   @@map("sensory_blind_mapping")
   @@schema("sensory")
 }
@@ -3238,6 +3244,10 @@ enum LotType {
   cherry
   processing
   drying
+  /// Café lavado o honey que terminó el secado conservando el pergamino.
+  parchment
+  /// Natural que terminó el secado como cereza seca, antes de la trilla.
+  dry_cherry
   green
   roast
   sample
@@ -3247,6 +3257,15 @@ enum LotType {
   // existing Lot machinery (Sample/Measurement/QuantityEvent/Asset)
   // unmodified, the same reasoning already applied to `roast`.
   honey
+
+  @@schema("traceability")
+}
+
+enum GreenScreenDataStatus {
+  measured
+  supplier_declared
+  qualitative
+  unknown
 
   @@schema("traceability")
 }
@@ -3306,6 +3325,14 @@ model Lot {
   // figure known to be wrong. Nullable and unset for every other lot —
   // absence means "no reason to doubt it", never "verified".
   dataQuality    DataQuality?        @map("data_quality")
+  /// Clasificación física del verde. Nulos fuera de lotes verdes o cuando no
+  /// se evaluó; `greenScreenStatus=unknown` conserva el desconocimiento explícito.
+  greenScreenMin      Int?                   @map("green_screen_min")
+  greenScreenMax      Int?                   @map("green_screen_max")
+  greenScreenSystem   String?                @map("green_screen_system")
+  greenScreenStatus   GreenScreenDataStatus? @map("green_screen_status")
+  greenGradeNote      String?                @map("green_grade_note")
+  greenUniformityPct  Decimal?               @map("green_uniformity_pct") @db.Decimal(5, 2)
   // P3 (44_P3_SELECTION.md §3) — why this lot was rejected, when it was.
   //
   // Deliberately NOT a new `LotType` value, diverging from the audit's §25.
@@ -4556,6 +4583,10 @@ model RoastSession {
   secondCrackAt     DateTime?    @map("second_crack_at")
   notes             String?
   purpose           RoastPurpose @map("purpose")
+  /// En tuestes de muestra identifica el café físico ya apartado del inventario.
+  /// Los tuestes de producción continúan entrando por el lote y dejan esto nulo.
+  sourceSampleId    String?      @map("source_sample_id") @db.Uuid
+  sourceSample      Sample?      @relation(fields: [sourceSampleId], references: [id], onDelete: SetNull)
   // El perfil que se siguió. Anulable: un tueste puede hacerse sin perfil —de
   // hecho los primeros de muestra se hacen así, que es como se encuentra uno—.
   // Reusa `ProcessRecipeVersion` en vez de una entidad propia (decisión de
@@ -4569,8 +4600,10 @@ model RoastSession {
 
   measurements    Measurement[]
   transformations LotTransformation[]
+  blindMappings   SensoryBlindMapping[]
 
   @@index([roasterPersonId])
+  @@index([sourceSampleId])
   /// Junto a `equipmentNote`, nunca en su lugar. Ver `FermentationRun.vesselEquipmentId`.
   equipmentId String?    @map("equipment_id") @db.Uuid
   equipment   Equipment? @relation("RoastSessionEquipment", fields: [equipmentId], references: [id])
