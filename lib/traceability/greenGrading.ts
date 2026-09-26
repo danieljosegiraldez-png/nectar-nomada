@@ -1,6 +1,6 @@
 import { recordTransformation } from "./lots";
 import { SISTEMAS_DE_MALLA } from "./vocabularioDeMalla";
-import { requireLotAccess } from "./lots";
+import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { prisma } from "../db";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
@@ -38,7 +38,9 @@ export async function recordGreenGrading(userAccountId: string, input: RecordGre
     where: { id: input.inputLotId },
     select: { lotType: true, projectId: true, locationId: true, classification: true },
   });
-  if (!source) throw new GreenGradingValidationError("lot_not_found");
+  // Un lote que no existe da el MISMO error que uno sin acceso (Codex, 2026-09-25): con clases
+  // distintas, quien prueba ids ajenos sabe cuáles existen. Es el patrón de `createSampleFromLot`.
+  if (!source) throw new TraceabilityAccessError("lot_not_found");
   // El permiso ANTES de decir de qué tipo es el lote (revisión de Codex, hallazgo 5). Antes, quien
   // no tenía acceso distinguía tres respuestas —no existe / existe y no es verde / existe, es verde
   // y no te toca—, un oráculo sobre los lotes de otra organización. `recordTransformation` autoriza

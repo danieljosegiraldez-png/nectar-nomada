@@ -367,7 +367,8 @@
     "externalReportNoRoast": "tueste no registrado",
     "externalReportRoastOn": "tostado el {fecha}",
     "error_roast_preparation_not_available": "Ese tueste no es una preparación de esa muestra.",
-    "error_roast_preparations_mismatch": "La lista de tuestes no cuadra con la de muestras. Vuelve a elegir las preparaciones."
+    "error_roast_preparations_mismatch": "La lista de tuestes no cuadra con la de muestras. Vuelve a elegir las preparaciones.",
+    "error_sample_retired": "Esa muestra está retirada: no se puede puntuar."
   },
   "SensoryWheels": {
     "badge": "Herramienta sensorial",
@@ -1724,7 +1725,8 @@
     "greenGradingScreenSystem_plana_oblonga": "Malla plana u oblonga",
     "greenGradingScreenSystem_otro": "Otro sistema (dilo en la nota)",
     "error_green_grading_screen_system_invalid": "Ese sistema de malla no está en la lista.",
-    "error_green_grading_screen_system_other_needs_note": "Elegiste «otro sistema»: escribe cuál en la nota de la fracción."
+    "error_green_grading_screen_system_other_needs_note": "Elegiste «otro sistema»: escribe cuál en la nota de la fracción.",
+    "error_sample_quantity_precision": "La cantidad tiene como máximo tres decimales; con más, se guardaría redondeada."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

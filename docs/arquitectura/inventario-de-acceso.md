@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
 
-**577 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
+**578 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
 rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
 **+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
 contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
@@ -26,7 +26,7 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **435** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **436** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -748,6 +748,13 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > operaciones**: consulta a través de su parámetro `db` (el cliente o el `tx` de quien llama), una
 > forma que el detector no cuenta. Está inventariado a mano en el allowlist, en
 > `importan_cliente_total` y en `reciben_transaccion`, con su razón.
+
+> **Y (577→578, «guardia directo» 435→436), 2026-09-25:** `exigirMuestraUsable`
+> (`lib/sensory/sessions.ts`), la comprobación de que una muestra es visible y no está retirada,
+> extraída para que el informe externo pregunte lo mismo que la cata interna. Llama a `can()` con el
+> principal, así que entra como guardia directo. La caminata de ascendencia de
+> `tieneSecadoTerminadoArriba` (`samples.ts`) no suma: es privada y consulta con el cliente del
+> módulo, que ya está inventariado.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 

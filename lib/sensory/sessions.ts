@@ -248,6 +248,22 @@ export async function esTuesteDeLaMuestra(roastSessionId: string, sampleId: stri
   return tueste != null && tueste.purpose === "sample" && tueste.sourceSampleId === sampleId;
 }
 
+/**
+ * ¿Puede esta cuenta usar esta muestra en una valoración? La MISMA pregunta que hace
+ * `crearSesionDeCata`: visible por su ámbito y clasificación, y **no retirada**. Se exporta porque
+ * el informe externo sólo comprobaba que la muestra existiera (Codex, 2026-09-25), y una cuenta con
+ * `sensory:manage_session` podía puntuar una muestra ajena si le pasaban su id.
+ */
+export async function exigirMuestraUsable(userAccountId: string, sampleId: string): Promise<void> {
+  const muestra = await prisma.sample.findUnique({
+    where: { id: sampleId },
+    select: { projectId: true, locationId: true, classification: true, retiredAt: true },
+  });
+  if (!muestra) throw new SesionDeCataError("sample_not_accessible");
+  if (muestra.retiredAt !== null) throw new SesionDeCataError("sample_retired");
+  if (!(await puedeVerMuestra(userAccountId, muestra))) throw new SesionDeCataError("sample_not_accessible");
+}
+
 /** ¿La muestra tiene alguna preparación tostada registrada? */
 export async function tienePreparacionTostada(sampleId: string): Promise<boolean> {
   return (await prisma.roastSession.count({ where: { sourceSampleId: sampleId, purpose: "sample" } })) > 0;

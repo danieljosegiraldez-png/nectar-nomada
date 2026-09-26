@@ -109,9 +109,28 @@ export interface CreateSampleFromLotInput {
   sourceReference?: string | null;
 }
 
-/** Tres decimales, los que la columna `Decimal(10,3)` guarda sin redondear. */
-function noExcedeTresDecimales(n: number): boolean {
-  return Number.isInteger(Math.round(n * 1000)) && Math.abs(n * 1000 - Math.round(n * 1000)) < 1e-9;
+/**
+ * ¿Algún antepasado de este lote terminó su secado? Sube por las transformaciones que lo produjeron
+ * —trilla, clasificación, lo que sea— y pregunta la fase de cada entrada. Tope de profundidad: un
+ * lote real no tiene diez generaciones, y un ciclo colgaría el bucle.
+ */
+async function tieneSecadoTerminadoArriba(lotId: string, profundidad = 6): Promise<boolean> {
+  const vistos = new Set<string>([lotId]);
+  let frontera = [lotId];
+  for (let nivel = 0; nivel < profundidad && frontera.length > 0; nivel++) {
+    const transformaciones = await prisma.lotTransformation.findMany({
+      where: { outputs: { some: { lotId: { in: frontera } } } },
+      select: { inputs: { select: { lotId: true } } },
+    });
+    const padres = [...new Set(transformaciones.flatMap((t) => t.inputs.map((i) => i.lotId)))].filter((id) => !vistos.has(id));
+    for (const padre of padres) {
+      const fase = await faseActualDeLote(padre);
+      if (fase?.tipo === "reposo") return true;
+      vistos.add(padre);
+    }
+    frontera = padres;
+  }
+  return false;
 }
 
 export async function createSampleFromLot(userAccountId: string, input: CreateSampleFromLotInput) {
@@ -134,16 +153,13 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   // la precondición de la trilla: exige pergamino o cereza seca, los dos únicos tipos que salen de un
   // secado terminado (`hulling_requires_parchment_or_dry_cherry`, lib/traceability/trilla.ts).
   //
-  // **No basta con que el TIPO sea `green`**: un lote verde creado a mano no demuestra nada, y esa
-  // prueba existe desde el 2026-09-18 («rechaza una muestra verde si el lote nunca terminó de
-  // secar»). Lo que exime es su procedencia: ser salida de una trilla o de una clasificación.
-  const nacidoDeTrillaOClasificacion =
-    sourceLot.lotType === "green" &&
-    (await prisma.lotTransformation.findFirst({
-      where: { transformationType: { in: ["hulling", "selection"] }, outputs: { some: { lotId: sourceLot.id } } },
-      select: { id: true },
-    })) != null;
-  if (input.materialState === "GREEN" && !nacidoDeTrillaOClasificacion) {
+  // **No basta con que el TIPO sea `green`**, y tampoco con ser salida de una trilla: la revisión de
+  // Codex del 2026-09-25 lo midió sobre mi propia prueba —un lote de pergamino creado a mano, sin
+  // ninguna corrida de secado, se trillaba y la muestra verde entraba—. La trilla exige pergamino o
+  // cereza seca, pero ese TIPO se puede escribir a mano; no es evidencia de nada. Lo que exime es el
+  // secado terminado en la ASCENDENCIA del lote, que es lo que la decisión del 2026-09-18 pedía.
+  const secadoEnLaAscendencia = sourceLot.lotType === "green" ? await tieneSecadoTerminadoArriba(sourceLot.id) : false;
+  if (input.materialState === "GREEN" && !secadoEnLaAscendencia) {
     const fase = await faseActualDeLote(input.sourceLotId);
     if (fase?.tipo !== "reposo") {
       throw new SampleValidationError("green_sample_before_reposo");
@@ -155,8 +171,8 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   return prisma.$transaction(async (tx) => {
     // El saldo, con el mismo criterio que `applyInputDecrements` usa para toda transformación
     // parcial (`input_exceeds_available`). Aquí faltaba, y la revisión adversarial del 2026-09-25 lo
-    // midió: se podía sacar más de lo que hay y, peor, una cantidad NEGATIVA —restada de un saldo—
-    // **fabricaba** café, porque `sample_removed` es un evento sustractivo.
+    // midió: se podía sacar más de lo que hay. Una cantidad negativa ya la rechazaba la base
+    // —`CHECK (quantity >= 0)`—, con un error opaco: aquí sale como frase.
     //
     // Dentro de la transacción y no antes: es el mismo `tx` que escribe el evento, así que entre
     // leer el saldo y restarlo no cabe otra extracción.
@@ -164,8 +180,14 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
     if (input.quantity != null && input.unit) {
       // La columna es `Decimal(10,3)`: 0,0004 kg se guardaría como cero, o sea una medición borrada
       // en silencio. Se rechaza en vez de redondear (revisión de Codex, hallazgo 4).
-      if (!(Number.isFinite(input.quantity) && input.quantity > 0) || !noExcedeTresDecimales(input.quantity)) {
+      if (!(Number.isFinite(input.quantity) && input.quantity > 0)) {
         throw new SampleValidationError("sample_quantity_must_be_positive");
+      }
+      // La columna es `Decimal(10,3)`: 0,0004 kg se guardaría como cero, o sea una medición borrada
+      // en silencio. Se pregunta al decimal, no a la coma flotante: mi primera versión multiplicaba
+      // por mil y rechazaba `65536.001`, que es válido (lo midió Codex ejecutándolo).
+      if (new Prisma.Decimal(input.quantity).decimalPlaces() > 3) {
+        throw new SampleValidationError("sample_quantity_precision");
       }
       // Bloqueo de fila antes de leer el saldo, el mismo protocolo que `bloquearCosechaEn`: estar
       // dentro de una transacción NO basta, porque el aislamiento por defecto de Postgres es

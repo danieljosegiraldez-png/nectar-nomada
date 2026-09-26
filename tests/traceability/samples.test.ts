@@ -252,37 +252,72 @@ describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-
    * nace de la trilla y nunca tiene corrida propia. La precondición de la trilla —pergamino o
    * cereza seca, los tipos que sólo salen de un secado terminado— ya garantiza el almacenamiento.
    */
-  it("acepta la muestra verde de un lote verde nacido de trilla", async () => {
+  it("RECHAZA la muestra verde si el pergamino se creó a mano: trillar no demuestra secado", async () => {
+    // Hallazgo de Codex sobre la primera versión de este arreglo: la trilla exige pergamino o cereza
+    // seca, pero ese TIPO se escribe a mano. Un pergamino inventado, trillado, daba muestra verde.
     const pergamino = await createLot(authorizedUserAccountId, {
-      lotCode: `${RUN_ID}-trilla-perg`,
+      lotCode: `${RUN_ID}-perg-a-mano`,
       lotType: "parchment",
       organizationId,
       projectId: projectAId,
       locationId: beneficioLocationId,
     });
     await recordQuantityEvent(authorizedUserAccountId, {
-      provenanceClass: "measured_fact",
-      lotId: pergamino.id,
-      eventType: "received",
-      quantity: 100,
-      unit: "kg",
-      occurredAt: new Date("2026-04-01"),
+      provenanceClass: "measured_fact", lotId: pergamino.id, eventType: "received",
+      quantity: 100, unit: "kg", occurredAt: new Date("2026-04-01"),
     });
     const { loteVerde } = await registrarTrilla(authorizedUserAccountId, {
-      lotePergaminoId: pergamino.id,
-      masaEntradaKg: 100,
-      loteVerde: { lotCode: `${RUN_ID}-trilla-verde`, masaKg: 80 },
-      cascarillaKg: 18,
-      mermaKg: 2,
-      producedAtLocationId: beneficioLocationId,
-      occurredAt: new Date("2026-04-10"),
+      lotePergaminoId: pergamino.id, masaEntradaKg: 100,
+      loteVerde: { lotCode: `${RUN_ID}-verde-a-mano`, masaKg: 80 },
+      cascarillaKg: 18, mermaKg: 2, producedAtLocationId: beneficioLocationId,
+      occurredAt: new Date("2026-04-10"), provenanceClass: "original_record",
+    });
+    await expect(
+      createSampleFromLot(authorizedUserAccountId, {
+        provenanceClass: "original_record",
+        sampleCode: `${RUN_ID}-S-verde-a-mano`,
+        sampleType: "green_coffee",
+        materialState: "GREEN",
+        sourceLotId: loteVerde.id,
+        occurredAt: new Date("2026-04-11"),
+      }),
+    ).rejects.toThrow(/green_sample_before_reposo/);
+  }, 30000);
+
+  it("acepta la muestra verde cuando el SECADO TERMINADO está en la ascendencia", async () => {
+    // El camino real: se seca, el secado produce el pergamino, se trilla, y de ese verde sí.
+    const enSecado = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-secando-real`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+      locationId: beneficioLocationId,
+    });
+    await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact", lotId: enSecado.id, eventType: "received",
+      quantity: 100, unit: "kg", occurredAt: new Date("2026-04-01"),
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      lotId: enSecado.id, startedAt: new Date("2026-04-02"), provenanceClass: "original_record",
+    });
+    await endDryingRun(authorizedUserAccountId, {
+      dryingRunId: run.id,
+      endedAt: new Date("2026-04-09"),
+      endedOutcome: "target_reached",
+      outputLotCode: `${RUN_ID}-perg-real`,
+      outputLotType: "parchment",
       provenanceClass: "original_record",
     });
-    expect(loteVerde.lotType).toBe("green");
-
+    const pergamino = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-perg-real` } });
+    const { loteVerde } = await registrarTrilla(authorizedUserAccountId, {
+      lotePergaminoId: pergamino.id, masaEntradaKg: 80,
+      loteVerde: { lotCode: `${RUN_ID}-verde-real`, masaKg: 64 },
+      cascarillaKg: 14, mermaKg: 2, producedAtLocationId: beneficioLocationId,
+      occurredAt: new Date("2026-04-10"), provenanceClass: "original_record",
+    });
     const { sample } = await createSampleFromLot(authorizedUserAccountId, {
       provenanceClass: "original_record",
-      sampleCode: `${RUN_ID}-S-verde-trillado`,
+      sampleCode: `${RUN_ID}-S-verde-real`,
       sampleType: "green_coffee",
       materialState: "GREEN",
       sourceLotId: loteVerde.id,
@@ -291,15 +326,16 @@ describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-
       occurredAt: new Date("2026-04-11"),
     });
     expect(sample.materialState).toBe("GREEN");
-  }, 30000);
+  }, 40000);
 });
 
 describe("createSampleFromLot — la cantidad no puede inventar ni gastar de más (2026-09-25)", () => {
   /**
    * Hallazgo de la revisión adversarial del 2026-09-25: `createSampleFromLot` escribía el evento
    * `sample_removed` sin mirar el saldo, mientras `applyInputDecrements` sí lo exige para toda
-   * transformación parcial. Dos consecuencias, y la segunda es peor: se podía sacar más de lo que
-   * hay, y una cantidad NEGATIVA —restada de un saldo— **fabricaba** café.
+   * transformación parcial. Se podía sacar más de lo que hay. La cantidad negativa ya la rechazaba
+   * la base —`CHECK (quantity >= 0)` desde agosto—, con un error opaco; lo que aporta el guardia ahí
+   * es una frase legible, no cerrar un agujero (corrección de Codex, 2026-09-25).
    */
   async function loteCon(kg: number, sufijo: string) {
     const lot = await createLot(authorizedUserAccountId, {
@@ -369,6 +405,22 @@ describe("createSampleFromLot — la cantidad no puede inventar ni gastar de má
     ).rejects.toThrow(/sample_mixed_units/);
   });
 
+  it("tres decimales exactos SÍ entran: la comprobación pregunta al decimal, no a la coma flotante", async () => {
+    // Codex ejecutó mi primera versión: `65536.001` se rechazaba por un residuo de 7,45e-9.
+    const lot = await loteCon(10, "tresdec");
+    await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-tresdec`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      quantity: 1.001,
+      unit: "kg",
+      occurredAt: new Date("2026-01-02"),
+    });
+    const q = await computeCurrentQuantity(authorizedUserAccountId, lot.id);
+    expect(q.quantity.toNumber()).toBe(8.999);
+  });
+
   it("control positivo: lo que cabe en el saldo sí entra, y el saldo baja", async () => {
     const lot = await loteCon(10, "cabe");
     await createSampleFromLot(authorizedUserAccountId, {
@@ -426,7 +478,7 @@ describe("createSampleFromLot — la cantidad no puede inventar ni gastar de má
         unit: "kg",
         occurredAt: new Date("2026-01-02"),
       }),
-    ).rejects.toThrow(/sample_quantity_must_be_positive/);
+    ).rejects.toThrow(/sample_quantity_precision/);
   });
 
   it("un lote sin libro de cantidades no se puede comparar, y la muestra sin cantidad pasa igual", async () => {

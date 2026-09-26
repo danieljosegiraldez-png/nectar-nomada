@@ -367,7 +367,8 @@
     "externalReportNoRoast": "roast not recorded",
     "externalReportRoastOn": "roasted on {fecha}",
     "error_roast_preparation_not_available": "That roast is not a preparation of that sample.",
-    "error_roast_preparations_mismatch": "The roast list does not match the sample list. Pick the preparations again."
+    "error_roast_preparations_mismatch": "The roast list does not match the sample list. Pick the preparations again.",
+    "error_sample_retired": "That sample is retired: it cannot be scored."
   },
   "SensoryWheels": {
     "badge": "Sensory tool",
@@ -1724,7 +1725,8 @@
     "greenGradingScreenSystem_plana_oblonga": "Flat or oblong screen",
     "greenGradingScreenSystem_otro": "Other system (say which in the note)",
     "error_green_grading_screen_system_invalid": "That screen system is not on the list.",
-    "error_green_grading_screen_system_other_needs_note": "You picked «other system»: say which one in the fraction note."
+    "error_green_grading_screen_system_other_needs_note": "You picked «other system»: say which one in the fraction note.",
+    "error_sample_quantity_precision": "The quantity takes three decimals at most; with more, it would be stored rounded."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

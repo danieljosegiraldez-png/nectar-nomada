@@ -25,7 +25,7 @@
  * un atributo que el protocolo no tiene» en un error con nombre, en vez de en un
  * puntaje calculado sobre lo que sí casó.
  */
-import { esTuesteDeLaMuestra, tienePreparacionTostada } from "./sessions";
+import { esTuesteDeLaMuestra, exigirMuestraUsable, SesionDeCataError, tienePreparacionTostada } from "./sessions";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { permissionKey } from "../rbac/types";
@@ -101,6 +101,17 @@ export async function registrarInformeExterno(userAccountId: string, informe: In
 
   const muestra = await prisma.sample.findUnique({ where: { id: informe.sampleId } });
   if (!muestra) throw new InformeExternoError("sample_not_found");
+
+  // Visibilidad y retiro, la misma pregunta que la cata interna: tener `sensory:manage_session` no
+  // da derecho a puntuar la muestra de otra finca (Codex, 2026-09-25).
+  try {
+    await exigirMuestraUsable(userAccountId, muestra.id);
+  } catch (error) {
+    // La regla es de la cata; el error, de este camino: así la acción lo traduce con sus claves y no
+    // escapa una clase que su `catch` no conoce (sería un 500 en vez de una frase).
+    if (error instanceof SesionDeCataError) throw new InformeExternoError(error.message);
+    throw error;
+  }
 
   // La MISMA regla que `crearSesionDeCata`, no una copia: `esTuesteDeLaMuestra` vive en sessions.ts.
   if (informe.roastSessionId) {

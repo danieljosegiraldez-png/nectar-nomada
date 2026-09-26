@@ -231,6 +231,18 @@ describe("el tueste servido en un informe externo (decisión de Daniel, 2026-09-
   const mapeoDe = async (blindSampleId: string) =>
     prisma.sensoryBlindMapping.findFirstOrThrow({ where: { blindSampleId }, select: { roastSessionId: true } });
 
+  it("rechaza una muestra retirada: existir no es poder usarla", async () => {
+    // Codex, 2026-09-25: este camino sólo comprobaba existencia, mientras la cata interna comprueba
+    // visibilidad y retiro. Ahora los dos preguntan lo mismo.
+    const retirada = await prisma.sample.create({
+      data: {
+        sampleCode: `T-retirada-${RUN}`, sampleType: "green", organizationId: orgId, locationId: plotId,
+        status: "approved", classification: "internal", createdBy: admin, retiredAt: new Date("2026-03-04"),
+      },
+    });
+    await expect(registrarInformeExterno(admin, base(retirada.id))).rejects.toThrow(/sample_retired/);
+  });
+
   it("una muestra SIN tueste registrado entra, y queda marcada como tal", async () => {
     const v = await registrarInformeExterno(admin, base(sinTueste));
     expect((await mapeoDe(v.blindSampleId!)).roastSessionId).toBeNull();
