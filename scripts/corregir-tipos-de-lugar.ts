@@ -7,7 +7,6 @@
  * El PR #461 ya hace que /fincas no los liste; esto corrige la causa, el tipo.
  *
  *   «Invernadero solar»                     (bajo Cafelino)       site → drying_facility
- *   «Beneficio Las Nubes»                   (bajo Finca Rosina)   site → beneficio
  *   «Cuarto de secado — Beneficio Las Nubes» (bajo Finca Rosina)  site → drying_facility
  *
  * Se empareja por **nombre exacto, nombre exacto del padre y tipo actual `site`**. Nada que no
@@ -20,6 +19,12 @@
  * aplica ese cambio aunque se le pase `--apply`, y lo dice.
  *
  * No toca: el padre de ningún lugar, sus nombres, ni nada fuera de estas tres filas.
+ *
+ * **QUITADO el 2026-09-26: «Beneficio Las Nubes» NO se convierte en beneficio.** Medido en producción
+ * ese día: ya existe «Las Nubes» de tipo `beneficio`, y son el MISMO —decisión de Daniel—. Convertir
+ * el segundo habría creado un duplicado en todas las listas. De unificarlos —mover sus permisos,
+ * corregir la jerarquía y archivar el duplicado— se encarga
+ * `scripts/unificar-beneficio-las-nubes.ts`.
  *
  * Uso:
  *   npm run data:tipos-de-lugar              (simulación: sólo imprime)
@@ -36,7 +41,6 @@ const RAZON =
 
 const CAMBIOS: ReadonlyArray<{ nombre: string; padre: string; a: LocationType }> = [
   { nombre: "Invernadero solar", padre: "Cafelino", a: "drying_facility" },
-  { nombre: "Beneficio Las Nubes", padre: "Finca Rosina", a: "beneficio" },
   { nombre: "Cuarto de secado — Beneficio Las Nubes", padre: "Finca Rosina", a: "drying_facility" },
 ];
 
