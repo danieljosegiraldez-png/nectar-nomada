@@ -56,8 +56,10 @@ Codex, once hallazgos atendidos.
 y esa pantalla no se renderiza contra ella; la buena es `nectar_test_verde`. Un worktree **no tiene `.env`**, así que
 Auth.js muere con `MissingSecret` y el login rebota al login sin decir por qué: hace falta uno local con `AUTH_SECRET`
 (`.gitignore` ya lo ignora). Y para entrar hay que crear cuenta con contraseña, porque `auth:set-password` **exige un
-TTY**: en `nectar_test_verde` quedó `verificacion-local@ejemplo.invalid`, Platform Admin, sólo en esa base. Google no
-funciona en local, sólo está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
+TTY**: la del 2026-09-26 se creó y se borró el mismo día, así que hay que hacerse una — persona con correo, cuenta con
+`hashPassword` de `lib/auth/password`, y una asignación de Platform Admin sobre el scope de plataforma que YA existe (no
+crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de una). Google no funciona en local, sólo
+está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
 **sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
 
 ### 2026-09-21 · Secado, paso 4: el ambiente a mano
