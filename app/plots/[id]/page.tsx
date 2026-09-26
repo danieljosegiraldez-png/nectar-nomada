@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { puedeSubdividirParcela } from "../../../lib/traceability/fincas";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
@@ -60,6 +61,8 @@ export default async function PlotDetailPage({
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const tf = await getTranslations("Fincas");
+  const puedeSubdividir = await puedeSubdividirParcela(user.userAccountId, id);
 
   let detail;
   try {
@@ -198,7 +201,15 @@ export default async function PlotDetailPage({
       <p>
         <Link href={`/plots/${location.id}/ajustes`} className="nn-button">
           {t("plotDashboardManageLink")}
-        </Link>
+        </Link>{" "}
+        {/* Subdividir se hacía SÓLO desde «Ajustes», un nombre que no dice que ahí se crean
+            microparcelas: Daniel lo buscó desde /finca el 2026-09-25 y creyó que había
+            desaparecido. Aquí está donde está la parcela, y sólo si de verdad puede. */}
+        {puedeSubdividir ? (
+          <Link href={`/plots/${location.id}/microparcela/nueva`} className="nn-button">
+            {tf("nuevaMicroparcelaTitulo")}
+          </Link>
+        ) : null}
       </p>
 
       <p className="nn-detail-meta">

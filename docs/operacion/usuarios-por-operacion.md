@@ -38,17 +38,17 @@ la forma de re-medirla está al final.
 
 ## Dos cosas medidas que conviene saber antes de probar
 
-**1. «Nueva microparcela» no comprueba permisos para pintarse.**
-`app/plots/[id]/ajustes/page.tsx` muestra el botón sólo por que el lugar sea una
-parcela (`puedeSubdividir = location.locationType === "plot"`). La acción de
-servidor decide después. Es un botón que promete lo que quizá niegue — el mismo
-tipo de defecto que el proyecto viene cerrando en otras pantallas.
+**1. «Nueva microparcela»: arreglado el 2026-09-25, y así quedó.**
+Antes, `app/plots/[id]/ajustes/page.tsx` pintaba el botón sólo por que el lugar
+fuera una parcela, sin mirar permisos —un botón que promete lo que el servidor
+puede negar—, y era el ÚNICO camino, escondido tras «Ajustes». Daniel lo buscó
+desde `/finca` ese día y creyó que la función había desaparecido.
 
-**Y el camino para llegar es largo:** `/finca` enlaza a la **lista** de parcelas
-(`/plots`), no a cada parcela; hay que abrir la parcela → **Ajustes** → **Nueva
-microparcela**. Daniel no lo encontró el 2026-09-25 y creyó que había
-desaparecido. No había desaparecido: está a tres pasos y sin camino desde la
-finca.
+Ahora el botón está **en la ficha de la parcela**, al lado de «Ajustes», y las dos
+pantallas preguntan `puedeSubdividirParcela`, que exige lo mismo que
+`createMicrolot`: `location:manage_attributes` sobre esa parcela. El camino es
+`/finca` → **Parcelas** → la parcela → **Nueva microparcela**, y cada paso se
+llama como lo que hace.
 
 **2. Montar una cata se juzga a nivel de plataforma.**
 `requireManageSession` (`lib/sensory/sessions.ts`) pregunta por
