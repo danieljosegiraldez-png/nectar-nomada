@@ -129,14 +129,19 @@ const SALIDAS_CON_MALLA = {
 } as const;
 
 /**
- * **El discriminador, y son DOS condiciones.** `recordGreenGrading` escribe con
- * `transformationType: "selection"`, el mismo tipo que la selección de cereza, así que el tipo
- * solo no distingue nada. La segunda sí: `screenStatus` es obligatorio en `GreenFractionInput`,
- * de modo que toda fracción escrita por `recordGreenGrading` lleva `greenScreenStatus` y ningún
- * lote de defecto lo lleva.
+ * **El discriminador.** `recordGreenGrading` escribe con `transformationType: "selection"`, el
+ * mismo tipo que la selección de cereza, así que el tipo solo no distingue nada. Lo que sí:
+ * `screenStatus` es obligatorio en `GreenFractionInput`, de modo que toda fracción escrita por
+ * `recordGreenGrading` lleva `greenScreenStatus` y ningún lote de defecto lo lleva.
  *
- * La tercera condición —que el lote de ENTRADA sea verde— la ponen las dos funciones de abajo,
- * cada una a su manera, porque aquí no hay a qué lote referirse.
+ * A esto las dos funciones de abajo le añaden que el lote de ENTRADA sea verde, cada una a su
+ * manera, porque aquí no hay a qué lote referirse.
+ *
+ * **Las dos condiciones son redundantes a propósito, y está medido** (flip-test del 2026-09-25):
+ * quitando CUALQUIERA de las dos por separado, una selección de cereza sigue quedando fuera y la
+ * prueba «control negativo» sigue en verde; sólo cae quitando las dos a la vez. O sea que esa
+ * prueba guarda el RESULTADO, no cada condición. **No se quita una «porque ya hay test»** — no lo
+ * hay para eso, y escribirlo exigiría montar por SQL crudo un estado que ningún escritor produce.
  */
 const ES_CLASIFICACION_VERDE = {
   transformationType: "selection",

@@ -219,6 +219,10 @@ describe("clasificacionDeLote", () => {
       provenanceClass: "measured_fact",
     });
 
+    // **Lo que esta prueba guarda, medido con flip-test el 2026-09-25:** cae sólo si se quitan
+    // LAS DOS condiciones del discriminador a la vez. Quitando una sola sigue en verde, porque
+    // cualquiera de las dos basta para dejar fuera a la cereza. Guarda el resultado, no cada
+    // condición — y por eso el comentario de `ES_CLASIFICACION_VERDE` dice que no se quite ninguna.
     // No es verde, así que devuelve null aunque la transformación sea de tipo `selection`.
     expect(await clasificacionDeLote(userAccountId, cereza.id)).toBeNull();
 
