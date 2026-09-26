@@ -8,7 +8,7 @@ import { COOKIE_FINCA, fincaDeLaPagina, idsBajoLaFinca, ordenarParcelas } from "
 import { getManageableContext, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { beneficiosDeDestino, jornadasDeFinca, recolectoresDeFinca } from "../../../lib/traceability/jornadasDeCosecha";
 import { FincaElegida } from "../../components/traceability/FincaElegida";
-import { AbrirJornadaForm, AgregarRecolectorForm } from "../../components/traceability/AbrirJornadaForm";
+import { AbrirJornadaForm, AgregarRecolectorForm, DarDeBajaRecolectorForm } from "../../components/traceability/AbrirJornadaForm";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +91,18 @@ export default async function JornadasPage() {
           </section>
           <section className="nn-section">
             <h2>{t("recolectoresTitulo")}</h2>
-            {recolectores.length ? <p>{recolectores.map((r) => r.nombre).join(", ")}</p> : <p className="nn-muted">{t("sinRecolectores")}</p>}
+            {/* Cada recolector con su baja al lado: un alta sin inverso era el hueco del 2026-09-25. */}
+            {recolectores.length ? (
+              <ul className="nn-list">
+                {recolectores.map((r) => (
+                  <li key={r.personId}>
+                    <DarDeBajaRecolectorForm fincaSiteId={siteId} personId={r.personId} nombre={r.nombre} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="nn-muted">{t("sinRecolectores")}</p>
+            )}
             <AgregarRecolectorForm
               fincaSiteId={siteId}
               personas={(candidatos?.people ?? []).filter((p) => !yaSon.has(p.id))}

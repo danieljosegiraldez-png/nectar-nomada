@@ -3632,7 +3632,11 @@
     "error_nota_obligatoria": "Con «otro», escribe una nota.",
     "error_event_kind_invalido": "Elige un tipo de situación.",
     "error_condicion_del_dia_invalido": "Elige una condición del día.",
-    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista."
+    "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista.",
+    "error_baja_antes_del_alta": "La baja no puede ser anterior al alta. Elige una fecha igual o posterior.",
+    "bajaRecolectorBoton": "Dar de baja",
+    "bajaRecolectorHasta": "Hasta",
+    "recolectorDadoDeBaja": "Dado de baja"
   },
   "Tienda": {
     "titulo": "Tienda",
