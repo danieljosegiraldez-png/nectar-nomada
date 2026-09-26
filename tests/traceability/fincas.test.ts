@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { TODAS, crearFinca, crearParcela, idsBajoLaFinca, ordenarParcelas, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
+import { TODAS, puedeSubdividirParcela, crearFinca, crearParcela, idsBajoLaFinca, ordenarParcelas, listarFincas, organizacionesSinTerreno, resolverFinca, type Finca } from "../../lib/traceability/fincas";
 import { createMicrolot } from "../../lib/traceability/locations";
 import { recordHarvestEvent } from "../../lib/traceability/harvest";
 
@@ -362,5 +362,30 @@ describe("el orden para elegir parcela", () => {
 
   it("una microparcela cuya parcela no está en la lista sale sola, sin sangría", () => {
     expect(ordenarParcelas([{ id: "m", name: "Sombra", parentLocationId: "fuera" }]).map((p) => p.name)).toEqual(["Sombra"]);
+  });
+});
+
+describe("subdividir una parcela: el botón pregunta lo que el servicio exige (2026-09-25)", () => {
+  /**
+   * `/plots/[id]/ajustes` pintaba «Nueva microparcela» sólo por que el lugar fuera una parcela, sin
+   * mirar permisos — un botón que promete lo que el servidor puede negar. Y era el único camino,
+   * escondido tras «Ajustes»: Daniel lo buscó desde /finca y creyó que la función había desaparecido.
+   * `puedeSubdividirParcela` pregunta lo mismo que `createMicrolot` (`location:manage_attributes`).
+   */
+  it("un operario con ámbito en la finca puede subdividir su parcela", async () => {
+    expect(await puedeSubdividirParcela(operarioA, P1)).toBe(true);
+  });
+
+  it("una microparcela también se puede subdividir: el spec no pone tope", async () => {
+    expect(await puedeSubdividirParcela(operarioA, M1)).toBe(true);
+  });
+
+  it("no se puede subdividir la parcela de otra finca", async () => {
+    expect(await puedeSubdividirParcela(operarioA, Q1)).toBe(false);
+  });
+
+  it("un sitio no es una parcela, y un id que no existe tampoco", async () => {
+    expect(await puedeSubdividirParcela(admin, A.site)).toBe(false);
+    expect(await puedeSubdividirParcela(admin, "00000000-0000-0000-0000-000000000000")).toBe(false);
   });
 });

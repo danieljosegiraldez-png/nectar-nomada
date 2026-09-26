@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { puedeSubdividirParcela } from "../../../../lib/traceability/fincas";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
@@ -54,7 +55,9 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   // ES `plot` —copia el tipo de su padre—, así que esta regla también deja
   // subdividirla otra vez: el spec no lo prohíbe y `createMicrolot` no tiene
   // tope de profundidad.
-  const puedeSubdividir = location.locationType === "plot";
+  // El MISMO predicado que la ficha de la parcela y que `createMicrolot`: antes bastaba con que el
+  // lugar fuera una parcela, así que el botón aparecía también a quien el servidor iba a negar.
+  const puedeSubdividir = await puedeSubdividirParcela(user.userAccountId, location.id);
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   // Ronda 1: `location:manage_attributes` (lo que exige esta página) y

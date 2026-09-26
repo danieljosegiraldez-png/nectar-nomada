@@ -274,6 +274,28 @@ export async function organizacionesSinTerreno(userAccountId: string) {
 }
 
 /** ¿Puede crear parcelas en esta finca? La misma pregunta que hace `crearParcela`, sin escribir. */
+/**
+ * ¿Puede esta cuenta subdividir esta parcela?
+ *
+ * **Por qué existe (2026-09-25).** `/plots/[id]/ajustes` pintaba el botón «Nueva microparcela» sólo
+ * por que el lugar fuera una parcela (`locationType === "plot"`), sin mirar permisos: un botón que
+ * promete lo que el servidor puede negar. Y era el ÚNICO camino, escondido tras «Ajustes», así que
+ * Daniel lo buscó desde /finca el 2026-09-25 y creyó que la función había desaparecido.
+ *
+ * Pregunta exactamente lo que `createMicrolot` exige —`location:manage_attributes` sobre el padre,
+ * por `requireLocationAttributeAccess`— y no una regla parecida: cuando la pantalla y el servicio
+ * usan dos reglas distintas, la pantalla miente.
+ */
+export async function puedeSubdividirParcela(userAccountId: string, plotId: string) {
+  const parcela = await prisma.location.findUnique({
+    where: { id: plotId },
+    select: { id: true, locationType: true, classification: true },
+  });
+  if (!parcela) return false;
+  if (parcela.locationType !== "plot" && parcela.locationType !== "micro_plot") return false;
+  return can(userAccountId, "manage_attributes", "location", { scopeType: "location", scopeRefId: parcela.id }, parcela.classification);
+}
+
 export async function puedeCrearParcelaEn(userAccountId: string, siteId: string) {
   const sitio = await prisma.location.findUnique({ where: { id: siteId }, select: { id: true, classification: true } });
   if (!sitio) return false;

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-23 con las ruedas sensoriales
 
-**578 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
+**579 operaciones** que tocan la base, en **159 archivos** — regenerado tras el
 rebase sobre `origin/main` (`70c74be3`, 2026-09-23). Las ruedas sensoriales suman
 **+2 operaciones con guardia directo en +1 archivo**: sin sesión se acotan a
 contenido público/publicado y con sesión sólo amplían a borradores tras comprobar
@@ -26,7 +26,7 @@ un permiso sensorial:
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **436** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **437** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **27** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -755,6 +755,11 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > principal, así que entra como guardia directo. La caminata de ascendencia de
 > `tieneSecadoTerminadoArriba` (`samples.ts`) no suma: es privada y consulta con el cliente del
 > módulo, que ya está inventariado.
+
+> **Y (578→579, «guardia directo» 436→437), 2026-09-25:** `puedeSubdividirParcela`
+> (`lib/traceability/fincas.ts`), el predicado que pinta «Nueva microparcela». Llama a `can()` con el
+> principal y el mismo permiso que exige `createMicrolot`, así que entra como guardia directo. Existe
+> porque el botón se pintaba sin comprobar nada.
 
 ### Las tres que no encajaban en ninguna regla (medición del 2026-08-31, por la mañana)
 
