@@ -84,6 +84,7 @@ export const RUTAS = {
   "/lots": { clase: "requiere-sesion", razon: "Trazabilidad de lotes." },
   "/lots/[id]": { clase: "requiere-sesion", razon: "Trazabilidad de lotes." },
   "/lots/[id]/report": { clase: "requiere-sesion", razon: "Informe de lote." },
+  "/lots/[id]/clasificacion": { clase: "requiere-sesion", razon: "Comparar la clasificación por malla entre lotes; la página exige sesión y la lectura recorta con `resolveLotVisibility`, que devuelve `sinAmbito` en vez de una lista vacía cuando la cuenta no alcanza ningún lote." },
   "/lots/[id]/drying/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/fermentation/new": { clase: "requiere-sesion", razon: "Operación sobre un lote." },
   "/lots/[id]/green-selection/new": { clase: "requiere-sesion", razon: "Clasificación de café verde; la página exige sesión y el servicio vuelve a autorizar el lote de entrada." },

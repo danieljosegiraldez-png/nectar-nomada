@@ -1,0 +1,136 @@
+import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+import type { ClasificacionDeLote } from "../../../lib/traceability/clasificacionVerde";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
+
+/**
+ * Las lecturas 1 y 2 de la spec del 2026-09-25: el reparto por malla y los defectos agrupados.
+ *
+ * **Sustituye** a la tabla genérica de cuajado en un lote verde, no se añade a ella: las mismas
+ * cifras en dos formatos en la misma pantalla es cómo se acaba con dos números que no cuadran. Y
+ * «aceptado / rechazado» es el vocabulario de la selección de cereza, no el de un tamizado.
+ */
+export async function ClasificacionPorMalla({
+  clasificacion,
+  lotId,
+  zona,
+}: {
+  clasificacion: ClasificacionDeLote;
+  lotId: string;
+  /**
+   * La zona del LUGAR del lote. Sin ella, `toISOString()` pinta el día UTC y una clasificación de
+   * las 20:00 en Panamá sale fechada al día siguiente (Codex, 2026-09-26). La ficha ya resuelve
+   * así sus otras fechas, con `mostrarFecha`.
+   */
+  zona: string | null;
+}) {
+  const t = await getTranslations("Traceability");
+  const share = (pct: number | null) =>
+    pct != null ? t("selectionOutturnShare", { share: pct }) : t("selectionOutturnUnknown");
+
+  return (
+    <section className="nn-section">
+      <h2>{t("clasificacionMallaHeading")}</h2>
+      <p className="nn-muted">
+        {t("clasificacionMallaEntrada")}: {clasificacion.entradaKg} kg
+        {" · "}
+        {t("clasificacionMallaFecha", { fecha: mostrarFecha(clasificacion.clasificadoEl, zona) })}
+      </p>
+
+      <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <thead>
+          <tr>
+            <th scope="col">{t("clasificacionMallaColumnaMalla")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaSistema")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaDato")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaPeso")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaShare")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clasificacion.mallas.map((m) => (
+            <tr key={m.lotId}>
+              <td>
+                <Link href={`/lots/${m.lotId}`} className="nn-code">{m.lotCode}</Link>{" "}
+                {/* «Sin declarar» no es «malla 0»: se dice con palabras, no con un cero. */}
+                {m.sinRango ? t("clasificacionMallaSinRango") : `${m.rangoMin ?? "?"}–${m.rangoMax ?? "?"}`}
+                {m.uniformidadPct != null ? ` · ${t("clasificacionMallaUniformidad", { pct: m.uniformidadPct })}` : ""}
+              </td>
+              <td>
+                {m.sistema ?? t("selectionOutturnUnknown")}
+                {/* Con sistema `otro`, `recordGreenGrading` EXIGE la nota para decir cuál es:
+                    enseñar «otro» y callarla deja el dato sin significado. */}
+                {m.nota ? <div className="nn-muted">{m.nota}</div> : null}
+              </td>
+              <td>{t(`estadoDelDato_${m.estado}` as "estadoDelDato_measured")}</td>
+              <td>{m.kg} kg</td>
+              <td>{share(m.pct)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3>{t("clasificacionMallaDefectosHeading")}</h3>
+      {clasificacion.defectos.length === 0 ? (
+        <p className="nn-muted">{t("clasificacionMallaSinDefectos")}</p>
+      ) : (
+        <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+          <thead>
+            <tr>
+              <th scope="col">{t("clasificacionMallaColumnaCategoria")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaLotes")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaPeso")}</th>
+              <th scope="col">{t("clasificacionMallaColumnaShare")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clasificacion.defectos.map((d) => (
+              <tr key={d.categoriaValueId}>
+                <th scope="row">{d.categoria ?? t("selectionOutturnUnknown")}</th>
+                {/* **Agrupar no es perder el rastro.** La suma por categoría es la lectura que pidió
+                    Daniel, pero cada lote de defecto sigue siendo un lote del inventario con su
+                    código: quitarle el enlace convertiría una plataforma de trazabilidad en un
+                    informe (Codex, 2026-09-26). */}
+                <td>
+                  {d.lotes.map((l, i) => (
+                    <span key={l.lotId}>
+                      {i > 0 ? ", " : ""}
+                      <Link href={`/lots/${l.lotId}`} className="nn-code">{l.lotCode}</Link>
+                      <span className="nn-muted"> {l.kg} kg</span>
+                    </span>
+                  ))}
+                </td>
+                <td>{d.kg} kg</td>
+                <td>{share(d.pct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <thead>
+          <tr>
+            <th scope="col">{t("clasificacionMallaColumnaConcepto")}</th>
+            <th scope="col">{t("clasificacionMallaColumnaCantidad")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">{t("clasificacionMallaMerma")}</th>
+            <td>{clasificacion.mermaDeclaradaKg != null ? `${clasificacion.mermaDeclaradaKg} kg` : t("selectionOutturnUnknown")}</td>
+          </tr>
+          <tr>
+            {/* null es «desconocido», nunca 0 — ADR-080, la misma distinción que la tabla de cereza. */}
+            <th scope="row">{t("clasificacionMallaSinExplicar")}</th>
+            <td>{clasificacion.noExplicadoKg != null ? `${clasificacion.noExplicadoKg} kg` : t("selectionOutturnUnknown")}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        <Link href={`/lots/${lotId}/clasificacion`}>{t("clasificacionMallaComparar")}</Link>
+      </p>
+    </section>
+  );
+}
