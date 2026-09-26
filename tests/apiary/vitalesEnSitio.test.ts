@@ -63,7 +63,36 @@ describe("los vitales anotados en sitio", () => {
   });
 
   afterAll(async () => {
+    /**
+     * Borra TODO lo que la corrida pudo dejar, no sólo las visitas.
+     *
+     * **Medido el 2026-09-26.** Esto borraba únicamente `fieldSession`, así que cada corrida
+     * abandonaba en la base COMPARTIDA su organización, su ubicación, su persona, su cuenta, su
+     * asignación, sus dos colmenas con sus dos emplazamientos y tres `AuditEvent`: **12 filas, con
+     * los 16 tests en verde**. En `nectar_test` se habían acumulado **22 corridas** entre el 18 y
+     * el 21 de septiembre — 66 entidades, 44 colmenas y 44 emplazamientos, el 62 % de toda la
+     * basura de prueba de esa base. El color no lo dice: hay que contar filas antes y después.
+     *
+     * **El orden es el de las claves ajenas.** Ninguna de estas relaciones declara `onDelete`, así
+     * que son `RESTRICT`: los emplazamientos van antes que las colmenas, y las dos antes que la
+     * ubicación que las aloja; la asignación antes que la cuenta, la cuenta antes que la persona,
+     * y la ubicación antes que la organización. Un `afterAll` es una cadena — la primera clave
+     * ajena que se queje tira todo lo que venga detrás (la fuga de `polinizacion.test.ts`).
+     *
+     * `auditEvent` va primero porque referencia la cuenta: `crearApiario` y `createHive` escriben
+     * los suyos con este usuario como actor, y el `afterEach` de arriba sólo borra los de la visita.
+     */
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: userAccountId }) });
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+    await prisma.hive.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: apiarioId }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+    // El ámbito de plataforma NO se borra: es compartido y el `beforeAll` lo reusa si ya existe.
+    // Medido en la misma corrida — `core.scope` no crece, así que esa mitad ya estaba bien.
   });
 
   async function visitaAbierta() {
