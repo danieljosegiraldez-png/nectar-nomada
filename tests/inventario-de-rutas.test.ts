@@ -202,7 +202,11 @@ describe("el inventario del router", () => {
     // permisos sensoriales en lib/sensory/ruedas.ts. Medido: 100 páginas y 11 handlers.
     // 111 → 113 el 2026-09-24: trilla y clasificación verde por mallas,
     // las dos con sesión y autorización repetida en el servicio.
-    expect(salida).toContain("113 entradas");
+    // 113 → 114 el 2026-09-26: /lots/[id]/clasificacion, comparar la clasificación por malla
+    // entre lotes. Con sesión, y la lectura recorta con `resolveLotVisibility`: devuelve
+    // `sinAmbito` en vez de una lista vacía cuando la cuenta no alcanza ningún lote. Medido con
+    // `node scripts/inventario-de-rutas.mjs`: 114 entradas (103 páginas, 11 handlers).
+    expect(salida).toContain("114 entradas");
     expect(codigo, salida).toBe(0);
   });
 
