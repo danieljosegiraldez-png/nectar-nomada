@@ -2469,6 +2469,53 @@ Hay un hook en `~/.claude/hooks/preguntar-patrones-caros.py` que **pregunta**
 cuando una tubería precede a un `git commit`. No cubre leer un resultado
 canalizado: eso sigue siendo cosa de quien mira.
 
+### Vitest esconde los `console.log` de un test que PASA
+
+**Síntoma.** 2026-09-26. Una sonda de sólo lectura, escrita para medir cuántos
+lotes hay por clasificación, imprimía sus cifras con `console.log`. La corrida
+dijo `Test Files 1 passed`, `Tests 1 passed`, salida 0 — y **ni un número**. Un
+test en verde sin la medición debajo se lee como «medido y correcto», que es la
+forma exacta de un cero que en realidad significa «no miré». Costó dos corridas
+y estuve a punto de dar cifras que no había visto.
+
+**Causa, medida y no deducida.** Vitest 4 (`4.1.10`) **intercepta `console.*`** y
+el reportero por defecto sólo lo saca a pantalla para los tests que **fallan**.
+Una sonda, que por definición pasa, no imprime nunca.
+
+Medido con un archivo de dos tests —uno que pasa y uno que falla— contando las
+marcas sobre la salida **entera**, no sobre un `tail`:
+
+| lo que escribe la sonda | test que PASA | test que FALLA |
+|---|---|---|
+| `console.log` | **0** | 2 |
+| `process.stdout.write` | 1 | no medido |
+| `console.log` con `--disableConsoleIntercept` | **1** | no medido |
+
+**Las dos columnas juntas son el control positivo:** el `grep` sí encuentra la
+marca del test que falla, así que el `0` de la primera columna es supresión y no
+un patrón mal escrito. Con una sola columna se lee como «la sonda no escribió».
+
+**Y `--silent=false` NO lo arregla**, aunque el texto de `--silent --help` lo
+sugiera («Use 'passed-only' to see logs from failing tests only»). Medido: con
+`--silent=false` y con `--silent=passed-only`, la marca del test que pasa sale
+**0** las dos veces. Deducir el mecanismo de la ayuda fue el segundo error de la
+misma tarde; el que lo mueve es el de la intercepción.
+
+**Arreglo.** Para cualquier sonda que deba imprimir lo que midió, una de estas
+dos — nunca `console.log` a secas:
+
+```bash
+npx vitest run tests/<sonda>.test.ts --disableConsoleIntercept
+```
+
+o que la sonda **escriba su resultado a un archivo** con `writeFileSync` y se lea
+después. La segunda no depende de acordarse de una bandera, y es la que se usó.
+
+**Por qué importa más que la incomodidad.** `npm run verify` y la suite no
+sufren: ahí lo que se lee es el código de salida. Pero **toda medición ad hoc
+hecha como test** cae en esto, y cae del lado que halaga — el veredicto que se
+buscaba sale en verde, sin ninguna cifra que pueda contradecirlo.
+
 ### `test:db -- up` dice «ready» y te da una base de hace dos días
 
 **Síntoma.** Tras `npm run test:db -- up`, la copia local seguía teniendo los

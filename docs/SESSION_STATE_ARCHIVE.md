@@ -4223,3 +4223,13 @@ ver en navegador.** Sigue: «marcos negros» en la inspección.
 ADR-176. La inspección cuenta «marcos negros (cera vieja)»; vacío = no se contó, no cero. Viaja por
 la cola sin conexión (lo encolado antes llega nulo). «Cera por año» lista las colmenas cuya última
 revisión que contó vio alguno. **Sin ver en navegador.**
+
+### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-181)
+
+Daniel pidió revisar **toda** la literatura de fermentación antes de responder. Seis subagentes, citas
+decisivas comprobadas contra la fuente, Codex de segundo asiento:
+`docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. En lo revisado, ninguna banda universal validada; ni
+Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores no la leen. **Sus respuestas,
+una por pregunta, quedan en 19 apartados** (ADR-181): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
+los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
+del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.

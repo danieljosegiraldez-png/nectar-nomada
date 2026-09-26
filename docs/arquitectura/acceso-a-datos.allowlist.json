@@ -366,6 +366,11 @@
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },
     {
+      "archivo": "lib/traceability/clasificacionVerde.ts",
+      "razon": "Módulo de dominio, SÓLO LECTURA: las tres lecturas de la clasificación de café verde por malla (spec 2026-09-25). `clasificacionDeLote` exige `requireLotAccess(view)` sobre el lote ANTES de leer nada, con su propio permiso y no el de quien la llama. `compararClasificacionVerde` no consulta un lote concreto: recorta con `resolveLotVisibility` + `lotWhereFromVisibility`, la misma vía que `getLotList`, y devuelve `sinAmbito` cuando el ámbito es vacío en vez de una lista vacía. No escribe nada y no recibe `tx`.",
+      "verificado": "2026-09-25"
+    },
+    {
       "archivo": "lib/traceability/selection.ts",
       "razon": "Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     },

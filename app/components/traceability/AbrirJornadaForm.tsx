@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
-import { abrirJornadaAction, agregarRecolectorAction, type JornadaActionState } from "../../actions/jornadasDeCosecha";
+import { abrirJornadaAction, agregarRecolectorAction, darDeBajaRecolectorAction, type JornadaActionState } from "../../actions/jornadasDeCosecha";
 
 const inicial: JornadaActionState = {};
 
@@ -73,6 +73,30 @@ export function AbrirJornadaForm({
 }
 
 /** Añadir una persona a la lista de recolectores de la finca, desde una fecha. */
+/**
+ * Dar de baja a UN recolector: su fecha y su botón, al lado de su nombre.
+ *
+ * Existe porque `agregarRecolector` no tenía inverso (2026-09-25): el campo `hasta` estaba en el
+ * modelo y ninguna pantalla lo escribía, así que un alta no se podía deshacer. No borra: cierra.
+ */
+export function DarDeBajaRecolectorForm({ fincaSiteId, personId, nombre }: { fincaSiteId: string; personId: string; nombre: string }) {
+  const t = useTranslations("Jornadas");
+  const [state, formAction, pending] = useActionState(darDeBajaRecolectorAction, inicial);
+
+  return (
+    <form action={formAction} className="nn-inline-form">
+      <input type="hidden" name="fincaSiteId" value={fincaSiteId} />
+      <input type="hidden" name="personId" value={personId} />
+      <span>{nombre}</span>{" "}
+      <label htmlFor={`baja-${personId}`} className="nn-muted">{t("bajaRecolectorHasta")}</label>{" "}
+      <input id={`baja-${personId}`} name="hasta" type="date" required ref={(el) => { if (el && !el.value) el.value = hoyLocal(); }} />{" "}
+      <button type="submit" className="nn-button" disabled={pending}>{t("bajaRecolectorBoton")}</button>
+      {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
+      {state.ok ? <p role="status">{t("recolectorDadoDeBaja")}</p> : null}
+    </form>
+  );
+}
+
 export function AgregarRecolectorForm({ fincaSiteId, personas }: { fincaSiteId: string; personas: readonly OpcionDePersona[] }) {
   const t = useTranslations("Jornadas");
   const [state, formAction, pending] = useActionState(agregarRecolectorAction, inicial);
