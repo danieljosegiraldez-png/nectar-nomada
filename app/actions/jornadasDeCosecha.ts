@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { JornadaError, abrirJornada, agregarRecolector, cerrarJornada } from "../../lib/traceability/jornadasDeCosecha";
+import { JornadaError, abrirJornada, agregarRecolector, cerrarJornada, darDeBajaRecolector } from "../../lib/traceability/jornadasDeCosecha";
 import {
   EntregaError,
   anotarEntrega,
@@ -35,7 +35,7 @@ const CODIGOS = [
   "finca_no_encontrada", "fecha_invalida", "sin_asignaciones", "parcela_fuera_de_la_finca", "no_es_recolector",
   "ya_es_recolector", "persona_no_encontrada", "ya_cerrada", "jornada_cerrada", "no_es_su_entrega", "sin_permiso",
   "peso_invalido", "no_asignado_en_la_jornada", "origen_no_asignado", "motivo_obligatorio", "ya_anulada",
-  "sobre_no_asignado", "nota_obligatoria", "event_kind_invalido", "condicion_del_dia_invalido",
+  "sobre_no_asignado", "nota_obligatoria", "event_kind_invalido", "condicion_del_dia_invalido", "baja_antes_del_alta",
   "tipo_de_archivo_invalido", "clave_invalida", "tamano_invalido", "beneficio_no_valido", "destino_fijo", "ya_recibida",
 ] as const;
 
@@ -77,6 +77,19 @@ export async function agregarRecolectorAction(_prev: JornadaActionState, formDat
     const desde = fechaDeDia(String(formData.get("desde") ?? ""), "desde");
     if (!desde) return traducir(new JornadaError("fecha_invalida"));
     await agregarRecolector(yo, { fincaSiteId: String(formData.get("fincaSiteId") ?? ""), personId: String(formData.get("personId") ?? ""), desde });
+  } catch (error) {
+    return traducir(error);
+  }
+  revalidatePath("/finca/jornadas");
+  return { ok: true };
+}
+
+export async function darDeBajaRecolectorAction(_prev: JornadaActionState, formData: FormData): Promise<JornadaActionState> {
+  const yo = await usuario();
+  try {
+    const hasta = fechaDeDia(String(formData.get("hasta") ?? ""), "hasta");
+    if (!hasta) return traducir(new JornadaError("fecha_invalida"));
+    await darDeBajaRecolector(yo, { fincaSiteId: String(formData.get("fincaSiteId") ?? ""), personId: String(formData.get("personId") ?? ""), hasta });
   } catch (error) {
     return traducir(error);
   }

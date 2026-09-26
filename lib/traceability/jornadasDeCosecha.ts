@@ -55,6 +55,37 @@ export async function agregarRecolector(userAccountId: string, input: { fincaSit
   });
 }
 
+/**
+ * Da de baja a un recolector: le cierra el periodo con `hasta`.
+ *
+ * **Por qué existe (2026-09-25).** `agregarRecolector` existía desde el principio y **nada lo
+ * deshacía**: el campo `hasta` estaba en el modelo y ningún código lo escribía nunca. Daniel dio de
+ * alta un recolector de prueba en producción y no había manera de quitarlo desde ninguna pantalla.
+ *
+ * **No borra la fila, la cierra.** Quien recolectó una vez recolectó: sus entregas siguen siendo
+ * suyas y los informes de esa cosecha no cambian. Lo que cambia es el futuro — desde `hasta` ya no
+ * se le puede asignar a una jornada, que es la misma ventana que `recolectoresDeFinca` y
+ * `abrirJornada` ya consultan.
+ */
+export async function darDeBajaRecolector(userAccountId: string, input: { fincaSiteId: string; personId: string; hasta: Date }) {
+  await exigeGestionarFinca(userAccountId, input.fincaSiteId);
+  return prisma.$transaction(async (tx) => {
+    const abierta = await tx.fincaRecolector.findFirst({
+      where: { personId: input.personId, fincaSiteId: input.fincaSiteId, hasta: null },
+    });
+    if (!abierta) throw new JornadaError("no_es_recolector");
+    // Cerrar antes de empezar dejaría una ventana negativa, y `recolectoresDeFinca` la leería como
+    // «nunca fue»: se rechaza en vez de guardar una fecha imposible.
+    if (input.hasta < abierta.desde) throw new JornadaError("baja_antes_del_alta");
+    const fila = await tx.fincaRecolector.update({ where: { id: abierta.id }, data: { hasta: input.hasta } });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, operation: "harvest_picker.end", entityType: "finca_recolector", entityId: fila.id, before: abierta, after: fila, sourceInterface: "traceability.service" },
+      tx,
+    );
+    return fila;
+  });
+}
+
 /** Los recolectores activos de la finca en una fecha (hoy, si no se da). */
 export async function recolectoresDeFinca(userAccountId: string, fincaSiteId: string, en: Date = new Date()) {
   const sitio = await sitioDeFinca(fincaSiteId);

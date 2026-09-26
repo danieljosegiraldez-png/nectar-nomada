@@ -47,6 +47,11 @@ const NO_ES_QUIEN_LO_HIZO: Record<string, string> = {
   "lib/sync/devices.ts:registerDevice": "el operador de un aparato es su dueño, y un aparato no tiene finca",
   "lib/sync/deviceTokens.ts:registrarAparato": "ídem: el aparato no tiene finca",
   "lib/traceability/selection.ts:recordSelection": "no escribe: lo pasa a recordTransformation, que tiene el guardia",
+  // **Falso positivo del detector, y vale la pena decirlo:** aquí `personId: input.personId` está en
+  // un `where`, buscando a quién dar de baja — no escribe atribución. El detector casa la FORMA
+  // `algoPersonId: input.x` y no distingue un `where` de un `data`. Mientras eso siga así, una
+  // escritura escondida dentro de un objeto con forma de filtro se le pasaría; queda anotado.
+  "lib/traceability/jornadasDeCosecha.ts:darDeBajaRecolector": "cierra el periodo de un recolector; el personId va en el `where`, no en lo escrito, y quien llama ya pasó por exigeGestionarFinca",
   "lib/traceability/trilla.ts:registrarTrilla": "no escribe: lo pasa a recordTransformation, que tiene el guardia",
   "lib/traceability/drying.ts:cerrarCorridaEnTransaccion": "ayudante transaccional: endDryingRun y bajarBandeja autorizan y validan a la persona antes de llamarlo",
   "lib/traceability/operations.ts:crearConsumoEnTx": "ayudante transaccional: recordMaterialConsumptionEntry y registrarRealizada autorizan y validan a la persona antes de llamarlo",

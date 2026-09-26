@@ -3591,7 +3591,11 @@
     "error_nota_obligatoria": "With “other”, write a note.",
     "error_event_kind_invalido": "Choose a type of situation.",
     "error_condicion_del_dia_invalido": "Choose a condition of the day.",
-    "error_persona_no_permitida": "That person is not from this farm or the Néctar Nómada team. Choose someone from the list."
+    "error_persona_no_permitida": "That person is not from this farm or the Néctar Nómada team. Choose someone from the list.",
+    "error_baja_antes_del_alta": "The end date cannot be before the start date. Pick the same day or later.",
+    "bajaRecolectorBoton": "End",
+    "bajaRecolectorHasta": "Until",
+    "recolectorDadoDeBaja": "Ended"
   },
   "Tienda": {
     "titulo": "Store",

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
-import { abrirJornada, agregarRecolector, cerrarJornada, detalleDeJornada, recolectoresDeFinca } from "../../lib/traceability/jornadasDeCosecha";
+import { abrirJornada, agregarRecolector, cerrarJornada, darDeBajaRecolector, detalleDeJornada, JornadaError, recolectoresDeFinca } from "../../lib/traceability/jornadasDeCosecha";
 
 const RUN = `jor-${Date.now()}`;
 const personas: string[] = [];
@@ -149,4 +149,57 @@ describe("la jornada de cosecha", () => {
     expect(lista.map((r) => r.personId)).toContain(recolector1);
     expect(lista.map((r) => r.personId)).not.toContain(noRecolector);
   }, 20000);
+});
+
+describe("dar de baja a un recolector (2026-09-25)", () => {
+  /**
+   * `agregarRecolector` no tenía inverso: el campo `hasta` estaba en el modelo y ningún código lo
+   * escribía. Daniel dio de alta un recolector de prueba en producción y no había cómo quitarlo.
+   * Cerrar NO borra: sus entregas siguen siendo suyas; lo que cambia es que ya no se le puede
+   * asignar a jornadas posteriores.
+   */
+  it("cierra el periodo y desaparece de los recolectores de hoy, sin borrar la fila", async () => {
+    const personaId = await persona("Baja");
+    const { organizationId: orgDeA } = await prisma.location.findUniqueOrThrow({ where: { id: A }, select: { organizationId: true } });
+    await prisma.organizationMembership.create({ data: { personId: personaId, organizationId: orgDeA! } });
+    await agregarRecolector(managerA, { fincaSiteId: A, personId: personaId, desde: new Date(hoy.getTime() - 86_400_000) });
+    expect((await recolectoresDeFinca(managerA, A)).map((r) => r.personId)).toContain(personaId);
+
+    await darDeBajaRecolector(managerA, { fincaSiteId: A, personId: personaId, hasta: new Date(hoy.getTime() - 3_600_000) });
+
+    expect((await recolectoresDeFinca(managerA, A)).map((r) => r.personId)).not.toContain(personaId);
+    const fila = await prisma.fincaRecolector.findFirstOrThrow({ where: { personId: personaId, fincaSiteId: A } });
+    expect(fila.hasta, "la fila sigue ahí, cerrada").not.toBeNull();
+  });
+
+  it("rechaza una baja anterior al alta: sería una ventana imposible", async () => {
+    const personaId = await persona("BajaAntes");
+    const { organizationId: orgDeA } = await prisma.location.findUniqueOrThrow({ where: { id: A }, select: { organizationId: true } });
+    await prisma.organizationMembership.create({ data: { personId: personaId, organizationId: orgDeA! } });
+    await agregarRecolector(managerA, { fincaSiteId: A, personId: personaId, desde: hoy });
+    // **La clase y el mensaje exactos, no una expresión regular.** La base tiene su propio
+    // `CHECK (hasta > desde)`, así que quitando esta comprobación la escritura falla igual — pero con
+    // un `PrismaClientKnownRequestError` de mensaje VACÍO. Con `toThrow(/…/)` la prueba pasaba en los
+    // dos mundos y no discriminaba: lo vio el flip-test del 2026-09-25.
+    let capturado: unknown;
+    try {
+      await darDeBajaRecolector(managerA, { fincaSiteId: A, personId: personaId, hasta: new Date(hoy.getTime() - 10 * 86_400_000) });
+    } catch (e) {
+      capturado = e;
+    }
+    expect(capturado, "tiene que rechazar").toBeInstanceOf(JornadaError);
+    expect((capturado as Error).message).toBe("baja_antes_del_alta");
+  });
+
+  it("rechaza dar de baja a quien no es recolector", async () => {
+    await expect(
+      darDeBajaRecolector(managerA, { fincaSiteId: A, personId: noRecolector, hasta: hoy }),
+    ).rejects.toThrow(/no_es_recolector/);
+  });
+
+  it("y el operario de OTRA finca no puede dar de baja a nadie aquí", async () => {
+    await expect(
+      darDeBajaRecolector(operarioB, { fincaSiteId: A, personId: recolector1, hasta: hoy }),
+    ).rejects.toThrow();
+  });
 });
