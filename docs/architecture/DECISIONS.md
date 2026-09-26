@@ -4435,6 +4435,41 @@ Against today's behaviour this is a **narrowing, not a widening**: with the
 gate unenforced those roles could reach `confidential` and `trade_secret`
 records too. They now stop at `internal`.
 
+**Corregido el 2026-09-26, dos afirmaciones de esta decisión que ya no son
+ciertas.** Se anotan aquí en vez de reescribirlas porque las dos se leyeron como
+vigentes al revisar la rama `clasificacion-verde`, y una de ellas sostiene el
+comentario de `lib/traceability/export.ts`.
+
+1. **«These are the only non-admin profiles holding `lot:view`» dejó de ser
+   cierto.** **Farm Manager** entró después, en `ebd35ac3` (PR #357), y trae
+   `lot:view`, `lot:export` y `lot:release`. Medido el 2026-09-26 sobre
+   `lib/rbac/catalog.ts`: son **tres** los perfiles no-admin con `lot:view`
+   —Farm Manager, Farm Operator, Project Viewer— y los tres tienen exactamente
+   `clear_internal` y `clear_partner`. Ninguno tiene `clear_registered`,
+   `clear_confidential` ni `clear_trade_secret`, y `resolve.ts` compara el nivel
+   **exacto**, sin jerarquía: un lote `registered` también se les negaría.
+
+2. **«They now stop at `internal`» vale para el camino por registro, NO para las
+   listas.** La decisión 4 enforzó `requireLotAccess`/`requireSampleAccess`, que
+   sí pasan la `classification` a `can()`. Pero el `where` de las listas sale de
+   `scopeOrClauses` (`lib/traceability/lots.ts`), que **no mira `classification`
+   en ninguna línea**: sólo genera cláusulas de `projectId` y `locationId`. Así
+   que un lote por encima de la clearance sigue **apareciendo** en `getLotList`,
+   en la exportación y en las otras seis superficies que comparten
+   `resolveLotVisibility`, y es su ficha la que lo niega después.
+
+**Por qué no se arregla y qué lo vigila (decisión de Daniel, 2026-09-26): hoy es
+inalcanzable.** Ningún camino del código puede crear un lote que no sea
+`internal` — `CreateLotInput` no acepta `classification`, ninguna de las diez
+escrituras a `Lot` la pasa, y los dos sitios que escriben `padre.classification`
+crean `Location`, no `Lot`. En la base restaurada del último backup verificado
+son **45 de 45** `internal`. La divergencia está dormida por **ausencia de
+camino**, no por hábito ni por los datos del día. Queda documentada aquí, y el
+guardia que la despertaría es una prueba que afirme que **todo perfil con
+`lot:view` limpia `internal`**: el día que alguien quite esa clearance —o añada
+un camino que clasifique un lote más arriba— la fuga se vuelve alcanzable y esa
+prueba es la que tiene que caer.
+
 **Decision 2 — Partner Field Collector is deliberately unchanged.** ADR-029
 decision 1 is not overturned. `partner.task` still holds one `internal` row and
 one `partner` row, and a partner seeing only the second is the property ADR-029
