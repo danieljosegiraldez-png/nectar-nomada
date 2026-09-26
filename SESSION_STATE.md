@@ -41,6 +41,16 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-26 · Las tres lecturas de la clasificación de verde por malla
+
+Decisión de Daniel, con seis respuestas suyas en `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md`.
+La escritura ya estaba (ADR-186); esto es la **lectura**. Ficha del lote verde: reparto por malla con rango, sistema,
+**estado del dato** y %, y defectos **agrupados por categoría** conservando el enlace a cada lote. Sustituye a la tabla
+genérica de cuajado **sólo cuando es el mismo evento** —comparar «¿hay clasificación?» escondía cifras de otra
+transformación—. Pantalla propia `/lots/[id]/clasificacion`: una fila por lote, **una columna por rango declarado**, sin
+escala inventada; dice `sinAmbito`, cuántos quedan sin clasificar y por qué el lote de la ruta no sale. Dos rondas de
+Codex, once hallazgos atendidos. **Sin ver en navegador:** la base de `dev:local` no tiene las columnas `green_screen_*`.
+
 ### 2026-09-21 · Secado, paso 4: el ambiente a mano
 
 ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
@@ -100,16 +110,6 @@ su peso es la suma, asentada en el libro del lote por el mismo camino que el pes
 encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
 y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
 **Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
-
-### 2026-09-19 · P-F para el café: los umbrales salen de la receta (ADR-181)
-
-Daniel pidió revisar **toda** la literatura de fermentación antes de responder. Seis subagentes, citas
-decisivas comprobadas contra la fuente, Codex de segundo asiento:
-`docs/dominio/revision-literatura-fermentacion-2026-09-19.md`. En lo revisado, ninguna banda universal validada; ni
-Fermentis ni Lallemand publican pH ni Brix; la temperatura manda y los motores no la leen. **Sus respuestas,
-una por pregunta, quedan en 19 apartados** (ADR-181): receta manda, sin receta no se opina, manda el pH y el Brix es secundario,
-los cinco perfiles son plantillas. `10`–`13`, `00` §8 y `03` §10 anotados; `02` §3 también (su decisión
-del 09-14 no estaba escrita). **Nada de esto toca aún los motores:** es su propio diseño.
 
 ## 3. Bloqueado, y en qué
 
