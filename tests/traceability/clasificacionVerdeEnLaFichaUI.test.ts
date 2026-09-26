@@ -20,6 +20,8 @@ import { describe, expect, it } from "vitest";
 
 const raiz = new URL("../..", import.meta.url).pathname;
 const ficha = readFileSync(join(raiz, "app/lots/[id]/page.tsx"), "utf8");
+const bloque = readFileSync(join(raiz, "app/components/traceability/ClasificacionPorMalla.tsx"), "utf8");
+const comparacion = readFileSync(join(raiz, "app/lots/[id]/clasificacion/page.tsx"), "utf8");
 
 describe("clasificación por malla en la ficha del lote", () => {
   it("el archivo leído es el que creemos", () => {
@@ -37,6 +39,25 @@ describe("clasificación por malla en la ficha del lote", () => {
     expect(ficha).toContain("{outturn && !cuajadoEsElMismoEvento ? (");
     // La forma vieja, la que escondía el evento equivocado.
     expect(ficha).not.toContain("outturn && !clasificacionVerde");
+  });
+
+  it("las fechas van en la zona del lugar, no en el día UTC", () => {
+    // `toISOString().slice(0,10)` da el día en UTC: una clasificación de las 20:00 en Panamá sale
+    // fechada al día siguiente. El repositorio ya resuelve esto con `mostrarFecha`, y la ficha lo
+    // usa para sus otras fechas desde el 2026-09-05 (Codex, 2026-09-26).
+    for (const [nombre, fuente] of [["el bloque", bloque], ["la comparación", comparacion]] as const) {
+      // Control positivo: que el archivo se leyó y es el que creemos.
+      expect(fuente, nombre).toContain("mostrarFecha");
+      // Y que no queda ninguna fecha pintada en UTC. Se mira el patrón completo, no la palabra
+      // suelta: `toISOString` aparece a propósito dentro del comentario que explica por qué no.
+      expect(fuente.replace(/\/\*[\s\S]*?\*\//g, ""), nombre).not.toContain("toISOString().slice");
+    }
+  });
+
+  it("la tabla ancha de la comparación va en un contenedor con desplazamiento", () => {
+    // Es la tabla con más columnas de la aplicación —una por rango declarado— y `.nn-table` no
+    // tiene ninguna regla en globals.css: el único contenedor real es `.nn-table-scroll`.
+    expect(comparacion).toContain('className="nn-table-scroll"');
   });
 
   it("no pregunta por la clasificación cuando no hay ninguna selección en juego", () => {

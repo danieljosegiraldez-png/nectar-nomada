@@ -955,7 +955,7 @@ export default async function LotDetailPage({
         ) : null}
       </section>
 
-      {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} /> : null}
+      {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} zona={lot.location?.timezone ?? null} /> : null}
 
       {outturn && !cuajadoEsElMismoEvento ? (
         <section className="nn-section">

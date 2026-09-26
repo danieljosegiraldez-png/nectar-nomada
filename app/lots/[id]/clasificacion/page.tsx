@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../lib/traceability/lots";
 import { compararClasificacionVerde } from "../../../../lib/traceability/clasificacionVerde";
+import { mostrarFecha } from "../../../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +36,24 @@ export default async function ComparacionDeClasificacionPage({
 
   const comparacion = await compararClasificacionVerde(user.userAccountId);
 
+  // **Por qué el lote desde el que llegaste puede no estar en la tabla**, en vez de dejar que su
+  // ausencia se lea como «no está clasificado» — que es sólo uno de los tres motivos posibles
+  // (Codex, 2026-09-26).
+  const esteLoteSale = comparacion.filas.some((f) => f.lotId === id);
+  const porQueNoSale = esteLoteSale || comparacion.sinAmbito
+    ? null
+    : lote.lotType !== "green"
+      ? t("compararMallaEsteLoteNoVerde")
+      : comparacion.truncado
+        ? t("compararMallaEsteLoteFueraDelCorte", { limit: comparacion.limite })
+        : t("compararMallaEsteLoteSinClasificar");
+
   return (
     <div>
       <Link href={`/lots/${id}`} className="nn-back-link">{t("backToLot", { lotCode: lote.lotCode })}</Link>
       <h1>{t("compararMallaTitulo")}</h1>
       <p className="nn-muted">{t("compararMallaIntro")}</p>
+      {porQueNoSale ? <p role="status">{porQueNoSale}</p> : null}
 
       {/* «No puedes ver ninguno» no es «no hay ninguno», y una tabla vacía diría lo segundo. */}
       {comparacion.sinAmbito ? (
@@ -47,6 +61,7 @@ export default async function ComparacionDeClasificacionPage({
       ) : comparacion.filas.length === 0 ? (
         <p className="nn-muted">{t("compararMallaVacio")}</p>
       ) : (
+        <div className="nn-table-scroll">
         <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
           <thead>
             <tr>
@@ -73,7 +88,7 @@ export default async function ComparacionDeClasificacionPage({
                   {/* `aria-current` no lo lee quien mira la pantalla, sólo quien la escucha. */}
                   {f.lotId === id ? <span className="nn-muted"> · {t("compararMallaEsteLote")}</span> : null}
                 </th>
-                <td>{f.clasificadoEl.toISOString().slice(0, 10)}</td>
+                <td>{mostrarFecha(f.clasificadoEl, f.zona)}</td>
                 <td>{f.entradaKg} kg</td>
                 {comparacion.columnas.map((c) => {
                   const pct = f.repartoPct[c.clave];
@@ -94,6 +109,7 @@ export default async function ComparacionDeClasificacionPage({
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       {comparacion.truncado ? <p className="nn-muted">{t("compararMallaTruncado", { limit: comparacion.limite })}</p> : null}

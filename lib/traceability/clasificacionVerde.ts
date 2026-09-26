@@ -64,6 +64,13 @@ export interface FilaDeComparacion {
   lotId: string;
   lotCode: string;
   clasificadoEl: Date;
+  /**
+   * La zona horaria del LUGAR de ese lote, para que la fecha se pinte en el día en que se trabajó.
+   * Va por fila y no una para toda la tabla: en una comparación entre fincas, aplicarle a todas la
+   * zona del lote de la ruta fecharía mal el trabajo ajeno (Codex, 2026-09-26). `null` cae en
+   * `ZONA_POR_DEFECTO`.
+   */
+  zona: string | null;
   entradaKg: number;
   /** clave de columna → % de la entrada. Clave ausente = ese lote no tiene esa malla. */
   repartoPct: Record<string, number | null>;
@@ -283,7 +290,7 @@ export async function compararClasificacionVerde(
   const [candidatos, sinClasificar] = await Promise.all([
     prisma.lot.findMany({
       where: { AND: [verdesVisibles, tieneClasificacion] },
-      select: { id: true, lotCode: true },
+      select: { id: true, lotCode: true, location: { select: { timezone: true } } },
       orderBy: { createdAt: "desc" },
       // El +1 es el que hace que `truncate` pueda detectar el corte sin un segundo `count`.
       take: LIST_LIMIT + 1,
@@ -343,6 +350,7 @@ export async function compararClasificacionVerde(
       lotId: lote.id,
       lotCode: lote.lotCode,
       clasificadoEl: c.clasificadoEl,
+      zona: lote.location?.timezone ?? null,
       entradaKg: c.entradaKg,
       repartoPct,
       // **Se suman los KILOS y se redondea UNA vez** (Codex, hallazgo 6). Sumando porcentajes ya

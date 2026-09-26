@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import type { ClasificacionDeLote } from "../../../lib/traceability/clasificacionVerde";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 
 /**
  * Las lecturas 1 y 2 de la spec del 2026-09-25: el reparto por malla y los defectos agrupados.
@@ -12,9 +13,16 @@ import type { ClasificacionDeLote } from "../../../lib/traceability/clasificacio
 export async function ClasificacionPorMalla({
   clasificacion,
   lotId,
+  zona,
 }: {
   clasificacion: ClasificacionDeLote;
   lotId: string;
+  /**
+   * La zona del LUGAR del lote. Sin ella, `toISOString()` pinta el día UTC y una clasificación de
+   * las 20:00 en Panamá sale fechada al día siguiente (Codex, 2026-09-26). La ficha ya resuelve
+   * así sus otras fechas, con `mostrarFecha`.
+   */
+  zona: string | null;
 }) {
   const t = await getTranslations("Traceability");
   const share = (pct: number | null) =>
@@ -26,7 +34,7 @@ export async function ClasificacionPorMalla({
       <p className="nn-muted">
         {t("clasificacionMallaEntrada")}: {clasificacion.entradaKg} kg
         {" · "}
-        {t("clasificacionMallaFecha", { fecha: clasificacion.clasificadoEl.toISOString().slice(0, 10) })}
+        {t("clasificacionMallaFecha", { fecha: mostrarFecha(clasificacion.clasificadoEl, zona) })}
       </p>
 
       <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
