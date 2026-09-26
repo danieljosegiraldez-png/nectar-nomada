@@ -238,7 +238,9 @@ export async function clasificacionDeLote(
 
   const tr = await prisma.lotTransformation.findFirst({
     where: { ...ES_CLASIFICACION_VERDE, inputs: { some: { lotId } } },
-    orderBy: { occurredAt: "desc" },
+    // El `id` desempata: `occurredAt` lo pone quien registra y no es único, así que sin él dos
+    // clasificaciones del mismo instante devolvían cualquiera de las dos (Codex, 2026-09-25).
+    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
     include: { inputs: true, outputs: SALIDAS_CON_MALLA },
   });
   if (!tr) return null;
@@ -252,31 +254,65 @@ export async function compararClasificacionVerde(
   const where = lotWhereFromVisibility(visibility);
   // `null` es «no puedes ver ninguno», que no es «no hay ninguno». Devolver una lista vacía aquí
   // le diría a una cuenta recién dada de alta que la finca no tiene café (ver lots.ts:724).
+  //
+  // **Lo que este recorte NO hace, dicho para no prometer de más** (Codex, 2026-09-25):
+  // `lotWhereFromVisibility` filtra por proyecto y ubicación, pero **no** por `classification`,
+  // que `requireLotAccess` sí comprueba al abrir la ficha. Es una divergencia del ayudante
+  // compartido —la tiene igual `getLotList`, o sea `/lots`— y no se corrige aquí: arreglarla en
+  // una pantalla y no en las otras deja dos reglas conviviendo. Anotada para Daniel aparte.
   if (where === null) {
     return { columnas: [], filas: [], sinClasificar: 0, sinAmbito: true, truncado: false, limite: LIST_LIMIT };
   }
   const verdesVisibles: Prisma.LotWhereInput = { AND: [where, { lotType: "green" }] };
+  const tieneClasificacion: Prisma.LotWhereInput = {
+    transformationInputs: { some: { transformation: ES_CLASIFICACION_VERDE } },
+  };
 
-  const [rows, totalVerdes, totalClasificados] = await Promise.all([
-    prisma.lotTransformation.findMany({
-      where: { ...ES_CLASIFICACION_VERDE, inputs: { some: { lot: verdesVisibles } } },
-      orderBy: { occurredAt: "desc" },
+  // **Se pagina por LOTE y no por transformación** (Codex, hallazgo 3). Antes cada transformación
+  // era una fila, así que un lote clasificado dos veces salía dos veces —incumpliendo «una fila
+  // por lote», que es la decisión de Daniel— y además gastaba dos huecos del tope, desplazando a
+  // otros lotes. Eligiendo los lotes primero, el tope cuenta lo que dice contar.
+  const [candidatos, sinClasificar] = await Promise.all([
+    prisma.lot.findMany({
+      where: { AND: [verdesVisibles, tieneClasificacion] },
+      select: { id: true, lotCode: true },
+      orderBy: { createdAt: "desc" },
       // El +1 es el que hace que `truncate` pueda detectar el corte sin un segundo `count`.
       take: LIST_LIMIT + 1,
-      include: { inputs: { include: { lot: { select: { id: true, lotCode: true } } } }, outputs: SALIDAS_CON_MALLA },
     }),
-    prisma.lot.count({ where: verdesVisibles }),
-    // Contado aparte y NO desde la página truncada: si el corte se lleva filas, restar sobre ellas
-    // daría un «sin clasificar» inflado que se leería como un hecho sobre la finca.
-    prisma.lot.count({
-      where: { AND: [verdesVisibles, { transformationInputs: { some: { transformation: ES_CLASIFICACION_VERDE } } }] },
-    }),
+    // **Un solo `count`, no una resta** (Codex, hallazgo 4). Restar dos conteos independientes
+    // mezcla dos instantáneas: con una escritura concurrente en medio, el resultado no es el
+    // número de nada. Contar directamente los que no tienen clasificación no tiene ese problema.
+    prisma.lot.count({ where: { AND: [verdesVisibles, { NOT: tieneClasificacion }] } }),
   ]);
 
-  const { items, truncated, limit } = truncate(rows);
-  const columnas = new Map<string, ColumnaDeMalla>();
+  const { items: lotes, truncated, limit } = truncate(candidatos);
+  if (lotes.length === 0) {
+    return { columnas: [], filas: [], sinClasificar, sinAmbito: false, truncado: truncated, limite: limit };
+  }
 
-  const filas: FilaDeComparacion[] = items.map((tr) => {
+  const ids = lotes.map((l) => l.id);
+  const transformaciones = await prisma.lotTransformation.findMany({
+    where: { ...ES_CLASIFICACION_VERDE, inputs: { some: { lotId: { in: ids } } } },
+    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+    include: { inputs: true, outputs: SALIDAS_CON_MALLA },
+  });
+
+  // La MÁS RECIENTE de cada lote, que es la que ya enseña su ficha: dos pantallas que eligen
+  // distinto sobre el mismo lote son dos verdades. Vienen ordenadas, así que la primera gana.
+  const masReciente = new Map<string, TransformacionClasificada>();
+  for (const tr of transformaciones) {
+    for (const entrada of tr.inputs) {
+      if (!masReciente.has(entrada.lotId)) masReciente.set(entrada.lotId, tr);
+    }
+  }
+
+  const columnas = new Map<string, ColumnaDeMalla>();
+  const filas: FilaDeComparacion[] = [];
+
+  for (const lote of lotes) {
+    const tr = masReciente.get(lote.id);
+    if (!tr) continue;
     const c = armarClasificacion(tr);
     const kgPorColumna = new Map<string, number>();
     for (const m of c.mallas) {
@@ -291,32 +327,31 @@ export async function compararClasificacionVerde(
     for (const [clave, kg] of kgPorColumna) {
       repartoPct[clave] = c.entradaKg > 0 ? Number(((kg / c.entradaKg) * 100).toFixed(2)) : null;
     }
-    const entrada = tr.inputs[0]?.lot;
-    return {
-      lotId: entrada?.id ?? "",
-      lotCode: entrada?.lotCode ?? "",
+    filas.push({
+      // El lote sale de la consulta de lotes, que YA pasó por el `where` de visibilidad — no de
+      // `tr.inputs[0]`, que en una transformación de varias entradas podía ser de otra finca
+      // (Codex, hallazgo 2). `entradaKg` sí suma todas las entradas, a propósito: es la base del
+      // balance de masa de esa transformación y no un dato de este lote.
+      lotId: lote.id,
+      lotCode: lote.lotCode,
       clasificadoEl: c.clasificadoEl,
       entradaKg: c.entradaKg,
       repartoPct,
+      // **Se suman los KILOS y se redondea UNA vez** (Codex, hallazgo 6). Sumando porcentajes ya
+      // redondeados, dos categorías de 0,014 kg sobre 100 daban 0,02 % donde el peso total dice
+      // 0,03 %.
       defectosPct:
         c.entradaKg > 0
-          ? Number(c.defectos.reduce((suma, d) => suma + (d.pct ?? 0), 0).toFixed(2))
+          ? Number(((c.defectos.reduce((suma, d) => suma + d.kg, 0) / c.entradaKg) * 100).toFixed(2))
           : null,
       estadoDelDato: c.estadoDelDato,
-    };
-  });
+    });
+  }
 
   const ordenadas = [...columnas.values()].sort((a, b) => {
     if (a.sinRango !== b.sinRango) return a.sinRango ? 1 : -1;
     return (b.rangoMax ?? b.rangoMin ?? 0) - (a.rangoMax ?? a.rangoMin ?? 0);
   });
 
-  return {
-    columnas: ordenadas,
-    filas,
-    sinClasificar: Math.max(totalVerdes - totalClasificados, 0),
-    sinAmbito: false,
-    truncado: truncated,
-    limite: limit,
-  };
+  return { columnas: ordenadas, filas, sinClasificar, sinAmbito: false, truncado: truncated, limite: limit };
 }

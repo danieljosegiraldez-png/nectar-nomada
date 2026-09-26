@@ -266,6 +266,71 @@ describe("compararClasificacionVerde", () => {
     expect(mio.filas.find((f) => f.lotCode === `${RUN}-ajena`)).toBeDefined();
   }, 30000);
 
+  it("un lote clasificado DOS veces da UNA fila, la de la clasificación más reciente", async () => {
+    // Hallazgo 3 de Codex, 2026-09-25. Antes se paginaba por transformación, así que este lote
+    // salía dos veces —incumpliendo «una fila por lote»— y gastaba dos huecos del tope.
+    //
+    // **Las dos son PARCIALES, y no por comodidad del test:** una clasificación que consume el
+    // lote entero deja el libro a cero y la segunda la rechaza el balance de masa con
+    // `input_exceeds_available`. El caso real de dos clasificaciones es clasificar en dos tandas.
+    const origen = await loteVerde("dos-veces", 100);
+    await recordGreenGrading(userAccountId, {
+      inputLotId: origen.id,
+      inputQuantityKg: 40,
+      fractions: [
+        { lotCode: `${RUN}-dos-veces-vieja`, quantityKg: 40, screenMin: 14, screenMax: 14, screenSystem: "redonda_internacional", screenStatus: "measured" },
+      ],
+      occurredAt: new Date("2026-09-20T10:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+    await recordGreenGrading(userAccountId, {
+      inputLotId: origen.id,
+      inputQuantityKg: 60,
+      fractions: [
+        { lotCode: `${RUN}-dos-veces-nueva`, quantityKg: 60, screenMin: 19, screenMax: 19, screenSystem: "redonda_internacional", screenStatus: "measured" },
+      ],
+      occurredAt: new Date("2026-09-24T10:00:00Z"),
+      provenanceClass: "measured_fact",
+    });
+
+    const r = await compararClasificacionVerde(userAccountId);
+    const suyas = r.filas.filter((f) => f.lotCode === `${RUN}-dos-veces`);
+    expect(suyas).toHaveLength(1);
+    // Y es la nueva, la misma que elige la ficha: dos pantallas que eligen distinto son dos verdades.
+    expect(suyas[0]!.repartoPct[claveDeColumna("redonda_internacional", 19, 19)]).toBe(100);
+    expect(suyas[0]!.repartoPct[claveDeColumna("redonda_internacional", 14, 14)]).toBeUndefined();
+
+    const ficha = await clasificacionDeLote(userAccountId, origen.id);
+    expect(ficha!.mallas[0]!.lotCode).toBe(`${RUN}-dos-veces-nueva`);
+  }, 30000);
+
+  it("el % de defectos suma kilos y redondea una vez, no suma porcentajes redondeados", async () => {
+    // Hallazgo 6 de Codex, 2026-09-25. Dos categorías de 0,014 kg sobre 100 redondean a 0,01 %
+    // cada una: sumar los redondeos da 0,02 %, y el peso total (0,028 kg) dice 0,03 %.
+    const origen = await loteVerde("redondeo", 100);
+    await recordGreenGrading(userAccountId, {
+      inputLotId: origen.id,
+      inputQuantityKg: 100,
+      fractions: [
+        { lotCode: `${RUN}-redondeo-A`, quantityKg: 99.972, screenMin: 17, screenMax: 18, screenSystem: "redonda_internacional", screenStatus: "measured" },
+      ],
+      defectLots: [
+        { lotCode: `${RUN}-redondeo-D1`, quantityKg: 0.014, rejectionCategoryValueId: brocaId },
+        { lotCode: `${RUN}-redondeo-D2`, quantityKg: 0.014, rejectionCategoryValueId: flotadoresId },
+      ],
+      occurredAt: new Date(),
+      provenanceClass: "measured_fact",
+    });
+
+    const r = await compararClasificacionVerde(userAccountId);
+    const fila = r.filas.find((f) => f.lotCode === `${RUN}-redondeo`);
+    expect(fila).toBeDefined();
+    // Cada categoría por separado sí redondea a 0,01; el total tiene que salir del peso.
+    const c = await clasificacionDeLote(userAccountId, origen.id);
+    expect(c!.defectos.map((d) => d.pct).sort()).toEqual([0.01, 0.01]);
+    expect(fila!.defectosPct).toBe(0.03);
+  }, 30000);
+
   it("pone una fila por lote clasificado y una columna por rango declarado", async () => {
     const origen = await loteVerde("comp", 200);
     await recordGreenGrading(userAccountId, {
