@@ -41,6 +41,26 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-27 · Alta de proveedores de equipos, y la colación que no era la que creíamos (PR #503)
+
+ADR-188. Ya se crea una `Organization` de tipo `supplier` desde la aplicación —los tres que había
+venían del seed—: sin `Location`, `approved`, `AuditEvent` en la misma transacción, índice único
+parcial sobre `lower(btrim(name))`. Pantalla propia `/equipos/proveedores/nuevo`, porque el
+desplegable vive DENTRO del `<form>` de `/equipos/nuevo` y un `<form>` anidado no es HTML válido.
+
+**Decisión de Daniel: el permiso se juzga en ámbito de PLATAFORMA.** Codex leyó lo que yo no:
+`permissionKeysAnywhere` dice de sí misma «Display only, and never an authorization decision», y la
+primera versión la usaba para autorizar. Ahora `can()` contra plataforma, como
+`organization:create_farm`. **Un Farm Manager ya NO da de alta proveedores.** **Sin hacer:**
+`lib/traceability/proveedoresDeCereza.ts` y `lib/sensory/ruedas.ts` siguen autorizando con ella.
+
+**La colación no es la que dice este repositorio.** Medido contra producción, sólo lectura:
+`datcollate` es **`C.UTF-8`** y «FERRETERÍA EL PUENTE» **choca** con «Ferretería El Puente»; CI igual.
+Lo contrario —lo que yo escribí y CI tumbó— sólo pasa en el clúster local, que `scripts/test-db.sh:44`
+crea **sin `--locale`**. La prueba ahora mide el plegado antes de afirmar. **Sin hacer:** el locale de
+`test-db.sh`, y el comentario de la migración `20260919170000`, que afirma que «DOÑA y Doña no
+chocan» — falso en producción.
+
 ### 2026-09-27 · Lotes es operación, y cuatro instrumentos que mentían
 
 **PR #496 — `/lots` deja de ser una segunda barra de navegación.** Salen los enlaces a
@@ -100,21 +120,6 @@ está registrado el callback de producción. Lo que destapó mirar: el resaltado
 ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
 enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
 pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
-
-### 2026-09-21 · El canal de aviso de una persona exige permiso (PR #464)
-
-ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal de cualquier persona sin
-autorizar. Ahora puede la propia persona, un Platform Admin, o quien tenga `person:manage_notifications`
-(permiso nuevo: Farm Manager sí, Farm Operator no) sobre su finca, con la regla de P-G. Ninguna pantalla lo
-llama todavía. Flip-test por nombre. **Sigue:** la acción que lo llame traduce `PreferenciaDeCanalError`.
-
-### 2026-09-21 · Rutinas de limpieza y fumigación en lugares, y la bodega (PR #456)
-
-ADR-180. La bodega (`storage_facility`) cuelga de un beneficio o de una finca, y la base lo exige.
-Las rutinas de equipo cuelgan también de lugares —beneficio, instalación, cama suelta, bodega—: avisan
-cuando vencen y **no bloquean**. El insumo usado descuenta existencias en la misma transacción. Visto en
-navegador con una cuenta DEMO en base propia. **Siguen:** rutinas por estante, ahora que `drying_rack`
-está en main.
 
 ## 3. Bloqueado, y en qué
 

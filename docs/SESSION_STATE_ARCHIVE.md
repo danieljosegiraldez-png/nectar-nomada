@@ -4280,3 +4280,24 @@ balance descuadrado, condiciones de pesaje distintas o un lote de dos pedidos. L
 pesaje se exige **sólo en flotación**, que es la que moja la cereza. Se retiran `/lots/new`,
 `HarvestForm` y `ReceivingForm` —primera vez que la cifra de rutas baja, 98→97—; sus servicios se
 quedan con la nota de por qué. **Sin ver en navegador.**
+
+---
+
+**Archivado 2026-09-27**, con el estado en 393/400 líneas, para hacer sitio a la
+entrada de ADR-188. Se movió la más vieja de la sección 2, que es la que nombraba
+`scripts/check-state-budget.mjs`.
+
+### 2026-09-21 · Rutinas de limpieza y fumigación en lugares, y la bodega (PR #456)
+
+ADR-180. La bodega (`storage_facility`) cuelga de un beneficio o de una finca, y la base lo exige.
+Las rutinas de equipo cuelgan también de lugares —beneficio, instalación, cama suelta, bodega—: avisan
+cuando vencen y **no bloquean**. El insumo usado descuenta existencias en la misma transacción. Visto en
+navegador con una cuenta DEMO en base propia. **Siguen:** rutinas por estante, ahora que `drying_rack`
+está en main.
+
+### 2026-09-21 · El canal de aviso de una persona exige permiso (PR #464)
+
+ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal de cualquier persona sin
+autorizar. Ahora puede la propia persona, un Platform Admin, o quien tenga `person:manage_notifications`
+(permiso nuevo: Farm Manager sí, Farm Operator no) sobre su finca, con la regla de P-G. Ninguna pantalla lo
+llama todavía. Flip-test por nombre. **Sigue:** la acción que lo llame traduce `PreferenciaDeCanalError`.
