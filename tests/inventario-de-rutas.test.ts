@@ -206,7 +206,12 @@ describe("el inventario del router", () => {
     // entre lotes. Con sesión, y la lectura recorta con `resolveLotVisibility`: devuelve
     // `sinAmbito` en vez de una lista vacía cuando la cuenta no alcanza ningún lote. Medido con
     // `node scripts/inventario-de-rutas.mjs`: 114 entradas (103 páginas, 11 handlers).
-    expect(salida).toContain("114 entradas");
+    // 114 → 115 el 2026-09-27: /equipos/proveedores/nuevo, dar de alta un proveedor de equipos
+    // (ADR-188). La pantalla es sólo el formulario —la compuerta es el servicio, que exige
+    // `equipment_supplier:create` en algún ámbito—, y `volverA` sólo se acepta si empieza por
+    // `/equipos/nuevo`. Medido con `node scripts/inventario-de-rutas.mjs`: 115 entradas
+    // (104 páginas, 11 handlers).
+    expect(salida).toContain("115 entradas");
     expect(codigo, salida).toBe(0);
   });
 

@@ -1,0 +1,29 @@
+-- ADR-188 · El alta de proveedores de equipos copia la de los proveedores de cereza.
+--
+-- El proveedor de un equipo tiene que ser una `Organization` de tipo `supplier` y en estado
+-- `approved` —lo exige `comprobarProveedor` en lib/equipos/equipos.ts— pero hasta hoy no había
+-- forma de crear una desde la aplicación: los tres que existían venían del seed.
+--
+-- Este índice es el calco del de productores (`organization_productor_nombre_unico`, migración
+-- 20260919170000): PARCIAL, acotado a su tipo, y normalizando mayúsculas y espacios de sobra. Sin
+-- él, «Ferretería El Puente» y «ferreteria el puente  » serían dos proveedores y ningún informe los
+-- agruparía nunca. Acotarlo al tipo es deliberado: una finca y un proveedor pueden llamarse igual.
+--
+-- **Cuánto normaliza depende de la colación del clúster, no de este SQL.** Medido el 2026-09-27
+-- contra producción, con una consulta de sólo lectura: `datcollate` es **`C.UTF-8`**,
+-- `lower('FERRETERÍA')` da `ferretería` y «FERRETERÍA EL PUENTE» choca con «Ferretería El Puente».
+-- En CI (`postgis/postgis:18-3.6`) igual. O sea: **en producción el acento NO es un agujero.**
+--
+-- Lo que sí es un agujero es el clúster local de `scripts/test-db.sh:44`, que se crea con
+-- `initdb --encoding=UTF8` y **sin `--locale`**: hereda el del entorno, y en al menos un Mac eso da
+-- `C` a secas, donde `lower('Í')` devuelve 'Í' y los dos nombres entran como dos filas. Por eso
+-- `tests/equipos/proveedores.test.ts` MIDE el plegado antes de afirmar nada: una prueba que diera
+-- por sentado un comportamiento u otro miente en la mitad de los sitios donde corre, y la primera
+-- versión de esa prueba cayó en CI justo por eso.
+--
+-- **Nota sobre la migración 20260919170000 (productores), que NO se toca aquí**: su comentario
+-- afirma que «con la colación `C` de la base, `lower('Ñ')` no da 'ñ', así que DOÑA y Doña no
+-- chocan». Con lo medido arriba, eso es falso en producción. Queda señalado, no corregido: es
+-- código ya fusionado y de otro asunto.
+CREATE UNIQUE INDEX "organization_proveedor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
+  WHERE "organization_type" = 'supplier';

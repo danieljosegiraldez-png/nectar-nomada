@@ -8,6 +8,7 @@ import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { SelectorDeModelo, type ModeloOpcion, type ModelosPorSitioYTipo } from "../../components/equipos/SelectorDeModelo";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { proveedoresPosibles, sitiosParaRegistrar } from "../../../lib/equipos/equipos";
+import { puedeCrearProveedorDeEquipos } from "../../../lib/equipos/proveedores";
 import { listarModelos } from "../../../lib/equipos/modelos";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 
@@ -35,16 +36,19 @@ function paraOpcion(m: { id: string; manufacturer: string; modelName: string; re
 export default async function EquipoNuevoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ modelo?: string; error?: string }>;
+  searchParams: Promise<{ modelo?: string; proveedor?: string; error?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, sitios, proveedores, { compartidos, propios }, sp, granted] = await Promise.all([
+  const [t, sitios, proveedores, { compartidos, propios }, puedeCrearProveedor, sp, granted] = await Promise.all([
     getTranslations("Equipos"),
     sitiosParaRegistrar(user.userAccountId),
     proveedoresPosibles(user.userAccountId),
     listarModelos(user.userAccountId),
+    // Dar de alta un proveedor es de ámbito de plataforma (ADR-188, decisión del 2026-09-27), así
+    // que casi nadie de los que registran equipo puede: el enlace sólo se ofrece a quien sí.
+    puedeCrearProveedorDeEquipos(user.userAccountId),
     searchParams,
     permissionKeysAnywhere(user.userAccountId),
   ]);
@@ -86,6 +90,13 @@ export default async function EquipoNuevoPage({
   // Vuelta desde «crea el modelo» (`/equipos/modelos/nuevo?volverA=...`): sólo se
   // acepta la forma de un id de la base, nunca texto libre en la pantalla.
   const modeloPreseleccionado = sp.modelo && /^[0-9a-f-]+$/i.test(sp.modelo) ? sp.modelo : undefined;
+  // Vuelta desde «crea el proveedor» (`/equipos/proveedores/nuevo?volverA=...`): mismo trato que el
+  // modelo. Se comprueba además que esté entre los que esta persona puede elegir, para no dejar
+  // seleccionado en el desplegable un id que el servidor rechazaría al guardar.
+  const proveedorPreseleccionado =
+    sp.proveedor && /^[0-9a-f-]+$/i.test(sp.proveedor) && proveedores.some((x) => x.id === sp.proveedor)
+      ? sp.proveedor
+      : "";
   // El código viene de la URL: sólo se acepta la forma que las acciones de
   // app/actions/equipos.ts producen, nunca texto libre en la pantalla.
   const codigoError = sp.error && /^[a-z_]+$/.test(sp.error) ? sp.error : null;
@@ -185,7 +196,7 @@ export default async function EquipoNuevoPage({
           </label>
           <label>
             {t("campoProveedor")}
-            <select name="supplierOrganizationId" defaultValue="">
+            <select name="supplierOrganizationId" defaultValue={proveedorPreseleccionado}>
               <option value="">{t("sinProveedor")}</option>
               {proveedores.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -194,6 +205,11 @@ export default async function EquipoNuevoPage({
               ))}
             </select>
           </label>
+          {puedeCrearProveedor ? (
+            <p className="nn-muted">
+              <Link href="/equipos/proveedores/nuevo?volverA=/equipos/nuevo">{t("proveedorCrear")}</Link>
+            </p>
+          ) : null}
           <label>
             {t("campoGarantia")}
             <input type="date" name="warrantyUntil" />
