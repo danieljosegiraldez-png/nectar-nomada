@@ -227,7 +227,15 @@ export async function retirarModelo(userAccountId: string, modelId: string, cuan
   await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
   if (m.retiredAt) return;
   await prisma.$transaction(async (tx) => {
-    await tx.equipmentModel.update({ where: { id: modelId }, data: { retiredAt: cuando } });
+    // **Condicionado al estado observado**, como su inversa (ADR-187, revisión de Codex del
+    // 2026-09-27). Con un `update` por id a secas, dos retiros simultáneos escribían DOS eventos
+    // `retire` y, peor, el segundo pisaba `retiredAt` con su propia fecha: la fila y su auditoría
+    // acababan contando instantes distintos. Medido con las dos llamadas a la vez: daba 2, ahora 1.
+    const { count } = await tx.equipmentModel.updateMany({
+      where: { id: modelId, retiredAt: null },
+      data: { retiredAt: cuando },
+    });
+    if (count === 0) return;
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, entityType: "equipment_model", entityId: modelId, operation: "retire", sourceInterface: "lib/equipos/modelos.ts", after: { retiredAt: cuando.toISOString() } },
       tx,
@@ -255,8 +263,8 @@ export async function retirarModelo(userAccountId: string, modelId: string, cuan
  * llamadas simultáneas escribieran dos `unretire`, y la segunda auditaba un no-cambio con un
  * `before` falso. Medido con una prueba que lanza las dos a la vez: daba 2 eventos, ahora 1.
  *
- * **`retirarModelo`, aquí al lado, tiene el mismo patrón y la misma carrera.** No se toca en este
- * cambio —es otro alcance— pero queda dicho para que no se lea como que está bien.
+ * **`retirarModelo` tenía la misma carrera y se cerró el 2026-09-27**, con la misma forma. Queda
+ * por revisar `retirarEspecificacion`, en este mismo archivo, que conserva el patrón.
  */
 export async function desRetirarModelo(userAccountId: string, modelId: string): Promise<void> {
   const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
