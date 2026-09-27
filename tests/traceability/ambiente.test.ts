@@ -14,7 +14,26 @@ import { PersonaNoPermitidaError } from "../../lib/people/quienLoHizo";
  * Farm Operator asignado al SITIO — `can()` sube por el árbol, así que eso le
  * da `sample:manage` sobre la instalación. `extrano` no tiene asignación.
  */
-const nombre = (e: string) => `TEST AMB ${e}-${randomUUID().slice(0, 8)}`;
+/**
+ * Cada fila dice DE QUÉ CORRIDA es, no sólo que es de prueba.
+ *
+ * **El caso que lo obligó, medido el 2026-09-27.** La limpieza de este archivo está bien: corrido
+ * contra una base propia recién migrada, 21 pruebas en verde y **delta cero** en las ocho tablas
+ * que toca. Pero el 2026-09-21 una corrida **murió a mitad del `afterAll`** —la transacción de las
+ * lecturas sí se aplicó, 0 lecturas quedaron, y todo lo posterior se quedó: 15 ubicaciones, 2
+ * personas, 2 cuentas, 1 asignación y 1 organización, 18 filas en la base COMPARTIDA—.
+ *
+ * Con sólo `randomUUID()` esas 18 filas **no se podían atribuir a una corrida**: no es que no se
+ * limpiaran, es que no se podían ni contar ni separar de las de otra vez. Un conjunto que el
+ * instrumento no puede medir se lee como vacío.
+ *
+ * El `RUN` va **entre paréntesis y con la época en milisegundos**, igual que `a9-vs-…`, `fito-…` o
+ * `t5-…`, para que la misma extracción que agrupa la deuda de la base compartida por corrida
+ * reconozca también éstas. El `randomUUID` se queda: distingue dos entidades dentro de la misma
+ * corrida sin depender de que sus etiquetas nunca se repitan.
+ */
+const RUN = `amb-${Date.now()}`;
+const nombre = (e: string) => `TEST AMB ${e} (${RUN}-${randomUUID().slice(0, 8)})`;
 const personIds: string[] = [];
 const accountIds: string[] = [];
 const scopeIds: string[] = [];
