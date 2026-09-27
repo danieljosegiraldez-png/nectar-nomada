@@ -3204,6 +3204,43 @@ seguidas a la misma rama: el grupo de concurrencia cancela la corrida anterior. 
 regla original se aplica igual — leer **la conclusión de cada comprobación**, una por
 línea, nunca un resumen.
 
+### Un PR en conflicto no tiene las compuertas en rojo: no las tiene
+
+**Síntoma.** 2026-09-26, PR #484. El panel decía `failing: 0` y dos comprobaciones
+en `SUCCESS`. Lo leí como verde y fui a fusionar. Las dos eran **de Vercel**: las
+**tres** que la protección de `main` exige no aparecían en la lista **en absoluto**.
+
+**Causa.** El PR estaba en conflicto con `main` —había entrado otra fusión debajo—.
+Un workflow de `pull_request` corre sobre la **referencia de fusión**, y GitHub no
+puede construirla si hay conflicto, así que el workflow **nunca arranca**. No hay
+rojo porque no hay corrida.
+
+**Por qué engaña, y en qué se distingue de las de arriba.** En la cuota de Actions
+el job arranca y sale `failure`; en `cancelled` arranca y se corta. Aquí **no
+existe**, y `failing: 0` es literalmente cierto y completamente vacío. Es la misma
+familia: una lectura que halaga la hipótesis porque el instrumento no midió nada.
+
+**El discriminante es CONTAR, no leer el color.** Un PR sano de este repositorio da
+**6**; el mío daba **2**:
+
+```bash
+gh pr view <n> -R <owner/repo> --json statusCheckRollup --jq '[.statusCheckRollup[]?] | length'
+gh pr view <n> -R <owner/repo> --json mergeable,mergeStateStatus --jq '"\(.mergeable) \(.mergeStateStatus)"'
+```
+
+`CONFLICTING` / `DIRTY` en la segunda línea explica la primera. Y el control es
+barato: correr lo mismo sobre un PR reciente que sí fusionó. Los #478, #479, #480 y
+#482 dieron 6 cada uno.
+
+**Lo que NO es.** No es un agujero por el que se cuele un cambio sin verificar: la
+protección exige tres contextos por nombre, así que GitHub bloquea la fusión de
+todas formas. Lo que se pierde es el **diagnóstico** — se concluye «CI está roto» o
+se espera un verde que no va a llegar nunca, cuando lo que hace falta es resolver el
+conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
+
+**Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
+que estén **las que deben estar**. Una comprobación ausente no tiene color.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
