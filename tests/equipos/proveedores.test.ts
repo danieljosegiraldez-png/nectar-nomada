@@ -67,6 +67,25 @@ describe("crearProveedorDeEquipos", () => {
     expect(await prisma.organization.count({ where: { organizationType: "supplier", name: { contains: `Insumos ${RUN}` } } })).toBe(1);
   }, 30000);
 
+  it("dos altas a la vez del mismo nombre: una entra, la otra es proveedor_repetido", async () => {
+    // El caso que SÓLO el índice único puede pasar: las dos transacciones leen antes de que
+    // ninguna escriba, así que la comprobación de dentro no ve nada y las deja pasar a las dos.
+    // Nombre ASCII a propósito —lo que se prueba es la carrera—: con la colación C las mayúsculas
+    // acentuadas no se pliegan (mismo motivo que en el índice de productores).
+    const nombre = `Rodamientos ${RUN}`;
+    const res = await Promise.allSettled([
+      crearProveedorDeEquipos(jefeA, { nombre }),
+      crearProveedorDeEquipos(jefeA, { nombre: nombre.toUpperCase() }),
+    ]);
+    expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(String((res.find((x) => x.status === "rejected") as PromiseRejectedResult).reason)).toMatch(
+      /proveedor_repetido/,
+    );
+    expect(
+      await prisma.organization.count({ where: { organizationType: "supplier", name: { contains: `Rodamientos ${RUN}` } } }),
+    ).toBe(1);
+  }, 30000);
+
   it("el proveedor nuevo aparece en el desplegable del equipo", async () => {
     const nombre = `Bombas ${RUN}`;
     // Control: antes de crearlo NO está, o la aserción de abajo no diría nada.
