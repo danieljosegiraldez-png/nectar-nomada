@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { listarInstalaciones } from "../../lib/traceability/instalaciones";
+import { listarInstalaciones, sitiosParaCrearInstalacion } from "../../lib/traceability/instalaciones";
 import { LocationAccessError } from "../../lib/traceability/locations";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ function sombra(t: (k: string, v?: Record<string, string>) => string, grado: str
 export default async function InstalacionesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const puedeCrearInstalacion = (await sitiosParaCrearInstalacion(user.userAccountId)).length > 0;
   const t = await getTranslations("Secado");
   let instalaciones;
   try { instalaciones = await listarInstalaciones(user.userAccountId); }
@@ -24,7 +25,12 @@ export default async function InstalacionesPage() {
     <p><Link href="/lots">← {t("lotes")}</Link></p>
     <h1>{t("instalaciones")}</h1>
     <p>{t("instalacionesIntro")}</p>
-    <p><Link href="/instalaciones/nueva">{t("crearInstalacion")}</Link> · <Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link> · <Link href="/bodegas">{t("bodegas")}</Link></p>
+    <p>        {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
+            lo que la otra pantalla niega. */}
+        {puedeCrearInstalacion ? (
+          <><Link href="/instalaciones/nueva">{t("crearInstalacion")}</Link> · </>
+        ) : null}<Link href="/inspecciones/nueva">{t("inspeccionTitulo")}</Link> · <Link href="/bodegas">{t("bodegas")}</Link></p>
     {!instalaciones.length && <p>{t("sinInstalaciones")}</p>}
     <ul>{instalaciones.map((i) => <li key={i.id}>
       {i.sitio?.name ?? t("sitioNoVisible")} → <Link href={`/instalaciones/${i.id}`}>{i.name}</Link>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { listRecipes, ProcessTargetError } from "../../lib/traceability/processTargets";
+import { listRecipes, ProcessTargetError, puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +26,7 @@ export default async function RecipesPage({
   }
 
   const [t, params] = await Promise.all([getTranslations("Traceability"), searchParams]);
+  const puedeCrearReceta = await puedeCrearRecetaEnAlguna(user.userAccountId);
 
   return (
     <div>
@@ -36,9 +37,14 @@ export default async function RecipesPage({
       {params.ok ? <p className="nn-ok" role="status">{t("recipeCreatedOk")}</p> : null}
 
       <p style={{ marginTop: "1rem" }}>
-        <Link href="/recipes/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
-          {t("recipeNewButton")}
-        </Link>
+        {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
+            lo que la otra pantalla niega. */}
+        {puedeCrearReceta ? (
+          <Link href="/recipes/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+            {t("recipeNewButton")}
+          </Link>
+        ) : null}
       </p>
 
       <section className="nn-section">

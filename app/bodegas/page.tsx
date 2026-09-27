@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { listarBodegas } from "../../lib/traceability/bodegas";
+import { listarBodegas, padresParaBodega } from "../../lib/traceability/bodegas";
 import { vencidasPorLugar } from "../../lib/rutinas/rutinas";
 import { diaDeHoy } from "../../lib/time/diaDeHoy";
 
@@ -14,6 +14,7 @@ export default async function BodegasPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const puedeCrearBodega = (await padresParaBodega(user.userAccountId)).length > 0;
   const [t, tEq, { vencidas }] = await Promise.all([
     getTranslations("Bodegas"),
     getTranslations("Equipos"),
@@ -29,7 +30,12 @@ export default async function BodegasPage({
       <h1>{t("titulo")}</h1>
       <p>{t("intro")}</p>
       <p>
-        <Link href="/bodegas/nueva">{t("nueva")}</Link>
+                {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
+            lo que la otra pantalla niega. */}
+        {puedeCrearBodega ? (
+          <><Link href="/bodegas/nueva">{t("nueva")}</Link></>
+        ) : null}
         {" · "}
         <Link href={soloVencidas ? "/bodegas" : "/bodegas?vencidas=1"}>{t("soloVencidas")}</Link>
       </p>
