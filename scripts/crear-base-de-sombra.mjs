@@ -43,7 +43,13 @@ mantenimiento.pathname = "/postgres";
 const cliente = new Client({ connectionString: mantenimiento.toString() });
 try {
   await cliente.connect();
-  await cliente.query(`CREATE DATABASE "${nombre}"`);
+  // Misma colación que la base real y que producción (`C.UTF-8`, medido el 2026-09-27). Sin
+  // declararla hereda la de `template1`, que en un clúster creado antes de ese día es `C` a secas:
+  // dos bases del mismo par comparándose con reglas distintas. `TEMPLATE template0` es obligatorio
+  // para poder pedir otra colación, y `builtin` es el único proveedor que da C.UTF-8 en macOS.
+  await cliente.query(
+    `CREATE DATABASE "${nombre}" TEMPLATE template0 ENCODING 'UTF8' LOCALE_PROVIDER builtin BUILTIN_LOCALE 'C.UTF-8'`,
+  );
   console.log(`Base de sombra creada: ${nombre} en ${url.host}`);
 } catch (error) {
   if (error.code === "42P04") {

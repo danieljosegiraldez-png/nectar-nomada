@@ -41,7 +41,18 @@ start_cluster() {
   if [ ! -d "$PGDATA" ]; then
     echo "Creating the test cluster (first run only)..."
     mkdir -p "$CLUSTER_DIR"
-    "$PG_BIN/initdb" -D "$PGDATA" -U postgres --encoding=UTF8 --no-sync >/dev/null
+    # `--locale-provider=builtin --builtin-locale=C.UTF-8` iguala la colación a la de
+    # PRODUCCIÓN, medida el 2026-09-27 contra Neon: `datcollate` es `C.UTF-8`. Sin esto
+    # `initdb` hereda el locale del entorno —en un Mac, `C` a secas—, donde `lower('Í')`
+    # devuelve 'Í' y «FERRETERÍA EL PUENTE» NO choca con «Ferretería El Puente», mientras
+    # que en producción y en CI sí. Una prueba sobre unicidad u orden de texto pasa aquí y
+    # cae allí; pasó con tests/equipos/proveedores.test.ts.
+    #
+    # `builtin` y no `libc`: macOS **no tiene** el locale `C.UTF-8` —sólo `en_US.UTF-8`,
+    # que ordena distinto—, así que pedírselo a la libc fallaría o mentiría. El proveedor
+    # builtin lo trae Postgres desde la 17 y da exactamente C.UTF-8 en cualquier sistema.
+    "$PG_BIN/initdb" -D "$PGDATA" -U postgres --encoding=UTF8 --no-sync \
+      --locale-provider=builtin --builtin-locale=C.UTF-8 >/dev/null
   fi
   if ! running; then
     "$PG_BIN/pg_ctl" -D "$PGDATA" -l "$CLUSTER_DIR/postgres.log" \
@@ -72,7 +83,8 @@ MSG
   fi
   echo "Restoring from $(basename "$set_dir")..."
   "$PG_BIN/psql" "postgresql://postgres@127.0.0.1:$PORT/postgres" -q \
-    -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME"
+    -c "drop database if exists $DB_NAME with (force)" \
+    -c "create database $DB_NAME template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8'"
   # --no-owner/--no-privileges: neondb_owner and ai_service are Neon roles and
   # do not exist here, exactly as in verify-restore.sh.
   "$PG_BIN/pg_restore" --dbname="$TEST_URL" --no-owner --no-privileges "$set_dir/neondb.dump" 2>/dev/null || true
