@@ -12239,3 +12239,63 @@ existían y no cambian.
   fila con el texto viejo, se lee tal cual y se corrige al editarla, no con un backfill silencioso.
 - Queda pendiente, y es trabajo aparte con su propio diseño: las tres lecturas que Daniel pidió en
   pantalla —peso y porcentaje por malla, defectos por categoría, y comparar lotes entre sí—.
+
+## ADR-187 — Se pueden des-retirar modelos de equipo, y el nombre sigue reservado mientras tanto (P-H)
+
+**Fecha:** 2026-09-27 · **Estado:** aceptado (decisión de Daniel, en sesión)
+
+**Contexto.** `retirarModelo` (`lib/equipos/modelos.ts`) pone `retiredAt` y no hay vuelta atrás: la
+acción inversa no existe ni en el servicio ni en la pantalla. Y el nombre queda **reservado de
+verdad**, no de palabra — medido el 2026-09-27 contra la base:
+`equipment_model_dueno_nombre_normalizado_key` es único sobre
+`(coalesce(organization_id, …), lower(btrim(manufacturer)), lower(btrim(model_name)))` y **no lleva
+`WHERE retired_at IS NULL`**. Consecuencia: un retiro por equivocación no se arregla desde la
+aplicación, y ese fabricante y nombre no se pueden volver a usar nunca.
+
+**Decisión.** Se añade **des-retirar**: pone `retiredAt` a nulo, exige el mismo permiso que retirar
+(`equipment:manage` sobre el dueño del modelo, por `requireEntradaDeCatalogoAccess`) y deja su
+`AuditEvent` con `operation: "unretire"`. No se toca el índice: un modelo sigue siendo **una fila
+con un nombre**.
+
+**Por qué no la alternativa.** La otra salida era hacer el índice parcial para liberar el nombre al
+retirar. Se descartó porque deja **dos filas llamadas igual** en el catálogo, y un registro de hace
+un año que nombre «Fermentador X» deja de poder leerse sin mirar el identificador. En una plataforma
+cuyo argumento es la trazabilidad, eso cuesta más de lo que resuelve.
+
+**Consecuencias.**
+- **Des-retirar nunca puede chocar.** Precisamente porque el nombre sigue reservado mientras el
+  modelo está retirado, nadie ha podido ocupar ese hueco: la fila que vuelve encuentra su sitio libre
+  por construcción. La garantía que causaba el problema es la que hace segura la solución.
+- Retirar deja de ser una decisión irreversible, así que la pantalla puede ofrecerlo sin ceremonia.
+- No hay migración: `retiredAt` ya existe y es anulable.
+
+## ADR-188 — El alta de proveedores de equipos copia la de los proveedores de cereza (P-I)
+
+**Fecha:** 2026-09-27 · **Estado:** aceptado (decisión de Daniel, en sesión)
+
+**Contexto.** El proveedor de un equipo tiene que ser una `Organization` de tipo `supplier` y en
+estado `approved` — lo comprueba `comprobarProveedor` (`lib/equipos/equipos.ts`) —, pero **no hay
+ninguna forma de crear una desde la aplicación**. Medido el 2026-09-27: los únicos
+`organization.create` fuera de pruebas y seed son el alta de fincas (`lib/traceability/fincas.ts`,
+con `organization:create_farm`, sólo en ámbito de plataforma) y el de **productores de cereza**
+(`lib/traceability/proveedoresDeCereza.ts`). Los tres `supplier` que existen vienen del seed, y
+**ningún equipo tiene proveedor asignado todavía**.
+
+**Decisión.** Se copia el patrón de los proveedores de cereza, que resuelve este mismo problema y
+está probado: alta **desde la pantalla donde hace falta**, organización de tipo `supplier`, **sin
+`Location`**, `status: approved` al crear, nombre único **sin distinguir mayúsculas ni espacios de
+sobra**, permiso propio, y su `AuditEvent` con una operación con nombre.
+
+**Consecuencias.**
+- Hace falta un índice único parcial nuevo, calcado del de productores:
+  `lower(btrim(name)) WHERE organization_type = 'supplier'`. Hoy no existe — el de productores es
+  `organization_productor_nombre_unico` y está acotado a `producer`.
+- Hace falta una clave de permiso nueva en `lib/rbac/catalog.ts`, del mismo corte que
+  `cherry_supplier:create`. El nombre exacto lo fija la implementación; lo que decide este ADR es
+  que **sea propia y no `equipment:manage`**: dar de alta una organización en el directorio no es lo
+  mismo que registrar un equipo.
+- El alta comprueba el duplicado **dentro de la transacción y además atrapa el `P2002`**, como hace
+  `crearProveedorDeCereza`: dos altas simultáneas del mismo nombre no crean dos filas.
+- No se migra nada. Los tres `supplier` del seed siguen valiendo.
+- **Esto no bloquea a nadie hoy** —cero equipos con proveedor— así que puede esperar a que alguien
+  lo necesite; lo que queda cerrado es **cómo** se hará, no cuándo.
