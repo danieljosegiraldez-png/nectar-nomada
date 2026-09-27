@@ -75,7 +75,6 @@ export default async function ComparacionDeClasificacionPage({
                 </th>
               ))}
               <th scope="col">{t("compararMallaColumnaDefectos")}</th>
-              <th scope="col">{t("compararMallaColumnaDato")}</th>
             </tr>
           </thead>
           <tbody>
@@ -100,11 +99,6 @@ export default async function ComparacionDeClasificacionPage({
                   );
                 })}
                 <td>{f.defectosPct != null ? t("selectionOutturnShare", { share: f.defectosPct }) : "—"}</td>
-                <td>
-                  {f.estadoDelDato
-                    ? t(`estadoDelDato_${f.estadoDelDato}` as "estadoDelDato_measured")
-                    : t("selectionOutturnUnknown")}
-                </td>
               </tr>
             ))}
           </tbody>
