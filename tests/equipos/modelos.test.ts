@@ -165,6 +165,23 @@ describe("editar y retirar", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } })).toBe(0);
   });
 
+  it("dos retiros a la vez dejan UN solo evento, y la fecha es la que se guardó", async () => {
+    // La hermana de la carrera del des-retiro, señalada al arreglar aquélla el 2026-09-27. Aquí
+    // además del evento de más se corrompe el DATO: el segundo `update` pisa `retiredAt` con su
+    // propia fecha, así que la auditoría y la fila pueden acabar diciendo instantes distintos.
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `RC ${RUN}`, modelName: "rc1", provenanceClass: "original_record" });
+
+    const a = new Date("2026-09-27T10:00:00Z");
+    const b = new Date("2026-09-27T11:00:00Z");
+    await Promise.all([retirarModelo(jefeA, m.id, a), retirarModelo(jefeA, m.id, b)]);
+
+    expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model", entityId: m.id, operation: "retire" } })).toBe(1);
+    const fila = await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } });
+    const ev = await prisma.auditEvent.findFirstOrThrow({ where: { entityType: "equipment_model", entityId: m.id, operation: "retire" } });
+    // Y las dos cuentan lo mismo: el evento describe la fila, no otra fecha.
+    expect((ev.after as { retiredAt: string }).retiredAt).toBe(fila.retiredAt!.toISOString());
+  });
+
   it("dos des-retiros a la vez dejan UN solo evento, no dos", async () => {
     // Codex, 2026-09-27: leer fuera de la transacción y actualizar por id sin condición deja que
     // las dos llamadas escriban `unretire`, y la segunda audita un no-cambio con un `before` falso
