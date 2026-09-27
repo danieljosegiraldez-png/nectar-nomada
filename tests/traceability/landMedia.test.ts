@@ -332,7 +332,7 @@ describe("listLandAssets: la foto de revisión de trampa exige specimen:view/man
       where: assertDefinedWhere({ assignment: { userAccountId: { in: userAccountIds } } }),
     });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -430,7 +430,7 @@ describe("la foto de una revisión de trampa", () => {
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -577,7 +577,7 @@ describe("finalizeTrampaPhotoPorBorrador: engancha por clientDraftId, nunca a ot
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -771,7 +771,7 @@ describe("finalizeTrampaPhotoPorBorrador: la autoría es SIEMPRE la de la sesió
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -845,7 +845,7 @@ describe("requestTrampaPhotoUpload: la clave ya usada por OTRA revisión se rech
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -965,7 +965,7 @@ describe("finalizeTrampaPhotoPorBorrador es idempotente por storageKey (fix roun
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
@@ -1080,7 +1080,7 @@ describe("permiso de la foto de trampa: TRAP, no location:manage_attributes (rul
     await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
     await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });

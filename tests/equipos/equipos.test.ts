@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 import {
   EquipoError,
   declararPatron,
@@ -75,7 +76,8 @@ beforeAll(async () => {
   ajeno = (await cuenta("Ajeno")).userId;
 
   // El jefe manda en toda la plataforma; el operario, sólo en el sitio A.
-  const scopePlataforma = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
+    // Reusado, no creado: el índice parcial de `20260927120000_un_solo_ambito_sin_referente` sólo admite UNO.
+  const scopePlataforma = { id: await ambitoDePlataforma() };
   const scopeSitioA = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: sitioA } });
   await asignar(jefe, "Platform Admin", scopePlataforma.id);
   await asignar(operario, "Farm Operator", scopeSitioA.id);
