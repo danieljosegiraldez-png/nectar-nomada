@@ -117,6 +117,36 @@ describe("editar y retirar", () => {
     expect((ev.after as { recommendedMaintenanceDays: number }).recommendedMaintenanceDays).toBe(120);
   });
 
+  it("dos ediciones a la vez no pueden auditar el mismo `before`", async () => {
+    // Decisión de Daniel, 2026-09-27. Dos daños distintos van juntos aquí y sólo se ataca uno: que
+    // la última edición gane es razonable para una EDICIÓN; que el AuditEvent afirme un `before`
+    // que NUNCA existió como estado no lo es, en una plataforma cuyo argumento es la trazabilidad.
+    //
+    // Leyendo fuera de la transacción, las dos llamadas ven 90 y las dos escriben `before: 90` —
+    // pero cuando la segunda escribió, el valor ya era el de la primera. Aquí se exige que los dos
+    // `before` sean DISTINTOS: uno describe el estado inicial y el otro, el que dejó su compañera.
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `EC ${RUN}`, modelName: "ec1", recommendedMaintenanceDays: 90, provenanceClass: "original_record" });
+    const base = { manufacturer: `EC ${RUN}`, modelName: "ec1", provenanceClass: "original_record" as const };
+
+    await Promise.all([
+      editarModelo(jefeA, m.id, { ...base, recommendedMaintenanceDays: 120 }),
+      editarModelo(jefeA, m.id, { ...base, recommendedMaintenanceDays: 150 }),
+    ]);
+
+    const evs = await prisma.auditEvent.findMany({
+      where: { entityType: "equipment_model", entityId: m.id, operation: "update" },
+      orderBy: { occurredAt: "asc" },
+    });
+    expect(evs).toHaveLength(2);
+    const antes = evs.map((e) => (e.before as { recommendedMaintenanceDays: number }).recommendedMaintenanceDays);
+    // Con la lectura fuera de la transacción esto vale [90, 90]: dos veces el mismo estado.
+    expect(new Set(antes).size, `los dos \`before\` dicen ${JSON.stringify(antes)}`).toBe(2);
+    // Y encadenan: el segundo parte de donde dejó el primero.
+    const despues = evs.map((e) => (e.after as { recommendedMaintenanceDays: number }).recommendedMaintenanceDays);
+    expect(antes).toContain(90);
+    expect(antes.filter((x) => x !== 90)).toEqual(despues.filter((x) => x !== despues[1]));
+  });
+
   it("el jefe de A no edita un modelo de B ni uno compartido", async () => {
     const deB = await crearModelo(admin, { dueno: { tipo: "propio", locationId: sitioB }, kind: "instrument", manufacturer: `B ${RUN}`, modelName: "b1", provenanceClass: "original_record" });
     await expect(editarModelo(jefeA, deB.id, { manufacturer: `B ${RUN}`, modelName: "b1", provenanceClass: "original_record" })).rejects.toThrow(
