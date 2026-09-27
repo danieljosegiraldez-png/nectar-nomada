@@ -2824,6 +2824,7 @@
     "modeloRetirado": "retirado",
     "botonCrearModelo": "Crear modelo",
     "botonEditarModelo": "Editar",
+    "botonDesRetirarModelo": "Volver a ofrecer este modelo",
     "botonRetirarModelo": "Retirar este modelo — no se puede deshacer",
     "okCreado": "Modelo creado.",
     "okEditado": "Modelo actualizado.",

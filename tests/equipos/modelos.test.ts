@@ -13,6 +13,7 @@ import {
   retirarEspecificacion,
   sitiosParaCatalogo,
   retirarModelo,
+  desRetirarModelo,
 } from "../../lib/equipos/modelos";
 import { registrarEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 import { montarFixtures, type Fixtures } from "../helpers/fixturesDeCatalogo";
@@ -128,6 +129,38 @@ describe("editar y retirar", () => {
     // Control positivo: el mismo cambio, hecho por quien manda en la plataforma, SÍ entra.
     await editarModelo(admin, comp.id, { manufacturer: `B ${RUN}`, modelName: "compartido", notes: "del admin", provenanceClass: "original_record" });
     expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: comp.id } })).notes).toBe("del admin");
+  });
+
+  it("des-retirar devuelve el modelo a la lista y deja su AuditEvent", async () => {
+    // ADR-187. Un retiro por equivocación no se arreglaba desde la aplicación.
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `DR ${RUN}`, modelName: "dr1", provenanceClass: "original_record" });
+    await retirarModelo(jefeA, m.id, new Date());
+    // Control: está fuera ANTES de des-retirar, o la prueba no mide nada.
+    expect((await modelosParaElegir(jefeA, orgA, "instrument")).propios.map((x) => x.id)).not.toContain(m.id);
+
+    await desRetirarModelo(jefeA, m.id);
+
+    expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } })).retiredAt).toBeNull();
+    expect((await modelosParaElegir(jefeA, orgA, "instrument")).propios.map((x) => x.id)).toContain(m.id);
+    const ev = await prisma.auditEvent.findFirstOrThrow({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } });
+    expect((ev.after as { retiredAt: null }).retiredAt).toBeNull();
+  });
+
+  it("el jefe de A no des-retira un modelo de B", async () => {
+    const deB = await crearModelo(admin, { dueno: { tipo: "propio", locationId: sitioB }, kind: "instrument", manufacturer: `DRB ${RUN}`, modelName: "drb1", provenanceClass: "original_record" });
+    await retirarModelo(admin, deB.id, new Date());
+    await expect(desRetirarModelo(jefeA, deB.id)).rejects.toThrow(new CatalogoError("forbidden"));
+    // Control positivo: quien sí manda en B lo des-retira, así que el rechazo era del permiso
+    // y no de que la operación esté rota.
+    await desRetirarModelo(admin, deB.id);
+    expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: deB.id } })).retiredAt).toBeNull();
+  });
+
+  it("des-retirar un modelo que no está retirado no hace nada ni escribe auditoría", async () => {
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `DRV ${RUN}`, modelName: "drv1", provenanceClass: "original_record" });
+    await desRetirarModelo(jefeA, m.id);
+    expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } })).retiredAt).toBeNull();
+    expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } })).toBe(0);
   });
 
   it("retirar no borra: la fila sigue y deja de ofrecerse", async () => {

@@ -2824,6 +2824,7 @@
     "modeloRetirado": "retired",
     "botonCrearModelo": "Create model",
     "botonEditarModelo": "Edit",
+    "botonDesRetirarModelo": "Put this model back in the catalogue",
     "botonRetirarModelo": "Retire this model — cannot be undone",
     "okCreado": "Model created.",
     "okEditado": "Model updated.",

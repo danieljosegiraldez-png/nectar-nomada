@@ -235,6 +235,37 @@ export async function retirarModelo(userAccountId: string, modelId: string, cuan
   });
 }
 
+/**
+ * Deshace un retiro (ADR-187).
+ *
+ * **Por qué existe.** `retirarModelo` no tenía inversa, y el nombre queda reservado: el índice
+ * `equipment_model_dueno_nombre_normalizado_key` es único sobre (dueño, fabricante, nombre) y **no
+ * excluye los retirados**. Un retiro por equivocación no se arreglaba desde la aplicación, y ese
+ * fabricante y nombre no volvían a poder usarse nunca.
+ *
+ * **Y por eso esto no puede chocar.** Precisamente porque el nombre sigue reservado mientras el
+ * modelo está retirado, nadie ha podido ocupar su sitio: la fila que vuelve lo encuentra libre por
+ * construcción. La garantía que causaba el problema es la que hace segura la solución.
+ *
+ * Mismo permiso que retirar, y su `AuditEvent` en la misma transacción.
+ */
+export async function desRetirarModelo(userAccountId: string, modelId: string): Promise<void> {
+  const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
+  if (!m) throw new ModeloError("modelo_no_encontrado");
+  await requireEntradaDeCatalogoAccess(userAccountId, m, GESTIONAR);
+  // No retirado: no hay nada que deshacer, y escribir auditoría de un no-cambio la envilece.
+  if (!m.retiredAt) return;
+  // Capturado fuera: el estrechamiento de `m.retiredAt` no cruza el cierre del `$transaction`.
+  const retiradoEn = m.retiredAt;
+  await prisma.$transaction(async (tx) => {
+    await tx.equipmentModel.update({ where: { id: modelId }, data: { retiredAt: null } });
+    await recordAuditEvent(
+      { actorUserAccountId: userAccountId, entityType: "equipment_model", entityId: modelId, operation: "unretire", sourceInterface: "lib/equipos/modelos.ts", before: { retiredAt: retiradoEn.toISOString() }, after: { retiredAt: null } },
+      tx,
+    );
+  });
+}
+
 export async function declararEspecificacion(userAccountId: string, modelId: string, e: EspecificacionInput): Promise<{ id: string }> {
   const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
   if (!m) throw new ModeloError("modelo_no_encontrado");

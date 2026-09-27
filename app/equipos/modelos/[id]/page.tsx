@@ -8,6 +8,7 @@ import {
   editarModeloFormAction,
   retirarEspecificacionFormAction,
   retirarModeloFormAction,
+  desRetirarModeloFormAction,
 } from "../../../actions/modelos";
 import { BotonDeEnvio } from "../../../components/BotonDeEnvio";
 import { DocumentoUploadForm } from "../../../components/equipos/DocumentoUploadForm";
@@ -316,7 +317,13 @@ export default async function ModeloPage({
               <input type="hidden" name="modelId" value={modelo.id} />
               <BotonDeEnvio className="nn-button-quiet">{t("botonRetirarModelo")}</BotonDeEnvio>
             </form>
-          ) : null}
+          ) : (
+            /* ADR-187: retirar dejó de ser irreversible, así que la vuelta se ofrece aquí mismo. */
+            <form action={desRetirarModeloFormAction} style={{ marginTop: "0.75rem" }}>
+              <input type="hidden" name="modelId" value={modelo.id} />
+              <BotonDeEnvio className="nn-button-quiet">{t("botonDesRetirarModelo")}</BotonDeEnvio>
+            </form>
+          )}
         </details>
       ) : null}
     </div>
