@@ -190,6 +190,20 @@ export async function editarModelo(userAccountId: string, modelId: string, d: Da
   const datos = datosLimpios(antes.kind, d);
   try {
     await prisma.$transaction(async (tx) => {
+      // **La fila se bloquea y se RELEE aquí dentro** (decisión de Daniel, 2026-09-27). La lectura
+      // de arriba vale para autorizar y para saber el `kind`, pero no para auditar: dos ediciones
+      // simultáneas la hacían las dos antes de que ninguna escribiera, y las dos anotaban el MISMO
+      // `before` — cuando la segunda escribió, ese estado ya no existía. Medido: los dos eventos
+      // decían [90, 90].
+      //
+      // `FOR UPDATE` y no `Serializable`, siguiendo `bloquearCosechaEn` (lib/apiary/cierreDeCosecha.ts)
+      // y la lección que su comentario deja escrita: serializable abortaba transacciones ajenas que
+      // sólo compartían la tabla; el bloqueo de fila serializa lo que debe y nada más.
+      //
+      // Esto NO impide que la última edición gane, y no pretende hacerlo: para una edición eso es
+      // razonable. Lo que garantiza es que cada `before` describa un estado que existió de verdad.
+      await tx.$queryRaw`SELECT id FROM core.equipment_model WHERE id = ${modelId}::uuid FOR UPDATE`;
+      const vigente = await tx.equipmentModel.findUniqueOrThrow({ where: { id: modelId } });
       await tx.equipmentModel.update({ where: { id: modelId }, data: datos });
       await recordAuditEvent(
         {
@@ -199,16 +213,16 @@ export async function editarModelo(userAccountId: string, modelId: string, d: Da
           operation: "update",
           sourceInterface: "lib/equipos/modelos.ts",
           before: {
-            manufacturer: antes.manufacturer,
-            modelName: antes.modelName,
-            recommendedMaintenanceDays: antes.recommendedMaintenanceDays,
-            capacityValue: antes.capacityValue?.toString() ?? null,
-            capacityUnit: antes.capacityUnit,
-            contactMaterial: antes.contactMaterial,
-            contactMaterialNote: antes.contactMaterialNote,
-            provenanceClass: antes.provenanceClass,
-            sourceReference: antes.sourceReference,
-            notes: antes.notes,
+            manufacturer: vigente.manufacturer,
+            modelName: vigente.modelName,
+            recommendedMaintenanceDays: vigente.recommendedMaintenanceDays,
+            capacityValue: vigente.capacityValue?.toString() ?? null,
+            capacityUnit: vigente.capacityUnit,
+            contactMaterial: vigente.contactMaterial,
+            contactMaterialNote: vigente.contactMaterialNote,
+            provenanceClass: vigente.provenanceClass,
+            sourceReference: vigente.sourceReference,
+            notes: vigente.notes,
           },
           after: { ...datos, capacityValue: datos.capacityValue?.toString() ?? null },
         },
