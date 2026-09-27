@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../../lib/auth/session";
-import { listarModelos, type ModeloEnLista } from "../../../lib/equipos/modelos";
+import { listarModelos, puedeCrearCompartido, sitiosParaCatalogo, type ModeloEnLista } from "../../../lib/equipos/modelos";
 import type { EquipmentKind } from "../../../generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -61,10 +61,13 @@ export default async function ModelosPage({
   const kind = esTipo(sp.kind) ? sp.kind : undefined;
   const incluirRetirados = sp.retirados === "1";
 
-  const [t, { compartidos, propios }] = await Promise.all([
+  const [t, { compartidos, propios }, sitiosDelCatalogo, puedeCompartido] = await Promise.all([
     getTranslations("Equipos"),
     listarModelos(user.userAccountId, { kind, incluirRetirados }),
+    sitiosParaCatalogo(user.userAccountId),
+    puedeCrearCompartido(user.userAccountId),
   ]);
+  const puedeCrearModelo = puedeCompartido || sitiosDelCatalogo.length > 0;
 
   const qs = (siguiente: { kind?: EquipmentKind; retirados?: boolean }) => {
     const params = new URLSearchParams();
@@ -87,9 +90,13 @@ export default async function ModelosPage({
       <p className="nn-muted">{t("modelosIntro")}</p>
 
       <p style={{ marginTop: "1rem" }}>
+        {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Mismos dos
+            predicados que usa `/equipos/modelos/nuevo` para decidir si pinta su formulario. */}
+        {puedeCrearModelo ? (
         <Link href="/equipos/modelos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
           {t("modeloNuevo")}
         </Link>
+        ) : null}
       </p>
 
       <p className="nn-muted" style={{ marginTop: "1rem" }}>

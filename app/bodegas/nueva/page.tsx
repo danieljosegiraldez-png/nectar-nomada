@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { crearBodegaFormAction } from "../../actions/bodegas";
 import { BotonDeEnvio } from "../../components/BotonDeEnvio";
@@ -16,6 +16,8 @@ export default async function NuevaBodegaPage({
   if (!user) redirect("/login");
   const [t, { error }] = await Promise.all([getTranslations("Bodegas"), searchParams]);
   const padres = await padresParaBodega(user.userAccountId);
+  // Daniel, 2026-09-27: sin el permiso, esta pantalla no existe — 404, sin explicar.
+  if (!padres.length) notFound();
   const codigo = error && /^[a-z_]+$/.test(error) ? error : null;
   return (
     <div>
@@ -28,10 +30,7 @@ export default async function NuevaBodegaPage({
           {t(`error_${codigo}` as "error_datos_invalidos")}
         </p>
       ) : null}
-      {!padres.length ? (
-        <p className="nn-muted">{t("sinPermiso")}</p>
-      ) : (
-        <form action={crearBodegaFormAction}>
+      <form action={crearBodegaFormAction}>
           <label>
             {t("padre")}
             <select name="parentLocationId" required defaultValue="">
@@ -48,8 +47,7 @@ export default async function NuevaBodegaPage({
           <label htmlFor="name">{t("nombre")}</label>
           <input type="text" id="name" name="name" required maxLength={120} />
           <BotonDeEnvio>{t("crear")}</BotonDeEnvio>
-        </form>
-      )}
+      </form>
     </div>
   );
 }

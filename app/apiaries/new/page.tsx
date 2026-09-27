@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { organizacionesParaApiario, getManageableApiaryProjects, lugaresParaSitioDeAbejas } from "../../../lib/apiary/hives";
@@ -31,6 +31,10 @@ export default async function NuevoApiarioPage() {
     // Los lugares donde puede colgar el sitio (ADR-145).
     lugaresParaSitioDeAbejas(user.userAccountId),
   ]);
+  // Daniel, 2026-09-27: sin permiso, 404 y sin explicar. Y el mensaje que había —«no hay ninguna
+  // finca a la que puedas colgar un apiario»— era ENGAÑOSO: `organizacionesParaApiario` no mira
+  // fincas, devuelve vacío cuando el manejo de apiarios no alcanza a toda la plataforma.
+  if (organizaciones.length === 0) notFound();
 
   return (
     <div>
@@ -40,15 +44,11 @@ export default async function NuevoApiarioPage() {
       <h1>{t("apiaryCreateHeading")}</h1>
       <p className="nn-muted">{t("apiaryCreateIntro")}</p>
 
-      {organizaciones.length === 0 ? (
-        <p className="nn-muted">{t("apiaryNoOrganizations")}</p>
-      ) : (
-        <NuevoApiarioForm
-          lugares={lugares}
-          organizaciones={organizaciones}
-          proyectos={proyectos.map((p) => ({ id: p.id, name: p.name }))}
-        />
-      )}
+      <NuevoApiarioForm
+        lugares={lugares}
+        organizaciones={organizaciones}
+        proyectos={proyectos.map((p) => ({ id: p.id, name: p.name }))}
+      />
     </div>
   );
 }

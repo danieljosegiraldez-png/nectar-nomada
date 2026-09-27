@@ -35,7 +35,7 @@ const PAGINAS_CON_ENLACE_DE_CREAR = () => {
   // `git grep -l` sobre las páginas: enlaces a una ruta de crear, del propio sitio.
   const salida = execFileSync(
     "git",
-    ["grep", "-l", "-E", 'href="/[a-z-]+/(nuev[ao]|crear|new)"', "--", "app/**/page.tsx"],
+    ["grep", "-l", "-E", 'href="(/[a-z-]+)+/(nuev[ao]|crear|new)"', "--", "app/**/page.tsx"],
     { encoding: "utf8" },
   );
   return salida.split("\n").filter((l) => l.endsWith("page.tsx"));
@@ -60,10 +60,10 @@ function enlaceSinCondicion(ruta: string) {
   const lineas = readFileSync(ruta, "utf8").split("\n");
   const sueltos: string[] = [];
   for (const [i, linea] of lineas.entries()) {
-    if (!/href="\/[a-z-]+\/(nuev[ao]|crear|new)"/.test(linea)) continue;
+    if (!/href="(\/[a-z-]+)+\/(nuev[ao]|crear|new)"/.test(linea)) continue;
     const contexto = lineas.slice(Math.max(0, i - 4), i + 1).join("\n");
     // Una condición JSX delante: `{algo ? (` o `{algo && (`, o la línea misma dentro de `{x ?`.
-    const destino = linea.match(/href="(\/[a-z-]+\/(?:nuev[ao]|crear|new))"/)?.[1];
+    const destino = linea.match(/href="((?:\/[a-z-]+)+\/(?:nuev[ao]|crear|new))"/)?.[1];
     if (destino && EXENTOS.some((e) => e.destino === destino)) continue;
     if (!/\{[^}]*\b(puede|granted|permite|can)[A-Za-z]*\b[^}]*(\?|&&)/i.test(contexto)) {
       sueltos.push(`${ruta}:${i + 1} → ${linea.trim().slice(0, 80)}`);
@@ -79,5 +79,37 @@ describe("una acción que no puedes no se ofrece", () => {
     expect(paginas.length).toBeGreaterThan(5);
     const sueltos = paginas.flatMap(enlaceSinCondicion);
     expect(sueltos, `enlaces de crear sin condición de permiso:\n${sueltos.join("\n")}`).toEqual([]);
+  });
+
+  /**
+   * Y la otra mitad de la regla: **tampoco se explica**. Una pantalla de crear a la que se llega
+   * escribiendo la dirección responde 404, no una disculpa.
+   *
+   * **Lo que se acepta y por qué:** las claves que empiezan por `error` son el mensaje DESPUÉS de
+   * enviar —`codigoError === "forbidden"`, una carrera perdida contra un permiso que cambió— y ahí
+   * decir por qué falló es lo correcto. Lo que se prohíbe es la disculpa PREVIA, la que se pinta en
+   * vez del formulario.
+   */
+  it("ninguna pantalla de crear se disculpa por falta de permiso antes de enviar", () => {
+    const paginasDeCrear = execFileSync(
+      "git",
+      ["ls-files", "app/**/page.tsx"],
+      { encoding: "utf8" },
+    )
+      .split("\n")
+      .filter((f) => /\/(nuev[ao]|new|crear)\/page\.tsx$/.test(f));
+    // Control positivo: sin páginas derivadas, la prueba no mide nada.
+    expect(paginasDeCrear.length).toBeGreaterThan(10);
+
+    const disculpas: string[] = [];
+    for (const ruta of paginasDeCrear) {
+      const lineas = readFileSync(ruta, "utf8").split("\n");
+      for (const [i, linea] of lineas.entries()) {
+        const clave = linea.match(/\bt\(\s*"([A-Za-z_]*(?:[Ss]inPermiso|sin_acceso|sinAcceso)[A-Za-z_]*)"/)?.[1];
+        if (!clave || clave.startsWith("error")) continue;
+        disculpas.push(`${ruta}:${i + 1} → ${clave}`);
+      }
+    }
+    expect(disculpas, `disculpas previas por falta de permiso:\n${disculpas.join("\n")}`).toEqual([]);
   });
 });

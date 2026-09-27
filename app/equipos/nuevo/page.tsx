@@ -1,6 +1,6 @@
 import { CampoNumerico } from "../../components/CampoNumerico";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { registrarEquipoFormAction } from "../../actions/equipos";
@@ -9,6 +9,7 @@ import { SelectorDeModelo, type ModeloOpcion, type ModelosPorSitioYTipo } from "
 import { getCurrentUser } from "../../../lib/auth/session";
 import { proveedoresPosibles, sitiosParaRegistrar } from "../../../lib/equipos/equipos";
 import { listarModelos } from "../../../lib/equipos/modelos";
+import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 
 export const dynamic = "force-dynamic";
 
@@ -39,15 +40,20 @@ export default async function EquipoNuevoPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, sitios, proveedores, { compartidos, propios }, sp] = await Promise.all([
+  const [t, sitios, proveedores, { compartidos, propios }, sp, granted] = await Promise.all([
     getTranslations("Equipos"),
     sitiosParaRegistrar(user.userAccountId),
     proveedoresPosibles(user.userAccountId),
     listarModelos(user.userAccountId),
     searchParams,
+    permissionKeysAnywhere(user.userAccountId),
   ]);
   // Sin un solo sitio donde pueda registrar, la página no ofrece un formulario
   // que iba a fallar al guardar: dice por qué y devuelve a la lista.
+  // Daniel, 2026-09-27: si falta el permiso, esta pantalla no existe — 404, sin explicar. Con el
+  // permiso pero sin datos todavía, el mensaje se queda: ahí sí hay algo que hacer y hay que decirlo.
+  const puedeEnAlgunSitio = granted.has("equipment:manage") || granted.has("location:edit_beneficio");
+  if (!puedeEnAlgunSitio) notFound();
   if (sitios.length === 0) {
     return (
       <div>
