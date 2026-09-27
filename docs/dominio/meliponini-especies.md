@@ -1,7 +1,7 @@
 <!--
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
-  estado    : referencia externa · no revisada · no se cita
+  estado    : referencia externa
   origen    : `nectar_nomada_meliponini_pack.md`, entregado por Daniel el 2026-09-16.
               Redactado por un modelo de lenguaje: lo delata su propio §4, titulado
               «INSTRUCCIÓN DE ARQUITECTURA PARA CLAUDE CODE».

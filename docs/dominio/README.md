@@ -21,6 +21,7 @@ puede citar desde el código.
 |---|---|---|
 | `material del dueño` | Daniel lo afirma desde su experiencia u operación | contenido de receta, catálogos, rangos por defecto |
 | `borrador · pendiente de revisión` | lo redactó un modelo y **nadie lo ha validado** | nada automático; sirve para conversar y para que él lo lea |
+| `respaldado en parte` | Daniel respaldó SUS PROCEDIMIENTOS y **ningún número**; la cabecera dice cuáles de cada | los procedimientos nombrados, como pasos; **ninguna cifra**: ni umbral, ni dosis, ni rango |
 | `referencia externa` | publicación o norma de un tercero, con su cita | lo que su propia cita sostenga |
 | `reemplazado · no normativo` | lo sustituyó un documento posterior, que se nombra en la cabecera | nada; se conserva como historia |
 

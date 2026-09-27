@@ -1,7 +1,7 @@
 <!--
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
-  estado    : procedimientos respaldados · dosis y umbrales SIN respaldo
+  estado    : respaldado en parte
   origen    : pegado por Daniel en la conversación de trabajo el 2026-09-17, como
               «manual técnico definitivo». La autoría no está declarada. El único
               enlace del texto es una búsqueda de Google (`google.com/search?…&kgmid=`),
