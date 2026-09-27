@@ -9,13 +9,21 @@
 -- él, «Ferretería El Puente» y «ferreteria el puente  » serían dos proveedores y ningún informe los
 -- agruparía nunca. Acotarlo al tipo es deliberado: una finca y un proveedor pueden llamarse igual.
 --
--- **Hereda su limitación, y hay que decirla porque el nombre engaña**: «normalizando mayúsculas»
--- vale para ASCII y NO para las acentuadas. Con la colación `C` de la base, `lower('Í')` devuelve
--- 'Í', así que «FERRETERÍA EL PUENTE» y «Ferretería El Puente» **entran como dos proveedores** —
--- medido el 2026-09-27 en el navegador, no deducido: el alta se completó y quedaron las dos filas.
--- El `mode: "insensitive"` de Prisma que usa el servicio tiene el mismo agujero, porque es `ILIKE`.
--- La decisión de convivir con esto ya está tomada para los productores (misma migración 20260919170000:
--- ICU lo resolvería, pero ninguna migración depende de ICU y no se añade esa dependencia por esto),
--- y aquí sólo se hereda. Si algún día se arregla, se arregla para los dos tipos a la vez.
+-- **Cuánto normaliza depende de la colación del clúster, no de este SQL.** Medido el 2026-09-27
+-- contra producción, con una consulta de sólo lectura: `datcollate` es **`C.UTF-8`**,
+-- `lower('FERRETERÍA')` da `ferretería` y «FERRETERÍA EL PUENTE» choca con «Ferretería El Puente».
+-- En CI (`postgis/postgis:18-3.6`) igual. O sea: **en producción el acento NO es un agujero.**
+--
+-- Lo que sí es un agujero es el clúster local de `scripts/test-db.sh:44`, que se crea con
+-- `initdb --encoding=UTF8` y **sin `--locale`**: hereda el del entorno, y en al menos un Mac eso da
+-- `C` a secas, donde `lower('Í')` devuelve 'Í' y los dos nombres entran como dos filas. Por eso
+-- `tests/equipos/proveedores.test.ts` MIDE el plegado antes de afirmar nada: una prueba que diera
+-- por sentado un comportamiento u otro miente en la mitad de los sitios donde corre, y la primera
+-- versión de esa prueba cayó en CI justo por eso.
+--
+-- **Nota sobre la migración 20260919170000 (productores), que NO se toca aquí**: su comentario
+-- afirma que «con la colación `C` de la base, `lower('Ñ')` no da 'ñ', así que DOÑA y Doña no
+-- chocan». Con lo medido arriba, eso es falso en producción. Queda señalado, no corregido: es
+-- código ya fusionado y de otro asunto.
 CREATE UNIQUE INDEX "organization_proveedor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
   WHERE "organization_type" = 'supplier';

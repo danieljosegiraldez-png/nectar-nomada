@@ -126,19 +126,38 @@ describe("crearProveedorDeEquipos", () => {
     ).toBe(1);
   }, 30000);
 
-  it("un nombre con mayúscula acentuada SÍ entra dos veces — la limitación de la colación C", async () => {
-    // Esto no es lo que se quiere, es lo que pasa, y se fija aquí para que nadie lea «sin distinguir
-    // mayúsculas» y dé por cubierto el caso. Con la colación `C` de la base, `lower('Í')` es 'Í', así
-    // que ni el índice ni el `mode: "insensitive"` (que es ILIKE) ven iguales estos dos nombres.
-    // Medido en el navegador el 2026-09-27, no deducido; el comentario del índice lo explica entero.
-    // La decisión de convivir con ello viene de los productores (migración 20260919170000).
-    // Si alguien arregla la colación, esta prueba CAE, y eso es lo que se quiere: avisa de que hay
-    // que quitarla y escribir la contraria.
+  it("el nombre acentuado sigue a la colación del clúster, y en producción choca", async () => {
+    // **Esta prueba MIDE antes de afirmar, y la primera versión no lo hacía.** La escribí diciendo
+    // «con la colación C los acentos no se pliegan, así que entran dos», que era cierto en el
+    // clúster local y FALSO en CI — cayó allí, con `proveedor_repetido`. El plegado no es del
+    // código: es del clúster.
+    //
+    // Medido el 2026-09-27 contra producción (consulta de sólo lectura, autorizada):
+    // `datcollate` es **`C.UTF-8`**, `lower('FERRETERÍA')` da `ferretería` y los dos nombres
+    // CHOCAN. En CI (postgis:18-3.6) igual. El clúster local de `scripts/test-db.sh` puede no
+    // coincidir: lo crea con `initdb --encoding=UTF8` y SIN `--locale`, así que hereda el del
+    // entorno — en este Mac, `C` a secas, que no pliega. Por eso la prueba pregunta primero.
+    const [medida] = await prisma.$queryRawUnsafe<{ pliega: boolean }[]>(
+      "SELECT lower(btrim('  FERRETERÍA EL PUENTE  ')) = lower(btrim('Ferretería El Puente')) AS pliega",
+    );
+    const pliega = medida!.pliega;
+
     const nombre = `Ferretería ${RUN} Ñandú`;
     const uno = await crearProveedorDeEquipos(admin, { nombre });
-    const dos = await crearProveedorDeEquipos(admin, { nombre: nombre.toUpperCase() });
-    expect(dos.id).not.toBe(uno.id);
-    // Control positivo en la misma prueba: el mismo nombre SIN acentos sí choca.
+    if (pliega) {
+      // Producción y CI: el acentuado es el MISMO proveedor y se rechaza.
+      await expect(crearProveedorDeEquipos(admin, { nombre: nombre.toUpperCase() })).rejects.toThrow(
+        new ProveedorDeEquiposError("proveedor_repetido"),
+      );
+    } else {
+      // Un clúster que no pliega —como el local mal configurado— deja entrar los dos. No es lo que
+      // se quiere, pero es lo que ese clúster hace, y la prueba no debe mentir sobre ninguno.
+      const dos = await crearProveedorDeEquipos(admin, { nombre: nombre.toUpperCase() });
+      expect(dos.id).not.toBe(uno.id);
+    }
+
+    // Control positivo, y vale en los dos mundos: sin acentos el rechazo es seguro. Si esta mitad
+    // cayera, el resultado de arriba no diría nada sobre acentos — diría que el guardia está roto.
     const ascii = `Ferreteria ${RUN} Nandu`;
     await crearProveedorDeEquipos(admin, { nombre: ascii });
     await expect(crearProveedorDeEquipos(admin, { nombre: ascii.toUpperCase() })).rejects.toThrow(
