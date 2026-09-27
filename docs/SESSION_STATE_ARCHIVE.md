@@ -16,6 +16,15 @@ trabajo salió de `SESSION_STATE.md`.
 Comprobado al moverlas: de las 75 líneas quitadas del estado, **cero** con
 contenido faltaban en este archivo.
 
+**2026-09-27**, con el estado en **391/400 líneas (98 %)** — al techo, y avisándolo:
+`check:state` nombraba la entrada más vieja y se movieron **las tres del 2026-09-19**
+(recepción pieza 2, la cera de la miel, y de la recepción a los lotes pieza 3), 31
+líneas, para que cupiera la entrada del día. Se archivan las tres y no sólo la que el
+script nombra porque liberar 11 líneas dejaba 20 de margen, y la entrada del 27 no cabe
+en 20. Las tres describen trabajo **entregado y cerrado**: sus especificaciones y planes
+siguen en `docs/superpowers/`, el código en el árbol, y nada de ellas dirige trabajo
+pendiente. Lo que sí sigue vivo del beneficio está en §2 y §3 del estado.
+
 **Cuarto archivado, 2026-09-01**, con el estado en 357/400 líneas (89 %). La
 entrada de la primera revisión independiente. Su lección central —flip-test a
 todo guardia— vive en los dos `CLAUDE.md`, que sí se cargan; la operativa, que
@@ -4241,3 +4250,33 @@ su peso es la suma, asentada en el libro del lote por el mismo camino que el pes
 encontró que ese camino calculaba contra el peso escrito, no contra el libro (y duplicaba al borrar
 y volver a pesar, también a mano): ahora mide lo aportado, y la cosecha se bloquea al pesarla.
 **Sin ver en navegador.** Sigue: la cera de extracción y de colado como subproducto (spec §4).
+
+### 2026-09-19 · Recepción de cereza en el beneficio (PR #444, pieza 2 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-recepcion-de-cereza-en-beneficio*`. La
+jornada dice a qué beneficio va. `/beneficio/recepcion`: recibir o rechazar cada entrega y la
+cereza de fuera (productor dado de alta como organización), con **doble peso** (bruto − tara contra
+el de finca o el declarado; fuera de tolerancia, nota; nunca bloquea), Brix con punto de muestreo y
+**siempre dos personas** (servicio y disparador). `/beneficio/pedidos`: cantidad aquí, calidad en la
+pieza 3. **La recepción es el origen**: de ella saldrán los lotes (pieza 3). `ReceivingEvent`, el
+viejo, sigue hasta entonces. **Sin navegador.**
+
+### 2026-09-19 · La cera de la miel es subproducto, no merma (Q28, rebanada 2)
+
+ADR-178. La cera que sale al colar deja de ir en la merma y cuenta como salida del balance; la que
+sale al desopercular se anota por apiario y ventana de fechas, y la ficha dice qué cosechas de ese
+apiario caen dentro. No se eligen colmenas: se desopercula junto. **Sin ver en navegador.**
+
+### 2026-09-19 · De la recepción a los lotes (pieza 3 de 3)
+
+Spec y plan `docs/superpowers/{specs,plans}/2026-09-19-de-la-recepcion-a-los-lotes*`. De una
+recepción salen **uno o varios lotes**, y cada proceso distinto es un lote distinto: el lote nace
+**sin proceso**, que se abre después sobre él. El vínculo recepción↔lote es de nivel 1 e inmutable;
+`origenDelLote` camina la genealogía hacia arriba, así que un lote tres transformaciones más abajo
+sigue diciendo de qué recepción vino, y **no cuenta dos veces** cuando dos ramas se fusionan. La
+merma baja el disponible y no es un lote. La **selección escribe el veredicto** de la calidad
+pedida —sobre TODAS sus selecciones, dentro de su misma transacción—, y no juzga cuando no puede:
+balance descuadrado, condiciones de pesaje distintas o un lote de dos pedidos. La condición de
+pesaje se exige **sólo en flotación**, que es la que moja la cereza. Se retiran `/lots/new`,
+`HarvestForm` y `ReceivingForm` —primera vez que la cifra de rutas baja, 98→97—; sus servicios se
+quedan con la nota de por qué. **Sin ver en navegador.**
