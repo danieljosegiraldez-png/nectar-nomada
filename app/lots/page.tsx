@@ -17,11 +17,20 @@ const LOT_TYPES: NonNullable<LotListFilters["lotType"]>[] = [
   "green",
   "roast",
   "sample",
-  "other",
-  // A5 (22_APIARY_V1_SCOPING_REPORT.md) — flagged as a gap when
-  // CreateLotInput["lotType"] widened for "honey" (A3/A4 follow-up); this
-  // is the actual UI wiring that gap left undone.
-  "honey",
+  // **Sólo etapas de CAFÉ. Decisión de Daniel, 2026-09-27.** El beneficio se vincula a café, así
+  // que `honey` y `other` se quitaron del filtro: no acotaban nada y confundían. Medido ese día
+  // sobre la base restaurada del último backup verificado — de 45 lotes, 35 `cherry` y 10
+  // `processing`, CERO de esos dos.
+  //
+  // `honey` había entrado por A5 (`22_APIARY_V1_SCOPING_REPORT.md`) como el cableado de UI que
+  // faltaba tras ensanchar `CreateLotInput["lotType"]` en A3/A4. Esa nota ya no describe el
+  // mundo y por eso no se deja puesta: la miel es un `Lot` (ADR-161) y su ficha sigue
+  // etiquetándola —`lotType_honey` se queda en los mensajes—, pero se cosecha en el apiario y no
+  // se filtra desde la pantalla del beneficio.
+  //
+  // Esto encoge los CHIPS, no el servicio: `LotListFilters["lotType"]` sigue ancho, así que una
+  // URL `?lotType=honey` escrita a mano deja de filtrar y enseña todo en vez de dar error. Y un
+  // lote de miel seguiría apareciendo en la lista sin filtrar: quitar el chip no lo saca de ahí.
 ];
 
 export default async function LotsPage({ searchParams }: { searchParams: Promise<{ lotType?: string }> }) {
@@ -82,18 +91,17 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           </Link>
         ) : null}
         {granted.has("sample:manage") && <Link href="/inspecciones/nueva">{secado("inspeccionTitulo")}</Link>}
-        {granted.has("location:manage_attributes") && <Link href="/instalaciones">{secado("instalaciones")}</Link>}
-        {/* Pregunta MÁS ANCHA que la del servicio, a propósito, como el enlace de
-            instalaciones: `permissionKeysAnywhere` junta los permisos de TODAS las
-            asignaciones, y `sitiosParaBeneficio` exige los dos juntos sobre el MISMO
-            sitio. Con los perfiles de serie coinciden —Farm Manager trae los dos—,
-            pero un override por asignación que los reparta entre sitios distintos
-            enseñaría este enlace a alguien que después recibe 404. Ése es el respaldo:
-            el enlace ofrece, la pantalla autoriza. (Corregido el 2026-09-17: antes
-            decía «es la misma regla», y no lo es.) */}
-        {granted.has("location:manage_attributes") && granted.has("location:create_site") && (
-          <Link href="/beneficio/ajustes">{t("beneficioAjustesLink")}</Link>
-        )}
+        {/* **Instalaciones de secado y ajustes del beneficio ya NO están aquí. Decisión de
+            Daniel, 2026-09-27.** Esta pantalla es el trabajo diario del operario —gestionar y
+            ver lotes en sus procesos y estados—; editar, agregar, registrar, activar y dar de
+            baja son configuración, y viven bajo el índice de `/beneficio`.
+
+            No se pierde nada, y se midió antes de quitarlo: `destinosDelBeneficio`
+            (`app/beneficio/destinos.ts`) ya ofrece los dos, con los MISMOS permisos
+            —`location:manage_attributes` para instalaciones, y ése más `location:create_site`
+            para ajustes—. Lo de aquí eran duplicados que quedaron atrás; el comentario de ese
+            archivo lo dice de las recetas: «estaban en la barra de Lotes antes del #383, y el
+            índice lo perdió». Lo pinta `tests/traceability/lotesSoloOperacion.test.ts`. */}
         {canExport ? (
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and
