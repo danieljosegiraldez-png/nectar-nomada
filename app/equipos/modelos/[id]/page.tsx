@@ -79,6 +79,12 @@ export default async function ModeloPage({
           {t("okEditado")}
         </p>
       ) : null}
+      {sp.ok === "des-retirado" ? (
+        <p className="nn-ok" role="status">
+          {t("okDesRetirado")}
+        </p>
+      ) : null}
+
       {sp.ok === "retirado" ? (
         <p className="nn-ok" role="status">
           {t("okRetirado")}

@@ -144,6 +144,8 @@ describe("editar y retirar", () => {
     expect((await modelosParaElegir(jefeA, orgA, "instrument")).propios.map((x) => x.id)).toContain(m.id);
     const ev = await prisma.auditEvent.findFirstOrThrow({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } });
     expect((ev.after as { retiredAt: null }).retiredAt).toBeNull();
+    // El `before` también: una auditoría que no dice de dónde viene la transición vale la mitad.
+    expect((ev.before as { retiredAt: string }).retiredAt).toBeTruthy();
   });
 
   it("el jefe de A no des-retira un modelo de B", async () => {
@@ -161,6 +163,19 @@ describe("editar y retirar", () => {
     await desRetirarModelo(jefeA, m.id);
     expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } })).retiredAt).toBeNull();
     expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } })).toBe(0);
+  });
+
+  it("dos des-retiros a la vez dejan UN solo evento, no dos", async () => {
+    // Codex, 2026-09-27: leer fuera de la transacción y actualizar por id sin condición deja que
+    // las dos llamadas escriban `unretire`, y la segunda audita un no-cambio con un `before` falso
+    // — justo lo que el comentario del servicio promete impedir.
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `DRC ${RUN}`, modelName: "drc1", provenanceClass: "original_record" });
+    await retirarModelo(jefeA, m.id, new Date());
+
+    await Promise.all([desRetirarModelo(jefeA, m.id), desRetirarModelo(jefeA, m.id)]);
+
+    expect((await prisma.equipmentModel.findUniqueOrThrow({ where: { id: m.id } })).retiredAt).toBeNull();
+    expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model", entityId: m.id, operation: "unretire" } })).toBe(1);
   });
 
   it("retirar no borra: la fila sigue y deja de ofrecerse", async () => {

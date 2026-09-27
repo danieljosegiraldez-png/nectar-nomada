@@ -243,11 +243,20 @@ export async function retirarModelo(userAccountId: string, modelId: string, cuan
  * excluye los retirados**. Un retiro por equivocación no se arreglaba desde la aplicación, y ese
  * fabricante y nombre no volvían a poder usarse nunca.
  *
- * **Y por eso esto no puede chocar.** Precisamente porque el nombre sigue reservado mientras el
- * modelo está retirado, nadie ha podido ocupar su sitio: la fila que vuelve lo encuentra libre por
- * construcción. La garantía que causaba el problema es la que hace segura la solución.
+ * **Y por eso esto no puede chocar** — pero la razón es más estrecha de lo que parece, y Codex la
+ * afinó el 2026-09-27: des-retirar **no cambia el nombre**, sólo `retiredAt`, así que la fila
+ * conserva la clave que ya tenía y no compite con nadie. Lo que NO es cierto es que la reserva sea
+ * perpetua: `editarModelo` deja renombrar una fila retirada, y entonces el nombre viejo queda
+ * libre. Por eso aquí no hace falta atrapar el `P2002` — no porque nada pueda ocupar ese nombre,
+ * sino porque esta operación no lo reclama.
  *
- * Mismo permiso que retirar, y su `AuditEvent` en la misma transacción.
+ * **La escritura va condicionada al estado observado**, y la auditoría sólo si la transición
+ * ocurrió de verdad. Leer fuera de la transacción y actualizar por `id` a secas dejaba que dos
+ * llamadas simultáneas escribieran dos `unretire`, y la segunda auditaba un no-cambio con un
+ * `before` falso. Medido con una prueba que lanza las dos a la vez: daba 2 eventos, ahora 1.
+ *
+ * **`retirarModelo`, aquí al lado, tiene el mismo patrón y la misma carrera.** No se toca en este
+ * cambio —es otro alcance— pero queda dicho para que no se lea como que está bien.
  */
 export async function desRetirarModelo(userAccountId: string, modelId: string): Promise<void> {
   const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
@@ -258,7 +267,13 @@ export async function desRetirarModelo(userAccountId: string, modelId: string): 
   // Capturado fuera: el estrechamiento de `m.retiredAt` no cruza el cierre del `$transaction`.
   const retiradoEn = m.retiredAt;
   await prisma.$transaction(async (tx) => {
-    await tx.equipmentModel.update({ where: { id: modelId }, data: { retiredAt: null } });
+    // `updateMany` con la condición dentro: si otra llamada se adelantó, toca 0 filas y no se
+    // audita nada. Un `update` por id habría escrito igual y contado una transición que no hubo.
+    const { count } = await tx.equipmentModel.updateMany({
+      where: { id: modelId, retiredAt: { not: null } },
+      data: { retiredAt: null },
+    });
+    if (count === 0) return;
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, entityType: "equipment_model", entityId: modelId, operation: "unretire", sourceInterface: "lib/equipos/modelos.ts", before: { retiredAt: retiradoEn.toISOString() }, after: { retiredAt: null } },
       tx,
