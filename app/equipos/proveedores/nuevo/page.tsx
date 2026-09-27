@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { crearProveedorDeEquiposFormAction } from "../../../actions/equipos";
 import { BotonDeEnvio } from "../../../components/BotonDeEnvio";
 import { getCurrentUser } from "../../../../lib/auth/session";
+import { puedeCrearProveedorDeEquipos } from "../../../../lib/equipos/proveedores";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,11 @@ export const dynamic = "force-dynamic";
  * `/equipos/modelos/nuevo?volverA=…` y vuelta con el id preseleccionado—, así que se copia ese
  * camino en vez de inventar otro.
  *
- * **No se comprueba el permiso aquí.** La frontera es el servicio (SECURITY.md §2): quien no lo
- * tenga verá el formulario y recibirá `sin_permiso` al enviarlo, igual que en el resto de las
- * pantallas de equipos. Lo que sí se acota es `volverA`, para que no haya redirecciones abiertas.
+ * **El permiso se mira también aquí, no sólo en el servicio.** La frontera sigue siendo el servicio
+ * (SECURITY.md §2) y allí se vuelve a comprobar; esto es para no ofrecer un formulario que iba a
+ * acabar en `sin_permiso`, porque el ámbito es de plataforma y casi nadie lo tiene. Mismo precedente
+ * que `/equipos/modelos/nuevo` con `modeloNuevoSinPermiso`. Y `volverA` se acota para que no haya
+ * redirecciones abiertas.
  */
 export default async function ProveedorDeEquiposNuevoPage({
   searchParams,
@@ -29,17 +32,35 @@ export default async function ProveedorDeEquiposNuevoPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, sp] = await Promise.all([getTranslations("Equipos"), searchParams]);
+  const [t, sp, puede] = await Promise.all([
+    getTranslations("Equipos"),
+    searchParams,
+    puedeCrearProveedorDeEquipos(user.userAccountId),
+  ]);
 
   const volverA = sp.volverA?.startsWith("/equipos/nuevo") ? sp.volverA : null;
   // El código viene de la URL: sólo se acepta la forma que la acción produce, nunca texto libre.
   const codigoError = sp.error && /^[a-z_]+$/.test(sp.error) ? sp.error : null;
 
+  const volver = (
+    <p>
+      <Link href={volverA ?? "/equipos"}>← {volverA ? t("proveedorVolverAlRegistro") : t("volver")}</Link>
+    </p>
+  );
+
+  if (!puede) {
+    return (
+      <div>
+        {volver}
+        <h1>{t("proveedorNuevo")}</h1>
+        <p className="nn-muted">{t("proveedorSinPermiso")}</p>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <p>
-        <Link href={volverA ?? "/equipos"}>← {volverA ? t("proveedorVolverAlRegistro") : t("volver")}</Link>
-      </p>
+      {volver}
       <h1>{t("proveedorNuevo")}</h1>
       <p className="nn-muted">{t("proveedorNuevoIntro")}</p>
 

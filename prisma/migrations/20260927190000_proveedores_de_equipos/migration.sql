@@ -8,5 +8,14 @@
 -- 20260919170000): PARCIAL, acotado a su tipo, y normalizando mayúsculas y espacios de sobra. Sin
 -- él, «Ferretería El Puente» y «ferreteria el puente  » serían dos proveedores y ningún informe los
 -- agruparía nunca. Acotarlo al tipo es deliberado: una finca y un proveedor pueden llamarse igual.
+--
+-- **Hereda su limitación, y hay que decirla porque el nombre engaña**: «normalizando mayúsculas»
+-- vale para ASCII y NO para las acentuadas. Con la colación `C` de la base, `lower('Í')` devuelve
+-- 'Í', así que «FERRETERÍA EL PUENTE» y «Ferretería El Puente» **entran como dos proveedores** —
+-- medido el 2026-09-27 en el navegador, no deducido: el alta se completó y quedaron las dos filas.
+-- El `mode: "insensitive"` de Prisma que usa el servicio tiene el mismo agujero, porque es `ILIKE`.
+-- La decisión de convivir con esto ya está tomada para los productores (misma migración 20260919170000:
+-- ICU lo resolvería, pero ninguna migración depende de ICU y no se añade esa dependencia por esto),
+-- y aquí sólo se hereda. Si algún día se arregla, se arregla para los dos tipos a la vez.
 CREATE UNIQUE INDEX "organization_proveedor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
   WHERE "organization_type" = 'supplier';

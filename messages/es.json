@@ -2859,6 +2859,7 @@
     "proveedorVolverAlRegistro": "Volver al registro del equipo",
     "proveedorCrear": "¿No está? Crea el proveedor",
     "proveedorCreado": "Proveedor creado.",
+    "proveedorSinPermiso": "Dar de alta un proveedor toca el directorio de toda la plataforma, así que lo hace quien manda en ella. Pídeselo, y en cuanto esté podrás elegirlo al registrar el equipo.",
     "campoProveedorNombre": "Nombre del proveedor",
     "errorProveedorRepetido": "Ya hay un proveedor con ese nombre.",
     "errorProveedorNombre": "El nombre no puede estar vacío ni pasar de 120 caracteres.",

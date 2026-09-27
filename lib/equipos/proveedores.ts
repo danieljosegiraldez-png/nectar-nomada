@@ -1,28 +1,52 @@
 /**
  * El alta de proveedores de equipos (ADR-188).
  *
- * **Calcada de `lib/traceability/proveedoresDeCereza.ts`**, que resuelve este mismo problema y está
- * probada: una organización de tipo `supplier`, **sin `Location`** —un proveedor es un tercero del
- * directorio, no un sitio de la operación—, `approved` al crear, nombre único sin distinguir
- * mayúsculas ni espacios de sobra, permiso propio y su `AuditEvent`.
+ * **Calcada de `lib/traceability/proveedoresDeCereza.ts`** en su forma: una organización de tipo
+ * `supplier`, **sin `Location`** —un proveedor es un tercero del directorio, no un sitio de la
+ * operación—, `approved` al crear, nombre único sin distinguir mayúsculas ni espacios de sobra,
+ * permiso propio y su `AuditEvent`.
  *
  * **Por qué el permiso es propio y no `equipment:manage`**: dar de alta una organización en el
  * directorio no es lo mismo que registrar un equipo. Lo decide ADR-188.
+ *
+ * **Y por qué se juzga en ámbito de PLATAFORMA, apartándose de la de cereza.** Ésta es la única
+ * divergencia deliberada del calco, y la razón es que el efecto es global: la fila creada la ve y la
+ * puede elegir cualquiera, y ocupa ese nombre en el directorio para todos. `crearProveedorDeCereza`
+ * mira su permiso con `permissionKeysAnywhere`, cuyo propio comentario dice **«Display only, and
+ * never an authorization decision»** — la unión de todos los ámbitos es más ancha que cualquiera de
+ * ellos, que es justo lo que `resolve.ts` existe para evitar. Lo destapó la revisión de Codex del
+ * 2026-09-27 y lo decidió Daniel. El precedente que se sigue es `organization:create_farm`
+ * (`lib/traceability/fincas.ts`): capacidad global, `can()` contra el ámbito de plataforma, y ningún
+ * perfil acotado la lista — Platform Admin la tiene por llevar el catálogo entero.
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { permissionKeysAnywhere } from "../rbac/service";
+import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { Prisma } from "../../generated/prisma/client";
 
 export class ProveedorDeEquiposError extends Error {}
+
+/**
+ * El ámbito de plataforma. `conAncestros` de plataforma es plataforma y nada más, así que una
+ * asignación de sitio NO lo satisface — que es exactamente lo que se quiere aquí.
+ */
+const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;
+
+/**
+ * ¿Puede esta cuenta meter un proveedor en el directorio? Lo usa el servicio antes de escribir y la
+ * pantalla para no ofrecer un enlace que iba a acabar en `sin_permiso`. Sin clasificación aplicable:
+ * la comprobación no toca ninguna fila, todavía no existe.
+ */
+export async function puedeCrearProveedorDeEquipos(userAccountId: string): Promise<boolean> {
+  return can(userAccountId, "create", "equipment_supplier", PLATAFORMA, CLASSIFICATION_NOT_APPLICABLE);
+}
 
 export async function crearProveedorDeEquipos(
   userAccountId: string,
   input: { nombre: string },
 ): Promise<{ id: string }> {
-  // Un proveedor no tiene ubicación, así que el permiso se mira en CUALQUIER ámbito — igual que
-  // `crearProveedorDeCereza`. Pedirlo sobre un sitio no tendría a qué sitio referirse.
-  if (!(await permissionKeysAnywhere(userAccountId)).has("equipment_supplier:create")) {
+  if (!(await puedeCrearProveedorDeEquipos(userAccountId))) {
     throw new ProveedorDeEquiposError("sin_permiso");
   }
   const nombre = input.nombre.trim().replace(/\s+/g, " ");

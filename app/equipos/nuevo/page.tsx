@@ -8,6 +8,7 @@ import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 import { SelectorDeModelo, type ModeloOpcion, type ModelosPorSitioYTipo } from "../../components/equipos/SelectorDeModelo";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { proveedoresPosibles, sitiosParaRegistrar } from "../../../lib/equipos/equipos";
+import { puedeCrearProveedorDeEquipos } from "../../../lib/equipos/proveedores";
 import { listarModelos } from "../../../lib/equipos/modelos";
 
 export const dynamic = "force-dynamic";
@@ -39,11 +40,14 @@ export default async function EquipoNuevoPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, sitios, proveedores, { compartidos, propios }, sp] = await Promise.all([
+  const [t, sitios, proveedores, { compartidos, propios }, puedeCrearProveedor, sp] = await Promise.all([
     getTranslations("Equipos"),
     sitiosParaRegistrar(user.userAccountId),
     proveedoresPosibles(user.userAccountId),
     listarModelos(user.userAccountId),
+    // Dar de alta un proveedor es de ámbito de plataforma (ADR-188, decisión del 2026-09-27), así
+    // que casi nadie de los que registran equipo puede: el enlace sólo se ofrece a quien sí.
+    puedeCrearProveedorDeEquipos(user.userAccountId),
     searchParams,
   ]);
   // Sin un solo sitio donde pueda registrar, la página no ofrece un formulario
@@ -195,9 +199,11 @@ export default async function EquipoNuevoPage({
               ))}
             </select>
           </label>
-          <p className="nn-muted">
-            <Link href="/equipos/proveedores/nuevo?volverA=/equipos/nuevo">{t("proveedorCrear")}</Link>
-          </p>
+          {puedeCrearProveedor ? (
+            <p className="nn-muted">
+              <Link href="/equipos/proveedores/nuevo?volverA=/equipos/nuevo">{t("proveedorCrear")}</Link>
+            </p>
+          ) : null}
           <label>
             {t("campoGarantia")}
             <input type="date" name="warrantyUntil" />
