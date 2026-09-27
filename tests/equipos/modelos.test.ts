@@ -214,6 +214,23 @@ describe("especificaciones", () => {
     expect(ficha.specs.map((s) => s.quantity)).toEqual(["temperatura"]);
   });
 
+  it("dos retiros de la misma especificación a la vez dejan UN solo evento", async () => {
+    // La tercera del mismo patrón, después de retirarModelo y desRetirarModelo. Idéntica: leer
+    // fuera de la transacción y actualizar por id deja que las dos escriban `retire`, y la segunda
+    // pisa `retiredAt` con su fecha — la fila y su auditoría acaban en instantes distintos.
+    const m = await crearModelo(jefeA, { dueno: { tipo: "propio", locationId: sitioA }, kind: "instrument", manufacturer: `SC ${RUN}`, modelName: "sc1", provenanceClass: "manufacturer_specification" });
+    const spec = await declararEspecificacion(jefeA, m.id, { quantity: "sólidos solubles", unit: "°Bx", rangeMin: "0", rangeMax: "32" });
+
+    const a = new Date("2026-09-27T10:00:00Z");
+    const b = new Date("2026-09-27T11:00:00Z");
+    await Promise.all([retirarEspecificacion(jefeA, spec.id, a), retirarEspecificacion(jefeA, spec.id, b)]);
+
+    expect(await prisma.auditEvent.count({ where: { entityType: "equipment_model_spec", entityId: spec.id, operation: "retire" } })).toBe(1);
+    const fila = await prisma.equipmentModelSpec.findUniqueOrThrow({ where: { id: spec.id } });
+    const ev = await prisma.auditEvent.findFirstOrThrow({ where: { entityType: "equipment_model_spec", entityId: spec.id, operation: "retire" } });
+    expect((ev.after as { retiredAt: string }).retiredAt).toBe(fila.retiredAt!.toISOString());
+  });
+
   it("crear con especificaciones es atómico: una fila mala no deja el modelo a medias", async () => {
     const entrada = (modelName: string, especificaciones: object[]) => ({
       dueno: { tipo: "propio" as const, locationId: sitioA },

@@ -263,8 +263,9 @@ export async function retirarModelo(userAccountId: string, modelId: string, cuan
  * llamadas simultáneas escribieran dos `unretire`, y la segunda auditaba un no-cambio con un
  * `before` falso. Medido con una prueba que lanza las dos a la vez: daba 2 eventos, ahora 1.
  *
- * **`retirarModelo` tenía la misma carrera y se cerró el 2026-09-27**, con la misma forma. Queda
- * por revisar `retirarEspecificacion`, en este mismo archivo, que conserva el patrón.
+ * **Las tres del archivo se cerraron el 2026-09-27 con esta misma forma**: `retirarModelo`,
+ * `desRetirarModelo` y `retirarEspecificacion`. Si se añade otra transición de estado aquí, va
+ * condicionada al estado observado y sin auditar cuando no hubo transición.
  */
 export async function desRetirarModelo(userAccountId: string, modelId: string): Promise<void> {
   const m = await prisma.equipmentModel.findUnique({ where: { id: modelId } });
@@ -317,7 +318,13 @@ export async function retirarEspecificacion(userAccountId: string, specId: strin
   await requireEntradaDeCatalogoAccess(userAccountId, s.model, GESTIONAR);
   if (s.retiredAt) return;
   await prisma.$transaction(async (tx) => {
-    await tx.equipmentModelSpec.update({ where: { id: specId }, data: { retiredAt: cuando } });
+    // La tercera del mismo patrón, cerrada el 2026-09-27 como sus dos hermanas: la condición va
+    // DENTRO, y sin transición no se audita. Ver el comentario de `desRetirarModelo`.
+    const { count } = await tx.equipmentModelSpec.updateMany({
+      where: { id: specId, retiredAt: null },
+      data: { retiredAt: cuando },
+    });
+    if (count === 0) return;
     await recordAuditEvent(
       { actorUserAccountId: userAccountId, entityType: "equipment_model_spec", entityId: specId, operation: "retire", sourceInterface: "lib/equipos/modelos.ts", after: { retiredAt: cuando.toISOString() } },
       tx,
