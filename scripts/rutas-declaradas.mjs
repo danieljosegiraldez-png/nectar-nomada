@@ -147,6 +147,7 @@ export const RUTAS = {
   "/equipos/[id]": { clase: "requiere-sesion", razon: "Un equipo, su verificación contra patrones y su condición. Verificar e informar exigen equipment:report_condition; sin permiso da 404, no una página vacía." },
   "/equipos/modelos": { clase: "requiere-sesion", razon: "Catálogo de modelos de equipo: compartidos y los de las organizaciones cuyos sitios quien mira puede ver (lib/catalogos/propiedad.ts)." },
   "/equipos/modelos/nuevo": { clase: "requiere-sesion", razon: "Dar de alta un modelo. Compartido sólo con equipment:manage en plataforma; propio, en un sitio de esa organización, que el servidor vuelve a resolver." },
+  "/equipos/proveedores/nuevo": { clase: "requiere-sesion", razon: "Dar de alta un proveedor de equipos (ADR-188). Formulario sólo; la compuerta es el servicio, que exige equipment_supplier:create en algún ámbito — un proveedor no tiene ubicación sobre la que juzgarlo." },
   "/equipos/modelos/[id]": { clase: "requiere-sesion", razon: "Un modelo, sus especificaciones y documentos. Fuera de lo visible da 404; editar y retirar exigen el permiso de catálogo." },
   "/recipes": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
