@@ -1,18 +1,26 @@
 <!--
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
-  estado    : borrador · pendiente de revisión
+  estado    : referencia externa
   origen    : `nectar_nomada_meliponini_pack.md`, entregado por Daniel el 2026-09-16.
               Redactado por un modelo de lenguaje: lo delata su propio §4, titulado
               «INSTRUCCIÓN DE ARQUITECTURA PARA CLAUDE CODE».
   sha256    : c11bca86f2d4938da0d9466a8f9a5a46ca3b7a91db089a5d74f3998eda59303a
               (el del archivo original; el cuerpo de abajo es ése, byte a byte, y
               `tests/arquitectura/fuentes-verbatim.test.ts` lo comprueba)
-  revisado  : NO.
-  qué puede : conversar, y que Daniel lo lea.
-  qué NO    : nada automático. Ningún catálogo de especies, medida de caja,
-              alcance de vuelo ni rendimiento del software puede apoyarse en estas
-              cifras mientras el estado siga siendo «pendiente de revisión».
+  revisado  : NO, y no va a estarlo tal cual. Decisión de Daniel, 2026-09-27: baja a
+              REFERENCIA EXTERNA. No hay nada que respaldar aquí — lo escribió un
+              modelo, sus cifras chocan con `meliponini-seeder.js.txt` en dos de las
+              tres especies (alcance de vuelo Y medidas de caja a la vez), la
+              distribución de *S. pectoralis* omite Herrera —de donde vienen las
+              colonias de Daniel, de Parita— y el nombre «Melipona panamensis» puede
+              ser *Melipona panamica* (Roubik) mal escrito. Ninguno cita fuente.
+  qué puede : leerse, y servir para preguntarle a una fuente de verdad.
+  qué NO    : citarse, ni apoyar nada. Ningún catálogo de especies, medida de caja,
+              alcance de vuelo ni rendimiento del software puede salir de aquí — y
+              esto ya no es un estado transitorio a la espera de revisión, es lo que
+              este archivo es. Para tener cifras hace falta otra fuente, no que
+              alguien apruebe éstas.
 
   POR QUÉ NO ES UNA FUENTE FIABLE TODAVÍA — medido el 2026-09-16, no opinado:
 

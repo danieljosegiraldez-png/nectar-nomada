@@ -1,20 +1,33 @@
 <!--
   PROCEDENCIA — léela antes de citar nada de este archivo.
 
-  estado    : borrador · pendiente de revisión
+  estado    : respaldado en parte
   origen    : pegado por Daniel en la conversación de trabajo el 2026-09-17, como
               «manual técnico definitivo». La autoría no está declarada. El único
               enlace del texto es una búsqueda de Google (`google.com/search?…&kgmid=`),
               que es la forma que deja copiar una respuesta del buscador, no una fuente.
   sha256    : no aplica — no hay archivo de origen. El cuerpo de abajo es el texto
               pegado, sin resumir ni reordenar.
-  revisado  : NO. Ninguna dosis, umbral ni rango de temperatura cita fuente.
-  qué puede : conversar, y servir de base para proponer los vocabularios de
-              tratamiento y de limpieza fitosanitaria que Daniel pidió.
-  qué NO    : nada automático. Ninguna alerta, dosis por defecto, umbral de
-              tratamiento ni validación de temperatura del software puede apoyarse
-              en estos números mientras el estado siga siendo «pendiente de revisión»
-              (`CLAUDE.md` §32: sugerencia → revisión humana → acción).
+  revisado  : EN PARTE, por Daniel el 2026-09-27, y la partición es la que el propio
+              texto dibuja. Ninguna dosis, umbral ni rango de temperatura cita fuente,
+              y eso NO cambia.
+  respaldado: los PROCEDIMIENTOS, que no dependen del clima — la secuencia de
+              inspección bio-segura (sanas primero), la lectura del panal de cría, el
+              método del frasco con alcohol y la fórmula del PIA, las dos vías de
+              desinfección de material (térmica y sosa), el cuadro zanganero, la
+              renovación de cera y la desinfección de herramientas entre colmenas.
+  SIN respaldo: todo número. El umbral de tratamiento (PIA 3 % / 5 %), las dosis y
+              concentraciones de oxálico, timol, fórmico y sosa, los rangos de
+              temperatura, y el 10 % de colmenas del monitoreo mensual.
+  qué puede : conversar; servir de base para los vocabularios de tratamiento y de
+              limpieza fitosanitaria; y que el software ofrezca los PROCEDIMIENTOS
+              respaldados como pasos, sin cifras.
+  qué NO    : nada automático con un número de aquí. Ninguna alerta, dosis por
+              defecto, umbral de tratamiento ni validación de temperatura puede
+              apoyarse en ellos (`CLAUDE.md` §32: sugerencia → revisión humana →
+              acción). **Y el ácido fórmico no se ofrece sin su advertencia al lado**:
+              el propio texto dice que por encima de 27 °C mata a la reina, y en
+              Cerro Azul se superan buena parte del día.
 
   POR QUÉ NO PUEDE USARSE TAL CUAL EN CERRO AZUL — contrastado el 2026-09-17:
 

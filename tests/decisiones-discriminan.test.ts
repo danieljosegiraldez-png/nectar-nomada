@@ -160,7 +160,15 @@ const MUNDOS: Record<string, { abrir: Mundo; cerrar: Mundo }> = {
   // borrador—, así que P-F no habría podido cerrarse jamás. Esta pareja es lo
   // que lo destapó.
   "P-F": {
-    abrir: { home: { url: true, zshrc: true } },
+    // **El mundo abierto se FABRICA, desde el 2026-09-27.** Antes no tocaba el árbol: se apoyaba en
+    // que el repositorio tuviera algún borrador, y el día que Daniel decidió las dos guías que
+    // quedaban, ese mundo dejó de existir y esta pareja dejó de distinguir nada — lo cazó esta misma
+    // prueba, en el mismo PR que cerró P-F. Una pareja cuyo mundo abierto es «el repositorio tal
+    // como está hoy» caduca en cuanto la decisión se toma, que es justo cuando hace falta.
+    abrir: {
+      arbol: `perl -0pi -e 's/^  estado    : .*$/  estado    : borrador · pendiente de revisión/gm' docs/dominio/*.md`,
+      home: { url: true, zshrc: true },
+    },
     cerrar: {
       arbol: `perl -0pi -e 's/^  estado    : borrador.*$/  estado    : material del dueño/gm' docs/dominio/*.md`,
       home: { url: true, zshrc: true },

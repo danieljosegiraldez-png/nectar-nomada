@@ -108,5 +108,19 @@ describe("el material de dominio dice de dónde salió", () => {
         `${nombre}: es un borrador sin revisar y no dice qué NO puede hacer`,
       ).toMatch(/qué NO\s+: nada automático/);
     }
+
+    // Un respaldado EN PARTE es el más peligroso de los cinco: lleva el sello del dueño y aun así
+    // hay partes que no puede sostener. Si no dice cuáles, «respaldado» se lee entero y el estado
+    // acaba autorizando justo lo que no autoriza. Por eso se le exige nombrar las dos mitades.
+    if (declarados[0] === "respaldado en parte") {
+      expect(
+        cabecera,
+        `${nombre}: está respaldado en parte y no nombra QUÉ respalda`,
+      ).toMatch(/respaldado\s*:/);
+      expect(
+        cabecera,
+        `${nombre}: está respaldado en parte y no nombra qué se queda SIN respaldo`,
+      ).toMatch(/SIN respaldo\s*:/);
+    }
   });
 });
