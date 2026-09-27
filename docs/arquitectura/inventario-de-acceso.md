@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**582 operaciones** que tocan la base, en **160 archivos** — medido con
+**583 operaciones** que tocan la base, en **160 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,7 +24,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **447** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **448** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **82** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -35,6 +35,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **Des-retirar un modelo de equipo (2026-09-27): 582→583 y guardia directo 447→448, sin
+> archivo nuevo.** ADR-187. `desRetirarModelo` (`lib/equipos/modelos.ts`) exige el mismo permiso
+> que retirar —`requireEntradaDeCatalogoAccess` con `equipment:manage` sobre el dueño— antes de
+> tocar nada, y escribe su `AuditEvent` en la misma transacción.
 
 > **Las tres lecturas de la clasificación de verde (2026-09-26): 580→582, 159→160
 > archivos y guardia directo 445→447.** `clasificacionDeLote` y

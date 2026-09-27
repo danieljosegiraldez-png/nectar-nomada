@@ -11,6 +11,7 @@ import {
   editarModelo,
   retirarEspecificacion,
   retirarModelo,
+  desRetirarModelo,
   type DatosDeModelo,
   type EspecificacionInput,
 } from "../../lib/equipos/modelos";
@@ -139,6 +140,25 @@ export async function retirarModeloFormAction(formData: FormData): Promise<void>
     revalidatePath("/equipos/modelos");
     revalidatePath(`/equipos/modelos/${modelId}`);
     destino = `/equipos/modelos/${modelId}?ok=retirado`;
+  } catch (error) {
+    if (!esErrorDeCatalogo(error)) throw error;
+    destino = `/equipos/modelos/${modelId}?error=${encodeURIComponent(error.message)}`;
+  }
+  redirect(destino);
+}
+
+/** ADR-187: deshace un retiro. Mismo camino que retirar, con su propio `ok` para la pantalla. */
+export async function desRetirarModeloFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const modelId = String(formData.get("modelId") ?? "");
+
+  let destino: string;
+  try {
+    await desRetirarModelo(user.userAccountId, modelId);
+    revalidatePath("/equipos/modelos");
+    revalidatePath(`/equipos/modelos/${modelId}`);
+    destino = `/equipos/modelos/${modelId}?ok=des-retirado`;
   } catch (error) {
     if (!esErrorDeCatalogo(error)) throw error;
     destino = `/equipos/modelos/${modelId}?error=${encodeURIComponent(error.message)}`;
