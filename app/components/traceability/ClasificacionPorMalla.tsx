@@ -42,7 +42,6 @@ export async function ClasificacionPorMalla({
           <tr>
             <th scope="col">{t("clasificacionMallaColumnaMalla")}</th>
             <th scope="col">{t("clasificacionMallaColumnaSistema")}</th>
-            <th scope="col">{t("clasificacionMallaColumnaDato")}</th>
             <th scope="col">{t("clasificacionMallaColumnaPeso")}</th>
             <th scope="col">{t("clasificacionMallaColumnaShare")}</th>
           </tr>
@@ -62,7 +61,6 @@ export async function ClasificacionPorMalla({
                     enseñar «otro» y callarla deja el dato sin significado. */}
                 {m.nota ? <div className="nn-muted">{m.nota}</div> : null}
               </td>
-              <td>{t(`estadoDelDato_${m.estado}` as "estadoDelDato_measured")}</td>
               <td>{m.kg} kg</td>
               <td>{share(m.pct)}</td>
             </tr>
