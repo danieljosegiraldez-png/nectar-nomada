@@ -36,6 +36,7 @@ tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
 tests/equipos/documentos.test.ts
+tests/equipos/proveedores.test.ts
 tests/rutinas/rutinas.test.ts
 tests/rutinas/rutinasDeLugar.test.ts
 tests/catalogos/propiedad.test.ts

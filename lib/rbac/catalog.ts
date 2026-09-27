@@ -137,6 +137,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   // Person de la cuenta sea el recolector asignado en esa jornada. Ver situaciones de campo es
   // aparte: de serie para Farm Manager y capataz, concedible a quien trabaje esa parcela o lote.
   { resourceType: "cherry_supplier", action: "create", description: "Dar de alta un productor de fuera que trae cereza al beneficio (spec recepción de cereza §3.2)." },
+  { resourceType: "equipment_supplier", action: "create", description: "Dar de alta un proveedor de equipos en el directorio (ADR-188). Sólo en ámbito de plataforma: la fila es global, la ve y la elige cualquiera. Propio y NO `equipment:manage`: registrar un equipo no es meter una organización en el directorio." },
   { resourceType: "harvest_delivery", action: "create_own", description: "Anotar la entrega propia de cosecha en una jornada donde se está asignado." },
   { resourceType: "field_report", action: "create_own", description: "Reportar situaciones de campo y condiciones del día sobre lo asignado en la jornada propia." },
   { resourceType: "field_report", action: "view", description: "Ver las situaciones de campo que reportan los recolectores en las jornadas de una finca." },

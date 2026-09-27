@@ -25,6 +25,7 @@ import {
 import { RutinaError, crearRutina } from "../../lib/rutinas/rutinas";
 import { TZ_OFFSET_FIELD, fechaDeDia, parseLocalDateTime } from "../../lib/time/localDateTime";
 import { declararModoDeInstrumento } from "../../lib/equipos/modosDeInstrumento";
+import { ProveedorDeEquiposError, crearProveedorDeEquipos } from "../../lib/equipos/proveedores";
 import type { MaterialState, ProvenanceClass } from "../../generated/prisma/client";
 
 /**
@@ -301,4 +302,43 @@ export async function confirmarSubidaDeDocumentoAction(
   }
 
   return { ok: true };
+}
+
+/** `volverA` sólo se acepta si empieza por `/equipos/nuevo`: nada de redirecciones abiertas. */
+function volverASeguro(f: FormData): string {
+  const v = String(f.get("volverA") ?? "");
+  return v.startsWith("/equipos/nuevo") ? v : "";
+}
+
+/**
+ * Alta de un proveedor de equipos (ADR-188), desde `/equipos/proveedores/nuevo`.
+ *
+ * Mismo camino que `crearModeloFormAction`: si se llegó desde el formulario de registro, se vuelve
+ * allí con el proveedor **ya elegido** en el desplegable; si no, se queda en la propia pantalla
+ * diciendo que quedó creado, porque no hay catálogo de proveedores al que ir.
+ *
+ * **`redirect()` se llama UNA sola vez, al final, fuera del `try`**, como el resto de este archivo:
+ * así su excepción de control nunca se confunde con un error del servicio.
+ */
+export async function crearProveedorDeEquiposFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const volverA = volverASeguro(formData);
+
+  let destino: string;
+  try {
+    const proveedor = await crearProveedorDeEquipos(user.userAccountId, {
+      nombre: String(formData.get("nombre") ?? ""),
+    });
+    revalidatePath("/equipos/nuevo");
+    destino = volverA
+      ? `${volverA}${volverA.includes("?") ? "&" : "?"}proveedor=${proveedor.id}`
+      : "/equipos/proveedores/nuevo?ok=creado";
+  } catch (error) {
+    if (!(error instanceof ProveedorDeEquiposError)) throw error;
+    const params = new URLSearchParams({ error: error.message });
+    if (volverA) params.set("volverA", volverA);
+    destino = `/equipos/proveedores/nuevo?${params.toString()}`;
+  }
+  redirect(destino);
 }
