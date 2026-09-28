@@ -54,7 +54,7 @@ beforeAll(async () => {
   const recipe = await createRecipeWithVersion(admin, {
     name: `RVER Lavado ${RUN}`,
     organizationId,
-    targets: [{ variable: "ph", moment: "final", unit: "pH", targetValue: 3.8 }],
+    targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }],
   });
   recipeId = recipe.id;
   v1Id = recipe.versions[0]!.id;
@@ -137,7 +137,7 @@ describe("creating version 2", () => {
   it("numbers it from the highest existing version", async () => {
     const v2 = await createRecipeVersion(
       admin, recipeId,
-      [{ variable: "ph", moment: "final", unit: "pH", targetValue: 4.0 }],
+      [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.0 }],
       "subimos el objetivo",
     );
     expect(v2.version).toBe(2);
@@ -184,7 +184,7 @@ describe("only the newest version is offered for a new run", () => {
 describe("a new version is validated like a first one", () => {
   it("refuses an impossible value", async () => {
     await expect(
-      createRecipeVersion(admin, recipeId, [{ variable: "ph", moment: "final", unit: "pH", targetValue: 15 }]),
+      createRecipeVersion(admin, recipeId, [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 15 }]),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
 
@@ -193,8 +193,8 @@ describe("a new version is validated like a first one", () => {
     // Catching it first names the actual mistake.
     await expect(
       createRecipeVersion(admin, recipeId, [
-        { variable: "ph", moment: "final", unit: "pH", targetValue: 3.8 },
-        { variable: "ph", moment: "final", unit: "pH", targetValue: 4.0 },
+        { variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 3.8 },
+        { variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.0 },
       ]),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });

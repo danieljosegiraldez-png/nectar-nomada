@@ -33,7 +33,7 @@ import { exigeEditarBeneficioEnOrganizacion } from "./locations";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
-import type { ProcessTargetMoment } from "../../generated/prisma/client";
+import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/client";
 import { puedeEditarBeneficioEnOrganizacion } from "./locations";
 
 export class ProcessTargetError extends Error {}
@@ -232,6 +232,12 @@ export interface CreateRecipeInput {
   targets: ReadonlyArray<{
     variable: string;
     moment: ProcessTargetMoment;
+    /**
+     * De qué fase es este objetivo. **Obligatorio en toda escritura nueva** (2026-09-27): los
+     * objetivos heredados pueden no decirlo, pero nada nuevo entra sin decirlo. Sin esto, «pH cada
+     * 6 h» y «voltear cada 4 h» vivirían en la misma receta sin poder distinguirse.
+     */
+    phase: ProcessPhase;
     unit: string;
     targetValue?: number | null;
     minValue?: number | null;
@@ -239,6 +245,18 @@ export interface CreateRecipeInput {
     note?: string | null;
     /** Cada cuántas horas toca medir. Sólo con `moment: "during"`. */
     everyHours?: number | null;
+  }>;
+  /**
+   * Lo que la receta declara POR FASE: cuánto debe durar, cada cuántas horas se voltea y a qué rango
+   * de humedad se quiere llegar. Opcional: una receta que sólo describe fermentación no declara la
+   * fase de secado, y su ausencia significa «no se declaró», no «cero».
+   */
+  fases?: ReadonlyArray<{
+    phase: ProcessPhase;
+    expectedHours?: number | null;
+    turnEveryHours?: number | null;
+    targetMoistureMinPct?: number | null;
+    targetMoistureMaxPct?: number | null;
   }>;
   /** Cuánto debe durar la fase que esta receta describe, en horas. */
   expectedHours?: number | null;
@@ -262,6 +280,44 @@ export function validateExpectedHours(expectedHours: number | null | undefined) 
   if (expectedHours == null) return; // no declararlo es legitimo
   if (!Number.isInteger(expectedHours) || expectedHours <= 0) {
     throw new ProcessTargetError("expected_hours_must_be_positive");
+  }
+}
+
+/**
+ * Las reglas de las filas de fase. Viven aquí y **no en la base** por la misma razón que la del ritmo
+ * de medición: un importador o un SQL directo se las salta, y eso se dice en vez de llamarlo
+ * estructural.
+ */
+export function validateFases(fases: CreateRecipeInput["fases"]) {
+  if (!fases?.length) return;
+  const vistas = new Set<ProcessPhase>();
+  for (const f of fases) {
+    if (vistas.has(f.phase)) throw new ProcessTargetError("duplicate_phase");
+    vistas.add(f.phase);
+
+    // Un volteo sólo existe en el secado. En fermentación no hay nada que revolver, y guardarlo
+    // sería un número que nadie puede leer sin equivocarse.
+    if (f.turnEveryHours != null && f.phase !== "drying") {
+      throw new ProcessTargetError("turn_cadence_only_in_drying");
+    }
+    for (const [valor, error] of [
+      [f.expectedHours, "expected_hours_must_be_positive"],
+      [f.turnEveryHours, "turn_cadence_must_be_positive_hours"],
+    ] as const) {
+      if (valor != null && (!Number.isInteger(valor) || valor <= 0)) throw new ProcessTargetError(error);
+    }
+
+    // Los dos o ninguno: un mínimo sin máximo no es un rango, y la pantalla no podría decir «cerca
+    // del objetivo» con la mitad de una banda.
+    const min = f.targetMoistureMinPct ?? null;
+    const max = f.targetMoistureMaxPct ?? null;
+    if ((min == null) !== (max == null)) throw new ProcessTargetError("moisture_range_needs_both_ends");
+    if (min != null && max != null) {
+      if (min > max) throw new ProcessTargetError("moisture_range_inverted");
+      for (const v of [min, max]) {
+        if (!(v > 0 && v <= 100)) throw new ProcessTargetError("moisture_range_out_of_physical_range");
+      }
+    }
   }
 }
 
@@ -296,6 +352,7 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
     // «cada 6 horas» es una contradicción, no una preferencia. Se rechaza en
     // vez de guardarla: una fila así haría que la pantalla prometiera lecturas
     // periódicas de un momento que no se repite.
+    if (!t.phase) throw new ProcessTargetError("phase_required");
     if (t.everyHours != null && t.moment !== "during") {
       throw new ProcessTargetError("cadence_only_while_running");
     }
@@ -311,7 +368,9 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
   // names the actual mistake.
   const seen = new Set<string>();
   for (const t of targets) {
-    const key = `${t.variable}:${t.moment}`;
+    // La fase entra en la clave: la misma variable y el mismo momento pueden repetirse en
+    // fermentación y en secado sin ser un duplicado — son dos cosas distintas.
+    const key = `${t.phase}:${t.variable}:${t.moment}`;
     if (seen.has(key)) throw new ProcessTargetError("duplicate_variable_and_moment");
     seen.add(key);
   }
@@ -321,6 +380,7 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
   validateTargets(input.targets);
+  validateFases(input.fases);
   validateExpectedHours(input.expectedHours);
 
   // Gated on the organization the recipe belongs to, through a lot of that
@@ -361,13 +421,25 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
                 maxValue: t.maxValue ?? null,
                 note: t.note?.trim() || null,
                 everyHours: t.everyHours ?? null,
+                phase: t.phase,
                 displayOrder: i,
               })),
             },
+            fases: input.fases?.length
+              ? {
+                  create: input.fases.map((f) => ({
+                    phase: f.phase,
+                    expectedHours: f.expectedHours ?? null,
+                    turnEveryHours: f.turnEveryHours ?? null,
+                    targetMoistureMinPct: f.targetMoistureMinPct ?? null,
+                    targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
+                  })),
+                }
+              : undefined,
           },
         },
       },
-      include: { versions: { include: { targets: true } } },
+      include: { versions: { include: { targets: true, fases: true } } },
     });
 
     await recordAuditEvent(
