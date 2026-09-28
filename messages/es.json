@@ -3508,7 +3508,6 @@
     "loteCodigo": "Código del lote",
     "loteRecepciones": "De qué recepciones",
     "avisoPedidosDistintos": "Las recepciones elegidas son de pedidos distintos: el lote no será atribuible a ninguno.",
-    "loteArmado": "Lote armado.",
     "armarBoton": "Armar el lote",
     "mermaKg": "Merma (kg)",
     "mermaMotivo": "Motivo de la merma",

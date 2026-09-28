@@ -121,8 +121,21 @@ export async function anularRecepcionAction(_prev: RecepcionActionState, formDat
  * una fila por recepción, y las vacías no se mandan —quien no escribió un peso no tomó cero kilos,
  * no tomó nada—.
  */
+/**
+ * **Decisión de Daniel, 2026-09-27.** Armar el lote lleva a la ficha del lote, porque lo que
+ * sigue a recibir es **seleccionar** —flotación primero, luego manual o con máquina— y la
+ * selección vive en esa ficha. Antes esto devolvía `{ ok: true }` y pintaba «Lote armado.»: el
+ * operador se quedaba en recepción sin el id, y para seleccionar tenía que ir a `/lots`, buscar
+ * el lote y bajar por una ficha de 28 secciones. `armarLote` ya devolvía el lote; se tiraba.
+ *
+ * **El `redirect` va FUERA del `try` a propósito.** Next lo implementa lanzando, así que dentro
+ * lo atraparía el `catch` de abajo y `traducir` lo convertiría en un mensaje de error del
+ * formulario: el salto se leería como un fallo al armar. Las siete acciones que ya redirigen lo
+ * hacen así. Lo fija `tests/beneficio/armarLoteRedirige.test.ts`.
+ */
 export async function armarLoteAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
   const yo = await usuario();
+  let loteId: string;
   try {
     const recepciones: Array<{ recepcionId: string; kg: number }> = [];
     for (const [clave, valor] of formData.entries()) {
@@ -131,12 +144,13 @@ export async function armarLoteAction(_prev: RecepcionActionState, formData: For
       if (kg === "") continue;
       recepciones.push({ recepcionId: clave.slice(3), kg: Number(kg) });
     }
-    await armarLote(yo, { beneficioId: texto(formData, "beneficioId"), codigo: texto(formData, "codigo"), recepciones });
+    const lote = await armarLote(yo, { beneficioId: texto(formData, "beneficioId"), codigo: texto(formData, "codigo"), recepciones });
+    loteId = lote.id;
   } catch (error) {
     return traducir(error);
   }
   revalidatePath("/beneficio/recepcion");
-  return { ok: true };
+  redirect(`/lots/${loteId}`);
 }
 
 export async function anotarMermaAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
