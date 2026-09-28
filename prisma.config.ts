@@ -2,6 +2,12 @@
 // npm install --save-dev prisma dotenv
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
+// Aquí y no en un script de npm: este archivo lo carga la CLI de Prisma en TODA invocación,
+// incluida `npx prisma migrate deploy` escrita a mano, que es justo el camino que no tenía guardia.
+// Envolverlo en un `npm run` no habría cerrado nada, porque nadie escribe `npm run` para esto.
+import { vigilar } from "./scripts/migrate-guard";
+
+vigilar();
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
