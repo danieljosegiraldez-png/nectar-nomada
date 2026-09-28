@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
@@ -12,6 +13,7 @@ import { mostrarInstante } from "../../../lib/time/mostrarInstante";
 import { BeneficioElegido } from "../../components/beneficio/BeneficioElegido";
 import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 import { ArmarLoteForm } from "../../components/beneficio/ArmarLoteForm";
+import { CerrarPedidoForm } from "../../components/beneficio/PedidoForm";
 import { AnularMermaForm, MermaForm } from "../../components/beneficio/MermaForm";
 import {
   AnularRecepcionForm,
@@ -117,6 +119,62 @@ export default async function RecepcionPage() {
           </div>
         </details>
       ) : null}
+
+      {/**
+        * **Los pedidos, aquí y no en el índice. Decisión de Daniel, 2026-09-27.** A este volumen se
+        * recibe lo que salga por parcela o microparcela, **sin pedido de por medio**: el pedido es
+        * opcional (`pedidoId` es `string | null` en `recibirCereza`) y las dos entradas de
+        * `RecibirCerezaForm` lo ofrecen como lista para elegir, nunca como requisito. Recepción es
+        * lo que más se usa, así que Pedidos dejó de competir con ella arriba.
+        *
+        * Aquí va SÓLO lo que se consulta mientras se recibe: los **abiertos**, con lo pedido contra
+        * lo recibido, y cerrarlos. Dar de alta uno y ver el histórico —incluidos los cerrados y el
+        * veredicto de calidad de sus lotes— sigue en `/beneficio/pedidos`, enlazada abajo.
+        *
+        * No hace falta consulta nueva: las cifras vienen de `pedidosDeBeneficio`, que esta pantalla
+        * ya cargaba para construir `abiertos`. `veredictosDePedidos` NO se trae, porque el juicio de
+        * calidad de los lotes es de la otra pantalla y no de recibir.
+        */}
+      <details className="nn-disclosure nn-mill-task">
+        <summary><span>{t("pedidosTitulo")}</span><small>{t("pedidosIntro")}</small></summary>
+        <div className="nn-disclosure-body">
+          {abiertos.length === 0 ? (
+            <p className="nn-muted">{t("sinPedidos")}</p>
+          ) : (
+            <ul className="nn-mill-records">
+              {pedidos
+                .filter((p) => p.estado === "abierto")
+                .map((p) => (
+                  <li key={p.id} className="nn-mill-record">
+                    <div className="nn-mill-record-heading">
+                      <strong>{p.fincaSite?.name ?? p.proveedor?.name ?? ""}</strong>
+                      <span>{p.fecha.toISOString().slice(0, 10)}</span>
+                    </div>
+                    <p>
+                      {t("pedidoCifras", {
+                        pedidos: kg(Number(p.kgPedidos)),
+                        recibidos: kg(p.recibidoKg),
+                        dif: kg(p.diferenciaKg),
+                        pct: (p.diferenciaPct * 100).toFixed(1),
+                      })}
+                    </p>
+                    <span className="nn-muted">
+                      {t("abierto")}
+                      {p.exceso ? ` · ${t("exceso")}` : ""}
+                    </span>
+                    {gestiona ? (
+                      <details className="nn-inline-disclosure">
+                        <summary>{t("cerrarPedido")}</summary>
+                        <CerrarPedidoForm pedidoId={p.id} />
+                      </details>
+                    ) : null}
+                  </li>
+                ))}
+            </ul>
+          )}
+          <p><Link href="/beneficio/pedidos">{t("nuevoPedidoTitulo")}</Link></p>
+        </div>
+      </details>
 
       {gestiona ? (
         <details className="nn-disclosure nn-mill-task">
