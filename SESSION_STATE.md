@@ -41,7 +41,7 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-27 · Alta de proveedores de equipos, y la colación que no era la que creíamos (PR #503)
+### 2026-09-27 · Proveedores de equipos, y la colación que no era la que creíamos (PR #503, #506, #507, #510)
 
 ADR-188. Ya se crea una `Organization` de tipo `supplier` desde la aplicación —los tres que había
 venían del seed—: sin `Location`, `approved`, `AuditEvent` en la misma transacción, índice único
@@ -51,15 +51,27 @@ desplegable vive DENTRO del `<form>` de `/equipos/nuevo` y un `<form>` anidado n
 **Decisión de Daniel: el permiso se juzga en ámbito de PLATAFORMA.** Codex leyó lo que yo no:
 `permissionKeysAnywhere` dice de sí misma «Display only, and never an authorization decision», y la
 primera versión la usaba para autorizar. Ahora `can()` contra plataforma, como
-`organization:create_farm`. **Un Farm Manager ya NO da de alta proveedores.** **Sin hacer:**
-`lib/traceability/proveedoresDeCereza.ts` y `lib/sensory/ruedas.ts` siguen autorizando con ella.
+`organization:create_farm`. **Un Farm Manager ya NO da de alta proveedores.**
 
-**La colación no es la que dice este repositorio.** Medido contra producción, sólo lectura:
-`datcollate` es **`C.UTF-8`** y «FERRETERÍA EL PUENTE» **choca** con «Ferretería El Puente»; CI igual.
-Lo contrario —lo que yo escribí y CI tumbó— sólo pasa en el clúster local, que `scripts/test-db.sh:44`
-crea **sin `--locale`**. La prueba ahora mide el plegado antes de afirmar. **Sin hacer:** el locale de
-`test-db.sh`, y el comentario de la migración `20260919170000`, que afirma que «DOÑA y Doña no
-chocan» — falso en producción.
+**La colación no era la que decía este repositorio, y lo destapó CI tumbando una prueba mía.**
+Medido contra producción, sólo lectura: `datcollate` es **`C.UTF-8`** y «FERRETERÍA EL PUENTE» sí
+choca con «Ferretería El Puente»; CI igual. Lo contrario sólo pasaba en el clúster local, que
+`scripts/test-db.sh` creaba **sin `--locale`**. Cambia el PLEGADO DE CAJA, no el orden. **#506** lo
+cierra: clúster, base y sombra con `--locale-provider=builtin --builtin-locale=C.UTF-8` —`builtin`
+porque macOS no tiene `C.UTF-8` en la libc— y un guardia que **falla** si la base no pliega. **No
+hace falta recrear el clúster**, y `up` NO arregla una base vieja: es `reset`, que borra y restaura.
+**#507** corrige el comentario de la migración `20260919170000`, que afirmaba lo contrario.
+
+**#510 — la CLI de Prisma ya no migra contra una base remota.** Un `npx prisma migrate deploy` sin
+`DATABASE_URL` delante lee el `.env` y apunta a PRODUCCIÓN; pasó hoy, no escribió nada, y con una
+migración pendiente la habría aplicado fuera del pipeline. El guardia vive en `prisma.config.ts`,
+que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
+`ALLOW_REMOTE_MIGRATE=1` o `VERCEL_ENV=production`.
+
+**Sin hacer, tres:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
+`permissionKeysAnywhere`; `npm run db:seed` es `tsx prisma/seed.ts` y no pasa por la CLI, así que
+sembrar producción a mano sigue sin guardia; y los dos guiones de `scripts/backup/` crean bases sin
+declarar colación.
 
 ### 2026-09-27 · Lotes es operación, y cuatro instrumentos que mentían
 
@@ -93,27 +105,6 @@ demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, t
 `nectar_test` tenía **10 migraciones sin aplicar**: aplicadas y sembrada, 186/186, 0 pendientes.
 **PR #483** añade a las «Trampas» de `CLAUDE.md` la cuarta: vitest 4 esconde los `console.log` de un
 test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
-
-### 2026-09-26 · Las tres lecturas de la clasificación de verde por malla
-
-Decisión de Daniel, con seis respuestas suyas en `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md`.
-La escritura ya estaba (ADR-186); esto es la **lectura**. Ficha del lote verde: reparto por malla con rango, sistema,
-**estado del dato** y %, y defectos **agrupados por categoría** conservando el enlace a cada lote. Sustituye a la tabla
-genérica de cuajado **sólo cuando es el mismo evento** —comparar «¿hay clasificación?» escondía cifras de otra
-transformación—. Pantalla propia `/lots/[id]/clasificacion`: una fila por lote, **una columna por rango declarado**, sin
-escala inventada; dice `sinAmbito`, cuántos quedan sin clasificar y por qué el lote de la ruta no sale. Dos rondas de
-Codex, once hallazgos atendidos.
-
-**Visto en el navegador el 2026-09-26, y montarlo costó tres piezas que nadie tenía apuntadas.** No sirve
-`dev:local`: su base `nectar_test` **no tiene las columnas `green_screen_*`** —su esquema es anterior a la migración—
-y esa pantalla no se renderiza contra ella; la buena es `nectar_test_verde`. Un worktree **no tiene `.env`**, así que
-Auth.js muere con `MissingSecret` y el login rebota al login sin decir por qué: hace falta uno local con `AUTH_SECRET`
-(`.gitignore` ya lo ignora). Y para entrar hay que crear cuenta con contraseña, porque `auth:set-password` **exige un
-TTY**: la del 2026-09-26 se creó y se borró el mismo día, así que hay que hacerse una — persona con correo, cuenta con
-`hashPassword` de `lib/auth/password`, y una asignación de Platform Admin sobre el scope de plataforma que YA existe (no
-crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de una). Google no funciona en local, sólo
-está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
-**sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
 
 ### 2026-09-21 · Secado, paso 4: el ambiente a mano
 
