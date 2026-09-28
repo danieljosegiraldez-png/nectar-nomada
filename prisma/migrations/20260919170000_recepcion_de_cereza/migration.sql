@@ -176,9 +176,23 @@ ALTER TABLE "traceability"."pedido_de_cereza" ADD CONSTRAINT "pedido_de_cereza_c
 -- Un productor de fuera se da de alta una vez: nombre único entre los `producer`, sin distinguir
 -- mayúsculas ni espacios de los bordes. El servicio lo mira antes; esto es la red ante dos altas
 -- simultáneas (revisión de Codex, hallazgo 4). Mismo patrón que los tres índices únicos de nombres
--- que ya hay (`lower(btrim(...))`), con su misma limitación, medida el 2026-09-19: con la colación
--- `C` de la base, `lower('Ñ')` no da 'ñ', así que «DOÑA» y «Doña» no chocan. ICU lo resolvería,
--- pero ninguna migración depende de ICU y no se añade esa dependencia por esto.
+-- que ya hay (`lower(btrim(...))`).
+--
+-- **CORREGIDO EL 2026-09-27: el párrafo que había aquí era falso.** Decía que «con la colación `C`
+-- de la base, `lower('Ñ')` no da 'ñ', así que DOÑA y Doña no chocan», y de ahí que hiciera falta ICU
+-- para arreglarlo. Las dos cosas están mal, y se midieron ese día:
+--
+--   * **Producción pliega.** Consulta de sólo lectura contra Neon: `datcollate` es `C.UTF-8`,
+--     `lower('FERRETERÍA')` da `ferretería`, y «DOÑA» y «Doña» **sí chocan**. El índice hace aquí
+--     exactamente lo que promete. En CI (`postgis/postgis:18-3.6`) igual.
+--   * **No hace falta ICU.** Lo que fallaba era el clúster LOCAL de `scripts/test-db.sh`, que se
+--     creaba sin `--locale` y heredaba `C` a secas. Desde el PR #506 se crea con el proveedor
+--     `builtin` y locale `C.UTF-8`, que no depende de ICU ni de la libc del sistema.
+--
+-- Lo que falla bajo `C` es el PLEGADO DE CAJA, no el orden: `C` y `C.UTF-8` ordenan las dos por
+-- bytes. La afirmación vieja estuvo 8 días en el repositorio sosteniendo una limitación que
+-- producción no tiene. No consta contra qué base se midió; lo que sí consta, ahora, es que la
+-- colación `C` que describe era la del clúster local de `scripts/test-db.sh`, no la de Neon.
 CREATE UNIQUE INDEX "organization_productor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
   WHERE "organization_type" = 'producer';
 
