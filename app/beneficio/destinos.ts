@@ -11,7 +11,16 @@ export function destinosDelBeneficio(granted: Set<string>) {
     // Spec recepción de cereza §4: la entrada del beneficio. Ver pendientes y lo recibido pide
     // `lot:view` sobre el beneficio; recibir y pedir, `lot:manage`, que exige cada servicio.
     { href: "/beneficio/recepcion", clave: "recepcion", visible: true },
-    { href: "/beneficio/pedidos", clave: "pedidos", visible: true },
+    // **Pedidos ya NO es una entrada del índice. Decisión de Daniel, 2026-09-27.** A este volumen
+    // se recibe lo que salga por parcela o microparcela, **sin pedido de por medio**, y forzar uno
+    // sobraba: recepción es lo que más se usa y el pedido es opcional —`pedidoId` es
+    // `string | null` en `recibirCereza`, y las dos entradas de `RecibirCerezaForm` pasan los
+    // pedidos abiertos como lista para elegir, no como requisito—.
+    //
+    // Lo que se consulta MIENTRAS se recibe —los pedidos abiertos con sus cifras, y cerrarlos—
+    // vive ahora dentro de `/beneficio/recepcion`. `/beneficio/pedidos` sigue existiendo para dar
+    // de alta uno y ver el histórico, y se llega desde ahí. Que no esté aquí lo fija
+    // `tests/beneficio/destinos-del-indice.test.ts`.
     // Lotes y el informe son de lectura: los ve quien entra a la sección.
     { href: "/lots", clave: "lotes", visible: true },
     // Recetas, sólo quien gestiona lotes: `listRecipes` exige `manage` sobre un

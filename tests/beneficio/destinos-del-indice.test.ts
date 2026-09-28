@@ -21,9 +21,27 @@ describe("los enlaces del índice del beneficio", () => {
     expect(vistos).toContain("/reports/proceso");
   });
 
-  it("quien entra a la sección ve Recepción y Pedidos; quien no, no llega aquí", () => {
+  it("quien entra a la sección ve Recepción", () => {
     expect(hrefs(["lot:view"])).toContain("/beneficio/recepcion");
-    expect(hrefs(["lot:view"])).toContain("/beneficio/pedidos");
+  });
+
+  /**
+   * **Decisión de Daniel, 2026-09-27.** A este volumen se recibe lo que salga por parcela o
+   * microparcela, **sin pedido de por medio**, así que Recepción es lo que más se usa y Pedidos
+   * dejó de competir con ella en el índice. Lo que se consulta mientras se recibe —los abiertos y
+   * cerrarlos— vive dentro de Recepción; dar de alta uno sigue en `/beneficio/pedidos`, a la que
+   * se llega desde ahí.
+   *
+   * Esto fija la decisión en vez de sólo satisfacerla: si alguien devuelve la entrada al índice,
+   * cae **este** test y no otro.
+   */
+  it("y NO ve Pedidos: salió del índice, con cualquier permiso", () => {
+    for (const permisos of [["lot:view"], ["lot:manage"], ["lot:view", "lot:manage", "location:manage_attributes", "location:create_site", "equipment:view"]]) {
+      expect(hrefs(permisos), `con ${permisos.join("+")}`).not.toContain("/beneficio/pedidos");
+    }
+    // Control positivo del mismo conjunto de permisos: Recepción sí sigue, así que el `not.toContain`
+    // no está pasando sobre una lista vacía.
+    expect(hrefs(["lot:view"])).toContain("/beneficio/recepcion");
   });
 
   it("quien gestiona lotes sí ve Recetas", () => {
