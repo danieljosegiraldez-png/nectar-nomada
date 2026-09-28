@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUser } from "../../lib/auth/session";
-import { disponibilidadDeRecipientes, listarEquipos } from "../../lib/equipos/equipos";
+import { disponibilidadDeRecipientes, listarEquipos, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 import { vencidasPorEquipo } from "../../lib/rutinas/rutinas";
 import { diaDeHoy } from "../../lib/time/diaDeHoy";
 
@@ -28,12 +28,14 @@ export default async function EquiposPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, equiposTodos, disponibilidad, sp] = await Promise.all([
+  const [t, equiposTodos, disponibilidad, sp, sitiosDondeRegistrar] = await Promise.all([
     getTranslations("Equipos"),
     listarEquipos(user.userAccountId),
     disponibilidadDeRecipientes(user.userAccountId),
     searchParams,
+    sitiosParaRegistrar(user.userAccountId),
   ]);
+  const puedeRegistrarEquipo = sitiosDondeRegistrar.length > 0;
 
   // `diaDeHoy(..., null)` usa la zona más atrasada del planeta (UTC−12): un
   // aviso de rutina vencida puede llegar como mucho un día tarde, nunca antes
@@ -82,9 +84,16 @@ export default async function EquiposPage({
       <p className="nn-muted">{t("intro")}</p>
 
       <p style={{ marginTop: "1rem" }}>
-        <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
-          {t("botonNuevo")}
-        </Link>{" "}
+        {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado que usa `/equipos/nuevo` para decidir si pinta su
+            formulario, así que el enlace no puede prometer lo que el destino niega. */}
+        {puedeRegistrarEquipo ? (
+          <>
+            <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+              {t("botonNuevo")}
+            </Link>{" "}
+          </>
+        ) : null}
         <Link href="/equipos/modelos">{t("verCatalogo")}</Link>
         {" · "}
         {soloVencidas ? <Link href="/equipos">{t("filtroTodos")}</Link> : <Link href="/equipos?vencidas=1">{t("soloVencidas")}</Link>}

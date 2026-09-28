@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { listProtocols } from "../../lib/research/protocols";
+import { puedeVerInvestigacion } from "../../lib/research/access";
 import { BotonDeEnvio } from "../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function ResearchPage({ searchParams }: { searchParams: Promise<{ variable?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const puedeVerResearch = await puedeVerInvestigacion(user.userAccountId);
 
   const { variable } = await searchParams;
   const t = await getTranslations("Research");
@@ -21,9 +23,14 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
       <h1>{t("title")}</h1>
       <p className="nn-muted">{t("intro")}</p>
       <p style={{ marginTop: "1rem" }}>
-        <Link href="/research/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
-          {t("createProtocolButton")}
-        </Link>
+                {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
+            lo que la otra pantalla niega. */}
+        {puedeVerResearch ? (
+          <Link href="/research/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+            {t("createProtocolButton")}
+          </Link>
+        ) : null}
       </p>
 
       <section className="nn-section">

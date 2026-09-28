@@ -1,6 +1,6 @@
 import { CampoNumerico } from "../../../components/CampoNumerico";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { crearModeloFormAction } from "../../../actions/modelos";
@@ -37,17 +37,8 @@ export default async function ModeloNuevoPage({
     searchParams,
   ]);
 
-  if (!compartido && sitios.length === 0) {
-    return (
-      <div>
-        <p>
-          <Link href="/equipos/modelos">← {t("verCatalogo")}</Link>
-        </p>
-        <h1>{t("modeloNuevo")}</h1>
-        <p className="nn-muted">{t("modeloNuevoSinPermiso")}</p>
-      </div>
-    );
-  }
+  // Daniel, 2026-09-27: sin permiso esta pantalla no existe — 404, sin explicar.
+  if (!compartido && sitios.length === 0) notFound();
 
   const volverA = sp.volverA?.startsWith("/equipos/nuevo") ? sp.volverA : null;
   // El código viene de la URL: sólo se acepta la forma que las acciones

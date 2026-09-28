@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { puedeEditarBeneficioEnOrganizacion } from "../../../lib/traceability/locations";
@@ -31,15 +31,9 @@ export default async function NewRecipePage() {
   }
   const permiteCompartida = await puedeEditarBeneficioEnOrganizacion(user.userAccountId, null);
 
-  if (organizations.length === 0 && !permiteCompartida) {
-    return (
-      <div>
-        <Link href="/recipes" className="nn-back-link">{t("recipesBackLink")}</Link>
-        <h1>{t("recipeNewTitle")}</h1>
-        <p className="nn-muted" role="alert">{t("recipeSinPermisoEditar")}</p>
-      </div>
-    );
-  }
+  // Daniel, 2026-09-27: sin `edit_beneficio` en ninguna organización esta pantalla no existe —
+  // 404, sin explicar. El enlace de `/recipes` ya no la ofrece; esto cubre la dirección escrita a mano.
+  if (organizations.length === 0 && !permiteCompartida) notFound();
 
   const variables = listVariableDefinitions("proceso_de_cafe");
 

@@ -13,6 +13,28 @@ export class ResearchAccessError extends Error {}
 
 export type ResearchAction = "view" | "create_measurement" | "create_evidence" | "approve_protocol" | "execute_protocol";
 
+/**
+ * ¿Puede esta cuenta ver investigación en alguna parte? Es `requireResearchAccess`
+ * contestado con un booleano en vez de con una excepción.
+ *
+ * **Para qué existe (Daniel, 2026-09-27).** Su regla: lo que no puedes hacer no se
+ * muestra, y no se explica. `/research` ofrecía «nueva» a cualquiera, y quien no
+ * tiene acceso se topaba con un **500** —la excepción de abajo, sin atrapar, desde
+ * `listVariableCatalogs`—. Para omitir el enlace hace falta preguntar sin reventar.
+ *
+ * Mismo criterio y mismo recorrido que el guardia: se delega en él y se atrapa su
+ * error, para que las dos respuestas no puedan divergir.
+ */
+export async function puedeVerInvestigacion(userAccountId: string): Promise<boolean> {
+  try {
+    await requireResearchAccess(userAccountId, "view", [{}]);
+    return true;
+  } catch (e) {
+    if (e instanceof ResearchAccessError) return false;
+    throw e;
+  }
+}
+
 export async function requireResearchAccess(
   userAccountId: string,
   action: ResearchAction,

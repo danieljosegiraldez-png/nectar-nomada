@@ -81,10 +81,15 @@ export default async function FincaPage() {
         ))}
       </ul>
       {finca.elegida ? (
+        /* Daniel, 2026-09-27: si no puede crear parcelas, la sección entera no aparece —
+           ni su título ni una disculpa. Antes se pintaba el encabezado «Nueva parcela» con un
+           texto de «no tienes permiso» debajo, que es ofrecer y luego negar. */
+        puedeCrearParcela ? (
         <section className="nn-section">
           <h2>{tf("nuevaParcelaTitulo")}</h2>
-          {puedeCrearParcela ? <NuevaParcelaForm siteId={finca.elegida.siteId} /> : <p className="nn-muted">{tf("parcelaSinPermiso")}</p>}
+          <NuevaParcelaForm siteId={finca.elegida.siteId} />
         </section>
+        ) : null
       ) : null}
       <p className="nn-muted">{t("proximamente")}</p>
     </div>
