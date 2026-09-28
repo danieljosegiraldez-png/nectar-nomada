@@ -53,7 +53,33 @@ try {
   console.log(`Base de sombra creada: ${nombre} en ${url.host}`);
 } catch (error) {
   if (error.code === "42P04") {
-    console.log(`Base de sombra ya estaba: ${nombre} en ${url.host}`);
+    // «Ya estaba» no es «está bien»: una sombra creada antes del 2026-09-27 heredó la colación
+    // del entorno y no pliega — justo el par con reglas distintas que este script dice evitar
+    // (hallazgo 4 de Codex). Se comprueba y se rechaza con la orden para recrearla.
+    const revision = new Client({ connectionString: sombra });
+    try {
+      await revision.connect();
+      const { rows } = await revision.query("SELECT lower('FERRETERÍA') = 'ferretería' AS pliega");
+      if (!rows[0].pliega) {
+        console.error(
+          [
+            "",
+            `La base de sombra ${nombre} ya existía, pero NO pliega las mayúsculas acentuadas.`,
+            "Se compararía con la base real usando reglas distintas de las de producción.",
+            "",
+            "Bórrala y vuelve a correr esto, que la creará bien:",
+            "",
+            `  dropdb -h ${url.hostname} -p ${url.port} -U postgres ${nombre}`,
+            "",
+          ].join("\n"),
+        );
+        await cliente.end();
+        process.exit(1);   // el `finally` de abajo cierra `revision`
+      }
+    } finally {
+      await revision.end();
+    }
+    console.log(`Base de sombra ya estaba, y pliega: ${nombre} en ${url.host}`);
   } else {
     console.error(`No se pudo crear la base de sombra ${nombre}:`, error.message);
     process.exit(1);

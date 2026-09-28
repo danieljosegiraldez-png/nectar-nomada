@@ -45,8 +45,10 @@ start_cluster() {
     # PRODUCCIÓN, medida el 2026-09-27 contra Neon: `datcollate` es `C.UTF-8`. Sin esto
     # `initdb` hereda el locale del entorno —en un Mac, `C` a secas—, donde `lower('Í')`
     # devuelve 'Í' y «FERRETERÍA EL PUENTE» NO choca con «Ferretería El Puente», mientras
-    # que en producción y en CI sí. Una prueba sobre unicidad u orden de texto pasa aquí y
-    # cae allí; pasó con tests/equipos/proveedores.test.ts.
+    # que en producción y en CI sí. Lo que se rompe es el PLEGADO DE CAJA —el orden sale
+    # igual en las dos, porque ambas ordenan por bytes—, o sea todo lo que compara sin
+    # distinguir mayúsculas: los índices `lower(btrim(name))`, el `mode: "insensitive"` de
+    # Prisma y cualquier `lower(a) = lower(b)`. Pasó con tests/equipos/proveedores.test.ts.
     #
     # `builtin` y no `libc`: macOS **no tiene** el locale `C.UTF-8` —sólo `en_US.UTF-8`,
     # que ordena distinto—, así que pedírselo a la libc fallaría o mentiría. El proveedor
@@ -114,6 +116,25 @@ case "${1:-up}" in
   up)
     start_cluster
     if "$PG_BIN/psql" "$TEST_URL" -At -c 'select 1' >/dev/null 2>&1; then
+      # Una base creada antes del 2026-09-27 hereda la colación del entorno y NO pliega las
+      # mayúsculas acentuadas, al revés que producción. Decirlo AQUÍ importa: sin esto `up`
+      # anunciaba "Already up" tan campante, el guardia tests/arquitectura/colacion-de-la-base
+      # seguía en rojo, y su instrucción devolvía a este mismo comando — el ciclo que enseña a
+      # ignorar un guardia (hallazgo 3 de Codex, 2026-09-27).
+      if [ "$("$PG_BIN/psql" "$TEST_URL" -At -c "select lower('FERRETERÍA') = 'ferretería'" 2>/dev/null)" != "t" ]; then
+        cat >&2 <<MSG
+
+Esta base es ANTERIOR al arreglo de colación: no pliega las mayúsculas acentuadas, y
+producción sí. Las pruebas que corras contra ella pueden pasar aquí y caer en CI.
+
+'up' no la puede arreglar: sólo restaura cuando no hay datos. Hay que recrearla, y eso
+BORRA lo que tenga dentro:
+
+  npm run test:db -- reset
+
+MSG
+        exit 1
+      fi
       echo "Already up, with data. Use 'reset' to restore it again."
     else
       restore

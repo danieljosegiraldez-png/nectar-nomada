@@ -7,8 +7,18 @@
  * clúster local lo creaba `scripts/test-db.sh` con `initdb --encoding=UTF8` y **sin `--locale`**, así
  * que heredaba el del entorno, `C` a secas, donde `lower('Í')` devuelve `'Í'`.
  *
- * Eso no afecta sólo a los índices `lower(btrim(name))`: cualquier unicidad u orden sobre texto se
- * comporta distinto. Una suite entera en verde sobre una base así **no dice nada** sobre producción.
+ * **Qué cambia exactamente, medido el 2026-09-27 contra producción y no razonado:** el PLEGADO DE
+ * CAJA, no el orden. `lower('ÁÉÍÓÚÑÜ')` y `upper('áéíóúñü')` difieren entre `C` y `C.UTF-8`; un
+ * `ORDER BY` con acentos da lo MISMO en las dos, porque ambas ordenan por bytes. Así que lo que se
+ * rompe es todo lo que compara sin distinguir mayúsculas: los índices `lower(btrim(name))`, los
+ * `mode: "insensitive"` de Prisma (que son `ILIKE`), y cualquier `lower(a) = lower(b)`.
+ *
+ * Sobre el proveedor `builtin C.UTF-8` que usa `scripts/test-db.sh`: **coincidió con producción en
+ * las cuatro medidas comparadas** —`lower('ÁÉÍÓÚÑÜ')`, `upper('áéíóúñü')`, un `ORDER BY` con acentos
+ * y este caso—. Eso NO es «equivalente a producción» en general, y no se afirma: son proveedores
+ * distintos —builtin usa conversión Unicode simple; libc depende de su biblioteca— y Postgres no
+ * promete equivalencia entre ellos. Lo que se garantiza es lo que esta prueba mide (hallazgo 1 de
+ * Codex, que tenía razón: una coincidencia de `lower('Í')` no es una garantía de equivalencia).
  *
  * **Por qué falla en vez de avisar.** Un aviso en una salida de 2.000 pruebas no se lee. Y el arreglo
  * es una orden: recrear la base. Si esto te acaba de romper, tu base no representaba producción y las
@@ -41,6 +51,10 @@ describe("la colación de la base de pruebas", () => {
     );
     expect(ascii!.ok, "el instrumento no mide: ni el ASCII se pliega").toBe(true);
 
+    // El contrato exacto, no sólo «los dos lados son iguales»: si `lower` devolviera otra cosa que
+    // resultara igual por ambos lados, la comparación de abajo pasaría y esta aserción no.
+    expect(m!.bajado, "lower('FERRETERÍA') no da el valor que da producción").toBe("ferretería");
+
     expect(
       m!.pliega,
       [
@@ -52,9 +66,10 @@ describe("la colación de la base de pruebas", () => {
         "",
         "Cualquier prueba sobre unicidad u orden de texto puede pasar aquí y caer en CI.",
         "",
-        "Para la base compartida:",
+        "Para la base compartida — OJO, `up` NO sirve: si tiene datos la deja como está y",
+        "volverías aquí. Hay que recrearla, y eso BORRA lo que tenga dentro:",
         "",
-        "  npm run test:db -- up",
+        "  npm run test:db -- reset",
         "",
         "Para una base privada tuya, recréala con la colación de producción:",
         "",
