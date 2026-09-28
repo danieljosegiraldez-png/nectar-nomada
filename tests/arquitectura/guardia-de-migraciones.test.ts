@@ -10,7 +10,7 @@
  * puede probar un test hermético; está medida a mano y anotada en el PR.
  */
 import { describe, expect, it } from "vitest";
-import { juzgar } from "../../scripts/migrate-guard";
+import { juzgar, juzgarSiembra } from "../../scripts/migrate-guard";
 
 const REMOTA = "postgresql://u:c@ep-algo.neon.tech/neondb";
 const LOCAL = "postgresql://postgres@127.0.0.1:55433/nectar_test";
@@ -18,9 +18,28 @@ const cli = (orden: string) => ["/bin/node", "/x/node_modules/.bin/prisma", orde
 
 describe("el guardia de migraciones", () => {
   it("bloquea las órdenes que escriben contra una base remota", () => {
-    for (const orden of ["migrate deploy", "migrate dev", "migrate reset", "migrate resolve", "db push", "db execute", "db seed"]) {
+    for (const orden of ["migrate deploy", "migrate dev", "migrate reset", "migrate resolve", "db push", "db execute"]) {
       expect(juzgar(cli(orden), { DATABASE_URL: REMOTA }), orden).toEqual({ bloquear: true, orden });
     }
+  });
+
+  it("`db seed` NO lo juzga este guardia, y es deliberado", () => {
+    // La CLI ejecuta la siembra lanzando `tsx prisma/seed.ts`, así que la guarda `vigilarSiembra()`
+    // desde dentro de ese archivo. Ponerlo también aquí obligaría a exportar DOS variables para un
+    // solo comando. Si alguien vuelve a meterlo en la lista, esta prueba cae y le dice por qué.
+    expect(juzgar(cli("db seed"), { DATABASE_URL: REMOTA })).toEqual({ bloquear: false, orden: null });
+  });
+
+  it("la siembra se juzga aparte, y cubre el camino que no pasa por la CLI", () => {
+    // `npm run db:seed` es `tsx prisma/seed.ts`: no toca `prisma.config.ts` ni `argv` de Prisma.
+    expect(juzgarSiembra({ DATABASE_URL: REMOTA })).toBe(true);
+    expect(juzgarSiembra({ DATABASE_URL: LOCAL })).toBe(false);
+    expect(juzgarSiembra({ DATABASE_URL: REMOTA, ALLOW_REMOTE_SEED: "1" })).toBe(false);
+    expect(juzgarSiembra({ DATABASE_URL: REMOTA, VERCEL_ENV: "production" })).toBe(false);
+    // Los mismos tres controles que su hermano: la puerta es estrecha.
+    expect(juzgarSiembra({ DATABASE_URL: REMOTA, ALLOW_REMOTE_SEED: "true" })).toBe(true);
+    expect(juzgarSiembra({ DATABASE_URL: REMOTA, VERCEL_ENV: "preview" })).toBe(true);
+    expect(juzgarSiembra({})).toBe(true);
   });
 
   it("deja pasar las que sólo leen, aunque la base sea remota", () => {
