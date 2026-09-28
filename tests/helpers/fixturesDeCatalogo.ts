@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "./ambitoDePlataforma";
 
 /**
  * Dos organizaciones con un sitio cada una, y cuatro cuentas:
@@ -59,16 +60,27 @@ export async function montarFixtures(prefijo: string): Promise<Fixtures> {
   async function asignar(userAccountId: string, perfil: string, scopeType: "platform" | "location", scopeRefId: string | null) {
     // `@@unique([scopeType, scopeRefId])` en Scope: dos cuentas en el MISMO
     // sitio (jefeA y operarioA, ambos en sitioA) chocarían si cada una creara
-    // su propio Scope. Postgres no aplica la unicidad entre NULLs, así que
-    // "platform" (scopeRefId null) sí puede crear uno propio sin colisión;
-    // "location" reutiliza el que ya exista para ese sitio — que sólo puede
-    // ser uno creado por ESTE fixture, porque el sitio es nuevo.
+    // su propio Scope. "location" reutiliza el que ya exista para ese sitio —
+    // que sólo puede ser uno creado por ESTE fixture, porque el sitio es nuevo.
+    //
+    // **CORREGIDO EL 2026-09-27.** Este comentario decía que «Postgres no aplica la
+    // unicidad entre NULLs, así que "platform" sí puede crear uno propio sin colisión».
+    // Era cierto, y era el hueco: la base de pruebas compartida había acumulado 19
+    // ámbitos de plataforma, 17 sin una sola asignación. La migración
+    // `20260927120000_un_solo_ambito_sin_referente` lo cierra con un índice parcial, y
+    // con él ese `create` propio deja de ser posible — 22 archivos de prueba cayeron con
+    // `Unique constraint failed on the fields: (scope_type)`.
+    //
+    // Ahora el de plataforma se REUSA, en una sola sentencia a prueba de carreras
+    // (`ambitoDePlataforma`), y **no entra en `scopes`**: es compartido, y borrarlo se lo
+    // quitaría a los archivos que corran en paralelo.
+    const compartido = scopeType === "platform" ? await ambitoDePlataforma() : null;
     const s =
-      scopeType === "location"
-        ? ((await prisma.scope.findFirst({ where: { scopeType, scopeRefId } })) ??
-          (await prisma.scope.create({ data: { scopeType, scopeRefId } })))
-        : await prisma.scope.create({ data: { scopeType, scopeRefId } });
-    if (!scopes.includes(s.id)) scopes.push(s.id);
+      compartido !== null
+        ? { id: compartido }
+        : ((await prisma.scope.findFirst({ where: { scopeType, scopeRefId } })) ??
+          (await prisma.scope.create({ data: { scopeType, scopeRefId } })));
+    if (compartido === null && !scopes.includes(s.id)) scopes.push(s.id);
     const rp = await prisma.roleProfile.findUniqueOrThrow({ where: { name: perfil } });
     await prisma.assignment.create({ data: { userAccountId, roleProfileId: rp.id, scopeId: s.id } });
   }

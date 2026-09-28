@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AvisosDeBotiquin } from "../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { getApiaryList } from "../../lib/apiary/hives";
+import { getApiaryList, organizacionesParaApiario } from "../../lib/apiary/hives";
 import { vitalesDeSitios, type VitalesDeSitio } from "../../lib/apiary/vitalesDelSitio";
 import { agruparSitios } from "../../lib/apiary/agrupacionDeSitios";
 import { MapaDeSitios } from "../components/apiary/MapaDeSitios";
@@ -41,6 +41,7 @@ function Vital({ etiqueta, valor }: { etiqueta: string; valor: string | null }) 
 export default async function ApiariesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const puedeCrearApiario = (await organizacionesParaApiario(user.userAccountId)).length > 0;
 
   const t = await getTranslations("Apiary");
   const { items: apiaries, truncated, limit, sinAmbito } = await getApiaryList(user.userAccountId);
@@ -93,7 +94,10 @@ export default async function ApiariesPage() {
     <div className="nn-apiary-page">
       <header className="nn-apiary-header">
         <div><span className="nn-badge">{t("badge")}</span><h1>{t("apiariesTitle")}</h1><p>{t("apiariesIntro")}</p></div>
-        <Link href="/apiaries/new" className="nn-apiary-primary-action">{t("apiaryCreateHeading")}</Link>
+        {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
+            pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
+            lo que la otra pantalla niega. */}
+        {puedeCrearApiario ? <Link href="/apiaries/new" className="nn-apiary-primary-action">{t("apiaryCreateHeading")}</Link> : null}
       </header>
       <AvisosDeBotiquin userAccountId={user.userAccountId} />
 

@@ -44,7 +44,7 @@ afterEach(async () => {
   await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
   await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });

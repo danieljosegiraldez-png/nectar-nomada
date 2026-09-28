@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 import {
   createStory,
   updateStory,
@@ -43,7 +44,9 @@ async function makeAccount(label: string, roleName: string) {
     data: { personId: person.id, authProvider: "credentials", status: "active" },
   });
   const role = await prisma.roleProfile.findUniqueOrThrow({ where: { name: roleName } });
-  const scope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
+  // Reusado, no creado: el índice parcial de `20260927120000_un_solo_ambito_sin_referente`
+  // sólo admite UNO. Ver `tests/helpers/ambitoDePlataforma.ts`.
+  const scope = { id: await ambitoDePlataforma() };
   await prisma.assignment.create({
     data: { userAccountId: account.id, roleProfileId: role.id, scopeId: scope.id, status: "active" },
   });
@@ -75,7 +78,7 @@ afterAll(async () => {
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: accountIds } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: accountIds } }) });
   }
-  if (scopeIds.length) await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+  if (scopeIds.length) await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
   if (personIds.length) await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
 
   // ADR-086's lesson: assert the cleanup worked, at the end, after every
@@ -130,7 +133,9 @@ describe("the classification half", () => {
     const account = await prisma.userAccount.create({
       data: { personId: person.id, authProvider: "credentials", status: "active" },
     });
-    const scope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
+    // Reusado, no creado: el índice parcial de `20260927120000_un_solo_ambito_sin_referente`
+  // sólo admite UNO. Ver `tests/helpers/ambitoDePlataforma.ts`.
+  const scope = { id: await ambitoDePlataforma() };
     await prisma.assignment.create({
       data: { userAccountId: account.id, roleProfileId: profile.id, scopeId: scope.id, status: "active" },
     });

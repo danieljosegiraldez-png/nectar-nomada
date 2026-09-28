@@ -34,6 +34,7 @@ import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment } from "../../generated/prisma/client";
+import { puedeEditarBeneficioEnOrganizacion } from "./locations";
 
 export class ProcessTargetError extends Error {}
 
@@ -392,6 +393,26 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
  * Gated the same way creation is — through a lot the account may manage —
  * rather than on a `recipe:*` permission that does not exist (ADR-099).
  */
+/**
+ * ¿Puede esta cuenta crear una receta en alguna parte?
+ *
+ * **Para qué existe (Daniel, 2026-09-27).** Su regla: lo que no puedes hacer no se
+ * muestra. `/recipes` ofrecía «nueva receta» a cualquiera y el destino contestaba con
+ * una frase de disculpa. Para omitir el enlace hay que poder preguntarlo antes.
+ *
+ * **Es la MISMA decisión que toma `app/recipes/new/page.tsx`**, movida aquí y usada por
+ * las dos pantallas: una organización propia donde `edit_beneficio` alcance, o la receta
+ * compartida (`null`). Si divergieran, el enlace volvería a mentir — que es el defecto
+ * que esto arregla.
+ */
+export async function puedeCrearRecetaEnAlguna(userAccountId: string): Promise<boolean> {
+  if (await puedeEditarBeneficioEnOrganizacion(userAccountId, null)) return true;
+  for (const org of await listRecipeOrganizations(userAccountId)) {
+    if (await puedeEditarBeneficioEnOrganizacion(userAccountId, org.id)) return true;
+  }
+  return false;
+}
+
 export async function listRecipes(userAccountId: string) {
   const anyLot = await prisma.lot.findFirst({ where: {} });
   if (!anyLot) return [];

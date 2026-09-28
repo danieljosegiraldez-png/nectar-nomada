@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 import { recordHarvestEvent, CerezaError } from "../../lib/traceability/harvest";
 import { catalogosDeCereza } from "../../lib/traceability/harvest";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -36,7 +37,7 @@ beforeAll(async () => {
   const ua = await prisma.userAccount.create({ data: { personId: persona.id, authProvider: "credentials", status: "active" } });
   cuenta = ua.id;
   const admin = await prisma.roleProfile.findFirstOrThrow({ where: { name: "Platform Admin" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "platform" } });
+  const scope = { id: await ambitoDePlataforma() };
   scopeId = scope.id;
   await prisma.assignment.create({ data: { userAccountId: ua.id, roleProfileId: admin.id, scopeId: scope.id } });
 });
@@ -49,7 +50,7 @@ afterAll(async () => {
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: ids } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: cuenta }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId, scopeType: { not: "platform" as const } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: cuenta }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });

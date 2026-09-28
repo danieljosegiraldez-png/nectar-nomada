@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { crearProveedorDeEquiposFormAction } from "../../../actions/equipos";
@@ -48,15 +48,10 @@ export default async function ProveedorDeEquiposNuevoPage({
     </p>
   );
 
-  if (!puede) {
-    return (
-      <div>
-        {volver}
-        <h1>{t("proveedorNuevo")}</h1>
-        <p className="nn-muted">{t("proveedorSinPermiso")}</p>
-      </div>
-    );
-  }
+  // Daniel, 2026-09-27: sin permiso esta pantalla no existe — 404, sin explicar. Esta página llegó
+  // a `main` el mismo día, de otra sesión, con la disculpa que el resto acaba de perder; el guardia
+  // la cazó al fusionar y se cierra igual, que es exactamente para lo que se escribió el guardia.
+  if (!puede) notFound();
 
   return (
     <div>

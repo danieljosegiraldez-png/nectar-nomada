@@ -43,11 +43,43 @@ mantenimiento.pathname = "/postgres";
 const cliente = new Client({ connectionString: mantenimiento.toString() });
 try {
   await cliente.connect();
-  await cliente.query(`CREATE DATABASE "${nombre}"`);
+  // Misma colación que la base real y que producción (`C.UTF-8`, medido el 2026-09-27). Sin
+  // declararla hereda la de `template1`, que en un clúster creado antes de ese día es `C` a secas:
+  // dos bases del mismo par comparándose con reglas distintas. `TEMPLATE template0` es obligatorio
+  // para poder pedir otra colación, y `builtin` es el único proveedor que da C.UTF-8 en macOS.
+  await cliente.query(
+    `CREATE DATABASE "${nombre}" TEMPLATE template0 ENCODING 'UTF8' LOCALE_PROVIDER builtin BUILTIN_LOCALE 'C.UTF-8'`,
+  );
   console.log(`Base de sombra creada: ${nombre} en ${url.host}`);
 } catch (error) {
   if (error.code === "42P04") {
-    console.log(`Base de sombra ya estaba: ${nombre} en ${url.host}`);
+    // «Ya estaba» no es «está bien»: una sombra creada antes del 2026-09-27 heredó la colación
+    // del entorno y no pliega — justo el par con reglas distintas que este script dice evitar
+    // (hallazgo 4 de Codex). Se comprueba y se rechaza con la orden para recrearla.
+    const revision = new Client({ connectionString: sombra });
+    try {
+      await revision.connect();
+      const { rows } = await revision.query("SELECT lower('FERRETERÍA') = 'ferretería' AS pliega");
+      if (!rows[0].pliega) {
+        console.error(
+          [
+            "",
+            `La base de sombra ${nombre} ya existía, pero NO pliega las mayúsculas acentuadas.`,
+            "Se compararía con la base real usando reglas distintas de las de producción.",
+            "",
+            "Bórrala y vuelve a correr esto, que la creará bien:",
+            "",
+            `  dropdb -h ${url.hostname} -p ${url.port} -U postgres ${nombre}`,
+            "",
+          ].join("\n"),
+        );
+        await cliente.end();
+        process.exit(1);   // el `finally` de abajo cierra `revision`
+      }
+    } finally {
+      await revision.end();
+    }
+    console.log(`Base de sombra ya estaba, y pliega: ${nombre} en ${url.host}`);
   } else {
     console.error(`No se pudo crear la base de sombra ${nombre}:`, error.message);
     process.exit(1);
