@@ -1564,7 +1564,7 @@
     "processReportMoistureCell": "{closed} % sobre objetivo {target} % ({diff})",
     "processReportScoresCell": "{avg} · {n} valoración(es)",
     "processReportMethodNote": "Media simple de los puntajes totales de las valoraciones enviadas. Un guión significa que no hay ninguna, no que valga cero.",
-    "viewProcessReportButton": "Reporte de proceso",
+    "viewProcessReportButton": "Informe de proceso",
     "processGradeLabel": "Grado de proceso",
     "processCherryStateLabel": "Estado de la cereza",
     "processChoose": "— Elegir —",
