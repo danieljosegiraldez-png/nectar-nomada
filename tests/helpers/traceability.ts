@@ -38,6 +38,7 @@
  * cuenta no sabe si otra prueba del mismo archivo todavía necesita la fila.
  */
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "./ambitoDePlataforma";
 
 let contador = 0;
 
@@ -55,11 +56,18 @@ export async function crearUsuarioConAcceso() {
     data: { personId: persona.id, authProvider: "credentials", status: "active" },
   });
   const admin = await prisma.roleProfile.findFirstOrThrow({ where: { name: "Platform Admin" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "platform" } });
+  // **El ámbito de plataforma se REUSA, y no se borra.** Antes cada llamada creaba el suyo, lo que
+  // era posible porque `UNIQUE (scope_type, scope_ref_id)` no restringe entre NULLs — y por eso la
+  // base compartida acumuló 19, 17 de ellos sin una sola asignación. La migración
+  // `20260927120000_un_solo_ambito_sin_referente` lo cierra con un índice parcial.
+  //
+  // El `scopeId` que esto devuelve es ahora el COMPARTIDO. Quien lo reciba no debe borrarlo: la
+  // limpieza de los siete archivos que usan este ayudante excluye `platform` por eso.
+  const scopeId = await ambitoDePlataforma();
   await prisma.assignment.create({
-    data: { userAccountId: cuenta.id, roleProfileId: admin.id, scopeId: scope.id },
+    data: { userAccountId: cuenta.id, roleProfileId: admin.id, scopeId },
   });
-  return { userAccountId: cuenta.id, personId: persona.id, scopeId: scope.id };
+  return { userAccountId: cuenta.id, personId: persona.id, scopeId };
 }
 
 export async function crearFinca() {

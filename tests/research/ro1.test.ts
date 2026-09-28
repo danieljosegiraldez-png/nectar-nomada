@@ -8,6 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 import {
   createResearchProgram,
   createResearchQuestion,
@@ -102,13 +103,13 @@ beforeAll(async () => {
   // Experiment/Protocol/TreatmentBatch writes below.
   researchLeadUserAccountId = await createTestUserAccount("RO1ResearchLead");
   const researchLeadProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Research Lead" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
+  const scope = { id: await ambitoDePlataforma() };
   researchLeadScopeId = scope.id;
   await prisma.assignment.create({ data: { userAccountId: researchLeadUserAccountId, roleProfileId: researchLeadProfile.id, scopeId: scope.id } });
 
   labOperatorUserAccountId = await createTestUserAccount("RO1LabOperator");
   const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
-  const labScope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
+  const labScope = { id: await ambitoDePlataforma() };
   labOperatorScopeId = labScope.id;
   await prisma.assignment.create({ data: { userAccountId: labOperatorUserAccountId, roleProfileId: farmOperatorProfile.id, scopeId: labScope.id } });
 
@@ -166,7 +167,7 @@ afterAll(async () => {
   });
 
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadScopeId, labOperatorScopeId] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadScopeId, labOperatorScopeId] }, scopeType: { not: "platform" as const } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });

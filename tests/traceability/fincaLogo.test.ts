@@ -35,7 +35,11 @@ afterAll(async () => {
   const orgs = await prisma.organization.findMany({ where: { locations: { none: {} } }, select: { id: true } });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizaciones.filter((o) => orgs.some((x) => x.id === o)) } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
+  // `scopeType: { not: "platform" as const }`: el de plataforma es COMPARTIDO desde el 2026-09-27
+  // —`crearUsuarioConAcceso` lo reusa en vez de crear uno por llamada— y borrarlo se lo quitaría a
+  // los archivos que corran en paralelo. La condición va aquí, en el borrado, y no en cada empuje:
+  // así la invariante se cumple aunque alguien vuelva a apuntar su id por descuido.
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes }, scopeType: { not: "platform" as const } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
 }, 30000);

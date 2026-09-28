@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../lib/db";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 import * as audit from "../../lib/audit";
 import { declararModoDeInstrumento } from "../../lib/equipos/modosDeInstrumento";
 import type { MeasurementReviewReason } from "../../generated/prisma/client";
@@ -29,7 +30,7 @@ afterEach(async () => {
   expect(await prisma.instrumentMeasurementMode.count({ where: modos })).toBe(0);
   await prisma.equipment.deleteMany({ where: { id: { in: ids.equipment } } });
   await prisma.assignment.deleteMany({ where: { id: { in: ids.assignment } } });
-  await prisma.scope.deleteMany({ where: { id: { in: ids.scope } } });
+  await prisma.scope.deleteMany({ where: { id: { in: ids.scope }, scopeType: { not: "platform" as const } } });
   await prisma.userAccount.deleteMany({ where: { id: { in: ids.user } } });
   await prisma.person.deleteMany({ where: { id: { in: ids.person } } });
   expect(await prisma.auditEvent.count({ where: auditorias })).toBe(0);
@@ -77,7 +78,8 @@ async function actor(conPermiso: boolean) {
   } });
   if (conPermiso) {
     const role = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Platform Admin" } });
-    const scope = await prisma.scope.create({ data: { id: reservar("scope"), scopeType: "platform" } });
+      // Reusado, no creado: el índice parcial de `20260927120000_un_solo_ambito_sin_referente` sólo admite UNO.
+    const scope = { id: await ambitoDePlataforma() };
     await prisma.assignment.create({ data: {
       id: reservar("assignment"), userAccountId: user.id, roleProfileId: role.id, scopeId: scope.id,
     } });

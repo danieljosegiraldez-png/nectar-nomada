@@ -32,7 +32,9 @@ afterEach(async () => {
   await prisma.specimenObservation.deleteMany({ where: assertDefinedWhere({ specimen: { locationId: { in: locationIds } } }) });
   await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: userAccountIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
+  // El ámbito de plataforma es COMPARTIDO desde el 2026-09-27 y no se borra: ver
+  // `tests/helpers/ambitoDePlataforma.ts`.
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds }, scopeType: { not: "platform" as const } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: userAccountIds } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
