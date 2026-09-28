@@ -19,6 +19,7 @@ import {
   cerrarProceso,
   colgarCorrida,
   listarProcesosDeLote,
+  opcionesParaProceso,
   registrarIntervencion,
   CATALOGO_ESTADO_CEREZA,
   CATALOGO_GRADO_PROCESO,
@@ -33,6 +34,9 @@ const RUN = `proc-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
 let gestor: string, sinPermiso: string;
 let loteA: string, loteB: string, loteC: string, loteD: string, loteE: string;
+// Para el cierre con la humedad de un descendiente (2026-09-27): loteF tiene el proceso, loteG sale
+// de él por una transformación, y loteH es de otra rama.
+let loteF: string, loteG: string, loteH: string, transformacionId: string;
 let recetaVersionId: string, recetaId: string;
 let valorManejo: string, valorDeOtroCatalogo: string;
 let valorGrado: string, valorCereza: string;
@@ -161,10 +165,32 @@ beforeAll(async () => {
   medicionDeA = await medicion(loteA, "moisture", 10.4);
   medicionDeB = await medicion(loteB, "moisture", 11.2);
   medicionBrixDeA = await medicion(loteA, "brix", 21);
+
+  loteF = await lote("LOTE-F");
+  loteG = await lote("LOTE-G");
+  loteH = await lote("LOTE-H");
+  // loteG desciende de loteF. Es lo que hace la fermentación de verdad: un lote nuevo como salida,
+  // con el de cereza como entrada.
+  transformacionId = (
+    await prisma.lotTransformation.create({
+      data: {
+        transformationType: "stage_change",
+        occurredAt: new Date("2026-03-05T12:00:00Z"),
+        provenanceClass: "original_record",
+        createdBy: gestor,
+        inputs: { create: [{ lotId: loteF, quantity: 40, unit: "kg" }] },
+        outputs: { create: [{ lotId: loteG, quantity: 38, unit: "kg" }] },
+      },
+    })
+  ).id;
 });
 
 afterAll(async () => {
-  const lotes = [loteA, loteB, loteC, loteD, loteE];
+  const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH];
+  // Las transformaciones primero: sus filas de entrada y salida apuntan a los lotes.
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: transformacionId }) });
   await prisma.lotProcessIntervention.deleteMany({
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
@@ -368,6 +394,56 @@ describe("cerrar el proceso con su medición de humedad", () => {
         closingMoistureMeasurementId: medicionDeB,
       }),
     ).rejects.toThrow(new LotProcessError("measurement_belongs_to_another_lot"));
+  });
+
+  /**
+   * El caso que dejaba un proceso abierto para siempre, medido el 2026-09-27: el proceso se abre
+   * sobre la CEREZA y la humedad se mide sobre el pergamino que la fermentación creó. Exigir el
+   * mismo lote hacía que el formulario de cierre no ofreciera ninguna opción — cero, medidas.
+   */
+  it("cierra con la humedad de un lote que desciende del suyo", async () => {
+    await abrirProceso(gestor, abrir(loteF));
+    const [p] = await listarProcesosDeLote(gestor, loteF);
+    const humedadDelDescendiente = await medicion(loteG, "moisture", 11);
+
+    const cerrado = await cerrarProceso(gestor, {
+      lotProcessId: p!.id,
+      endedAt: new Date("2026-03-20T12:00:00Z"),
+      closingMoistureMeasurementId: humedadDelDescendiente,
+    });
+
+    expect(cerrado.endedAt).not.toBeNull();
+    expect(cerrado.closingMoistureMeasurementId).toBe(humedadDelDescendiente);
+  });
+
+  /** Y la otra mitad: descendencia sí, otra rama no. Sin esto, lo de arriba abriría la puerta entera. */
+  it("no cierra con la humedad de un lote que no desciende del suyo", async () => {
+    await abrirProceso(gestor, abrir(loteH));
+    const [p] = await listarProcesosDeLote(gestor, loteH);
+    // Una humedad de loteG, que desciende de loteF y no de loteH.
+    const ajena = await medicion(loteG, "moisture", 12);
+
+    await expect(
+      cerrarProceso(gestor, {
+        lotProcessId: p!.id,
+        endedAt: new Date("2026-03-20T12:00:00Z"),
+        closingMoistureMeasurementId: ajena,
+      }),
+    ).rejects.toThrow(new LotProcessError("measurement_belongs_to_another_lot"));
+  });
+
+  /**
+   * La pantalla tiene que OFRECERLA, no sólo aceptarla: un cierre que el servicio admite y el
+   * formulario no lista sigue siendo un proceso que nadie puede cerrar. Y la etiqueta dice de qué
+   * lote es, porque ofrecer una humedad de otro lote sin decir de cuál es pedir que se adivine.
+   */
+  it("ofrece la humedad del descendiente, diciendo de qué lote es", async () => {
+    const humedad = await medicion(loteG, "moisture", 10);
+    const { mediciones } = await opcionesParaProceso(gestor, loteF);
+
+    const ofrecida = mediciones.find((m) => m.id === humedad);
+    expect(ofrecida, "la humedad del descendiente no se ofrece").toBeDefined();
+    expect(ofrecida!.label).toContain("LOTE-G");
   });
 
   it("un proceso cerrado ya no acepta cambios ni intervenciones", async () => {

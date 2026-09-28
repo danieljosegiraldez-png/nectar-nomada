@@ -1352,6 +1352,12 @@
       "operacion": "tienePreparacionTostada",
       "razon": "Decisión de Daniel, 2026-09-25: ¿la muestra tiene algún tueste registrado? Un `count` sobre `roastSession`, sin devolver ningún dato de la fila. Decide si un informe externo DEBE nombrar el tueste servido o si entra marcado «tueste no registrado». Mismo razonamiento que `esTuesteDeLaMuestra`: quien llama ya autorizó la muestra.",
       "verificado": "2026-09-25"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "idsDeDescendencia",
+      "razon": "Devuelve los ids de la descendencia de un lote con el MISMO SQL recursivo que `getLotLineage` ya usaba, extraído para que las dos preguntas no divergan. No recibe principal: sus dos llamadoras autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
+      "verificado": "2026-09-27"
     }
   ]
 }
