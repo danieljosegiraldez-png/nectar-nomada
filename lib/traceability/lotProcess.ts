@@ -14,7 +14,7 @@
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLotAccess } from "./lots";
+import { idsDeDescendencia, requireLotAccess } from "./lots";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export class LotProcessError extends Error {}
@@ -406,7 +406,17 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
   const medicion = await prisma.measurement.findUnique({ where: { id: input.closingMoistureMeasurementId } });
   if (!medicion) throw new LotProcessError("measurement_not_found");
   if (medicion.variable !== "moisture") throw new LotProcessError("measurement_is_not_moisture");
-  if (medicion.lotId !== proceso.lotId) throw new LotProcessError("measurement_belongs_to_another_lot");
+  // Daniel, 2026-09-27: la humedad de cierre puede ser de un DESCENDIENTE del lote del proceso,
+  // porque es el mismo café. El proceso se abre sobre la cereza y la fermentación crea un lote nuevo
+  // de pergamino: exigir el mismo lote dejaba el proceso sin poder cerrarse nunca (medido: cero
+  // mediciones de humedad en el lote del proceso). Lo que sigue prohibido es una medición de OTRA
+  // rama, y el error se conserva con su nombre.
+  if (medicion.lotId !== proceso.lotId) {
+    const descendencia = await idsDeDescendencia(proceso.lotId);
+    if (!medicion.lotId || !descendencia.includes(medicion.lotId)) {
+      throw new LotProcessError("measurement_belongs_to_another_lot");
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     const cerrado = await tx.lotProcess.update({
@@ -631,11 +641,16 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
       include: { catalog: true },
       orderBy: [{ catalog: { key: "asc" } }, { displayOrder: "asc" }, { value: "asc" }],
     }),
-    prisma.measurement.findMany({
-      where: { lotId, variable: "moisture" },
-      orderBy: { occurredAt: "desc" },
-      take: 20,
-    }),
+    // Las de este lote Y las de su descendencia, por lo mismo que `cerrarProceso`: la humedad que
+    // cierra un proceso abierto en cereza se mide sobre el pergamino que salió de él.
+    idsDeDescendencia(lotId).then((descendencia) =>
+      prisma.measurement.findMany({
+        where: { lotId: { in: [lotId, ...descendencia] }, variable: "moisture" },
+        orderBy: { occurredAt: "desc" },
+        take: 20,
+        include: { lot: { select: { lotCode: true } } },
+      }),
+    ),
   ]);
 
   const [grados, estados] = await Promise.all([
@@ -653,9 +668,15 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     grados: grados.map((v) => ({ id: v.id, label: v.value })),
     estadosDeCereza: estados.map((v) => ({ id: v.id, label: v.value })),
     intervenciones: valores.map((v) => ({ id: v.id, label: `${v.catalog.name} · ${v.value}` })),
+    // El código del lote va en la etiqueta cuando la medición NO es de este lote: ofrecer una
+    // humedad de otro lote sin decir de cuál es pedirle al operario que adivine (ADR-080: un id
+    // no significa nada, un código sí).
     mediciones: mediciones.map((m) => ({
       id: m.id,
-      label: `${m.value.toNumber()} ${m.unit} · ${m.occurredAt.toISOString().slice(0, 10)}`,
+      label:
+        m.lotId === lotId
+          ? `${m.value.toNumber()} ${m.unit} · ${m.occurredAt.toISOString().slice(0, 10)}`
+          : `${m.value.toNumber()} ${m.unit} · ${m.occurredAt.toISOString().slice(0, 10)} · de ${m.lot?.lotCode ?? "otro lote"}`,
     })),
   };
 }
