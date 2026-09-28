@@ -19,6 +19,13 @@
  *
  * La salida de escape es explícita a propósito, como la de sus hermanos: `ALLOW_REMOTE_MIGRATE=1`.
  * Y `VERCEL_ENV=production` pasa sin ella, porque ése es el camino que SÍ debe aplicar.
+ *
+ * **`db seed` NO está en la lista de arriba, y es deliberado.** La CLI lo ejecuta lanzando
+ * `tsx prisma/seed.ts` (lo dice `prisma.config.ts`), así que la siembra la guarda el propio
+ * `prisma/seed.ts` con `vigilarSiembra()`. Ponerlo en los dos sitios obligaría a exportar DOS
+ * variables para un solo comando, y una puerta con dos cerrojos se deja abierta. Guardar por
+ * EFECTO y no por herramienta tiene además la ventaja que buscábamos: `npm run db:seed`, que no
+ * pasa por la CLI, queda cubierto igual.
  */
 import { hostOf, isLocalDatabaseUrl } from "../lib/databaseHost";
 
@@ -34,7 +41,6 @@ const ORDENES_QUE_ESCRIBEN = [
   "migrate resolve",
   "db push",
   "db execute",
-  "db seed",
 ] as const;
 
 export interface Veredicto {
@@ -88,5 +94,44 @@ export function vigilar(argv: readonly string[] = process.argv, env = process.en
   const { bloquear, orden } = juzgar(argv, env);
   if (!bloquear || !orden) return;
   console.error(mensaje(orden, env.DATABASE_URL));
+  process.exit(1);
+}
+
+/**
+ * La siembra, que no llega por `argv` sino por ejecución directa de `prisma/seed.ts`.
+ *
+ * Es un upsert idempotente y por eso menos grave que una migración — pero escribe en la base, y
+ * hasta el 2026-09-27 `npm run db:seed` contra producción no lo impedía nada.
+ */
+export function juzgarSiembra(env: Record<string, string | undefined>): boolean {
+  if (isLocalDatabaseUrl(env.DATABASE_URL)) return false;
+  if (env.ALLOW_REMOTE_SEED === "1") return false;
+  if (env.VERCEL_ENV === "production") return false;   // `vercel-build.sh` siembra ahí a propósito
+  return true;
+}
+
+export function mensajeDeSiembra(url: string | undefined): string {
+  return [
+    "",
+    `Me niego a sembrar contra una base remota (${hostOf(url) ?? "DATABASE_URL vacía o ilegible"}).`,
+    "",
+    "`prisma/seed.ts` lee el `.env` del repositorio, así que sin `DATABASE_URL` delante esto es",
+    "PRODUCCIÓN. La siembra de producción la hace el pipeline en `scripts/vercel-build.sh`,",
+    "después de `prisma migrate deploy` y con las banderas `SEED_DEMO_*` limpiadas.",
+    "",
+    "Para la base local:",
+    "",
+    '  DATABASE_URL="postgresql://postgres@127.0.0.1:55433/nectar_test" npm run db:seed',
+    "",
+    "Si de verdad quieres sembrar la remota desde aquí, dilo:",
+    "",
+    "  ALLOW_REMOTE_SEED=1 npm run db:seed",
+    "",
+  ].join("\n");
+}
+
+export function vigilarSiembra(env = process.env): void {
+  if (!juzgarSiembra(env)) return;
+  console.error(mensajeDeSiembra(env.DATABASE_URL));
   process.exit(1);
 }
