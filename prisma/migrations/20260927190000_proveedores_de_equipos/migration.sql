@@ -21,9 +21,10 @@
 -- por sentado un comportamiento u otro miente en la mitad de los sitios donde corre, y la primera
 -- versión de esa prueba cayó en CI justo por eso.
 --
--- **Nota sobre la migración 20260919170000 (productores), que NO se toca aquí**: su comentario
--- afirma que «con la colación `C` de la base, `lower('Ñ')` no da 'ñ', así que DOÑA y Doña no
--- chocan». Con lo medido arriba, eso es falso en producción. Queda señalado, no corregido: es
--- código ya fusionado y de otro asunto.
+-- **Nota sobre la migración 20260919170000 (productores)**: afirmaba que «con la colación `C` de la
+-- base, DOÑA y Doña no chocan», que con lo medido arriba es falso en producción. Se corrigió el
+-- mismo día, en su propio archivo: sólo el comentario, cero SQL. Editar una migración ya aplicada
+-- se comprobó antes de hacerlo — `prisma migrate deploy` sale 0 aunque el checksum del archivo haya
+-- cambiado, medido sobre una base con las 186 migraciones registradas.
 CREATE UNIQUE INDEX "organization_proveedor_nombre_unico" ON "core"."organization" (lower(btrim("name")))
   WHERE "organization_type" = 'supplier';
