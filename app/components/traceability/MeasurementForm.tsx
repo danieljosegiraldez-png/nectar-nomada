@@ -167,12 +167,24 @@ export function MeasurementForm({
   // desfase horario: en el servidor este componente también se renderiza, y
   // allí el reloj de pared es el del servidor —UTC en producción—, que es el
   // valor equivocado. Sale vacío del servidor y lo rellena el navegador.
+  //
+  // **Sin array de dependencias, y eso arregla un defecto medido el 2026-09-29
+  // en la aplicación viva: sólo se podía guardar UNA medición por carga de
+  // página.** Escribir en el `.value` es escribir por detrás de React, que al
+  // re-renderizar reaplica el `defaultValue=""` y lo borra. Con `[]` no volvía
+  // a rellenarse, el campo quedaba vacío, y como es `required` el navegador
+  // **bloqueaba el siguiente envío sin decir nada**: el botón respondía, la
+  // acción no llegaba a dispararse y no aparecía ningún error. Tres zonas de
+  // una pasada eran imposibles de anotar.
+  //
+  // El `!value` de dentro es lo que hace segura la reaplicación: sólo rellena
+  // cuando está vacío, así que nunca pisa la hora que el operario corrigió.
   const cuandoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (cuandoRef.current && !cuandoRef.current.value) {
       cuandoRef.current.value = paraCampoLocal(new Date());
     }
-  }, []);
+  });
 
   // Lo que el plegado dice de sí mismo. Nombrar lo que falta es lo que lo distingue de un
   // acordeón mudo, que se ignora para siempre.
