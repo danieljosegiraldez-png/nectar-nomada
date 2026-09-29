@@ -58,7 +58,8 @@
     "data:retirar-muestra-111": "tsx scripts/retirar-muestra-111.ts",
     "data:tipos-de-lugar": "tsx scripts/corregir-tipos-de-lugar.ts",
     "data:unificar-las-nubes": "tsx scripts/unificar-beneficio-las-nubes.ts",
-    "data:medir-fases": "tsx scripts/medir-fases-de-objetivos.ts"
+    "data:medir-fases": "tsx scripts/medir-fases-de-objetivos.ts",
+    "data:gestores-de-finca": "tsx scripts/alta-gestores-de-finca.ts"
   },
   "keywords": [],
   "author": "",
