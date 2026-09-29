@@ -51,8 +51,9 @@ de la CLI y lo vigila `prisma/seed.ts`, con una sola variable — `ALLOW_REMOTE_
 El censo dice que están los DATOS, no que las REGLAS sean las mismas: una copia mal colada cuenta
 igual y sus índices admiten lo que el original rechaza.
 
-**Sin hacer:** `~/nectar-backups` está MUERTO —lo nuevo vive en el Drive, vía `NN_BACKUP_DIR` del
-`.zshrc`—; y el PASS del verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
+**`~/nectar-backups` borrado el 2026-09-29** tras copiar sus 13 conjuntos al Drive y comparar los 48
+archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
+verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
 
 ### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
 
