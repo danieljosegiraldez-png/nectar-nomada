@@ -1,33 +1,29 @@
 /**
- * Las ruedas sensoriales son un catálogo **de plataforma**: no cuelgan de un proyecto ni de un sitio,
- * se identifican por `domain`. Por eso el derecho a ver sus BORRADORES se juzga en ámbito de
- * plataforma y no «en cualquier ámbito» (cambio del 2026-09-29).
+ * **`permissionKeysAnywhere` aquí es deliberado, y no es la infracción de los otros dos sitios.**
  *
- * Antes usaba `permissionKeysAnywhere`, cuyo propio comentario dice **«Display only, and never an
- * authorization decision»**: bastaba con tener un permiso sensorial en CUALQUIER proyecto o sesión
- * para ver los borradores del catálogo entero. Decidir qué filas se ven es una decisión de
- * autorización, por muy poco sensible que sea el contenido.
+ * El 2026-09-29 se acotaron los usos que autorizaban ESCRITURAS contra un ámbito concreto. Éste se
+ * intentó acotar también —a plataforma— y se revirtió: el spec
+ * `docs/superpowers/specs/2026-09-21-herramientas-sensoriales-rueda-design.md` §3 define la
+ * audiencia sin ámbito, «una rueda apagada sólo la ve quien tenga permiso de ver Sensorial», y
+ * exigir plataforma habría dejado fuera a quien lo tiene en un proyecto o una sesión. Lo destapó la
+ * revisión de Codex leyendo el spec, que el diff no incluía.
+ *
+ * La pregunta que se hace aquí es literalmente la que `permissionKeysAnywhere` responde —«¿hay algún
+ * sitio donde esta persona podría usar esto?»—: una rueda no cuelga de ningún ámbito contra el que
+ * juzgar. Si algún día la audiencia se quiere más estrecha, es una decisión de producto sobre el
+ * spec, no un arreglo de mecanismo.
  */
 import { prisma } from "../db";
-import { can } from "../rbac/service";
-import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
+import { permissionKeysAnywhere } from "../rbac/service";
 
-const PERMISOS_SENSORIALES = [
-  ["submit_assessment", "sensory"],
-  ["manage_session", "sensory"],
-  ["manage", "competition"],
-] as const;
-
-const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;
+const PERMISOS_SENSORIALES = new Set(["sensory:submit_assessment", "sensory:manage_session", "competition:manage"]);
 
 export class RuedaSensorialNoEncontrada extends Error {}
 
 async function puedeVerBorradores(userAccountId?: string | null) {
   if (!userAccountId) return false;
-  for (const [action, resourceType] of PERMISOS_SENSORIALES) {
-    if (await can(userAccountId, action, resourceType, PLATAFORMA, CLASSIFICATION_NOT_APPLICABLE)) return true;
-  }
-  return false;
+  const permisos = await permissionKeysAnywhere(userAccountId);
+  return [...PERMISOS_SENSORIALES].some((permiso) => permisos.has(permiso));
 }
 const versionConContenido = {
   include: {

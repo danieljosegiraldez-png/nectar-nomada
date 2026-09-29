@@ -102,6 +102,27 @@ describe("el proveedor de fuera", () => {
     expect(p.organizationType).toBe('producer');
   }, 20000);
 
+  it("alcanzar el beneficio NO basta: sin `cherry_supplier:create` sale sin_permiso", async () => {
+    // Hallazgo 3 de Codex, y tenía razón: los dos rechazos de arriba caen en `exigeVerBeneficio`, así
+    // que quitar el `can(cherry_supplier:create)` entero los dejaba intactos — medido, 0 caídas. Esta
+    // aísla la SEGUNDA barrera: al operador se le quita sólo esa clave con un override `deny`, sin
+    // tocar su acceso al beneficio, y el rechazo pasa de `no_lot_access` a `sin_permiso`.
+    const asignacion = await prisma.assignment.findFirstOrThrow({ where: { userAccountId: operador } });
+    const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType: "cherry_supplier", action: "create" } });
+    const veto = await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: asignacion.id, permissionId: permiso.id, effect: "deny", createdBy: operador, reason: null },
+    });
+    try {
+      await expect(crearProveedorDeCereza(operador, beneficio, { nombre: `Vetado ${RUN}` })).rejects.toThrow(/sin_permiso/);
+    } finally {
+      await prisma.assignmentPermissionOverride.delete({ where: { id: veto.id } });
+    }
+    // Control positivo: devuelta la clave, el mismo nombre entra. El rechazo era de la clave y no
+    // del beneficio, que es justo lo que las otras dos pruebas no podían distinguir.
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Vetado ${RUN}` });
+    expect(p.organizationType).toBe("producer");
+  }, 20000);
+
   it("el Recolector no da de alta proveedores", async () => {
     // Igual que el de arriba: el recolector no alcanza el beneficio, así que cae en el guardia del
     // ámbito. Antes del 2026-09-29 llegaba hasta la clave y salía `sin_permiso`.
