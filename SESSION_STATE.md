@@ -41,6 +41,19 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-28 · Los cuatro caminos que escriben ya tienen guardia (PR #513, #515)
+
+**#513 — la siembra tampoco escribe en una remota.** `npm run db:seed` es `tsx prisma/seed.ts` y no
+pasaba por `prisma.config.ts`. Se guarda por EFECTO y no por herramienta: `db seed` SALE de la lista
+de la CLI y lo vigila `prisma/seed.ts`, con una sola variable — `ALLOW_REMOTE_SEED=1`.
+
+**#515 — el verificador de respaldos crea su copia con la colación de producción, y lo comprueba.**
+El censo dice que están los DATOS, no que las REGLAS sean las mismas: una copia mal colada cuenta
+igual y sus índices admiten lo que el original rechaza.
+
+**Sin hacer:** `~/nectar-backups` está MUERTO —lo nuevo vive en el Drive, vía `NN_BACKUP_DIR` del
+`.zshrc`—; y el PASS del verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
+
 ### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
 
 **#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
@@ -88,10 +101,8 @@ migración pendiente la habría aplicado fuera del pipeline. El guardia vive en 
 que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
 `ALLOW_REMOTE_MIGRATE=1` o `VERCEL_ENV=production`.
 
-**Sin hacer, tres:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
-`permissionKeysAnywhere`; `npm run db:seed` es `tsx prisma/seed.ts` y no pasa por la CLI, así que
-sembrar producción a mano sigue sin guardia; y los dos guiones de `scripts/backup/` crean bases sin
-declarar colación.
+**Sin hacer:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
+`permissionKeysAnywhere`. Los otros dos se cerraron esa madrugada — ver la entrada del 28.
 
 ## 3. Bloqueado, y en qué
 

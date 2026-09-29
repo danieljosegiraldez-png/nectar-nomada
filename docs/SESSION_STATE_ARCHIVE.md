@@ -4329,6 +4329,11 @@ crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de un
 está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
 **sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
 
+---
+
+**Archivado 2026-09-28** para hacer sitio a la entrada de los guardias. Su único pendiente
+—«Sin ver en navegador»— NO se fue con ella: está rescatado en la sección 3 del estado.
+
 ### 2026-09-21 · Secado, paso 4: el ambiente a mano
 
 ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
