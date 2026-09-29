@@ -72,7 +72,7 @@ export default async function LotDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[]; ok?: string | string[] }>;
 }) {
   const { id } = await params;
   const user = await getCurrentUser();
@@ -87,8 +87,15 @@ export default async function LotDetailPage({
   // y se envió el cierre convierte el rechazo en `BandejaError` (A4, ajustes.md).
   // `tb.has` evita traducir un código arbitrario de la URL: sin él, un código
   // que no exista en ningún idioma haría que `next-intl` reventara al pintar.
-  const { error: codigoErrorCrudo } = await searchParams;
+  //
+  // Y `?ok=<código>` para confirmar lo que acaba de entrar. `registrarInspeccionFormAction`
+  // redirigía aquí con `?ok=inspeccion` desde que existe, y **esta página no leía `ok`**: la
+  // confirmación no se vio nunca. Medido el 2026-09-28 recorriendo la interfaz; catorce pantallas
+  // de la casa ya lo leen y ésta era la excepción. Se normaliza igual que el error porque un
+  // parámetro repetido en la URL llega como array.
+  const { error: codigoErrorCrudo, ok: okCrudo } = await searchParams;
   const codigoError = Array.isArray(codigoErrorCrudo) ? codigoErrorCrudo[0] : codigoErrorCrudo;
+  const ok = Array.isArray(okCrudo) ? okCrudo[0] : okCrudo;
   const mensajeDeErrorDeBandeja = codigoError && tb.has(`error_${codigoError}` as "error_sin_acceso")
     ? tb(`error_${codigoError}` as "error_sin_acceso")
     : null;
@@ -517,6 +524,14 @@ export default async function LotDetailPage({
       ) : null}
 
       {mensajeDeErrorDeBandeja ? <p role="alert">{mensajeDeErrorDeBandeja}</p> : null}
+
+      {/* `role="status"` y no `alert`: es una confirmación de algo que salió bien, y un lector de
+          pantalla no debe interrumpir por ella. Mismo patrón que `/instalaciones/[id]`. */}
+      {ok === "inspeccion" ? (
+        <p className="nn-notice nn-notice-success" role="status">
+          {t("inspeccionRegistrada")}
+        </p>
+      ) : null}
 
       {/* Un aviso, no dieciséis: repetir el motivo junto a cada formulario sería
           ruido en una página de 825 líneas. La trazabilidad se sigue leyendo

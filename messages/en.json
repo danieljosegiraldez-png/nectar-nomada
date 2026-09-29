@@ -1673,6 +1673,7 @@
     "resumenHeading": "Recorded on this visit",
     "resumenCifras": "{inspecciones} inspections · {eventos} colony events · {cosechas} harvests",
     "visitPurposeLegend": "What you are going for",
+    "inspeccionRegistrada": "Drying inspection recorded.",
     "visitPurpose_inspeccion": "Inspection",
     "visitPurpose_alimentacion": "Feeding",
     "visitPurpose_tratamiento": "Treatment",
