@@ -9,6 +9,12 @@
  * pipeline never accidentally ships a default login.
  */
 import "dotenv/config";
+// Antes de crear el cliente, y antes de cualquier import que lo cree: sembrar es escribir, y hasta
+// el 2026-09-27 `npm run db:seed` contra producción no lo impedía nada. El guardia de la CLI de
+// Prisma (`scripts/migrate-guard.ts`) no cubría este camino porque `npm run db:seed` es
+// `tsx prisma/seed.ts` y no pasa por `prisma.config.ts`. Vive en el mismo archivo que su hermano
+// para que el escape y el mensaje no se escriban dos veces.
+import { vigilarSiembra } from "../scripts/migrate-guard";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PERMISSIONS, ROLE_PROFILES } from "../lib/rbac/catalog";
@@ -25,6 +31,11 @@ import { recordInspection } from "../lib/apiary/inspections";
 import { recordColonyEvent } from "../lib/apiary/colonyEvents";
 import { recordApiaryHarvest } from "../lib/apiary/harvest";
 import { findOrCreateOrganization } from "./seedHelpers";
+
+// La PRIMERA sentencia del cuerpo, y por eso no está entre los imports: en ESM los `import` se
+// hoistean, así que una llamada colocada ahí arriba no correría antes de que se evalúen los módulos
+// siguientes. Aquí sí corre antes de abrir el cliente, que es lo que importa.
+vigilarSiembra();
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });

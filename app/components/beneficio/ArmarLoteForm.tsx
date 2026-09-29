@@ -58,7 +58,8 @@ export function ArmarLoteForm({ beneficioId, recepciones }: { beneficioId: strin
       </fieldset>
       {mezcla ? <p role="status" className="nn-muted">{t("avisoPedidosDistintos")}</p> : null}
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
-      {state.ok ? <p role="status">{t("loteArmado")}</p> : null}
+      {/* No hay mensaje de éxito: `armarLoteAction` redirige a la ficha del lote, donde sigue la
+          selección. Aterrizar en ella con su código a la vista ES la confirmación. */}
       <button type="submit" className="nn-button" disabled={pending || elegidas.length === 0}>
         {t("armarBoton")}
       </button>

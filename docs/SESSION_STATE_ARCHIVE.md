@@ -4301,3 +4301,30 @@ ADR-184, decisión de Daniel: `declararCanal` escribía la preferencia de canal 
 autorizar. Ahora puede la propia persona, un Platform Admin, o quien tenga `person:manage_notifications`
 (permiso nuevo: Farm Manager sí, Farm Operator no) sobre su finca, con la regla de P-G. Ninguna pantalla lo
 llama todavía. Flip-test por nombre. **Sigue:** la acción que lo llame traduce `PreferenciaDeCanalError`.
+
+---
+
+**Archivado 2026-09-27**, con el estado en 410/400, para que cupiera el desenlace de la
+colación. Se movió entera y sin pendientes dentro: lo que enseñaba sobre montar el entorno
+local vive en la memoria de verificación local, y la pantalla que describe está en producción.
+
+### 2026-09-26 · Las tres lecturas de la clasificación de verde por malla
+
+Decisión de Daniel, con seis respuestas suyas en `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md`.
+La escritura ya estaba (ADR-186); esto es la **lectura**. Ficha del lote verde: reparto por malla con rango, sistema,
+**estado del dato** y %, y defectos **agrupados por categoría** conservando el enlace a cada lote. Sustituye a la tabla
+genérica de cuajado **sólo cuando es el mismo evento** —comparar «¿hay clasificación?» escondía cifras de otra
+transformación—. Pantalla propia `/lots/[id]/clasificacion`: una fila por lote, **una columna por rango declarado**, sin
+escala inventada; dice `sinAmbito`, cuántos quedan sin clasificar y por qué el lote de la ruta no sale. Dos rondas de
+Codex, once hallazgos atendidos.
+
+**Visto en el navegador el 2026-09-26, y montarlo costó tres piezas que nadie tenía apuntadas.** No sirve
+`dev:local`: su base `nectar_test` **no tiene las columnas `green_screen_*`** —su esquema es anterior a la migración—
+y esa pantalla no se renderiza contra ella; la buena es `nectar_test_verde`. Un worktree **no tiene `.env`**, así que
+Auth.js muere con `MissingSecret` y el login rebota al login sin decir por qué: hace falta uno local con `AUTH_SECRET`
+(`.gitignore` ya lo ignora). Y para entrar hay que crear cuenta con contraseña, porque `auth:set-password` **exige un
+TTY**: la del 2026-09-26 se creó y se borró el mismo día, así que hay que hacerse una — persona con correo, cuenta con
+`hashPassword` de `lib/auth/password`, y una asignación de Platform Admin sobre el scope de plataforma que YA existe (no
+crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de una). Google no funciona en local, sólo
+está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
+**sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
