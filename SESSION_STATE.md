@@ -67,6 +67,13 @@ claves de la fuente y **su control positivo va primero**: cegando el extractor, 
 `/fincas`, y que la organización Kiva Estate sigue marcada «DEMO placeholder» — falso en cuanto le
 cuelguen fincas reales, y el guión lo avisa cada vez.
 
+### 2026-09-29 · El permiso se juzga donde ocurre el acto (PR #525)
+
+Cierra el pendiente de `permissionKeysAnywhere`: de sus tres usos **dos se acotaron y uno se quedó**.
+Equipos va a plataforma —fila global—, CEREZA al **sitio del beneficio** («el cosechador sólo entrega
+y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque su spec da esa audiencia SIN
+ámbito. El `AuditEvent` lleva `autorizadoEnBeneficio`, y mi flip-test **no discriminaba** hasta que Codex lo vio.
+
 ### 2026-09-28 · Los cuatro caminos que escriben ya tienen guardia (PR #513, #515)
 
 **#513 — la siembra tampoco escribe en una remota.** `npm run db:seed` es `tsx prisma/seed.ts` y no
@@ -101,12 +108,6 @@ después, así que el aterrizaje encabeza con la acción correcta. Medido, no su
 lee `error`, así que esa confirmación no se ve nunca. (Los rótulos se arreglaron el 29, PR #522.)
 
 ## 3. Bloqueado, y en qué
-
-#### `permissionKeysAnywhere` autoriza donde no debe (PR #503)
-
-Rescatado al archivar «2026-09-27 · Proveedores de equipos»: `proveedoresDeCereza.ts` y
-`sensory/ruedas.ts` siguen autorizando con `permissionKeysAnywhere`, que dice de sí misma «Display
-only, and never an authorization decision».
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
@@ -206,18 +207,19 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
 guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
 faltando que una persona registre un dato real en el campo.
 
-#### Un vocabulario de procedencia por formulario — **declarado el 2026-09-08**
+#### Pendientes sueltos, sin sección propia
 
-Los ocho subconjuntos viven ahora en `lib/traceability/procedencia.ts`, con
-nombre, tipados contra el enum, y el servidor ya no acepta mas de lo que la
-pantalla pinta —su entrada está en `docs/SESSION_STATE_ARCHIVE.md`—. **Lo que
-sigue abierto es cual debe ofrecer cada una**:
-que una medicion pueda declararse `interpretation` y una calicata no, que el
-enum tenga diez valores y las pantallas ofrezcan cinco, y si
-`manufacturer_specification` deberia estar en alguna. Es decision de diseño —que
-puede afirmar cada pantalla— y sigue sin tomarse.
+Una veintena de pendientes distintos colgaba de un encabezado que sólo nombraba
+al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 
-
+- **Un vocabulario de procedencia por formulario — declarado el 2026-09-08.**
+  Los ocho subconjuntos viven en `lib/traceability/procedencia.ts`, tipados
+  contra el enum, y el servidor ya no acepta más de lo que la pantalla pinta
+  —su entrada está en `docs/SESSION_STATE_ARCHIVE.md`—. **Sigue abierto cuál
+  debe ofrecer cada una**: que una medición pueda declararse `interpretation` y
+  una calicata no, que el enum tenga diez valores y las pantallas ofrezcan
+  cinco, y si `manufacturer_specification` debería estar en alguna. Decisión de
+  diseño, sin tomar.
 - **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
   dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
   leer producción está prohibido—; es la palabra del dueño, y basta. Queda
@@ -225,13 +227,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
-- **La protección de `main`, tal como quedó** — no es un bloqueo, es la
-  configuración viva. Exige los dos checks de compuerta —el pesado y el
-  ligero—, prohíbe force-push y borrar la rama. **Sin revisiones exigidas a
-  propósito**: hay una sola cuenta humana y GitHub no deja aprobar el propio PR.
-  `enforce_admins` en **false**, también a propósito: si CI se cae por cuota hay
-  que poder fusionar un arreglo sin desactivar la protección primero. Cerrado el
-  2026-09-05; el detalle, en `docs/SESSION_STATE_ARCHIVE.md`.
+- **La protección de `main`, tal como quedó** — cerrada el 2026-09-05; no es un
+  bloqueo sino la configuración viva, con su detalle —sin revisiones exigidas y
+  `enforce_admins` en false, los dos a propósito— en
+  `docs/SESSION_STATE_ARCHIVE.md`.
 
 - **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
   `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
@@ -248,13 +247,10 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
   bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
   ahora sin ayuda.
-- **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — la quinta y
-  la sexta revisión (2026-09-05 y 06) miraron esa capa y **lo que encontraron ya
-  está arreglado**; el detalle se archivó el 2026-09-06 en
-  `docs/SESSION_STATE_ARCHIVE.md` porque era registro de entrega dentro de una
-  sección llamada «Bloqueado», y ocupaba el 24 % del archivo. Lo que sigue
-  abierto es sólo esto: **quedan páginas sin mirar con esas lentes**, y cada
-  lente nueva ha encontrado algo que las anteriores no podían ver.
+- **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — lo que la
+  quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
+  su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
+  lentes**, y cada lente nueva ha encontrado algo que las anteriores no podían ver.
 - **El job de CI con base aún no es obligatorio** — la protección sólo exige
   «Compuerta». CI pasó de 22 de 97 archivos a 94 de 100 (2026-09-06); quedan 6
   fuera, dos de ellas deliberadas. Detalle en `docs/SESSION_STATE_ARCHIVE.md`.
@@ -287,21 +283,12 @@ puede afirmar cada pantalla— y sigue sin tomarse.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **La v2 del protocolo YA ESTÁ CARGADA en producción — 2026-09-18, lo confirmó Daniel.** La
-  vista previa dice «versión(es) 1, 2» y que la 2 ya está (con el guion arreglado en #422: el
-  viejo buscaba el identificador por versión y habría dicho «NO está»).
-- **`npm run apiary:load-protocol` (v1) YA SE CORRIÓ — 2026-09-16, lo confirmó Daniel.**
-  `apiario-campo-v1` está en producción, así que las pantallas de captura de campo
-  tienen qué preguntar. **Se anota justamente porque no estaba anotado:** ese día
-  se le pidió correrlo como «lo único que falta» sacándolo de la memoria de una
-  sesión anterior y **no de este archivo**, donde nunca figuró (control positivo:
-  `sensory:create-protocol`, que sí figura, aparece arriba). Sin esta línea, la
-  siguiente sesión vuelve a pedirle un guion que ya corrió.
-
-  **No se verificó contra la base y no se puede:** leer la base de producción de
-  Neon está prohibido. Es la palabra del dueño, y basta — pero la distinción
-  importa si alguien lo vuelve a dudar: el guion imprime **lo que dice el archivo
-  y lo que hay en la base**, y las dos líneas contienen `apiario-campo-v1`.
+- **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
+  protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
+  (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
+  **No se verificó contra la base y no se puede** —leer producción de Neon está
+  prohibido—: es su palabra, y basta. El segundo se anota porque **no estaba
+  anotado**, y ese día se le pidió correr un guion que ya había corrido.
 
 - **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Fumigar y
   sembrar se registran como *hechos* (`LabourEntry`, `MaterialConsumptionEntry`,
