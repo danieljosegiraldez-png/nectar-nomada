@@ -11,6 +11,8 @@ const initialState: TraceabilityActionState = {};
 export interface InitialTarget {
   variable: string;
   moment: "initial" | "during" | "final";
+  /** De qué fase habla el objetivo: fermentación o secado (2026-09-27). */
+  phase: "fermentation" | "drying";
   /** Cada cuántas horas medir. Sólo con `during`. */
   everyHours?: string;
   targetValue: string;
@@ -72,6 +74,7 @@ export function RecipeVersionForm({
           <div key={row.key} style={{ border: "1px solid var(--nn-border)", borderRadius: 6, padding: "0.75rem", marginBottom: "0.75rem" }}>
             <input type="hidden" name={`targets[${i}][variable]`} value={row.variable} />
             <input type="hidden" name={`targets[${i}][moment]`} value={row.moment} />
+<input type="hidden" name={`targets[${i}][phase]`} value={row.phase} />
             <input type="hidden" name={`targets[${i}][unit]`} value={unitFor(row.variable)} />
 
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -83,6 +86,13 @@ export function RecipeVersionForm({
                       {t(`variable_${v.variable}` as "variable_ph", { fallback: v.variable })} ({v.canonicalUnit})
                     </option>
                   ))}
+                </select>
+              </div>
+              <div className="nn-field" style={{ flex: "1 1 150px" }}>
+                <label htmlFor={`vf-${row.key}`}>{t("recipePhaseLabel")}</label>
+                <select id={`vf-${row.key}`} value={row.phase} onChange={(e) => update(row.key, { phase: e.target.value as InitialTarget["phase"] })}>
+                  <option value="fermentation">{t("phase_fermentation")}</option>
+                  <option value="drying">{t("phase_drying")}</option>
                 </select>
               </div>
               <div className="nn-field" style={{ flex: "1 1 140px" }}>
@@ -148,7 +158,7 @@ export function RecipeVersionForm({
 
       <button type="button" className="nn-button-quiet"
         onClick={() => {
-          setRows((rs) => [...rs, { key: nextKey, variable: "ph", moment: "during", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" }]);
+          setRows((rs) => [...rs, { key: nextKey, variable: "ph", moment: "during", phase: "fermentation" as const, targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" }]);
           setNextKey((k) => k + 1);
         }}>
         {t("recipeAddTarget")}

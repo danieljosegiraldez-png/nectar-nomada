@@ -1760,7 +1760,10 @@
     "greenGradingScreenSystem_otro": "Other system (say which in the note)",
     "error_green_grading_screen_system_invalid": "That screen system is not on the list.",
     "error_green_grading_screen_system_other_needs_note": "You picked «other system»: say which one in the fraction note.",
-    "error_sample_quantity_precision": "The quantity takes three decimals at most; with more, it would be stored rounded."
+    "error_sample_quantity_precision": "The quantity takes three decimals at most; with more, it would be stored rounded.",
+    "recipePhaseLabel": "Phase",
+    "phase_fermentation": "Fermentation",
+    "phase_drying": "Drying"
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

@@ -43,6 +43,11 @@ export default async function RecipeDetailPage({
   const initialTargets = (current?.targets ?? []).map((tg) => ({
     variable: tg.variable,
     moment: tg.moment as "initial" | "during" | "final",
+    // Un objetivo heredado puede no decir de qué fase habla —la migración del 2026-09-27 sólo
+    // rellenó los que pudo demostrar— y al publicar la v2 hay que elegir una. Se propone
+    // fermentación, que es lo que toda receta anterior describía, y el selector queda a la vista
+    // para corregirlo. Lo que NO se hace es escribir nulo otra vez: la versión nueva sí declara.
+    phase: (tg.phase ?? "fermentation") as "fermentation" | "drying",
     targetValue: tg.targetValue?.toString() ?? "",
     minValue: tg.minValue?.toString() ?? "",
     maxValue: tg.maxValue?.toString() ?? "",

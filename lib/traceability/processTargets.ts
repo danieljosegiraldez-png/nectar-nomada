@@ -667,6 +667,10 @@ export async function createRecipeVersion(
             minValue: t.minValue ?? null,
             maxValue: t.maxValue ?? null,
             everyHours: t.everyHours ?? null,
+            // La SEGUNDA puerta. El guardia `campos-con-dos-puertas` existe por esto: cuando se
+            // añadieron `everyHours` y `expectedHours` se cerró sólo `createRecipeWithVersion`, y
+            // publicar la v2 le borraba el ritmo a la receta en silencio.
+            phase: t.phase,
             note: t.note?.trim() || null,
             displayOrder: i,
           })),
