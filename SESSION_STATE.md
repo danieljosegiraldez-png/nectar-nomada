@@ -41,6 +41,29 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-27/28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
+
+**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
+
+**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
+por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
+Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
+`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 entradas a 8 y
+lo fija `tests/beneficio/destinos-del-indice.test.ts`.
+
+**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
+`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
+error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
+`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
+encadenadas, y `nextActionFor` sugiere `selection` a un lote de cereza sin transformar y
+`fermentation` después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
+
+**Sin hacer, dos.** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha
+sólo lee `error`: esa confirmación no se ve nunca. Y cuatro rótulos del menú del lote llevan
+mayúscula suelta —«Iniciar Fermentación», «Iniciar Secado», «Mover Almacenamiento», «Crear
+Muestra»— frente a ocho en minúscula, con el de bodega traducido palabra por palabra. **Daniel no lo
+ha decidido.**
+
 ### 2026-09-27 · Proveedores de equipos, y la colación que no era la que creíamos (PR #503, #506, #507, #510)
 
 ADR-188. Ya se crea una `Organization` de tipo `supplier` desde la aplicación —los tres que había
@@ -105,12 +128,6 @@ demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, t
 `nectar_test` tenía **10 migraciones sin aplicar**: aplicadas y sembrada, 186/186, 0 pendientes.
 **PR #483** añade a las «Trampas» de `CLAUDE.md` la cuarta: vitest 4 esconde los `console.log` de un
 test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
-
-### 2026-09-21 · Secado, paso 4: el ambiente a mano
-
-ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
-enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
-pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
 
 ## 3. Bloqueado, y en qué
 
@@ -351,14 +368,6 @@ puede afirmar cada pantalla— y sigue sin tomarse.
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
-
----
-
-### 2026-09-24 · Flujo verde, tueste y cata
-
-- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
-- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
-- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 
 ## 5. Al cerrar la sesión
 

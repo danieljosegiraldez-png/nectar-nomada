@@ -4328,3 +4328,15 @@ TTY**: la del 2026-09-26 se creó y se borró el mismo día, así que hay que ha
 crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de una). Google no funciona en local, sólo
 está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
 **sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
+
+### 2026-09-21 · Secado, paso 4: el ambiente a mano
+
+ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
+enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
+pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
+
+### 2026-09-24 · Flujo verde, tueste y cata
+
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
+- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
+- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
