@@ -104,9 +104,6 @@ error del formulario. Fuera, las claves `loteArmado`. **La selección no necesit
 encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
 después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
 
-**Sin hacer:** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha sólo
-lee `error`, así que esa confirmación no se ve nunca. (Los rótulos se arreglaron el 29, PR #522.)
-
 ## 3. Bloqueado, y en qué
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
