@@ -20,11 +20,29 @@ import { TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
  * Si por lo que sea llegara vacío, `parseLocalDateTime` **falla** en vez de
  * suponer una zona: guardar un instante equivocado con aspecto de correcto es
  * el fallo del que viene todo esto.
+ *
+ * **El efecto corre en CADA render, y el array de dependencias vacío que tenía
+ * era un defecto medido el 2026-09-29.** Escribir en el `.value` de un nodo es
+ * escribir por detrás de React; cuando el formulario se vuelve a renderizar
+ * —al cambiar la variable de una medición, el instrumento, el material— React
+ * reaplica el `defaultValue=""` y **se lleva el valor**. Con `[]` no volvía a
+ * escribirse nunca, así que el campo quedaba vacío para siempre y el guardado
+ * moría con `timezone_offset_missing`.
+ *
+ * Medido en la pantalla del lote: `300` al cargar, `(VACÍO)` en cuanto cambia
+ * la variable, mientras los otros cuatro formularios de la misma página —que no
+ * re-renderizan— seguían con `300`. Esa comparación es la que lo delató; con un
+ * solo formulario a la vista se lee como «el campo no se rellena».
+ *
+ * Sin `[]` el efecto se reaplica tras cada render, que es exactamente lo que
+ * hace falta: el coste es una asignación a un nodo del DOM, y a cambio el valor
+ * no puede desaparecer. Lo vigila
+ * `tests/arquitectura/desfase-horario-sobrevive-al-render.test.ts`.
  */
 export function TimezoneOffsetField() {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.value = String(new Date().getTimezoneOffset());
-  }, []);
+  });
   return <input ref={ref} type="hidden" name={TZ_OFFSET_FIELD} defaultValue="" />;
 }
