@@ -19,6 +19,8 @@ const initialState: TraceabilityActionState = {};
 // (routed through QuantityEvent, not here, per T3's own design).
 const VARIABLES = ["temperature", "ph", "brix", "relative_humidity", "moisture", "water_activity"] as const;
 
+const ZONAS = ["NORTH", "SOUTH", "EAST", "WEST", "CENTER", "EDGE"] as const;
+
 interface ObserverOption {
   id: string;
   displayName: string;
@@ -53,6 +55,40 @@ interface ObserverOption {
  * las 9 en la oficina quedaba fechado a las 9, y en una fermentación la curva
  * es el dato. Llega relleno con la hora actual: si mides y anotas a la vez, no
  * se toca.
+ *
+ * ---
+ *
+ * **En cascada (2026-09-29).** Daniel, mirando la pantalla del lote: «muchos
+ * campos, no intuitivo el flujo». Eran hasta doce visibles de una vez.
+ *
+ * La forma elegida —de tres que se le presentaron— es **un paso con el detalle
+ * plegado**, y la razón es la misma que en 2026-09-11: la respuesta correcta a
+ * «me haces trabajar de más» es **quitar preguntas**, no reordenarlas. Un
+ * asistente de dos o tres pasos obliga a pasar por la pantalla del detalle cada
+ * vez, incluso el martes a las 7 cuando sólo vas a anotar 14,8 — y medir es
+ * opcional y no ocurre en cada volteo, así que lo que se repite es anotar un
+ * número. Ése es el camino que cuesta un toque.
+ *
+ * Arriba queda **el número y nada más**. El detalle —material, instrumento,
+ * modo, zona y nota— vive en un `<details>` cerrado que **dice lo que esconde**
+ * cuando algo falta: un acordeón mudo se ignora para siempre.
+ *
+ * **Lo que llega prellenado se enseña como TEXTO, no como desplegable.** Con
+ * `variableInicial`/`instrumentInicial`/`modoInicial`/`materialInicial` puestos,
+ * el dato queda **declarado sin ser preguntado**, con un «cambiar» al lado para
+ * quien lo necesite. Esos tres últimos props existían desde antes y **nadie los
+ * pasaba nunca** — medido el 2026-09-29: cero usos fuera de este archivo.
+ *
+ * **La zona de muestreo ya no exige elegir una inspección** (decisión de Daniel
+ * ese día). En el patio nadie abre una para anotar una humedad, así que el
+ * servidor la crea él; y el papel `ZONE` lo deriva `recordMeasurement` del
+ * propio `CHECK` de `core.sample`, en vez de preguntarlo. Aquí queda una sola
+ * pregunta, la zona.
+ *
+ * **La foto no está en este formulario y es a propósito** (T12.5 §6): adjuntar
+ * una foto no puede bloquear el guardado del registro, así que no existe ningún
+ * formulario que cree registro y foto en un acto. Va con `PhotoUploadForm`,
+ * después de guardar, colgada de la medición.
  */
 export function MeasurementForm({
   lotId,
@@ -67,6 +103,7 @@ export function MeasurementForm({
   materialInicial = null,
   instrumentInicial = "",
   modoInicial = "",
+  variableInicial = "temperature",
   enSecado = false,
 }: {
   // La genera el servidor al pintar la página, no el cliente: un `useState` con
@@ -77,6 +114,8 @@ export function MeasurementForm({
   materialInicial?: MaterialState | null;
   instrumentInicial?: string;
   modoInicial?: string;
+  /** Qué se va a medir. Desde la cola de secado llega `moisture`: es a lo que se va. */
+  variableInicial?: (typeof VARIABLES)[number];
   enSecado?: boolean;
   claveDeEnvio: string;
   lotId: string;
@@ -97,15 +136,32 @@ export function MeasurementForm({
   const [modoId, setModoId] = useState(modoInicial);
   const [material, setMaterial] = useState<MaterialState | "">(materialInicial ?? "");
   const [inspeccion, setInspeccion] = useState("");
+  const [zona, setZona] = useState("");
   const [otrosMateriales, setOtrosMateriales] = useState(false);
   const equipo = instrumentos.find((e) => e.id === instrumentId);
   const aviso = equipo ? avisoDeModo(material || null, equipo.modos, modoId) : null;
   const secado = enSecado || !!dryingRunId;
   const materiales = MATERIALES.filter((m) => !secado || otrosMateriales || m !== "GREEN" || material === m);
 
-  const [variable, setVariable] = useState<string>("temperature");
+  const [variable, setVariable] = useState<string>(variableInicial);
   const unidades = unidadesAceptadas(variable);
   const unicaUnidad = unidades.length === 1 ? unidades[0] : null;
+
+  // Lo que llegó decidido se muestra como texto; «cambiar» lo convierte en el desplegable de
+  // siempre. Un solo interruptor para los cuatro: quien abre uno está revisando el contexto
+  // entero, y cuatro botones de «cambiar» son cuatro decisiones donde hacía falta una.
+  const [editarContexto, setEditarContexto] = useState(false);
+  const contextoPrellenado = !editarContexto && (variableInicial !== "temperature" || !!instrumentInicial || !!materialInicial);
+
+  /**
+   * La inspección de la pasada, si el servidor ya creó una.
+   *
+   * La primera lectura con zona la crea; la acción la devuelve y desde aquí viaja con las
+   * siguientes, para que tres zonas de una pasada queden bajo UNA inspección. No hay ninguna
+   * ventana de tiempo: «la misma pasada» es esta visita a la pantalla, que es lo que el operario
+   * vivió.
+   */
+  const inspeccionDeLaPasada = inspeccion || state.inspeccionId || "";
 
   // El «ahora» se escribe en el DOM al montar, por la misma razón que el
   // desfase horario: en el servidor este componente también se renderiza, y
@@ -118,6 +174,13 @@ export function MeasurementForm({
     }
   }, []);
 
+  // Lo que el plegado dice de sí mismo. Nombrar lo que falta es lo que lo distingue de un
+  // acordeón mudo, que se ignora para siempre.
+  const faltantes = [
+    ...(instrumentId ? [] : [t("resumenFaltaInstrumento")]),
+    ...(secado && !zona ? [t("resumenFaltaZona")] : []),
+  ];
+
   return (
     <form action={(datos) => formAction(sinCamposVacios(datos))} className="nn-form" style={{ maxWidth: 480, marginTop: "1rem" }}>
       <input type="hidden" name="claveDeEnvio" value={claveDeEnvio} />
@@ -128,65 +191,38 @@ export function MeasurementForm({
       {fermentationRunId ? <input type="hidden" name="fermentationRunId" value={fermentationRunId} /> : null}
       {dryingRunId ? <input type="hidden" name="dryingRunId" value={dryingRunId} /> : null}
       {storageAssignmentId ? <input type="hidden" name="storageAssignmentId" value={storageAssignmentId} /> : null}
+      {inspeccionDeLaPasada ? <input type="hidden" name="samplingEventId" value={inspeccionDeLaPasada} /> : null}
 
-      <div className="nn-field">
-        <label htmlFor="materialState">{t("materialStateLabel")}</label>
-        <select id="materialState" name="materialState" value={material} onChange={(e) => setMaterial(e.target.value as MaterialState | "")}>
-          <option value="">{t("notDeclaredOption")}</option>
-          {materiales.map((m) => <option key={m} value={m}>{t(`material_${m}`)}</option>)}
-        </select>
-        {secado ? <label><input type="checkbox" checked={otrosMateriales} onChange={(e) => setOtrosMateriales(e.target.checked)} />{t("otherStageMaterials")}</label> : null}
-      </div>
-      {materialNoEsDeSecado(material || null, secado) ? <p role="status">{t("aviso_material_no_es_de_esta_etapa")}</p> : null}
-      <div className="nn-field">
-        <label htmlFor="instrumentId">{t("instrumentLabel")}</label>
-        <select id="instrumentId" name="instrumentId" value={instrumentId} onChange={(e) => { setInstrumentId(e.target.value); setModoId(""); }}>
-          <option value="">{t("notDeclaredOption")}</option>
-          {instrumentos.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-        </select>
-      </div>
-      {equipo ? <div className="nn-field">
-        <label htmlFor="instrumentModeId">{t("instrumentModeLabel")}</label>
-        <select id="instrumentModeId" name="instrumentModeId" value={modoId} onChange={(e) => setModoId(e.target.value)}>
-          <option value="">{t("notDeclaredOption")}</option>
-          {equipo.modos.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-      </div> : null}
-      {aviso && material ? <p role="status">{t(aviso.clave, { modo: aviso.modo, material: t(`material_${material}`) })}</p> : null}
-      {inspecciones.length > 0 ? <div className="nn-field">
-        <label htmlFor="samplingEventId">{t("samplingEventLabel")}</label>
-        <select id="samplingEventId" name="samplingEventId" value={inspeccion} onChange={(e) => setInspeccion(e.target.value)}>
-          <option value="">{t("notDeclaredOption")}</option>
-          {inspecciones.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
-        </select>
-      </div> : null}
-      {inspeccion ? <>
+      {contextoPrellenado ? (
+        <p className="nn-muted" style={{ margin: "0 0 0.5rem" }}>
+          {[
+            t(`variable_${variable}` as "variable_temperature"),
+            equipo?.name,
+            equipo?.modos.find((m) => m.id === modoId)?.label,
+            material ? t(`material_${material}`) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}{" "}
+          <button type="button" className="nn-link" onClick={() => setEditarContexto(true)}>
+            {t("cambiarContexto")}
+          </button>
+          <input type="hidden" name="variable" value={variable} />
+          {material ? <input type="hidden" name="materialState" value={material} /> : null}
+          {instrumentId ? <input type="hidden" name="instrumentId" value={instrumentId} /> : null}
+          {modoId ? <input type="hidden" name="instrumentModeId" value={modoId} /> : null}
+        </p>
+      ) : (
         <div className="nn-field">
-          <label htmlFor="samplingRole">{t("samplingRoleLabel")}</label>
-          <select id="samplingRole" name="samplingRole" defaultValue="">
-            <option value="">{t("notDeclaredOption")}</option>
-            {(["ZONE", "REPLICATE"] as const).map((r) => <option key={r} value={r}>{t(`samplingRole_${r}`)}</option>)}
+          <label htmlFor="variable">{t("variableLabel")}</label>
+          <select id="variable" name="variable" value={variable} onChange={(e) => setVariable(e.target.value)}>
+            {VARIABLES.map((v) => (
+              <option key={v} value={v}>
+                {t(`variable_${v}` as "variable_temperature")}
+              </option>
+            ))}
           </select>
         </div>
-        <div className="nn-field">
-          <label htmlFor="samplingZone">{t("samplingZoneLabel")}</label>
-          <select id="samplingZone" name="samplingZone" defaultValue="">
-            <option value="">{t("notDeclaredOption")}</option>
-            {(["NORTH", "SOUTH", "EAST", "WEST", "CENTER", "EDGE"] as const).map((z) => <option key={z} value={z}>{t(`samplingZone_${z}`)}</option>)}
-          </select>
-        </div>
-      </> : null}
-
-      <div className="nn-field">
-        <label htmlFor="variable">{t("variableLabel")}</label>
-        <select id="variable" name="variable" value={variable} onChange={(e) => setVariable(e.target.value)}>
-          {VARIABLES.map((v) => (
-            <option key={v} value={v}>
-              {t(`variable_${v}` as "variable_temperature")}
-            </option>
-          ))}
-        </select>
-      </div>
+      )}
 
       <div className="nn-field">
         <label htmlFor="value">
@@ -215,17 +251,75 @@ export function MeasurementForm({
         <input ref={cuandoRef} id="occurredAt" name="occurredAt" type="datetime-local" defaultValue="" required />
       </div>
 
-      <div className="nn-field">
-        <label htmlFor="operatorPersonId">{t("observerLabel")}</label>
-        <select id="operatorPersonId" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
-          <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
-        </select>
-      </div>
+      {/* El detalle. Cerrado por defecto y guardar sin abrirlo es válido: una lectura ES el número. */}
+      <details className="nn-details">
+        <summary>
+          {t("detalleDeLaMedicion")}
+          {faltantes.length > 0 ? <span className="nn-muted"> — {faltantes.join(", ")}</span> : null}
+        </summary>
 
-      <div className="nn-field">
-        <label htmlFor="notes">{t("notesLabel")}</label>
-        <textarea id="notes" name="notes" rows={2} />
-      </div>
+        {contextoPrellenado ? null : (
+          <>
+            <div className="nn-field">
+              <label htmlFor="materialState">{t("materialStateLabel")}</label>
+              <select id="materialState" name="materialState" value={material} onChange={(e) => setMaterial(e.target.value as MaterialState | "")}>
+                <option value="">{t("notDeclaredOption")}</option>
+                {materiales.map((m) => <option key={m} value={m}>{t(`material_${m}`)}</option>)}
+              </select>
+              {secado ? <label><input type="checkbox" checked={otrosMateriales} onChange={(e) => setOtrosMateriales(e.target.checked)} />{t("otherStageMaterials")}</label> : null}
+            </div>
+            {materialNoEsDeSecado(material || null, secado) ? <p role="status">{t("aviso_material_no_es_de_esta_etapa")}</p> : null}
+            <div className="nn-field">
+              <label htmlFor="instrumentId">{t("instrumentLabel")}</label>
+              <select id="instrumentId" name="instrumentId" value={instrumentId} onChange={(e) => { setInstrumentId(e.target.value); setModoId(""); }}>
+                <option value="">{t("notDeclaredOption")}</option>
+                {instrumentos.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </div>
+            {equipo ? <div className="nn-field">
+              <label htmlFor="instrumentModeId">{t("instrumentModeLabel")}</label>
+              <select id="instrumentModeId" name="instrumentModeId" value={modoId} onChange={(e) => setModoId(e.target.value)}>
+                <option value="">{t("notDeclaredOption")}</option>
+                {equipo.modos.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div> : null}
+            {aviso && material ? <p role="status">{t(aviso.clave, { modo: aviso.modo, material: t(`material_${material}`) })}</p> : null}
+          </>
+        )}
+
+        {/* La zona ya no espera a que se elija una inspección: si no hay ninguna, el servidor la
+            crea. El desplegable de inspecciones sólo aparece cuando de verdad hay entre cuáles
+            elegir, y sirve para colgar la lectura de un muestreo formal que ya empezó. */}
+        {inspecciones.length > 0 ? (
+          <div className="nn-field">
+            <label htmlFor="samplingEventId">{t("samplingEventLabel")}</label>
+            <select id="samplingEventId" value={inspeccion} onChange={(e) => setInspeccion(e.target.value)}>
+              <option value="">{t("notDeclaredOption")}</option>
+              {inspecciones.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
+            </select>
+          </div>
+        ) : null}
+
+        <div className="nn-field">
+          <label htmlFor="samplingZone">{t("samplingZoneLabel")}</label>
+          <select id="samplingZone" name="samplingZone" value={zona} onChange={(e) => setZona(e.target.value)}>
+            <option value="">{t("notDeclaredOption")}</option>
+            {ZONAS.map((z) => <option key={z} value={z}>{t(`samplingZone_${z}`)}</option>)}
+          </select>
+        </div>
+
+        <div className="nn-field">
+          <label htmlFor="operatorPersonId">{t("observerLabel")}</label>
+          <select id="operatorPersonId" name="operatorPersonId" defaultValue={selfPersonId ?? ""}>
+            <OpcionesDePersona personas={observers} selfPersonId={selfPersonId} />
+          </select>
+        </div>
+
+        <div className="nn-field">
+          <label htmlFor="notes">{t("notesLabel")}</label>
+          <textarea id="notes" name="notes" rows={2} />
+        </div>
+      </details>
 
       {state.error ? <p className="nn-error" role="alert">{state.error}</p> : null}
       <button type="submit" className="nn-button" disabled={pending}>

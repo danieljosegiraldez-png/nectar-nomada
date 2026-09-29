@@ -297,7 +297,17 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   // ahora la clave del envío entra en la misma.
   const measurement = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "Measurement",
-    recuperar: (id) => prisma.measurement.findUniqueOrThrow({ where: { id } }),
+    // Lleva la inspección de vuelta al llamador, para que la SIGUIENTE lectura de la misma pasada
+    // pueda nombrarla y no se creen dos. La rama de recuperación la trae igual: un reenvío con la
+    // misma clave tiene que devolver exactamente la misma forma, o el tipo genérico no cierra.
+    recuperar: async (id) => {
+      const m = await prisma.measurement.findUniqueOrThrow({
+        where: { id },
+        include: { sample: { select: { samplingEventId: true } } },
+      });
+      const { sample, ...resto } = m;
+      return { ...resto, inspeccionId: sample?.samplingEventId ?? null };
+    },
     crear: async (tx) => {
   const lot = input.lotId ? await tx.lot.findUniqueOrThrow({ where: { id: input.lotId } }) : null;
   const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
@@ -414,7 +424,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     },
     tx,
   );
-  return creada;
+  return { ...creada, inspeccionId: samplingEventId };
     },
   });
 
