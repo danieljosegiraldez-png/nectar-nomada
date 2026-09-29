@@ -114,7 +114,7 @@ Una regla dice, para una finca:
 - **en cuántos días hay que volver a revisar** en situación normal y cuando se
   disparó — que es cómo se cumple lo que pidió el dueño: la frecuencia sube
   cuando se ve broca;
-- **qué acción sugerir**, como texto («aplicar repelente Bralic», «usar Regin»).
+- **qué acción sugerir**, como texto («aplicar repelente Bralic», «usar Regent»).
 
 La acción es texto libre a propósito: los productos son de la finca y no existe
 todavía un catálogo de productos fitosanitarios. Ese catálogo es **la pieza 3**,
