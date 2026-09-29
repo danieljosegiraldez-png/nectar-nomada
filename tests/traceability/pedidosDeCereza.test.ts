@@ -75,6 +75,18 @@ describe("el proveedor de fuera", () => {
     proveedor = p.id;
     expect(p.organizationType).toBe("producer");
     expect(p.description).toBe("Boquete");
+    // Hallazgo 1 de Codex: el beneficio que autorizó el alta tiene que quedar en la auditoría, o
+    // una cuenta con acceso a varios no deja ver cuál la justificó. Se comprueba aquí y no con una
+    // sonda posterior porque el `afterAll` de este archivo borra estos eventos.
+    const ev = await prisma.auditEvent.findFirstOrThrow({
+      where: { operation: "organization.create_cherry_supplier", entityId: p.id },
+      select: { after: true },
+    });
+    const despues = ev.after as Record<string, unknown>;
+    expect(despues.autorizadoEnBeneficio, "el AuditEvent no dice en qué beneficio se autorizó").toBe(beneficio);
+    // Control: el evento sigue trayendo lo de siempre, así que la aserción de arriba mide un campo
+    // añadido y no un objeto que se haya quedado a medias.
+    expect(despues.name).toBe(`Don Pedro ${RUN}`);
     await expect(crearProveedorDeCereza(operador, beneficio, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
   }, 20000);
 

@@ -44,7 +44,7 @@ export async function crearProveedorDeCereza(
   const nombre = input.nombre.trim().replace(/\s+/g, " ");
   if (!nombre || nombre.length > 120) throw new ProveedorError("nombre_invalido");
   try {
-    return await crear(userAccountId, nombre, input.lugar);
+    return await crear(userAccountId, b.id, nombre, input.lugar);
   } catch (error) {
     // Dos altas a la vez del mismo nombre: la segunda choca con `organization_productor_nombre_unico`
     // (revisión de Codex, hallazgo 4).
@@ -53,7 +53,7 @@ export async function crearProveedorDeCereza(
   }
 }
 
-async function crear(userAccountId: string, nombre: string, lugar: string | null | undefined) {
+async function crear(userAccountId: string, beneficioId: string, nombre: string, lugar: string | null | undefined) {
   return prisma.$transaction(async (tx) => {
     const repetido = await tx.organization.findFirst({
       where: { organizationType: "producer", name: { equals: nombre, mode: "insensitive" } },
@@ -71,7 +71,17 @@ async function crear(userAccountId: string, nombre: string, lugar: string | null
       },
     });
     await recordAuditEvent(
-      { actorUserAccountId: userAccountId, operation: "organization.create_cherry_supplier", entityType: "organization", entityId: proveedor.id, after: proveedor, sourceInterface: "traceability.service" },
+      {
+        actorUserAccountId: userAccountId,
+        operation: "organization.create_cherry_supplier",
+        entityType: "organization",
+        entityId: proveedor.id,
+        // `autorizadoEnBeneficio` es el beneficio que autorizó el alta. Sin él, una cuenta con
+        // acceso a varios no deja ver cuál la justificó (revisión de Codex, hallazgo 1). No lo
+        // convierte en dueño: el proveedor es global y no cuelga de ningún beneficio.
+        after: { ...proveedor, autorizadoEnBeneficio: beneficioId },
+        sourceInterface: "traceability.service",
+      },
       tx,
     );
     return proveedor;
