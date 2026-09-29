@@ -41,28 +41,25 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-27/28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
+### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
 
 **#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
-
 **#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
 por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
 Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
-`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 entradas a 8 y
-lo fija `tests/beneficio/destinos-del-indice.test.ts`.
+`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
+`tests/beneficio/destinos-del-indice.test.ts`.
 
 **#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
 `redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
 error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
 `seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
-encadenadas, y `nextActionFor` sugiere `selection` a un lote de cereza sin transformar y
-`fermentation` después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
+encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
+después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
 
 **Sin hacer, dos.** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha
-sólo lee `error`: esa confirmación no se ve nunca. Y cuatro rótulos del menú del lote llevan
-mayúscula suelta —«Iniciar Fermentación», «Iniciar Secado», «Mover Almacenamiento», «Crear
-Muestra»— frente a ocho en minúscula, con el de bodega traducido palabra por palabra. **Daniel no lo
-ha decidido.**
+sólo lee `error`: esa confirmación no se ve nunca. Y cuatro de los doce rótulos del menú del lote
+llevan mayúscula a mitad de frase, con «Mover Almacenamiento» traducido literal. **Sin decidir.**
 
 ### 2026-09-27 · Proveedores de equipos, y la colación que no era la que creíamos (PR #503, #506, #507, #510)
 
@@ -130,6 +127,11 @@ demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, t
 test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
 
 ## 3. Bloqueado, y en qué
+
+#### El ambiente del secado, sin ver en navegador
+
+Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
+por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
 
 #### Recolectores: darles su perfil (de Daniel)
 
