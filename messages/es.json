@@ -1673,6 +1673,7 @@
     "resumenHeading": "Lo registrado en esta visita",
     "resumenCifras": "{inspecciones} inspecciones · {eventos} eventos de colonia · {cosechas} cosechas",
     "visitPurposeLegend": "A qué vas",
+    "inspeccionRegistrada": "Inspección de secado registrada.",
     "visitPurpose_inspeccion": "Inspección",
     "visitPurpose_alimentacion": "Alimentación",
     "visitPurpose_tratamiento": "Tratamiento",
