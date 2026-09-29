@@ -152,7 +152,11 @@ pg_run "$PG_BIN/pg_dump" "$DUMP_URL" \
   done
   echo ""
   echo "restore into any PostgreSQL 18+ instance:"
-  echo "  createdb restored"
+  # Con las banderas de colación: sin ellas la copia hereda el locale del entorno y deja de plegar
+  # las mayúsculas acentuadas, que producción sí pliega (medido el 2026-09-27). Los índices únicos
+  # sobre lower(btrim(name)) admitirían entonces filas que el original rechaza.
+  echo "  createdb restored --template=template0 --locale-provider=builtin \\"
+  echo "    --builtin-locale=C.UTF-8 --encoding=UTF8"
   echo "  pg_restore --dbname=restored --no-owner --no-privileges neondb.dump"
   echo ""
   echo "verify this backup actually restores:"

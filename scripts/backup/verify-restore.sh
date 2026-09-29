@@ -67,7 +67,24 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Creating throwaway cluster in $WORK_DIR ..."
-pg_run "$PG_BIN/initdb" -D "$PGDATA" -U postgres --encoding=UTF8 --no-sync >/dev/null 2>&1
+# `--locale-provider=builtin --builtin-locale=C.UTF-8` iguala la colación a la de PRODUCCIÓN,
+# medida el 2026-09-27: `datcollate` es `C.UTF-8` y pliega las mayúsculas acentuadas. Sin esto
+# `initdb` hereda el locale del entorno —en un Mac, `C` a secas— y la copia «verificada» se
+# comportaría distinto del original ante cualquier comparación que no distinga caja: los índices
+# `lower(btrim(name))`, los `ILIKE`, cualquier `lower(a) = lower(b)`. `builtin` y no `libc` porque
+# macOS no tiene el locale `C.UTF-8`; lo trae Postgres desde la 17. Mismo arreglo que el PR #506
+# hizo en scripts/test-db.sh.
+#
+# **Esta bandera y la del `create database` de abajo son REDUNDANTES entre sí, y está medido.**
+# Flip-test del 2026-09-28, tres corridas sobre el respaldo real: quitando sólo ésta, la copia
+# sigue plegando —la del `create database` la fija—; quitando sólo la de abajo, también sigue
+# —con `initdb` builtin, `template1` ya pliega y la base lo hereda—; y sólo quitando LAS DOS
+# falla. O sea que quien venga y borre una «porque sobra» no romperá nada, y por eso hay que
+# decir aquí que la que quede es la que guarda. No se quita ninguna: la del `initdb` protege
+# cualquier otra base que se cree en este clúster, la del `create database` protege ésta aunque
+# el clúster cambie.
+pg_run "$PG_BIN/initdb" -D "$PGDATA" -U postgres --encoding=UTF8 --no-sync \
+  --locale-provider=builtin --builtin-locale=C.UTF-8 >/dev/null 2>&1
 
 # Unix socket only: no TCP listener, so this cannot collide with any Postgres
 # already running on this machine.
@@ -75,7 +92,8 @@ pg_run "$PG_BIN/pg_ctl" -D "$PGDATA" -l "$WORK_DIR/postgres.log" \
   -o "-k $SOCK_DIR -h ''" -w start >/dev/null 2>&1
 
 LOCAL="postgresql://postgres@/postgres?host=$SOCK_DIR"
-pg_run "$PG_BIN/psql" "$LOCAL" -q -c 'create database restored' >/dev/null
+pg_run "$PG_BIN/psql" "$LOCAL" -q \
+  -c "create database restored template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8'" >/dev/null
 RESTORED="postgresql://postgres@/restored?host=$SOCK_DIR"
 
 # --- restore ---------------------------------------------------------------
@@ -102,6 +120,26 @@ if [ "$RESTORE_ERRORS" -gt 0 ]; then
 else
   echo "  restored with no errors"
 fi
+
+# --- ¿se comporta como el original? ----------------------------------------
+# El censo de filas dice que están los datos; esto dice que las REGLAS son las mismas. Una copia
+# creada con otra colación restaura las 199 tablas y las cuenta iguales, y aun así «DOÑA» deja de
+# chocar con «Doña»: los índices únicos sobre `lower(btrim(name))` admitirían filas que el original
+# rechaza. Eso no es una copia restaurable, es una parecida.
+PLIEGA="$(pg_run "$PG_BIN/psql" "$RESTORED" -At -c "select lower('FERRETERÍA') = 'ferretería'")"
+if [ "$PLIEGA" != "t" ]; then
+  echo ""
+  echo "FAIL — la copia restaurada NO pliega las mayúsculas acentuadas." >&2
+  echo "  lower('FERRETERÍA') no da 'ferretería', y en producción sí (medido el 2026-09-27)." >&2
+  echo "  El clúster de verificación se creó con otra colación; mira el initdb de este guion." >&2
+  {
+    echo ""
+    echo "verified_at_utc:  $(date -u +%Y-%m-%dT%H%M%SZ)"
+    echo "verified_result:  FAIL — la copia no pliega mayúsculas acentuadas"
+  } >> "$SET_DIR/MANIFEST.txt"
+  exit 1
+fi
+echo "  la copia pliega las mayúsculas acentuadas, como producción"
 
 # --- the actual verification ----------------------------------------------
 echo "Recomputing row census on the restored copy..."
