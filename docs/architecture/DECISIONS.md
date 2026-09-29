@@ -12347,3 +12347,72 @@ es justo lo que se quiere y no costó nada.
 - **No se migra nada** y no cambia el esquema: `Location.organizationId` nunca fue único.
 - Lo que **no** cambia: que crear una organización siga siendo sólo del administrador de plataforma
   (Daniel, 2026-09-18), y que `listarFincas` agrupe por el sitio de más arriba.
+
+## ADR-190 — La clasificación por malla son dos operaciones, y el gramaje vive en la muestra
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado en su parte decidida (Daniel, en sesión); el
+vocabulario queda abierto y se anota abajo
+
+**Contexto.** «Muestras en gramos» era una de las decisiones que Daniel tomó el 2026-09-25 sobre el
+flujo de verde, y era **la única de aquel apunte sin casa fuera de `SESSION_STATE.md`**: el tueste
+exacto vive en `tests/sensory/informeExterno.test.ts:196` —un `describe` que lleva su fecha y su
+atribución en el nombre— y las mallas en ADR-186 y en el diseño del 25. Al archivar el apunte
+(2026-09-29) hubo que rescatar ese fragmento, y buscarle sitio destapó lo de abajo.
+
+**Lo que se midió, antes de proponer nada.**
+
+- `RecordGreenGradingInput` (`lib/traceability/greenGrading.ts:21`) **no tiene campo de muestra ni
+  enlace a `Sample`**: su entrada es un lote y toda masa va en kg. La única mención de `Sample` en
+  ese módulo es un comentario.
+- Lo que sí hace es un **corte físico**: cada fracción se convierte en un `Lot` real con su código
+  y su masa, más `declaredLoss`, con balance de masa contra el lote de entrada.
+- `docs/beneficio/00_conventions.md` §1 ya fija la unidad: masa canónica en **kilogramo, 3
+  decimales, campo `*_kg`**, con la unidad que digitó el operador conservada en `entry_unit`. Tres
+  decimales de kg **son gramos exactos**, y hay 24 campos con ese sufijo en el esquema.
+- `docs/beneficio/03_public_api.md`, que es el contrato autoritativo, **no menciona malla, screen ni
+  muestra ni una vez** — medido con control positivo de 15 «enum» sobre ese mismo archivo. Así que
+  ningún nombre de aquí se puede inventar.
+- `Measurement` ya lleva `lotId` **y** `sampleId`, los dos opcionales, y su propio comentario declara
+  el precedente: una lectura pre-tueste y una de almacén llevan las dos `lotId` y sólo la primera
+  lleva `roastSessionId`, «no hace falta campo nuevo para expresar qué momento».
+- `lib/traceability/units.ts` declara `MeasurementVariable` alimentando un `Record` **total**, así que
+  añadir una variable obliga al compilador a exigir su unidad, mínimo y máximo. **Hoy no hay ninguna
+  de malla ni de tamaño** (0; control: «humedad» da 5 en ese archivo).
+
+**La decisión de Daniel.** Clasificar por malla son **dos operaciones en momentos distintos**, no una:
+
+1. **Una medición sobre muestra**, de unos cientos de gramos, para juzgar calidad antes de vender. El
+   lote **no** se parte.
+2. **Un corte físico** del lote entero cuando se procesa, fracción a fracción.
+
+**Lo que se deriva, y no necesita modelo nuevo.**
+
+- **El gramaje va en `Sample.massAtExtraction`** — la cosa que de verdad se pesó—, guardado como
+  `0.350` con `massUnitAtExtraction = "kg"` por §1 de `00_conventions`; gramos es unidad de entrada y
+  de pantalla. Eso además **mantiene la muestra tostable**: `crearTueste`
+  (`lib/traceability/roasting.ts:106`) exige `kg` con `sample_mass_in_kg_required`, y una muestra de
+  control de calidad es justo la que se tuesta para catar. **El `kg` de ahí no era el problema**, que
+  es lo que `SESSION_STATE.md` daba por sospechoso hasta hoy.
+- **Las dos operaciones se distinguen sin campo nuevo**, por el precedente de `Measurement`: la
+  medición sobre muestra lleva `sampleId`; el corte físico se queda **tal cual está hoy**
+  `recordGreenGrading`, con sus lotes de salida y su balance. No se toca.
+
+**Lo que falta construir, que es poco y está nombrado.**
+
+- La malla **no tiene variable** en el vocabulario de medición, y añadirla es una declaración que el
+  compilador exige completa.
+- Y una fila de `Measurement` **no tiene dónde poner el rango de malla**: `greenScreenMin/Max/System`
+  viven en `Lot`. Ésa es la única pieza que no se resuelve reutilizando.
+
+**Lo que sigue abierto y es de Daniel, porque `03_public_api.md` no lo declara.** Cómo se nombra: una
+variable por rango de malla, o una sola variable con el rango al lado —y en ese caso, dónde vive el
+rango—. ADR-186 ya decidió que el rango es `min`/`max` numéricos y el sistema un enum de tres, así
+que una variable por número de malla contradiría esa forma; no se propone nada hasta que él elija.
+
+**Consecuencias.**
+
+- **No se construyó nada** con este ADR, y no cambia el esquema. Registra la decisión y el reparto,
+  para que la siguiente sesión no vuelva a preguntarle lo mismo — que es exactamente lo que pasó con
+  `apiary:load-protocol` el 2026-09-16.
+- El pendiente de `SESSION_STATE.md` §3 se reescribe apuntando aquí: lo decidido está decidido, y lo
+  que espera es sólo el vocabulario.
