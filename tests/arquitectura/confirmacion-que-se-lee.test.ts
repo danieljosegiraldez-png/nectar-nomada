@@ -97,9 +97,12 @@ function paginaDe(ruta: string): string | null {
  */
 function leeOk(page: string): boolean {
   const src = readFileSync(page, "utf8");
-  const usa =
-    /\bok\b\s*===/.test(src) || /const\s*\{[^}]*\bok\b[^}]*\}\s*=\s*await\s+searchParams/.test(src);
-  return usa && /searchParams/.test(src);
+  // **Una comparación, no una desestructuración.** La tercera versión aceptaba también
+  // `const { ok } = await searchParams`, y el flip lo tumbó: quitando de la página la rama que
+  // pinta el aviso —pero dejando la desestructuración— el guardia seguía en verde. Sacar el valor
+  // y no enseñarlo deja la confirmación igual de invisible, que es lo que esto vigila.
+  // Comprobado sobre las 16 redirecciones reales: ninguna pantalla correcta se marca por esto.
+  return /\bok\b\s*===/.test(src) && /searchParams/.test(src);
 }
 
 describe("una confirmación que nadie lee no es una confirmación", () => {
