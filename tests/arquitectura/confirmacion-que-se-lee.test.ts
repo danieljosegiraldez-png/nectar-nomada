@@ -77,10 +77,29 @@ function paginaDe(ruta: string): string | null {
   return existsSync(page) ? page : null;
 }
 
-/** ¿La pantalla saca `ok` de sus `searchParams`? */
+/**
+ * ¿La pantalla **usa** `ok`, y no sólo lo declara?
+ *
+ * **Las dos versiones anteriores estaban mal, y lo dijeron los flips, no la lectura.**
+ *
+ * La primera pedía `ok` seguido de `:`/`,`/`}` en cualquier parte, y eso lo satisface **el tipo**
+ * —`searchParams: Promise<{ ok?: string }>`— sin que nadie lea el valor: mutando la página para que
+ * dejara de leerlo, el guardia seguía en verde.
+ *
+ * La segunda exigía la desestructuración `const { ok } = await searchParams`, y **marcó como sordas
+ * a `/equipos/[id]` y `/recipes/[id]`, que leen bien**: resuelven `searchParams` dentro de un
+ * `Promise.all` y usan `sp.ok` / `query.ok`. Un guardia que marca el código correcto enseña a
+ * ignorarlo, y aquí ya se descartaron tres versiones de un hook por eso.
+ *
+ * Lo que distingue de verdad no es **cómo** se obtiene el valor sino que se **use**: una comparación
+ * `ok === "…"` —con o sin objeto delante— o una desestructuración desde `await searchParams`. El
+ * tipo por sí solo no basta, y la forma de obtenerlo da igual.
+ */
 function leeOk(page: string): boolean {
   const src = readFileSync(page, "utf8");
-  return /\bok\??\s*[:,}]/.test(src) && /searchParams/.test(src);
+  const usa =
+    /\bok\b\s*===/.test(src) || /const\s*\{[^}]*\bok\b[^}]*\}\s*=\s*await\s+searchParams/.test(src);
+  return usa && /searchParams/.test(src);
 }
 
 describe("una confirmación que nadie lee no es una confirmación", () => {
