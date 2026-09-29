@@ -104,9 +104,6 @@ error del formulario. Fuera, las claves `loteArmado`. **La selección no necesit
 encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
 después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
 
-**Sin hacer:** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha sólo
-lee `error`, así que esa confirmación no se ve nunca. (Los rótulos se arreglaron el 29, PR #522.)
-
 ## 3. Bloqueado, y en qué
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
@@ -283,12 +280,14 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **«Muestras en gramos» contra el `kg` que el código exige (espera a Daniel)** — de sus
-  decisiones del 2026-09-25 es la única sin casa fuera del apunte archivado el 29.
-  `crearTueste` (`lib/traceability/roasting.ts:106`) **rechaza** una muestra cuya unidad no
-  sea `kg` (`sample_mass_in_kg_required`): en gramos existe y no se puede tostar. Sin tocar
-  nada, porque «en gramos» puede ser el tamaño de la muestra de clasificación y no la unidad
-  de `massAtExtraction`.
+- **El tamaño de la muestra de clasificación, en gramos, no tiene dónde ir** — Daniel
+  respondió el 2026-09-29 que «muestras en gramos» (decisión suya del 09-25) es eso: el
+  tamaño de la muestra sobre la que se clasifica. Así que el `kg` que exige `crearTueste`
+  **está bien** y no era el problema. Lo que falta es sitio: `RecordGreenGradingInput`
+  (`lib/traceability/greenGrading.ts:21`) no tiene campo de muestra ni enlace a `Sample` —su
+  entrada es un lote y toda masa va en kg—, así que hoy el dato sólo cabe en texto libre
+  (`gradeNote`, `notes`). Importa por veracidad: un % medido sobre 350 g y otro sobre el lote
+  entero se pintan igual. **Decisión de modelo suya; no se construyó nada.**
 - **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
   protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
   (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
