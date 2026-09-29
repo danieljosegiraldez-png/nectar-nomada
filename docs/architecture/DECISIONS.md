@@ -11579,7 +11579,7 @@ hay riesgo de residuo.
 
 **La decision de las cuatro clases fue de Daniel el 2026-09-18:**
 
-1. **Productos comprados** — Bralic, Regin, fungicidas, insecticidas, abonos foliares.
+1. **Productos comprados** — Bralic, Regent, fungicidas, insecticidas, abonos foliares.
 2. **Preparados de la finca** — un lote hecho en la biofábrica cuelga de `ConsumableLot`, igual que
    un frasco comprado. No hace falta tabla nueva.
 3. **Liberaciones biologicas** — parasitoides, ácaros depredadores, bacterias; se miden en unidades
