@@ -211,7 +211,12 @@ describe("el inventario del router", () => {
     // `equipment_supplier:create` en algún ámbito—, y `volverA` sólo se acepta si empieza por
     // `/equipos/nuevo`. Medido con `node scripts/inventario-de-rutas.mjs`: 115 entradas
     // (104 páginas, 11 handlers).
-    expect(salida).toContain("115 entradas");
+    // 115 → 116 el 2026-09-29: /beneficio/secado, la cola de secado. Sólo lee, y lo que trae lo
+    // acota `resolveLotVisibility` sobre los LOTES —no permisos de instalación, que le cerrarían la
+    // cola al operario de secado, para quien se escribe—; sin ámbito responde «no ves ninguno
+    // todavía», que no es «no hay ninguno». Medido con `node scripts/inventario-de-rutas.mjs`:
+    // 116 entradas (105 páginas, 11 handlers).
+    expect(salida).toContain("116 entradas");
     expect(codigo, salida).toBe(0);
   });
 

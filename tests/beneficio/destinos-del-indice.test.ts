@@ -21,6 +21,17 @@ describe("los enlaces del índice del beneficio", () => {
     expect(vistos).toContain("/reports/proceso");
   });
 
+  /**
+   * La cola de secado es la pantalla de inicio del operario (Daniel, 2026-09-27), así que se ve con
+   * el mismo permiso que abre la sección. Si alguien la mueve detrás de un permiso de instalación,
+   * cae esto y no otra cosa.
+   */
+  it("quien sólo lee lotes SÍ ve la cola de secado, y antes que la lista de lotes", () => {
+    const vistos = hrefs(["lot:view"]);
+    expect(vistos).toContain("/beneficio/secado");
+    expect(vistos.indexOf("/beneficio/secado")).toBeLessThan(vistos.indexOf("/lots"));
+  });
+
   it("quien entra a la sección ve Recepción", () => {
     expect(hrefs(["lot:view"])).toContain("/beneficio/recepcion");
   });

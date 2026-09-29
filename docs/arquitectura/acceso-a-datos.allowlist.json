@@ -657,6 +657,10 @@
     {
       "archivo": "lib/sensory/ruedas.ts",
       "razon": "Módulo de lectura de ruedas sensoriales versionadas. Sin cuenta identificada, cada consulta exige EN EL where `isPublic: true` y una versión `published`; el detalle vuelve a comprobar el estado antes de devolverlo. Una cuenta sólo amplía esa lectura a borradores si `permissionKeysAnywhere` confirma alguno de los permisos sensoriales nombrados. No escribe ni publica contenido."
+    },
+    {
+      "archivo": "lib/beneficio/colaDeSecado.ts",
+      "razon": "Módulo de dominio: la cola de secado (diseño 2026-09-27 §B.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` antes de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de una cola vacía. No exige permisos de instalación a propósito: hacerlo le cerraría la cola a un operario que sí puede ver y medir esos lotes, que es para quien se escribe."
     }
   ],
   "reciben_transaccion": [
