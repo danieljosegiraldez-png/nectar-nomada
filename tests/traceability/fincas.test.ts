@@ -211,20 +211,46 @@ describe("crear una finca", () => {
     expect(await prisma.organization.count({ where: { name: `TEST No (${RUN})` } })).toBe(0);
   }, 20000);
 
-  it("a una organización de finca sin terreno se le crea sólo el terreno, y una sola vez", async () => {
+  /**
+   * **ADR-189, decisión de Daniel del 2026-09-29.** Antes esto terminaba en
+   * `rejects.toThrow(/ya_tiene_terreno/)`: una organización tenía UNA finca. Kiva Estate tiene dos,
+   * así que la segunda ahora entra — con nombre propio, porque heredar el de la organización las
+   * llamaría a las dos igual.
+   */
+  it("a una organización de finca se le crea su terreno, y luego OTRO con nombre propio", async () => {
     const sola = await prisma.organization.create({
-      data: { organizationType: "estate", name: `TEST Sin Terreno (${RUN})`, status: "approved", classification: "internal" },
+      data: { organizationType: "estate", name: `TEST Dos Fincas (${RUN})`, status: "approved", classification: "internal" },
     });
     organizaciones.push(sola.id);
     expect((await organizacionesSinTerreno(admin)).map((o) => o.id)).toContain(sola.id);
     expect(await organizacionesSinTerreno(managerA)).toEqual([]);
 
+    // La primera sigue heredando el nombre de la organización: el comportamiento de siempre.
     const { organization, site } = await crearFinca(admin, { organizationId: sola.id });
     ubicaciones.push(site.id);
     expect(organization.id).toBe(sola.id);
     expect(site.name).toBe(sola.name);
     expect((await organizacionesSinTerreno(admin)).map((o) => o.id)).not.toContain(sola.id);
-    await expect(crearFinca(admin, { organizationId: sola.id })).rejects.toThrow(/ya_tiene_terreno/);
+
+    // La SEGUNDA, que antes se rechazaba.
+    const segunda = await crearFinca(admin, { organizationId: sola.id, nombre: `TEST Dos Fincas II (${RUN})` });
+    ubicaciones.push(segunda.site.id);
+    expect(segunda.organization.id).toBe(sola.id);
+    expect(segunda.site.name).toBe(`TEST Dos Fincas II (${RUN})`);
+
+    // Y las dos salen como fincas distintas, que es el punto: `listarFincas` agrupa por el sitio de
+    // más arriba y éstas son hermanas, no una dentro de otra.
+    const fincas = (await listarFincas(admin)).map((f) => f.siteId);
+    expect(fincas).toContain(site.id);
+    expect(fincas).toContain(segunda.site.id);
+
+    // El guardia que sustituye al de `ya_tiene_terreno`: el nombre no se puede repetir entre las
+    // fincas de una misma organización, sin distinguir mayúsculas ni espacios de los extremos.
+    await expect(
+      crearFinca(admin, { organizationId: sola.id, nombre: `  test dos fincas ii (${RUN})  ` }),
+    ).rejects.toThrow(/nombre_repetido/);
+    // Control positivo del rechazo anterior: no quedó una tercera a medio crear.
+    expect(await prisma.location.count({ where: { organizationId: sola.id, locationType: "site" } })).toBe(2);
   }, 20000);
 
   it("un nombre inválido se rechaza antes de escribir nada", async () => {

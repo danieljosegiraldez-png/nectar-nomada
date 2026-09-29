@@ -29,7 +29,7 @@ export async function elegirFincaAction(formData: FormData): Promise<void> {
 export type FincasActionState = { error?: string; ok?: boolean };
 
 const CODIGOS_CON_MENSAJE = [
-  "nombre_invalido", "nombre_repetido", "name_required", "ya_tiene_terreno", "organizacion_no_es_finca",
+  "nombre_invalido", "nombre_repetido", "name_required", "organizacion_no_es_finca",
   "padre_no_es_una_finca", "area_invalida", "tipo_invalido", "motivo_invalido", "otro_sin_nota", "sin_permiso",
   "gps_incompleto", "latitud_fuera_de_rango", "longitud_fuera_de_rango",
   "tipo_no_soportado", "archivo_demasiado_grande", "tamano_invalido", "no_es_una_finca",

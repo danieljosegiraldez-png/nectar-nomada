@@ -13,6 +13,7 @@
  * `getManageableContext` ya autorizó, y `resolverFinca` sólo acepta una finca de esa lista: una
  * cookie con el sitio de otra finca se ignora y se vuelve a preguntar.
  */
+import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
@@ -211,13 +212,35 @@ function exigeCoordenadas(latitude: number | null, longitude: number | null): { 
 
 export type CrearFincaInput =
   | { readonly nombre: string; readonly tipo: "farm" | "estate"; readonly descripcion?: string | null }
-  | { readonly organizationId: string };
+  | { readonly organizationId: string; readonly nombre?: string };
+
+/**
+ * ¿Está libre este nombre entre las fincas de una organización? Mismo criterio que
+ * `nombreLibreBajo` —sin distinguir mayúsculas ni espacios de los extremos—, pero por
+ * **organización** y no por padre: dos fincas hermanas de Kiva Estate no comparten padre, y llamar
+ * a aquella con un padre nulo habría comparado contra todas las raíces del árbol. Se llama DENTRO
+ * de la transacción que va a crear la fila.
+ */
+async function nombreLibreEnLaOrganizacion(db: Prisma.TransactionClient, organizationId: string, nombre: string) {
+  const hermanas = await db.location.findMany({ where: { organizationId, locationType: "site" }, select: { name: true } });
+  const clave = nombre.trim().toLowerCase();
+  return !hermanas.some((h) => h.name.trim().toLowerCase() === clave);
+}
 
 /**
  * Dar de alta una finca: la organización y su terreno (`site`), en una transacción con su
- * AuditEvent. Con `organizationId`, sólo el terreno de una organización de finca que no lo tiene
- * — el caso de Kiva Estate, que el seed creó sin sitio. **Sólo el administrador de plataforma**
- * (Daniel, 2026-09-18): crear una organización no es trabajo de una finca.
+ * AuditEvent. **Sólo el administrador de plataforma** (Daniel, 2026-09-18): crear una organización
+ * no es trabajo de una finca.
+ *
+ * **Con `organizationId`, añade una finca a una organización que ya existe** — la primera, si no
+ * tenía ninguna, o una más. **ADR-189**, decisión de Daniel del 2026-09-29: Kiva Estate tiene dos
+ * fincas. Antes esto rechazaba la segunda con `ya_tiene_terreno`; esa regla no era una invariante
+ * del dominio sino la intención de una rama escrita para un solo caso —completar la organización
+ * que el seed creó sin sitio—, y se midió que sólo `crearFinca` suponía una finca por organización.
+ *
+ * El `nombre` es opcional ahí y sin él hereda el de la organización, que es lo que hacía siempre:
+ * la primera finca de una organización sigue comportándose igual. Con dos, heredarlo las llamaría
+ * a las dos «Kiva Estate», así que la pantalla lo pide.
  */
 export async function crearFinca(userAccountId: string, input: CrearFincaInput) {
   if (!(await puedeCrearFincas(userAccountId))) throw new FincaError("sin_permiso");
@@ -226,12 +249,17 @@ export async function crearFinca(userAccountId: string, input: CrearFincaInput) 
   if ("organizationId" in input) {
     const org = await prisma.organization.findUnique({ where: { id: input.organizationId } });
     if (!org || !esTipoDeFinca(org.organizationType)) throw new FincaError("organizacion_no_es_finca");
-    if (await prisma.location.count({ where: { organizationId: org.id, locationType: "site" } })) throw new FincaError("ya_tiene_terreno");
     existente = { id: org.id, name: org.name };
   }
-  const nombre = exigeNombre(existente ? existente.name : (input as { nombre: string }).nombre);
+  const propuesto = "organizationId" in input ? (input.nombre ?? existente!.name) : input.nombre;
+  const nombre = exigeNombre(propuesto);
 
   return prisma.$transaction(async (tx) => {
+    // Sólo sobre una organización que ya existía: la recién creada no tiene fincas con las que
+    // chocar, y preguntarlo sería una consulta que siempre contesta que sí.
+    if (existente && !(await nombreLibreEnLaOrganizacion(tx, existente.id, nombre))) {
+      throw new FincaError("nombre_repetido");
+    }
     const organization = existente
       ? await tx.organization.findUniqueOrThrow({ where: { id: existente.id } })
       : await tx.organization.create({
@@ -260,6 +288,24 @@ export async function crearFinca(userAccountId: string, input: CrearFincaInput) 
     );
     return { organization, site };
   });
+}
+
+/**
+ * Todas las organizaciones de finca, con cuántas fincas tiene ya cada una.
+ *
+ * **ADR-189.** `organizacionesSinTerreno` no sirve para elegir a cuál añadirle una finca: por
+ * definición deja fuera a las que ya tienen una, que desde hoy son justo las que pueden recibir la
+ * segunda. Se añade al lado en vez de ensanchar aquella, porque aquella sigue teniendo su propio
+ * trabajo — decir en `/fincas` a quién le falta la primera.
+ */
+export async function organizacionesDeFinca(userAccountId: string) {
+  if (!(await puedeCrearFincas(userAccountId))) return [];
+  const orgs = await prisma.organization.findMany({
+    where: { organizationType: { in: [...TIPOS_DE_FINCA] } },
+    select: { id: true, name: true, _count: { select: { locations: { where: { locationType: "site" } } } } },
+    orderBy: { name: "asc" },
+  });
+  return orgs.map((o) => ({ id: o.id, name: o.name, fincas: o._count.locations }));
 }
 
 /** Las organizaciones de finca sin terreno. Sólo para quien puede crear fincas; para los demás, vacío. */

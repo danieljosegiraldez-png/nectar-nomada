@@ -761,6 +761,10 @@
     {
       "archivo": "lib/people/quienLoHizo.ts",
       "razon": "Decisión P-G (2026-09-21): `personasPermitidas(…, db)` y `exigirPersonaPermitida(…, { db })` aceptan el `tx` de quien escribe para leer dentro de su transacción (historias). Sólo leen; la autorización es la del llamador."
+    },
+    {
+      "archivo": "lib/traceability/fincas.ts",
+      "razon": "ADR-189: `nombreLibreEnLaOrganizacion(tx, organizationId, nombre)` recibe el `tx` de `crearFinca` para mirar las fincas hermanas DENTRO de la transacción que va a crear la fila — mismo motivo y misma forma que `nombreLibreBajo` en locations.ts, pero por organización en vez de por padre, porque dos fincas de una misma organización no comparten padre. Sólo lee nombres de los `site` de una organización sobre la que quien llama ya pasó `puedeCrearFincas`; no escribe nada."
     }
   ],
   "operaciones_sin_patron": [
