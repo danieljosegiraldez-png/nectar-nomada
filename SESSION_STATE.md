@@ -283,6 +283,12 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
+- **«Muestras en gramos» contra el `kg` que el código exige (espera a Daniel)** — de sus
+  decisiones del 2026-09-25 es la única sin casa fuera del apunte archivado el 29.
+  `crearTueste` (`lib/traceability/roasting.ts:106`) **rechaza** una muestra cuya unidad no
+  sea `kg` (`sample_mass_in_kg_required`): en gramos existe y no se puede tostar. Sin tocar
+  nada, porque «en gramos» puede ser el tamaño de la muestra de clasificación y no la unidad
+  de `massAtExtraction`.
 - **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
   protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
   (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
@@ -351,12 +357,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
 
 ---
-
-### 2026-09-24 · Flujo verde, tueste y cata
-
-- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
-- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
-- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 
 ## 5. Al cerrar la sesión
 

@@ -4402,3 +4402,25 @@ que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
 
 **Sin hacer:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
 `permissionKeysAnywhere`. Los otros dos se cerraron esa madrugada — ver la entrada del 28.
+
+### 2026-09-24 · Flujo verde, tueste y cata
+
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
+- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
+- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
+
+---
+
+**Archivado el 2026-09-29, y antes se midió dónde vive cada decisión suya de ese apunte.** Una
+sesión anterior lo había devuelto al estado al ver que «tueste no registrado» da **cero** en
+`docs/architecture/DECISIONS.md` (control positivo: `ADR-144`, cinco menciones). Eso sigue siendo
+cierto, y no era toda la historia:
+
+| la decisión | dónde vive, comprobado |
+|---|---|
+| el tueste exacto en un informe externo | `tests/sensory/informeExterno.test.ts:196` — un `describe` llamado «el tueste servido en un informe externo (decisión de Daniel, 2026-09-25)» con cuatro pruebas que la cubren, y el rótulo en `messages/es.json`. Una prueba se ejecuta; un apunte archivado no lo lee nadie |
+| mallas en fracciones trazables | **ADR-186**, fechado y atribuido, y las seis decisiones de `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md` |
+| «muestras en gramos» | **en ningún sitio fuera de este apunte.** NO se fue con él: está rescatado en la §3 del estado, con la medición de que `roasting.ts:106` exige `kg` |
+
+Que ningún ADR la nombre no es lo mismo que que no tenga casa: el nombre de ese `describe` lleva
+la fecha y la atribución, así que un `grep` por la decisión la encuentra donde se ejecuta.
