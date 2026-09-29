@@ -18,6 +18,8 @@ interface TargetRow {
   key: number;
   variable: string;
   moment: "initial" | "during" | "final";
+  /** De qué fase habla el objetivo: fermentación o secado (2026-09-27). */
+  phase: "fermentation" | "drying";
   targetValue: string;
   minValue: string;
   maxValue: string;
@@ -54,7 +56,7 @@ export function RecipeForm({
   const [state, formAction, pending] = useActionState(createRecipeAction, initialState);
 
   const [rows, setRows] = useState<TargetRow[]>([
-    { key: 1, variable: "ph", moment: "final", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
+    { key: 1, variable: "ph", moment: "final", phase: "fermentation", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
 
@@ -117,6 +119,7 @@ export function RecipeForm({
           >
             <input type="hidden" name={`targets[${i}][variable]`} value={row.variable} />
             <input type="hidden" name={`targets[${i}][moment]`} value={row.moment} />
+            <input type="hidden" name={`targets[${i}][phase]`} value={row.phase} />
             {/* The unit travels with the variable rather than being typed. */}
             <input type="hidden" name={`targets[${i}][unit]`} value={unitFor(row.variable)} />
 
@@ -133,6 +136,18 @@ export function RecipeForm({
                       {t(`variable_${v.variable}` as "variable_ph", { fallback: v.variable })} ({v.canonicalUnit})
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div className="nn-field" style={{ flex: "1 1 150px" }}>
+                <label htmlFor={`f-${row.key}`}>{t("recipePhaseLabel")}</label>
+                <select
+                  id={`f-${row.key}`}
+                  value={row.phase}
+                  onChange={(e) => update(row.key, { phase: e.target.value as TargetRow["phase"] })}
+                >
+                  <option value="fermentation">{t("phase_fermentation")}</option>
+                  <option value="drying">{t("phase_drying")}</option>
                 </select>
               </div>
 
@@ -232,7 +247,7 @@ export function RecipeForm({
         onClick={() => {
           setRows((rs) => [
             ...rs,
-            { key: nextKey, variable: "ph", moment: "during", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
+            { key: nextKey, variable: "ph", moment: "during", phase: "fermentation", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" },
           ]);
           setNextKey((k) => k + 1);
         }}

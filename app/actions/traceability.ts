@@ -1160,6 +1160,7 @@ function parseTargetRows(formData: FormData) {
   const targets: {
     variable: string;
     moment: "initial" | "during" | "final";
+    phase: "fermentation" | "drying";
     unit: string;
     targetValue: number | null;
     minValue: number | null;
@@ -1173,6 +1174,11 @@ function parseTargetRows(formData: FormData) {
     targets.push({
       variable,
       moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
+      // La fase por defecto es fermentación, que es lo que toda receta existente describe: un
+      // formulario viejo o una llamada sin el campo sigue significando lo que significaba. Lo que
+      // NO se admite es una fase inventada, así que cualquier otra cosa cae a fermentación y el
+      // servicio la valida igual.
+      phase: formData.get(`targets[${i}][phase]`) === "drying" ? "drying" : "fermentation",
       unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
       targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
       minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),

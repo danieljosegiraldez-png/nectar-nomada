@@ -323,7 +323,7 @@ describe("recetas (crear, editar, publicar)", () => {
   // un ProcessTargetError) antes de llegar a la guardia bajo prueba, así que
   // se usa el mínimo válido: el mismo objetivo de humo que
   // tests/traceability/recipeAuthoring.test.ts.
-  const unTarget = [{ variable: "ph", moment: "final" as const, unit: "pH", targetValue: 3.8 }];
+  const unTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
   const receta = (organizationId: string | null) => {
     const name = nombre(); recetaNombres.push(name);
     return { name, organizationId, targets: unTarget };
@@ -438,7 +438,7 @@ describe("recetas: la organización heredada también cuenta (createRecipeWithVe
     orgIds.length = 0; lotIds.length = 0; recetaNombres.length = 0;
   });
 
-  const unTarget = [{ variable: "ph", moment: "final" as const, unit: "pH", targetValue: 3.8 }];
+  const unTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
   const receta = (organizationId: string | null) => {
     const name = nombre(); recetaNombres.push(name);
     return { name, organizationId, targets: unTarget };

@@ -4262,6 +4262,7 @@ model ProcessRecipeVersion {
   creator   UserAccount? @relation("ProcessRecipeVersionCreatedBy", fields: [createdBy], references: [id])
 
   targets          ProcessTarget[]
+  fases            ProcessRecipePhase[]
   fermentationRuns FermentationRun[]
   roastSessions    RoastSession[]
   lotRoastProfiles LotRoastProfile[]
@@ -4284,6 +4285,45 @@ model ProcessRecipeVersion {
 /// nullable because a recipe that says "measure pH at the end" without
 /// declaring a number is still a useful instruction, and inventing a target
 /// to fill the column would be inventing a fact (CLAUDE.md §3).
+/// Lo que una receta declara **por fase**: cuánto debe durar, cada cuánto se voltea, y a qué humedad
+/// se quiere llegar.
+///
+/// **Por qué una tabla y no más columnas en la versión (2026-09-27).** `ProcessRecipeVersion.expectedHours`
+/// es un solo número para toda la receta, y significa lo que siempre significó: la duración de la
+/// fermentación. Meter «horas de secado» a su lado daría dos columnas que hay que leer juntas, y
+/// mañana tres. Una fila por fase dice una cosa por fila.
+///
+/// **Y por qué el ritmo de volteo vive aquí y no en `ProcessTarget`.** Un volteo no es una medición:
+/// no tiene variable, ni unidad, ni valor. `everyHours` en un objetivo contesta «cada cuánto se mide
+/// el pH»; esto contesta «cada cuánto se revuelve el café», que no cuelga de ninguna variable.
+model ProcessRecipePhase {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeVersionId String               @map("recipe_version_id") @db.Uuid
+  recipeVersion   ProcessRecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  phase           ProcessPhase
+
+  /// Cuánto debe durar la fase. Anulable: ausencia es «no se declaró», y eso hace que la cola ordene
+  /// por horas en fase sin prometer que va a tiempo (ADR-080, y la misma regla que `ritmo.ts`).
+  expectedHours   Int?                 @map("expected_hours")
+
+  /// Cada cuántas horas se voltea. Sólo tiene sentido en `drying`, y el servicio lo rechaza en otra
+  /// fase en vez de guardarlo; esa regla vive en TypeScript, como la de `everyHours`, y se dice aquí
+  /// en vez de llamarla estructural.
+  turnEveryHours  Int?                 @map("turn_every_hours")
+
+  /// El rango de humedad al que se quiere llegar en esta fase. Los dos o ninguno: un mínimo sin
+  /// máximo no es un rango, y el servicio lo rechaza.
+  targetMoistureMinPct Decimal?        @map("target_moisture_min_pct") @db.Decimal(5, 2)
+  targetMoistureMaxPct Decimal?        @map("target_moisture_max_pct") @db.Decimal(5, 2)
+
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  @@unique([recipeVersionId, phase])
+  @@index([recipeVersionId])
+  @@map("process_recipe_phase")
+  @@schema("traceability")
+}
+
 model ProcessTarget {
   id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   recipeVersionId  String               @map("recipe_version_id") @db.Uuid
@@ -4324,7 +4364,25 @@ model ProcessTarget {
   /// tiempo en fase; con ritmo puede decir «14 h, y la receta dice 12».
   everyHours       Int?                 @map("every_hours")
 
-  @@unique([recipeVersionId, variable, moment])
+  /// **De qué fase es este objetivo**: fermentación o secado.
+  ///
+  /// **Anulable, y no por comodidad.** Los objetivos que ya existían no dicen de qué fase hablan, y
+  /// rellenarlos a ciegas con `fermentation` sería un supuesto: una versión de receta puede estar
+  /// referenciada por un TUESTE, y entonces sería falso. La migración rellena `fermentation` sólo
+  /// donde ningún tueste ni perfil de tueste la referencia —la misma condición que imprime
+  /// `npm run data:medir-fases`— y deja nulo lo demás, que significa «no dice de qué fase habla».
+  ///
+  /// **Lo que la migración NO hace, y por qué.** No pone la columna obligatoria. Las migraciones
+  /// corren solas en cada despliegue, así que una que pueda fallar con los datos de producción
+  /// tumbaría el despliegue: se prefiere un nulo visible a un despliegue roto o a un dato inventado.
+  ///
+  /// **La grieta que esto abre, dicha.** La unicidad de abajo lleva la fase dentro, y en Postgres dos
+  /// nulos no chocan: dos objetivos heredados con la misma variable y momento podrían coexistir donde
+  /// antes no. Se acepta porque **nada escribe ya una fase nula** —`createRecipeWithVersion` la exige—
+  /// así que el hueco sólo alcanza a filas que ninguna escritura nueva puede crear.
+  phase            ProcessPhase?        @map("phase")
+
+  @@unique([recipeVersionId, phase, variable, moment])
   @@index([recipeVersionId])
   @@map("process_target")
   @@schema("traceability")
@@ -5611,6 +5669,23 @@ enum SkyCondition {
   rain
 
   @@schema("core")
+}
+
+/// De qué fase del proceso habla un objetivo de receta, o una fila de ritmo.
+///
+/// **Por qué existe (2026-09-27).** Una receta ya sabía decir «pH cada 6 h» y «18 horas», pero no de
+/// qué fase hablaba: `moment` distingue inicio, durante y final DENTRO de una fase, no entre fases.
+/// Sin esto, el secado no puede tener ni objetivos ni ritmo, y toda la maquinaria de «va tarde» y
+/// «te debe una lectura» sólo podía funcionar en fermentación. Decisión de Daniel: el ritmo sale de
+/// la receta, con fase.
+///
+/// El tueste no está: `RoastSession` no cuelga de una fase de receta y darle una aquí sugeriría que
+/// sí. Cuando le toque, entra con su propio turno.
+enum ProcessPhase {
+  fermentation
+  drying
+
+  @@schema("traceability")
 }
 
 /// Paso 4 (§4.5): cómo está ventilado el lugar. Catálogo de Daniel, 2026-09-18.

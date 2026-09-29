@@ -24,7 +24,7 @@ let organizationId: string;
 let lotId: string;
 const created = { recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[] };
 
-const oneTarget = [{ variable: "ph", moment: "final" as const, unit: "pH", targetValue: 3.8 }];
+const oneTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
 
 beforeAll(async () => {
   admin = (
@@ -80,8 +80,8 @@ describe("creating a recipe", () => {
       name: `RECIPE Lavado ${RUN}`,
       organizationId,
       targets: [
-        { variable: "brix", moment: "initial", unit: "Bx", targetValue: 22 },
-        { variable: "ph", moment: "final", unit: "pH", targetValue: 3.8, note: "fin de fermentación" },
+        { variable: "brix", moment: "initial", phase: "fermentation" as const, unit: "Bx", targetValue: 22 },
+        { variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 3.8, note: "fin de fermentación" },
       ],
     });
     created.recipeIds.push(recipe.id);
@@ -107,7 +107,75 @@ describe("creating a recipe", () => {
   });
 });
 
+  /**
+   * Phases on targets (2026-09-27). Without a phase, "pH every 6 h" and "turn every 4 h" live in the
+   * same recipe with no way to tell them apart, and drying gets neither targets nor a rhythm.
+   */
+  it("stores each target's phase and the recipe's per-phase rows", async () => {
+    const recipe = await createRecipeWithVersion(admin, {
+      name: `RECIPE washed with drying ${RUN}`,
+      organizationId,
+      expectedHours: 18,
+      targets: [
+        { variable: "ph", moment: "during", phase: "fermentation" as const, unit: "pH", minValue: 4.1, maxValue: 5.6, everyHours: 6 },
+        // The SAME variable at the SAME moment, in another phase: not a duplicate.
+        { variable: "moisture", moment: "during", phase: "drying" as const, unit: "%", minValue: 9, maxValue: 24, everyHours: 12 },
+      ],
+      fases: [
+        { phase: "fermentation", expectedHours: 18 },
+        { phase: "drying", expectedHours: 192, turnEveryHours: 4, targetMoistureMinPct: 9, targetMoistureMaxPct: 12 },
+      ],
+    });
+    created.recipeIds.push(recipe.id);
+
+    const version = recipe.versions[0]!;
+    expect(version.targets.map((t) => t.phase).sort()).toEqual(["drying", "fermentation"]);
+
+    const drying = version.fases.find((f) => f.phase === "drying");
+    expect(drying, "the drying phase row was not stored").toBeDefined();
+    expect(drying!.turnEveryHours).toBe(4);
+    expect(drying!.expectedHours).toBe(192);
+    expect(drying!.targetMoistureMinPct?.toNumber()).toBe(9);
+    expect(drying!.targetMoistureMaxPct?.toNumber()).toBe(12);
+  });
+
 describe("what it refuses", () => {
+  /** Turning does not exist during fermentation: there is nothing to turn. */
+  it("refuses a turn rhythm on fermentation", async () => {
+    await expect(
+      createRecipeWithVersion(admin, {
+        name: `RECIPE odd turning ${RUN}`,
+        organizationId,
+        targets: oneTarget,
+        fases: [{ phase: "fermentation", turnEveryHours: 4 }],
+      }),
+    ).rejects.toThrow(new ProcessTargetError("turn_cadence_only_in_drying"));
+  });
+
+  /** Half a range is not a range: the queue cannot say "close to target" with one end. */
+  it("refuses a moisture range with only one end", async () => {
+    await expect(
+      createRecipeWithVersion(admin, {
+        name: `RECIPE half range ${RUN}`,
+        organizationId,
+        targets: oneTarget,
+        fases: [{ phase: "drying", targetMoistureMinPct: 9 }],
+      }),
+    ).rejects.toThrow(new ProcessTargetError("moisture_range_needs_both_ends"));
+  });
+
+  /** And the inverted range, which is the mistake a finger actually makes. */
+  it("refuses an inverted moisture range", async () => {
+    await expect(
+      createRecipeWithVersion(admin, {
+        name: `RECIPE inverted range ${RUN}`,
+        organizationId,
+        targets: oneTarget,
+        fases: [{ phase: "drying", targetMoistureMinPct: 12, targetMoistureMaxPct: 9 }],
+      }),
+    ).rejects.toThrow(new ProcessTargetError("moisture_range_inverted"));
+  });
+
   it("refuses a recipe with no name", async () => {
     await expect(
       createRecipeWithVersion(admin, { name: "   ", organizationId, targets: oneTarget }),
@@ -128,7 +196,7 @@ describe("what it refuses", () => {
       createRecipeWithVersion(admin, {
         name: `RECIPE NoNumber ${RUN}`,
         organizationId,
-        targets: [{ variable: "ph", moment: "final", unit: "pH" }],
+        targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH" }],
       }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
@@ -138,7 +206,7 @@ describe("what it refuses", () => {
       createRecipeWithVersion(admin, {
         name: `RECIPE Inverted ${RUN}`,
         organizationId,
-        targets: [{ variable: "ph", moment: "during", unit: "pH", minValue: 5, maxValue: 4 }],
+        targets: [{ variable: "ph", moment: "during", phase: "fermentation" as const, unit: "pH", minValue: 5, maxValue: 4 }],
       }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
@@ -151,7 +219,7 @@ describe("what it refuses", () => {
       createRecipeWithVersion(admin, {
         name: `RECIPE Impossible ${RUN}`,
         organizationId,
-        targets: [{ variable: "ph", moment: "final", unit: "pH", targetValue: 15 }],
+        targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 15 }],
       }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
@@ -164,7 +232,7 @@ describe("what it refuses", () => {
       createRecipeWithVersion(admin, {
         name: `RECIPE WrongUnit ${RUN}`,
         organizationId,
-        targets: [{ variable: "ph", moment: "final", unit: "Bx", targetValue: 4 }],
+        targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "Bx", targetValue: 4 }],
       }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
@@ -174,7 +242,7 @@ describe("what it refuses", () => {
       createRecipeWithVersion(admin, {
         name: `RECIPE Unknown ${RUN}`,
         organizationId,
-        targets: [{ variable: "vibes", moment: "final", unit: "x", targetValue: 1 }],
+        targets: [{ variable: "vibes", moment: "final", phase: "fermentation" as const, unit: "x", targetValue: 1 }],
       }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });

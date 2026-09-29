@@ -1760,7 +1760,10 @@
     "greenGradingScreenSystem_otro": "Otro sistema (dilo en la nota)",
     "error_green_grading_screen_system_invalid": "Ese sistema de malla no está en la lista.",
     "error_green_grading_screen_system_other_needs_note": "Elegiste «otro sistema»: escribe cuál en la nota de la fracción.",
-    "error_sample_quantity_precision": "La cantidad tiene como máximo tres decimales; con más, se guardaría redondeada."
+    "error_sample_quantity_precision": "La cantidad tiene como máximo tres decimales; con más, se guardaría redondeada.",
+    "recipePhaseLabel": "Fase",
+    "phase_fermentation": "Fermentación",
+    "phase_drying": "Secado"
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
