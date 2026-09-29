@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**586 operaciones** que tocan la base, en **161 archivos** — medido con
+**587 operaciones** que tocan la base, en **161 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -29,12 +29,21 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **19** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
+| **20** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
 
 > **Muestras verdes disponibles para tueste (2026-09-23): 573→574 y guardia directo
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **La inspección implícita al medir (2026-09-29): 586→587 y «recibía principal sin guardia
+> visible» 19→20, sin archivo nuevo.** `crearInspeccionEnTransaccion` en
+> `lib/traceability/samplingEvents.ts` es el ayudante que `recordMeasurement` llama para crear la
+> inspección cuando llega una zona de muestreo sin ninguna: una zona es la zona DE una inspección,
+> y nadie en el patio abre una para anotar una humedad. Recibe la transacción porque anidar otra
+> usaría una conexión distinta y la inspección podría persistir mientras la medición se deshace.
+> Sus dos llamadores autorizan antes, y `recordMeasurement` comprueba además que la corrida sea
+> del lote autorizado. `createSamplingEvent` pasa ahora por el mismo ayudante.
 
 > **Varias fincas por organización (2026-09-29): 585→586 y guardia directo 449→450, sin
 > archivo nuevo.** ADR-189. `organizacionesDeFinca` en `lib/traceability/fincas.ts` lista las

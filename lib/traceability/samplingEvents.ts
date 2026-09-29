@@ -4,7 +4,7 @@ import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import type { ClassificationLevel } from "../rbac/types";
 import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
-import type { MaterialState, SamplingEvent, SamplingRole, SamplingZone } from "../../generated/prisma/client";
+import type { MaterialState, Prisma, SamplingEvent, SamplingRole, SamplingZone } from "../../generated/prisma/client";
 
 export interface CreateSamplingEventInput {
   dryingBedLocationId?: string | null;
@@ -78,27 +78,46 @@ export async function createSamplingEvent(
   const anclas = await autorizarContextos(userAccountId, input, { exigirAlgunContexto: true });
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas);
 
-  return prisma.$transaction(async (tx) => {
-    const event = await tx.samplingEvent.create({
-      data: {
-        dryingBedLocationId: input.dryingBedLocationId ?? null,
-        dryingRunId: input.dryingRunId ?? null,
-        occurredAt: input.occurredAt,
-        operatorPersonId: input.operatorPersonId ?? null,
-        notes: input.notes ?? null,
-        createdBy: userAccountId,
-      },
-    });
-    await recordAuditEvent({
-      actorUserAccountId: userAccountId,
-      operation: "sampling_event.create",
-      entityType: "sampling_event",
-      entityId: event.id,
-      after: event,
-      sourceInterface: "traceability.service",
-    }, tx);
-    return event;
+  return prisma.$transaction(async (tx) => crearInspeccionEnTransaccion(tx, userAccountId, input));
+}
+
+/**
+ * La escritura sola, para quien ya tiene una transacción abierta.
+ *
+ * **Existe porque `recordMeasurement` crea la inspección implícita** cuando llega una zona de
+ * muestreo sin ninguna (Daniel, 2026-09-29). Llamar a `createSamplingEvent` desde dentro de esa
+ * transacción la anidaría, y una transacción anidada usa otra conexión: la inspección podría quedar
+ * escrita mientras la medición se deshace, que es exactamente lo que la atomicidad existe para
+ * impedir. Mismo patrón y misma razón que `cerrarCorridaEnTransaccion`.
+ *
+ * **No autoriza nada, y por eso no se exporta a las pantallas.** Quien la llama ya autorizó — su
+ * único llamador es `recordMeasurement`, que autorizó el lote y comprueba además que la corrida sea
+ * de ese lote antes de llegar aquí.
+ */
+// La firma va en UNA línea y sin anotación de tipo de retorno a propósito: `audit-atomico` sólo
+// reconoce así la rama `function nombre(tx…)`, y su propia cabecera lo dice. Partida en varias
+// líneas, su `recordAuditEvent` sale «huérfano» y el guardia se pone rojo con este nombre.
+// eslint-disable-next-line max-len
+export async function crearInspeccionEnTransaccion(tx: Prisma.TransactionClient, userAccountId: string, input: CreateSamplingEventInput) {
+  const event = await tx.samplingEvent.create({
+    data: {
+      dryingBedLocationId: input.dryingBedLocationId ?? null,
+      dryingRunId: input.dryingRunId ?? null,
+      occurredAt: input.occurredAt,
+      operatorPersonId: input.operatorPersonId ?? null,
+      notes: input.notes ?? null,
+      createdBy: userAccountId,
+    },
   });
+  await recordAuditEvent({
+    actorUserAccountId: userAccountId,
+    operation: "sampling_event.create",
+    entityType: "sampling_event",
+    entityId: event.id,
+    after: event,
+    sourceInterface: "traceability.service",
+  }, tx);
+  return event;
 }
 
 export interface MuestraDeInspeccion {
