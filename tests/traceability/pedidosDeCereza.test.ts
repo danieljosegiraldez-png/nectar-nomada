@@ -71,11 +71,11 @@ afterAll(async () => {
 
 describe("el proveedor de fuera", () => {
   it("el Farm Operator lo da de alta; el mismo nombre en minúsculas se rechaza", async () => {
-    const p = await crearProveedorDeCereza(operador, { nombre: `Don Pedro ${RUN}`, lugar: "Boquete" });
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Don Pedro ${RUN}`, lugar: "Boquete" });
     proveedor = p.id;
     expect(p.organizationType).toBe("producer");
     expect(p.description).toBe("Boquete");
-    await expect(crearProveedorDeCereza(operador, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
+    await expect(crearProveedorDeCereza(operador, beneficio, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
   }, 20000);
 
   it("dos altas a la vez del mismo nombre: una entra, la otra es proveedor_repetido", async () => {
@@ -83,13 +83,29 @@ describe("el proveedor de fuera", () => {
     // Nombre ASCII a propósito: lo que se prueba es la carrera. Las mayúsculas acentuadas no se
     // pliegan con la colación C (ver el comentario del índice en la migración).
     const nombre = `Dona Rosa ${RUN}`;
-    const res = await Promise.allSettled([crearProveedorDeCereza(operador, { nombre }), crearProveedorDeCereza(operador, { nombre: nombre.toUpperCase() })]);
+    const res = await Promise.allSettled([crearProveedorDeCereza(operador, beneficio, { nombre }), crearProveedorDeCereza(operador, beneficio, { nombre: nombre.toUpperCase() })]);
     expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
     expect(String((res.find((x) => x.status === "rejected") as PromiseRejectedResult).reason)).toMatch(/proveedor_repetido/);
   }, 20000);
 
+  it("un Farm Manager de OTRA finca no da de alta en este beneficio — el ámbito manda", async () => {
+    // Éste es el discriminante del cambio del 2026-09-29. `managerOtra` TIENE `cherry_supplier:create`
+    // por su perfil, pero en otro sitio: con `permissionKeysAnywhere` la unión de sus ámbitos bastaba
+    // y podía dar de alta aquí. Ahora el permiso se juzga contra el beneficio donde se recibe.
+    // `no_lot_access` y no `sin_permiso`: quien no alcanza el beneficio se cae en `exigeVerBeneficio`
+    // ANTES de llegar a la clave. Son dos rechazos distintos y la prueba nombra el que ocurre; los
+    // dos salen por pantalla como «no tienes permiso» (`traducir` en app/actions/recepcionDeCereza).
+    await expect(crearProveedorDeCereza(managerOtra, beneficio, { nombre: `Ajeno ${RUN}` })).rejects.toThrow(/no_lot_access/);
+    // Control positivo: el operador de ESTE beneficio sí puede, así que el rechazo es del ámbito y
+    // no de una operación rota.
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Ajeno ${RUN}` });
+    expect(p.organizationType).toBe('producer');
+  }, 20000);
+
   it("el Recolector no da de alta proveedores", async () => {
-    await expect(crearProveedorDeCereza(recolector, { nombre: `Otro ${RUN}` })).rejects.toThrow(/sin_permiso/);
+    // Igual que el de arriba: el recolector no alcanza el beneficio, así que cae en el guardia del
+    // ámbito. Antes del 2026-09-29 llegaba hasta la clave y salía `sin_permiso`.
+    await expect(crearProveedorDeCereza(recolector, beneficio, { nombre: `Otro ${RUN}` })).rejects.toThrow(/no_lot_access/);
   }, 20000);
 });
 

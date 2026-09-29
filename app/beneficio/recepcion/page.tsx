@@ -58,7 +58,7 @@ export default async function RecepcionPage() {
     pendientesDeBeneficio(user.userAccountId, elegido.id),
     recepcionesDeBeneficio(user.userAccountId, elegido.id, 24),
     pedidosDeBeneficio(user.userAccountId, elegido.id),
-    gestiona ? proveedoresDeCereza(user.userAccountId) : Promise.resolve([]),
+    gestiona ? proveedoresDeCereza(user.userAccountId, elegido.id) : Promise.resolve([]),
     recepcionesArmables(user.userAccountId, elegido.id),
   ]);
   // El disponible de las recepciones que se están mostrando, para la merma. `armables` ya trae el

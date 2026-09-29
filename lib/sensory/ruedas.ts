@@ -1,14 +1,33 @@
+/**
+ * Las ruedas sensoriales son un catálogo **de plataforma**: no cuelgan de un proyecto ni de un sitio,
+ * se identifican por `domain`. Por eso el derecho a ver sus BORRADORES se juzga en ámbito de
+ * plataforma y no «en cualquier ámbito» (cambio del 2026-09-29).
+ *
+ * Antes usaba `permissionKeysAnywhere`, cuyo propio comentario dice **«Display only, and never an
+ * authorization decision»**: bastaba con tener un permiso sensorial en CUALQUIER proyecto o sesión
+ * para ver los borradores del catálogo entero. Decidir qué filas se ven es una decisión de
+ * autorización, por muy poco sensible que sea el contenido.
+ */
 import { prisma } from "../db";
-import { permissionKeysAnywhere } from "../rbac/service";
+import { can } from "../rbac/service";
+import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 
-const PERMISOS_SENSORIALES = new Set(["sensory:submit_assessment", "sensory:manage_session", "competition:manage"]);
+const PERMISOS_SENSORIALES = [
+  ["submit_assessment", "sensory"],
+  ["manage_session", "sensory"],
+  ["manage", "competition"],
+] as const;
+
+const PLATAFORMA = { scopeType: "platform", scopeRefId: null } as const;
 
 export class RuedaSensorialNoEncontrada extends Error {}
 
 async function puedeVerBorradores(userAccountId?: string | null) {
   if (!userAccountId) return false;
-  const permisos = await permissionKeysAnywhere(userAccountId);
-  return [...PERMISOS_SENSORIALES].some((permiso) => permisos.has(permiso));
+  for (const [action, resourceType] of PERMISOS_SENSORIALES) {
+    if (await can(userAccountId, action, resourceType, PLATAFORMA, CLASSIFICATION_NOT_APPLICABLE)) return true;
+  }
+  return false;
 }
 const versionConContenido = {
   include: {
