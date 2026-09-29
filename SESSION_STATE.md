@@ -280,14 +280,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **El tamaño de la muestra de clasificación, en gramos, no tiene dónde ir** — Daniel
-  respondió el 2026-09-29 que «muestras en gramos» (decisión suya del 09-25) es eso: el
-  tamaño de la muestra sobre la que se clasifica. Así que el `kg` que exige `crearTueste`
-  **está bien** y no era el problema. Lo que falta es sitio: `RecordGreenGradingInput`
-  (`lib/traceability/greenGrading.ts:21`) no tiene campo de muestra ni enlace a `Sample` —su
-  entrada es un lote y toda masa va en kg—, así que hoy el dato sólo cabe en texto libre
-  (`gradeNote`, `notes`). Importa por veracidad: un % medido sobre 350 g y otro sobre el lote
-  entero se pintan igual. **Decisión de modelo suya; no se construyó nada.**
+- **Clasificar por malla sobre muestra: falta sólo el vocabulario (ADR-190)** — Daniel
+  decidió el 2026-09-29 que son **dos operaciones**: una medición sobre unos cientos de
+  gramos para juzgar calidad, y el corte físico del lote al procesar. El gramaje va en
+  `Sample.massAtExtraction` en kg, las dos se distinguen por `sampleId` sin campo nuevo, y
+  el corte de hoy no se toca. **Queda abierto cómo se nombra la variable de malla**, porque
+  `03_public_api.md` no la declara y `Measurement` no tiene dónde poner el rango. Lo medido
+  y el reparto, en ADR-190; no se construyó nada.
 - **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
   protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
   (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
