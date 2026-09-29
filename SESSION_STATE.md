@@ -41,6 +41,39 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-28 · Los cuatro caminos que escriben ya tienen guardia (PR #513, #515)
+
+**#513 — la siembra tampoco escribe en una remota.** `npm run db:seed` es `tsx prisma/seed.ts` y no
+pasaba por `prisma.config.ts`. Se guarda por EFECTO y no por herramienta: `db seed` SALE de la lista
+de la CLI y lo vigila `prisma/seed.ts`, con una sola variable — `ALLOW_REMOTE_SEED=1`.
+
+**#515 — el verificador de respaldos crea su copia con la colación de producción, y lo comprueba.**
+El censo dice que están los DATOS, no que las REGLAS sean las mismas: una copia mal colada cuenta
+igual y sus índices admiten lo que el original rechaza.
+
+**Sin hacer:** `~/nectar-backups` está MUERTO —lo nuevo vive en el Drive, vía `NN_BACKUP_DIR` del
+`.zshrc`—; y el PASS del verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
+
+### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
+
+**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
+**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
+por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
+Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
+`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
+`tests/beneficio/destinos-del-indice.test.ts`.
+
+**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
+`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
+error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
+`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
+encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
+después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
+
+**Sin hacer, dos.** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha
+sólo lee `error`: esa confirmación no se ve nunca. Y cuatro de los doce rótulos del menú del lote
+llevan mayúscula a mitad de frase, con «Mover Almacenamiento» traducido literal. **Sin decidir.**
+
 ### 2026-09-27 · Proveedores de equipos, y la colación que no era la que creíamos (PR #503, #506, #507, #510)
 
 ADR-188. Ya se crea una `Organization` de tipo `supplier` desde la aplicación —los tres que había
@@ -68,51 +101,27 @@ migración pendiente la habría aplicado fuera del pipeline. El guardia vive en 
 que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
 `ALLOW_REMOTE_MIGRATE=1` o `VERCEL_ENV=production`.
 
-**Sin hacer, tres:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
-`permissionKeysAnywhere`; `npm run db:seed` es `tsx prisma/seed.ts` y no pasa por la CLI, así que
-sembrar producción a mano sigue sin guardia; y los dos guiones de `scripts/backup/` crean bases sin
-declarar colación.
-
-### 2026-09-27 · Lotes es operación, y cuatro instrumentos que mentían
-
-**PR #496 — `/lots` deja de ser una segunda barra de navegación.** Salen los enlaces a
-`/instalaciones` y `/beneficio/ajustes` —configuración, y ya estaban en el índice de `/beneficio`
-con los mismos permisos, medido antes de quitarlos— y salen del filtro los chips `honey` y `other`.
-Quedan ocho etapas de café; **las recetas se quedan**, que se eligen procesando un lote. Guardia
-`tests/traceability/lotesSoloOperacion.test.ts`. **Quitar el chip NO saca los lotes de miel de la
-lista**: eso sería en el servicio y no está decidido.
-
-**PR #481 — dos textos falsos sobre la compuerta de clasificación.** `export.ts` la justificaba con
-«Farm Operator holds only `clear_partner`», que ADR-063 invalidó; y ADR-063 daba por únicos no-admin
-con `lot:view` a dos perfiles (Farm Manager entró en el #357) y decía que «se detienen en
-`internal`» — cierto para `requireLotAccess` y **falso para las listas**: `scopeOrClauses` no mira
-`classification`, así que un lote por encima de la clearance sale en la lista y su ficha lo niega.
-**Dormida por AUSENCIA DE CAMINO**: `CreateLotInput` no acepta `classification` y ninguna de las
-diez escrituras a `Lot` la pasa. Daniel decidió documentar, no gatear. **Sin hacer, y es lo que la
-despertaría: la prueba de que todo perfil con `lot:view` limpia `internal`.**
-
-**PR #488 y #498 — dos fugas de prueba de clases distintas.** `vitalesEnSitio` dejaba 12 filas por
-corrida **con los 16 tests en verde**, y 22 corridas habían dejado el 62 % de la basura de
-`nectar_test`. `ambiente` (#498) **no fugaba**: nombraba con `randomUUID()`, así que sus filas no se
-podían atribuir a una corrida — y un conjunto que el instrumento no puede medir se lee como vacío.
-Las dos se verificaron **contando filas antes y después**, no por el color. Deuda que queda en
-`nectar_test`: **~405 filas, 27 corridas**, repartidas entre cinco archivos —`ambiente`,
-`intervenciones`, `samples`, `ceraDeExtraccion`, `landMedia`—. **Nadie la ha limpiado:** barrer por
-patrón en una base compartida es tocar trabajo ajeno.
-
-**Entorno, al día.** El checkout compartido estaba 792 commits por detrás —`pull` sin pérdida,
-demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, typecheck 0; y
-`nectar_test` tenía **10 migraciones sin aplicar**: aplicadas y sembrada, 186/186, 0 pendientes.
-**PR #483** añade a las «Trampas» de `CLAUDE.md` la cuarta: vitest 4 esconde los `console.log` de un
-test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
-
-### 2026-09-21 · Secado, paso 4: el ambiente a mano
-
-ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
-enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
-pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
+**Sin hacer:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
+`permissionKeysAnywhere`. Los otros dos se cerraron esa madrugada — ver la entrada del 28.
 
 ## 3. Bloqueado, y en qué
+
+#### La prueba que despertaría la divergencia de clasificación (PR #481)
+
+Rescatado al archivar «2026-09-27 · Lotes es operación»: falta **la prueba de que todo perfil con
+`lot:view` limpia `internal`**. Sin ella, `scopeOrClauses` no mira `classification` y una lista
+podría enseñar lo que su ficha niega. Hoy está dormida por ausencia de camino de escritura.
+
+#### Deuda de filas en `nectar_test` (PR #488, #498)
+
+Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
+`ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
+compartida es tocar trabajo ajeno.
+
+#### El ambiente del secado, sin ver en navegador
+
+Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
+por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
 
 #### Recolectores: darles su perfil (de Daniel)
 

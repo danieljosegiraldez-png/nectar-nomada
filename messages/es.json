@@ -3380,7 +3380,6 @@
     "error_nombre_invalido": "El nombre tiene que tener entre 1 y 120 caracteres.",
     "error_nombre_repetido": "Ya hay otra con ese nombre aquí.",
     "error_name_required": "Falta el nombre.",
-    "error_ya_tiene_terreno": "Esa finca ya tiene terreno.",
     "error_organizacion_no_es_finca": "Esa organización no es una finca.",
     "error_padre_no_es_una_finca": "Las parcelas se crean sobre el terreno de una finca.",
     "error_area_invalida": "El área tiene que ser un número mayor que cero.",

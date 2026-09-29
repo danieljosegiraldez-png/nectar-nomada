@@ -4328,3 +4328,47 @@ TTY**: la del 2026-09-26 se creó y se borró el mismo día, así que hay que ha
 crear otro: hay 42 filas de ese tipo y las asignaciones cuelgan casi todas de una). Google no funciona en local, sólo
 está registrado el callback de producción. Lo que destapó mirar: el resaltado de la fila era
 **sólo semántico** —`aria-current` no pinta nada— y ninguna prueba iba a decirlo.
+
+---
+
+**Archivado 2026-09-28** para hacer sitio a la entrada de los guardias. Su único pendiente
+—«Sin ver en navegador»— NO se fue con ella: está rescatado en la sección 3 del estado.
+
+### 2026-09-21 · Secado, paso 4: el ambiente a mano
+
+ADR-185. `/instalaciones/[id]` anota temperatura, HR, cielo y ventilación, en general o por estante y nivel. Cada nivel
+enseña **sólo su** lectura, con su hora y su edad, o «sin lectura de este nivel». Inmutable, corregible con razón (sin
+pantalla aún). Migración aplicada en `nectar_test` antes de fusionar, con permiso de la coordinadora. **Sin ver en navegador.**
+
+### 2026-09-27 · Lotes es operación, y cuatro instrumentos que mentían
+
+**PR #496 — `/lots` deja de ser una segunda barra de navegación.** Salen los enlaces a
+`/instalaciones` y `/beneficio/ajustes` —configuración, y ya estaban en el índice de `/beneficio`
+con los mismos permisos, medido antes de quitarlos— y salen del filtro los chips `honey` y `other`.
+Quedan ocho etapas de café; **las recetas se quedan**, que se eligen procesando un lote. Guardia
+`tests/traceability/lotesSoloOperacion.test.ts`. **Quitar el chip NO saca los lotes de miel de la
+lista**: eso sería en el servicio y no está decidido.
+
+**PR #481 — dos textos falsos sobre la compuerta de clasificación.** `export.ts` la justificaba con
+«Farm Operator holds only `clear_partner`», que ADR-063 invalidó; y ADR-063 daba por únicos no-admin
+con `lot:view` a dos perfiles (Farm Manager entró en el #357) y decía que «se detienen en
+`internal`» — cierto para `requireLotAccess` y **falso para las listas**: `scopeOrClauses` no mira
+`classification`, así que un lote por encima de la clearance sale en la lista y su ficha lo niega.
+**Dormida por AUSENCIA DE CAMINO**: `CreateLotInput` no acepta `classification` y ninguna de las
+diez escrituras a `Lot` la pasa. Daniel decidió documentar, no gatear. **Sin hacer, y es lo que la
+despertaría: la prueba de que todo perfil con `lot:view` limpia `internal`.**
+
+**PR #488 y #498 — dos fugas de prueba de clases distintas.** `vitalesEnSitio` dejaba 12 filas por
+corrida **con los 16 tests en verde**, y 22 corridas habían dejado el 62 % de la basura de
+`nectar_test`. `ambiente` (#498) **no fugaba**: nombraba con `randomUUID()`, así que sus filas no se
+podían atribuir a una corrida — y un conjunto que el instrumento no puede medir se lee como vacío.
+Las dos se verificaron **contando filas antes y después**, no por el color. Deuda que queda en
+`nectar_test`: **~405 filas, 27 corridas**, repartidas entre cinco archivos —`ambiente`,
+`intervenciones`, `samples`, `ceraDeExtraccion`, `landMedia`—. **Nadie la ha limpiado:** barrer por
+patrón en una base compartida es tocar trabajo ajeno.
+
+**Entorno, al día.** El checkout compartido estaba 792 commits por detrás —`pull` sin pérdida,
+demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, typecheck 0; y
+`nectar_test` tenía **10 migraciones sin aplicar**: aplicadas y sembrada, 186/186, 0 pendientes.
+**PR #483** añade a las «Trampas» de `CLAUDE.md` la cuarta: vitest 4 esconde los `console.log` de un
+test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
