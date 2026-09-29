@@ -12299,3 +12299,51 @@ sobra**, permiso propio, y su `AuditEvent` con una operación con nombre.
 - No se migra nada. Los tres `supplier` del seed siguen valiendo.
 - **Esto no bloquea a nadie hoy** —cero equipos con proveedor— así que puede esperar a que alguien
   lo necesite; lo que queda cerrado es **cómo** se hará, no cuándo.
+
+## ADR-189 — Una organización de finca puede tener varias fincas
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado (decisión de Daniel, en sesión)
+
+**Contexto.** Kiva Estate tiene dos fincas, y Daniel quiere darle a Luis Sotillo la gestión de las
+dos. El modelo no lo permitía: `crearFinca` (`lib/traceability/fincas.ts`) rechazaba con
+`ya_tiene_terreno` un segundo `site` para la misma `Organization`, y en esa rama tomaba el nombre de
+la finca **de la organización**, así que dos fincas de Kiva Estate se habrían llamado las dos «Kiva
+Estate».
+
+Esa regla no era una invariante del dominio: la rama con `organizationId` se escribió para **un solo
+caso**, completar una organización que el seed creó sin sitio —el propio comentario dice «el caso de
+Kiva Estate»—, y `ya_tiene_terreno` protegía esa intención, no una propiedad del modelo.
+
+**Lo que se midió antes de tocarlo**, porque quitar un guardia sin saber qué sostenía es cómo se
+rompe algo en silencio. `locationType: "site"` aparece **6 veces en 4 archivos**, y **sólo 2 suponen
+una finca por organización** — las dos dentro de `crearFinca`. Las otras cuatro listan sitios
+(`instalaciones.ts`, `beneficios.ts`), preguntan si hay **alguno** (`vistaDeBandejas.ts`) o piden
+los que no tienen **ninguno** (`organizacionesSinTerreno`), y ninguna se rompe con varios.
+
+Y el caso ya existe en los datos: `listarFincas` sube al sitio **de más arriba** desde ADR-144,
+precisamente porque un `site` colgado de otro —«Invernadero solar» dentro de Cafelino— salía como
+una finca aparte. Dos sitios **hermanos** con la misma organización, en cambio, son dos fincas, que
+es justo lo que se quiere y no costó nada.
+
+**Decisión.**
+
+- **Se quita `ya_tiene_terreno`.** Una organización de finca puede tener los `site` que haga falta.
+- **La rama con `organizationId` acepta `nombre`.** Sin él conserva el comportamiento de hoy —hereda
+  el de la organización—, así que la primera finca de una organización sigue funcionando igual.
+- **Nombre libre entre las fincas de la misma organización**, o `nombre_repetido`. Es el mismo
+  guardia que ya tienen las parcelas entre hermanas (`nombreLibreBajo`), con el mismo criterio de
+  mayúsculas y espacios, pero por **organización** y no por padre: estas fincas no comparten padre.
+  Se escribe al lado en vez de reusar aquella porque el eje es otro, y llamarla con un padre nulo
+  habría comparado contra todas las raíces del árbol.
+- **`/fincas/nueva` acepta cualquier organización de finca**, no sólo las que no tienen terreno. La
+  sección «sin terreno» de `/fincas` se queda como está: sigue siendo la señal de que a una
+  organización le falta su primera finca.
+
+**Consecuencias.**
+
+- **Un ámbito de ubicación no alcanza de lado.** ADR-144 alcanza hacia abajo, así que quien gestione
+  dos fincas hermanas necesita **dos asignaciones**, una por finca. No es un defecto: son dos
+  terrenos distintos y el permiso se concede sobre cada uno.
+- **No se migra nada** y no cambia el esquema: `Location.organizationId` nunca fue único.
+- Lo que **no** cambia: que crear una organización siga siendo sólo del administrador de plataforma
+  (Daniel, 2026-09-18), y que `listarFincas` agrupe por el sitio de más arriba.

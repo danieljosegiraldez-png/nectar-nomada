@@ -3352,7 +3352,6 @@
     "error_nombre_invalido": "The name must be 1 to 120 characters.",
     "error_nombre_repetido": "There is already one with that name here.",
     "error_name_required": "The name is missing.",
-    "error_ya_tiene_terreno": "That farm already has land.",
     "error_organizacion_no_es_finca": "That organization is not a farm.",
     "error_padre_no_es_una_finca": "Plots are created on a farm's land.",
     "error_area_invalida": "The area must be a number greater than zero.",
