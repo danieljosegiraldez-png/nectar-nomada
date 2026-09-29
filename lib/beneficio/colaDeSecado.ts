@@ -41,7 +41,12 @@ export interface RitmoDeclarado {
  */
 export interface UnidadEnCola {
   readonly clave: string;
-  readonly tipo: "cama" | "bandeja";
+  /**
+   * `corrida` es el caso sin cama ni bandejas cargadas. **Aparece igual, a propósito**: una corrida
+   * de secado abierta es café secándose, y esconderla porque nadie le asignó una unidad física sería
+   * la peor respuesta posible en una pantalla cuyo trabajo es que no se te escape nada.
+   */
+  readonly tipo: "cama" | "bandeja" | "corrida";
   readonly nombre: string;
   readonly dryingRunId: string;
   readonly lotId: string;
@@ -81,6 +86,37 @@ export interface ColaDeSecado {
 }
 
 const HORAS = 3_600_000;
+
+/** Hasta dónde se sube buscando el cuarto: una cama dentro de un estante dentro de un cuarto son 3. */
+const PROFUNDIDAD_DE_AREA = 6;
+
+/**
+ * El área a la que pertenece una corrida: el cuarto de secado más cercano subiendo por los padres.
+ *
+ * **Por qué sube en vez de leer un campo** (2026-09-29, midiendo la cola contra la base de
+ * demostración): una corrida **en bandejas** no tiene cama y puede no tener `locationId`, así que
+ * agrupaba bajo «Sin área» — cuatro zarandas con café y ninguna área que las contuviera. Y una cama
+ * puede colgar de un estante, no del cuarto, así que un solo salto tampoco basta.
+ *
+ * Si no hay ningún cuarto arriba, se devuelve el lugar más concreto que se conozca **con su nombre**:
+ * agrupar bajo «Sin área» esconde el café en vez de ubicarlo.
+ */
+async function areaDeLaCorrida(candidatos: ReadonlyArray<string | null | undefined>) {
+  const primero = candidatos.find((c): c is string => typeof c === "string" && c.length > 0);
+  if (!primero) return null;
+
+  const select = { id: true, name: true, locationType: true, parentLocationId: true } as const;
+  let actual = await prisma.location.findUnique({ where: { id: primero }, select });
+  const masConcreto = actual;
+
+  for (let nivel = 0; nivel < PROFUNDIDAD_DE_AREA && actual; nivel++) {
+    if (actual.locationType === "drying_facility") return { id: actual.id, nombre: actual.name };
+    if (!actual.parentLocationId) break;
+    actual = await prisma.location.findUnique({ where: { id: actual.parentLocationId }, select });
+  }
+  return masConcreto ? { id: masConcreto.id, nombre: masConcreto.name } : null;
+}
+
 const horasEntre = (a: Date, b: Date) => (b.getTime() - a.getTime()) / HORAS;
 
 /**
@@ -205,7 +241,7 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
       transformations: {
         orderBy: { occurredAt: "asc" },
         take: 1,
-        select: { inputs: { select: { lot: { select: { id: true, lotCode: true } } } } },
+        select: { inputs: { select: { lot: { select: { id: true, lotCode: true, locationId: true } } } } },
       },
     },
     orderBy: { startedAt: "asc" },
@@ -286,23 +322,25 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
 
     // Una corrida va en cama O en bandejas, nunca en las dos: `cargarBandeja` lo rechaza con
     // `corrida_con_cama`. Así que aquí también son dos caminos y no una mezcla.
+    const enBandejas: UnidadEnCola[] = c.trays.map((t) => ({
+      ...comun,
+      clave: `bandeja:${t.equipment.id}`,
+      tipo: "bandeja" as const,
+      nombre: t.equipment.name ?? `B-${String(t.equipment.trayNumber ?? 0).padStart(3, "0")}`,
+      desde: t.desde,
+    }));
     const unidades: UnidadEnCola[] = c.dryingBedLocation
       ? [{ ...comun, clave: `cama:${c.dryingBedLocation.id}`, tipo: "cama", nombre: c.dryingBedLocation.name, desde: c.startedAt }]
-      : c.trays.map((t) => ({
-          ...comun,
-          clave: `bandeja:${t.equipment.id}`,
-          tipo: "bandeja" as const,
-          nombre: t.equipment.name ?? `B-${String(t.equipment.trayNumber ?? 0).padStart(3, "0")}`,
-          desde: t.desde,
-        }));
+      : enBandejas.length > 0
+        ? enBandejas
+        : // Ni cama ni bandejas cargadas: la corrida se enseña igual. Ver el comentario de `tipo`.
+          [{ ...comun, clave: `corrida:${c.id}`, tipo: "corrida", nombre: lot.lotCode, desde: c.startedAt }];
 
-    // El área: el cuarto al que pertenece la cama, o el lugar de la corrida cuando va en bandejas.
-    const areaId = c.dryingBedLocation?.parentLocationId ?? c.location?.id ?? "sin-area";
-    const areaNombre =
-      c.dryingBedLocation?.parentLocationId && c.dryingBedLocation.parentLocationId === c.location?.id
-        ? c.location.name
-        : (c.location?.name ?? "Sin área");
-    const area = areas.get(areaId) ?? { nombre: areaNombre, unidades: [] };
+    // El área: el cuarto de secado más cercano, empezando por la cama, luego el lugar de la corrida
+    // y por último el lugar del lote — que es lo que salva a una corrida en bandejas sin lugar.
+    const resuelta = await areaDeLaCorrida([c.dryingBedLocation?.id, c.location?.id, lot.locationId]);
+    const areaId = resuelta?.id ?? "sin-area";
+    const area = areas.get(areaId) ?? { nombre: resuelta?.nombre ?? "Sin área", unidades: [] };
     area.unidades.push(...unidades);
     areas.set(areaId, area);
   }

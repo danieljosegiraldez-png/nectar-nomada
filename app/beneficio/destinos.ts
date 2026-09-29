@@ -22,6 +22,10 @@ export function destinosDelBeneficio(granted: Set<string>) {
     // de alta uno y ver el histórico, y se llega desde ahí. Que no esté aquí lo fija
     // `tests/beneficio/destinos-del-indice.test.ts`.
     // Lotes y el informe son de lectura: los ve quien entra a la sección.
+    // La cola de secado va ANTES de la lista de lotes: es la pantalla de inicio del operario de
+    // secado (Daniel, 2026-09-27), y `/lots` es la lista general. Se ve con `lot:view`, como la
+    // sección: la cola misma sólo trae lo que la visibilidad de lotes alcanza.
+    { href: "/beneficio/secado", clave: "secado", visible: true },
     { href: "/lots", clave: "lotes", visible: true },
     // Recetas, sólo quien gestiona lotes: `listRecipes` exige `manage` sobre un
     // lote. Así estaba en la barra de Lotes antes del #383, y el índice lo perdió.

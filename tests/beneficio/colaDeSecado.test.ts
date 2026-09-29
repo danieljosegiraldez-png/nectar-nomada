@@ -276,6 +276,49 @@ describe("la cola de secado", () => {
     expect(urgencias).toEqual(ordenadas);
   });
 
+  /**
+   * **Medido contra la base de demostración el 2026-09-29, y era un defecto mío.** Una corrida en
+   * BANDEJAS no tiene cama y puede no tener `locationId`, así que agrupaba bajo «Sin área»: cuatro
+   * zarandas con café y ninguna área que las contuviera. El área se resuelve subiendo por los padres
+   * desde la cama, el lugar de la corrida o el del lote, y si no hay cuarto arriba se usa el lugar
+   * más concreto CON SU NOMBRE — agrupar bajo «Sin área» esconde el café en vez de ubicarlo.
+   */
+  it("una corrida en bandejas sin lugar propio encuentra su área por el lote", async () => {
+    const lot = await prisma.lot.create({
+      data: {
+        lotCode: `LOTE-EN-ZARANDA-${RUN}`,
+        lotType: "parchment",
+        organizationId: orgIds[0]!,
+        locationId: cuarto,
+        status: "approved",
+        classification: "internal",
+      },
+    });
+    lotIds.push(lot.id);
+    // Sin cama y sin `locationId`: exactamente la forma que producía «Sin área».
+    const corrida = await prisma.dryingRun.create({ data: { startedAt: haceHoras(10) } });
+    runIds.push(corrida.id);
+    const t = await prisma.lotTransformation.create({
+      data: {
+        transformationType: "stage_change",
+        occurredAt: haceHoras(10),
+        provenanceClass: "original_record",
+        dryingRunId: corrida.id,
+        inputs: { create: [{ lotId: lot.id, quantity: 20, unit: "kg" }] },
+      },
+    });
+    transformationIds.push(t.id);
+
+    const cola = await colaDeSecado(operario, ahora);
+    // Se busca por SU unidad, no por el cuarto: el cuarto ya existe como área por los otros lotes,
+    // así que buscarlo pasaría igual aunque esta corrida cayera en «Sin área» (medido: el flip-test
+    // no discriminaba hasta escribirlo así).
+    const suArea = cola.areas.find((a) => a.unidades.some((u) => u.lotId === lot.id));
+    expect(suArea, "la corrida en bandejas no aparece en ninguna área").toBeDefined();
+    expect(suArea!.locationId, "no encontró el cuarto subiendo desde el lote").toBe(cuarto);
+    expect(suArea!.nombre).not.toBe("Sin área");
+  });
+
   it("quien no tiene ámbito recibe «sin ámbito», no una cola vacía", async () => {
     const forastero = await cuenta("Forastero");
     const cola = await colaDeSecado(forastero, ahora);
