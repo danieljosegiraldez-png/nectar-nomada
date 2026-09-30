@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**589 operaciones** que tocan la base, en **162 archivos** — medido con
+**589 operaciones** que tocan la base, en **163 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,7 +24,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **452** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **453** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -35,6 +35,15 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
+
+> **Las lecturas del tablero del beneficio (2026-09-29): 588→589, 162→163 archivos y
+> guardia directo 452→453.** `lib/beneficio/datosDelTablero.ts` es archivo nuevo: junta lo
+> que el tablero necesita —corridas abiertas, sus procesos y recetas, las mediciones de la
+> fase y las desviaciones sin acción correctiva— y se acota con `resolveLotVisibility`
+> sobre los LOTES, igual que la cola de secado; sin ámbito devuelve `sinAmbito: true` y no
+> un tablero vacío. Los equipos NO se consultan crudos: salen de `listarEquipos`, que ya
+> filtra por `can(view, equipment)`. Las camas se acotan por las organizaciones de los
+> lotes visibles, que es un apoderado dicho en el código y no la regla ideal.
 
 > **La cola de secado (2026-09-29): 586→587, 161→162 archivos y guardia directo
 > 450→451.** `lib/beneficio/colaDeSecado.ts` es archivo nuevo: arma la cola de trabajo del
