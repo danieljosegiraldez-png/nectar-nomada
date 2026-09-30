@@ -41,6 +41,17 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
+
+**Diseñado y aprobado el 2026-09-18, y tres semanas sin construir porque este archivo no lo nombraba.**
+`/beneficio` es ahora el tablero arriba —cola de cinco grupos, capacidad, instrumentos— y el índice en tres
+grupos abajo (ADR-193); los motores ya estaban. Visto en navegador con sesión, 0 errores. **«Sin veredicto»
+nunca se mezcla con «En curso» y un `demora: null` nunca se pinta «en hora»** — se puntúan igual a propósito,
+así que la diferencia la hace la pantalla o se pierde. Nueve flip-tests, **dos cazaron guardias falsos míos**.
+Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `afterAll` dejó en la base compartida
+—es una cadena, el primer `deleteMany` que lanza abandona los nueve siguientes con la suite en verde— y un
+«1 ocupaciones». **Sin hacer:** la capacidad sin ejercer con unidades reales; §4.5 y el paso 2 son planes propios.
+
 ### 2026-09-29 · La credencial rotada, y una confirmación que nadie leía (PR #527, #529, #533)
 
 **#527 — la confirmación de una inspección no se mostraba nunca:** redirigía con `?ok=inspeccion` y
@@ -103,6 +114,10 @@ claves de la fuente y **su control positivo va primero**: cegando el extractor, 
 cuelguen fincas reales, y el guión lo avisa cada vez.
 
 ## 3. Bloqueado, y en qué
+
+#### El PASS del verificador de respaldos mira sólo el censo
+
+Rescatado al archivar «2026-09-28 · Los cuatro caminos»: un `pg_restore` con errores acaba en PASS — los cuenta y los registra, pero no bloquea. No vivía en ningún otro sitio.
 
 #### El tablero del beneficio: diseñado, aprobado y sin construir
 

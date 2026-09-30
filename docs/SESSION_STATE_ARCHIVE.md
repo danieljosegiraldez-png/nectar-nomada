@@ -4478,3 +4478,15 @@ Cierra el pendiente de `permissionKeysAnywhere`: de sus tres usos **dos se acota
 Equipos va a plataforma —fila global—, CEREZA al **sitio del beneficio** («el cosechador sólo entrega
 y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque su spec da esa audiencia SIN
 ámbito. El `AuditEvent` lleva `autorizadoEnBeneficio`, y mi flip-test **no discriminaba** hasta que Codex lo vio.
+
+
+---
+
+**Archivado el 2026-09-30.** Medido antes de moverla, pieza por pieza:
+
+| lo que llevaba | dónde vive |
+|---|---|
+| el guardia de la siembra y `ALLOW_REMOTE_SEED=1` | `prisma/seed.ts`, `scripts/migrate-guard.ts` y sus 8 pruebas, que lo ejercen por los cuatro caminos |
+| la colación del verificador de respaldos | `scripts/backup/verify-restore.sh`, con su comprobación que **falla** si la copia no pliega |
+| `~/nectar-backups` borrado y `NN_BACKUP_KEEP=28` | la memoria `nectar-nomada-backups.md`, actualizada ese día |
+| **«el PASS del verificador mira sólo el censo»** | **en ningún sitio más** — medido: 0 en `DECISIONS.md`, 0 aquí y 0 en `PENDING_IMPLEMENTATIONS`. **NO se fue con ella:** está rescatado en la §3 del estado |
