@@ -13,9 +13,17 @@ entra fumigación o tratamientos de esta índole, trampas de broca o manejos
 relacionados»*; *«puede notar que hay muchos y aplicar repelente Bralic, o puede
 ser mucho y usar Regin para controlar plaga u otras acciones»*.
 
-**Bralic y Regin son nombres que dio Daniel.** Este documento no dice nada de su
+**Bralic y Regent son nombres que dio Daniel.** Este documento no dice nada de su
 composición, dosis, carencia ni registro: esos valores los pone quien da de alta
 el producto, con su procedencia.
+
+> **CORREGIDO EL 2026-09-29: se llama Regent, no «Regin».** La cita de arriba
+> conserva el «Regin» tal como se transcribió el 2026-09-18, porque es una cita;
+> pero el nombre del producto es **Regent**, dicho por Daniel hoy al preguntarle
+> justamente si «Regin» era un producto. No lo es: sus únicas cinco menciones en
+> este repositorio salían todas de aquella transcripción, sin ninguna otra fuente,
+> así que el error se propagó desde aquí. Corregido también en `DECISIONES` y en
+> el diseño de trampas de broca.
 
 ---
 
@@ -447,6 +455,6 @@ hostil directamente.
 - **Los plazos de las guías** (revisión quincenal, 150 mm de lluvia): la pieza 2
   ya los dejó fuera.
 - **Cualquier dato de producto:** composición, dosis, carencia o registro de
-  Bralic, Regin o cualquier otro. Los pone quien da de alta el producto.
+  Bralic, Regent o cualquier otro. Los pone quien da de alta el producto.
 - **Avisos fuera de la aplicación** (correo, WhatsApp): siguen sin proveedor.
 - La cola offline (§5).

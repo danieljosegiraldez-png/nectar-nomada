@@ -4402,3 +4402,58 @@ que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
 
 **Sin hacer:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
 `permissionKeysAnywhere`. Los otros dos se cerraron esa madrugada — ver la entrada del 28.
+
+### 2026-09-24 · Flujo verde, tueste y cata
+
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
+- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
+- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
+
+---
+
+**Archivado el 2026-09-29, y antes se midió dónde vive cada decisión suya de ese apunte.** Una
+sesión anterior lo había devuelto al estado al ver que «tueste no registrado» da **cero** en
+`docs/architecture/DECISIONS.md` (control positivo: `ADR-144`, cinco menciones). Eso sigue siendo
+cierto, y no era toda la historia:
+
+| la decisión | dónde vive, comprobado |
+|---|---|
+| el tueste exacto en un informe externo | `tests/sensory/informeExterno.test.ts:196` — un `describe` llamado «el tueste servido en un informe externo (decisión de Daniel, 2026-09-25)» con cuatro pruebas que la cubren, y el rótulo en `messages/es.json`. Una prueba se ejecuta; un apunte archivado no lo lee nadie |
+| mallas en fracciones trazables | **ADR-186**, fechado y atribuido, y las seis decisiones de `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md` |
+| «muestras en gramos» | **en ningún sitio fuera de este apunte.** NO se fue con él: está rescatado en la §3 del estado, con la medición de que `roasting.ts:106` exige `kg` |
+
+Que ningún ADR la nombre no es lo mismo que que no tenga casa: el nombre de ese `describe` lleva
+la fecha y la atribución, así que un `grep` por la decisión la encuentra donde se ejecuta.
+
+### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
+
+**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
+**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
+por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
+Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
+`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
+`tests/beneficio/destinos-del-indice.test.ts`.
+
+**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
+`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
+error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
+`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
+encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
+después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
+
+---
+
+**Archivado el 2026-09-29, después de darle casa a lo que sólo vivía aquí.** Se midió pieza por
+pieza antes de moverla, porque dos veces el mismo día una entrada archivada se llevó consigo la
+única copia de algo:
+
+| lo que la entrada contenía | dónde vive ahora |
+|---|---|
+| **la decisión de Daniel: se recibe sin pedido de por medio** | **ADR-192**, escrito el 2026-09-29 justamente para poder archivar esto. `DECISIONS.md` daba **0** menciones de «sin pedido» y **0** de `pedidoId` antes, con «recepción» dando 8 como control positivo |
+| **la trampa del `redirect` dentro del `try`** | el `CLAUDE.md` de este repositorio, en «Trampas que han costado tiempo real», al lado de la de `friendlyError`. Medido antes de moverla: **cero** menciones en ese archivo, en `DECISIONS.md` y aquí |
+| el índice de 9 a 8 entradas, y que `pedidos` no esté | `tests/beneficio/destinos-del-indice.test.ts`, que lo fija, y ADR-192, que lo explica |
+| el nombre único de #509 y el aterrizaje de #514 | el código y sus pruebas; son registro de entrega, no reglas |
+
+**Y una cifra que se volvió a medir en vez de copiarla:** esta entrada decía «el índice pasa de 9 a
+8». Hoy tiene 9 y por eso se dudó. Medido sobre los dos lados del commit `a0809cda`: **antes 9,
+después 8** — la cifra era correcta, y el 9 de hoy es porque la cola de secado entró después.

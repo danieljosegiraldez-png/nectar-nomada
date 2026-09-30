@@ -113,6 +113,7 @@ model Person {
   receivingEventsOperated            ReceivingEvent[]              @relation("ReceivingEventOperator")
   fermentationRunsOperated           FermentationRun[]             @relation("FermentationRunOperator")
   dryingTurnEventsOperated           DryingTurnEvent[]             @relation("DryingTurnEventOperator")
+  dryingTurnBatchesOperated          DryingTurnBatch[]             @relation("DryingTurnBatchOperator")
   lotProcessInterventionsOperated    LotProcessIntervention[]      @relation("LotProcessInterventionOperator")
   neighbourConsultationsOperated     NeighbourConsultation[]       @relation("NeighbourConsultationOperator")
   roastSessionsRoasted               RoastSession[]                @relation("RoastSessionRoaster")
@@ -229,6 +230,7 @@ model UserAccount {
   processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
   processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
   dryingTurnEventsCreated           DryingTurnEvent[]            @relation("DryingTurnEventCreatedBy")
+  dryingTurnBatchesCreated          DryingTurnBatch[]            @relation("DryingTurnBatchCreatedBy")
   dryingRunTraysCreated             DryingRunTray[]              @relation("DryingRunTrayCreatedBy")
   storageAssignmentsCreated         StorageAssignment[]          @relation("StorageAssignmentCreatedBy")
   labourEntriesCreated              LabourEntry[]                @relation("LabourEntryCreatedBy")
@@ -4515,8 +4517,41 @@ model DryingTurnEvent {
   createdBy        String?             @map("created_by") @db.Uuid
   creator          UserAccount?        @relation("DryingTurnEventCreatedBy", fields: [createdBy], references: [id])
 
+  /// La tanda que lo agrupa, si nació dentro de una. **Anulable a propósito**: los volteos
+  /// anteriores al 2026-09-29 no pertenecen a ninguna tanda, y un volteo suelto sigue siendo
+  /// válido. Nulo aquí significa «no hubo tanda», no «falta el dato».
+  turnBatchId      String?             @map("turn_batch_id") @db.Uuid
+  turnBatch        DryingTurnBatch?    @relation(fields: [turnBatchId], references: [id])
+
   @@index([dryingRunId])
+  @@index([turnBatchId])
   @@map("drying_turn_event")
+  @@schema("traceability")
+}
+
+/// Un acto de volteo sobre VARIAS unidades a la vez.
+///
+/// **Por qué existe** (diseño §A.5): revolver seis zarandas eran seis filas que nada agrupaba, así
+/// que no se podía decir «esto se hizo de una pasada» ni auditar el acto como uno. El apiario ya
+/// tenía la forma —tandas de marcos—, y ésta es la misma.
+///
+/// La tanda escribe UN evento de auditoría con la lista de unidades; cada volteo conserva el suyo.
+model DryingTurnBatch {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  occurredAt       DateTime        @map("occurred_at")
+  operatorPersonId String?         @map("operator_person_id") @db.Uuid
+  operator         Person?         @relation("DryingTurnBatchOperator", fields: [operatorPersonId], references: [id])
+  notes            String?
+  provenanceClass  ProvenanceClass @map("provenance_class")
+  sourceReference  String?         @map("source_reference")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  createdBy        String?         @map("created_by") @db.Uuid
+  creator          UserAccount?    @relation("DryingTurnBatchCreatedBy", fields: [createdBy], references: [id])
+
+  turns DryingTurnEvent[]
+
+  @@index([occurredAt])
+  @@map("drying_turn_batch")
   @@schema("traceability")
 }
 

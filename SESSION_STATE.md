@@ -88,26 +88,16 @@ igual y sus índices admiten lo que el original rechaza.
 archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
 verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
 
-### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
-
-**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
-**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
-por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
-Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
-`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
-`tests/beneficio/destinos-del-indice.test.ts`.
-
-**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
-`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
-error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
-`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
-encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
-después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
-
-**Sin hacer:** `registrarInspeccionFormAction` redirige a `/lots/<id>?ok=inspeccion` y la ficha sólo
-lee `error`, así que esa confirmación no se ve nunca. (Los rótulos se arreglaron el 29, PR #522.)
 
 ## 3. Bloqueado, y en qué
+
+#### El tablero del beneficio: diseñado, aprobado y sin construir
+
+**Tres semanas perdido porque este archivo no lo nombraba.** Las once decisiones de Daniel
+(2026-09-16/18) viven en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`:
+la cola de atención de §4.2 y las tres piezas de §4.5. **Los motores están en `main`**
+—`puntajeDeUrgencia`, `estadoDeRitmo`, `SinVeredicto`—; **la vista no existe**. **Y choca con
+la ruta:** decidió «una página nueva `/beneficio`, sólo lectura», y hoy es un índice.
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
@@ -232,8 +222,12 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   `enforce_admins` en false, los dos a propósito— en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
-  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
+- ~~**PR B del manejo fitosanitario, pendiente de fusionar**~~ — **falso, y quitado el
+  2026-09-29.** `origin/fitosanitarios-pr-b` no tiene **ningún** commit que `main` no
+  tenga —control al revés: 384— y **cero** archivos que difieran; el trabajo está en
+  `main` (`lib/traceability/intervenciones.ts`, 36.710 bytes, con
+  `productosFitosanitarios`). No faltaba fusionar nada: faltaba borrar la línea, que
+  mandaba a la siguiente sesión a buscar trabajo a una rama vacía.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
@@ -283,6 +277,14 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
+- **Clasificar por malla sobre muestra: decidido y sin construir (ADR-190, ADR-191)** —
+  Daniel decidió el 2026-09-29 que son **dos operaciones** —medición sobre unos cientos de
+  gramos, y el corte físico al procesar— y cómo se nombran: **`SampleKind.SCREEN`** y una
+  tabla **`GreenScreenFraction`** que espeja las cuatro columnas `greenScreen*` de `Lot`.
+  **No hace falta ninguna variable de medición**: una fila de `Measurement` no tiene dónde
+  ir el rango. Falta construirlo —tabla, migración, y el servicio que escribe esas filas—
+  y decidir si las tres lecturas deben distinguir en pantalla una fracción medida sobre
+  muestra de una salida de un corte real. El corte de hoy no se toca.
 - **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
   protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
   (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
@@ -351,12 +353,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
 
 ---
-
-### 2026-09-24 · Flujo verde, tueste y cata
-
-- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
-- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
-- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
 
 ## 5. Al cerrar la sesión
 

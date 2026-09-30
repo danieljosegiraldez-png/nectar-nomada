@@ -206,6 +206,7 @@ tests/traceability/bandejasDelSecado.test.ts
 tests/traceability/v1-vocabulary.test.ts
 tests/traceability/ubicacionesEmparentadas.test.ts
 tests/beneficio/vistaDeBandejas.test.ts
+tests/beneficio/colaDeSecado.test.ts
 tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
 tests/traceability/carreraDelArbolDeEstante.test.ts
 tests/apiary/apiarioHeredado.test.ts

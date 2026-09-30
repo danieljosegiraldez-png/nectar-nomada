@@ -11579,7 +11579,7 @@ hay riesgo de residuo.
 
 **La decision de las cuatro clases fue de Daniel el 2026-09-18:**
 
-1. **Productos comprados** — Bralic, Regin, fungicidas, insecticidas, abonos foliares.
+1. **Productos comprados** — Bralic, Regent, fungicidas, insecticidas, abonos foliares.
 2. **Preparados de la finca** — un lote hecho en la biofábrica cuelga de `ConsumableLot`, igual que
    un frasco comprado. No hace falta tabla nueva.
 3. **Liberaciones biologicas** — parasitoides, ácaros depredadores, bacterias; se miden en unidades
@@ -12347,3 +12347,180 @@ es justo lo que se quiere y no costó nada.
 - **No se migra nada** y no cambia el esquema: `Location.organizationId` nunca fue único.
 - Lo que **no** cambia: que crear una organización siga siendo sólo del administrador de plataforma
   (Daniel, 2026-09-18), y que `listarFincas` agrupe por el sitio de más arriba.
+
+## ADR-190 — La clasificación por malla son dos operaciones, y el gramaje vive en la muestra
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado en su parte decidida (Daniel, en sesión); el
+vocabulario queda abierto y se anota abajo
+
+**Contexto.** «Muestras en gramos» era una de las decisiones que Daniel tomó el 2026-09-25 sobre el
+flujo de verde, y era **la única de aquel apunte sin casa fuera de `SESSION_STATE.md`**: el tueste
+exacto vive en `tests/sensory/informeExterno.test.ts:196` —un `describe` que lleva su fecha y su
+atribución en el nombre— y las mallas en ADR-186 y en el diseño del 25. Al archivar el apunte
+(2026-09-29) hubo que rescatar ese fragmento, y buscarle sitio destapó lo de abajo.
+
+**Lo que se midió, antes de proponer nada.**
+
+- `RecordGreenGradingInput` (`lib/traceability/greenGrading.ts:21`) **no tiene campo de muestra ni
+  enlace a `Sample`**: su entrada es un lote y toda masa va en kg. La única mención de `Sample` en
+  ese módulo es un comentario.
+- Lo que sí hace es un **corte físico**: cada fracción se convierte en un `Lot` real con su código
+  y su masa, más `declaredLoss`, con balance de masa contra el lote de entrada.
+- `docs/beneficio/00_conventions.md` §1 ya fija la unidad: masa canónica en **kilogramo, 3
+  decimales, campo `*_kg`**, con la unidad que digitó el operador conservada en `entry_unit`. Tres
+  decimales de kg **son gramos exactos**, y hay 24 campos con ese sufijo en el esquema.
+- `docs/beneficio/03_public_api.md`, que es el contrato autoritativo, **no menciona malla, screen ni
+  muestra ni una vez** — medido con control positivo de 15 «enum» sobre ese mismo archivo. Así que
+  ningún nombre de aquí se puede inventar.
+- `Measurement` ya lleva `lotId` **y** `sampleId`, los dos opcionales, y su propio comentario declara
+  el precedente: una lectura pre-tueste y una de almacén llevan las dos `lotId` y sólo la primera
+  lleva `roastSessionId`, «no hace falta campo nuevo para expresar qué momento».
+- `lib/traceability/units.ts` declara `MeasurementVariable` alimentando un `Record` **total**, así que
+  añadir una variable obliga al compilador a exigir su unidad, mínimo y máximo. **Hoy no hay ninguna
+  de malla ni de tamaño** (0; control: «humedad» da 5 en ese archivo).
+
+**La decisión de Daniel.** Clasificar por malla son **dos operaciones en momentos distintos**, no una:
+
+1. **Una medición sobre muestra**, de unos cientos de gramos, para juzgar calidad antes de vender. El
+   lote **no** se parte.
+2. **Un corte físico** del lote entero cuando se procesa, fracción a fracción.
+
+**Lo que se deriva, y no necesita modelo nuevo.**
+
+- **El gramaje va en `Sample.massAtExtraction`** — la cosa que de verdad se pesó—, guardado como
+  `0.350` con `massUnitAtExtraction = "kg"` por §1 de `00_conventions`; gramos es unidad de entrada y
+  de pantalla. Eso además **mantiene la muestra tostable**: `crearTueste`
+  (`lib/traceability/roasting.ts:106`) exige `kg` con `sample_mass_in_kg_required`, y una muestra de
+  control de calidad es justo la que se tuesta para catar. **El `kg` de ahí no era el problema**, que
+  es lo que `SESSION_STATE.md` daba por sospechoso hasta hoy.
+- **Las dos operaciones se distinguen sin campo nuevo**, por el precedente de `Measurement`: la
+  medición sobre muestra lleva `sampleId`; el corte físico se queda **tal cual está hoy**
+  `recordGreenGrading`, con sus lotes de salida y su balance. No se toca.
+
+**Lo que falta construir, que es poco y está nombrado.**
+
+- La malla **no tiene variable** en el vocabulario de medición, y añadirla es una declaración que el
+  compilador exige completa.
+- Y una fila de `Measurement` **no tiene dónde poner el rango de malla**: `greenScreenMin/Max/System`
+  viven en `Lot`. Ésa es la única pieza que no se resuelve reutilizando.
+
+**Lo que sigue abierto y es de Daniel, porque `03_public_api.md` no lo declara.** Cómo se nombra: una
+variable por rango de malla, o una sola variable con el rango al lado —y en ese caso, dónde vive el
+rango—. ADR-186 ya decidió que el rango es `min`/`max` numéricos y el sistema un enum de tres, así
+que una variable por número de malla contradiría esa forma; no se propone nada hasta que él elija.
+
+**Consecuencias.**
+
+- **No se construyó nada** con este ADR, y no cambia el esquema. Registra la decisión y el reparto,
+  para que la siguiente sesión no vuelva a preguntarle lo mismo — que es exactamente lo que pasó con
+  `apiary:load-protocol` el 2026-09-16.
+- El pendiente de `SESSION_STATE.md` §3 se reescribe apuntando aquí: lo decidido está decidido, y lo
+  que espera es sólo el vocabulario.
+
+## ADR-191 — La malla no es una variable de medición: es `SampleKind.SCREEN` y una fracción propia
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado (decisión de Daniel, en sesión) · **Cierra** la
+pregunta que ADR-190 dejó abierta
+
+**Contexto.** ADR-190 decidió que clasificar por malla son dos operaciones —una medición sobre
+muestra y un corte físico— y dejó abierto «cómo se nombra la variable de malla», porque
+`docs/beneficio/03_public_api.md` no la declara. Daniel pidió resolverlo.
+
+**Lo primero que se midió tumbó la pregunta.** Una fracción de malla es *(rango, sistema, masa)* y
+una fila de `Measurement` es *(variable, valor, unidad)* más FK y procedencia: **no tiene ninguna
+columna donde quepa el rango**, y `CLAUDE.md` §49 prohíbe guardarlo como JSON. Meter el número de
+malla en el nombre de la variable —`malla_16`, `malla_17`…— daría treinta variables en un `Record`
+total y **contradiría ADR-186**, que decidió que el rango es `min`/`max` numéricos y el sistema un
+enum de tres. Así que **no hace falta ninguna `MeasurementVariable`**, y la pregunta de ADR-190
+estaba mal planteada: lo que faltaba nombrar eran otras dos cosas.
+
+**Decisión 1: `SCREEN`, sexto valor de `SampleKind`.**
+
+La tabla normativa de `docs/beneficio/20_modelo_ciclo_completo.md` §2 nombra los tipos por su
+**destino**, en una palabra inglesa en mayúsculas: `PROCESS`, `MOISTURE`, `ROAST`, `CUPPING`,
+`RETENTION`. `SCREEN` sigue esa forma, es el término del oficio, y casa con las columnas
+`greenScreen*` de `Lot` y con `SISTEMAS_DE_MALLA` que ADR-186 ya fijó.
+
+**Y NO es `RETENTION`, aunque en inglés «screen retention» sea exactamente esto.** Medido: aquí
+`RETENTION` es el **testigo sellado**, «obligatoria para todo lote que se venda», con su propia
+regla en ese documento. Apropiarse de ese valor por la coincidencia del término inglés habría
+confundido dos cosas sin relación — y habría hecho pasar por testigo una muestra que se consume.
+
+**Lo que ese tipo hereda, y es lo que hace honesto el gramaje de ADR-190:** el mismo §2 dice que una
+muestra es un hijo cuya masa **sale del lote y se contabiliza**, porque «una muestra que no descuenta
+masa es una fuga silenciosa en el balance, pequeña por evento y acumulativa a lo largo de una
+cosecha». Los 350 g de la muestra de malla salen del balance del lote; no aparecen de la nada.
+
+**Decisión 2: `GreenScreenFraction`, una fila por fracción de la muestra.**
+
+`@@map("green_screen_fraction")`, schema `core` —donde vive `Sample`—, con `sampleId` y **los mismos
+cuatro nombres de columna que `Lot` ya tiene**: `greenScreenMin`, `greenScreenMax`,
+`greenScreenSystem`, `greenScreenStatus`, más `massKg` por §1 de `00_conventions` (kg, 3 decimales).
+Reusa el enum `GreenScreenDataStatus` que ya existe; no se crea ninguno.
+
+**Espejar los nombres es el punto, no pereza.** Una lectura sobre muestra y un corte físico se
+comparan entonces sin traducir nada, que es lo que la rúbrica de veracidad pide: una cifra que no
+resiste ser desarmada convierte la herramienta en un generador de documentación creíble.
+
+**Consecuencias.**
+
+- **Esto es modelo nuevo y no se construyó:** la decisión 2 pide tabla y migración. La 1 es un valor
+  de enum. Ninguna de las dos entra con este ADR, que sólo fija los nombres.
+- **El corte físico no se toca.** `recordGreenGrading` sigue igual, con sus lotes de salida y su
+  balance de masa. La medición sobre muestra es un camino aparte que no escribe lotes.
+- **No hay `MeasurementVariable` nueva**, así que el `Record` total de `lib/traceability/units.ts` no
+  cambia y nadie tiene que declarar mínimos ni máximos para esto.
+- Lo que sigue abierto, y es trabajo con su propio diseño: **quién escribe esas filas** —una función
+  de servicio al lado de `recordGreenGrading`— y si las tres lecturas de ADR-186 deben saber
+  distinguir en pantalla una fracción medida sobre muestra de una salida de un corte real. Hoy nada
+  las distingue porque sólo existe la segunda.
+
+## ADR-192 — Un pedido de cereza es una restricción cuando existe, no un requisito para recibir
+
+**Fecha:** 2026-09-27 · **Estado:** aceptado (decisión de Daniel, en sesión) · **Entregado** en el
+PR #512 el 2026-09-28
+
+**Contexto.** La recepción es la entrada del beneficio, y `/beneficio/pedidos` era una de las
+entradas del índice, al lado de ella. Eso ponía a la misma altura lo que más se usa y un paso que a
+este volumen es opcional: forzar un pedido antes de poder recibir añadía trámite sin añadir control.
+
+**Por qué este ADR se escribe dos días tarde.** La decisión existía en un comentario de
+`app/beneficio/destinos.ts` y en una entrada de `SESSION_STATE.md` §2 que toca archivar. Medido:
+`DECISIONS.md` daba **0** para «sin pedido» y **0** para `pedidoId`, con «recepción» dando 8 como
+control positivo. O sea que al archivar esa entrada la razón habría quedado viviendo sólo en el
+archivo histórico, y un log archivado no lo lee nadie. Es la misma forma que ADR-190 registró para
+el `apiary:load-protocol`, dos veces en el mismo día.
+
+**Decisión de Daniel.** A este volumen **se recibe lo que salga por parcela o microparcela, sin
+pedido de por medio**. El pedido queda opcional.
+
+**Lo que eso significa en el código, medido y no supuesto.**
+
+- `pedidoId` es `string | null` en `RecibirCerezaInput` (`lib/traceability/recepcionesDeCereza.ts:42`)
+  y nullable en el esquema —`pedido_id String?` en dos modelos, con `onDelete: Restrict`—, así que
+  una recepción sin pedido es un dato de primera clase y no un hueco.
+- **Cuando SÍ hay pedido, sigue restringiendo.** `recibirCereza` bloquea su fila con `FOR UPDATE` y
+  compara los kilos ya recibidos contra el pedido antes de aceptar. Opcional no es decorativo: es
+  «no obligatorio de antemano», no «ignorado cuando está».
+- Las dos entradas de `RecibirCerezaForm` pasan los pedidos abiertos **como lista para elegir**, no
+  como requisito.
+
+**Lo que se movió, y lo que no.**
+
+- **Salió del índice**, que pasó de **9 a 8** entradas —medido sobre los dos lados del commit
+  `a0809cda`—. Que `pedidos` no esté ahí lo fija `tests/beneficio/destinos-del-indice.test.ts`.
+  Hoy el índice vuelve a tener 9 porque la cola de secado entró después; el 8 es de ese momento.
+- **`/beneficio/pedidos` sigue existiendo** para dar de alta uno y ver el histórico, y se llega
+  desde la recepción.
+- **Lo que se consulta MIENTRAS se recibe** —los pedidos abiertos con sus cifras, y cerrarlos— vive
+  ahora dentro de `/beneficio/recepcion`, que es donde se necesita.
+
+**Consecuencias.**
+
+- El índice del beneficio ordena por **frecuencia de uso del operador**, no por completitud del
+  modelo: un paso opcional no ocupa un primer nivel.
+- **No hay migración ni cambio de esquema**: `pedido_id` ya era nullable.
+- Con esta razón escrita aquí, la entrada de `SESSION_STATE.md` §2 «2026-09-28 · El recorrido de
+  granja a beneficio» **ya se puede archivar sin pérdida**, que era lo que la bloqueaba.
+- Lo que este ADR **no** decide: si un pedido debería poder exigirse en algún caso —otro volumen,
+  otro comprador—. Hoy no se exige nunca y nadie lo ha pedido.

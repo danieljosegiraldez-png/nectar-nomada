@@ -7,7 +7,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
-import { DryingValidationError, endDryingRun, recordDryingTurnEvent, startDryingRun } from "../../lib/traceability/drying";
+import {
+  DryingValidationError,
+  endDryingRun,
+  recordDryingTurnEvent,
+  registrarTandaDeVolteo,
+  startDryingRun,
+} from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -68,6 +74,16 @@ afterAll(async () => {
   const runIds = runs.map((r) => r.id);
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "drying_run", entityId: { in: runIds } }) });
   await prisma.dryingTurnEvent.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
+  // Las tandas se buscan por quién las creó y no por sus volteos: la línea de arriba ya se los
+  // llevó, y una tanda huérfana sobrevive a la suite y contamina la siguiente.
+  const tandas = await prisma.dryingTurnBatch.findMany({
+    where: { createdBy: { in: [authorizedUserAccountId, wrongProjectUserAccountId] } },
+  });
+  const tandaIds = tandas.map((t) => t.id);
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ entityType: "drying_turn_batch", entityId: { in: tandaIds } }),
+  });
+  await prisma.dryingTurnBatch.deleteMany({ where: assertDefinedWhere({ id: { in: tandaIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
@@ -337,5 +353,119 @@ describe("Secado — el desenlace, no solo la fecha", () => {
       unit: "kg",
     });
     expect(cerrado.endedOutcome).toBe("abandoned");
+  }, 20000);
+});
+
+/**
+ * `registrarTandaDeVolteo` — "I turned these", one act over several units (design §A.5).
+ *
+ * The test that matters most here is the mixed-project one. `requireLotAccess` is an OR: it
+ * returns as soon as ONE candidate passes. Handing it every lot of a batch in a single call would
+ * authorize six units to someone who can only touch one, and nothing would look wrong — the batch
+ * would just be written. That is why the service asks once per unit, and why the assertion below
+ * checks that NOTHING was written, not merely that it threw.
+ */
+describe("Drying — turning several units as one batch", () => {
+  async function runInProject(label: string, projectId: string, userAccountId: string) {
+    const lot = await createLot(userAccountId, {
+      lotCode: `${RUN_ID}-${label}`,
+      lotType: "drying",
+      organizationId,
+      projectId,
+    });
+    const { run } = await startDryingRun(userAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      method: "raised_bed",
+      startedAt: new Date("2026-02-01T12:00:00Z"),
+    });
+    return run;
+  }
+
+  it("writes one batch, one turn per unit, and exactly one audit event", async () => {
+    const runs = [
+      await runInProject("batch-a", projectAId, authorizedUserAccountId),
+      await runInProject("batch-b", projectAId, authorizedUserAccountId),
+      await runInProject("batch-c", projectAId, authorizedUserAccountId),
+    ];
+    const turnedAt = new Date("2026-02-02T13:00:00Z");
+
+    const batch = await registrarTandaDeVolteo(authorizedUserAccountId, {
+      dryingRunIds: runs.map((r) => r.id),
+      occurredAt: turnedAt,
+      provenanceClass: "direct_observation",
+      notes: "morning pass",
+    });
+
+    expect(batch.turns).toHaveLength(3);
+    expect(batch.turns.map((t) => t.dryingRunId).sort()).toEqual(runs.map((r) => r.id).sort());
+    // Every turn points at the batch: this is what "one act" means in the data.
+    for (const turn of batch.turns) {
+      expect(turn.turnBatchId).toBe(batch.id);
+      expect(turn.eventType).toBe("turned");
+      expect(turn.occurredAt.toISOString()).toBe(turnedAt.toISOString());
+    }
+
+    const audits = await prisma.auditEvent.findMany({
+      where: { entityType: "drying_turn_batch", entityId: batch.id },
+    });
+    expect(audits, "the act is audited once, not once per unit").toHaveLength(1);
+  }, 20000);
+
+  it("refuses a batch that mixes a unit the operator cannot manage, and writes nothing", async () => {
+    const mine = await runInProject("batch-mine", projectAId, authorizedUserAccountId);
+    const theirs = await runInProject("batch-theirs", projectBId, wrongProjectUserAccountId);
+
+    const batchesBefore = await prisma.dryingTurnBatch.count({ where: { createdBy: authorizedUserAccountId } });
+
+    await expect(
+      registrarTandaDeVolteo(authorizedUserAccountId, {
+        dryingRunIds: [mine.id, theirs.id],
+        occurredAt: new Date("2026-02-03T13:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+
+    // Not "it threw" but "the database is untouched": the authorization loop runs before the
+    // transaction opens, so a single failing unit leaves no batch and no turn behind.
+    expect(await prisma.dryingTurnBatch.count({ where: { createdBy: authorizedUserAccountId } })).toBe(batchesBefore);
+    expect(await prisma.dryingTurnEvent.count({ where: { dryingRunId: mine.id } })).toBe(0);
+  }, 20000);
+
+  it("refuses an empty batch and a batch naming the same unit twice", async () => {
+    const run = await runInProject("batch-dup", projectAId, authorizedUserAccountId);
+
+    await expect(
+      registrarTandaDeVolteo(authorizedUserAccountId, {
+        dryingRunIds: [],
+        occurredAt: new Date("2026-02-04T13:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+
+    await expect(
+      registrarTandaDeVolteo(authorizedUserAccountId, {
+        dryingRunIds: [run.id, run.id],
+        occurredAt: new Date("2026-02-04T13:00:00Z"),
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(TraceabilityAccessError);
+
+    // A repeated unit must not leave one of the two turns behind, which would inflate the rhythm.
+    expect(await prisma.dryingTurnEvent.count({ where: { dryingRunId: run.id } })).toBe(0);
+  }, 20000);
+
+  it("keeps a lone turn outside any batch", async () => {
+    const run = await runInProject("batch-lone", projectAId, authorizedUserAccountId);
+
+    const turn = await recordDryingTurnEvent(authorizedUserAccountId, {
+      dryingRunId: run.id,
+      eventType: "turned",
+      occurredAt: new Date("2026-02-05T13:00:00Z"),
+    });
+
+    // Null here means "there was no batch", not "the field is missing" — turning one bed by hand
+    // stays a first-class act.
+    expect(turn.turnBatchId).toBeNull();
   }, 20000);
 });

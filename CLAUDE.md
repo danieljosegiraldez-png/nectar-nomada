@@ -3021,6 +3021,22 @@ de error en vez de decir «Elige al menos un propósito de la visita».
 pantalla miente. Se anota aquí porque la entrada de estado que lo contaba se
 archivó el 2026-09-19 y un log archivado no lo lee nadie.
 
+### Un `redirect` dentro de un `try` se convierte en un error del formulario
+
+**PR #514.** Next implementa `redirect()` **lanzando**, así que un `redirect` escrito
+dentro del `try` de una acción de servidor lo atrapa el `catch`, y `traducir` lo
+vuelve un mensaje de error en la pantalla. El formulario se queda donde estaba
+diciendo que algo falló, cuando lo que pasó es que todo salió bien.
+
+**La regla:** el `redirect` va **fuera del `try`**. Es la hermana de la trampa de
+arriba y se equivoca al revés: allí el dominio funciona y la pantalla miente por lo
+que `friendlyError` no conoce; aquí miente por lo que el `catch` sí atrapa y no
+debería.
+
+Se anota aquí, y no en un log, por lo mismo que la de arriba: la entrada de estado
+que lo contaba se archivó el 2026-09-29, y medido antes de moverla daba **cero**
+menciones en este archivo, en `DECISIONS.md` y en el archivo histórico.
+
 ### Una prueba puede cerrarse sola por una errata
 
 **Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
@@ -3240,6 +3256,33 @@ conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
 
 **Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
 que estén **las que deben estar**. Una comprobación ausente no tiene color.
+
+### Un guardia que lee la fuente puede quedar satisfecho por la DECLARACIÓN
+
+**2026-09-29.** Escribí un guardia para una clase de defecto real: una acción que redirige con
+`?ok=<código>` a una pantalla que no lee `ok`, así que la confirmación no se muestra nunca. Pasó
+con `/lots/<id>?ok=inspeccion` desde que existe esa acción. **Escribí tres versiones del detector y
+las tres las tumbó el flip-test. Ninguna la cazó releer el código.**
+
+| versión del detector | qué aceptaba de más o de menos |
+|---|---|
+| `ok` seguido de `:`/`,`/`}` | **el TIPO**: `searchParams: Promise<{ ok?: string }>` lo satisface sin que nadie lea el valor |
+| `const { ok } = await searchParams` | marcaba como sordas dos pantallas que **leen bien** —`Promise.all` y luego `sp.ok`— |
+| + aceptar también la desestructuración | sacar el valor y **no pintarlo** deja la confirmación igual de invisible |
+
+La tercera es la que enseña más: **extraer un dato no es usarlo.** El guardia quedó en exigir la
+comparación `ok === "…"`, con o sin objeto delante, que es lo que hacen las catorce pantallas que
+lo leen bien.
+
+**La regla que queda, y vale para cualquier guardia que lea fuente: la mutación del flip tiene que
+quitar LA CONDUCTA, no el token con el que casa el detector.** Si se muta la línea que el regex
+busca, el flip prueba el regex. Aquí la mutación buena fue quitar la rama JSX que **pinta** el
+aviso, dejando intactos el tipo y la desestructuración: eso es lo que un operador notaría, y es lo
+que dos de las tres versiones no vieron.
+
+**Y el reverso, que ya costó tres versiones de un hook:** apretar hasta marcar código correcto es
+peor que no tener guardia, porque enseña a ignorarlo. Entre las dos orillas, el control es barato —
+correr el detector sobre TODAS las pantallas reales y mirar si alguna buena sale marcada.
 
 ## Al cerrar la sesión
 
