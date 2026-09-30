@@ -3129,7 +3129,7 @@
     "fichaGrafica": "Cómo va",
     "fichaGraficaSinDatos": "Todavía no hay lecturas que dibujar.",
     "fichaGraficaEje": "Humedad del grano contra el rango objetivo, con el ambiente del cuarto y los volteos",
-    "fichaGraficaNotaTemperatura": "La temperatura del cuarto va en su propia escala, a trazos.",
+    "fichaGraficaNotaTemperatura": "El ambiente del cuarto —temperatura y humedad relativa— va en su propia escala, a trazos.",
     "fichaGraficaVolteo": "volteo",
     "fichaPesajes": "Pesajes"
   },
