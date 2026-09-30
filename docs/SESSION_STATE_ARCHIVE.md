@@ -4424,3 +4424,36 @@ cierto, y no era toda la historia:
 
 Que ningún ADR la nombre no es lo mismo que que no tenga casa: el nombre de ese `describe` lleva
 la fecha y la atribución, así que un `grep` por la decisión la encuentra donde se ejecuta.
+
+### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
+
+**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
+**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
+por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
+Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
+`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
+`tests/beneficio/destinos-del-indice.test.ts`.
+
+**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
+`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
+error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
+`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
+encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
+después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
+
+---
+
+**Archivado el 2026-09-29, después de darle casa a lo que sólo vivía aquí.** Se midió pieza por
+pieza antes de moverla, porque dos veces el mismo día una entrada archivada se llevó consigo la
+única copia de algo:
+
+| lo que la entrada contenía | dónde vive ahora |
+|---|---|
+| **la decisión de Daniel: se recibe sin pedido de por medio** | **ADR-192**, escrito el 2026-09-29 justamente para poder archivar esto. `DECISIONS.md` daba **0** menciones de «sin pedido» y **0** de `pedidoId` antes, con «recepción» dando 8 como control positivo |
+| **la trampa del `redirect` dentro del `try`** | el `CLAUDE.md` de este repositorio, en «Trampas que han costado tiempo real», al lado de la de `friendlyError`. Medido antes de moverla: **cero** menciones en ese archivo, en `DECISIONS.md` y aquí |
+| el índice de 9 a 8 entradas, y que `pedidos` no esté | `tests/beneficio/destinos-del-indice.test.ts`, que lo fija, y ADR-192, que lo explica |
+| el nombre único de #509 y el aterrizaje de #514 | el código y sus pruebas; son registro de entrega, no reglas |
+
+**Y una cifra que se volvió a medir en vez de copiarla:** esta entrada decía «el índice pasa de 9 a
+8». Hoy tiene 9 y por eso se dudó. Medido sobre los dos lados del commit `a0809cda`: **antes 9,
+después 8** — la cifra era correcta, y el 9 de hoy es porque la cola de secado entró después.
