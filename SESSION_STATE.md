@@ -96,8 +96,9 @@ verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
 **Tres semanas perdido porque este archivo no lo nombraba.** Las once decisiones de Daniel
 (2026-09-16/18) viven en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`:
 la cola de atención de §4.2 y las tres piezas de §4.5. **Los motores están en `main`**
-—`puntajeDeUrgencia`, `estadoDeRitmo`, `SinVeredicto`—; **la vista no existe**. **Y choca con
-la ruta:** decidió «una página nueva `/beneficio`, sólo lectura», y hoy es un índice.
+—`puntajeDeUrgencia`, `estadoDeRitmo`, `SinVeredicto`—; **la vista no existe**. La ruta ya
+**no bloquea**: **ADR-193** decide que el tablero es `/beneficio` arriba y el índice su mitad
+de abajo. Falta el plan y construirlo; el orden de esa mitad se decide ahí.
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
