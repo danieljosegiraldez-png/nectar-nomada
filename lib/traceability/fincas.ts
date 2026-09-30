@@ -37,6 +37,13 @@ export interface Finca {
   readonly tipo: TipoDeFinca;
   /** El logotipo de la finca (`Location.logoAssetId`), o `null` si no tiene. */
   readonly logoAssetId: string | null;
+  /**
+   * El beneficio al que va su cereza (ADR-194, diseño 2026-09-30).
+   *
+   * **`null` NO es un hueco:** una finca cuya cereza se compra y se traslada no lleva destino, y
+   * entra por el camino del proveedor. La pantalla dice **qué falta**, no «0 pendientes».
+   */
+  readonly beneficioDestino: { readonly id: string; readonly name: string } | null;
 }
 
 /**
@@ -50,7 +57,7 @@ export async function listarFincas(userAccountId: string): Promise<Finca[]> {
 
   // Una sola lectura del árbol para subir de una parcela a su sitio.
   const arbol = await prisma.location.findMany({
-    select: { id: true, parentLocationId: true, locationType: true, name: true, logoAssetId: true, organization: { select: { id: true, organizationType: true } } },
+    select: { id: true, parentLocationId: true, locationType: true, name: true, logoAssetId: true, organization: { select: { id: true, organizationType: true } }, beneficioDestino: { select: { id: true, name: true } } },
   });
   const porId = new Map(arbol.map((l) => [l.id, l]));
   // El sitio **de más arriba**, no el primero que aparece al subir. Daniel, 2026-09-21:
@@ -75,7 +82,7 @@ export async function listarFincas(userAccountId: string): Promise<Finca[]> {
     if (l.locationType !== "site" && l.locationType !== "plot") continue;
     const sitio = sitioDe(l.id);
     if (!sitio?.organization || !esTipoDeFinca(sitio.organization.organizationType)) continue;
-    fincas.set(sitio.id, { siteId: sitio.id, nombre: sitio.name, organizationId: sitio.organization.id, tipo: sitio.organization.organizationType, logoAssetId: sitio.logoAssetId });
+    fincas.set(sitio.id, { siteId: sitio.id, nombre: sitio.name, organizationId: sitio.organization.id, tipo: sitio.organization.organizationType, logoAssetId: sitio.logoAssetId, beneficioDestino: sitio.beneficioDestino });
   }
   return sortByName([...fincas.values()], (f) => f.nombre);
 }

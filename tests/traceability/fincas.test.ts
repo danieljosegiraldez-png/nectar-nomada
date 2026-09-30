@@ -130,7 +130,7 @@ describe("qué fincas ve cada uno", () => {
 
   it("una finca lleva su nombre, su organización y su tipo", async () => {
     const a = (await listarFincas(admin)).find((f) => f.siteId === A.site);
-    expect(a).toEqual({ siteId: A.site, nombre: `TEST Finca A (${RUN})`, organizationId: A.org, tipo: "farm", logoAssetId: null });
+    expect(a).toEqual({ siteId: A.site, nombre: `TEST Finca A (${RUN})`, organizationId: A.org, tipo: "farm", logoAssetId: null, beneficioDestino: null });
   }, 20000);
 
   // Daniel, 2026-09-21: «Invernadero solar» le salía en /fincas como si fuera otra finca. El
@@ -154,8 +154,8 @@ describe("qué fincas ve cada uno", () => {
 });
 
 describe("qué finca queda elegida", () => {
-  const fa: Finca = { siteId: "a", nombre: "A", organizationId: "oa", tipo: "farm", logoAssetId: null };
-  const fb: Finca = { siteId: "b", nombre: "B", organizationId: "ob", tipo: "estate", logoAssetId: null };
+  const fa: Finca = { siteId: "a", nombre: "A", organizationId: "oa", tipo: "farm", logoAssetId: null, beneficioDestino: null };
+  const fb: Finca = { siteId: "b", nombre: "B", organizationId: "ob", tipo: "estate", logoAssetId: null, beneficioDestino: null };
 
   it("con una sola finca, esa, aunque no haya cookie", () => {
     expect(resolverFinca([fa], undefined)).toEqual({ elegida: fa, todas: false, debeElegir: false });
