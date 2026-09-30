@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **⚠ Este plan se unificó con `2026-09-29-tablero-del-beneficio-paso-1.md`.** Sus tareas 1 y 2
+> se ejecutan tal cual; las 3, 4 y 5 las sustituyen las tareas 5 y 8 del plan unificado. El
+> orden y la composición están en
+> `docs/superpowers/plans/2026-09-29-tablero-del-beneficio-unificado.md`, que es el que se abre
+> primero.
+
 **Goal:** que `/beneficio` conteste de un vistazo «¿qué entró hoy?» y «¿cuánto cabe?», y que la capacidad nunca cuente una unidad que nadie ha liberado.
 
 **Architecture:** cuatro piezas independientes. (1) La transición automática a «por limpiar» al cerrar una corrida, reusando la condición de equipo que ya existe. (2) El mismo estado para las camas, que hoy no tienen ninguno. (3) El modelo de lectura del tablero, que **reutiliza** `colaDeSecado` en vez de volver a consultar lo mismo. (4) La pantalla y la reorganización del índice en tres niveles.
