@@ -106,6 +106,14 @@ después, así que el aterrizaje encabeza con la acción correcta. Medido, no su
 
 ## 3. Bloqueado, y en qué
 
+#### El tablero del beneficio: diseñado, aprobado y sin construir
+
+**Tres semanas perdido porque este archivo no lo nombraba.** Las once decisiones de Daniel
+(2026-09-16/18) viven en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`:
+la cola de atención de §4.2 y las tres piezas de §4.5. **Los motores están en `main`**
+—`puntajeDeUrgencia`, `estadoDeRitmo`, `SinVeredicto`—; **la vista no existe**. **Y choca con
+la ruta:** decidió «una página nueva `/beneficio`, sólo lectura», y hoy es un índice.
+
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
 Rescatado al archivar «2026-09-27 · Lotes es operación»: falta **la prueba de que todo perfil con
