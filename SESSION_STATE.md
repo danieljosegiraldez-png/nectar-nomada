@@ -229,8 +229,12 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   `enforce_admins` en false, los dos a propósito— en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
-  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
+- ~~**PR B del manejo fitosanitario, pendiente de fusionar**~~ — **falso, y quitado el
+  2026-09-29.** `origin/fitosanitarios-pr-b` no tiene **ningún** commit que `main` no
+  tenga —control al revés: 384— y **cero** archivos que difieran; el trabajo está en
+  `main` (`lib/traceability/intervenciones.ts`, 36.710 bytes, con
+  `productosFitosanitarios`). No faltaba fusionar nada: faltaba borrar la línea, que
+  mandaba a la siguiente sesión a buscar trabajo a una rama vacía.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
