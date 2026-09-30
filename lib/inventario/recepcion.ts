@@ -17,29 +17,27 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
 import { MaterialAccessError, MaterialValidationError } from "./materiales";
+import { CAMPOS_DECIMALES, CAMPOS_DEL_PRODUCTO, CAMPOS_DE_OPCIONES, CAMPOS_ENTEROS, VALORES_DE_OPCIONES, camposDe, type CampoDelProducto, type ClaseDeProducto } from "./camposDeProducto";
+import { esPlaga } from "../traceability/plagas";
+import type { PlotInterventionTarget } from "../../generated/prisma/client";
 
-/** Los campos del producto como medicamento. El orden es el de la pantalla. */
-export const CAMPOS_DEL_PRODUCTO = [
-  "manufacturer",
-  "activeIngredient",
-  "sanitaryRegistration",
-  "defaultWithdrawalDays",
-  "avisarDiasAntes",
-  "storageConditions",
-  "safetyNotes",
-  "defaultReentryHours",
-] as const;
-export type CampoDelProducto = (typeof CAMPOS_DEL_PRODUCTO)[number];
-const NUMERICOS: ReadonlySet<CampoDelProducto> = new Set(["defaultWithdrawalDays", "avisarDiasAntes", "defaultReentryHours"]);
-
-/** Medicamento de botiquín o producto de manejo fitosanitario. */
-export type ClaseDeProducto = "medicamento" | "fitosanitario";
-
-/** Qué campos del producto se piden según su clase. La reentrada no significa
- *  nada para un medicamento de colmena. */
-export function camposDe(clase: ClaseDeProducto): readonly CampoDelProducto[] {
-  return clase === "fitosanitario" ? CAMPOS_DEL_PRODUCTO : CAMPOS_DEL_PRODUCTO.filter((c) => c !== "defaultReentryHours");
-}
+/**
+ * Qué campos tiene un producto y cuáles se piden según su clase **viven en `./camposDeProducto`**,
+ * un módulo puro, porque el formulario de cliente los necesita y no puede importar éste —lee la
+ * base—. Se re-exportan aquí para no romper a quien ya los importaba de este módulo.
+ */
+export {
+  CAMPOS_DEL_PRODUCTO,
+  CAMPOS_ENTEROS,
+  CAMPOS_DECIMALES,
+  CAMPOS_NUMERICOS,
+  CAMPOS_LARGOS,
+  CAMPOS_DE_OPCIONES,
+  VALORES_DE_OPCIONES,
+  camposDe,
+  type CampoDelProducto,
+  type ClaseDeProducto,
+} from "./camposDeProducto";
 
 export interface ProductoParaRecibir {
   readonly id: string;
@@ -49,6 +47,8 @@ export interface ProductoParaRecibir {
   readonly campos: { readonly [K in CampoDelProducto]: string | number | null };
   /** Los que el producto aún no declara. La pantalla los ofrece. */
   readonly faltan: readonly CampoDelProducto[];
+  /** Las plagas que el producto declara cubrir. Vacío es «nadie lo declaró», no «ninguna». */
+  readonly plagas: readonly PlotInterventionTarget[];
 }
 
 export interface OpcionesDeRecepcion {
@@ -96,6 +96,7 @@ export async function opcionesDeRecepcion(userAccountId: string, clase: ClaseDeP
       organizationId: m.organizationId,
       campos,
       faltan: camposDeLaClase.filter((c) => campos[c] == null),
+      plagas: m.plantProtectionTargets,
     };
   });
   return { sitios, productos };
@@ -103,7 +104,17 @@ export async function opcionesDeRecepcion(userAccountId: string, clase: ClaseDeP
 
 export async function completarProducto(
   userAccountId: string,
-  input: { readonly materialId: string; readonly locationId: string; readonly campos: Partial<Record<CampoDelProducto, string | number | null>> },
+  input: {
+    readonly materialId: string;
+    readonly locationId: string;
+    readonly campos: Partial<Record<CampoDelProducto, string | number | null>>;
+    /**
+     * Las plagas que el producto cubre. Van **fuera** de `campos` porque son una lista y ése es un
+     * mapa de escalares. Como el resto: sólo rellenan el hueco —una lista vacía es «nadie lo
+     * declaró»— y nunca reemplazan una ya declarada.
+     */
+    readonly plantProtectionTargets?: readonly PlotInterventionTarget[];
+  },
 ) {
   if (!(await can(userAccountId, "manage", "equipment", { scopeType: "location", scopeRefId: input.locationId }, "internal"))) {
     throw new MaterialAccessError("forbidden");
@@ -122,20 +133,45 @@ export async function completarProducto(
       const valor = input.campos[campo];
       if (valor == null || valor === "") continue;
       if (antes[campo] != null) continue; // Sólo huecos: lo declarado no se toca aquí.
-      if (NUMERICOS.has(campo)) {
+      if (CAMPOS_ENTEROS.has(campo)) {
         const n = Number(valor);
         if (!Number.isInteger(n) || n < 0) {
           throw new MaterialValidationError(`${campo} inválido: ${valor}. Cero es válido; negativo no.`);
         }
         data[campo] = n;
+      } else if (CAMPOS_DECIMALES.has(campo)) {
+        // Una dosis NO es un entero: «1,5 L/ha» es la forma típica. Se exige finito y positivo —una
+        // dosis de cero no es una dosis—. El RANGO (min ≤ max) sí lo vigila la base, con su CHECK:
+        // ahí no llega este servicio, pero tampoco un importador ni un SQL directo.
+        const n = Number(valor);
+        if (!Number.isFinite(n) || n <= 0) {
+          throw new MaterialValidationError(`${campo} inválido: ${valor}. Una dosis es un número positivo.`);
+        }
+        data[campo] = n;
+      } else if (CAMPOS_DE_OPCIONES.has(campo)) {
+        // Lista cerrada: un valor de fuera reventaría el insert con un error de Postgres, que la
+        // pantalla enseña como una avería. Aquí se rechaza con un mensaje que dice qué pasó.
+        const texto = String(valor).trim();
+        if (!texto) continue;
+        if (!VALORES_DE_OPCIONES[campo]?.includes(texto)) {
+          throw new MaterialValidationError(`${campo} inválido: ${texto}.`);
+        }
+        data[campo] = texto;
       } else {
         const texto = String(valor).trim();
         if (texto) data[campo] = texto;
       }
     }
-    if (Object.keys(data).length === 0) return antes;
+    // Las plagas, con la misma regla de hueco: si el producto ya declara alguna, no se tocan.
+    const plagas = (input.plantProtectionTargets ?? []).filter(esPlaga);
+    const plagasNuevas = antes.plantProtectionTargets.length === 0 ? [...new Set(plagas)] : [];
 
-    const despues = await tx.consumableMaterial.update({ where: { id: input.materialId }, data });
+    if (Object.keys(data).length === 0 && plagasNuevas.length === 0) return antes;
+
+    const despues = await tx.consumableMaterial.update({
+      where: { id: input.materialId },
+      data: plagasNuevas.length > 0 ? { ...data, plantProtectionTargets: plagasNuevas } : data,
+    });
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,

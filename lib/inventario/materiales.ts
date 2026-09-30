@@ -7,6 +7,7 @@
  *
  * Spec: docs/superpowers/specs/2026-09-17-inventario-con-existencias-design.md
  */
+import type { PlantProtectionUse, PlotInterventionTarget } from "../../generated/prisma/client";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
@@ -40,6 +41,21 @@ export interface CrearMaterialInput {
    * ofrece al registrar una intervención del aserrín y la gallinaza.
    */
   readonly isPlantProtection?: boolean;
+  /**
+   * **Los datos que hacen consistente el registro de una aplicación** — decisión de Daniel,
+   * 2026-09-30. Todos opcionales, como los de arriba: un saco de gallinaza no tiene dosis, y
+   * exigirlos convertiría el alta de cualquier material en una ficha de agroquímico.
+   *
+   * `plantProtectionUse` es `preventivo` o `control`, y es del PRODUCTO y no de cada aplicación.
+   * La dosis va en rango y **por litro de agua**, que es como viene en la etiqueta y lo que deja
+   * multiplicar por el `mixVolume` que la intervención ya guarda. Y las plagas reusan el enum del
+   * objetivo, para que producto e intervención hablen de lo mismo.
+   */
+  readonly plantProtectionUse?: PlantProtectionUse | null;
+  readonly doseMin?: number | null;
+  readonly doseMax?: number | null;
+  readonly doseUnit?: string | null;
+  readonly plantProtectionTargets?: readonly PlotInterventionTarget[];
   /** Horas de reentrada por defecto. Nulo = no declarada; 0 = declarada cero. */
   readonly defaultReentryHours?: number | null;
   /**
@@ -71,6 +87,24 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
     if (valor != null && (!Number.isInteger(valor) || valor < 0)) {
       throw new MaterialValidationError(`${campo} inválido: ${valor}. Cero es válido; negativo no.`);
     }
+  }
+
+  // Las dosis, que NO son enteros —«1,5 L/ha» es la forma típica— y no admiten el cero: una dosis
+  // de cero no es una dosis, y lo que falta se queda en nulo.
+  //
+  // **El CHECK de la base es más flojo a propósito: rechaza negativos, no el cero.** No son la
+  // misma comprobación y conviene no leerlas como si lo fueran — la base es el suelo que un
+  // importador o un SQL directo tampoco pueden atravesar; esto es la puerta, y puede apretar más.
+  for (const [campo, valor] of [
+    ["doseMin", input.doseMin],
+    ["doseMax", input.doseMax],
+  ] as const) {
+    if (valor != null && (!Number.isFinite(valor) || valor <= 0)) {
+      throw new MaterialValidationError(`${campo} inválido: ${valor}. Una dosis es un número positivo.`);
+    }
+  }
+  if (input.doseMin != null && input.doseMax != null && input.doseMin > input.doseMax) {
+    throw new MaterialValidationError(`rango de dosis inválido: ${input.doseMin} > ${input.doseMax}.`);
   }
 
   // **Definir qué es «gallinaza» es un acto de GESTIÓN, no de faena.** Se usa
@@ -111,6 +145,11 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
           avisarDiasAntes: input.avisarDiasAntes ?? null,
           isPlantProtection: input.isPlantProtection ?? false,
           defaultReentryHours: input.defaultReentryHours ?? null,
+          plantProtectionUse: input.plantProtectionUse ?? null,
+          doseMin: input.doseMin ?? null,
+          doseMax: input.doseMax ?? null,
+          doseUnit: input.doseUnit?.trim() || null,
+          plantProtectionTargets: [...(input.plantProtectionTargets ?? [])],
           createdBy: userAccountId,
         },
       });

@@ -4784,6 +4784,15 @@ enum PlotInterventionKind {
 
 /// Contra qué. **La lista es de Daniel**, 2026-09-18, spec §2.5, con la
 /// procedencia de cada nombre. No se añade nada sin él; crecer es una línea.
+/// Para qué se usa un producto fitosanitario. Decisión de Daniel, 2026-09-30, con sus palabras:
+/// unos previenen y otros controlan, y los de control «no se usan para prevenir con frecuencia».
+enum PlantProtectionUse {
+  preventivo
+  control
+
+  @@schema("traceability")
+}
+
 enum PlotInterventionTarget {
   arana_roja
   broca
@@ -10034,6 +10043,32 @@ model ConsumableMaterial {
   isPlantProtection   Boolean @default(false) @map("is_plant_protection")
   /// Horas de reentrada por defecto. Nulo = no declarada; 0 = declarada cero.
   defaultReentryHours Int?    @map("default_reentry_hours")
+
+  /// **Para qué se usa: prevenir o controlar.** Decisión de Daniel, 2026-09-30, con sus palabras:
+  /// Bralic y Beauveria son preventivos para la broca y otros; Regent y Abamectina son de control,
+  /// y «no se usan para prevenir con frecuencia, sólo si hay una infestación». Es propiedad del
+  /// PRODUCTO y no de cada aplicación —decisión suya— porque no cambia entre una y otra.
+  /// Nulo = no declarado.
+  plantProtectionUse PlantProtectionUse? @map("plant_protection_use")
+
+  /// **La dosis típica, en rango.** Las etiquetas casi siempre dan un mínimo y un máximo, y quien
+  /// aplica elige dentro; guardar un solo número obligaría a inventar cuál. Se expresa **por litro
+  /// de agua** —decisión de Daniel— que es como viene en la etiqueta y lo que permite multiplicar
+  /// por el `mixVolume` que la intervención ya guarda. UNA dosis por producto, no una por plaga:
+  /// también decisión suya. Nulo = no declarada.
+  doseMin  Decimal? @map("dose_min") @db.Decimal(12, 4)
+  doseMax  Decimal? @map("dose_max") @db.Decimal(12, 4)
+  /// `g/L` o `ml/L`. Texto y no enum: la unidad la escribe la etiqueta, y encerrarla en un enum
+  /// obligaría a ampliarlo cada vez que aparezca una presentación nueva.
+  doseUnit String?  @map("dose_unit")
+
+  /// **Contra qué plagas sirve**, reusando el enum que la intervención ya usa como objetivo — así
+  /// una y otra hablan de lo mismo y se pueden comparar. Lista vacía = no declarado.
+  ///
+  /// **Avisa, no impide.** Decisión de Daniel: si alguien elige este producto para una plaga que no
+  /// está aquí, la pantalla lo dice y deja registrar igual. En campo pasan cosas que la etiqueta no
+  /// prevé, y con todas las listas vacías hoy, rechazar bloquearía usos legítimos.
+  plantProtectionTargets PlotInterventionTarget[] @map("plant_protection_targets")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
