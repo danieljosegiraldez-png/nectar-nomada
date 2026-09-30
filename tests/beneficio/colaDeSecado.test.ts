@@ -13,6 +13,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { colaDeSecado, estadoDeUnidad, urgenciaDeUnidad } from "../../lib/beneficio/colaDeSecado";
+import { fichaDeUnidad, interpretarReferencia } from "../../lib/beneficio/fichaDeUnidad";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `cola-${Date.now()}`;
@@ -355,5 +356,41 @@ describe("el criterio, en aislamiento", () => {
     const uno = urgenciaDeUnidad({ base: 0, ritmo, horasSinVoltear: 5, humedadPct: null });
     const tres = urgenciaDeUnidad({ base: 0, ritmo, horasSinVoltear: 13, humedadPct: null });
     expect(tres).toBeGreaterThan(uno);
+  });
+});
+
+/**
+ * La ficha de una unidad (§B.3). Lo que se prueba aquí NO es que pinte bien: es que su
+ * autorización **venga de la cola** y que no haya un segundo camino que pueda divergir.
+ */
+describe("la ficha de una unidad", () => {
+  it("interpreta las dos formas de nombrar una unidad, y rechaza lo que no lo es", () => {
+    expect(interpretarReferencia("B-001")).toEqual({ tipo: "bandeja", numero: "B-001" });
+    // Minúsculas también: es lo que sale de teclear deprisa con una mano.
+    expect(interpretarReferencia("b-007")).toEqual({ tipo: "bandeja", numero: "B-007" });
+    const id = "11111111-2222-3333-4444-555555555555";
+    expect(interpretarReferencia(id)).toEqual({ tipo: "cama", locationId: id });
+    expect(interpretarReferencia(`cama:${id}`)).toEqual({ tipo: "cama", locationId: id });
+    expect(interpretarReferencia(`corrida:${id}`)).toEqual({ tipo: "corrida", dryingRunId: id });
+    // Y el control negativo, sin el cual lo de arriba sólo dice que acepta cosas:
+    expect(interpretarReferencia("no-soy-una-unidad")).toBeNull();
+    expect(interpretarReferencia("B-1")).toBeNull();
+    expect(interpretarReferencia("")).toBeNull();
+  });
+
+  it("devuelve la unidad a quien la tiene en su cola, y NADA a quien no", async () => {
+    const cola = await colaDeSecado(operario, ahora);
+    const primera = cola.areas[0]?.unidades[0];
+    expect(primera, "el fixture tiene que dar al menos una unidad, o esto no mide nada").toBeDefined();
+
+    const ficha = await fichaDeUnidad(operario, primera!.clave, ahora);
+    expect(ficha, "la unidad de su propia cola").not.toBeNull();
+    expect(ficha!.unidad.clave).toBe(primera!.clave);
+    expect(ficha!.unidad.lotCode).toBe(primera!.lotCode);
+
+    // **El control que le da sentido**: una cuenta sin ámbito no la ve. Sin esta mitad, «la
+    // devuelve» no distingue una ficha correcta de una que enseña cualquier unidad a cualquiera.
+    const forastero = await cuenta("Forastero");
+    expect(await fichaDeUnidad(forastero, primera!.clave, ahora), "sin ámbito, nada").toBeNull();
   });
 });
