@@ -4522,3 +4522,24 @@ cuelguen fincas reales, y el guión lo avisa cada vez.
 **dos pendientes NO se fueron con ella** —los comandos de Luis y Chris contra producción, y el
 «DEMO placeholder» de la organización, que daba **una sola** mención en todo el estado y **cero**
 en §3—: están rescatados en «Kiva Estate: crear su terreno», que ya existía.
+
+### 2026-09-29 · El secado tiene cola, la tanda es un acto, y medir cabe en un campo (PR #523, #526, #531)
+
+**#523 — `ritmo.ts` por fin tiene quien lo pinte.** Calculaba la cola desde el 2026-09-13 y **sus
+únicos consumidores eran sus pruebas**. La pinta `/beneficio/secado`; un guardia exige que sus dos
+cálculos se **importen** fuera de `tests/` — su primera versión buscaba el NOMBRE y pasaba en verde
+con dos constantes locales homónimas.
+
+**#526 — `requireLotAccess` es un O, no un Y.** Vuelve en cuanto UNO de los candidatos pasa, así que
+pasarle las seis unidades de una tanda de golpe **la habría autorizado entera a quien sólo puede
+tocar una**. Se pide una vez por unidad, y fuera de la transacción.
+
+**#531 — doce campos pasan a cuatro, y salen dos fallos de horas que nadie buscaba.** Medido en la
+aplicación viva: **sólo se podía guardar UNA medición por carga de página** —el campo de la hora se
+vaciaba y, por obligatorio, el navegador bloqueaba el envío **sin ningún error**—, y el desfase se
+perdía igual. Un efecto con `[]` escribe en el DOM una vez y React lo borra al re-renderizar.
+**Afecta a los nueve formularios con `TimezoneOffsetField`** y es anterior a este trabajo. Lo delató
+que los otros cuatro formularios de la misma página, que no re-renderizan, seguían con su valor.
+
+**La zona de muestreo ya no exige inspección**: el servidor la crea, y el papel `ZONE` lo impone un
+`CHECK` de `core.sample` — preguntarlo era pedir la única respuesta que la base acepta.

@@ -111,7 +111,6 @@ export async function abrirJornadaAction(_prev: JornadaActionState, formData: Fo
       .map(([locationId, personId]) => ({ locationId, personId }));
     const jornada = await abrirJornada(yo, {
       fincaSiteId: String(formData.get("fincaSiteId") ?? ""),
-      beneficioId: String(formData.get("beneficioId") ?? ""),
       fecha,
       nota: String(formData.get("nota") ?? "") || null,
       asignaciones,

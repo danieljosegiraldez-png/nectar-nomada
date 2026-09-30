@@ -73,6 +73,12 @@ export function scopeTargetsFor(input: { projectId?: string | null; locationId?:
  * passes the classification the record will carry, which for a new Lot is the
  * schema default `internal`. "May this user create an internal lot" is a real
  * question and now gets asked.
+ *
+ * **ESTO ES UN «O», NO UN «Y» — y la diferencia autoriza de más.** Vuelve en cuanto UNO de los
+ * candidatos pasa, así que pasarle varias unidades de golpe **autoriza el conjunto entero a quien
+ * sólo puede tocar una**. Medido el 2026-09-29 sobre las seis unidades de una tanda de volteo
+ * (PR #526): se pide UNA VEZ POR UNIDAD, y fuera de la transacción. Quien pase una lista tiene que
+ * querer decir «con que pueda con cualquiera de éstos, basta».
  */
 export async function requireLotAccess(
   userAccountId: string,

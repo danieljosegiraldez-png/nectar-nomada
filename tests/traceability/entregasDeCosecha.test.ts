@@ -61,9 +61,11 @@ beforeAll(async () => {
   const ayer = new Date(hoy.getTime() - 86_400_000);
   await agregarRecolector(capataz, { fincaSiteId: finca, personId: r1, desde: ayer });
   await agregarRecolector(capataz, { fincaSiteId: finca, personId: r2, desde: ayer });
+  // El destino ya no se pasa a `abrirJornada`: lo lleva la finca y la jornada lo COPIA (ADR-194).
+  await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: beneficio } });
   jornada = (
     await abrirJornada(capataz, {
-      fincaSiteId: finca, beneficioId: beneficio,
+      fincaSiteId: finca,
       fecha: hoy,
       asignaciones: [
         { locationId: parcela, personId: r1 },
@@ -87,6 +89,9 @@ afterAll(async () => {
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: bloque }) });
+  // La FK del destino es RESTRICT: sin soltarlo, borrar el beneficio lanza y —siendo el
+  // `afterAll` una cadena— abandona los borrados de abajo.
+  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: beneficio }), data: { beneficioDestinoId: null } });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficio, parcela, otraParcela] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: finca }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
@@ -126,7 +131,7 @@ describe("anotar la entrega", () => {
   }, 20000);
 
   it("en una jornada cerrada no se anota", async () => {
-    const otra = await abrirJornada(capataz, { fincaSiteId: finca, beneficioId: beneficio, fecha: hoy, asignaciones: [{ locationId: parcela, personId: r1 }] });
+    const otra = await abrirJornada(capataz, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: r1 }] });
     await cerrarJornada(capataz, otra.id);
     await expect(anotarEntrega(capataz, { ...base(), jornadaId: otra.id, recolectorPersonId: r1, origen: { locationId: parcela } })).rejects.toThrow(
       /jornada_cerrada/,
