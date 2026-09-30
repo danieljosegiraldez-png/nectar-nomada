@@ -3098,7 +3098,14 @@
     "colaEstado_va_tarde": "va tarde",
     "colaEstado_cerca_del_objetivo": "cerca del objetivo",
     "colaEstado_listo": "listo",
-    "colaEstado_sin_receta_declarada": "sin receta declarada"
+    "colaEstado_sin_receta_declarada": "sin receta declarada",
+    "colaColumnaVolvi": "Revolví",
+    "colaCasillaDe": "Revolví {unidad}",
+    "colaBotonVolvi": "Revolví éstas",
+    "colaBotonAyuda": "Viene marcado lo que toca volteo. Desmarca lo que no tocaste y confirma.",
+    "colaTandaHecha": "Anotado: {corridas, plural, one {una corrida volteada} other {# corridas volteadas}}.",
+    "colaTandaVacia": "No marcaste ninguna, así que no se anotó nada.",
+    "colaTandaSinPermiso": "No puedes anotar volteos en alguna de las que marcaste."
   },
   "Bodegas": {
     "titulo": "Bodegas",
