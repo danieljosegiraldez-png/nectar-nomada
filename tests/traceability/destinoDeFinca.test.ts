@@ -243,6 +243,15 @@ describe("dos declaraciones a la vez", () => {
    * transición — una de las dos declara venir de un estado que ya no era el suyo. Lo señaló la
    * revisión independiente de Codex el 2026-09-30.
    *
+   * **ESTA PRUEBA NO ES UN GUARDIA DETERMINISTA, Y ASÍ HAY QUE CONTARLA.** Medido el 2026-09-30
+   * quitando el `FOR UPDATE`: corriendo el archivo entero cae **2 de 3 veces**, y corriendo sólo
+   * esta prueba (`-t`), **3 de 3**. Sin mutar pasa **5 de 5**, así que no es intermitente en rojo
+   * y no va a parar CI sobre un árbol sano. Pero la primera vuelta del flip cayó justo en el
+   * verde y estuve a punto de firmar un adorno: quien la use como prueba de que la carrera está
+   * cerrada tiene que correrla aislada, o repetirla. Lo que de verdad sostiene la corrección es
+   * el bloqueo, que sigue el precedente de `cambiarDestinoDeJornada`; esto es la red para el día
+   * que alguien lo quite, no la demostración de que no se puede quitar.
+   *
    * **La aserción no depende del orden a propósito.** `occurredAt` sale de `now()`, que en Postgres
    * es la hora de INICIO de la transacción, y la segunda puede haber empezado antes de que la
    * primera confirmara: ordenar por ella mentiría. Lo que sí es invariante es que los dos `before`
