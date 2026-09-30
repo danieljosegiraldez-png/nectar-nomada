@@ -84,16 +84,30 @@ apicultor, otro asunto. **No vivía en ningún otro sitio.**
 
 Rescatado al archivar «2026-09-28 · Los cuatro caminos»: un `pg_restore` con errores acaba en PASS — los cuenta y los registra, pero no bloquea. No vivía en ningún otro sitio.
 
-#### El tablero del beneficio: diseñado, aprobado y sin construir
+#### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
 
-**Tres semanas perdido porque este archivo no lo nombraba.** Las once decisiones de Daniel
-(2026-09-16/18) viven en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`:
-la cola de atención de §4.2 y las tres piezas de §4.5. **Los motores están en `main`**
-—`puntajeDeUrgencia`, `estadoDeRitmo`, `SinVeredicto`—; **la vista no existe**. La ruta la
-decide **ADR-193**: el tablero es `/beneficio` arriba y el índice su mitad de abajo. **El plan
-del paso 1 ya está escrito**, seis tareas, en
-`docs/superpowers/plans/2026-09-29-tablero-del-beneficio-paso-1.md`. Falta **ejecutarlo**;
-las tres piezas visuales de §4.5 y el paso 2 (capacidad, con migración) son planes aparte.
+**Corregido el 2026-09-30: esta entrada decía «la vista no existe» y era falso desde el PR
+#545**, que ejecutó el plan del paso 1. Medido pieza a pieza, no de memoria:
+`app/beneficio/page.tsx` cita el tablero 5 veces, `lib/beneficio/tablero.ts` y
+`datosDelTablero.ts` existen los dos, y la cola de §4.2 y la ocupación de §4.3 se pintan. La
+ruta la fijó **ADR-193**. El diseño sigue en
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
+
+**Lo que SIGUE abierto, medido contra el código el 2026-09-30:**
+
+- **§4.5 pieza 1, la línea por etapas.** No existe: los únicos archivos de `lib/beneficio/`
+  que dicen «etapa» son `balanceDeMasas.ts` y `comparacionDePesos.ts`, otro asunto.
+- **§4.5 pieza 2, su segunda mitad: «cuándo se libera».** La ocupación sí está; falta la hora
+  según `expectedHours` — sus dos citas en `tablero.ts` alimentan `estadoDeRitmo`, no esto.
+- **§4.5 pieza 3, la curva contra su banda.** No existe: el único `<svg>` de `app/` es la
+  rueda sensorial (control: 205 con `<div>`). El diseño la quiere sin librería.
+- **El paso 2, capacidad con migración: sin plan escrito** (0 archivos).
+- **Sin medir, y el diseño lo pide antes del plan:** si recepción y flotación se registran
+  como etapas propias; si no, esas columnas dicen «sin registro» y no un cero.
+
+**Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
+instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
+salía «0 de 0». Verde no es lo mismo que probado.
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
