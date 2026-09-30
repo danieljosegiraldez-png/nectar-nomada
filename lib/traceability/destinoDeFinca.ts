@@ -20,7 +20,8 @@
  */
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { exigeBeneficioDeDestino, exigeGestionarFinca } from "./jornadasDeCosecha";
+import { JornadaError, beneficiosDeDestino, exigeBeneficioDeDestino, exigeGestionarFinca } from "./jornadasDeCosecha";
+import { TraceabilityAccessError } from "./lots";
 
 /**
  * Declara —o quita— el beneficio al que esta finca envía su cereza.
@@ -63,4 +64,39 @@ export async function declararDestinoDeFinca(
       tx,
     );
   });
+}
+
+/**
+ * Lo que la pantalla de destino necesita, y **nada que quien mira no pueda ver**.
+ *
+ * Devuelve `null` —y la página contesta 404— cuando no es un `site` o cuando quien mira no
+ * gestiona esa finca. **El permiso que comprueba es el MISMO que exige `declararDestinoDeFinca`**
+ * (`lot:manage` sobre la finca), no `location:manage_attributes` como la pantalla del logotipo: una
+ * pantalla que se abre con un permiso y guarda con otro enseña un formulario que va a fallar.
+ *
+ * Los beneficios salen de `beneficiosDeDestino`, que ya filtra por `can(view, lot)`. Así la lista
+ * no puede ofrecer un destino que después el servicio rechace — y, si sale vacía, la pantalla dice
+ * qué falta en vez de un desplegable sin opciones.
+ */
+export async function fincaParaDestino(
+  userAccountId: string,
+  siteId: string,
+): Promise<{
+  readonly id: string;
+  readonly name: string;
+  readonly destino: { readonly id: string; readonly name: string } | null;
+  readonly beneficios: readonly { readonly id: string; readonly name: string }[];
+} | null> {
+  const sitio = await prisma.location.findUnique({
+    where: { id: siteId },
+    select: { id: true, name: true, locationType: true, beneficioDestino: { select: { id: true, name: true } } },
+  });
+  if (!sitio || sitio.locationType !== "site") return null;
+  try {
+    await exigeGestionarFinca(userAccountId, siteId);
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError || error instanceof JornadaError) return null;
+    throw error;
+  }
+  return { id: sitio.id, name: sitio.name, destino: sitio.beneficioDestino, beneficios: await beneficiosDeDestino(userAccountId) };
 }

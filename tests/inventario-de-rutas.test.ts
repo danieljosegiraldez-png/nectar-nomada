@@ -216,7 +216,13 @@ describe("el inventario del router", () => {
     // cola al operario de secado, para quien se escribe—; sin ámbito responde «no ves ninguno
     // todavía», que no es «no hay ninguno». Medido con `node scripts/inventario-de-rutas.mjs`:
     // 116 entradas (105 páginas, 11 handlers).
-    expect(salida).toContain("116 entradas");
+    // 116 → 117 el 2026-09-30: /fincas/[siteId]/destino, a qué beneficio envía su cereza una finca
+    // (ADR-194). 404 sin `lot:manage` sobre esa finca, comprobado con el MISMO permiso que exige la
+    // escritura —`fincaParaDestino` y `declararDestinoDeFinca` piden lo mismo, para que la pantalla
+    // no se abra con un permiso y guarde con otro—, y sin beneficios que ofrecer dice qué falta en
+    // vez de un desplegable vacío. Medido con `node scripts/inventario-de-rutas.mjs`: 117 entradas
+    // (106 páginas, 11 handlers).
+    expect(salida).toContain("117 entradas");
     expect(codigo, salida).toBe(0);
   });
 

@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**593 operaciones** que tocan la base, en **164 archivos** — medido con
+**594 operaciones** que tocan la base, en **164 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,7 +24,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **456** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **457** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -36,10 +36,13 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
 
-> **El destino de cereza por finca (2026-09-30): 590→593, 163→164 archivos y guardia
-> directo 453→456.** `lib/traceability/destinoDeFinca.ts` es archivo nuevo: una escritura
+> **El destino de cereza por finca (2026-09-30): 590→594, 163→164 archivos y guardia
+> directo 453→457.** `lib/traceability/destinoDeFinca.ts` es archivo nuevo: una escritura
 > (`location.beneficioDestinoId`), su lectura del valor anterior para poder auditar el
-> `before`, y el `AuditEvent` en la misma transacción. Las tres van detrás de los DOS
+> `before`, el `AuditEvent` en la misma transacción, y la lectura acotada que alimenta la
+> pantalla (`fincaParaDestino`, que comprueba el MISMO `lot:manage` que exige la escritura —
+> una pantalla que se abre con un permiso y guarda con otro enseña un formulario que falla).
+> Las cuatro van detrás de los DOS
 > permisos que ADR-194 exige —`lot:manage` sobre la finca y `lot:view` sobre el
 > beneficio—, reusados de `jornadasDeCosecha.ts` en vez de duplicados. Medido con
 > `node scripts/inventario-de-acceso.mjs`.

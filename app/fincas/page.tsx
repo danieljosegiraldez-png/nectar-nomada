@@ -42,6 +42,18 @@ export default async function FincasPage({ searchParams }: { searchParams: Promi
                 <input type="hidden" name="volver" value={destino} />
                 <BotonDeEnvio>{f.nombre}</BotonDeEnvio>
               </form>
+              {/*
+                Rúbrica 22: una finca sin destino **no dice «0 pendientes»**, dice qué falta y
+                quién lo arregla — con el enlace al sitio donde se arregla. Y rúbrica 21: la
+                afirmación «esta cereza va a X» se puede desarmar hasta aquí, que es el enlace
+                que la sostiene.
+              */}
+              <p className="nn-muted">
+                {f.beneficioDestino
+                  ? t("destinoDeLaFinca", { beneficio: f.beneficioDestino.name })
+                  : t("destinoDeLaFincaFalta")}{" "}
+                <Link href={`/fincas/${f.siteId}/destino`}>{t("destinoEnlace")}</Link>
+              </p>
             </li>
           ))}
           <li>
