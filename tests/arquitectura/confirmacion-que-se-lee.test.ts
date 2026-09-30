@@ -50,7 +50,13 @@ function redireccionesConOk(): { archivo: string; ruta: string; codigo: string }
     if (!nombre.endsWith(".ts")) continue;
     const src = readFileSync(join(ACCIONES, nombre), "utf8");
     // `redirect(`/lots/${x}?ok=inspeccion`)` y también comillas normales.
-    for (const m of src.matchAll(/redirect\(\s*[`"']([^`"']*)\?ok=([a-z_-]+)/g)) {
+    //
+    // **El código puede ser DINÁMICO**, como `?ok=${kind}` en `manejo.ts`, donde dice qué tipo de
+    // intervención se registró. Al principio el patrón sólo casaba `[a-z_-]+` y esa redirección se
+    // volvió invisible: el guardia dejó de cubrir `/plots/[id]` justo cuando se arregló. Lo destapó
+    // el flip-test —quitar las tres comparaciones de esa página y ver que el guardia seguía verde—,
+    // no releer el regex. Un extractor que pierde un caso no falla: mide de menos y sale en verde.
+    for (const m of src.matchAll(/redirect\(\s*[`"']([^`"']*)\?ok=([a-z_-]+|\$\{[^}]+\})/g)) {
       salida.push({ archivo: join(ACCIONES, nombre), ruta: m[1]!, codigo: m[2]! });
     }
   }
@@ -119,6 +125,11 @@ describe("una confirmación que nadie lee no es una confirmación", () => {
   it("el extractor encuentra las redirecciones con ?ok=", () => {
     expect(redirecciones.length, `Ningún redirect con ?ok= en ${ACCIONES}: el extractor está ciego`).toBeGreaterThanOrEqual(15);
     expect(redirecciones.map((r) => r.codigo)).toContain("inspeccion");
+    // Y al menos uno DINÁMICO, para que el punto ciego del 2026-09-30 no pueda volver sin caer aquí.
+    expect(
+      redirecciones.filter((r) => r.codigo.startsWith("${")).length,
+      "Ningún `?ok=${…}`: el extractor volvió a perder los códigos dinámicos",
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("cada ruta de destino se resuelve a una pantalla", () => {
