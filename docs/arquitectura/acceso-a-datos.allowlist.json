@@ -659,6 +659,10 @@
       "razon": "Módulo de lectura de ruedas sensoriales versionadas. Sin cuenta identificada, cada consulta exige EN EL where `isPublic: true` y una versión `published`; el detalle vuelve a comprobar el estado antes de devolverlo. Una cuenta sólo amplía esa lectura a borradores si `permissionKeysAnywhere` confirma alguno de los permisos sensoriales nombrados. No escribe ni publica contenido."
     },
     {
+      "archivo": "lib/beneficio/datosDelTablero.ts",
+      "razon": "Módulo de dominio: las lecturas del tablero del beneficio (diseño 2026-09-16 §4.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` ANTES de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de un tablero vacío — un tablero vacío le diría a una cuenta nueva que el beneficio no tiene café fermentando. Los equipos NO se consultan crudos: salen de `listarEquipos`, que ya filtra por `can(view, equipment)`. Las camas se acotan por las organizaciones de los lotes visibles, que es un apoderado dicho en el código y no la regla ideal: lo que no hace es traer todas las camas de la base. No escribe nada."
+    },
+    {
       "archivo": "lib/beneficio/colaDeSecado.ts",
       "razon": "Módulo de dominio: la cola de secado (diseño 2026-09-27 §B.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` antes de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de una cola vacía. No exige permisos de instalación a propósito: hacerlo le cerraría la cola a un operario que sí puede ver y medir esos lotes, que es para quien se escribe."
     }

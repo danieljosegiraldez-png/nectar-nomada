@@ -22,6 +22,7 @@ import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/lo
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
 import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
 import { veredictoDelLote } from "../../../lib/beneficio/desdeElLote";
+import { entradaDelLote } from "../../../lib/beneficio/entradaDelLote";
 import { faseDelLote } from "../../../lib/beneficio/reposo";
 import { estadosDeInstrumentoPorMedicion } from "../../../lib/equipos/equipos";
 import type { EstadoDeVerificacion } from "../../../lib/equipos/verificacion";
@@ -325,29 +326,30 @@ export default async function LotDetailPage({
         measurements.map((m) => ({ id: m.id, instrumentId: m.instrumentId, occurredAt: m.occurredAt })),
       )
     : new Map<string, EstadoDeVerificacion>();
-  const procesoAbierto = procesos.find((pr) => pr.endedAt === null) ?? null;
-  // En reposo NO hay proceso abierto —el secado ya terminó— así que el grado, y
-  // con él los umbrales, salen del último proceso que corrió. Sin esto el lote
-  // en reposo caería por `GRADO_SIN_PERFIL` y no enseñaría ningún día.
-  const procesoDelVeredicto =
-    faseAbierta?.tipo === "reposo" ? (procesos[procesos.length - 1] ?? null) : procesoAbierto;
-  const veredicto = faseAbierta
-    ? veredictoDelLote({
-        fase: faseAbierta,
-        gradoDeProceso: procesoDelVeredicto?.processGradeValue?.value ?? null,
-        // La corrección supersede a la original, y el puente la excluye del
-        // cálculo. El conjunto ya está resuelto arriba, sin otra consulta.
-        mediciones: measurements.map((m) => ({
-          variable: m.variable,
-          value: m.value.toNumber(),
-          occurredAt: m.occurredAt,
-          provenanceClass: String(m.provenanceClass),
-          fueCorregida: supersededMeasurementIds.has(m.id),
-          estadoDelInstrumento: estadosDeInstrumento.get(m.id) ?? "SIN_INSTRUMENTO",
-        })),
-        ahora: new Date(),
-      })
-    : null;
+  // La regla de qué entra en el veredicto —incluido de dónde sale el grado en reposo— vive en
+  // `lib/beneficio/entradaDelLote.ts`, para que esta ficha y el tablero del beneficio no puedan
+  // discrepar. Aquí sólo se le pasan los datos que esta página ya cargó.
+  const entrada = entradaDelLote({
+    fermentacionAbierta: activeFermentation,
+    secadoAbierto: activeDrying,
+    ultimoSecadoTerminado: secadosTerminados[0] ?? null,
+    procesos: procesos.map((pr) => ({
+      endedAt: pr.endedAt,
+      gradoDeProceso: pr.processGradeValue?.value ?? null,
+    })),
+    mediciones: measurements.map((m) => ({
+      id: m.id,
+      variable: m.variable,
+      value: m.value.toNumber(),
+      occurredAt: m.occurredAt,
+      provenanceClass: String(m.provenanceClass),
+      correctsId: m.correctsId,
+      instrumentId: m.instrumentId,
+    })),
+    estadosDeInstrumento,
+    ahora: new Date(),
+  });
+  const veredicto = entrada ? veredictoDelLote(entrada) : null;
 
   // P3 §6 — the selection form is offered for cherry that is not already in a
   // run. A batch mid-fermentation is not waiting to be sorted, and a lot that

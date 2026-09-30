@@ -4,31 +4,41 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
+import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import {
+  colaDeAtencion,
+  instrumentosQuePidenAtencion,
+  ocupacionDelSitio,
+  type FilaDeAtencion,
+  type GrupoDeAtencion,
+} from "../../lib/beneficio/tablero";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
 import { NavegacionBeneficio } from "../components/beneficio/NavegacionBeneficio";
-import { destinosDelBeneficio } from "./destinos";
+import { destinosDelBeneficio, repartirDestinos } from "./destinos";
 
 export const dynamic = "force-dynamic";
 
 /**
- * La sección Beneficio: una página índice, sin formularios.
+ * La sección Beneficio: **el tablero arriba, el índice abajo** (ADR-193).
  *
- * **Por qué existe ya, antes que el tablero.** El 2026-09-17 Daniel decidió que el
- * menú dijera «Beneficio» y no «Lotes», y que los lotes, las recetas, las
- * instalaciones y los equipos colgaran de ahí. El tablero del beneficio (spec #363)
- * es quien acabará ocupando esta ruta; hasta entonces, esta página es el índice de
- * la sección. Las rutas de dentro NO se mueven: mudarlas antes de que exista el
- * tablero obligaría a mudarlas dos veces.
+ * **Por qué esta ruta y no una nueva.** El enfoque A que Daniel aprobó el 2026-09-16 ya
+ * nombraba `/beneficio` para el tablero; el índice la ocupó mientras el tablero esperaba tres
+ * semanas. Un `/beneficio/tablero` haría del tablero un destino DENTRO del índice —algo que hay
+ * que encontrar— cuando es lo primero que el operario necesita ver.
  *
- * **Sin formularios, a propósito.** Esta ruta es la de operar, y la configuración
- * vive aparte en `/beneficio/ajustes` (spec #370). Un índice de enlaces cumple esa
- * separación sin necesidad de guardia todavía; el guardia llega con el tablero.
+ * **El índice se reparte por frecuencia de uso, no por completitud del modelo:** operaciones
+ * arriba, lo que se consulta en medio, y la configuración abajo. El reparto vive en
+ * `destinos.ts` como función pura, y por eso tiene prueba — dentro del JSX estaba roto y nadie
+ * podía verlo.
  *
- * **Cada enlace sólo aparece si quien mira puede usarlo**, con la misma pregunta
- * ancha que ya hace la navegación (`permissionKeysAnywhere`): ofrecer lo que el
- * servidor va a rechazar es el fallo que S2 §4 nombra. La autorización de verdad
- * sigue en cada destino.
+ * **Componente de servidor, sin JavaScript de cliente y sin librería de gráficas.** La curva de
+ * §4.5 del diseño y las otras dos piezas visuales son un plan aparte.
+ *
+ * **Cada enlace sólo aparece si quien mira puede usarlo** (`permissionKeysAnywhere`), y la
+ * autorización de verdad sigue en cada destino. Los lotes del tablero los acota
+ * `datosDelTablero` con la visibilidad real, y si no alcanza ninguno dice **por qué** en vez de
+ * pintar un tablero vacío.
  */
 export default async function BeneficioPage({
   searchParams,
@@ -43,30 +53,57 @@ export default async function BeneficioPage({
   if (!granted.has("lot:view") && !granted.has("lot:manage")) notFound();
 
   const t = await getTranslations("SeccionBeneficio");
-  // Qué enlace ve cada perfil lo decide `destinosDelBeneficio`, que tiene su prueba.
   const destinos = destinosDelBeneficio(granted);
+  const { operaciones, consultar, herramientas } = repartirDestinos(destinos);
 
-  // Las rutinas de cada beneficio (spec 2026-09-19 §5/§6). `rutaDeLugar()`
-  // manda de vuelta aquí, a `/beneficio` a secas, así que el aviso de
-  // `?ok=`/`?error=` vive en esta página y no en una de detalle.
-  //
-  // `listarBeneficios` filtra por `location:manage_attributes`, no por
-  // `equipment:report_condition` (la faena que de verdad hace falta para
-  // apuntar una rutina). Con los perfiles de serie coinciden — Farm Manager y
-  // Farm Operator llevan los dos permisos juntos (`lib/rbac/catalog.ts`) — pero
-  // una cuenta con `report_condition` sobre un beneficio SIN
-  // `manage_attributes` ahí (una concesión estrecha por asignación) no vería
-  // esta sección para ese beneficio, aunque `RutinasDeLugar` sí la dejaría
-  // apuntar si llegara por otra vía. `RutinasDeLugar` vuelve a comprobar su
-  // propio `view` de todas formas, así que reusar esta lista no abre nada de
-  // más — sólo puede quedarse corta en ese caso estrecho.
-  const [tEq, { ok, error }, beneficios] = await Promise.all([
+  const [tEq, { ok, error }, beneficios, datos] = await Promise.all([
     getTranslations("Equipos"),
     searchParams,
     listarBeneficios(user.userAccountId),
+    datosDelTablero(user.userAccountId),
   ]);
-  const operaciones = destinos.filter((d) => d.href === "/beneficio/recepcion" || d.href === "/beneficio/pedidos");
-  const herramientas = destinos.filter((d) => !operaciones.includes(d));
+
+  const cola = colaDeAtencion({
+    lotes: datos.lotes,
+    desviacionesAbiertasPorLote: datos.desviacionesAbiertasPorLote,
+    ahora: datos.medidoEn,
+  });
+  const ocupacion = ocupacionDelSitio({
+    tanques: datos.tanques,
+    camas: datos.camas,
+    corridas: datos.corridas,
+  });
+  const instrumentos = instrumentosQuePidenAtencion(datos.instrumentos);
+
+  // Los cinco grupos en su orden de gravedad, y sólo los que tienen filas: una sección vacía
+  // llamada «Crítico» se lee como un problema que no existe.
+  const GRUPOS: readonly { grupo: GrupoDeAtencion; clave: string; ayuda?: string }[] = [
+    { grupo: "critico", clave: "grupoCritico" },
+    { grupo: "listo_para_decidir", clave: "grupoListo", ayuda: "grupoListoAyuda" },
+    { grupo: "aviso", clave: "grupoAviso" },
+    { grupo: "sin_veredicto", clave: "grupoSinVeredicto", ayuda: "grupoSinVeredictoAyuda" },
+    { grupo: "en_curso", clave: "grupoEnCurso" },
+  ];
+
+  /**
+   * El ritmo, en palabras. **`demora: null` nunca se pinta como «en hora»**: son dos hechos
+   * distintos y `puntajeDeUrgencia` los puntúa igual a propósito, así que la diferencia la tiene
+   * que hacer esta pantalla o se pierde.
+   */
+  function textoDeRitmo(fila: FilaDeAtencion): string[] {
+    if ("error" in fila.ritmo) return [t("ritmoInvalido", { codigo: fila.ritmo.error })];
+    const partes = fila.ritmo.debidas.map((d) =>
+      t("ritmoDebe", { variable: d.variable, cada: d.cada, horas: Math.round(d.horasSinMedir) }),
+    );
+    if (fila.ritmo.demora === true) {
+      partes.push(t("ritmoTarde", { horas: Math.round(fila.ritmo.horasDeMas ?? 0) }));
+    } else if (fila.ritmo.demora === false) {
+      partes.push(t("ritmoEnHora"));
+    } else {
+      partes.push(t("ritmoSinDeclarar"));
+    }
+    return partes;
+  }
 
   return (
     <div className="nn-mill-page">
@@ -74,11 +111,95 @@ export default async function BeneficioPage({
         <div><h1>{t("titulo")}</h1><p>{t("intro")}</p></div>
       </header>
       <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio" />
+
+      <section className="nn-mill-board" aria-labelledby="tablero-beneficio">
+        <h2 id="tablero-beneficio">{t("tablero")}</h2>
+        <p className="nn-muted">{t("tableroAyuda")}</p>
+        {datos.sinAmbito ? (
+          // **No es «no hay lotes».** Decirlo así le diría a una cuenta nueva que el beneficio
+          // no tiene café fermentando.
+          <p className="nn-empty">{t("sinAmbito")}</p>
+        ) : cola.length === 0 ? (
+          <p className="nn-empty">{t("nadaPideAtencion")}</p>
+        ) : (
+          GRUPOS.map(({ grupo, clave, ayuda }) => {
+            const filas = cola.filter((f) => f.grupo === grupo);
+            if (filas.length === 0) return null;
+            return (
+              <div key={grupo} className={`nn-board-group nn-board-${grupo}`}>
+                <h3>{t(clave)} <small>({filas.length})</small></h3>
+                {ayuda ? <p className="nn-muted">{t(ayuda)}</p> : null}
+                <ul>
+                  {filas.map((f) => (
+                    <li key={f.lotId}>
+                      <Link href={`/lots/${f.lotId}`}><strong>{f.lotCode}</strong></Link>
+                      {/* TODOS los motivos, no el que ganó el grupo: un lote crítico Y listo
+                          para decidir tiene dos hechos, y esconder uno es esconder trabajo. */}
+                      <span className="nn-board-motivos">{f.motivos.join(" · ")}</span>
+                      <span className="nn-board-ritmo">{textoDeRitmo(f).join(" · ")}</span>
+                      {f.ultimaLectura === null ? (
+                        <span className="nn-board-sinlectura">{t("sinLectura")}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })
+        )}
+      </section>
+
+      <section className="nn-mill-capacity" aria-labelledby="capacidad-beneficio">
+        <h2 id="capacidad-beneficio">{t("capacidad")}</h2>
+        <p>
+          {t("capacidadTanques", {
+            libres: ocupacion.tanques.libresYSanos,
+            total: ocupacion.tanques.total,
+            intervencion: ocupacion.tanques.requierenIntervencion,
+          })}
+        </p>
+        <p>{t("capacidadCamas", { libres: ocupacion.camas.libresYSanos, total: ocupacion.camas.total })}</p>
+        {/* Los tres avisos sólo salen si hay algo que decir, y dicen POR QUÉ importan. */}
+        {ocupacion.sinUnidadDeclarada > 0 ? (
+          <p className="nn-warn">{t("sinUnidadDeclarada", { n: ocupacion.sinUnidadDeclarada })}</p>
+        ) : null}
+        {ocupacion.conflictos.length > 0 ? (
+          <p className="nn-warn">{t("conflictoDeDatos", { n: ocupacion.conflictos.length })}</p>
+        ) : null}
+        {ocupacion.ajenas > 0 ? <p className="nn-muted">{t("ocupacionAjena", { n: ocupacion.ajenas })}</p> : null}
+      </section>
+
+      <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
+        <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
+        {instrumentos.length === 0 ? (
+          <p className="nn-empty">{t("instrumentosNinguno")}</p>
+        ) : (
+          <ul>
+            {instrumentos.map((i) => (
+              <li key={i.id}>
+                <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section className="nn-mill-primary" aria-labelledby="operaciones-beneficio">
         <h2 id="operaciones-beneficio">{t("operaciones")}</h2>
         <div>
           {operaciones.map((d) => (
             <Link key={d.href} href={d.href} className="nn-mill-action">
+              <strong>{t(d.clave)}</strong>
+              <span>{t(`${d.clave}Ayuda`)}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="nn-mill-lookup" aria-labelledby="consultar-beneficio">
+        <h2 id="consultar-beneficio">{t("consultar")}</h2>
+        <div>
+          {consultar.map((d) => (
+            <Link key={d.href} href={d.href}>
               <strong>{t(d.clave)}</strong>
               <span>{t(`${d.clave}Ayuda`)}</span>
             </Link>
@@ -96,6 +217,7 @@ export default async function BeneficioPage({
           ))}
         </div>
       </section>
+
       <AvisoDeRutina ok={ok} error={error} t={tEq} />
       {beneficios.length > 0 && <section className="nn-mill-routines" aria-labelledby="rutinas-beneficio">
         <h2 id="rutinas-beneficio">{t("rutinas")}</h2>

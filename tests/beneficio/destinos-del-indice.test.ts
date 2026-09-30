@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { destinosDelBeneficio } from "../../app/beneficio/destinos";
+import { destinosDelBeneficio, repartirDestinos } from "../../app/beneficio/destinos";
 
 /**
  * Qué enlaces ofrece el índice `/beneficio` según los permisos de quien mira.
@@ -68,5 +68,62 @@ describe("los enlaces del índice del beneficio", () => {
     expect(hrefs(["lot:view", "equipment:view"])).toContain("/beneficio/bandejas");
     expect(hrefs(["lot:view", "location:manage_attributes"])).not.toContain("/beneficio/ajustes");
     expect(hrefs(["lot:view", "location:manage_attributes", "location:create_site"])).toContain("/beneficio/ajustes");
+  });
+});
+
+/**
+ * El reparto del índice, por frecuencia de uso del operador (ADR-193).
+ *
+ * **Hasta hoy el reparto vivía DENTRO del JSX** de `app/beneficio/page.tsx`, así que ninguna
+ * prueba podía llamarlo — y estaba roto: filtraba por `recepcion` **o `pedidos`**, y `pedidos`
+ * salió del índice con ADR-192, así que «Operaciones» tenía UN enlace y «Herramientas» los otros
+ * ocho, incluida la cola de secado, que es la pantalla de inicio del operario de secado (Daniel,
+ * 2026-09-27). Extraerlo a función pura es lo que permite fijarlo.
+ */
+describe("repartirDestinos", () => {
+  const TODOS = new Set([
+    "lot:view",
+    "lot:manage",
+    "location:manage_attributes",
+    "location:create_site",
+    "equipment:view",
+  ]);
+
+  it("el secado es OPERACIÓN, no herramienta", () => {
+    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS));
+    expect(operaciones.map((d) => d.href)).toContain("/beneficio/secado");
+  });
+
+  it("recepción y secado son las dos operaciones, y sólo ésas", () => {
+    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS));
+    expect(operaciones.map((d) => d.href)).toEqual(["/beneficio/recepcion", "/beneficio/secado"]);
+  });
+
+  it("los lotes y el informe son de CONSULTAR, no de configurar", () => {
+    const { consultar } = repartirDestinos(destinosDelBeneficio(TODOS));
+    expect(consultar.map((d) => d.href)).toEqual(["/lots", "/reports/proceso"]);
+  });
+
+  it("los ajustes y el resto de la configuración van abajo", () => {
+    const { herramientas } = repartirDestinos(destinosDelBeneficio(TODOS));
+    expect(herramientas.map((d) => d.href)).toContain("/beneficio/ajustes");
+    expect(herramientas.map((d) => d.href)).toContain("/equipos");
+    expect(herramientas.map((d) => d.href)).not.toContain("/beneficio/recepcion");
+  });
+
+  it("ningún destino se pierde ni se duplica en el reparto", () => {
+    const destinos = destinosDelBeneficio(TODOS);
+    const r = repartirDestinos(destinos);
+    const repartidos = [...r.operaciones, ...r.consultar, ...r.herramientas].map((d) => d.href);
+    expect(repartidos.length).toBe(destinos.length);
+    expect(new Set(repartidos).size).toBe(destinos.length);
+  });
+
+  it("un perfil que no ve equipos ni ajustes reparte lo que le queda, sin huecos", () => {
+    const destinos = destinosDelBeneficio(new Set(["lot:view"]));
+    const r = repartirDestinos(destinos);
+    const repartidos = [...r.operaciones, ...r.consultar, ...r.herramientas];
+    expect(repartidos).toHaveLength(destinos.length);
+    expect(r.herramientas.map((d) => d.href)).not.toContain("/beneficio/ajustes");
   });
 });

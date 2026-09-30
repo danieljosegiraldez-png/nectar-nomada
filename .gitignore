@@ -15,3 +15,4 @@ next-env.d.ts
 # Local backup output (backups belong off this machine, never in git)
 /backups/
 nectar-backups/
+.cuenta-local.json
