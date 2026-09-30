@@ -27,6 +27,8 @@ let A: string;
 let beneficioA: string;
 /** Beneficio bajo la finca B: los de A **no** lo ven. Es lo que prueba la otra mitad de ADR-194. */
 let beneficioForaneo: string;
+/** Segundo beneficio BAJO la finca A: el gestor sí lo ve, así que puede declararlo de verdad. */
+let beneficioA2: string;
 let B: string;
 let parcelaA: string;
 let parcelaB: string;
@@ -69,6 +71,7 @@ beforeAll(async () => {
   const fb = await finca("B");
   A = fa.site; parcelaA = fa.plot; B = fb.site; parcelaB = fb.plot;
   beneficioA = (await prisma.location.create({ data: { name: `TEST Beneficio (${RUN})`, locationType: "beneficio", parentLocationId: A, classification: "internal" } })).id;
+  beneficioA2 = (await prisma.location.create({ data: { name: `TEST Beneficio A2 (${RUN})`, locationType: "beneficio", parentLocationId: A, classification: "internal" } })).id;
   beneficioForaneo = (await prisma.location.create({ data: { name: `TEST Beneficio foráneo (${RUN})`, locationType: "beneficio", parentLocationId: B, classification: "internal" } })).id;
   managerA = await cuenta("Farm Manager", A);
   operarioA = await cuenta("Farm Operator", A);
@@ -96,7 +99,7 @@ afterAll(async () => {
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   // La FK del destino es RESTRICT: un beneficio al que una finca envía no se puede borrar.
   await prisma.location.updateMany({ where: assertDefinedWhere({ id: { in: [A, B] } }), data: { beneficioDestinoId: null } });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, beneficioForaneo, parcelaA, parcelaB] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, beneficioA2, beneficioForaneo, parcelaA, parcelaB] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [A, B] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
@@ -233,11 +236,15 @@ describe("el destino sale de la finca, no de quien abre", () => {
     const antes = (await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId;
     expect(antes).toBe(beneficioA);
 
-    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioForaneo } });
+    // **Por el SERVICIO, no por un `prisma.update` directo.** La primera versión de esta prueba
+    // cambiaba la columna a mano, y su flip-test lo delató: propagar el cambio a las jornadas
+    // abiertas desde `declararDestinoDeFinca` —el error que esta prueba existe para cazar— la
+    // dejaba en verde, porque el camino mutado no era el que la prueba recorría.
+    await declararDestinoDeFinca(managerA, { fincaSiteId: A, beneficioId: beneficioA2 });
     const despues = (await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId;
-    expect(despues).toBe(beneficioA); // NO `beneficioForaneo`: es una instantánea.
+    expect(despues).toBe(beneficioA); // NO `beneficioA2`: es una instantánea.
 
-    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioA } });
+    await declararDestinoDeFinca(managerA, { fincaSiteId: A, beneficioId: beneficioA });
   });
 
   /**
