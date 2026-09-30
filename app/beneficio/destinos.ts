@@ -45,3 +45,40 @@ export function destinosDelBeneficio(granted: Set<string>) {
     },
   ].filter((d) => d.visible);
 }
+
+/**
+ * El reparto del índice **por frecuencia de uso del operador** (ADR-193).
+ *
+ * Tres grupos, y los tres salen de lo que Daniel dijo: lo que se hace arriba, lo que se consulta
+ * en medio, y la configuración abajo — «todo lo de abajo es ajustes o vista… lo frecuente para un
+ * operador manda sobre definir parámetros o dar de alta».
+ *
+ * **Vivía dentro del JSX de `page.tsx` y estaba roto:** filtraba por `recepcion` **o `pedidos`**,
+ * y `pedidos` salió del índice con ADR-192, así que «Operaciones» tenía UN enlace y
+ * «Herramientas» los otros ocho — incluida la cola de secado, que es la pantalla de inicio del
+ * operario de secado (Daniel, 2026-09-27). Aquí es una función pura, y por eso tiene prueba.
+ *
+ * **Se reparte por listas nombradas y el resto cae en configuración**, no al revés: así un
+ * destino nuevo aparece abajo —donde estorba menos— en vez de colarse arriba sin que nadie lo
+ * decida, y la prueba comprueba que ninguno se pierde ni se duplica.
+ */
+const OPERACIONES: readonly string[] = ["/beneficio/recepcion", "/beneficio/secado"];
+const CONSULTAR: readonly string[] = ["/lots", "/reports/proceso"];
+
+type Destinos = ReturnType<typeof destinosDelBeneficio>;
+
+export function repartirDestinos(destinos: Destinos): {
+  readonly operaciones: Destinos;
+  readonly consultar: Destinos;
+  readonly herramientas: Destinos;
+} {
+  const enOrden = (lista: readonly string[]) =>
+    lista.flatMap((href) => destinos.filter((d) => d.href === href));
+  return {
+    operaciones: enOrden(OPERACIONES),
+    consultar: enOrden(CONSULTAR),
+    herramientas: destinos.filter(
+      (d) => !OPERACIONES.includes(d.href) && !CONSULTAR.includes(d.href),
+    ),
+  };
+}
