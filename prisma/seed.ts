@@ -176,9 +176,12 @@ async function seedDemoAdmin(platformScopeId: string) {
  * Slice 2 (Public Discovery) DEMO content — opt-in via SEED_DEMO_CONTENT=true,
  * same reasoning as SEED_DEMO_ADMIN. CLAUDE.md §54 compliance, deliberate:
  *
- * - Uses "DEMO Amber Ridge" and "Kiva Estate" — fictional farm/estate
- *   names for this DEMO content. "Kiva Estate" is still one of CLAUDE.md
- *   §54's named acceptable examples. The other farm is deliberately NOT
+ * - Uses "DEMO Amber Ridge" and "DEMO Rivera Estate" — fictional farm/estate
+ *   names for this DEMO content. **"Kiva Estate" ya NO se usa aquí, y §54 ya no
+ *   vale como lista de nombres seguros: de los cuatro que nombra, sólo CryoBloom
+ *   lo sigue siendo.** Kiva Estate pasó a ser una finca real de Daniel el
+ *   2026-09-30, con dos terrenos; ver la corrección en `CLAUDE.md`, sección
+ *   «Kiva Estate ya NO es un nombre ficticio». The other farm is deliberately NOT
  *   named "Finca Rosina" despite §54 listing that name too, and despite
  *   an earlier version of this function using it: A7 reused the
  *   then-DEMO-only "Finca Rosina" Organization as the real Cerro Azul
