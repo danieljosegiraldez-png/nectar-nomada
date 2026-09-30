@@ -89,17 +89,6 @@ fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha 
 el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
 firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
 
-### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
-
-**Diseñado y aprobado el 2026-09-18, y tres semanas sin construir porque este archivo no lo nombraba.**
-`/beneficio` es ahora el tablero arriba —cola de cinco grupos, capacidad, instrumentos— y el índice en tres
-grupos abajo (ADR-193); los motores ya estaban. Visto en navegador con sesión, 0 errores. **«Sin veredicto»
-nunca se mezcla con «En curso» y un `demora: null` nunca se pinta «en hora»** — se puntúan igual a propósito,
-así que la diferencia la hace la pantalla o se pierde. Nueve flip-tests, **dos cazaron guardias falsos míos**.
-Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `afterAll` dejó en la base compartida
-—es una cadena, el primer `deleteMany` que lanza abandona los nueve siguientes con la suite en verde— y un
-«1 ocupaciones». **Sin hacer:** la capacidad sin ejercer con unidades reales; §4.5 y el paso 2 son planes propios.
-
 ## 3. Bloqueado, y en qué
 
 #### Nueve formularios guardan UNA sola medición por carga de página

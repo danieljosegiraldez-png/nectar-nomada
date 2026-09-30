@@ -222,7 +222,14 @@ describe("el inventario del router", () => {
     // no se abra con un permiso y guarde con otro—, y sin beneficios que ofrecer dice qué falta en
     // vez de un desplegable vacío. Medido con `node scripts/inventario-de-rutas.mjs`: 117 entradas
     // (106 páginas, 11 handlers).
-    expect(salida).toContain("117 entradas");
+    // 116 → 117 el 2026-09-30: /beneficio/secado/[unidad], la ficha de una unidad. Sólo lee, y su
+    // autorización VIENE DE LA COLA: si la cuenta no ve el lote, la unidad no sale en su cola y la
+    // ficha da 404. No distingue «no existe» de «no la ves» a propósito. Medido con
+    // `node scripts/inventario-de-rutas.mjs`: 117 entradas (106 páginas, 11 handlers).
+    // 117 → 118 al fusionar: las dos ramas añadieron una ruta el mismo día, y cada una escribió
+    // 117. Medido sobre el árbol fusionado, no sumado: `node scripts/inventario-de-rutas.mjs`
+    // dice 118 entradas (107 páginas, 11 handlers).
+    expect(salida).toContain("118 entradas");
     expect(codigo, salida).toBe(0);
   });
 
