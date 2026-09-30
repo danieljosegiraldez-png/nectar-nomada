@@ -112,6 +112,23 @@ async function recibir(entregaId: string) {
   });
 }
 
+/**
+ * `cambiarDestinoDeJornada` ES la corrección (ADR-194 + diseño 2026-09-30 §4.3). Antes de este
+ * cambio ninguna jornada podía nacer sin destino, así que «poner uno donde no había» era un caso
+ * que no existía; ahora una finca sin destino declarado abre jornadas con `beneficioId` en `null`,
+ * y esto es lo único que las rescata.
+ */
+describe("corregir el destino de una jornada que nació sin él", () => {
+  it("corrige una jornada que nació sin destino", async () => {
+    await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: null } });
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+    expect(j.beneficioId).toBeNull(); // control: de verdad nació sin destino
+
+    await cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio });
+    expect((await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId).toBe(beneficio);
+  }, 20000);
+});
+
 describe("el destino al abrir la jornada", () => {
   /**
    * **Estas dos comprobaciones no se han perdido: se han MOVIDO** (ADR-194, 2026-09-30). Antes las

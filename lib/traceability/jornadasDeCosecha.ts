@@ -221,6 +221,13 @@ export async function cerrarJornada(userAccountId: string, jornadaId: string) {
  * Pone o cambia el beneficio de destino. Sólo mientras ninguna entrega de la jornada tenga una
  * recepción vigente: después queda fijo (y el disparador `jornada_de_cosecha_destino_fijo` es la
  * red en la base).
+ *
+ * **Desde ADR-194 esto es LA CORRECCIÓN, y el caso «no había destino» ya no es hipotético.** El
+ * destino lo declara la finca y la jornada lo copia; una finca sin destino —cereza que se compra y
+ * se traslada— abre jornadas con `beneficioId` en `null`, y esta función es lo único que las
+ * rescata. No hace falta que hubiera un destino antes: nunca hubo tal guarda, y
+ * `destinoDeJornada.test.ts` lo fija ahora con su prueba con nombre para que nadie la añada
+ * creyendo que endurece algo.
  */
 export async function cambiarDestinoDeJornada(userAccountId: string, input: { jornadaId: string; beneficioId: string }) {
   const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: input.jornadaId } });
