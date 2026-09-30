@@ -229,8 +229,12 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   `enforce_admins` en false, los dos a propósito— en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **PR B del manejo fitosanitario** — construido en la rama `fitosanitarios-pr-b` (plan
-  `docs/superpowers/plans/2026-09-19-aplicaciones-fitosanitarias-pr-b.md`); pendiente de fusionar.
+- ~~**PR B del manejo fitosanitario, pendiente de fusionar**~~ — **falso, y quitado el
+  2026-09-29.** `origin/fitosanitarios-pr-b` no tiene **ningún** commit que `main` no
+  tenga —control al revés: 384— y **cero** archivos que difieran; el trabajo está en
+  `main` (`lib/traceability/intervenciones.ts`, 36.710 bytes, con
+  `productosFitosanitarios`). No faltaba fusionar nada: faltaba borrar la línea, que
+  mandaba a la siguiente sesión a buscar trabajo a una rama vacía.
 
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
@@ -280,13 +284,14 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
-- **Clasificar por malla sobre muestra: falta sólo el vocabulario (ADR-190)** — Daniel
-  decidió el 2026-09-29 que son **dos operaciones**: una medición sobre unos cientos de
-  gramos para juzgar calidad, y el corte físico del lote al procesar. El gramaje va en
-  `Sample.massAtExtraction` en kg, las dos se distinguen por `sampleId` sin campo nuevo, y
-  el corte de hoy no se toca. **Queda abierto cómo se nombra la variable de malla**, porque
-  `03_public_api.md` no la declara y `Measurement` no tiene dónde poner el rango. Lo medido
-  y el reparto, en ADR-190; no se construyó nada.
+- **Clasificar por malla sobre muestra: decidido y sin construir (ADR-190, ADR-191)** —
+  Daniel decidió el 2026-09-29 que son **dos operaciones** —medición sobre unos cientos de
+  gramos, y el corte físico al procesar— y cómo se nombran: **`SampleKind.SCREEN`** y una
+  tabla **`GreenScreenFraction`** que espeja las cuatro columnas `greenScreen*` de `Lot`.
+  **No hace falta ninguna variable de medición**: una fila de `Measurement` no tiene dónde
+  ir el rango. Falta construirlo —tabla, migración, y el servicio que escribe esas filas—
+  y decidir si las tres lecturas deben distinguir en pantalla una fracción medida sobre
+  muestra de una salida de un corte real. El corte de hoy no se toca.
 - **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
   protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
   (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.

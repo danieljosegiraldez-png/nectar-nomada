@@ -12416,3 +12416,61 @@ que una variable por número de malla contradiría esa forma; no se propone nada
   `apiary:load-protocol` el 2026-09-16.
 - El pendiente de `SESSION_STATE.md` §3 se reescribe apuntando aquí: lo decidido está decidido, y lo
   que espera es sólo el vocabulario.
+
+## ADR-191 — La malla no es una variable de medición: es `SampleKind.SCREEN` y una fracción propia
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado (decisión de Daniel, en sesión) · **Cierra** la
+pregunta que ADR-190 dejó abierta
+
+**Contexto.** ADR-190 decidió que clasificar por malla son dos operaciones —una medición sobre
+muestra y un corte físico— y dejó abierto «cómo se nombra la variable de malla», porque
+`docs/beneficio/03_public_api.md` no la declara. Daniel pidió resolverlo.
+
+**Lo primero que se midió tumbó la pregunta.** Una fracción de malla es *(rango, sistema, masa)* y
+una fila de `Measurement` es *(variable, valor, unidad)* más FK y procedencia: **no tiene ninguna
+columna donde quepa el rango**, y `CLAUDE.md` §49 prohíbe guardarlo como JSON. Meter el número de
+malla en el nombre de la variable —`malla_16`, `malla_17`…— daría treinta variables en un `Record`
+total y **contradiría ADR-186**, que decidió que el rango es `min`/`max` numéricos y el sistema un
+enum de tres. Así que **no hace falta ninguna `MeasurementVariable`**, y la pregunta de ADR-190
+estaba mal planteada: lo que faltaba nombrar eran otras dos cosas.
+
+**Decisión 1: `SCREEN`, sexto valor de `SampleKind`.**
+
+La tabla normativa de `docs/beneficio/20_modelo_ciclo_completo.md` §2 nombra los tipos por su
+**destino**, en una palabra inglesa en mayúsculas: `PROCESS`, `MOISTURE`, `ROAST`, `CUPPING`,
+`RETENTION`. `SCREEN` sigue esa forma, es el término del oficio, y casa con las columnas
+`greenScreen*` de `Lot` y con `SISTEMAS_DE_MALLA` que ADR-186 ya fijó.
+
+**Y NO es `RETENTION`, aunque en inglés «screen retention» sea exactamente esto.** Medido: aquí
+`RETENTION` es el **testigo sellado**, «obligatoria para todo lote que se venda», con su propia
+regla en ese documento. Apropiarse de ese valor por la coincidencia del término inglés habría
+confundido dos cosas sin relación — y habría hecho pasar por testigo una muestra que se consume.
+
+**Lo que ese tipo hereda, y es lo que hace honesto el gramaje de ADR-190:** el mismo §2 dice que una
+muestra es un hijo cuya masa **sale del lote y se contabiliza**, porque «una muestra que no descuenta
+masa es una fuga silenciosa en el balance, pequeña por evento y acumulativa a lo largo de una
+cosecha». Los 350 g de la muestra de malla salen del balance del lote; no aparecen de la nada.
+
+**Decisión 2: `GreenScreenFraction`, una fila por fracción de la muestra.**
+
+`@@map("green_screen_fraction")`, schema `core` —donde vive `Sample`—, con `sampleId` y **los mismos
+cuatro nombres de columna que `Lot` ya tiene**: `greenScreenMin`, `greenScreenMax`,
+`greenScreenSystem`, `greenScreenStatus`, más `massKg` por §1 de `00_conventions` (kg, 3 decimales).
+Reusa el enum `GreenScreenDataStatus` que ya existe; no se crea ninguno.
+
+**Espejar los nombres es el punto, no pereza.** Una lectura sobre muestra y un corte físico se
+comparan entonces sin traducir nada, que es lo que la rúbrica de veracidad pide: una cifra que no
+resiste ser desarmada convierte la herramienta en un generador de documentación creíble.
+
+**Consecuencias.**
+
+- **Esto es modelo nuevo y no se construyó:** la decisión 2 pide tabla y migración. La 1 es un valor
+  de enum. Ninguna de las dos entra con este ADR, que sólo fija los nombres.
+- **El corte físico no se toca.** `recordGreenGrading` sigue igual, con sus lotes de salida y su
+  balance de masa. La medición sobre muestra es un camino aparte que no escribe lotes.
+- **No hay `MeasurementVariable` nueva**, así que el `Record` total de `lib/traceability/units.ts` no
+  cambia y nadie tiene que declarar mínimos ni máximos para esto.
+- Lo que sigue abierto, y es trabajo con su propio diseño: **quién escribe esas filas** —una función
+  de servicio al lado de `recordGreenGrading`— y si las tres lecturas de ADR-186 deben saber
+  distinguir en pantalla una fracción medida sobre muestra de una salida de un corte real. Hoy nada
+  las distingue porque sólo existe la segunda.
