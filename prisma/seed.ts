@@ -268,9 +268,13 @@ async function seedDemoDiscoverContent() {
     description:
       "A specialty coffee farm in the Boquete highlands. [DEMO placeholder — production figures, certifications, and exact history are not populated; add real, verified detail before this leaves demo status.]",
   });
-  const kivaEstateOrg = await findOrCreateOrganization(prisma, {
+  // **«Kiva Estate» ya NO se usa como nombre DEMO: es una finca real de Daniel** (2026-09-30), con
+  // sus dos terrenos. Reutilizarlo aquí es exactamente el incidente de «Finca Rosina» del
+  // 2026-08-13 que `findOrCreateOrganization` existe para evitar — y su guardia no lo habría visto,
+  // porque contaba membresías y proyectos pero no ubicaciones. Eso también se corrigió.
+  const demoEstateOrg = await findOrCreateOrganization(prisma, {
     organizationType: "estate",
-    name: "Kiva Estate",
+    name: "DEMO Rivera Estate",
     description: "[DEMO placeholder organization — no verified details populated yet.]",
   });
 
@@ -412,7 +416,7 @@ async function seedDemoDiscoverContent() {
       durationMinutes: 120,
       projectId: lasNubesProject.id,
       locationId: lasNubesSite.id,
-      organizationId: kivaEstateOrg.id,
+      organizationId: demoEstateOrg.id,
       status: "approved",
       classification: "public",
     },

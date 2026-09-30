@@ -27,11 +27,20 @@ async function findRealBackingReason(
   prisma: PrismaClient,
   organizationId: string,
 ): Promise<string | null> {
-  const [membershipCount, ownedProjectCount, clientProjectCount] = await Promise.all([
+  const [membershipCount, ownedProjectCount, clientProjectCount, locationCount] = await Promise.all([
     prisma.organizationMembership.count({ where: { organizationId } }),
     prisma.project.count({ where: { organizationId } }),
     prisma.project.count({ where: { clientOrganizationId: organizationId } }),
+    // **Las ubicaciones cuentan desde el 2026-09-30.** Una organización con terreno es real: es
+    // lo que la distingue de un nombre en una lista. Kiva Estate pasó a tener sus dos fincas y
+    // este guardia no lo habría visto, porque miraba membresías y proyectos y no el suelo — o sea
+    // que habría dejado al seed reutilizar una organización real creyéndola DEMO, que es el
+    // incidente de «Finca Rosina» del 2026-08-13 que existe para evitar.
+    prisma.location.count({ where: { organizationId } }),
   ]);
+  if (locationCount > 0) {
+    return `${locationCount} real Location row(s) — an organization with land is not a placeholder`;
+  }
   if (membershipCount > 0) {
     return `${membershipCount} real OrganizationMembership row(s)`;
   }

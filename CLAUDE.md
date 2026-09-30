@@ -2385,6 +2385,24 @@ revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
 
 ## Trampas que han costado tiempo real
 
+### «Kiva Estate» ya NO es un nombre ficticio — §54 quedó desfasada
+
+**2026-09-30, decisión de Daniel.** La §54 de arriba lista «Kiva Estate» entre los nombres que el
+seed puede usar como ejemplo ficticio. **Es una finca real suya**, con dos terrenos propios, y desde
+hoy la organización deja de estar marcada como DEMO. Esa línea de §54 no se borra —la especificación
+original no se reescribe, por instrucción suya— así que se neutraliza aquí: **de los cuatro nombres
+que lista, sólo CryoBloom sigue siendo seguro como ejemplo.** «Las Nubes» y «Finca Rosina» ya eran
+reales, y ahora también Kiva Estate. El seed usa `DEMO Rivera Estate` en su lugar.
+
+**Y lo que esto destapó vale más que el renombrado.** El guardia que existe para evitarlo —
+`findOrCreateOrganization`, escrito tras el incidente de «Finca Rosina» del 2026-08-13 — **no lo
+habría visto**: contaba membresías y proyectos, y Kiva Estate no tiene ninguna de las dos. Lo que
+tiene es **suelo**. Desde hoy cuenta también las ubicaciones, con su prueba en
+`tests/seed/organizationGuard.test.ts`.
+
+La forma es la de siempre: un guardia que mira tres señales de «esto es real» y se pierde la cuarta
+no falla en rojo — deja pasar, y lo que deja pasar es justo el caso nuevo.
+
 ### El último párrafo de la especificación de arriba ya no aplica
 
 **Síntoma.** El documento termina pidiendo «empezar inspeccionando el
