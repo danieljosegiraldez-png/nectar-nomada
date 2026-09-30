@@ -4490,3 +4490,35 @@ y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque s
 | la colación del verificador de respaldos | `scripts/backup/verify-restore.sh`, con su comprobación que **falla** si la copia no pliega |
 | `~/nectar-backups` borrado y `NN_BACKUP_KEEP=28` | la memoria `nectar-nomada-backups.md`, actualizada ese día |
 | **«el PASS del verificador mira sólo el censo»** | **en ningún sitio más** — medido: 0 en `DECISIONS.md`, 0 aquí y 0 en `PENDING_IMPLEMENTATIONS`. **NO se fue con ella:** está rescatado en la §3 del estado |
+
+### 2026-09-29 · Kiva Estate tiene dos fincas (PR #519, #521, #522)
+
+**ADR-189 — una organización de finca puede tener varias.** `crearFinca` rechazaba la segunda con
+`ya_tiene_terreno` y heredaba el nombre **de la organización**: las dos se habrían llamado «Kiva
+Estate». No era una invariante: esa rama se escribió para UN caso —completar la organización que el
+seed creó sin sitio—. **Medido antes de quitarlo:** `locationType: "site"` sale 6 veces en 4
+archivos y **sólo 2 suponían una finca por organización**, las dos ahí dentro; y desde ADR-144
+`listarFincas` sube al sitio de más arriba, así que dos sitios **hermanos** ya son dos fincas sin
+tocar nada. Guardia `nombreLibreEnLaOrganizacion` —por organización, no por padre— y
+`organizacionesDeFinca` para el selector. **Dos fincas hermanas piden DOS asignaciones: ADR-144
+alcanza hacia abajo, no de lado.**
+
+**#521 — el guión de alta de gestores.** Crea la Person que falte y concede `Farm Manager`; no crea
+fincas ni pone correos, que son de la pantalla y de `people:set-email`. **Chris Huerbsch ya existía**
+con cuenta activa: crearlo habría duplicado una persona canónica. Y **«Las Nubes» cuelga de «Finca
+Rosina»**, así que una sola asignación alcanza a las dos, como el precedente de Bob Huerbsch.
+
+**#522 — una sola regla de mayúsculas en los doce rótulos del lote.** Cuatro llevaban mayúscula a
+mitad de frase, **los mismos cuatro en los dos idiomas**, que delata la traducción literal. «Mover
+Almacenamiento» se llevó también la gramática: queda «Mover a almacenamiento». El guardia lee las
+claves de la fuente y **su control positivo va primero**: cegando el extractor, cae.
+
+**Sin hacer, de Daniel:** los comandos de Luis y Chris contra producción, crear las dos fincas en
+`/fincas`, y que la organización Kiva Estate sigue marcada «DEMO placeholder» — falso en cuanto le
+cuelguen fincas reales, y el guión lo avisa cada vez.
+---
+
+**Archivado el 2026-09-30.** Su decisión vive en **ADR-189**, medido. Y de su bloque «Sin hacer»,
+**dos pendientes NO se fueron con ella** —los comandos de Luis y Chris contra producción, y el
+«DEMO placeholder» de la organización, que daba **una sola** mención en todo el estado y **cero**
+en §3—: están rescatados en «Kiva Estate: crear su terreno», que ya existía.
