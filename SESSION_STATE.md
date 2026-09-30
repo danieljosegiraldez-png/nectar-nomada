@@ -77,18 +77,17 @@ máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una int
 palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
 medicamento de colmena no ve ninguno de los cinco.
 
-**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —en
-`lib/inventario/recepcion.ts` y copiados a mano en `RecibirMedicamentoForm.tsx`, con su propio
-comentario diciéndolo— y **ya habían derivado**: el servidor ofrecía cuatro campos que el formulario no
-pintaba, lo que no falla en rojo. Unificarlas en módulos puros destapó dos más: `completarProducto`
-validaba **toda** dosis con `Number.isInteger` —así que «1,5 L/ha» se rechazaba con un mensaje sobre
-negativos, y el formulario pintaba `step={1}`— y las plagas sólo se declaraban al **crear** el producto.
+**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —servidor y una
+copia a mano en `RecibirMedicamentoForm.tsx`, con su propio comentario diciéndolo— y **ya habían
+derivado**: el servidor ofrecía cuatro campos que el formulario no pintaba, lo que no falla en rojo.
+Unificarlas en módulos puros destapó dos más: `completarProducto` validaba **toda** dosis con
+`Number.isInteger` —«1,5 L/ha» se rechazaba por «negativa», y el formulario pintaba `step={1}`— y las
+plagas sólo se declaraban al **crear** el producto.
 
-**Verificado.** `verify` 0, `build` 0, carril hermético 163 archivos / 2096 pruebas, `recepcion.test.ts`
-9/9 contra la base local. Cuatro flip-tests con sha antes/después, «compila» y el test caído **por su
-nombre**; el primer intento del cuarto **no compilaba** y sus dos rojos no se firmaron, y el tercero
-importa el módulo y afirma sobre el objeto que construye en vez de conformarse con que compile. **Sin
-hacer:** la propuesta de dosis en el formulario de intervención — el dato se guarda aquí, se usa allí.
+**Verificado.** `verify` y `build` 0, y los DOS carriles de CI corridos en local sobre el árbol
+fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
+el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
+firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
 
 ### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
 
@@ -107,29 +106,44 @@ Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `after
 
 Rescatado al archivar «2026-09-29 · El secado tiene cola» (PR #531), su único sitio: medido **0** veces
 en `CLAUDE.md`, que describe el mecanismo pero no dice que siga abierto ni en cuántas pantallas. Un
-efecto con `[]` escribe el desfase una vez y React lo borra al re-renderizar, así que el campo de la
-hora se vacía y —por obligatorio— **el navegador bloquea el envío sin ningún error**. #531 lo arregló
-donde tocaba; **afecta a los nueve que usan `TimezoneOffsetField`** y es anterior a ese trabajo.
+efecto con `[]` escribe el desfase una vez y React lo borra al re-renderizar: el campo de la hora se
+vacía y —por obligatorio— **el navegador bloquea el envío sin ningún error**. #531 lo arregló donde
+tocaba; **afecta a los nueve con `TimezoneOffsetField`**, y es anterior a ese trabajo.
 
 #### La migración de la dosis ya está aplicada en la base de pruebas compartida
 
-`20260930170000_dosis_y_uso_del_producto` se aplicó el 2026-09-30 al 55433 con `migrate deploy` —aditiva
-y sin riesgo— y **sigue sin fusionar** (PR #554): quien compare migraciones verá una en la BASE que no
-está en su árbol, y eso se lee como trabajo sin commitear de otra sesión. No lo es. Al revés igual: esa
-base tiene `20260930114546_destino_de_cereza_por_finca`, de otra sesión y no de esta rama.
+`20260930170000_dosis_y_uso_del_producto` se aplicó al 55433 con `migrate deploy` —aditiva y sin
+riesgo— y **sigue sin fusionar** (PR #554): quien compare migraciones verá una en la BASE que no está en
+su árbol, y **no es trabajo sin commitear de nadie**. Muere al fusionarse el PR.
 
 #### El PASS del verificador de respaldos mira sólo el censo
 
 Rescatado al archivar «2026-09-28 · Los cuatro caminos»: un `pg_restore` con errores acaba en PASS — los cuenta y los registra, pero no bloquea. No vivía en ningún otro sitio.
 
-#### El tablero del beneficio: falta el paso 2 y las tres piezas de §4.5
+#### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
 
-**CORREGIDO EL 2026-09-30: este bloque decía «la vista no existe» y es falso.** El paso 1 entró
-con el PR #545; medido: `app/beneficio/page.tsx` existe y **usa los motores**
-(`puntajeDeUrgencia`, `estadoDeRitmo`). Queda abierto lo que ese PR no traía: **el paso 2**
-—capacidad, con migración— y **las tres piezas visuales de §4.5**, las dos cosas con plan propio
-por escribir. Las once decisiones de Daniel (2026-09-16/18) siguen en
-`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`, y la ruta la fija ADR-193.
+**Corregido el 2026-09-30: esta entrada decía «la vista no existe» y era falso desde el PR
+#545**, que ejecutó el plan del paso 1. Medido pieza a pieza, no de memoria:
+`app/beneficio/page.tsx` cita el tablero 5 veces, `lib/beneficio/tablero.ts` y
+`datosDelTablero.ts` existen los dos, y la cola de §4.2 y la ocupación de §4.3 se pintan. La
+ruta la fijó **ADR-193**. El diseño sigue en
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
+
+**Lo que SIGUE abierto, medido contra el código el 2026-09-30:**
+
+- **§4.5 pieza 1, la línea por etapas.** No existe: los únicos archivos de `lib/beneficio/`
+  que dicen «etapa» son `balanceDeMasas.ts` y `comparacionDePesos.ts`, otro asunto.
+- **§4.5 pieza 2, su segunda mitad: «cuándo se libera».** La ocupación sí está; falta la hora
+  según `expectedHours` — sus dos citas en `tablero.ts` alimentan `estadoDeRitmo`, no esto.
+- **§4.5 pieza 3, la curva contra su banda.** No existe: el único `<svg>` de `app/` es la
+  rueda sensorial (control: 205 con `<div>`). El diseño la quiere sin librería.
+- **El paso 2, capacidad con migración: sin plan escrito** (0 archivos).
+- **Sin medir, y el diseño lo pide antes del plan:** si recepción y flotación se registran
+  como etapas propias; si no, esas columnas dicen «sin registro» y no un cero.
+
+**Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
+instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
+salía «0 de 0». Verde no es lo mismo que probado.
 
 #### La prueba que despertaría la divergencia de clasificación (PR #481)
 
@@ -158,10 +172,9 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
 Estate** desde `/fincas` → «sin terreno».
 
-**CORREGIDO EL 2026-09-30: este bloque decía que «el seed dice que es un nombre ficticio
-(`prisma/seed.ts:168`)». Ya no.** El PR #551 lo dio la vuelta: el seed dice hoy lo contrario —«Kiva
-Estate ya NO se usa aquí», líneas 180-184 y 274— y usa `DEMO Rivera Estate`. Y la línea 168 que se
-citaba es hoy otra cosa, así que la cita mandaba a mirar donde no había nada.
+**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
+El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas 180-184 y 274— y usa `DEMO Rivera
+Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
 
 **Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
 `data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
