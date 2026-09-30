@@ -828,6 +828,20 @@ model Location {
   parentLocationId String?                                @map("parent_location_id") @db.Uuid
   parentLocation   Location?                              @relation("LocationHierarchy", fields: [parentLocationId], references: [id])
   childLocations   Location[]                             @relation("LocationHierarchy")
+
+  /// El beneficio al que va la cereza de esta finca (diseño 2026-09-30, ADR-194). Sólo tiene
+  /// sentido en un `site`.
+  ///
+  /// **Anulable a propósito, y `null` NO es un hueco:** una finca cuya cereza se compra y se
+  /// traslada —Jaramillo, Artillería— no lleva destino, y entra por el camino del proveedor
+  /// (`OrigenDeRecepcion.proveedorId`). Un `NOT NULL` obligaría a inventarle uno.
+  ///
+  /// **`Restrict` a propósito:** borrar un beneficio al que una finca envía dejaría fincas
+  /// apuntando al vacío en silencio, y el encaminamiento de `pendientesDeBeneficio` depende de
+  /// esto para no perder entregas.
+  beneficioDestinoId  String?    @map("beneficio_destino_id") @db.Uuid
+  beneficioDestino    Location?  @relation("FincaDestino", fields: [beneficioDestinoId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  fincasQueEnvianAqui Location[] @relation("FincaDestino")
   organizationId   String?                                @map("organization_id") @db.Uuid
   organization     Organization?                          @relation(fields: [organizationId], references: [id])
   name             String
@@ -980,6 +994,8 @@ model Location {
   equipmentTransfersTo   EquipmentTransfer[] @relation("EquipmentTransferTo")
   careRoutines CareRoutine[] @relation("CareRoutineLocation")
   @@index([logoAssetId])
+  /// Lo consulta `fincasQueEnvianAqui` y la pantalla del beneficio: «qué fincas me envían».
+  @@index([beneficioDestinoId])
 
   @@map("location")
   @@schema("core")

@@ -7,6 +7,9 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { COOKIE_FINCA, FincaError, TODAS, crearFinca, crearParcela } from "../../lib/traceability/fincas";
 import { LocationAccessError, LocationValidationError, createMicrolot } from "../../lib/traceability/locations";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { JornadaError } from "../../lib/traceability/jornadasDeCosecha";
+import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 import { FincaLogoValidationError, finalizeFincaLogoUpload, requestFincaLogoUpload } from "../../lib/traceability/fincaLogo";
 import { MOTIVOS_DE_SUBDIVISION } from "../../lib/traceability/motivosDeSubdivision";
 
@@ -33,6 +36,8 @@ const CODIGOS_CON_MENSAJE = [
   "padre_no_es_una_finca", "area_invalida", "tipo_invalido", "motivo_invalido", "otro_sin_nota", "sin_permiso",
   "gps_incompleto", "latitud_fuera_de_rango", "longitud_fuera_de_rango",
   "tipo_no_soportado", "archivo_demasiado_grande", "tamano_invalido", "no_es_una_finca",
+  // Los de `declararDestinoDeFinca`, que lanza `JornadaError` porque reusa sus dos guardas.
+  "beneficio_no_valido", "finca_no_encontrada",
 ] as const;
 
 /**
@@ -41,11 +46,13 @@ const CODIGOS_CON_MENSAJE = [
  */
 async function traducir(error: unknown): Promise<FincasActionState> {
   const t = await getTranslations("Fincas");
-  if (error instanceof FincaError || error instanceof LocationValidationError || error instanceof FincaLogoValidationError) {
+  if (error instanceof FincaError || error instanceof LocationValidationError || error instanceof FincaLogoValidationError || error instanceof JornadaError) {
     const codigo = CODIGOS_CON_MENSAJE.find((c) => c === error.message);
     return { error: codigo ? t(`error_${codigo}`) : t("error_generico") };
   }
-  if (error instanceof LocationAccessError) return { error: t("error_sin_permiso") };
+  // `TraceabilityAccessError` es lo que lanza `requireLotAccess`, y SIN esta rama subía y daba
+  // una pantalla de error 500 en vez de «no tienes permiso» — el fallo del PR #433.
+  if (error instanceof LocationAccessError || error instanceof TraceabilityAccessError) return { error: t("error_sin_permiso") };
   throw error;
 }
 
@@ -155,5 +162,26 @@ export async function finalizeFincaLogoUploadAction(
     return { error: (await traducir(error)).error ?? "" };
   }
   revalidatePath("/finca");
+  return { ok: true };
+}
+
+/**
+ * Declarar —o quitar— el beneficio al que esta finca envía su cereza (ADR-194, diseño §4.1).
+ *
+ * La cadena vacía significa **quitarlo**, y se traduce a `null` aquí y no en el servicio: en un
+ * `FormData` no existe el `null`, así que la frontera tiene que decidirlo alguien, y es esta.
+ */
+export async function declararDestinoDeFincaAction(_prev: FincasActionState, formData: FormData): Promise<FincasActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const siteId = String(formData.get("siteId") ?? "");
+  const beneficioId = String(formData.get("beneficioId") ?? "");
+  try {
+    await declararDestinoDeFinca(user.userAccountId, { fincaSiteId: siteId, beneficioId: beneficioId || null });
+  } catch (error) {
+    return traducir(error);
+  }
+  revalidatePath("/fincas");
+  revalidatePath(`/fincas/${siteId}/destino`);
   return { ok: true };
 }

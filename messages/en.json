@@ -3098,7 +3098,14 @@
     "colaEstado_va_tarde": "running late",
     "colaEstado_cerca_del_objetivo": "close to target",
     "colaEstado_listo": "ready",
-    "colaEstado_sin_receta_declarada": "no recipe declared"
+    "colaEstado_sin_receta_declarada": "no recipe declared",
+    "colaColumnaVolvi": "Turned",
+    "colaCasillaDe": "I turned {unidad}",
+    "colaBotonVolvi": "I turned these",
+    "colaBotonAyuda": "What is due a turn comes pre-checked. Uncheck what you did not touch, then confirm.",
+    "colaTandaHecha": "Recorded: {corridas, plural, one {one run turned} other {# runs turned}}.",
+    "colaTandaVacia": "You checked none, so nothing was recorded.",
+    "colaTandaSinPermiso": "You cannot record turns on one of the ones you checked."
   },
   "Bodegas": {
     "titulo": "Storage rooms",
@@ -3284,7 +3291,13 @@
     "capacidadSinAcceso": "{n, plural, one {there is # weighing from lots your account can't see} other {there are # weighings from lots your account can't see}}",
     "lotesRecortados": "Showing the 100 most recent lots; there may be more.",
     "dondeOculto": "restricted location",
-    "noSePudoCalcular": "could not be calculated"
+    "noSePudoCalcular": "could not be calculated",
+    "columnaOcupacion": "What is on it",
+    "ocupacionSinDato": "—",
+    "ocupacionSinNombrar": "In use",
+    "ocupacionDesde": "since {fecha}",
+    "ocupacionLibreDesde": "Free since {fecha}",
+    "ocupacionLibre": "Free"
   },
   "Inventario": {
     "recibidoOk": "Container received. It appears below with its expiry.",
@@ -3433,7 +3446,21 @@
     "error_motivo_invalido": "Choose why it is managed separately.",
     "error_otro_sin_nota": "If the reason is “other”, write which.",
     "error_sin_permiso": "You don't have permission for this.",
-    "error_generico": "It could not be saved. Check the data."
+    "error_generico": "It could not be saved. Check the data.",
+    "destinoTitulo": "Destination mill",
+    "destinoIntro": "Which mill the cherry harvested at {nombre} goes to. Declare it once: every harvest day opened from now on copies this destination, and whoever harvests doesn't have to choose it.",
+    "destinoActual": "Currently sends to {beneficio}.",
+    "destinoNinguno": "Currently sends to no mill. Its harvest days still open, and its deliveries won't show up in any mill's list until each one's destination is corrected individually.",
+    "destinoSinBeneficios": "You can't see any mill to send the cherry to, so you can't declare this farm's destination. Ask for read access to the mill that receives it; if the mill isn't in the system yet, it has to be registered first.",
+    "destinoEtiqueta": "Send the cherry to",
+    "destinoQuitar": "Don't send to any mill",
+    "destinoGuardar": "Save destination",
+    "destinoGuardado": "Destination saved. Harvest days that were already open don't move: each one stored the destination it had when it opened.",
+    "destinoDeLaFinca": "Sends its cherry to {beneficio}.",
+    "destinoDeLaFincaFalta": "Doesn't send to any mill yet — whoever manages this farm can declare it.",
+    "destinoEnlace": "Change destination",
+    "error_beneficio_no_valido": "That destination isn't a mill you can see. Pick one from the list.",
+    "error_finca_no_encontrada": "That farm doesn't exist, or isn't a farm site."
   },
   "SeccionFinca": {
     "titulo": "Farm",
@@ -3612,8 +3639,6 @@
   "Jornadas": {
     "recibidaEnBeneficio": "received: {kg} kg at the mill ({dif} kg)",
     "rechazadaEnBeneficio": "rejected at the mill: {motivo}",
-    "destino": "Destination mill",
-    "sinBeneficioDestino": "You don't see any mill to send the cherry to. Ask for access to the mill to open harvest days.",
     "error_beneficio_no_valido": "Choose the mill this harvest day's cherry goes to.",
     "error_destino_fijo": "This harvest day already has received deliveries: its mill can no longer change.",
     "error_ya_recibida": "That delivery was already received at the mill: it can't be voided from the farm.",

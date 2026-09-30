@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**590 operaciones** que tocan la base, en **163 archivos** — medido con
+**595 operaciones** que tocan la base, en **164 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,18 +24,37 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **453** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **458** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **20** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
 
+> **Qué tiene encima cada bandeja (2026-09-30): 590→591 y guardia directo 453→454, sin
+> archivo nuevo.** Diseño §B.4. `ocupacionDeBandejas` en `lib/beneficio/vistaDeBandejas.ts` lee
+> `DryingRunTray`, que ya sabía qué bandeja tiene café encima y desde cuándo — la lista decía
+> que las ocho están «en Finca Rosina» cuando cuatro estaban cargadas. **El código del lote se
+> acota por visibilidad de LOTES, no por la de la bandeja**: una bandeja visible puede tener
+> encima un lote que no lo es, y entonces dice «ocupada» sin nombrarlo. Lo contrario convertiría
+> esta lista en un canal para leer códigos de lote ajenos.
+
 > **Muestras verdes disponibles para tueste (2026-09-23): 573→574 y guardia directo
 > 433→434, sin archivo nuevo.** `listGreenSamplesForRoast` consulta muestras de un lote
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
 
+> **El destino de cereza por finca (2026-09-30): 590→594, 163→164 archivos y guardia
+> directo 453→457.** `lib/traceability/destinoDeFinca.ts` es archivo nuevo: una escritura
+> (`location.beneficioDestinoId`), su lectura del valor anterior para poder auditar el
+> `before`, el `AuditEvent` en la misma transacción, y la lectura acotada que alimenta la
+> pantalla (`fincaParaDestino`, que comprueba el MISMO `lot:manage` que exige la escritura —
+> una pantalla que se abre con un permiso y guarda con otro enseña un formulario que falla).
+> Las cuatro van detrás de los DOS
+> permisos que ADR-194 exige —`lot:manage` sobre la finca y `lot:view` sobre el
+> beneficio—, reusados de `jornadasDeCosecha.ts` en vez de duplicados. Medido con
+> `node scripts/inventario-de-acceso.mjs`.
+>
 > **Las lecturas del tablero del beneficio (2026-09-30): 589→590, 162→163 archivos y
 > guardia directo 452→453.** `lib/beneficio/datosDelTablero.ts` es archivo nuevo: junta lo
 > que el tablero necesita —corridas abiertas, sus procesos y recetas, las mediciones de la

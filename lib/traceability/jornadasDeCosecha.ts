@@ -29,7 +29,12 @@ async function sitioDeFinca(fincaSiteId: string) {
   return sitio;
 }
 
-async function exigeGestionarFinca(userAccountId: string, fincaSiteId: string) {
+/**
+ * `lot:manage` sobre el sitio de la finca. **Exportada, no duplicada** (2026-09-30): el destino
+ * de cereza por finca necesita la misma comprobación, y dos copias de «quién gestiona una finca»
+ * divergen en cuanto una de las dos cambie.
+ */
+export async function exigeGestionarFinca(userAccountId: string, fincaSiteId: string) {
   const sitio = await sitioDeFinca(fincaSiteId);
   await requireLotAccess(userAccountId, "manage", [{ locationId: sitio.id, classification: sitio.classification }]);
   return sitio;
@@ -117,7 +122,8 @@ export async function beneficiosDeDestino(userAccountId: string) {
   return salida;
 }
 
-async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
+/** Igual que la de arriba: la comparte `declararDestinoDeFinca`, que exige exactamente esto. */
+export async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
   const b = beneficioId ? await prisma.location.findUnique({ where: { id: beneficioId }, select: { id: true, locationType: true, classification: true } }) : null;
   if (!b || b.locationType !== "beneficio") throw new JornadaError("beneficio_no_valido");
   if (!(await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: b.id }, b.classification))) throw new JornadaError("beneficio_no_valido");
@@ -125,8 +131,10 @@ async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: strin
 
 export interface AbrirJornadaInput {
   readonly fincaSiteId: string;
-  /** Spec recepción §3.1: el beneficio de destino, obligatorio. */
-  readonly beneficioId: string;
+  /**
+   * `beneficioId` YA NO ESTÁ (ADR-194, 2026-09-30): el destino lo lleva la finca y la jornada lo
+   * **copia** al abrirse. Quien abre no elige, y no necesita permiso en el beneficio.
+   */
   readonly fecha: Date;
   readonly nota?: string | null;
   readonly asignaciones: readonly { locationId: string; personId: string }[];
@@ -140,7 +148,22 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
   await exigeGestionarFinca(userAccountId, input.fincaSiteId);
   if (Number.isNaN(input.fecha.getTime())) throw new JornadaError("fecha_invalida");
   if (!input.asignaciones.length) throw new JornadaError("sin_asignaciones");
-  await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
+
+  /**
+   * **El destino se COPIA de la finca, y aquí NO se pide permiso sobre el beneficio.** Las dos
+   * mitades de ADR-194: quien cosecha no define a quién entrega, así que tampoco tiene por qué
+   * alcanzar ese beneficio —un capataz que no lo ve abre la jornada del día igual—. Y se copia,
+   * no se referencia: cambiar el destino de la finca después no mueve las jornadas ya abiertas,
+   * que es la misma regla de instantánea que rige las muestras
+   * (`docs/beneficio/20_modelo_ciclo_completo.md`).
+   *
+   * `null` es un destino válido: una finca cuya cereza se compra y se traslada no envía a ningún
+   * beneficio propio, y su jornada se abre igual.
+   */
+  const destino = (await prisma.location.findUniqueOrThrow({
+    where: { id: input.fincaSiteId },
+    select: { beneficioDestinoId: true },
+  })).beneficioDestinoId;
 
   const arbol = await prisma.location.findMany({ select: { id: true, parentLocationId: true, locationType: true } });
   const bajo = idsBajoLaFinca(arbol, input.fincaSiteId);
@@ -161,7 +184,7 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
     const jornada = await tx.jornadaDeCosecha.create({
       data: {
         fincaSiteId: input.fincaSiteId,
-        beneficioId: input.beneficioId,
+        beneficioId: destino,
         fecha: input.fecha,
         nota: input.nota?.trim() || null,
         createdBy: userAccountId,
@@ -198,6 +221,13 @@ export async function cerrarJornada(userAccountId: string, jornadaId: string) {
  * Pone o cambia el beneficio de destino. Sólo mientras ninguna entrega de la jornada tenga una
  * recepción vigente: después queda fijo (y el disparador `jornada_de_cosecha_destino_fijo` es la
  * red en la base).
+ *
+ * **Desde ADR-194 esto es LA CORRECCIÓN, y el caso «no había destino» ya no es hipotético.** El
+ * destino lo declara la finca y la jornada lo copia; una finca sin destino —cereza que se compra y
+ * se traslada— abre jornadas con `beneficioId` en `null`, y esta función es lo único que las
+ * rescata. No hace falta que hubiera un destino antes: nunca hubo tal guarda, y
+ * `destinoDeJornada.test.ts` lo fija ahora con su prueba con nombre para que nadie la añada
+ * creyendo que endurece algo.
  */
 export async function cambiarDestinoDeJornada(userAccountId: string, input: { jornadaId: string; beneficioId: string }) {
   const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: input.jornadaId } });

@@ -156,6 +156,7 @@ export default async function BandejasPage({
                   <th>{t("columnaNumero")}</th>
                   <th>{t("columnaTipo")}</th>
                   <th>{t("columnaDonde")}</th>
+                  <th>{t("columnaOcupacion")}</th>
                   <th>{t("columnaMover")}</th>
                 </tr>
               </thead>
@@ -168,6 +169,33 @@ export default async function BandejasPage({
                         o el lugar no lo autoriza `manage_attributes` a esta cuenta — y no
                         se dicen igual: la segunda no es "sin traslado". */}
                     <td>{b.donde ?? (b.dondeOculto ? t("dondeOculto") : t("sinTraslado"))}</td>
+                    {/* Lo que tiene encima AHORA, de `DryingRunTray`. Si el lote no es visible
+                        para esta cuenta se dice «ocupada» sin nombrarlo: esta lista no puede
+                        ser un canal para leer códigos de lote ajenos. */}
+                    <td>
+                      {b.ocupacion === null || b.ocupacion === undefined ? (
+                        t("ocupacionSinDato")
+                      ) : b.ocupacion.estado === "ocupada" ? (
+                        <>
+                          {b.ocupacion.lotCode && b.ocupacion.lotId ? (
+                            <Link href={`/lots/${b.ocupacion.lotId}`} className="nn-code">
+                              {b.ocupacion.lotCode}
+                            </Link>
+                          ) : (
+                            t("ocupacionSinNombrar")
+                          )}{" "}
+                          <span className="nn-muted">
+                            {t("ocupacionDesde", { fecha: mostrarFecha(b.ocupacion.desde, locale) })}
+                          </span>
+                        </>
+                      ) : b.ocupacion.desde ? (
+                        <span className="nn-muted">
+                          {t("ocupacionLibreDesde", { fecha: mostrarFecha(b.ocupacion.desde, locale) })}
+                        </span>
+                      ) : (
+                        <span className="nn-muted">{t("ocupacionLibre")}</span>
+                      )}
+                    </td>
                     <td>
                       {/* Fix round 1 (Tarea 3, hallazgo 3): un equipo fijo no
                           tiene destino posible (`moverBandeja` lo rechaza con

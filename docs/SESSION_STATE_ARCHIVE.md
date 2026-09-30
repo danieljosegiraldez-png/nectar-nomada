@@ -4588,4 +4588,3 @@ después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la pro
 lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
 rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
 fusionado queda corregida allí.
-

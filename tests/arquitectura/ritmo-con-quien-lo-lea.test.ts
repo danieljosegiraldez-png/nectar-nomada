@@ -31,8 +31,13 @@ import { describe, expect, it } from "vitest";
 
 /** Los símbolos que no deben quedarse sin consumidor, y por qué importa cada uno. */
 const CALCULOS_SIN_LOS_QUE_LA_COLA_NO_EXISTE = [
-  { simbolo: "estadoDeRitmo", quePasaSiNadieLoLlama: "nadie sabe si un lote va tarde ni cuántas lecturas debe" },
-  { simbolo: "puntajeDeUrgencia", quePasaSiNadieLoLlama: "la cola no se puede ordenar por urgencia" },
+  { modulo: "traceability/ritmo", simbolo: "estadoDeRitmo", quePasaSiNadieLoLlama: "nadie sabe si un lote va tarde ni cuántas lecturas debe" },
+  { modulo: "traceability/ritmo", simbolo: "puntajeDeUrgencia", quePasaSiNadieLoLlama: "la cola no se puede ordenar por urgencia" },
+  // **Añadido el 2026-09-30, porque la enfermedad volvió el mismo día.** La tanda de volteo se
+  // fusionó con su servicio, su migración y sus pruebas — y NINGUNA pantalla la llamaba: el
+  // operario no podía registrar una tanda. Exactamente lo que este guardia existe para impedir,
+  // en la pieza de al lado, y no lo vio porque sólo miraba `ritmo.ts`.
+  { modulo: "traceability/drying", simbolo: "registrarTandaDeVolteo", quePasaSiNadieLoLlama: "el operario no puede registrar que revolvió varias unidades de una pasada" },
 ] as const;
 
 /**
@@ -46,14 +51,14 @@ const CALCULOS_SIN_LOS_QUE_LA_COLA_NO_EXISTE = [
  *
  * Exigir el import cierra las dos: una constante local no importa nada, y un comentario tampoco.
  */
-function consumidoresDe(simbolo: string): string[] {
+function consumidoresDe(modulo: string, simbolo: string): string[] {
   let archivos: string[];
   try {
-    archivos = execFileSync("git", ["grep", "-l", "-F", "traceability/ritmo", "--", "lib", "app", "scripts"], {
+    archivos = execFileSync("git", ["grep", "-l", "-F", modulo, "--", "lib", "app", "scripts"], {
       encoding: "utf8",
     })
       .split("\n")
-      .filter((f) => f.length > 0 && !f.endsWith("lib/traceability/ritmo.ts"));
+      .filter((f) => f.length > 0 && !f.endsWith(`lib/${modulo}.ts`));
   } catch {
     // `git grep` sale con 1 cuando no encuentra nada, y eso aquí es el fallo que se busca.
     return [];
@@ -62,7 +67,7 @@ function consumidoresDe(simbolo: string): string[] {
   return archivos.filter((archivo) => {
     const fuente = readFileSync(archivo, "utf8");
     // La línea de import que trae el símbolo, sin contar un `import type`: un tipo no llama a nada.
-    const lineas = fuente.split("\n").filter((l) => l.includes("traceability/ritmo") && l.includes("import"));
+    const lineas = fuente.split("\n").filter((l) => l.includes(modulo) && l.includes("import"));
     return lineas.some((l) => {
       const soloTipos = /import\s+type\s*\{/.test(l);
       const traeElSimbolo = new RegExp(`(^|[{,\\s])${simbolo}\\s*(,|\\}|$)`).test(l);
@@ -89,9 +94,9 @@ describe("el ritmo de la cola tiene quien lo lea", () => {
     );
   });
 
-  for (const { simbolo, quePasaSiNadieLoLlama } of CALCULOS_SIN_LOS_QUE_LA_COLA_NO_EXISTE) {
+  for (const { modulo, simbolo, quePasaSiNadieLoLlama } of CALCULOS_SIN_LOS_QUE_LA_COLA_NO_EXISTE) {
     it(`${simbolo} se usa fuera de sus pruebas`, () => {
-      const consumidores = consumidoresDe(simbolo);
+      const consumidores = consumidoresDe(modulo, simbolo);
       expect(
         consumidores,
         `${simbolo} sólo lo llaman sus pruebas: ${quePasaSiNadieLoLlama}`,
