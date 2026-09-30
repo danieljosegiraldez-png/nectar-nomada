@@ -88,21 +88,6 @@ igual y sus índices admiten lo que el original rechaza.
 archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
 verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
 
-### 2026-09-28 · El recorrido de granja a beneficio, con Daniel (PR #509, #512, #514)
-
-**#509** — un solo nombre: «Informe de proceso» y «Recetas de proceso», en los dos idiomas.
-**#512 — los pedidos salen del índice.** Decisión de Daniel: a este volumen se recibe lo que salga
-por parcela **sin pedido de por medio** —`pedidoId` es nullable en `recibirCereza`—, así que
-Recepción no competía con algo opcional. Los abiertos y cerrarlos se consultan DENTRO de
-`/beneficio/recepcion`; dar de alta sigue en `/beneficio/pedidos`. El índice pasa de 9 a 8 y lo fija
-`tests/beneficio/destinos-del-indice.test.ts`.
-
-**#514 — armar un lote lleva a su ficha, porque lo que sigue a recibir es SELECCIONAR.** El
-`redirect` va **fuera del `try`**: Next lo implementa lanzando, y dentro `traducir` lo volvería un
-error del formulario. Fuera, las claves `loteArmado`. **La selección no necesita entrada de índice:**
-`seleccion_metodo` ya trae los nueve métodos, flotación-y-luego-manual son dos selecciones
-encadenadas, y `nextActionFor` sugiere `selection` a una cereza sin transformar y `fermentation`
-después, así que el aterrizaje encabeza con la acción correcta. Medido, no supuesto.
 
 ## 3. Bloqueado, y en qué
 

@@ -3021,6 +3021,22 @@ de error en vez de decir «Elige al menos un propósito de la visita».
 pantalla miente. Se anota aquí porque la entrada de estado que lo contaba se
 archivó el 2026-09-19 y un log archivado no lo lee nadie.
 
+### Un `redirect` dentro de un `try` se convierte en un error del formulario
+
+**PR #514.** Next implementa `redirect()` **lanzando**, así que un `redirect` escrito
+dentro del `try` de una acción de servidor lo atrapa el `catch`, y `traducir` lo
+vuelve un mensaje de error en la pantalla. El formulario se queda donde estaba
+diciendo que algo falló, cuando lo que pasó es que todo salió bien.
+
+**La regla:** el `redirect` va **fuera del `try`**. Es la hermana de la trampa de
+arriba y se equivoca al revés: allí el dominio funciona y la pantalla miente por lo
+que `friendlyError` no conoce; aquí miente por lo que el `catch` sí atrapa y no
+debería.
+
+Se anota aquí, y no en un log, por lo mismo que la de arriba: la entrada de estado
+que lo contaba se archivó el 2026-09-29, y medido antes de moverla daba **cero**
+menciones en este archivo, en `DECISIONS.md` y en el archivo histórico.
+
 ### Una prueba puede cerrarse sola por una errata
 
 **Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
