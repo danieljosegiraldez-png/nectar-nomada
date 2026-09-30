@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { colaDeSecado, type UnidadEnCola } from "../../../lib/beneficio/colaDeSecado";
 import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
+import { registrarTandaFormAction } from "../../actions/traceability";
+import { BotonDeEnvio } from "../../components/BotonDeEnvio";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +36,19 @@ const COLOR: Record<UnidadEnCola["estado"], string> = {
 
 const horas = (h: number | null) => (h == null ? "—" : h < 1 ? "<1 h" : `${Math.round(h)} h`);
 
-export default async function ColaDeSecadoPage() {
+export default async function ColaDeSecadoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ok?: string; error?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [t, cola] = await Promise.all([getTranslations("Secado"), colaDeSecado(user.userAccountId)]);
+  const [t, cola, { ok, error }] = await Promise.all([
+    getTranslations("Secado"),
+    colaDeSecado(user.userAccountId),
+    searchParams,
+  ]);
 
   return (
     <div className="nn-mill-page">
@@ -49,6 +59,18 @@ export default async function ColaDeSecadoPage() {
         </div>
       </header>
       <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/secado" />
+
+      {/* El resultado del acto anterior. `ok` trae CUÁNTAS corridas se voltearon, no cuántas
+          casillas se marcaron: dos bandejas de un mismo lote son una corrida, y decir «2» cuando
+          se escribió 1 sería mentir en la dirección que nadie comprueba. */}
+      {ok === undefined ? null : (
+        <p className="nn-notice nn-notice-success" role="status">{t("colaTandaHecha", { corridas: Number(ok) })}</p>
+      )}
+      {error ? (
+        <p className="nn-error" role="alert">
+          {error === "tanda_vacia" ? t("colaTandaVacia") : t("colaTandaSinPermiso")}
+        </p>
+      ) : null}
 
       {/* «No puedes ver ninguna» no es «no hay ninguna»: una cuenta recién dada de alta leería que el
           beneficio no tiene café secándose. Son dos mensajes distintos a propósito. */}
@@ -61,7 +83,8 @@ export default async function ColaDeSecadoPage() {
           {t("colaSinSecados")}
         </p>
       ) : (
-        cola.areas.map((area) => (
+        <form action={registrarTandaFormAction}>
+          {cola.areas.map((area) => (
           <section key={area.locationId} className="nn-section" aria-labelledby={`area-${area.locationId}`}>
             <h2 id={`area-${area.locationId}`}>{area.nombre}</h2>
             <p className="nn-muted">
@@ -76,6 +99,11 @@ export default async function ColaDeSecadoPage() {
               <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
                 <thead>
                   <tr>
+                    {/* Sin rótulo visible: la columna son casillas y cada una lleva su
+                        `aria-label` con el nombre de su unidad, que es lo que un lector de
+                        pantalla necesita. El repositorio no tiene clase para texto oculto
+                        —comprobado— y no se inventa una para un encabezado que nadie ve. */}
+                    <th scope="col" />
                     <th scope="col">{t("colaColumnaUnidad")}</th>
                     <th scope="col">{t("colaColumnaLote")}</th>
                     <th scope="col">{t("colaColumnaProceso")}</th>
@@ -88,6 +116,21 @@ export default async function ColaDeSecadoPage() {
                 <tbody>
                   {area.unidades.map((u) => (
                     <tr key={u.clave}>
+                      <td>
+                        {/* Marcada de antemano si le toca volteo: el operario DESMARCA lo que no
+                            tocó, en vez de marcar lo que sí. Es la diferencia entre confirmar y
+                            rellenar, y en el patio con las manos sucias se nota.
+                            El `value` es la CORRIDA, no la unidad: dos bandejas hermanas mandan el
+                            mismo valor y la acción lo deduplica. Ver su cabecera. */}
+                        <input
+                          type="checkbox"
+                          name="corrida"
+                          value={u.dryingRunId}
+                          defaultChecked={u.estado === "le toca volteo"}
+                          aria-label={t("colaCasillaDe", { unidad: u.nombre })}
+                          style={{ width: "26px", height: "26px" }}
+                        />
+                      </td>
                       <th scope="row">{u.nombre}</th>
                       <td>
                         <Link href={`/lots/${u.lotId}`} className="nn-code">
@@ -141,7 +184,18 @@ export default async function ColaDeSecadoPage() {
               </table>
             </div>
           </section>
-        ))
+          ))}
+
+          {/* Un solo botón para toda la pantalla, y va al final: la tanda es UN acto sobre lo que
+              esté marcado, aunque sea de dos áreas distintas. Un botón por área partiría en dos
+              lo que el operario hizo de una pasada. */}
+          <div style={{ marginTop: "1rem" }}>
+            <BotonDeEnvio className="nn-button">{t("colaBotonVolvi")}</BotonDeEnvio>
+            <p className="nn-muted" style={{ marginTop: "0.35rem" }}>
+              {t("colaBotonAyuda")}
+            </p>
+          </div>
+        </form>
       )}
     </div>
   );

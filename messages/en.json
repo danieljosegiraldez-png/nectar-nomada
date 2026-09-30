@@ -3098,7 +3098,14 @@
     "colaEstado_va_tarde": "running late",
     "colaEstado_cerca_del_objetivo": "close to target",
     "colaEstado_listo": "ready",
-    "colaEstado_sin_receta_declarada": "no recipe declared"
+    "colaEstado_sin_receta_declarada": "no recipe declared",
+    "colaColumnaVolvi": "Turned",
+    "colaCasillaDe": "I turned {unidad}",
+    "colaBotonVolvi": "I turned these",
+    "colaBotonAyuda": "What is due a turn comes pre-checked. Uncheck what you did not touch, then confirm.",
+    "colaTandaHecha": "Recorded: {corridas, plural, one {one run turned} other {# runs turned}}.",
+    "colaTandaVacia": "You checked none, so nothing was recorded.",
+    "colaTandaSinPermiso": "You cannot record turns on one of the ones you checked."
   },
   "Bodegas": {
     "titulo": "Storage rooms",
@@ -3284,7 +3291,13 @@
     "capacidadSinAcceso": "{n, plural, one {there is # weighing from lots your account can't see} other {there are # weighings from lots your account can't see}}",
     "lotesRecortados": "Showing the 100 most recent lots; there may be more.",
     "dondeOculto": "restricted location",
-    "noSePudoCalcular": "could not be calculated"
+    "noSePudoCalcular": "could not be calculated",
+    "columnaOcupacion": "What is on it",
+    "ocupacionSinDato": "—",
+    "ocupacionSinNombrar": "In use",
+    "ocupacionDesde": "since {fecha}",
+    "ocupacionLibreDesde": "Free since {fecha}",
+    "ocupacionLibre": "Free"
   },
   "Inventario": {
     "recibidoOk": "Container received. It appears below with its expiry.",

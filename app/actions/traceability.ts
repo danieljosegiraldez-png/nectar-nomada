@@ -37,7 +37,7 @@ import {
   updateRecipeMetadata,
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
-import { startDryingRun, recordDryingTurnEvent, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
+import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
@@ -667,6 +667,46 @@ export async function recordDryingTurnFormAction(formData: FormData): Promise<vo
   });
 
   revalidatePath(`/lots/${lotId}`);
+}
+
+/**
+ * «Revolví éstas» — la tanda, desde la cola de secado.
+ *
+ * **Las casillas son UNIDADES FÍSICAS y la tanda son CORRIDAS**, así que hay que deduplicar.
+ * Seis bandejas del mismo lote son UNA corrida de secado, y `DryingTurnEvent` cuelga de la
+ * corrida, no de la bandeja: el modelo no sabe registrar «volteé tres de las seis bandejas».
+ * Sin el dedupe, marcar dos bandejas hermanas daría `tanda_con_unidad_repetida` — un error por
+ * hacer exactamente lo que la pantalla invita a hacer.
+ *
+ * **Eso es un límite del modelo, no una decisión de esta pantalla**, y conviene que esté dicho
+ * aquí: el día que un volteo necesite nombrar la bandeja, se cambia `DryingTurnEvent`.
+ *
+ * La hora es `new Date()` a propósito, como en el volteo suelto: el operario acaba de voltear y
+ * lo está confirmando. No hay un reloj de pared que interpretar, así que no hay desfase que
+ * combinar.
+ */
+export async function registrarTandaFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const corridas = [...new Set(formData.getAll("corrida").map(String).filter((c) => c.length > 0))];
+  // Confirmar sin marcar nada no es un acto: sería una tanda que afirma que se volteó algo sin
+  // decir qué. El servicio también lo rechaza; aquí se atrapa antes para dar un aviso y no un error.
+  if (corridas.length === 0) redirect("/beneficio/secado?error=tanda_vacia");
+
+  try {
+    await registrarTandaDeVolteo(user.userAccountId, {
+      dryingRunIds: corridas,
+      occurredAt: new Date(),
+      provenanceClass: "direct_observation",
+    });
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) redirect("/beneficio/secado?error=sin_permiso");
+    throw error;
+  }
+
+  revalidatePath("/beneficio/secado");
+  redirect(`/beneficio/secado?ok=${corridas.length}`);
 }
 
 export async function endDryingFormAction(formData: FormData): Promise<void> {
