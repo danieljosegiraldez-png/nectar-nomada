@@ -4457,3 +4457,17 @@ pieza antes de moverla, porque dos veces el mismo día una entrada archivada se 
 **Y una cifra que se volvió a medir en vez de copiarla:** esta entrada decía «el índice pasa de 9 a
 8». Hoy tiene 9 y por eso se dudó. Medido sobre los dos lados del commit `a0809cda`: **antes 9,
 después 8** — la cifra era correcta, y el 9 de hoy es porque la cola de secado entró después.
+
+### 2026-09-28 · Los cuatro caminos que escriben ya tienen guardia (PR #513, #515)
+
+**#513 — la siembra tampoco escribe en una remota.** `npm run db:seed` es `tsx prisma/seed.ts` y no
+pasaba por `prisma.config.ts`. Se guarda por EFECTO y no por herramienta: `db seed` SALE de la lista
+de la CLI y lo vigila `prisma/seed.ts`, con una sola variable — `ALLOW_REMOTE_SEED=1`.
+
+**#515 — el verificador de respaldos crea su copia con la colación de producción, y lo comprueba.**
+El censo dice que están los DATOS, no que las REGLAS sean las mismas: una copia mal colada cuenta
+igual y sus índices admiten lo que el original rechaza.
+
+**`~/nectar-backups` borrado el 2026-09-29** tras copiar sus 13 conjuntos al Drive y comparar los 48
+archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
+verificador mira sólo el censo, así que un `pg_restore` con errores pasa.

@@ -41,6 +41,27 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-29 · El secado tiene cola, la tanda es un acto, y medir cabe en un campo (PR #523, #526, #531)
+
+**#523 — `ritmo.ts` por fin tiene quien lo pinte.** Calculaba la cola desde el 2026-09-13 y **sus
+únicos consumidores eran sus pruebas**. La pinta `/beneficio/secado`; un guardia exige que sus dos
+cálculos se **importen** fuera de `tests/` — su primera versión buscaba el NOMBRE y pasaba en verde
+con dos constantes locales homónimas.
+
+**#526 — `requireLotAccess` es un O, no un Y.** Vuelve en cuanto UNO de los candidatos pasa, así que
+pasarle las seis unidades de una tanda de golpe **la habría autorizado entera a quien sólo puede
+tocar una**. Se pide una vez por unidad, y fuera de la transacción.
+
+**#531 — doce campos pasan a cuatro, y salen dos fallos de horas que nadie buscaba.** Medido en la
+aplicación viva: **sólo se podía guardar UNA medición por carga de página** —el campo de la hora se
+vaciaba y, por obligatorio, el navegador bloqueaba el envío **sin ningún error**—, y el desfase se
+perdía igual. Un efecto con `[]` escribe en el DOM una vez y React lo borra al re-renderizar.
+**Afecta a los nueve formularios con `TimezoneOffsetField`** y es anterior a este trabajo. Lo delató
+que los otros cuatro formularios de la misma página, que no re-renderizan, seguían con su valor.
+
+**La zona de muestreo ya no exige inspección**: el servidor la crea, y el papel `ZONE` lo impone un
+`CHECK` de `core.sample` — preguntarlo era pedir la única respuesta que la base acepta.
+
 ### 2026-09-29 · Kiva Estate tiene dos fincas (PR #519, #521, #522)
 
 **ADR-189 — una organización de finca puede tener varias.** `crearFinca` rechazaba la segunda con
@@ -73,21 +94,6 @@ Cierra el pendiente de `permissionKeysAnywhere`: de sus tres usos **dos se acota
 Equipos va a plataforma —fila global—, CEREZA al **sitio del beneficio** («el cosechador sólo entrega
 y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque su spec da esa audiencia SIN
 ámbito. El `AuditEvent` lleva `autorizadoEnBeneficio`, y mi flip-test **no discriminaba** hasta que Codex lo vio.
-
-### 2026-09-28 · Los cuatro caminos que escriben ya tienen guardia (PR #513, #515)
-
-**#513 — la siembra tampoco escribe en una remota.** `npm run db:seed` es `tsx prisma/seed.ts` y no
-pasaba por `prisma.config.ts`. Se guarda por EFECTO y no por herramienta: `db seed` SALE de la lista
-de la CLI y lo vigila `prisma/seed.ts`, con una sola variable — `ALLOW_REMOTE_SEED=1`.
-
-**#515 — el verificador de respaldos crea su copia con la colación de producción, y lo comprueba.**
-El censo dice que están los DATOS, no que las REGLAS sean las mismas: una copia mal colada cuenta
-igual y sus índices admiten lo que el original rechaza.
-
-**`~/nectar-backups` borrado el 2026-09-29** tras copiar sus 13 conjuntos al Drive y comparar los 48
-archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
-verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
-
 
 ## 3. Bloqueado, y en qué
 
