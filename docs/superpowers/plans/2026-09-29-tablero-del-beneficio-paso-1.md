@@ -4,6 +4,12 @@
 > (recomendada) o `superpowers:executing-plans`, tarea por tarea. Los pasos llevan casilla
 > (`- [ ]`) para poder marcarlos.
 
+> **⚠ Este plan se unificó con el del 2026-09-29.** Las tareas 1, 2, 4 y 5 se ejecutan tal cual
+> desde aquí; **la Tarea 3 está anulada** (ver su aviso) y la Tarea 6 cambia. El orden y la
+> composición están en
+> `docs/superpowers/plans/2026-09-29-tablero-del-beneficio-unificado.md`, que es el que se abre
+> primero.
+
 **Objetivo:** que `/beneficio` conteste de un vistazo **qué lote pide atención ahora** y **si cabe
 más cereza**, reuniendo los motores que hoy sólo se ven lote por lote.
 
@@ -257,6 +263,28 @@ del lote tiene que pintar **el mismo veredicto** antes y después.
 ---
 
 ## Tarea 3 — Ocupación: tanques y camas, con el MISMO clasificador
+
+> ## ⛔ ESTA TAREA ESTÁ ANULADA. NO SE EJECUTA TAL CUAL.
+>
+> **La sustituye la Tarea 4 de**
+> `docs/superpowers/plans/2026-09-29-tablero-del-beneficio-unificado.md`.
+>
+> **Por qué.** Su paso 5 dice que una cama con `endedAt` no nulo está libre. Daniel decidió lo
+> contrario el 2026-09-29, después de que este plan se escribiera: *«si uno termina un día, no se
+> puede mismo día vaciar, purgar, esterilizar o sanitizar y reutilizar por defecto; depende de
+> quien lo ponga disponible, ya que logísticamente es así.»* Una unidad cerrada pasa a **por
+> limpiar** y **no cuenta como capacidad** hasta que una persona la libera.
+>
+> No es un defecto de este plan: implementa el diseño del 2026-09-16, que era el vigente cuando se
+> escribió. Lo corrige
+> `docs/superpowers/specs/2026-09-29-tablero-del-beneficio-y-disponibilidad-design.md`, y la
+> especificación que manda ya lo exigía: «nunca inventan un cero ni una hora de liberación»
+> (`2026-09-23-operacion-integrada-beneficio-2027.md:274`).
+>
+> **Lo que SÍ se conserva de aquí:** usar el MISMO clasificador para tanques y camas, los
+> conflictos de dos corridas abiertas en la misma unidad, y las corridas sin unidad declarada.
+> Lo único que cambia es qué cuenta como libre.
+
 
 **Archivos:**
 - Modificar: `lib/beneficio/tablero.ts`
