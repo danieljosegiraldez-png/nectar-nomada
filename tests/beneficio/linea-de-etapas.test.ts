@@ -3,8 +3,10 @@
  *
  * **Lo que estas pruebas existen para impedir.** Un cero y un «sin registro» no son lo mismo: un
  * cero dice «no hay nada ahí», y la flotación no puede decir eso porque el esquema no la anota
- * (medido el 2026-09-30 contra `prisma/schema.prisma`: sus únicas menciones son un umbral del
- * pedido y parte de un veredicto, no un acto registrado por lote). Si la columna pintara `0`, el
+ * (medido el 2026-09-30 contra `prisma/schema.prisma`: la flotación sí está, pero como método de
+ * una selección —`LotTransformation.selectionMethodValue`, con `condicionDePesaje` obligatoria
+ * para ese método, decisión de Daniel del 2026-09-19—, no como etapa propia; un método pasado no
+ * dice cuánto hay en la etapa ahora, y §4.5 manda decir «sin registro de esta etapa»). Si la columna pintara `0`, el
  * operario leería que no hay café flotando cuando lo que pasa es que el sistema no lo sabe. Un
  * refactor mecánico aplasta esa diferencia sin avisar, de ahí la primera prueba.
  *
@@ -58,11 +60,22 @@ describe("lineaDeEtapas", () => {
       seleccion: 2,
       proceso: 3,
       secado: 1,
-      almacen: 0,
+      almacen: 4,
       pidenDecision: { proceso: 2 },
     });
     const porClave = new Map(etapas.map((e) => [e.clave, e.estado]));
     expect(porClave.get("proceso")).toEqual({ tipo: "cuenta", lotes: 3, pidenDecision: 2 });
     expect(porClave.get("secado")).toEqual({ tipo: "cuenta", lotes: 1, pidenDecision: 0 });
+    // Las seis posiciones a la vez, con cinco cuentas distintas entre sí: intercambiar dos
+    // entradas del mapeo (recepcion por seleccion) pasaba las aserciones de arriba en verde.
+    // `almacen` es 4 y no 0 para que el `?? 0` de la función no enmascare un mapeo perdido.
+    expect(etapas.map((e) => (e.estado.tipo === "cuenta" ? e.estado.lotes : null))).toEqual([
+      5,
+      null,
+      2,
+      3,
+      1,
+      4,
+    ]);
   });
 });

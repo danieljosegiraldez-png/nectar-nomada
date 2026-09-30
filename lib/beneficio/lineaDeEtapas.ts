@@ -7,14 +7,23 @@
  * **Lo que este módulo existe para impedir** es que un cero y un «sin registro» se confundan.
  * Medido el 2026-09-30 contra `prisma/schema.prisma`: recepción (`RecepcionDeCereza`), proceso
  * (`LotProcess`), secado (`DryingRun`) y almacén (`StorageAssignment`) se registran; la
- * selección se cuenta filtrando `LotTransformation` por `transformationType: "selection"`; y la
- * **flotación no tiene ningún registro** —sus únicas menciones son `PedidoDeCereza.maxFlotesPct`,
- * un umbral, y `VeredictoDeCalidadDePedido.flotesKg`, parte de un veredicto—. Un cero dice «no hay
- * nada ahí»; la flotación no puede decir eso, porque nadie la anota y el sistema no lo sabe. Si
- * se pintara `0`, el operario leería que no hay café flotando.
+ * selección se cuenta filtrando `LotTransformation` por `transformationType: "selection"`.
+ *
+ * **La flotación sí está en el esquema, pero como método de una selección, no como etapa
+ * propia**: `LotTransformation.selectionMethodValue`, con `condicionDePesaje` obligatoria sólo
+ * cuando el método es `flotacion` —la que moja la cereza—, decisión de Daniel del 2026-09-19.
+ * (Las otras dos menciones, `PedidoDeCereza.maxFlotesPct` y
+ * `VeredictoDeCalidadDePedido.flotesKg`, son un umbral y parte de un veredicto.) Por eso no se
+ * puede contar aquí: un **método pasado** de una transformación no dice **cuánto hay en esa
+ * etapa ahora**, que es lo que la línea muestra. Un cero dice «no hay nada ahí»; la flotación no
+ * puede decir eso, porque el sistema no lo sabe. Si se pintara `0`, el operario leería que no
+ * hay café flotando. §4.5 manda decir «sin registro de esta etapa» justo en este caso.
  *
  * Por eso `flotacion` **no se recibe por parámetro**: que no se pueda pasar es a propósito, para
  * que nadie le meta un cero sin darse cuenta de lo que significa.
+ *
+ * **Si Daniel decide que la columna cuente «selecciones hechas por flotación»**, es un cambio de
+ * esta función pura y de su prueba, sin migración ni datos nuevos: el método ya se guarda.
  *
  * Diseño: `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md` §4.5.
  */
