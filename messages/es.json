@@ -3604,8 +3604,6 @@
   "Jornadas": {
     "recibidaEnBeneficio": "recibida: {kg} kg en el beneficio ({dif} kg)",
     "rechazadaEnBeneficio": "rechazada en el beneficio: {motivo}",
-    "destino": "Beneficio de destino",
-    "sinBeneficioDestino": "No ves ningún beneficio al que enviar la cereza. Pide acceso al beneficio para abrir jornadas.",
     "error_beneficio_no_valido": "Elige el beneficio al que va la cereza de esta jornada.",
     "error_destino_fijo": "Esta jornada ya tiene entregas recibidas: su beneficio ya no se cambia.",
     "error_ya_recibida": "Esa entrega ya se recibió en el beneficio: no se anula desde la finca.",

@@ -10,6 +10,10 @@ import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
 import { abrirJornada, agregarRecolector, cerrarJornada, darDeBajaRecolector, detalleDeJornada, JornadaError, recolectoresDeFinca } from "../../lib/traceability/jornadasDeCosecha";
+import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
+import { anotarEntrega } from "../../lib/traceability/entregasDeCosecha";
+import { pendientesDeBeneficio } from "../../lib/traceability/recepcionesDeCereza";
+import { can } from "../../lib/rbac/service";
 
 const RUN = `jor-${Date.now()}`;
 const personas: string[] = [];
@@ -21,6 +25,8 @@ const hoy = new Date(new Date().toISOString().slice(0, 10));
 
 let A: string;
 let beneficioA: string;
+/** Beneficio bajo la finca B: los de A **no** lo ven. Es lo que prueba la otra mitad de ADR-194. */
+let beneficioForaneo: string;
 let B: string;
 let parcelaA: string;
 let parcelaB: string;
@@ -63,6 +69,7 @@ beforeAll(async () => {
   const fb = await finca("B");
   A = fa.site; parcelaA = fa.plot; B = fb.site; parcelaB = fb.plot;
   beneficioA = (await prisma.location.create({ data: { name: `TEST Beneficio (${RUN})`, locationType: "beneficio", parentLocationId: A, classification: "internal" } })).id;
+  beneficioForaneo = (await prisma.location.create({ data: { name: `TEST Beneficio foráneo (${RUN})`, locationType: "beneficio", parentLocationId: B, classification: "internal" } })).id;
   managerA = await cuenta("Farm Manager", A);
   operarioA = await cuenta("Farm Operator", A);
   operarioB = await cuenta("Farm Operator", B);
@@ -71,6 +78,8 @@ beforeAll(async () => {
   const { organizationId } = await prisma.location.findUniqueOrThrow({ where: { id: A }, select: { organizationId: true } });
   await prisma.organizationMembership.createMany({ data: [recolector1, noRecolector].map((personId) => ({ personId, organizationId: organizationId! })) });
   await agregarRecolector(managerA, { fincaSiteId: A, personId: recolector1, desde: new Date(hoy.getTime() - 86_400_000) });
+  // El destino ya no se pasa a `abrirJornada`: lo lleva la finca (ADR-194).
+  await declararDestinoDeFinca(managerA, { fincaSiteId: A, beneficioId: beneficioA });
 }, 30000);
 
 afterAll(async () => {
@@ -85,7 +94,9 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, parcelaA, parcelaB] } }) });
+  // La FK del destino es RESTRICT: un beneficio al que una finca envía no se puede borrar.
+  await prisma.location.updateMany({ where: assertDefinedWhere({ id: { in: [A, B] } }), data: { beneficioDestinoId: null } });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficioA, beneficioForaneo, parcelaA, parcelaB] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [A, B] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
@@ -108,7 +119,7 @@ describe("los permisos nuevos", () => {
 
 describe("la jornada de cosecha", () => {
   it("el Farm Manager de la finca abre una jornada con su asignación, y se lee con su detalle", async () => {
-    const j = await abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     expect(j.estado).toBe("abierta");
     const d = await detalleDeJornada(managerA, j.id);
     expect(d.asignaciones.map((a) => [a.location.id, a.person.id])).toEqual([[parcelaA, recolector1]]);
@@ -116,29 +127,29 @@ describe("la jornada de cosecha", () => {
   }, 20000);
 
   it("el capataz de esta finca también abre (control positivo)", async () => {
-    const j = await abrirJornada(operarioA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const j = await abrirJornada(operarioA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     expect(j.fincaSiteId).toBe(A);
   }, 20000);
 
   it("una parcela de otra finca se rechaza", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaB, personId: recolector1 }] })).rejects.toThrow(
+    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaB, personId: recolector1 }] })).rejects.toThrow(
       /parcela_fuera_de_la_finca/,
     );
   }, 20000);
 
   it("una persona que no es recolectora de la finca se rechaza", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: noRecolector }] })).rejects.toThrow(
+    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: noRecolector }] })).rejects.toThrow(
       /no_es_recolector/,
     );
   }, 20000);
 
   it("el capataz de OTRA finca no abre jornadas aquí", async () => {
-    await expect(abrirJornada(operarioB, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] })).rejects.toThrow();
+    await expect(abrirJornada(operarioB, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] })).rejects.toThrow();
   }, 20000);
 
   it("sin asignaciones no se abre, y cerrar dos veces da ya_cerrada", async () => {
-    await expect(abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [] })).rejects.toThrow(/sin_asignaciones/);
-    const j = await abrirJornada(managerA, { fincaSiteId: A, beneficioId: beneficioA, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    await expect(abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [] })).rejects.toThrow(/sin_asignaciones/);
+    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
     const cerrada = await cerrarJornada(managerA, j.id);
     expect(cerrada.estado).toBe("cerrada");
     await expect(cerrarJornada(managerA, j.id)).rejects.toThrow(/ya_cerrada/);
@@ -201,5 +212,77 @@ describe("dar de baja a un recolector (2026-09-25)", () => {
     await expect(
       darDeBajaRecolector(operarioB, { fincaSiteId: A, personId: recolector1, hasta: hoy }),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * ADR-194, sus dos mitades. Diseño:
+ * `docs/superpowers/specs/2026-09-30-destino-de-cereza-por-finca-design.md`.
+ */
+describe("el destino sale de la finca, no de quien abre", () => {
+  /**
+   * **La jornada COPIA, no referencia.** Decisión de Daniel, 2026-09-30, y la misma regla que
+   * `docs/beneficio/20_modelo_ciclo_completo.md` fija para las muestras: «una muestra guarda una
+   * instantánea del estado del lote, no una referencia viva». Si la jornada resolviera el destino
+   * en vivo, cambiar el de la finca movería jornadas ya cerradas —y con ellas entregas ya
+   * recibidas— hacia un beneficio que nunca las recibió. Un refactor mecánico rompe justo esto,
+   * porque «leer el destino de la finca» suena igual de bien en las dos formas.
+   */
+  it("la jornada COPIA el destino: cambiar el de la finca no la mueve", async () => {
+    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const antes = (await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId;
+    expect(antes).toBe(beneficioA);
+
+    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioForaneo } });
+    const despues = (await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId;
+    expect(despues).toBe(beneficioA); // NO `beneficioForaneo`: es una instantánea.
+
+    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioA } });
+  });
+
+  /**
+   * **La otra mitad de ADR-194, y la que nadie había nombrado.** «El cosechador no tiene que
+   * definir a quién le entrega; sólo entrega y pesa». Mientras `abrirJornada` exigía `lot:view`
+   * sobre el beneficio, un capataz que no alcanza el beneficio de destino no podía abrir la
+   * jornada del día — la contradicción quedaba abierta aunque el selector desapareciera.
+   *
+   * **El control positivo va ANTES del veredicto y es lo que hace que esta prueba signifique
+   * algo:** si `operarioA` resultara ver el beneficio foráneo, la apertura pasaría por el motivo
+   * equivocado y la prueba saldría verde sin probar nada.
+   */
+  it("quien abre la jornada NO necesita permiso en el beneficio", async () => {
+    const foraneo = await prisma.location.findUniqueOrThrow({ where: { id: beneficioForaneo }, select: { classification: true } });
+    const loVe = await can(operarioA, "view", "lot", { scopeType: "location", scopeRefId: beneficioForaneo }, foraneo.classification);
+    expect(loVe).toBe(false); // control: el capataz de A NO alcanza el beneficio de B
+
+    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioForaneo } });
+    const j = await abrirJornada(operarioA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    expect((await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId).toBe(beneficioForaneo);
+
+    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: beneficioA } });
+  });
+
+  /**
+   * Una finca sin destino **abre jornada igual** —Jaramillo y Artillería existen— y sus entregas no
+   * aparecen en ningún beneficio.
+   *
+   * **Afirma sobre IDs y no sobre recuentos, a propósito.** Las otras pruebas de este archivo
+   * abren jornadas sobre la misma finca A con destino `beneficioA`, así que un
+   * `toHaveLength(0)` mediría el resto de la suite y no este cambio. Y el control positivo no es
+   * repetir la consulta: es **enlazar la finca y volver a preguntar**. Sin él, un «no aparece» se
+   * lee como «funciona» cuando puede ser «no miré».
+   */
+  it("una finca sin destino abre jornada, y su entrega no sale en ningún beneficio", async () => {
+    await prisma.location.update({ where: { id: A }, data: { beneficioDestinoId: null } });
+    const j = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    expect((await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId).toBeNull();
+    const sinDestino = await anotarEntrega(managerA, { jornadaId: j.id, recolectorPersonId: recolector1, origen: { locationId: parcelaA }, pesoFincaKg: 12, enviadaAt: new Date() });
+    expect((await pendientesDeBeneficio(managerA, beneficioA)).map((e) => e.id)).not.toContain(sinDestino.id);
+
+    // Control positivo: con la finca enlazada, la MISMA consulta sí la trae.
+    await declararDestinoDeFinca(managerA, { fincaSiteId: A, beneficioId: beneficioA });
+    const j2 = await abrirJornada(managerA, { fincaSiteId: A, fecha: hoy, asignaciones: [{ locationId: parcelaA, personId: recolector1 }] });
+    const conDestino = await anotarEntrega(managerA, { jornadaId: j2.id, recolectorPersonId: recolector1, origen: { locationId: parcelaA }, pesoFincaKg: 13, enviadaAt: new Date() });
+    expect((await pendientesDeBeneficio(managerA, beneficioA)).map((e) => e.id)).toContain(conDestino.id);
   });
 });

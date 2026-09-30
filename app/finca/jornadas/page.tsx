@@ -6,7 +6,7 @@ import { getCurrentUser } from "../../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../../lib/rbac/service";
 import { COOKIE_FINCA, fincaDeLaPagina, idsBajoLaFinca, ordenarParcelas } from "../../../lib/traceability/fincas";
 import { getManageableContext, getObserverCandidates, TraceabilityAccessError } from "../../../lib/traceability/lots";
-import { beneficiosDeDestino, jornadasDeFinca, recolectoresDeFinca } from "../../../lib/traceability/jornadasDeCosecha";
+import { jornadasDeFinca, recolectoresDeFinca } from "../../../lib/traceability/jornadasDeCosecha";
 import { FincaElegida } from "../../components/traceability/FincaElegida";
 import { AbrirJornadaForm, AgregarRecolectorForm, DarDeBajaRecolectorForm } from "../../components/traceability/AbrirJornadaForm";
 
@@ -51,9 +51,11 @@ export default async function JornadasPage() {
   }
 
   const gestiona = granted.has("lot:manage");
-  const [contexto, candidatos, destinos] = gestiona
-    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId, [{ locationId: siteId }]), beneficiosDeDestino(user.userAccountId)])
-    : [null, null, []];
+  // Ya no se cargan los beneficios: el destino lo lleva la finca y la jornada lo copia (ADR-194),
+  // así que quien abre no elige — ni necesita permiso allí.
+  const [contexto, candidatos] = gestiona
+    ? await Promise.all([getManageableContext(user.userAccountId), getObserverCandidates(user.userAccountId, [{ locationId: siteId }])])
+    : [null, null];
   const bajo = contexto ? idsBajoLaFinca(contexto.locations, siteId) : new Set<string>();
   const parcelas = contexto ? ordenarParcelas(contexto.plotLocations.filter((p) => bajo.has(p.id))) : [];
   const yaSon = new Set(recolectores.map((r) => r.personId));
@@ -87,7 +89,7 @@ export default async function JornadasPage() {
         <>
           <section className="nn-section">
             <h2>{t("abrirTitulo")}</h2>
-            <AbrirJornadaForm fincaSiteId={siteId} parcelas={parcelas.map((p) => ({ id: p.id, name: p.name }))} recolectores={recolectores} beneficios={destinos} />
+            <AbrirJornadaForm fincaSiteId={siteId} parcelas={parcelas.map((p) => ({ id: p.id, name: p.name }))} recolectores={recolectores} />
           </section>
           <section className="nn-section">
             <h2>{t("recolectoresTitulo")}</h2>

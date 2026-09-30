@@ -840,7 +840,7 @@ model Location {
   /// apuntando al vacío en silencio, y el encaminamiento de `pendientesDeBeneficio` depende de
   /// esto para no perder entregas.
   beneficioDestinoId  String?    @map("beneficio_destino_id") @db.Uuid
-  beneficioDestino    Location?  @relation("FincaDestino", fields: [beneficioDestinoId], references: [id], onDelete: Restrict)
+  beneficioDestino    Location?  @relation("FincaDestino", fields: [beneficioDestinoId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   fincasQueEnvianAqui Location[] @relation("FincaDestino")
   organizationId   String?                                @map("organization_id") @db.Uuid
   organization     Organization?                          @relation(fields: [organizationId], references: [id])
@@ -994,6 +994,8 @@ model Location {
   equipmentTransfersTo   EquipmentTransfer[] @relation("EquipmentTransferTo")
   careRoutines CareRoutine[] @relation("CareRoutineLocation")
   @@index([logoAssetId])
+  /// Lo consulta `fincasQueEnvianAqui` y la pantalla del beneficio: «qué fincas me envían».
+  @@index([beneficioDestinoId])
 
   @@map("location")
   @@schema("core")

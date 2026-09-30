@@ -131,8 +131,10 @@ export async function exigeBeneficioDeDestino(userAccountId: string, beneficioId
 
 export interface AbrirJornadaInput {
   readonly fincaSiteId: string;
-  /** Spec recepción §3.1: el beneficio de destino, obligatorio. */
-  readonly beneficioId: string;
+  /**
+   * `beneficioId` YA NO ESTÁ (ADR-194, 2026-09-30): el destino lo lleva la finca y la jornada lo
+   * **copia** al abrirse. Quien abre no elige, y no necesita permiso en el beneficio.
+   */
   readonly fecha: Date;
   readonly nota?: string | null;
   readonly asignaciones: readonly { locationId: string; personId: string }[];
@@ -146,7 +148,22 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
   await exigeGestionarFinca(userAccountId, input.fincaSiteId);
   if (Number.isNaN(input.fecha.getTime())) throw new JornadaError("fecha_invalida");
   if (!input.asignaciones.length) throw new JornadaError("sin_asignaciones");
-  await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
+
+  /**
+   * **El destino se COPIA de la finca, y aquí NO se pide permiso sobre el beneficio.** Las dos
+   * mitades de ADR-194: quien cosecha no define a quién entrega, así que tampoco tiene por qué
+   * alcanzar ese beneficio —un capataz que no lo ve abre la jornada del día igual—. Y se copia,
+   * no se referencia: cambiar el destino de la finca después no mueve las jornadas ya abiertas,
+   * que es la misma regla de instantánea que rige las muestras
+   * (`docs/beneficio/20_modelo_ciclo_completo.md`).
+   *
+   * `null` es un destino válido: una finca cuya cereza se compra y se traslada no envía a ningún
+   * beneficio propio, y su jornada se abre igual.
+   */
+  const destino = (await prisma.location.findUniqueOrThrow({
+    where: { id: input.fincaSiteId },
+    select: { beneficioDestinoId: true },
+  })).beneficioDestinoId;
 
   const arbol = await prisma.location.findMany({ select: { id: true, parentLocationId: true, locationType: true } });
   const bajo = idsBajoLaFinca(arbol, input.fincaSiteId);
@@ -167,7 +184,7 @@ export async function abrirJornada(userAccountId: string, input: AbrirJornadaInp
     const jornada = await tx.jornadaDeCosecha.create({
       data: {
         fincaSiteId: input.fincaSiteId,
-        beneficioId: input.beneficioId,
+        beneficioId: destino,
         fecha: input.fecha,
         nota: input.nota?.trim() || null,
         createdBy: userAccountId,

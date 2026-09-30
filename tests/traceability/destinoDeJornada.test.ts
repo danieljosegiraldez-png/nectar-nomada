@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada } from "../../lib/traceability/jornadasDeCosecha";
+import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 import { anotarEntrega, anularEntrega } from "../../lib/traceability/entregasDeCosecha";
 
 const RUN = `dest-${Date.now()}`;
@@ -85,14 +86,20 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
+  // La FK del destino es RESTRICT: sin soltarlo, borrar el beneficio lanza y —siendo el
+  // `afterAll` una cadena— abandona los borrados de abajo.
+  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: { in: [beneficio, beneficio2, beneficioAjeno] } }), data: { beneficioDestinoId: null } });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, beneficioAjeno] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
 }, 30000);
 
-const abrir = (beneficioId: string) =>
-  abrirJornada(manager, { fincaSiteId: finca, beneficioId, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+/** El destino ya no se pasa: se declara en la finca y la jornada lo COPIA al abrirse (ADR-194). */
+const abrir = async (beneficioId: string) => {
+  await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: beneficioId } });
+  return abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+};
 
 /** Una recepción vigente de la entrega, escrita directo en la base (el servicio es la Tarea 5). */
 async function recibir(entregaId: string) {
@@ -106,15 +113,23 @@ async function recibir(entregaId: string) {
 }
 
 describe("el destino al abrir la jornada", () => {
-  it("sin destino, o con algo que no es un beneficio, se rechaza; con el beneficio, se guarda", async () => {
-    await expect(abrir("")).rejects.toThrow(/beneficio_no_valido/);
-    await expect(abrir(parcela)).rejects.toThrow(/beneficio_no_valido/);
-    const j = await abrir(beneficio);
+  /**
+   * **Estas dos comprobaciones no se han perdido: se han MOVIDO** (ADR-194, 2026-09-30). Antes las
+   * hacía `abrirJornada`, porque el destino se le pasaba; ahora el destino lo lleva la finca, así
+   * que quien las tiene que hacer es `declararDestinoDeFinca` — y la jornada se limita a copiar lo
+   * que encuentre. Se reescriben en su sitio nuevo en vez de borrarse: un guardia que se quita
+   * porque falló es cobertura que desaparece sin que nadie lo note.
+   */
+  it("sin destino, o con algo que no es un beneficio, se rechaza al DECLARARLO; con el beneficio, la jornada lo copia", async () => {
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: "" })).rejects.toThrow(/beneficio_no_valido/);
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: parcela })).rejects.toThrow(/beneficio_no_valido/);
+    await declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficio });
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
     expect(j.beneficioId).toBe(beneficio);
   }, 20000);
 
-  it("un beneficio de otra finca, que no ve, se rechaza", async () => {
-    await expect(abrir(beneficioAjeno)).rejects.toThrow(/beneficio_no_valido/);
+  it("un beneficio de otra finca, que no ve, se rechaza al declararlo", async () => {
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioAjeno })).rejects.toThrow(/beneficio_no_valido/);
   }, 20000);
 
   it("los destinos que se le ofrecen son los de su finca, no los de otra", async () => {
