@@ -137,21 +137,42 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Orden que respeta los RESTRICT: lo que referencia primero.
-  await prisma.correctiveAction.deleteMany({ where: assertDefinedWhere({ id: { in: correctiveIds } }) });
-  await prisma.deviation.deleteMany({ where: assertDefinedWhere({ id: { in: deviationIds } }) });
-  await prisma.lotTransformationInput.deleteMany({
-    where: assertDefinedWhere({ transformationId: { in: transformationIds } }),
-  });
-  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) });
-  await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ id: { in: assignmentIds } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgIds } }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: accountIds } }) });
-  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) });
+  // **Cada borrado en su propio `try`, y no una cadena.** Un `afterAll` es una cadena: la
+  // primera FK que se queja tira todo lo que viene después. El 2026-09-30 esta misma limpieza
+  // dejó 22 filas TEST en la base compartida —3 lotes, 2 organizaciones, 2 ubicaciones, 2
+  // personas y su rastro— porque el `deleteMany` de los inputs llevaba el nombre de campo
+  // equivocado (`lotTransformationId` en vez de `transformationId`), lanzó, y las nueve líneas
+  // siguientes no se ejecutaron. Se vieron en el navegador, no en el verde de la suite.
+  //
+  // Envolver cada paso cuesta esto y convierte «una fuga silenciosa» en «un aviso impreso».
+  const pasos: [string, () => Promise<unknown>][] = [
+    ["correctiveAction", () => prisma.correctiveAction.deleteMany({ where: assertDefinedWhere({ id: { in: correctiveIds } }) })],
+    ["deviation", () => prisma.deviation.deleteMany({ where: assertDefinedWhere({ id: { in: deviationIds } }) })],
+    ["transformationInput", () => prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) })],
+    ["lotTransformation", () => prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) })],
+    ["fermentationRun", () => prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) })],
+    ["lot", () => prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) })],
+    ["assignment", () => prisma.assignment.deleteMany({ where: assertDefinedWhere({ id: { in: assignmentIds } }) })],
+    ["scope", () => prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) })],
+    ["location", () => prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIds } }) })],
+    ["organization", () => prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgIds } }) })],
+    ["userAccount", () => prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: accountIds } }) })],
+    ["person", () => prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIds } }) })],
+  ];
+  const fallos: string[] = [];
+  for (const [nombre, fn] of pasos) {
+    try {
+      await fn();
+    } catch (e) {
+      fallos.push(`${nombre}: ${(e as Error).message.split("\n")[0]}`);
+    }
+  }
+  // Se imprime con `process.stdout.write` y no con `console.log`: vitest intercepta la consola
+  // y sólo la saca para las pruebas que FALLAN, así que un aviso de fuga en una corrida verde
+  // no se vería nunca.
+  if (fallos.length > 0) {
+    process.stdout.write(`\n[FUGA] la limpieza de ${RUN} dejó filas: ${fallos.join(" | ")}\n`);
+  }
 });
 
 describe("datosDelTablero", () => {
