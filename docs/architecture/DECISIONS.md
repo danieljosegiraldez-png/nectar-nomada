@@ -12572,3 +12572,70 @@ página de hoy, no sobre la del 16.
 - Las rutinas **se quedan al fondo y plegadas**, como están. Era ya lo que Daniel pedía.
 - **Lo que este ADR NO decide:** el orden exacto de la mitad de abajo, y cómo se acomodan las tres
   piezas de §4.5 sobre el índice en pantalla estrecha. Es trabajo de plan, con el spec al lado.
+
+## ADR-194 — El cosechador entrega y pesa; el beneficio recibe, y ahí se juzga el permiso
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado en su parte implementada (decisión de Daniel, en
+sesión); **una parte del código la contradice hoy y se dice abajo**
+
+**Contexto, y por qué este ADR se escribe un día tarde.** La decisión vivía en la cabecera de
+`lib/traceability/proveedoresDeCereza.ts` y en una entrada de `SESSION_STATE.md` §2 que se archivó
+el 2026-09-30. Medido antes de escribir esto: «entrega y pesa» daba **cero** menciones en este
+archivo. Una decisión suya cuyo único hogar es un log archivado se vuelve a preguntar — es la misma
+forma que ADR-190 registró para el `apiary:load-protocol` y ADR-192 para los pedidos.
+
+**Sus palabras, del 2026-09-29, y no una paráfrasis.** «El cosechador no tiene que definir a quién
+le entrega. Sólo entrega y pesa lo entregado. El beneficio ya en su pantalla de operador recibe y
+sabemos que entró ahí. La finca no tiene que saber a qué beneficio le entregaron, solamente cuánto
+fue su producción por cosecha, peso, y eficiencia de cosecha vía medición en selección post-flotado,
+que nos indica qué recolectó o cosechó.»
+
+**Decisión.** Tres cosas, y conviene separarlas porque su estado es distinto:
+
+1. **El permiso del alta de un proveedor de cereza se juzga en el beneficio donde ocurre el acto**,
+   no «en cualquier ámbito».
+2. **La finca no necesita saber a qué beneficio entregó.**
+3. **Lo que la finca sí necesita** es su producción por cosecha, el peso, y la **eficiencia de
+   cosecha medida en la selección post-flotado**.
+
+**Lo que ya está hecho (1).** `crearProveedorDeCereza` exige el beneficio y juzga con
+`can(userAccountId, "create", "cherry_supplier", { scopeType: "location", scopeRefId: b.id }, …)`.
+Antes usaba `permissionKeysAnywhere`, cuyo propio comentario dice **«Display only, and never an
+authorization decision»**: la unión de todos los ámbitos es más ancha que cualquiera de ellos. Que
+el proveedor creado no tenga ubicación **no obliga a juzgar sin ámbito** — lo que tiene ámbito es el
+**acto**, y ocurre en un beneficio concreto. El `AuditEvent` lleva `autorizadoEnBeneficio`, así que
+la fila dice **quién** autorizó y **dónde**. Su prueba aísla esa barrera con un `deny` sobre esa
+única clave; el primer flip-test mutaba dos barreras a la vez y **no discriminaba** — lo vio Codex.
+
+**Lo que ya es cierto por construcción (2).** `app/plots/[id]/page.tsx` menciona «beneficio»
+**cero** veces: la ficha de la parcela no le dice a la finca a quién entregó.
+
+**LO QUE EL CÓDIGO CONTRADICE HOY, medido y no deducido.** `abrirJornada`
+(`lib/traceability/jornadasDeCosecha.ts`) **exige** `beneficioId` —su propio comentario lo llama
+«el beneficio de destino, **obligatorio**», citando la spec de recepción §3.1— y
+`exigeBeneficioDeDestino` además pide `can(view, lot)` **sobre ese beneficio**. O sea que hoy, para
+abrir una jornada, el lado de la finca **tiene que** nombrar el beneficio y tener permiso en él,
+que es justo lo que la decisión dice que no hace falta. El esquema no lo impone: `beneficio_id` es
+**nullable**; quien lo exige es el servicio.
+
+**Esto no se resuelve aquí**, porque las dos lecturas son defendibles y la elección es de Daniel:
+
+- **(a) su frase alcanza a la jornada**: `beneficioId` pasa a opcional, y el destino se conoce
+  cuando el beneficio recibe. Hay que decidir qué pasa con `cambiarDestinoDeJornada` y con los
+  pedidos, cuyo `beneficio_id` **sí** es obligatorio;
+- **(b) su frase era sólo sobre el alta del proveedor**, y la jornada declara destino a propósito
+  porque la recepción lo necesita para cuadrar el doble peso. Entonces lo que sobra es la palabra
+  «obligatorio» en la spec, no el campo.
+
+**Y (3) no existe.** «Eficiencia» da **cero** archivos en `lib` —control: «selección» da 25 y
+«flotado» 9, así que el grep mide—. La selección post-flotado está construida; la **lectura** que
+él pide de ella, no. Es trabajo con su propio diseño, y lo que este ADR aporta es que quede
+nombrado en vez de vivir en una frase de conversación.
+
+**Consecuencias.**
+
+- **No se construyó nada con este ADR** y no cambia el esquema: registra la decisión, lo hecho, la
+  contradicción y lo que falta.
+- El pendiente de `permissionKeysAnywhere` que esta decisión cerró **queda cerrado**: de sus tres
+  usos, dos se acotaron y `ruedas.ts` se revirtió a propósito, porque su spec da esa audiencia sin
+  ámbito y la razón está escrita en el propio archivo.
