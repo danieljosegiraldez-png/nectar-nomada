@@ -28,12 +28,14 @@ const RUN_ID = `seed-org-guard-${Date.now()}`;
 const organizationIdsToClean: string[] = [];
 const personIdsToClean: string[] = [];
 const projectIdsToClean: string[] = [];
+const locationIdsToClean: string[] = [];
 
 afterAll(async () => {
   // Children before parents, so no FK constraint blocks cleanup.
   await prisma.organizationMembership.deleteMany({
     where: assertDefinedWhere({ organizationId: { in: organizationIdsToClean } }),
   });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: locationIdsToClean } }) });
   await prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: projectIdsToClean } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personIdsToClean } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizationIdsToClean } }) });
@@ -90,6 +92,35 @@ describe("findOrCreateOrganization DEMO/real collision guard", () => {
     await expect(
       findOrCreateOrganization(prisma, {
         organizationType: "farm",
+        name,
+        description: "[DEMO placeholder — should never attach to a real org.]",
+      }),
+    ).rejects.toThrow(DemoOrganizationCollisionError);
+  });
+
+  /**
+   * **El caso que faltaba, y que costó descubrirlo: el suelo.** Hasta el 2026-09-30 el guardia
+   * contaba membresías y proyectos, no ubicaciones — así que una organización con terreno pasaba
+   * por DEMO. Salió al volver real «Kiva Estate», que tiene sus dos fincas y ni una membresía ni
+   * un proyecto: el seed la habría reutilizado como contenido ficticio sin que nada lo dijera.
+   * Una organización con terreno no es un nombre en una lista.
+   */
+  it("throws instead of silently reusing an org that has real Locations", async () => {
+    const name = `TEST Real Estate With Land (${RUN_ID})`;
+
+    const realOrg = await prisma.organization.create({
+      data: { organizationType: "estate", name, status: "approved", classification: "public" },
+    });
+    organizationIdsToClean.push(realOrg.id);
+
+    const site = await prisma.location.create({
+      data: { name: `TEST Finca (${RUN_ID})`, locationType: "site", organizationId: realOrg.id },
+    });
+    locationIdsToClean.push(site.id);
+
+    await expect(
+      findOrCreateOrganization(prisma, {
+        organizationType: "estate",
         name,
         description: "[DEMO placeholder — should never attach to a real org.]",
       }),
