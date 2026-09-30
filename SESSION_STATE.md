@@ -41,7 +41,7 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #NNN)
+### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
 
 **ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
 elige el destino **y** no necesita permiso en el beneficio. La finca declara una vez a qué beneficio
