@@ -12524,3 +12524,51 @@ pedido de por medio**. El pedido queda opcional.
   granja a beneficio» **ya se puede archivar sin pérdida**, que era lo que la bloqueaba.
 - Lo que este ADR **no** decide: si un pedido debería poder exigirse en algún caso —otro volumen,
   otro comprador—. Hoy no se exige nunca y nadie lo ha pedido.
+
+## ADR-193 — El tablero del beneficio ES `/beneficio`, arriba; el índice pasa a ser su mitad de abajo
+
+**Fecha:** 2026-09-29 · **Estado:** aceptado · **Decisión delegada por Daniel** («decide el choque
+de ruta del tablero»), tomada sobre sus propias decisiones previas y una medición
+
+**Contexto.** El tablero está diseñado y aprobado —§4.2 y §4.5 de
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`— y su enfoque A decía **«una
+página nueva `/beneficio`, sólo lectura»**. Pero `/beneficio` ya existe y es otra cosa: un índice
+con «Operaciones», «Herramientas» y las rutinas plegadas al fondo. La ruta estaba ocupada por algo
+que se construyó después de aquella decisión.
+
+**Decisión. El tablero es `/beneficio` mismo, arriba de la página. No se crea
+`/beneficio/tablero`, y el índice no se mueve a otra ruta: pasa a ser la mitad de abajo.**
+
+**Por qué, y ninguna razón es de gusto.**
+
+1. **La ruta ya era suya.** El enfoque A que Daniel aprobó nombraba `/beneficio`. El índice la ocupó
+   mientras el tablero esperaba; recuperarla es volver a su decisión, no cambiarla.
+2. **Es lo que describió el 2026-09-29**, sin saber que estaba redescribiendo su propio diseño: la
+   vista tipo tablero arriba, la lista reducida a **reporte**, lo demás como ajustes o vista, y las
+   rutinas al fondo. Eso es **una** página, no dos.
+3. **Un `/beneficio/tablero` invertiría la prioridad que acaba de fijar.** Haría del tablero un
+   destino *dentro* del índice — algo que el operario tiene que encontrar— cuando es lo primero que
+   necesita ver. Su frase fue explícita: lo frecuente para un operador manda sobre definir
+   parámetros o dar de alta.
+4. **Y el reparto actual del índice está roto, así que hay que rehacerlo de todos modos.** Medido:
+   `operaciones` filtra por `recepcion` **o `pedidos`**, y `pedidos` salió del índice con ADR-192
+   —**0** apariciones como `href` en `destinos.ts`, con `recepcion` en 1 como control—. O sea que
+   **«Operaciones» tiene hoy UN enlace** y «Herramientas» los otros **ocho**, entre ellos
+   `/beneficio/secado`, que Daniel decidió el 2026-09-27 que es **la pantalla de inicio del operario
+   de secado**. La cláusula de `pedidos` es código muerto.
+
+**Una premisa del enfoque A que ya no se sostiene, y se dice en vez de esconderla.** `/beneficio`
+**no es «sólo lectura»** hoy: lee `ok`/`error` de sus `searchParams`, hospeda `AvisoDeRutina` —o
+sea, es el aterrizaje de una escritura— y `RutinasDeLugar` dispara acciones. El **tablero** sí es de
+sólo lectura; la **página** no lo es desde que las rutinas viven ahí. La decisión se toma sobre la
+página de hoy, no sobre la del 16.
+
+**Consecuencias.**
+
+- **No hay ruta nueva, ni redirección, ni enlace que migrar.** Nadie tiene que aprender una URL.
+- El reparto `operaciones` / `herramientas` **se sustituye** cuando se construya, y con él se va la
+  cláusula muerta de `pedidos`. `tests/beneficio/destinos-del-indice.test.ts` cambia en el mismo
+  paso: hoy fija **qué** destinos hay y tendrá que fijar también **dónde** caen.
+- Las rutinas **se quedan al fondo y plegadas**, como están. Era ya lo que Daniel pedía.
+- **Lo que este ADR NO decide:** el orden exacto de la mitad de abajo, y cómo se acomodan las tres
+  piezas de §4.5 sobre el índice en pantalla estrecha. Es trabajo de plan, con el spec al lado.
