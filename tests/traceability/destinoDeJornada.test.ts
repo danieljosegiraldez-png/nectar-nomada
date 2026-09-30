@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada } from "../../lib/traceability/jornadasDeCosecha";
+import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada, JornadaError } from "../../lib/traceability/jornadasDeCosecha";
 import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 import { anotarEntrega, anularEntrega } from "../../lib/traceability/entregasDeCosecha";
 
@@ -166,6 +166,13 @@ describe("cambiar el destino", () => {
     await cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio });
     const e = await anotarEntrega(manager, { jornadaId: j.id, recolectorPersonId: recolector, origen: { locationId: parcela }, pesoFincaKg: 20, enviadaAt: new Date() });
     await recibir(e.id);
+    // **`JornadaError` y no sólo el mensaje.** Con `/destino_fijo/` a secas esta aserción no
+    // distinguía el cinturón de los tirantes: quitando la guarda del SERVICIO, el disparador
+    // `jornada_de_cosecha_destino_fijo` de la base salta igual y su excepción también contiene
+    // «destino_fijo», así que la prueba seguía verde sobre código sin guarda. Lo destapó el
+    // flip-test de la Tarea 4 (2026-09-30). Exigir la clase fija la capa donde tiene que pararse
+    // —antes de escribir—, y la red de la base sigue debajo para lo que llegue por otro camino.
+    await expect(cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio2 })).rejects.toThrow(JornadaError);
     await expect(cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio2 })).rejects.toThrow(/destino_fijo/);
   }, 20000);
 });
