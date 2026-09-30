@@ -1,4 +1,4 @@
-import { caminoDe, escalasDe, LIENZO, type DatosDeLaGrafica } from "../../../../lib/beneficio/graficaDeSecado";
+import { caminoDe, escalaDeAmbiente, escalasDe, LIENZO, type DatosDeLaGrafica } from "../../../../lib/beneficio/graficaDeSecado";
 
 /**
  * La gráfica de una unidad de secado (diseño §B.3).
@@ -16,9 +16,9 @@ import { caminoDe, escalasDe, LIENZO, type DatosDeLaGrafica } from "../../../../
  * - **volteos → marcas verticales.** Un gesto, no una medición: no tiene altura.
  * - **peso neto → fuera de aquí**, en cifras. Cuatro pesajes no hacen una curva.
  *
- * **La temperatura va en su propio eje** y por eso se dibuja con su propia escala: mezclar grados
- * y porcentaje en un eje es la forma más barata de dibujar una mentira convincente. Se pinta
- * discreta y con su nota, para que nadie la lea contra el eje de la izquierda.
+ * **El ambiente del cuarto va en su propio eje, cada serie con el suyo** —la temperatura por
+ * unidad distinta, la humedad relativa porque el aire no es el grano aunque las dos sean `%`—. Se
+ * pintan discretas y con su nota, para que nadie las lea contra el eje de la izquierda.
  *
  * **Si no hay escala, no hay gráfica**: se dice con palabras en vez de pintar ejes vacíos, que se
  * leen como «no hay nada» cuando significan «no hay con qué».
@@ -44,17 +44,18 @@ export function GraficaDeSecado({ datos, textos }: {
     ? { y: y(datos.rango.max), alto: Math.abs(y(datos.rango.min) - y(datos.rango.max)) }
     : null;
 
-  // La temperatura, en su propia escala, para no mentir contra el eje de porcentaje.
+  /**
+   * El ambiente del cuarto —temperatura y humedad relativa— va en **su propia escala, cada serie
+   * con la suya**, y no en el eje principal. `escalaDeAmbiente` lo dice con sus pruebas, y la
+   * medición que lo motivó está en su comentario: la HR compartiendo eje dejaba la curva del grano
+   * en el 44 % del alto en vez del 93 %.
+   *
+   * Las dos se pintan a trazos y discretas, con su nota, para que nadie las lea contra el eje de
+   * la izquierda.
+   */
   const temps = datos.temperatura;
-  const tMin = temps.length ? Math.min(...temps.map((p) => p.valor)) : 0;
-  const tMax = temps.length ? Math.max(...temps.map((p) => p.valor)) : 0;
-  const rangoT = tMax - tMin === 0 ? 1 : tMax - tMin;
-  const yT = (v: number) => margen.arriba + (1 - (v - tMin) / rangoT) * (alto - margen.arriba - margen.abajo);
-  const caminoT = temps.length >= 2
-    ? temps.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.cuando).toFixed(1)} ${yT(p.valor).toFixed(1)}`).join(" ")
-    : null;
-
-  const caminoHR = caminoDe(datos.humedadRelativa, escala);
+  const caminoT = caminoDe(temps, escalaDeAmbiente(temps, escala));
+  const caminoHR = caminoDe(datos.humedadRelativa, escalaDeAmbiente(datos.humedadRelativa, escala));
 
   return (
     <figure style={{ margin: 0 }}>
@@ -113,7 +114,7 @@ export function GraficaDeSecado({ datos, textos }: {
           </circle>
         ))}
       </svg>
-      {temps.length > 0 ? <figcaption className="nn-muted">{textos.notaTemperatura}</figcaption> : null}
+      {temps.length > 0 || datos.humedadRelativa.length > 0 ? <figcaption className="nn-muted">{textos.notaTemperatura}</figcaption> : null}
     </figure>
   );
 }

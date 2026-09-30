@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caminoDe, escalasDe, LIENZO, type PuntoEnElTiempo } from "../../lib/beneficio/graficaDeSecado";
+import { caminoDe, escalaDeAmbiente, escalasDe, LIENZO, type PuntoEnElTiempo } from "../../lib/beneficio/graficaDeSecado";
 
 /**
  * La escala de la gráfica, probada sin base ni navegador.
@@ -81,21 +81,21 @@ describe("la escala de la gráfica de secado", () => {
 
 describe("el camino de una línea", () => {
   it("dibuja con dos puntos o más, y NO con uno", () => {
-    const dos = { ...base, humedadRelativa: [p("2026-09-01T00:00:00Z", 60), p("2026-09-03T00:00:00Z", 55)] };
+    const dos = { ...base, humedad: [p("2026-09-01T00:00:00Z", 22), p("2026-09-03T00:00:00Z", 15)] };
     const e = escalasDe(dos);
-    const d = caminoDe(dos.humedadRelativa, e);
+    const d = caminoDe(dos.humedad, e);
     expect(d).not.toBeNull();
     expect(d!.startsWith("M ")).toBe(true);
     expect(d).toContain("L ");
 
     // Un punto no es una línea: dibujarlo daría un camino de un solo `M`, invisible y engañoso.
-    expect(caminoDe([p("2026-09-01T00:00:00Z", 60)], e)).toBeNull();
+    expect(caminoDe([p("2026-09-01T00:00:00Z", 22)], e)).toBeNull();
   });
 
   it("descarta los valores que no son números en vez de escribir NaN en el SVG", () => {
-    const datos = { ...base, humedadRelativa: [p("2026-09-01T00:00:00Z", 60), p("2026-09-03T00:00:00Z", 55)] };
+    const datos = { ...base, humedad: [p("2026-09-01T00:00:00Z", 22), p("2026-09-03T00:00:00Z", 15)] };
     const e = escalasDe(datos);
-    const conBasura = [...datos.humedadRelativa, p("2026-09-04T00:00:00Z", Number.NaN)];
+    const conBasura = [...datos.humedad, p("2026-09-04T00:00:00Z", Number.NaN)];
     const d = caminoDe(conBasura, e);
     expect(d, "un NaN en el atributo `d` hace que el navegador tire la línea entera").not.toContain("NaN");
   });
@@ -104,5 +104,68 @@ describe("el camino de una línea", () => {
     const t = T("2026-09-01T00:00:00Z");
     const sinEje = escalasDe({ ...base, desde: t, hasta: t });
     expect(caminoDe([p("2026-09-01T00:00:00Z", 1), p("2026-09-01T00:00:00Z", 2)], sinEje)).toBeNull();
+  });
+});
+
+/**
+ * **El guardia de esta pieza, y sale de un defecto medido, no de una simetría.**
+ *
+ * La humedad relativa del cuarto se mide en `%` igual que la del grano, así que la primera versión
+ * las puso en el mismo eje. Renderizando el SVG de verdad se vio lo que costaba: con la HR dentro
+ * (55–78 %) la curva del grano (12–42 %) usaba **96 px de 220 — el 44 %**; fuera, **204 — el 93 %**.
+ *
+ * Por eso las dos aserciones no son una sola: la primera dice que la HR no entra, y **la segunda
+ * dice cuánto del lienzo queda para el grano**. Sin la segunda, meter la HR de vuelta con un rango
+ * que quepa dentro del del grano pasaría el guardia sin que nadie notara el aplastamiento.
+ */
+describe("el eje del grano es del grano", () => {
+  const conAmbiente = {
+    ...base,
+    humedad: [p("2026-09-01T00:00:00Z", 42), p("2026-09-04T00:00:00Z", 12)],
+    humedadRelativa: [p("2026-09-01T00:00:00Z", 78), p("2026-09-04T00:00:00Z", 55)],
+  };
+
+  it("la humedad del CUARTO no estira el eje de la humedad del GRANO", () => {
+    const e = escalasDe(conAmbiente);
+    expect(e.maxY, "un 78 % de aire en el eje del grano lo estira hasta 78").toBe(42);
+    expect(e.minY).toBe(12);
+  });
+
+  it("y por eso la curva del grano usa casi todo el alto del lienzo", () => {
+    const e = escalasDe(conAmbiente);
+    const util = LIENZO.alto - LIENZO.margen.arriba - LIENZO.margen.abajo;
+    const usado = Math.abs(e.y!(12) - e.y!(42));
+    expect(usado / util, `con el aire dentro esto cae al 44 %; usado=${usado} de ${util}`).toBeGreaterThan(0.9);
+  });
+});
+
+describe("la escala propia de una serie de ambiente", () => {
+  const serie = [p("2026-09-01T00:00:00Z", 78), p("2026-09-04T00:00:00Z", 55)];
+
+  it("se estira sobre SUS propios extremos, no sobre los del grano", () => {
+    const base2 = escalasDe({ ...base, humedad: [p("2026-09-01T00:00:00Z", 42), p("2026-09-04T00:00:00Z", 12)] });
+    const a = escalaDeAmbiente(serie, base2);
+    expect(a.minY).toBe(55);
+    expect(a.maxY).toBe(78);
+    // Y cae DENTRO del lienzo: con la escala del grano, un 78 se saldría por arriba.
+    expect(a.y!(78)).toBeCloseTo(LIENZO.margen.arriba, 1);
+    expect(a.y!(55)).toBeCloseTo(LIENZO.alto - LIENZO.margen.abajo, 1);
+    expect(base2.y!(78), "control: contra el eje del grano el mismo 78 queda FUERA, por arriba")
+      .toBeLessThan(LIENZO.margen.arriba);
+  });
+
+  it("conserva el eje de tiempo de la gráfica: es el mismo secado", () => {
+    const base2 = escalasDe({ ...base, humedad: [p("2026-09-01T00:00:00Z", 20)] });
+    const a = escalaDeAmbiente(serie, base2);
+    expect(a.x!(T("2026-09-01T00:00:00Z"))).toBeCloseTo(base2.x!(T("2026-09-01T00:00:00Z")), 5);
+  });
+
+  it("sin lecturas no inventa escala, y una sola no se sale del lienzo", () => {
+    const base2 = escalasDe({ ...base, humedad: [p("2026-09-01T00:00:00Z", 20)] });
+    expect(escalaDeAmbiente([], base2).y).toBeNull();
+    const una = escalaDeAmbiente([p("2026-09-02T00:00:00Z", 61)], base2);
+    expect(Number.isFinite(una.y!(61)), "un rango de cero daría Infinity").toBe(true);
+    expect(una.y!(61)).toBeGreaterThanOrEqual(LIENZO.margen.arriba);
+    expect(una.y!(61)).toBeLessThanOrEqual(LIENZO.alto - LIENZO.margen.abajo);
   });
 });

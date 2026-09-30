@@ -73,9 +73,16 @@ export function escalasDe(
   const duracion = t1 - t0;
   const x = duracion > 0 ? (cuando: Date) => margen.izq + ((cuando.getTime() - t0) / duracion) * anchoUtil : null;
 
+  // **El eje principal es de la humedad DEL GRANO y de su rango, y de nada más.**
+  //
+  // La humedad relativa del cuarto también se mide en `%`, y por eso la primera versión la metió
+  // aquí. Medido al renderizar: con la HR dentro (55–78 %), la curva del grano (12–42 %) usa
+  // **96 px de 220 — el 44 %**; fuera, usa 204 — el 93 %. La misma unidad no es la misma
+  // magnitud: una es el grano y la otra el aire, y compartir eje aplasta justo la serie que se
+  // viene a mirar. Es el mismo argumento que ya daba escala propia a la temperatura, aplicado
+  // donde la coincidencia de unidad lo había escondido.
   const valores = [
     ...datos.humedad.map((p) => p.valor),
-    ...datos.humedadRelativa.map((p) => p.valor),
     ...(datos.rango ? [datos.rango.min, datos.rango.max] : []),
   ].filter((v) => Number.isFinite(v));
 
@@ -89,6 +96,39 @@ export function escalasDe(
   }
   const y = (valor: number) => margen.arriba + (1 - (valor - minY) / (maxY - minY)) * altoUtil;
   return { x, y, minY, maxY };
+}
+
+/**
+ * La escala PROPIA de una serie de ambiente del cuarto, sobre el mismo eje de tiempo.
+ *
+ * **Existe por un defecto medido, no por simetría.** La temperatura ya iba aparte porque su unidad
+ * es otra, y eso era evidente. La humedad relativa **no lo era**: también se mide en `%`, así que
+ * la primera versión la puso en el eje principal. Renderizando el SVG de verdad: con la HR dentro
+ * (55–78 %), la curva del grano (12–42 %) usaba **96 px de 220 — el 44 %**; fuera, usa 204 — el
+ * 93 %. La misma unidad no es la misma magnitud: una es el grano y la otra el aire, y compartir
+ * eje aplasta justo la serie que se viene a mirar.
+ *
+ * Devuelve el eje de tiempo de `base` intacto y una `y` suya, o `y: null` cuando no hay con qué.
+ */
+export function escalaDeAmbiente(
+  serie: readonly PuntoEnElTiempo[],
+  base: Escala,
+  lienzo: Lienzo = LIENZO,
+): Escala {
+  const { alto, margen } = lienzo;
+  const altoUtil = alto - margen.arriba - margen.abajo;
+  const valores = serie.map((p) => p.valor).filter((v) => Number.isFinite(v));
+  if (valores.length === 0) return { x: base.x, y: null, minY: 0, maxY: 0 };
+
+  let minY = Math.min(...valores);
+  let maxY = Math.max(...valores);
+  // Igual que el eje principal: un rango de cero daría `Infinity` y pintaría en el borde.
+  if (maxY - minY === 0) {
+    minY -= 1;
+    maxY += 1;
+  }
+  const y = (valor: number) => margen.arriba + (1 - (valor - minY) / (maxY - minY)) * altoUtil;
+  return { x: base.x, y, minY, maxY };
 }
 
 /** Una línea SVG, o `null` si no hay con qué dibujarla. Dos puntos son el mínimo de una línea. */
