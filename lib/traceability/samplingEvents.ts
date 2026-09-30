@@ -97,7 +97,6 @@ export async function createSamplingEvent(
 // La firma va en UNA línea y sin anotación de tipo de retorno a propósito: `audit-atomico` sólo
 // reconoce así la rama `function nombre(tx…)`, y su propia cabecera lo dice. Partida en varias
 // líneas, su `recordAuditEvent` sale «huérfano» y el guardia se pone rojo con este nombre.
-// eslint-disable-next-line max-len
 export async function crearInspeccionEnTransaccion(tx: Prisma.TransactionClient, userAccountId: string, input: CreateSamplingEventInput) {
   const event = await tx.samplingEvent.create({
     data: {
