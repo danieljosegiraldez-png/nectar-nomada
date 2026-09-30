@@ -4471,3 +4471,10 @@ igual y sus índices admiten lo que el original rechaza.
 **`~/nectar-backups` borrado el 2026-09-29** tras copiar sus 13 conjuntos al Drive y comparar los 48
 archivos por sha; `NN_BACKUP_KEEP=28` para que la poda no se los lleve. **Sin hacer:** el PASS del
 verificador mira sólo el censo, así que un `pg_restore` con errores pasa.
+
+### 2026-09-29 · El permiso se juzga donde ocurre el acto (PR #525)
+
+Cierra el pendiente de `permissionKeysAnywhere`: de sus tres usos **dos se acotaron y uno se quedó**.
+Equipos va a plataforma —fila global—, CEREZA al **sitio del beneficio** («el cosechador sólo entrega
+y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque su spec da esa audiencia SIN
+ámbito. El `AuditEvent` lleva `autorizadoEnBeneficio`, y mi flip-test **no discriminaba** hasta que Codex lo vio.

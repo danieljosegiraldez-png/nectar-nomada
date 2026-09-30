@@ -41,6 +41,20 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-29 · La credencial rotada, y una confirmación que nadie leía (PR #527, #529, #533)
+
+**#527 — la confirmación de una inspección no se mostraba nunca:** redirigía con `?ok=inspeccion` y
+la ficha sólo leía `error`. El guardia de la clase **encontró cinco más** —`/beneficio/ajustes`,
+`/plots/[id]` y corregir un manejo—, fechadas en `CONOCIDAS`. **#533**: el producto es **Regent**, no
+«Regin», y sus cinco menciones salían de una transcripción del 18 sin otra fuente.
+
+**La credencial de `ai_service` está rotada** (memoria `rotar-credencial-ai-service`, **cerrada**):
+Neon, los seis `.env` iguales por hash sin que el valor pasara por pantalla, Vercel, y producción
+construida con 191 migraciones y cero errores — eso prueba que la contraseña cuadra. **Y lo que costó
+el rato:** una variable de entorno **no entra en vigor sin un build**, y con commits de sólo
+documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
+productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
+
 ### 2026-09-29 · El secado tiene cola, la tanda es un acto, y medir cabe en un campo (PR #523, #526, #531)
 
 **#523 — `ritmo.ts` por fin tiene quien lo pinte.** Calculaba la cola desde el 2026-09-13 y **sus
@@ -87,13 +101,6 @@ claves de la fuente y **su control positivo va primero**: cegando el extractor, 
 **Sin hacer, de Daniel:** los comandos de Luis y Chris contra producción, crear las dos fincas en
 `/fincas`, y que la organización Kiva Estate sigue marcada «DEMO placeholder» — falso en cuanto le
 cuelguen fincas reales, y el guión lo avisa cada vez.
-
-### 2026-09-29 · El permiso se juzga donde ocurre el acto (PR #525)
-
-Cierra el pendiente de `permissionKeysAnywhere`: de sus tres usos **dos se acotaron y uno se quedó**.
-Equipos va a plataforma —fila global—, CEREZA al **sitio del beneficio** («el cosechador sólo entrega
-y pesa; el beneficio recibe», de Daniel); **`ruedas.ts` se REVIRTIÓ** porque su spec da esa audiencia SIN
-ámbito. El `AuditEvent` lleva `autorizadoEnBeneficio`, y mi flip-test **no discriminaba** hasta que Codex lo vio.
 
 ## 3. Bloqueado, y en qué
 
