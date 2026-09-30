@@ -3125,7 +3125,13 @@
     "fichaVolteoTipo_covered": "se tapó",
     "fichaVolteoTipo_uncovered": "se destapó",
     "fichaVolteoTipo_other": "otro gesto",
-    "fichaVolverALaCola": "Volver a la cola de secado"
+    "fichaVolverALaCola": "Volver a la cola de secado",
+    "fichaGrafica": "Cómo va",
+    "fichaGraficaSinDatos": "Todavía no hay lecturas que dibujar.",
+    "fichaGraficaEje": "Humedad del grano contra el rango objetivo, con el ambiente del cuarto y los volteos",
+    "fichaGraficaNotaTemperatura": "La temperatura del cuarto va en su propia escala, a trazos.",
+    "fichaGraficaVolteo": "volteo",
+    "fichaPesajes": "Pesajes"
   },
   "Bodegas": {
     "titulo": "Bodegas",
