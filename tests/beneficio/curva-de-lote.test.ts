@@ -54,6 +54,9 @@ describe("curvaDeLote", () => {
     });
     expect(c.puntos[0]).toEqual({ x: 0, y: 0 });     // la primera lectura, valor máximo → arriba
     expect(c.puntos[1]).toEqual({ x: 300, y: 120 }); // la última, valor mínimo → abajo
+    // El lienzo se devuelve tal cual: el `<svg>` los usa para su `viewBox`. Distintos a propósito.
+    expect(c.ancho).toBe(300);
+    expect(c.alto).toBe(120);
     // En SVG la Y crece hacia ABAJO. Si esta prueba no existiera, la curva saldría del revés
     // y seguiría pareciendo una curva.
   });
@@ -107,17 +110,34 @@ describe("curvaDeLote", () => {
   });
 
   it("sin banda, el eje Y escala al mínimo y máximo de los propios datos", () => {
+    // Ni el mínimo (4,0) ni el máximo (5,0) son la primera ni la última lectura: si lo fueran,
+    // una escala tomada del primer o del último valor daría lo mismo y la prueba no la vería.
     const c = curvaDeLote({
       lecturas: [
-        { occurredAt: t(10), value: 4.2 },
-        { occurredAt: t(12), value: 4.8 },  // el máximo no es la primera ni la última
-        { occurredAt: t(14), value: 4.5 },
+        { occurredAt: t(10), value: 4.5 },
+        { occurredAt: t(12), value: 5.0 },  // máximo de los datos
+        { occurredAt: t(13), value: 4.0 },  // mínimo de los datos
+        { occurredAt: t(14), value: 4.25 },
       ],
       objetivo: null, ancho: 300, alto: 120,
     });
-    expect(c.puntos[0]).toEqual({ x: 0, y: 120 });  // mínimo de los datos → abajo
-    expect(c.puntos[1]).toEqual({ x: 150, y: 0 });  // máximo de los datos → arriba
-    expect(c.puntos[2]).toEqual({ x: 300, y: 60 });
+    expect(c.puntos).toEqual([
+      { x: 0, y: 60 },
+      { x: 150, y: 0 },    // máximo → arriba
+      { x: 225, y: 120 },  // mínimo → abajo
+      { x: 300, y: 90 },
+    ]);
+  });
+
+  it("un cero es un valor legítimo de receta, no un hueco: la banda con minValue 0 se dibuja", () => {
+    // Humedad o Brix pueden empezar en 0. Un `||` en vez de `??` leería ese 0 como «ausente» y
+    // haría desaparecer la banda, que es justo la banda perdida que el diseño prohíbe.
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(10), value: 6 }, { occurredAt: t(14), value: 0 }],
+      objetivo: { minValue: 0, maxValue: 12, targetValue: 0 }, ancho: 300, alto: 120,
+    });
+    expect(c.banda).toEqual({ tipo: "banda", yMin: 120, yMax: 0, yObjetivo: 120 });
+    expect(c.puntos).toEqual([{ x: 0, y: 60 }, { x: 300, y: 120 }]);
   });
 
   it("una sola lectura no produce NaN", () => {
@@ -176,5 +196,7 @@ describe("curvaDeLote", () => {
     const c = curvaDeLote({ lecturas: [], objetivo: BANDA, ancho: 300, alto: 120 });
     expect(c.puntos).toEqual([]);
     expect(c.banda.tipo).toBe("banda");
+    expect(c.ancho).toBe(300);
+    expect(c.alto).toBe(120);
   });
 });
