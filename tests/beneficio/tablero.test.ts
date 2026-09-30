@@ -142,8 +142,13 @@ describe("colaDeAtencion", () => {
    * `null` como «en hora».
    */
   it("demora null y demora false dan el mismo puntaje y texto distinto", () => {
-    const sinDuracion = lote({ lotId: "sinDur", expectedHours: null, faseIniciada: haceHoras(10) });
-    const enHora = lote({ lotId: "enHora", expectedHours: 24, faseIniciada: haceHoras(10) });
+    // **Los dos llevan una lectura debida a propósito.** Sin ella los dos puntúan 0 y la
+    // igualdad de abajo es trivialmente cierta: la primera versión de esta prueba pasaba
+    // idéntica con la regla mutada, y el flip-test lo destapó con 0 caídas. El
+    // `not.toBe(0)` es el control que hace que la igualdad signifique algo.
+    const debidas = [{ variable: "ph", everyHours: 6, ultimaLectura: haceHoras(7) }];
+    const sinDuracion = lote({ lotId: "sinDur", expectedHours: null, faseIniciada: haceHoras(10), metas: debidas });
+    const enHora = lote({ lotId: "enHora", expectedHours: 24, faseIniciada: haceHoras(10), metas: debidas });
     const filas = colaDeAtencion({
       lotes: [sinDuracion, enHora],
       desviacionesAbiertasPorLote: SIN_DESVIACIONES,
@@ -151,6 +156,7 @@ describe("colaDeAtencion", () => {
     });
     const a = filas.find((f) => f.lotId === "sinDur")!;
     const b = filas.find((f) => f.lotId === "enHora")!;
+    expect(a.puntaje).not.toBe(0);
     expect(a.puntaje).toBe(b.puntaje);
     expect("demora" in a.ritmo ? a.ritmo.demora : "error").toBeNull();
     expect("demora" in b.ritmo ? b.ritmo.demora : "error").toBe(false);
