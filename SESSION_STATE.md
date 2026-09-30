@@ -41,9 +41,11 @@ de «hecho y sin rastro».
 
 #### Los seis productos de Finca Rosina: qué falta exactamente
 
-Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle. Faltan de
-Daniel: la **etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote
-del fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
+Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle — **medido por
+dos sesiones en paralelo y con el mismo resultado**: 0 en §1, 0 en `PENDING_IMPLEMENTATIONS/`, 0 en
+`docs/`, y la única «Rosina» de §3 es la de Kenis el apicultor, otro asunto. Faltan de Daniel: la
+**etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote del
+fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
 listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
 
 ## 2. Lo que se entregó — más nuevo primero
