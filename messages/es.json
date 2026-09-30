@@ -1764,7 +1764,11 @@
     "error_sample_quantity_precision": "La cantidad tiene como máximo tres decimales; con más, se guardaría redondeada.",
     "recipePhaseLabel": "Fase",
     "phase_fermentation": "Fermentación",
-    "phase_drying": "Secado"
+    "phase_drying": "Secado",
+    "detalleDeLaMedicion": "Añadir detalle",
+    "cambiarContexto": "cambiar",
+    "resumenFaltaInstrumento": "sin instrumento",
+    "resumenFaltaZona": "sin zona"
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

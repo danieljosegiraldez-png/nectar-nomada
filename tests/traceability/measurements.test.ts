@@ -80,6 +80,11 @@ afterAll(async () => {
   const dryingRunIds = dryingRuns.map((r) => r.id);
 
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  // Las muestras y sus eventos de muestreo, que las pruebas de zona de muestreo crean: la base
+  // del 55433 la comparten otras sesiones, y una fila TEST que sobrevive contamina la siguiente
+  // corrida. El orden importa — `Sample` referencia al evento, así que va antes.
+  await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: { in: lotIds } }) });
+  await prisma.samplingEvent.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: dryingRunIds } }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: fermentationRunIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: dryingRunIds } }) });
@@ -470,6 +475,127 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const reloaded = await prisma.measurement.findUniqueOrThrow({ where: { id: measurement.id } });
     expect(reloaded.dryingRunId).toBe(run.id);
     expect(reloaded.lotId).toBe(lot.id);
+  });
+
+  /**
+   * Sampling zone without opening an inspection first (Daniel, 2026-09-29).
+   *
+   * A zone is the zone OF a sampling event — without one it is the zone of nothing, which is why
+   * the service used to reject it outright. But nobody in the drying yard opens an inspection to
+   * write down one moisture reading, so the service now creates the event itself from the drying
+   * run it already has. The operator never sees the word.
+   *
+   * Three readings taken in the same pass share ONE event by passing its id back, so what gets
+   * written is what actually happened. The id travels with the form; there is deliberately no time
+   * window deciding what "the same pass" means — an invented threshold is how the 24-hour
+   * placeholder got into the lot screen.
+   */
+  it("creates the sampling event by itself when a zone arrives without one", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-zona-sola`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-02-10"),
+    });
+
+    const medida = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 14.8,
+      unit: "%",
+      occurredAt: new Date("2026-02-12T07:40:00Z"),
+      lotId: lot.id,
+      dryingRunId: run.id,
+      samplingZone: "CENTER",
+      operatorPersonId: null,
+    });
+
+    // The zone has to have SURVIVED, which means a Sample was created for it. Asserting only that
+    // the call did not throw would pass with the zone silently dropped — today the Sample is
+    // created on `materialState || samplingEventId || sampleKind`, and a bare zone is none of those.
+    expect(medida.sampleId, "a zone with no sample is a zone of nothing").not.toBeNull();
+    const muestra = await prisma.sample.findUniqueOrThrow({ where: { id: medida.sampleId! } });
+    expect(muestra.samplingZone).toBe("CENTER");
+    // The role is DERIVED, not asked: `core.sample` has a CHECK saying a zone requires role ZONE,
+    // so asking for it would be asking for the only answer the database accepts.
+    expect(muestra.samplingRole).toBe("ZONE");
+    expect(muestra.samplingEventId, "the service must have created the event").not.toBeNull();
+
+    const evento = await prisma.samplingEvent.findUniqueOrThrow({ where: { id: muestra.samplingEventId! } });
+    expect(evento.dryingRunId).toBe(run.id);
+    expect(evento.occurredAt.toISOString()).toBe("2026-02-12T07:40:00.000Z");
+    expect(evento.createdBy).toBe(authorizedUserAccountId);
+  });
+
+  it("puts two readings of the same pass on the same sampling event", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-zona-misma-pasada`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      lotId: lot.id,
+      startedAt: new Date("2026-02-10"),
+    });
+
+    const primera = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 14.8,
+      unit: "%",
+      occurredAt: new Date("2026-02-12T07:40:00Z"),
+      lotId: lot.id,
+      dryingRunId: run.id,
+      samplingZone: "CENTER",
+    });
+    const eventoId = (await prisma.sample.findUniqueOrThrow({ where: { id: primera.sampleId! } })).samplingEventId!;
+
+    const segunda = await recordMeasurement(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      variable: "moisture",
+      value: 15.6,
+      unit: "%",
+      occurredAt: new Date("2026-02-12T07:43:00Z"),
+      lotId: lot.id,
+      dryingRunId: run.id,
+      samplingZone: "EDGE",
+      samplingEventId: eventoId,
+    });
+
+    const muestraSegunda = await prisma.sample.findUniqueOrThrow({ where: { id: segunda.sampleId! } });
+    expect(muestraSegunda.samplingEventId, "the same pass is one inspection, not two").toBe(eventoId);
+    expect(muestraSegunda.samplingZone).toBe("EDGE");
+    // The control that makes the line above mean something: exactly one event for this run, so
+    // "they match" cannot be satisfied by the service having created two and us reading one.
+    expect(await prisma.samplingEvent.count({ where: { dryingRunId: run.id } })).toBe(1);
+  });
+
+  it("still refuses a zone when there is no drying run to hang the event on", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-zona-sin-corrida`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+
+    await expect(
+      recordMeasurement(authorizedUserAccountId, {
+        provenanceClass: "measured_fact",
+        variable: "moisture",
+        value: 14.8,
+        unit: "%",
+        occurredAt: new Date("2026-02-12T07:40:00Z"),
+        lotId: lot.id,
+        samplingZone: "CENTER",
+      }),
+    ).rejects.toThrow(MeasurementValidationError);
   });
 
   it("rejects dryingRunId without lotId", async () => {

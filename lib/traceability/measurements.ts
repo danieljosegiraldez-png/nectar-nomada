@@ -41,6 +41,7 @@ import {
   type MeasurementVariable,
 } from "./units";
 import { recordAuditEvent } from "../audit";
+import { crearInspeccionEnTransaccion } from "./samplingEvents";
 import { fueraDeRango, hayDesajuste } from "../equipos/modos";
 import { materialNoEsDeSecado } from "./avisoDeModo";
 import { instrumentosParaMedicion } from "../equipos/equipos";
@@ -268,7 +269,13 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   if ((input.materialState || input.samplingEventId || input.samplingRole || input.samplingZone || input.sampleKind) && !input.lotId) {
     throw new MeasurementValidationError("sample_context_requires_lot_id");
   }
-  if ((input.samplingRole || input.samplingZone) && !input.samplingEventId) throw new MeasurementValidationError("sampling_event_required");
+  // Una zona es la zona DE una inspección: sin ninguna, no es zona de nada. Pero nadie en el patio
+  // abre una inspección para anotar una humedad (Daniel, 2026-09-29), así que con una corrida de
+  // secado a la vista el servicio la crea él mismo, más abajo y dentro de la transacción. Sin
+  // corrida sigue sin haber de qué colgarla, y ahí se niega igual que siempre.
+  if ((input.samplingRole || input.samplingZone) && !input.samplingEventId && !input.dryingRunId) {
+    throw new MeasurementValidationError("sampling_event_required");
+  }
   if (input.sampleId && (input.materialState || input.samplingEventId || input.samplingRole || input.samplingZone || input.sampleKind)) {
     throw new MeasurementValidationError("existing_sample_is_immutable");
   }
@@ -290,7 +297,17 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
   // ahora la clave del envío entra en la misma.
   const measurement = await unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "Measurement",
-    recuperar: (id) => prisma.measurement.findUniqueOrThrow({ where: { id } }),
+    // Lleva la inspección de vuelta al llamador, para que la SIGUIENTE lectura de la misma pasada
+    // pueda nombrarla y no se creen dos. La rama de recuperación la trae igual: un reenvío con la
+    // misma clave tiene que devolver exactamente la misma forma, o el tipo genérico no cierra.
+    recuperar: async (id) => {
+      const m = await prisma.measurement.findUniqueOrThrow({
+        where: { id },
+        include: { sample: { select: { samplingEventId: true } } },
+      });
+      const { sample, ...resto } = m;
+      return { ...resto, inspeccionId: sample?.samplingEventId ?? null };
+    },
     crear: async (tx) => {
   const lot = input.lotId ? await tx.lot.findUniqueOrThrow({ where: { id: input.lotId } }) : null;
   const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
@@ -315,15 +332,36 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     } });
     if (!origen) throw new MeasurementValidationError("sampling_event_context_mismatch");
   }
+  // La inspección implícita. Se comprueba primero que la corrida sea DEL LOTE autorizado —la misma
+  // comprobación que hace el camino explícito justo arriba—: sin ella, una zona con el id de una
+  // corrida ajena crearía una inspección sobre trabajo de otro.
+  // Una zona ES el papel `ZONE`, y no por convención: lo dice el CHECK `sample_zona_exige_papel_zona`
+  // de `core.sample`. Así que se deriva en vez de preguntarse — el mismo criterio por el que la
+  // unidad sale de la variable desde el 2026-09-11, cuando Daniel dijo que el formulario le hacía
+  // trabajar de más. Un papel explícito manda sobre la derivación.
+  const papelDeMuestreo = input.samplingRole ?? (input.samplingZone ? ("ZONE" as const) : null);
+  let samplingEventId = input.samplingEventId ?? null;
+  if (!samplingEventId && (input.samplingRole || input.samplingZone) && input.dryingRunId) {
+    const origen = await tx.lotTransformation.findFirst({ where: {
+      dryingRunId: input.dryingRunId, inputs: { some: { lotId: input.lotId! } },
+    } });
+    if (!origen) throw new MeasurementValidationError("sampling_event_context_mismatch");
+    const implicita = await crearInspeccionEnTransaccion(tx, userAccountId, {
+      dryingRunId: input.dryingRunId,
+      occurredAt: input.occurredAt,
+      operatorPersonId: input.operatorPersonId ?? null,
+    });
+    samplingEventId = implicita.id;
+  }
   const enSecado = !!input.dryingRunId || lot?.lotType === "drying";
   let sampleId = input.sampleId ?? null;
-  if (lot && (input.materialState || input.samplingEventId || input.sampleKind)) {
+  if (lot && (input.materialState || samplingEventId || input.sampleKind)) {
     const muestra = await tx.sample.create({ data: {
       sampleCode: `M-${crypto.randomUUID()}`, sampleType: "", sourceLotId: lot.id,
       projectId: lot.projectId, organizationId: lot.organizationId, locationId: lot.locationId,
       classification: lot.classification, createdBy: userAccountId,
-      materialState: input.materialState, samplingEventId: input.samplingEventId,
-      samplingRole: input.samplingRole, samplingZone: input.samplingZone, sampleKind: input.sampleKind,
+      materialState: input.materialState, samplingEventId,
+      samplingRole: papelDeMuestreo, samplingZone: input.samplingZone, sampleKind: input.sampleKind,
       stageAtExtraction: enSecado ? "drying" : input.fermentationRunId ? "processing" : lot.lotType,
     } });
     sampleId = muestra.id;
@@ -386,7 +424,7 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     },
     tx,
   );
-  return creada;
+  return { ...creada, inspeccionId: samplingEventId };
     },
   });
 

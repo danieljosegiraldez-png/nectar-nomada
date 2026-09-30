@@ -55,6 +55,7 @@ const NO_ES_QUIEN_LO_HIZO: Record<string, string> = {
   "lib/traceability/trilla.ts:registrarTrilla": "no escribe: lo pasa a recordTransformation, que tiene el guardia",
   "lib/traceability/drying.ts:cerrarCorridaEnTransaccion": "ayudante transaccional: endDryingRun y bajarBandeja autorizan y validan a la persona antes de llamarlo",
   "lib/traceability/operations.ts:crearConsumoEnTx": "ayudante transaccional: recordMaterialConsumptionEntry y registrarRealizada autorizan y validan a la persona antes de llamarlo",
+  "lib/traceability/samplingEvents.ts:crearInspeccionEnTransaccion": "ayudante transaccional: createSamplingEvent y recordMeasurement autorizan y validan a la persona antes de llamarlo",
 };
 
 export function escriturasSinGuardia(ruta: string, fuente: string): { sitio: string; linea: number }[] {

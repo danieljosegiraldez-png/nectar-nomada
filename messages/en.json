@@ -1764,7 +1764,11 @@
     "error_sample_quantity_precision": "The quantity takes three decimals at most; with more, it would be stored rounded.",
     "recipePhaseLabel": "Phase",
     "phase_fermentation": "Fermentation",
-    "phase_drying": "Drying"
+    "phase_drying": "Drying",
+    "detalleDeLaMedicion": "Add detail",
+    "cambiarContexto": "change",
+    "resumenFaltaInstrumento": "no instrument",
+    "resumenFaltaZona": "no zone"
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

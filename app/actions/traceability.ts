@@ -136,6 +136,15 @@ import {
 
 export interface TraceabilityActionState {
   error?: string;
+  /**
+   * La inspección de secado que la última medición usó o creó.
+   *
+   * Vuelve al formulario para que la SIGUIENTE lectura de la misma pasada la nombre en vez de
+   * crear otra: tres zonas revisadas de una pasada son UNA inspección, que es lo que ocurrió.
+   * Deliberadamente no hay ninguna ventana de tiempo decidiendo qué es «la misma pasada» — un
+   * umbral inventado es como llegó el marcador de 24 h a la pantalla del lote.
+   */
+  inspeccionId?: string;
 }
 
 // Matched by class, not by exact message string — UnitValidationError's
@@ -423,8 +432,9 @@ export async function recordMeasurementAction(
   const t = await getTranslations("Traceability");
 
   const lotId = String(formData.get("lotId") ?? "");
+  let inspeccionId: string | null = null;
   try {
-    await recordMeasurement(user.userAccountId, {
+    const medida = await recordMeasurement(user.userAccountId, {
       claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
       lotId,
       instrumentId: emptyToNull(formData.get("instrumentId")),
@@ -463,12 +473,13 @@ export async function recordMeasurementAction(
       provenanceClass: exigeProcedencia(formData.get("provenanceClass"), PROCEDENCIA_DE_MEDICION),
       operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
     });
+    inspeccionId = medida.inspeccionId;
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/lots/${lotId}`);
-  return {};
+  return inspeccionId ? { inspeccionId } : {};
 }
 
 // --- Record Fermentation, §30 screen 6 -----------------------------------
