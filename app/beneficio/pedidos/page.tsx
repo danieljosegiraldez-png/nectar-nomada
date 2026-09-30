@@ -45,7 +45,7 @@ export default async function PedidosPage() {
   const gestiona = granted.has("lot:manage");
   const [pedidos, proveedores, fincas] = await Promise.all([
     pedidosDeBeneficio(user.userAccountId, elegido.id),
-    gestiona ? proveedoresDeCereza(user.userAccountId) : Promise.resolve([]),
+    gestiona ? proveedoresDeCereza(user.userAccountId, elegido.id) : Promise.resolve([]),
     gestiona ? listarFincas(user.userAccountId) : Promise.resolve([]),
   ]);
   const kg = (x: number) => x.toFixed(1);

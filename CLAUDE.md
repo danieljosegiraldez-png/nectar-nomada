@@ -3241,6 +3241,33 @@ conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
 **Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
 que estén **las que deben estar**. Una comprobación ausente no tiene color.
 
+### Un guardia que lee la fuente puede quedar satisfecho por la DECLARACIÓN
+
+**2026-09-29.** Escribí un guardia para una clase de defecto real: una acción que redirige con
+`?ok=<código>` a una pantalla que no lee `ok`, así que la confirmación no se muestra nunca. Pasó
+con `/lots/<id>?ok=inspeccion` desde que existe esa acción. **Escribí tres versiones del detector y
+las tres las tumbó el flip-test. Ninguna la cazó releer el código.**
+
+| versión del detector | qué aceptaba de más o de menos |
+|---|---|
+| `ok` seguido de `:`/`,`/`}` | **el TIPO**: `searchParams: Promise<{ ok?: string }>` lo satisface sin que nadie lea el valor |
+| `const { ok } = await searchParams` | marcaba como sordas dos pantallas que **leen bien** —`Promise.all` y luego `sp.ok`— |
+| + aceptar también la desestructuración | sacar el valor y **no pintarlo** deja la confirmación igual de invisible |
+
+La tercera es la que enseña más: **extraer un dato no es usarlo.** El guardia quedó en exigir la
+comparación `ok === "…"`, con o sin objeto delante, que es lo que hacen las catorce pantallas que
+lo leen bien.
+
+**La regla que queda, y vale para cualquier guardia que lea fuente: la mutación del flip tiene que
+quitar LA CONDUCTA, no el token con el que casa el detector.** Si se muta la línea que el regex
+busca, el flip prueba el regex. Aquí la mutación buena fue quitar la rama JSX que **pinta** el
+aviso, dejando intactos el tipo y la desestructuración: eso es lo que un operador notaría, y es lo
+que dos de las tres versiones no vieron.
+
+**Y el reverso, que ya costó tres versiones de un hook:** apretar hasta marcar código correcto es
+peor que no tener guardia, porque enseña a ignorarlo. Entre las dos orillas, el control es barato —
+correr el detector sobre TODAS las pantallas reales y mirar si alguna buena sale marcada.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar

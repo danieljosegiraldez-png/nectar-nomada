@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**587 operaciones** que tocan la base, en **161 archivos** — medido con
+**588 operaciones** que tocan la base, en **162 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,7 +24,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **451** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **452** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -36,7 +36,15 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
 
-> **La tanda de volteo (2026-09-29): 586→587 y guardia directo 450→451, sin archivo nuevo.**
+> **La cola de secado (2026-09-29): 586→587, 161→162 archivos y guardia directo
+> 450→451.** `lib/beneficio/colaDeSecado.ts` es archivo nuevo: arma la cola de trabajo del
+> operario de secado —qué hay en cada área y qué le toca a cada unidad— leyendo corridas,
+> procesos, mediciones y ubicaciones. Se acota con `resolveLotVisibility` sobre los LOTES,
+> no con permisos de instalación, que le cerrarían la cola justo a quien se escribe; sin
+> ámbito devuelve `sinAmbito: true`, que la pantalla dice con otras palabras que «no hay
+> ninguna».
+
+> **La tanda de volteo (2026-09-29): 587→588 y guardia directo 451→452, sin archivo nuevo.**
 > Diseño §A.5. `registrarTandaDeVolteo` en `lib/traceability/drying.ts` escribe UN acto sobre
 > varias unidades: la tanda, un volteo por unidad y un solo `AuditEvent` con la lista. Pide
 > `requireLotAccess` **una vez por unidad**, no una vez con todas: ese guardia es un O y vuelve

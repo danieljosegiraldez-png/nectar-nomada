@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { COOKIE_BENEFICIO } from "../../lib/traceability/beneficioElegido";
+import { COOKIE_BENEFICIO, beneficioDeLaPagina } from "../../lib/traceability/beneficioElegido";
 import {
   RecepcionError,
   anotarMerma,
@@ -183,7 +183,12 @@ export async function anularMermaAction(_prev: RecepcionActionState, formData: F
 export async function crearProveedorAction(_prev: RecepcionActionState, formData: FormData): Promise<RecepcionActionState> {
   const yo = await usuario();
   try {
-    await crearProveedorDeCereza(yo, { nombre: texto(formData, "nombre"), lugar: texto(formData, "lugar") || null });
+    // El alta ocurre EN un beneficio y ahí se juzga el permiso (decisión de Daniel, 2026-09-29).
+    // Se resuelve con `beneficioDeLaPagina`, que vuelve a comprobar la cookie contra los beneficios
+    // que esta cuenta alcanza: la cookie acota, no autoriza.
+    const { elegido } = await beneficioDeLaPagina(yo, (await cookies()).get(COOKIE_BENEFICIO)?.value);
+    if (!elegido) return { error: (await getTranslations("Recepcion"))("error_beneficio_no_valido") };
+    await crearProveedorDeCereza(yo, elegido.id, { nombre: texto(formData, "nombre"), lugar: texto(formData, "lugar") || null });
   } catch (error) {
     return traducir(error);
   }

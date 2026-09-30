@@ -4372,3 +4372,55 @@ demostrada antes—, `node_modules` reinstalado, cliente de Prisma regenerado, t
 `nectar_test` tenía **10 migraciones sin aplicar**: aplicadas y sembrada, 186/186, 0 pendientes.
 **PR #483** añade a las «Trampas» de `CLAUDE.md` la cuarta: vitest 4 esconde los `console.log` de un
 test que **pasa**, así que un «1 passed» sin cifras debajo se lee como medido.
+
+### 2026-09-27 · Proveedores de equipos, y la colación que no era la que creíamos (PR #503, #506, #507, #510)
+
+ADR-188. Ya se crea una `Organization` de tipo `supplier` desde la aplicación —los tres que había
+venían del seed—: sin `Location`, `approved`, `AuditEvent` en la misma transacción, índice único
+parcial sobre `lower(btrim(name))`. Pantalla propia `/equipos/proveedores/nuevo`, porque el
+desplegable vive DENTRO del `<form>` de `/equipos/nuevo` y un `<form>` anidado no es HTML válido.
+
+**Decisión de Daniel: el permiso se juzga en ámbito de PLATAFORMA.** Codex leyó lo que yo no:
+`permissionKeysAnywhere` dice de sí misma «Display only, and never an authorization decision», y la
+primera versión la usaba para autorizar. Ahora `can()` contra plataforma, como
+`organization:create_farm`. **Un Farm Manager ya NO da de alta proveedores.**
+
+**La colación no era la que decía este repositorio, y lo destapó CI tumbando una prueba mía.**
+Medido contra producción, sólo lectura: `datcollate` es **`C.UTF-8`** y «FERRETERÍA EL PUENTE» sí
+choca con «Ferretería El Puente»; CI igual. Lo contrario sólo pasaba en el clúster local, que
+`scripts/test-db.sh` creaba **sin `--locale`**. Cambia el PLEGADO DE CAJA, no el orden. **#506** lo
+cierra: clúster, base y sombra con `--locale-provider=builtin --builtin-locale=C.UTF-8` —`builtin`
+porque macOS no tiene `C.UTF-8` en la libc— y un guardia que **falla** si la base no pliega. **No
+hace falta recrear el clúster**, y `up` NO arregla una base vieja: es `reset`, que borra y restaura.
+**#507** corrige el comentario de la migración `20260919170000`, que afirmaba lo contrario.
+
+**#510 — la CLI de Prisma ya no migra contra una base remota.** Un `npx prisma migrate deploy` sin
+`DATABASE_URL` delante lee el `.env` y apunta a PRODUCCIÓN; pasó hoy, no escribió nada, y con una
+migración pendiente la habría aplicado fuera del pipeline. El guardia vive en `prisma.config.ts`,
+que la CLI carga siempre; deja pasar `generate` y `migrate status`, y abre con
+`ALLOW_REMOTE_MIGRATE=1` o `VERCEL_ENV=production`.
+
+**Sin hacer:** `proveedoresDeCereza.ts` y `sensory/ruedas.ts` siguen autorizando con
+`permissionKeysAnywhere`. Los otros dos se cerraron esa madrugada — ver la entrada del 28.
+
+### 2026-09-24 · Flujo verde, tueste y cata
+
+- Verde se clasifica por mallas en fracciones trazables; muestras en gramos; una cata nueva exige el tueste exacto y un informe externo sólo si la muestra tiene tuestes registrados (Daniel, 2026-09-25) — sin ninguno entra marcado «tueste no registrado»; las históricas incompletas permanecen legibles.
+- Commits `9357b297`, `cf538961` y `cd44587c` publicados en la rama; este último cierre queda en el commit siguiente.
+- Verificado: build, typecheck, lint, 71 pruebas enfocadas; suite 340/341 archivos y el restante pasó aislado tras `ENOSPC` temporal.
+
+---
+
+**Archivado el 2026-09-29, y antes se midió dónde vive cada decisión suya de ese apunte.** Una
+sesión anterior lo había devuelto al estado al ver que «tueste no registrado» da **cero** en
+`docs/architecture/DECISIONS.md` (control positivo: `ADR-144`, cinco menciones). Eso sigue siendo
+cierto, y no era toda la historia:
+
+| la decisión | dónde vive, comprobado |
+|---|---|
+| el tueste exacto en un informe externo | `tests/sensory/informeExterno.test.ts:196` — un `describe` llamado «el tueste servido en un informe externo (decisión de Daniel, 2026-09-25)» con cuatro pruebas que la cubren, y el rótulo en `messages/es.json`. Una prueba se ejecuta; un apunte archivado no lo lee nadie |
+| mallas en fracciones trazables | **ADR-186**, fechado y atribuido, y las seis decisiones de `docs/superpowers/specs/2026-09-25-clasificacion-verde-por-malla-design.md` |
+| «muestras en gramos» | **en ningún sitio fuera de este apunte.** NO se fue con él: está rescatado en la §3 del estado, con la medición de que `roasting.ts:106` exige `kg` |
+
+Que ningún ADR la nombre no es lo mismo que que no tenga casa: el nombre de ese `describe` lleva
+la fecha y la atribución, así que un `grep` por la decisión la encuentra donde se ejecuta.

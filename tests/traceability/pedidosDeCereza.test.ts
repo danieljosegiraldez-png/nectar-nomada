@@ -71,11 +71,23 @@ afterAll(async () => {
 
 describe("el proveedor de fuera", () => {
   it("el Farm Operator lo da de alta; el mismo nombre en minúsculas se rechaza", async () => {
-    const p = await crearProveedorDeCereza(operador, { nombre: `Don Pedro ${RUN}`, lugar: "Boquete" });
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Don Pedro ${RUN}`, lugar: "Boquete" });
     proveedor = p.id;
     expect(p.organizationType).toBe("producer");
     expect(p.description).toBe("Boquete");
-    await expect(crearProveedorDeCereza(operador, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
+    // Hallazgo 1 de Codex: el beneficio que autorizó el alta tiene que quedar en la auditoría, o
+    // una cuenta con acceso a varios no deja ver cuál la justificó. Se comprueba aquí y no con una
+    // sonda posterior porque el `afterAll` de este archivo borra estos eventos.
+    const ev = await prisma.auditEvent.findFirstOrThrow({
+      where: { operation: "organization.create_cherry_supplier", entityId: p.id },
+      select: { after: true },
+    });
+    const despues = ev.after as Record<string, unknown>;
+    expect(despues.autorizadoEnBeneficio, "el AuditEvent no dice en qué beneficio se autorizó").toBe(beneficio);
+    // Control: el evento sigue trayendo lo de siempre, así que la aserción de arriba mide un campo
+    // añadido y no un objeto que se haya quedado a medias.
+    expect(despues.name).toBe(`Don Pedro ${RUN}`);
+    await expect(crearProveedorDeCereza(operador, beneficio, { nombre: `don pedro ${RUN}` })).rejects.toThrow(/proveedor_repetido/);
   }, 20000);
 
   it("dos altas a la vez del mismo nombre: una entra, la otra es proveedor_repetido", async () => {
@@ -83,13 +95,50 @@ describe("el proveedor de fuera", () => {
     // Nombre ASCII a propósito: lo que se prueba es la carrera. Las mayúsculas acentuadas no se
     // pliegan con la colación C (ver el comentario del índice en la migración).
     const nombre = `Dona Rosa ${RUN}`;
-    const res = await Promise.allSettled([crearProveedorDeCereza(operador, { nombre }), crearProveedorDeCereza(operador, { nombre: nombre.toUpperCase() })]);
+    const res = await Promise.allSettled([crearProveedorDeCereza(operador, beneficio, { nombre }), crearProveedorDeCereza(operador, beneficio, { nombre: nombre.toUpperCase() })]);
     expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(1);
     expect(String((res.find((x) => x.status === "rejected") as PromiseRejectedResult).reason)).toMatch(/proveedor_repetido/);
   }, 20000);
 
+  it("un Farm Manager de OTRA finca no da de alta en este beneficio — el ámbito manda", async () => {
+    // Éste es el discriminante del cambio del 2026-09-29. `managerOtra` TIENE `cherry_supplier:create`
+    // por su perfil, pero en otro sitio: con `permissionKeysAnywhere` la unión de sus ámbitos bastaba
+    // y podía dar de alta aquí. Ahora el permiso se juzga contra el beneficio donde se recibe.
+    // `no_lot_access` y no `sin_permiso`: quien no alcanza el beneficio se cae en `exigeVerBeneficio`
+    // ANTES de llegar a la clave. Son dos rechazos distintos y la prueba nombra el que ocurre; los
+    // dos salen por pantalla como «no tienes permiso» (`traducir` en app/actions/recepcionDeCereza).
+    await expect(crearProveedorDeCereza(managerOtra, beneficio, { nombre: `Ajeno ${RUN}` })).rejects.toThrow(/no_lot_access/);
+    // Control positivo: el operador de ESTE beneficio sí puede, así que el rechazo es del ámbito y
+    // no de una operación rota.
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Ajeno ${RUN}` });
+    expect(p.organizationType).toBe('producer');
+  }, 20000);
+
+  it("alcanzar el beneficio NO basta: sin `cherry_supplier:create` sale sin_permiso", async () => {
+    // Hallazgo 3 de Codex, y tenía razón: los dos rechazos de arriba caen en `exigeVerBeneficio`, así
+    // que quitar el `can(cherry_supplier:create)` entero los dejaba intactos — medido, 0 caídas. Esta
+    // aísla la SEGUNDA barrera: al operador se le quita sólo esa clave con un override `deny`, sin
+    // tocar su acceso al beneficio, y el rechazo pasa de `no_lot_access` a `sin_permiso`.
+    const asignacion = await prisma.assignment.findFirstOrThrow({ where: { userAccountId: operador } });
+    const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType: "cherry_supplier", action: "create" } });
+    const veto = await prisma.assignmentPermissionOverride.create({
+      data: { assignmentId: asignacion.id, permissionId: permiso.id, effect: "deny", createdBy: operador, reason: null },
+    });
+    try {
+      await expect(crearProveedorDeCereza(operador, beneficio, { nombre: `Vetado ${RUN}` })).rejects.toThrow(/sin_permiso/);
+    } finally {
+      await prisma.assignmentPermissionOverride.delete({ where: { id: veto.id } });
+    }
+    // Control positivo: devuelta la clave, el mismo nombre entra. El rechazo era de la clave y no
+    // del beneficio, que es justo lo que las otras dos pruebas no podían distinguir.
+    const p = await crearProveedorDeCereza(operador, beneficio, { nombre: `Vetado ${RUN}` });
+    expect(p.organizationType).toBe("producer");
+  }, 20000);
+
   it("el Recolector no da de alta proveedores", async () => {
-    await expect(crearProveedorDeCereza(recolector, { nombre: `Otro ${RUN}` })).rejects.toThrow(/sin_permiso/);
+    // Igual que el de arriba: el recolector no alcanza el beneficio, así que cae en el guardia del
+    // ámbito. Antes del 2026-09-29 llegaba hasta la clave y salía `sin_permiso`.
+    await expect(crearProveedorDeCereza(recolector, beneficio, { nombre: `Otro ${RUN}` })).rejects.toThrow(/no_lot_access/);
   }, 20000);
 });
 

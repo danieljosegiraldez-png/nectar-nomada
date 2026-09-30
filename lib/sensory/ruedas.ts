@@ -1,3 +1,18 @@
+/**
+ * **`permissionKeysAnywhere` aquí es deliberado, y no es la infracción de los otros dos sitios.**
+ *
+ * El 2026-09-29 se acotaron los usos que autorizaban ESCRITURAS contra un ámbito concreto. Éste se
+ * intentó acotar también —a plataforma— y se revirtió: el spec
+ * `docs/superpowers/specs/2026-09-21-herramientas-sensoriales-rueda-design.md` §3 define la
+ * audiencia sin ámbito, «una rueda apagada sólo la ve quien tenga permiso de ver Sensorial», y
+ * exigir plataforma habría dejado fuera a quien lo tiene en un proyecto o una sesión. Lo destapó la
+ * revisión de Codex leyendo el spec, que el diff no incluía.
+ *
+ * La pregunta que se hace aquí es literalmente la que `permissionKeysAnywhere` responde —«¿hay algún
+ * sitio donde esta persona podría usar esto?»—: una rueda no cuelga de ningún ámbito contra el que
+ * juzgar. Si algún día la audiencia se quiere más estrecha, es una decisión de producto sobre el
+ * spec, no un arreglo de mecanismo.
+ */
 import { prisma } from "../db";
 import { permissionKeysAnywhere } from "../rbac/service";
 
