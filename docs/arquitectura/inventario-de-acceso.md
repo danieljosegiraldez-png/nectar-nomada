@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**589 operaciones** que tocan la base, en **163 archivos** — medido con
+**590 operaciones** que tocan la base, en **163 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -36,7 +36,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 > sólo después de `requireLotAccess`; calcula el saldo de la muestra restando las cargas
 > de sus tuestes registrados, para que la pantalla no ofrezca masa ya consumida.
 
-> **Las lecturas del tablero del beneficio (2026-09-29): 588→589, 162→163 archivos y
+> **Las lecturas del tablero del beneficio (2026-09-30): 589→590, 162→163 archivos y
 > guardia directo 452→453.** `lib/beneficio/datosDelTablero.ts` es archivo nuevo: junta lo
 > que el tablero necesita —corridas abiertas, sus procesos y recetas, las mediciones de la
 > fase y las desviaciones sin acción correctiva— y se acota con `resolveLotVisibility`
