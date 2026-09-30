@@ -39,6 +39,15 @@ de «hecho y sin rastro».
 
 ---
 
+#### Los seis productos de Finca Rosina: qué falta exactamente
+
+Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle — **medido por
+dos sesiones en paralelo y con el mismo resultado**: 0 en §1, 0 en `PENDING_IMPLEMENTATIONS/`, 0 en
+`docs/`, y la única «Rosina» de §3 es la de Kenis el apicultor, otro asunto. Faltan de Daniel: la
+**etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote del
+fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
+listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
+
 ## 2. Lo que se entregó — más nuevo primero
 
 ### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
@@ -60,14 +69,41 @@ la transacción no es «resolver en vivo».
 **Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
 `null → valor`. Se dice, no se disfraza.
 
+### 2026-09-30 · La dosis del fitosanitario, y dos listas que estaban dos veces (PR #554)
+
+**Lo que Daniel pidió:** que registrar una aplicación no sea texto libre. Cuatro datos del PRODUCTO y
+no de cada aplicación —uso `preventivo`/`control`, dosis en **rango** porque la etiqueta da mínimo y
+máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una intervención—. Sus
+palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
+medicamento de colmena no ve ninguno de los cinco.
+
+**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —servidor y una
+copia a mano en `RecibirMedicamentoForm.tsx`, con su propio comentario diciéndolo— y **ya habían
+derivado**: el servidor ofrecía cuatro campos que el formulario no pintaba, lo que no falla en rojo.
+Unificarlas en módulos puros destapó dos más: `completarProducto` validaba **toda** dosis con
+`Number.isInteger` —«1,5 L/ha» se rechazaba por «negativa», y el formulario pintaba `step={1}`— y las
+plagas sólo se declaraban al **crear** el producto.
+
+**Verificado.** `verify` y `build` 0, y los DOS carriles de CI corridos en local sobre el árbol
+fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
+el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
+firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
+
 ## 3. Bloqueado, y en qué
 
-#### Los seis productos de Finca Rosina, bloqueados en Daniel
+#### Nueve formularios guardan UNA sola medición por carga de página
 
-Rescatado al archivar «2026-09-29 · La credencial rotada»: faltan **tres etiquetas**, y la
-**cantidad y el lote de cada uno** de los seis. Medido antes de mover la entrada — 0 en §1, 0 en
-`PENDING_IMPLEMENTATIONS/`, 0 en `docs/`, y la única mención de «Rosina» en §3 es la de Kenis el
-apicultor, otro asunto. **No vivía en ningún otro sitio.**
+Rescatado al archivar «2026-09-29 · El secado tiene cola» (PR #531), su único sitio: medido **0** veces
+en `CLAUDE.md`, que describe el mecanismo pero no dice que siga abierto ni en cuántas pantallas. Un
+efecto con `[]` escribe el desfase una vez y React lo borra al re-renderizar: el campo de la hora se
+vacía y —por obligatorio— **el navegador bloquea el envío sin ningún error**. #531 lo arregló donde
+tocaba; **afecta a los nueve con `TimezoneOffsetField`**, y es anterior a ese trabajo.
+
+#### La migración de la dosis ya está aplicada en la base de pruebas compartida
+
+`20260930170000_dosis_y_uso_del_producto` se aplicó al 55433 con `migrate deploy` —aditiva y sin
+riesgo— y **sigue sin fusionar** (PR #554): quien compare migraciones verá una en la BASE que no está en
+su árbol, y **no es trabajo sin commitear de nadie**. Muere al fusionarse el PR.
 
 #### El PASS del verificador de respaldos mira sólo el censo
 
@@ -123,11 +159,17 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 #### Kiva Estate: crear su terreno (de Daniel)
 
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
-Estate** desde `/fincas` → «sin terreno». El seed dice que es un nombre ficticio
-(`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que él decida.
-Y dos más de la misma entrega, rescatados al archivarla el 2026-09-30: **los comandos de Luis y Chris
-contra producción**, y que la organización Kiva Estate sigue marcada **«DEMO placeholder»** — falso en
-cuanto le cuelguen fincas reales, y el guión lo avisa cada vez.
+Estate** desde `/fincas` → «sin terreno».
+
+**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
+El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas 180-184 y 274— y usa `DEMO Rivera
+Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
+
+**Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
+`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
+tres guiones **simulan por defecto**. Si la descripción «DEMO placeholder» sigue o no en esa fila
+**no se ha medido** —leer producción de Neon está prohibido desde aquí—: el guión la comprueba él
+mismo y **aborta sin escribir** si alguien puso otro texto, que es por qué se puede correr a ciegas.
 
 
 #### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
@@ -142,34 +184,6 @@ Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigi
 `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y registrar cada nodo con su UID de
 Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
 **cerrada por defecto** hasta entonces.
-
-#### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
-
-**2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
-not started because an Actions budget is preventing further use»*. Se lee como el rojo
-de una compuerta propia —«¿Hay código en este cambio?: failure» y las otras tres
-`skipped`— y **no es el cambio**: el job nunca arrancó. Cuatro corridas seguidas, dos
-PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
-comandos están en `CLAUDE.md`.
-
-**Lo que bloqueaba:** la protección de `main` exige tres checks evaluados sobre el PR,
-así que nada se podía fusionar. No hay reintento que lo salte. Verificado que Vercel es
-independiente: llega como `status`, no como check-run, y siguió desplegando.
-
-**Restablecido la misma tarde**, medido y no supuesto: el PR #310 llevó las tres
-compuertas en `SUCCESS` con runner y pasos de verdad, contra el `runner_name` vacío y
-`steps: []` de las corridas muertas. **Ése es el discriminante**, no la conclusión: una
-corrida sin runner sale `failure` y se lee como un fallo del cambio. Mientras duró se
-fusionó con los dos carriles corridos en local sobre el árbol rebasado y con base creada
-desde cero — es peor evidencia que CI y hay que decirlo, no equipararla.
-
-**Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
-mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15
-canceladas solas. Consecuencia que hay que saber: **`main` ya no tiene corrida
-después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la protección
-lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
-rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
-fusionado queda corregida allí.
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
 
@@ -220,18 +234,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
-- **La protección de `main`, tal como quedó** — cerrada el 2026-09-05; no es un
-  bloqueo sino la configuración viva, con su detalle —sin revisiones exigidas y
-  `enforce_admins` en false, los dos a propósito— en
-  `docs/SESSION_STATE_ARCHIVE.md`.
-
-- ~~**PR B del manejo fitosanitario, pendiente de fusionar**~~ — **falso, y quitado el
-  2026-09-29.** `origin/fitosanitarios-pr-b` no tiene **ningún** commit que `main` no
-  tenga —control al revés: 384— y **cero** archivos que difieran; el trabajo está en
-  `main` (`lib/traceability/intervenciones.ts`, 36.710 bytes, con
-  `productosFitosanitarios`). No faltaba fusionar nada: faltaba borrar la línea, que
-  mandaba a la siguiente sesión a buscar trabajo a una rama vacía.
-
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
   que no hay densidad ni rendimiento por hectárea, que es lo único comparable
@@ -354,6 +356,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
+| Fusionar `origin/fitosanitarios-pr-b` | No tiene **ningún** commit que `main` no tenga (medido 2026-09-29; control al revés: 384) y cero archivos que difieran. El trabajo ya está en `main`, en `lib/traceability/intervenciones.ts` |
 
 ---
 

@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "../../lib/auth/session";
 import { crearMaterial } from "../../lib/inventario/materiales";
+import { esPlaga } from "../../lib/traceability/plagas";
 import { recibirLote } from "../../lib/inventario/lotes";
-import { camposDe, completarProducto, opcionesDeRecepcion, type CampoDelProducto, type ClaseDeProducto } from "../../lib/inventario/recepcion";
+import { CAMPOS_NUMERICOS, camposDe, completarProducto, opcionesDeRecepcion, type CampoDelProducto, type ClaseDeProducto } from "../../lib/inventario/recepcion";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
 /**
@@ -21,6 +22,15 @@ import { fechaDeDia } from "../../lib/time/localDateTime";
  * Un campo vacío se envía como nulo, nunca como cero: cero días de carencia es
  * una respuesta, un campo vacío es que nadie la dio.
  */
+/**
+ * El uso declarado, o nulo. **No se acepta cualquier cadena que llegue del formulario**: un valor
+ * fuera del enum haría reventar el insert con un error de Postgres en vez de guardarse como «sin
+ * declarar», que es lo que un campo opcional debe hacer cuando llega vacío o mal.
+ */
+function usoDeProducto(valor: string | null): "preventivo" | "control" | null {
+  return valor === "preventivo" || valor === "control" ? valor : null;
+}
+
 export async function recibirMedicamentoFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -46,7 +56,8 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
 
   const campos: Partial<Record<CampoDelProducto, string | number | null>> = {};
   for (const c of camposDe(clase)) {
-    campos[c] = c === "defaultWithdrawalDays" || c === "avisarDiasAntes" || c === "defaultReentryHours" ? numero(`p_${c}`) : texto(`p_${c}`);
+    // De la lista, no de una cadena de `===`: ésa es la copia que se olvida el día que entra un campo.
+    campos[c] = CAMPOS_NUMERICOS.has(c) ? numero(`p_${c}`) : texto(`p_${c}`);
   }
 
   let materialId = texto("materialId");
@@ -67,10 +78,22 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
       defaultReentryHours: numero("p_defaultReentryHours"),
       storageConditions: texto("p_storageConditions"),
       safetyNotes: texto("p_safetyNotes"),
+      // Lo que hace consistente el registro de una aplicación (Daniel, 2026-09-30). Sólo llega
+      // con clase `fitosanitario`: `camposDe` no ofrece estos campos para un medicamento.
+      plantProtectionUse: usoDeProducto(texto("p_plantProtectionUse")),
+      doseMin: numero("p_doseMin"),
+      doseMax: numero("p_doseMax"),
+      doseUnit: texto("p_doseUnit"),
+      plantProtectionTargets: formData.getAll("p_plantProtectionTargets").filter(esPlaga),
     });
     materialId = creado.id;
-  } else if (materialId && sitio.puedeDefinirProducto && Object.values(campos).some((v) => v != null)) {
-    await completarProducto(user.userAccountId, { materialId, locationId, campos });
+  } else if (materialId && sitio.puedeDefinirProducto) {
+    // Las plagas van aparte de `campos` —son una lista— así que también cuentan para decidir si
+    // hay algo que completar. Sin esto, marcar sólo plagas no escribía nada y no lo decía.
+    const plagas = formData.getAll("p_plantProtectionTargets").filter(esPlaga);
+    if (Object.values(campos).some((v) => v != null) || plagas.length > 0) {
+      await completarProducto(user.userAccountId, { materialId, locationId, campos, plantProtectionTargets: plagas });
+    }
   }
 
   await recibirLote(user.userAccountId, {
