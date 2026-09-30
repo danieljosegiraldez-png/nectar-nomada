@@ -11,6 +11,7 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { endDryingRun, startDryingRun } from "../../lib/traceability/drying";
 import { bajarBandeja, bandejasDeCorrida, bandejasDisponibles, cargarBandeja, moverBandeja, posicionDeBandeja, posicionesParaMover } from "../../lib/traceability/bandejasDelSecado";
 import { puedeVerEquipo } from "../../lib/equipos/equipos";
+import { ocupacionDeBandejas } from "../../lib/beneficio/vistaDeBandejas";
 import { can } from "../../lib/rbac/service";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
@@ -602,5 +603,48 @@ describe("mover una bandeja", () => {
     if (!(await puedeVerEquipo(operador, secreta))) {                // sólo si el caso se puede construir (ver el conflicto oculto)
       expect(opciones.find((o) => o.id === p8.id)).toMatchObject({ ocupada: true, ocupadaPor: null });
     }
+  });
+});
+
+/**
+ * Qué tiene encima cada bandeja — el hueco de §B.4 del diseño del 2026-09-27: `DryingRunTray` lo
+ * sabía y la lista de bandejas no lo leía, así que decía que las ocho están «en Finca Rosina»
+ * cuando cuatro tenían café encima.
+ */
+describe("qué tiene encima cada bandeja", () => {
+  it("nombra el lote a quien puede verlo, y NO lo nombra a quien no", async () => {
+    const run = await secado("ocupacion");
+    const b = await bandeja("ocup-1");
+    await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: b.id, desde: T("2026-09-02T08:00:00Z") });
+
+    const mia = (await ocupacionDeBandejas(operador, [b.id])).get(b.id);
+    expect(mia?.estado).toBe("ocupada");
+    expect(mia?.estado === "ocupada" && mia.lotCode).toBe(`${RUN_ID}-ocupacion`);
+    expect(mia?.estado === "ocupada" && mia.desde.toISOString()).toBe("2026-09-02T08:00:00.000Z");
+
+    // **El control que da sentido al anterior**: el mismo dato, otra cuenta. Sin esta mitad,
+    // «nombra el lote» no distingue una lista correcta de un canal para leer códigos ajenos.
+    const suya = (await ocupacionDeBandejas(ajeno, [b.id])).get(b.id);
+    expect(suya?.estado, "sigue viéndose ocupada: eso no es secreto").toBe("ocupada");
+    expect(suya?.estado === "ocupada" && suya.lotCode, "pero el lote ajeno no se nombra").toBeNull();
+    expect(suya?.estado === "ocupada" && suya.lotId, "ni su id, que también identifica").toBeNull();
+  });
+
+  it("libre desde su última bajada, y sin fecha si nunca se usó", async () => {
+    const run = await secado("libre");
+    const usada = await bandeja("libre-1");
+    const nueva = await bandeja("libre-2");
+    const t = await cargarBandeja(operador, { dryingRunId: run.id, equipmentId: usada.id, desde: T("2026-09-02T08:00:00Z") });
+    await bajarBandeja(operador, { dryingRunTrayId: t.id, hasta: T("2026-09-06T09:00:00Z"), cierre: cierre("libre") });
+
+    const o = await ocupacionDeBandejas(operador, [usada.id, nueva.id]);
+    const u = o.get(usada.id);
+    expect(u?.estado).toBe("libre");
+    expect(u?.estado === "libre" && u.desde?.toISOString()).toBe("2026-09-06T09:00:00.000Z");
+
+    // Nunca usada NO es «libre desde siempre»: no se inventa una fecha.
+    const n = o.get(nueva.id);
+    expect(n?.estado).toBe("libre");
+    expect(n?.estado === "libre" && n.desde, "nunca estuvo en una corrida").toBeNull();
   });
 });

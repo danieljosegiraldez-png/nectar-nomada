@@ -3291,7 +3291,13 @@
     "capacidadSinAcceso": "{n, plural, one {hay # pesaje de lotes que tu cuenta no ve} other {hay # pesajes de lotes que tu cuenta no ve}}",
     "lotesRecortados": "Mostrando los 100 lotes más recientes; puede haber más.",
     "dondeOculto": "ubicación restringida",
-    "noSePudoCalcular": "no se pudo calcular"
+    "noSePudoCalcular": "no se pudo calcular",
+    "columnaOcupacion": "Qué tiene encima",
+    "ocupacionSinDato": "—",
+    "ocupacionSinNombrar": "Ocupada",
+    "ocupacionDesde": "desde el {fecha}",
+    "ocupacionLibreDesde": "Libre desde el {fecha}",
+    "ocupacionLibre": "Libre"
   },
   "Inventario": {
     "recibidoOk": "Frasco recibido. Aparece abajo con su vencimiento.",

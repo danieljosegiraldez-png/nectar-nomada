@@ -85,7 +85,11 @@ export async function vistaDeBandejas(userAccountId: string) {
   const secciones = [];
   for (const org of organizaciones) {
     const tipos = await tiposDeBandeja(userAccountId, org.id);
-    const bandejas = await bandejasDeLaFinca(userAccountId, org.id);
+    const bandejasSinOcupacion = await bandejasDeLaFinca(userAccountId, org.id);
+    // Lo que cada una tiene encima. Va aquí y no dentro de `bandejasDeLaFinca` porque esa
+    // función la comparten otras pantallas de equipos, a las que el secado no les importa.
+    const ocupaciones = await ocupacionDeBandejas(userAccountId, bandejasSinOcupacion.map((b) => b.id));
+    const bandejas = bandejasSinOcupacion.map((b) => ({ ...b, ocupacion: ocupaciones.get(b.id) ?? null }));
     const puedeEditar = await puedeEditarBeneficioEnOrganizacion(userAccountId, org.id);
     if (!tipos.length && !bandejas.length && !puedeEditar) continue;
 
@@ -135,4 +139,99 @@ export async function vistaDeBandejas(userAccountId: string) {
     secciones.push({ org, tipos: tiposConCapacidad, bandejas, puedeEditar, sitiosDisponibles, lotesGestionables, lotesRecortados });
   }
   return secciones;
+}
+
+/** Lo que una bandeja tiene encima ahora, o desde cuándo está libre. */
+export type OcupacionDeBandeja =
+  | { readonly estado: "ocupada"; readonly desde: Date; readonly lotId: string | null; readonly lotCode: string | null }
+  | { readonly estado: "libre"; readonly desde: Date | null };
+
+/**
+ * Qué hay encima de cada bandeja, leyendo `DryingRunTray`, que ya lo sabía.
+ *
+ * **El hueco que lo motiva** (diseño §B.4, medido el 2026-09-27): `lib/equipos/bandejas.ts` no
+ * menciona `dryingRunTray` ni una vez —control: menciona `equipment` ocho veces—, así que la
+ * lista decía que las ocho bandejas están «en Finca Rosina» cuando cuatro tenían café encima.
+ *
+ * **El código del lote se acota por VISIBILIDAD DE LOTES, no por la de la bandeja.** Una bandeja
+ * que esta cuenta puede ver puede tener encima un lote que no: entonces dice «ocupada» y **no
+ * nombra el lote**. Lo contrario convertiría esta lista en un canal para leer códigos de lote
+ * ajenos, que es justo lo que `resolveLotVisibility` existe para impedir.
+ *
+ * **«Libre desde» sale del último `hasta`**, y es nulo cuando la bandeja no ha estado nunca en
+ * una corrida — que no es lo mismo que «libre desde siempre» y por eso no se inventa una fecha.
+ */
+export async function ocupacionDeBandejas(
+  userAccountId: string,
+  equipmentIds: readonly string[],
+): Promise<Map<string, OcupacionDeBandeja>> {
+  const salida = new Map<string, OcupacionDeBandeja>();
+  if (equipmentIds.length === 0) return salida;
+
+  const ocupadas = await prisma.dryingRunTray.findMany({
+    where: { equipmentId: { in: [...equipmentIds] }, hasta: null },
+    select: {
+      equipmentId: true,
+      desde: true,
+      dryingRun: {
+        select: {
+          transformations: {
+            select: { inputs: { select: { lotId: true }, take: 1 } },
+            orderBy: { occurredAt: "asc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const lotIds = [
+    ...new Set(
+      ocupadas
+        .map((o) => o.dryingRun.transformations[0]?.inputs[0]?.lotId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+
+  // Los que esta cuenta puede ver. `null` de `lotWhereFromVisibility` significa «ninguno»,
+  // y entonces ningún código se nombra — que es lo correcto, no un caso límite raro.
+  const visibilidad = await resolveLotVisibility(userAccountId, "view");
+  const loteWhere = lotWhereFromVisibility(visibilidad);
+  const visibles = new Map<string, string>();
+  if (loteWhere && lotIds.length > 0) {
+    const lotes = await prisma.lot.findMany({
+      where: { ...loteWhere, id: { in: lotIds } },
+      select: { id: true, lotCode: true },
+    });
+    for (const l of lotes) visibles.set(l.id, l.lotCode);
+  }
+
+  for (const o of ocupadas) {
+    const lotId = o.dryingRun.transformations[0]?.inputs[0]?.lotId ?? null;
+    const lotCode = lotId ? visibles.get(lotId) ?? null : null;
+    salida.set(o.equipmentId, {
+      estado: "ocupada",
+      desde: o.desde,
+      lotId: lotCode ? lotId : null,
+      lotCode,
+    });
+  }
+
+  const libres = equipmentIds.filter((id) => !salida.has(id));
+  if (libres.length > 0) {
+    const ultimas = await prisma.dryingRunTray.findMany({
+      where: { equipmentId: { in: libres }, hasta: { not: null } },
+      select: { equipmentId: true, hasta: true },
+      orderBy: { hasta: "desc" },
+    });
+    const vistas = new Set<string>();
+    for (const u of ultimas) {
+      if (vistas.has(u.equipmentId)) continue;
+      vistas.add(u.equipmentId);
+      salida.set(u.equipmentId, { estado: "libre", desde: u.hasta });
+    }
+    for (const id of libres) if (!salida.has(id)) salida.set(id, { estado: "libre", desde: null });
+  }
+
+  return salida;
 }
