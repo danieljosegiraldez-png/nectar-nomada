@@ -3291,7 +3291,13 @@
     "capacidadSinAcceso": "{n, plural, one {there is # weighing from lots your account can't see} other {there are # weighings from lots your account can't see}}",
     "lotesRecortados": "Showing the 100 most recent lots; there may be more.",
     "dondeOculto": "restricted location",
-    "noSePudoCalcular": "could not be calculated"
+    "noSePudoCalcular": "could not be calculated",
+    "columnaOcupacion": "What is on it",
+    "ocupacionSinDato": "—",
+    "ocupacionSinNombrar": "In use",
+    "ocupacionDesde": "since {fecha}",
+    "ocupacionLibreDesde": "Free since {fecha}",
+    "ocupacionLibre": "Free"
   },
   "Inventario": {
     "recibidoOk": "Container received. It appears below with its expiry.",
