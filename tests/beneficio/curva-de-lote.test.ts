@@ -140,6 +140,17 @@ describe("curvaDeLote", () => {
     expect(c.puntos).toEqual([{ x: 0, y: 60 }, { x: 300, y: 120 }]);
   });
 
+  it("un maxValue 0 también es un valor: la banda de −4 a 0 se dibuja", () => {
+    // El gemelo del cero de arriba, del otro extremo: sin él, un `||` sólo en `maxValue`
+    // sobrevive, porque la prueba anterior tiene un máximo de 12.
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(10), value: -1 }, { occurredAt: t(14), value: -3 }],
+      objetivo: { minValue: -4, maxValue: 0, targetValue: -2 }, ancho: 300, alto: 120,
+    });
+    expect(c.banda).toEqual({ tipo: "banda", yMin: 120, yMax: 0, yObjetivo: 60 });
+    expect(c.puntos).toEqual([{ x: 0, y: 30 }, { x: 300, y: 90 }]);
+  });
+
   it("una sola lectura no produce NaN", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(10), value: 4.5 }],
