@@ -129,6 +129,99 @@ export async function recordDryingTurnEvent(userAccountId: string, input: Record
   });
 }
 
+export interface TandaDeVolteoInput {
+  /** Las corridas que se voltearon de una pasada. Sin repetidas y no vacía. */
+  dryingRunIds: readonly string[];
+  occurredAt: Date;
+  operatorPersonId?: string | null;
+  notes?: string | null;
+  provenanceClass: ProvenanceClass;
+  sourceReference?: string | null;
+}
+
+/**
+ * «Revolví éstas»: UN acto sobre varias unidades (diseño §A.5).
+ *
+ * Antes, revolver seis zarandas eran seis filas que nada agrupaba: no se podía decir que fue una
+ * sola pasada, ni auditar el acto como uno. La tanda es la entidad que faltaba; el apiario ya tenía
+ * la forma con sus tandas de marcos.
+ *
+ * **La autorización se pide una vez POR unidad, y eso no es redundante.** `requireLotAccess` es un
+ * O: vuelve en cuanto UNO de los candidatos pasa. Pasarle las seis de golpe autorizaría la tanda
+ * entera a quien sólo puede tocar una. Aquí se exige poder gestionar **todas** antes de escribir
+ * nada, y como la comprobación va fuera de la transacción, una sola que falle deja la base intacta.
+ *
+ * **Un volteo suelto sigue existiendo** (`recordDryingTurnEvent`) y no crea tanda. Por eso
+ * `turnBatchId` es anulable: nulo significa «no hubo tanda», no «falta el dato».
+ *
+ * La tanda escribe **un** evento de auditoría con la lista de unidades; cada volteo conserva su
+ * propia fila, con su operario y su nota.
+ */
+export async function registrarTandaDeVolteo(userAccountId: string, input: TandaDeVolteoInput) {
+  // Una tanda vacía no es un acto: sería una fila que afirma que se volteó algo sin decir qué.
+  if (input.dryingRunIds.length === 0) throw new TraceabilityAccessError("tanda_vacia");
+
+  const unicas = new Set(input.dryingRunIds);
+  if (unicas.size !== input.dryingRunIds.length) {
+    // Dos veces la misma unidad escribiría dos volteos del mismo acto, y el ritmo contaría de más.
+    throw new TraceabilityAccessError("tanda_con_unidad_repetida");
+  }
+
+  const idsEnOrden = [...input.dryingRunIds];
+  const lotesDeOrigen: Lot[] = [];
+  for (const dryingRunId of idsEnOrden) {
+    const sourceLot = await resolveRunSourceLot(dryingRunId);
+    await requireLotAccess(userAccountId, "manage", [
+      { projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification },
+    ]);
+    lotesDeOrigen.push(sourceLot);
+  }
+
+  await exigirPersonaPermitida(
+    userAccountId,
+    input.operatorPersonId,
+    lotesDeOrigen.map((l) => ({ projectId: l.projectId, locationId: l.locationId })),
+  );
+
+  return prisma.$transaction(async (tx) => {
+    const tanda = await tx.dryingTurnBatch.create({
+      data: {
+        occurredAt: input.occurredAt,
+        operatorPersonId: input.operatorPersonId ?? null,
+        notes: input.notes ?? null,
+        provenanceClass: input.provenanceClass,
+        sourceReference: input.sourceReference ?? null,
+        createdBy: userAccountId,
+        turns: {
+          create: idsEnOrden.map((dryingRunId) => ({
+            dryingRunId,
+            eventType: "turned" as const,
+            occurredAt: input.occurredAt,
+            operatorPersonId: input.operatorPersonId ?? null,
+            createdBy: userAccountId,
+          })),
+        },
+      },
+      include: { turns: true },
+    });
+
+    // C1 §3: escritura probatoria, dentro de la transacción y con `tx`. Ver `lib/audit.ts`.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "drying_turn_batch.record",
+        entityType: "drying_turn_batch",
+        entityId: tanda.id,
+        after: { ...tanda, dryingRunIds: idsEnOrden },
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return tanda;
+  });
+}
+
 export interface EndDryingRunInput {
   dryingRunId: string;
   endedAt: Date;
