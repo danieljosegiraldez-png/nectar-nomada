@@ -39,7 +39,35 @@ de «hecho y sin rastro».
 
 ---
 
+#### Los seis productos de Finca Rosina: qué falta exactamente
+
+Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle. Faltan de
+Daniel: la **etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote
+del fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
+listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
+
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-09-30 · La dosis del fitosanitario, y dos listas que estaban dos veces (PR #554)
+
+**Lo que Daniel pidió:** que registrar una aplicación no sea texto libre. Cuatro datos del PRODUCTO y
+no de cada aplicación —uso `preventivo`/`control`, dosis en **rango** porque la etiqueta da mínimo y
+máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una intervención—. Sus
+palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
+medicamento de colmena no ve ninguno de los cinco.
+
+**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —en
+`lib/inventario/recepcion.ts` y copiados a mano en `RecibirMedicamentoForm.tsx`, con su propio
+comentario diciéndolo— y **ya habían derivado**: el servidor ofrecía cuatro campos que el formulario no
+pintaba, lo que no falla en rojo. Unificarlas en módulos puros destapó dos más: `completarProducto`
+validaba **toda** dosis con `Number.isInteger` —así que «1,5 L/ha» se rechazaba con un mensaje sobre
+negativos, y el formulario pintaba `step={1}`— y las plagas sólo se declaraban al **crear** el producto.
+
+**Verificado.** `verify` 0, `build` 0, carril hermético 163 archivos / 2096 pruebas, `recepcion.test.ts`
+9/9 contra la base local. Cuatro flip-tests con sha antes/después, «compila» y el test caído **por su
+nombre**; el primer intento del cuarto **no compilaba** y sus dos rojos no se firmaron, y el tercero
+importa el módulo y afirma sobre el objeto que construye en vez de conformarse con que compile. **Sin
+hacer:** la propuesta de dosis en el formulario de intervención — el dato se guarda aquí, se usa allí.
 
 ### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
 
@@ -52,42 +80,22 @@ Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `after
 —es una cadena, el primer `deleteMany` que lanza abandona los nueve siguientes con la suite en verde— y un
 «1 ocupaciones». **Sin hacer:** la capacidad sin ejercer con unidades reales; §4.5 y el paso 2 son planes propios.
 
-### 2026-09-29 · La credencial rotada, y una confirmación que nadie leía (PR #527, #529, #533)
-
-**#527 — la confirmación de una inspección no se mostraba nunca:** redirigía con `?ok=inspeccion` y
-la ficha sólo leía `error`. El guardia de la clase **encontró cinco más** —`/beneficio/ajustes`,
-`/plots/[id]` y corregir un manejo—, fechadas en `CONOCIDAS`. **#533**: el producto es **Regent**, no
-«Regin», y sus cinco menciones salían de una transcripción del 18 sin otra fuente.
-
-**La credencial de `ai_service` está rotada** (memoria `rotar-credencial-ai-service`, **cerrada**):
-Neon, los seis `.env` iguales por hash sin que el valor pasara por pantalla, Vercel, y producción
-construida con 191 migraciones y cero errores — eso prueba que la contraseña cuadra. **Y lo que costó
-el rato:** una variable de entorno **no entra en vigor sin un build**, y con commits de sólo
-documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
-productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
-
-### 2026-09-29 · El secado tiene cola, la tanda es un acto, y medir cabe en un campo (PR #523, #526, #531)
-
-**#523 — `ritmo.ts` por fin tiene quien lo pinte.** Calculaba la cola desde el 2026-09-13 y **sus
-únicos consumidores eran sus pruebas**. La pinta `/beneficio/secado`; un guardia exige que sus dos
-cálculos se **importen** fuera de `tests/` — su primera versión buscaba el NOMBRE y pasaba en verde
-con dos constantes locales homónimas.
-
-**#526 — `requireLotAccess` es un O, no un Y.** Vuelve en cuanto UNO de los candidatos pasa, así que
-pasarle las seis unidades de una tanda de golpe **la habría autorizado entera a quien sólo puede
-tocar una**. Se pide una vez por unidad, y fuera de la transacción.
-
-**#531 — doce campos pasan a cuatro, y salen dos fallos de horas que nadie buscaba.** Medido en la
-aplicación viva: **sólo se podía guardar UNA medición por carga de página** —el campo de la hora se
-vaciaba y, por obligatorio, el navegador bloqueaba el envío **sin ningún error**—, y el desfase se
-perdía igual. Un efecto con `[]` escribe en el DOM una vez y React lo borra al re-renderizar.
-**Afecta a los nueve formularios con `TimezoneOffsetField`** y es anterior a este trabajo. Lo delató
-que los otros cuatro formularios de la misma página, que no re-renderizan, seguían con su valor.
-
-**La zona de muestreo ya no exige inspección**: el servidor la crea, y el papel `ZONE` lo impone un
-`CHECK` de `core.sample` — preguntarlo era pedir la única respuesta que la base acepta.
-
 ## 3. Bloqueado, y en qué
+
+#### Nueve formularios guardan UNA sola medición por carga de página
+
+Rescatado al archivar «2026-09-29 · El secado tiene cola» (PR #531), su único sitio: medido **0** veces
+en `CLAUDE.md`, que describe el mecanismo pero no dice que siga abierto ni en cuántas pantallas. Un
+efecto con `[]` escribe el desfase una vez y React lo borra al re-renderizar, así que el campo de la
+hora se vacía y —por obligatorio— **el navegador bloquea el envío sin ningún error**. #531 lo arregló
+donde tocaba; **afecta a los nueve que usan `TimezoneOffsetField`** y es anterior a ese trabajo.
+
+#### La migración de la dosis ya está aplicada en la base de pruebas compartida
+
+`20260930170000_dosis_y_uso_del_producto` se aplicó el 2026-09-30 al 55433 con `migrate deploy` —aditiva
+y sin riesgo— y **sigue sin fusionar** (PR #554): quien compare migraciones verá una en la BASE que no
+está en su árbol, y eso se lee como trabajo sin commitear de otra sesión. No lo es. Al revés igual: esa
+base tiene `20260930114546_destino_de_cereza_por_finca`, de otra sesión y no de esta rama.
 
 #### El PASS del verificador de respaldos mira sólo el censo
 
