@@ -4543,3 +4543,17 @@ que los otros cuatro formularios de la misma página, que no re-renderizan, segu
 
 **La zona de muestreo ya no exige inspección**: el servidor la crea, y el papel `ZONE` lo impone un
 `CHECK` de `core.sample` — preguntarlo era pedir la única respuesta que la base acepta.
+
+### 2026-09-29 · La credencial rotada, y una confirmación que nadie leía (PR #527, #529, #533)
+
+**#527 — la confirmación de una inspección no se mostraba nunca:** redirigía con `?ok=inspeccion` y
+la ficha sólo leía `error`. El guardia de la clase **encontró cinco más** —`/beneficio/ajustes`,
+`/plots/[id]` y corregir un manejo—, fechadas en `CONOCIDAS`. **#533**: el producto es **Regent**, no
+«Regin», y sus cinco menciones salían de una transcripción del 18 sin otra fuente.
+
+**La credencial de `ai_service` está rotada** (memoria `rotar-credencial-ai-service`, **cerrada**):
+Neon, los seis `.env` iguales por hash sin que el valor pasara por pantalla, Vercel, y producción
+construida con 191 migraciones y cero errores — eso prueba que la contraseña cuadra. **Y lo que costó
+el rato:** una variable de entorno **no entra en vigor sin un build**, y con commits de sólo
+documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
+productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
