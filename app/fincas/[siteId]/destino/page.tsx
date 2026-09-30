@@ -38,15 +38,19 @@ export default async function DestinoDeFincaPage({ params }: { params: Promise<{
           ? t("destinoActual", { beneficio: finca.destino.name })
           : t("destinoNinguno")}
       </p>
-      {finca.beneficios.length === 0 ? (
-        <p className="nn-muted">{t("destinoSinBeneficios")}</p>
-      ) : (
-        <DestinoDeFincaForm
-          siteId={finca.id}
-          actual={finca.destino?.id ?? ""}
-          beneficios={finca.beneficios.map((b) => ({ id: b.id, name: b.name }))}
-        />
-      )}
+      {/*
+        **El formulario se enseña aunque no haya beneficios que ofrecer**, y el aviso se queda al
+        lado. Quitar el destino NO exige ver ningún beneficio —`declararDestinoDeFinca` se salta esa
+        comprobación cuando llega `null`—, así que esconder el formulario le impedía DETENER el
+        encaminamiento justo a quien está autorizado a hacerlo. Lo señaló la revisión independiente
+        de Codex, 2026-09-30.
+      */}
+      {finca.beneficios.length === 0 ? <p className="nn-muted">{t("destinoSinBeneficios")}</p> : null}
+      <DestinoDeFincaForm
+        siteId={finca.id}
+        actual={finca.destino?.id ?? ""}
+        beneficios={finca.beneficios.map((b) => ({ id: b.id, name: b.name }))}
+      />
     </div>
   );
 }

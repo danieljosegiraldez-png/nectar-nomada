@@ -38,6 +38,8 @@ let fincaA: string;
 let beneficioA: string;
 /** Beneficio de OTRA organización: el gestor no lo ve, así que no puede enviarle su cereza. */
 let beneficioAjeno: string;
+/** Segundo beneficio VISIBLE bajo el mismo sitio: hace falta para probar dos declaraciones a la vez. */
+let beneficioA2: string;
 
 async function cuenta(etiqueta: string) {
   const person = await prisma.person.create({
@@ -91,6 +93,12 @@ beforeAll(async () => {
   });
   ubicaciones.push(ben.id);
   beneficioA = ben.id;
+
+  const ben2 = await prisma.location.create({
+    data: { name: nombre("Beneficio A2"), locationType: "beneficio", classification: "internal", status: "approved", organizationId: org.id, parentLocationId: site.id },
+  });
+  ubicaciones.push(ben2.id);
+  beneficioA2 = ben2.id;
 
   const orgOtra = await prisma.organization.create({
     data: { organizationType: "farm", name: nombre("Finca B"), status: "approved", classification: "internal" },
@@ -224,5 +232,39 @@ describe("declararDestinoDeFinca", () => {
     expect(ultimo!.before).toEqual({ beneficioDestinoId: null });
     expect(ultimo!.after).toEqual({ beneficioDestinoId: beneficioA });
     expect(ultimo!.actorUserAccountId).toBe(gestor);
+  });
+});
+
+describe("dos declaraciones a la vez", () => {
+  /**
+   * **El `before` de cada evento tiene que ser el estado que esa declaración sustituyó.** Sin el
+   * `FOR UPDATE` que abre la transacción, bajo `READ COMMITTED` las dos leen el MISMO `antes`: la
+   * escritura y su evento siguen siendo atómicos, y aun así el historial describe mal la
+   * transición — una de las dos declara venir de un estado que ya no era el suyo. Lo señaló la
+   * revisión independiente de Codex el 2026-09-30.
+   *
+   * **La aserción no depende del orden a propósito.** `occurredAt` sale de `now()`, que en Postgres
+   * es la hora de INICIO de la transacción, y la segunda puede haber empezado antes de que la
+   * primera confirmara: ordenar por ella mentiría. Lo que sí es invariante es que los dos `before`
+   * sean DISTINTOS — con el bloqueo, la segunda ve lo que escribió la primera; sin él, las dos ven
+   * el original y salen iguales.
+   */
+  it("cada evento audita el estado que de verdad sustituyó", async () => {
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: null });
+    await prisma.auditEvent.deleteMany({ where: { entityId: fincaA, operation: "location.set_beneficio_destino" } });
+
+    await Promise.all([
+      declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioA }),
+      declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioA2 }),
+    ]);
+
+    const eventos = await prisma.auditEvent.findMany({
+      where: { entityId: fincaA, operation: "location.set_beneficio_destino" },
+    });
+    expect(eventos).toHaveLength(2); // control: se midieron los dos, no uno
+    const antes = eventos.map((e) => (e.before as { beneficioDestinoId: string | null }).beneficioDestinoId);
+    expect(new Set(antes).size).toBe(2);
+
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: null });
   });
 });

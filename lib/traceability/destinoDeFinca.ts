@@ -44,6 +44,13 @@ export async function declararDestinoDeFinca(
   if (input.beneficioId !== null) await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
 
   await prisma.$transaction(async (tx) => {
+    // **El `before` se lee con la fila bloqueada.** Sin esto, dos declaraciones a la vez leen el
+    // mismo `antes` bajo READ COMMITTED y la segunda audita un origen que ya no era el suyo: la
+    // escritura y su evento serían atómicos y aun así el historial describiría mal la transición,
+    // que en una plataforma de procedencia cuesta más que un fallo visible. Es el mismo bloqueo,
+    // en la misma forma, que `cambiarDestinoDeJornada` ya hace antes de comparar su destino.
+    // Señalado por la revisión independiente de Codex, 2026-09-30.
+    await tx.$queryRaw`SELECT "id" FROM "core"."location" WHERE "id" = ${sitio.id}::uuid FOR UPDATE`;
     const antes = await tx.location.findUniqueOrThrow({
       where: { id: sitio.id },
       select: { beneficioDestinoId: true },
@@ -67,7 +74,15 @@ export async function declararDestinoDeFinca(
 }
 
 /**
- * Lo que la pantalla de destino necesita, y **nada que quien mira no pueda ver**.
+ * Lo que la pantalla de destino necesita.
+ *
+ * **Una precisión que esta cabecera decía mal, y la corrigió Codex el 2026-09-30:** decía «nada que
+ * quien mira no pueda ver», y no es cierto para el destino ACTUAL — se devuelve su nombre sin
+ * comprobar `lot:view` sobre él. Es deliberado, no un descuido: el destino es un campo **de la
+ * finca**, y quien la gestiona tiene que poder sostener «esta cereza va a Las Nubes» hasta el
+ * enlace que lo dice (rúbrica 21). La alternativa —enseñar «destino restringido»— dejaría a quien
+ * manda la cereza sin saber a dónde va. Lo que sí va filtrado por `can(view, lot)` es la lista de
+ * lo que se puede ELEGIR, que es donde el permiso decide algo.
  *
  * Devuelve `null` —y la página contesta 404— cuando no es un `site` o cuando quien mira no
  * gestiona esa finca. **El permiso que comprueba es el MISMO que exige `declararDestinoDeFinca`**
