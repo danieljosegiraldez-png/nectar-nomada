@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   colaDeAtencion,
   ocupacionDelSitio,
+  instrumentosQuePidenAtencion,
   type EntradaDeLoteParaTablero,
 } from "../../lib/beneficio/tablero";
 
@@ -314,5 +315,45 @@ describe("ocupacionDelSitio", () => {
     expect(o.tanques.enUso).toBe(0);
     expect(o.sinUnidadDeclarada).toBe(0);
     expect(o.ajenas).toBe(1);
+  });
+});
+
+describe("instrumentosQuePidenAtencion", () => {
+  const eq = (id: string, kind: "instrument" | "vessel" | "tool" | "machine", verificacion: string) => ({
+    id,
+    name: `EQ ${id}`,
+    kind,
+    verificacion: verificacion as never,
+  });
+
+  it("devuelve sólo los tres estados que piden que alguien vaya", () => {
+    const r = instrumentosQuePidenAtencion([
+      eq("vencida", "instrument", "REVISION_VENCIDA"),
+      eq("fallida", "instrument", "VERIFICACION_FALLIDA"),
+      eq("sinver", "instrument", "SIN_VERIFICACION"),
+      eq("ok", "instrument", "VERIFICADO"),
+    ]);
+    expect(r.map((i) => i.id)).toEqual(["vencida", "fallida", "sinver"]);
+  });
+
+  /**
+   * **El filtro por `kind` se prueba con una entrada que el cargador real NO produce hoy:**
+   * `listarEquipos` pone `SIN_INSTRUMENTO` a todo lo que no es instrumento, así que filtrar
+   * sólo por estado ya los excluiría y esta prueba pasaría sin que el filtro por `kind`
+   * existiera. Se construye el caso hostil a mano para que el filtro esté de verdad probado —
+   * y así queda como red para el día que un traslado de `kind` o un importador produzcan la
+   * combinación. Sin esto sería un guardia que no puede fallar.
+   */
+  it("un equipo que NO es instrumento no aparece, aunque su estado lo pidiera", () => {
+    const r = instrumentosQuePidenAtencion([
+      eq("tanque", "vessel", "REVISION_VENCIDA"),
+      eq("maquina", "machine", "SIN_VERIFICACION"),
+      eq("potenciometro", "instrument", "REVISION_VENCIDA"),
+    ]);
+    expect(r.map((i) => i.id)).toEqual(["potenciometro"]);
+  });
+
+  it("sin nada que pida atención devuelve una lista vacía, no null", () => {
+    expect(instrumentosQuePidenAtencion([eq("ok", "instrument", "VERIFICADO")])).toEqual([]);
   });
 });

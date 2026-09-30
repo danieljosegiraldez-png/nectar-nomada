@@ -16,6 +16,7 @@
 import { estadoDeRitmo, puntajeDeUrgencia, RitmoError, type EstadoDeRitmo, type MetaConRitmo } from "../traceability/ritmo";
 import type { SinVeredicto } from "./desdeElLote";
 import { clasificar, resumir, type HechosDelEquipo, type ResumenDeDisponibilidad } from "../equipos/disponibilidad";
+import type { EstadoDeVerificacion } from "../equipos/verificacion";
 
 export type GrupoDeAtencion = "critico" | "listo_para_decidir" | "aviso" | "sin_veredicto" | "en_curso";
 
@@ -255,4 +256,37 @@ export function ocupacionDelSitio(input: {
     conflictos: [...cuenta].filter(([, n]) => n > 1).map(([id]) => id).sort(),
     ajenas,
   };
+}
+
+/** Lo único que el bloque de instrumentos lee de un equipo. */
+export interface EquipoParaTablero {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly verificacion: EstadoDeVerificacion;
+}
+
+/**
+ * Los instrumentos que piden que alguien vaya.
+ *
+ * Mismos estados que ya usa el veredicto del lote, así que el tablero y la ficha dicen lo mismo
+ * del mismo potenciómetro. Un `VERIFICADO` no aparece: el bloque es una lista de trabajo, no un
+ * inventario.
+ *
+ * **Y se filtra por `kind` además de por estado, aunque hoy sea redundante.** `listarEquipos`
+ * pone `SIN_INSTRUMENTO` a todo lo que no es instrumento, así que el filtro de estado ya los
+ * excluiría; el de `kind` es la red para el día que un importador o un cambio de `kind`
+ * produzcan la combinación. Su prueba construye ese caso a mano, porque un guardia que la
+ * entrada real no puede disparar no está probado.
+ */
+const PIDEN_ATENCION = new Set<EstadoDeVerificacion>([
+  "REVISION_VENCIDA",
+  "VERIFICACION_FALLIDA",
+  "SIN_VERIFICACION",
+]);
+
+export function instrumentosQuePidenAtencion(
+  equipos: readonly EquipoParaTablero[],
+): readonly EquipoParaTablero[] {
+  return equipos.filter((e) => e.kind === "instrument" && PIDEN_ATENCION.has(e.verificacion));
 }
