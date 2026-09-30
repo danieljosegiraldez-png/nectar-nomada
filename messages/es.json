@@ -1768,7 +1768,11 @@
     "detalleDeLaMedicion": "Añadir detalle",
     "cambiarContexto": "cambiar",
     "resumenFaltaInstrumento": "sin instrumento",
-    "resumenFaltaZona": "sin zona"
+    "resumenFaltaZona": "sin zona",
+    "okAplicacion": "Aplicación registrada.",
+    "okLiberacion": "Liberación biológica registrada.",
+    "okManejoCultural": "Manejo cultural registrado.",
+    "okCorreccion": "Corrección registrada."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
@@ -3153,7 +3157,10 @@
     "error_sin_concesion": "No hay ninguna concesión que quitar.",
     "error_no_es_beneficio": "Esa ubicación no es un beneficio.",
     "error_no_beneficio_edit_access": "No tienes permiso para conceder ni quitar edición en este beneficio.",
-    "error_conflicto_concurrente": "Alguien más cambió esto al mismo tiempo. Vuelve a intentarlo."
+    "error_conflicto_concurrente": "Alguien más cambió esto al mismo tiempo. Vuelve a intentarlo.",
+    "okGuardado": "Guardado.",
+    "okConcedido": "Permiso de edición concedido.",
+    "okRetirado": "Permiso de edición retirado."
   },
   "SeccionBeneficio": {
     "navegacion": "Navegación del beneficio",

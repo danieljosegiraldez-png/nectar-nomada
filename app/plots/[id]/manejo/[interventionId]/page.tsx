@@ -34,10 +34,15 @@ export const dynamic = "force-dynamic";
  */
 export default async function ManejoDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; interventionId: string }>;
+  searchParams: Promise<{ ok?: string | string[] }>;
 }) {
   const { id, interventionId } = await params;
+  // `corregirIntervencionFormAction` redirige aquí con `?ok=corregido` y esta pantalla no lo leía.
+  const okCrudo = (await searchParams).ok;
+  const ok = Array.isArray(okCrudo) ? okCrudo[0] : okCrudo;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
@@ -137,6 +142,7 @@ export default async function ManejoDetailPage({
         <Link href={`/plots/${location.id}`}>{t("manejoBackToPlot")}</Link>
       </p>
       <h1>{t("manejoDetailTitle", { fecha: mostrarFecha(intervencion.occurredAt, location.timezone) })}</h1>
+      {ok === "corregido" && <p className="nn-notice nn-notice-success" role="status">{t("okCorreccion")}</p>}
 
       <dl className="nn-detail-meta">
         <p>

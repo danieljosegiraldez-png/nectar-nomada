@@ -134,10 +134,17 @@ export async function registrarIntervencionFormAction(
   const t = await getTranslations("Traceability");
 
   const locationId = String(formData.get("locationId") ?? "");
+  // El código dice QUÉ se registró, no sólo que algo se registró. Hay tres tipos
+  // —`aplicacion`, `liberacion`, `manejo_cultural`— y la pantalla ya los nombra
+  // distinto, así que una confirmación que no distinga sería la rara. Decisión de
+  // Daniel, 2026-09-30, con su palabra: en la finca a esto le dicen «aplicación».
+  let kind: string;
   try {
+    const entrada = parseNueva(formData);
+    kind = entrada.kind;
     await registrarIntervencion(user.userAccountId, {
       locationId,
-      ...parseNueva(formData),
+      ...entrada,
       claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
     });
   } catch (error) {
@@ -145,7 +152,7 @@ export async function registrarIntervencionFormAction(
   }
 
   revalidatePath(`/plots/${locationId}`);
-  redirect(`/plots/${locationId}?ok=manejo`);
+  redirect(`/plots/${locationId}?ok=${kind}`);
 }
 
 export async function corregirIntervencionFormAction(
