@@ -665,6 +665,10 @@
     {
       "archivo": "lib/beneficio/colaDeSecado.ts",
       "razon": "Módulo de dominio: la cola de secado (diseño 2026-09-27 §B.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` antes de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de una cola vacía. No exige permisos de instalación a propósito: hacerlo le cerraría la cola a un operario que sí puede ver y medir esos lotes, que es para quien se escribe."
+    },
+    {
+      "archivo": "lib/beneficio/fichaDeUnidad.ts",
+      "razon": "Modelo de LECTURA de la ficha de una unidad de secado (diseño §B.3). **Su autorización no es propia: viene de `colaDeSecado`**, que ya acota por `resolveLotVisibility` sobre los lotes. Si la cuenta no ve el lote, la unidad no aparece en su cola y la ficha devuelve `null` — y la pantalla responde 404 sin distinguir «no existe» de «no la ves», porque distinguirlas diría que la unidad existe y está ocupada a quien no debe saberlo. Las consultas crudas que hace son posteriores a esa comprobación y todas acotadas al `dryingRunId` de la unidad YA autorizada: sus volteos, sus mediciones, y la zona horaria del área para pintar las horas. No escribe nada. Verificado al escribir ficha-de-la-unidad el 2026-09-30."
     }
   ],
   "reciben_transaccion": [
@@ -879,6 +883,11 @@
       "archivo": "lib/traceability/samplingEvents.ts",
       "operacion": "crearInspeccionEnTransaccion",
       "razon": "Ayudante transaccional sin guardia propio. Dos llamadores, los dos autorizan antes: `createSamplingEvent`, que pasa `autorizarContextos` y `exigirPersonaPermitida` sobre la corrida o la cama; y `recordMeasurement`, que autoriza el lote y comprueba ADEMÁS —con el mismo `lotTransformation.findFirst` que usa el camino explícito— que la corrida sea de ese lote, para que una zona con el id de una corrida ajena no cree una inspección sobre trabajo de otro. No es una superficie autorizable independiente. Verificado al escribir medir-en-cascada el 2026-09-29."
+    },
+    {
+      "archivo": "lib/beneficio/fichaDeUnidad.ts",
+      "operacion": "fichaDeUnidad",
+      "razon": "Recibe el principal y no llama a ningún guardia por su cuenta: **lo llama por dentro**. Lo primero que hace es `colaDeSecado(userAccountId)`, que acota por `resolveLotVisibility` sobre los lotes; si la unidad pedida no aparece en esa cola, devuelve `null` y la pantalla da 404. Todo lo que consulta después va acotado al `dryingRunId` de una unidad que YA pasó esa comprobación. No es una superficie autorizable independiente: no hay forma de llegar a un dato sin que la cola lo haya autorizado antes. Verificado al escribir ficha-de-la-unidad el 2026-09-30."
     }
   ],
   "dependen_del_llamador": [
