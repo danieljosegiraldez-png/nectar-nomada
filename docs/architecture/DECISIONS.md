@@ -12474,3 +12474,53 @@ resiste ser desarmada convierte la herramienta en un generador de documentación
   de servicio al lado de `recordGreenGrading`— y si las tres lecturas de ADR-186 deben saber
   distinguir en pantalla una fracción medida sobre muestra de una salida de un corte real. Hoy nada
   las distingue porque sólo existe la segunda.
+
+## ADR-192 — Un pedido de cereza es una restricción cuando existe, no un requisito para recibir
+
+**Fecha:** 2026-09-27 · **Estado:** aceptado (decisión de Daniel, en sesión) · **Entregado** en el
+PR #512 el 2026-09-28
+
+**Contexto.** La recepción es la entrada del beneficio, y `/beneficio/pedidos` era una de las
+entradas del índice, al lado de ella. Eso ponía a la misma altura lo que más se usa y un paso que a
+este volumen es opcional: forzar un pedido antes de poder recibir añadía trámite sin añadir control.
+
+**Por qué este ADR se escribe dos días tarde.** La decisión existía en un comentario de
+`app/beneficio/destinos.ts` y en una entrada de `SESSION_STATE.md` §2 que toca archivar. Medido:
+`DECISIONS.md` daba **0** para «sin pedido» y **0** para `pedidoId`, con «recepción» dando 8 como
+control positivo. O sea que al archivar esa entrada la razón habría quedado viviendo sólo en el
+archivo histórico, y un log archivado no lo lee nadie. Es la misma forma que ADR-190 registró para
+el `apiary:load-protocol`, dos veces en el mismo día.
+
+**Decisión de Daniel.** A este volumen **se recibe lo que salga por parcela o microparcela, sin
+pedido de por medio**. El pedido queda opcional.
+
+**Lo que eso significa en el código, medido y no supuesto.**
+
+- `pedidoId` es `string | null` en `RecibirCerezaInput` (`lib/traceability/recepcionesDeCereza.ts:42`)
+  y nullable en el esquema —`pedido_id String?` en dos modelos, con `onDelete: Restrict`—, así que
+  una recepción sin pedido es un dato de primera clase y no un hueco.
+- **Cuando SÍ hay pedido, sigue restringiendo.** `recibirCereza` bloquea su fila con `FOR UPDATE` y
+  compara los kilos ya recibidos contra el pedido antes de aceptar. Opcional no es decorativo: es
+  «no obligatorio de antemano», no «ignorado cuando está».
+- Las dos entradas de `RecibirCerezaForm` pasan los pedidos abiertos **como lista para elegir**, no
+  como requisito.
+
+**Lo que se movió, y lo que no.**
+
+- **Salió del índice**, que pasó de **9 a 8** entradas —medido sobre los dos lados del commit
+  `a0809cda`—. Que `pedidos` no esté ahí lo fija `tests/beneficio/destinos-del-indice.test.ts`.
+  Hoy el índice vuelve a tener 9 porque la cola de secado entró después; el 8 es de ese momento.
+- **`/beneficio/pedidos` sigue existiendo** para dar de alta uno y ver el histórico, y se llega
+  desde la recepción.
+- **Lo que se consulta MIENTRAS se recibe** —los pedidos abiertos con sus cifras, y cerrarlos— vive
+  ahora dentro de `/beneficio/recepcion`, que es donde se necesita.
+
+**Consecuencias.**
+
+- El índice del beneficio ordena por **frecuencia de uso del operador**, no por completitud del
+  modelo: un paso opcional no ocupa un primer nivel.
+- **No hay migración ni cambio de esquema**: `pedido_id` ya era nullable.
+- Con esta razón escrita aquí, la entrada de `SESSION_STATE.md` §2 «2026-09-28 · El recorrido de
+  granja a beneficio» **ya se puede archivar sin pérdida**, que era lo que la bloqueaba.
+- Lo que este ADR **no** decide: si un pedido debería poder exigirse en algún caso —otro volumen,
+  otro comprador—. Hoy no se exige nunca y nadie lo ha pedido.
