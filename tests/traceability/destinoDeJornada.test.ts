@@ -11,7 +11,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada } from "../../lib/traceability/jornadasDeCosecha";
+import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada, JornadaError } from "../../lib/traceability/jornadasDeCosecha";
+import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 import { anotarEntrega, anularEntrega } from "../../lib/traceability/entregasDeCosecha";
 
 const RUN = `dest-${Date.now()}`;
@@ -85,14 +86,20 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
+  // La FK del destino es RESTRICT: sin soltarlo, borrar el beneficio lanza y —siendo el
+  // `afterAll` una cadena— abandona los borrados de abajo.
+  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: { in: [beneficio, beneficio2, beneficioAjeno] } }), data: { beneficioDestinoId: null } });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, beneficioAjeno] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
 }, 30000);
 
-const abrir = (beneficioId: string) =>
-  abrirJornada(manager, { fincaSiteId: finca, beneficioId, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+/** El destino ya no se pasa: se declara en la finca y la jornada lo COPIA al abrirse (ADR-194). */
+const abrir = async (beneficioId: string) => {
+  await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: beneficioId } });
+  return abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+};
 
 /** Una recepción vigente de la entrega, escrita directo en la base (el servicio es la Tarea 5). */
 async function recibir(entregaId: string) {
@@ -105,16 +112,41 @@ async function recibir(entregaId: string) {
   });
 }
 
+/**
+ * `cambiarDestinoDeJornada` ES la corrección (ADR-194 + diseño 2026-09-30 §4.3). Antes de este
+ * cambio ninguna jornada podía nacer sin destino, así que «poner uno donde no había» era un caso
+ * que no existía; ahora una finca sin destino declarado abre jornadas con `beneficioId` en `null`,
+ * y esto es lo único que las rescata.
+ */
+describe("corregir el destino de una jornada que nació sin él", () => {
+  it("corrige una jornada que nació sin destino", async () => {
+    await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: null } });
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+    expect(j.beneficioId).toBeNull(); // control: de verdad nació sin destino
+
+    await cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio });
+    expect((await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId).toBe(beneficio);
+  }, 20000);
+});
+
 describe("el destino al abrir la jornada", () => {
-  it("sin destino, o con algo que no es un beneficio, se rechaza; con el beneficio, se guarda", async () => {
-    await expect(abrir("")).rejects.toThrow(/beneficio_no_valido/);
-    await expect(abrir(parcela)).rejects.toThrow(/beneficio_no_valido/);
-    const j = await abrir(beneficio);
+  /**
+   * **Estas dos comprobaciones no se han perdido: se han MOVIDO** (ADR-194, 2026-09-30). Antes las
+   * hacía `abrirJornada`, porque el destino se le pasaba; ahora el destino lo lleva la finca, así
+   * que quien las tiene que hacer es `declararDestinoDeFinca` — y la jornada se limita a copiar lo
+   * que encuentre. Se reescriben en su sitio nuevo en vez de borrarse: un guardia que se quita
+   * porque falló es cobertura que desaparece sin que nadie lo note.
+   */
+  it("sin destino, o con algo que no es un beneficio, se rechaza al DECLARARLO; con el beneficio, la jornada lo copia", async () => {
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: "" })).rejects.toThrow(/beneficio_no_valido/);
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: parcela })).rejects.toThrow(/beneficio_no_valido/);
+    await declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficio });
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
     expect(j.beneficioId).toBe(beneficio);
   }, 20000);
 
-  it("un beneficio de otra finca, que no ve, se rechaza", async () => {
-    await expect(abrir(beneficioAjeno)).rejects.toThrow(/beneficio_no_valido/);
+  it("un beneficio de otra finca, que no ve, se rechaza al declararlo", async () => {
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioAjeno })).rejects.toThrow(/beneficio_no_valido/);
   }, 20000);
 
   it("los destinos que se le ofrecen son los de su finca, no los de otra", async () => {
@@ -134,6 +166,13 @@ describe("cambiar el destino", () => {
     await cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio });
     const e = await anotarEntrega(manager, { jornadaId: j.id, recolectorPersonId: recolector, origen: { locationId: parcela }, pesoFincaKg: 20, enviadaAt: new Date() });
     await recibir(e.id);
+    // **`JornadaError` y no sólo el mensaje.** Con `/destino_fijo/` a secas esta aserción no
+    // distinguía el cinturón de los tirantes: quitando la guarda del SERVICIO, el disparador
+    // `jornada_de_cosecha_destino_fijo` de la base salta igual y su excepción también contiene
+    // «destino_fijo», así que la prueba seguía verde sobre código sin guarda. Lo destapó el
+    // flip-test de la Tarea 4 (2026-09-30). Exigir la clase fija la capa donde tiene que pararse
+    // —antes de escribir—, y la red de la base sigue debajo para lo que llegue por otro camino.
+    await expect(cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio2 })).rejects.toThrow(JornadaError);
     await expect(cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficio2 })).rejects.toThrow(/destino_fijo/);
   }, 20000);
 });

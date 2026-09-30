@@ -41,6 +41,25 @@ de «hecho y sin rastro».
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #NNN)
+
+**ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
+elige el destino **y** no necesita permiso en el beneficio. La finca declara una vez a qué beneficio
+envía; cada jornada lo **copia** al abrirse —instantánea, no referencia viva: si se resolviera en
+vivo, cambiar el destino movería jornadas ya cerradas con entregas ya recibidas—. `null` no es un
+hueco: Jaramillo y Artillería no envían a ningún beneficio propio, y sus jornadas se abren igual.
+`cambiarDestinoDeJornada` es la corrección, y la lista de fincas dice **qué falta**, no «0».
+
+**Dos flip-tests cazaron guardias falsos míos.** La prueba de la instantánea cambiaba el destino con
+un `prisma.update` directo, así que la mutación que debía cazar —propagar a las jornadas abiertas—
+la dejaba verde: ejercitaba el fixture, no el servicio. Y `rejects.toThrow(/destino_fijo/)` casaba
+también con la excepción del DISPARADOR, así que quitar la guarda del servicio no rompía nada; ahora
+exige la CLASE. Un tercer flip que probé no discriminaba y tenía razón: mover la lectura dentro de
+la transacción no es «resolver en vivo».
+
+**Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
+`null → valor`. Se dice, no se disfraza.
+
 ### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
 
 **Diseñado y aprobado el 2026-09-18, y tres semanas sin construir porque este archivo no lo nombraba.**
@@ -65,27 +84,6 @@ construida con 191 migraciones y cero errores — eso prueba que la contraseña 
 el rato:** una variable de entorno **no entra en vigor sin un build**, y con commits de sólo
 documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
 productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
-
-### 2026-09-29 · El secado tiene cola, la tanda es un acto, y medir cabe en un campo (PR #523, #526, #531)
-
-**#523 — `ritmo.ts` por fin tiene quien lo pinte.** Calculaba la cola desde el 2026-09-13 y **sus
-únicos consumidores eran sus pruebas**. La pinta `/beneficio/secado`; un guardia exige que sus dos
-cálculos se **importen** fuera de `tests/` — su primera versión buscaba el NOMBRE y pasaba en verde
-con dos constantes locales homónimas.
-
-**#526 — `requireLotAccess` es un O, no un Y.** Vuelve en cuanto UNO de los candidatos pasa, así que
-pasarle las seis unidades de una tanda de golpe **la habría autorizado entera a quien sólo puede
-tocar una**. Se pide una vez por unidad, y fuera de la transacción.
-
-**#531 — doce campos pasan a cuatro, y salen dos fallos de horas que nadie buscaba.** Medido en la
-aplicación viva: **sólo se podía guardar UNA medición por carga de página** —el campo de la hora se
-vaciaba y, por obligatorio, el navegador bloqueaba el envío **sin ningún error**—, y el desfase se
-perdía igual. Un efecto con `[]` escribe en el DOM una vez y React lo borra al re-renderizar.
-**Afecta a los nueve formularios con `TimezoneOffsetField`** y es anterior a este trabajo. Lo delató
-que los otros cuatro formularios de la misma página, que no re-renderizan, seguían con su valor.
-
-**La zona de muestreo ya no exige inspección**: el servidor la crea, y el papel `ZONE` lo impone un
-`CHECK` de `core.sample` — preguntarlo era pedir la única respuesta que la base acepta.
 
 ## 3. Bloqueado, y en qué
 

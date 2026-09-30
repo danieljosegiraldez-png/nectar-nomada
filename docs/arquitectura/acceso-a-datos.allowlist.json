@@ -665,6 +665,10 @@
     {
       "archivo": "lib/beneficio/colaDeSecado.ts",
       "razon": "Módulo de dominio: la cola de secado (diseño 2026-09-27 §B.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` antes de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de una cola vacía. No exige permisos de instalación a propósito: hacerlo le cerraría la cola a un operario que sí puede ver y medir esos lotes, que es para quien se escribe."
+    },
+    {
+      "archivo": "lib/traceability/destinoDeFinca.ts",
+      "razon": "Módulo de dominio: a qué beneficio envía su cereza una finca (ADR-194, diseño 2026-09-30 §4.1). Una sola escritura, `location.beneficioDestinoId`, y va detrás de DOS permisos reusados —`exigeGestionarFinca` (lot:manage sobre la finca) y `exigeBeneficioDeDestino` (lot:view sobre el beneficio)— que corren ANTES de abrir la transacción. No lee nada que no sea el valor anterior, y sólo para poder auditar el `before`."
     }
   ],
   "reciben_transaccion": [

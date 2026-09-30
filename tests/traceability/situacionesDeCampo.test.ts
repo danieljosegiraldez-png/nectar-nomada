@@ -77,9 +77,11 @@ beforeAll(async () => {
   const ayer = new Date(hoy.getTime() - 86_400_000);
   await agregarRecolector(manager, { fincaSiteId: finca, personId: a, desde: ayer });
   await agregarRecolector(manager, { fincaSiteId: finca, personId: c, desde: ayer });
+  // El destino ya no se pasa a `abrirJornada`: lo lleva la finca y la jornada lo COPIA (ADR-194).
+  await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: beneficio } });
   jornada = (
     await abrirJornada(manager, {
-      fincaSiteId: finca, beneficioId: beneficio,
+      fincaSiteId: finca,
       fecha: hoy,
       asignaciones: [
         { locationId: parcela, personId: a },
@@ -110,6 +112,9 @@ afterAll(async () => {
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.plotBlock.deleteMany({ where: assertDefinedWhere({ id: bloque }) });
+  // La FK del destino es RESTRICT: sin soltarlo, borrar el beneficio lanza y —siendo el
+  // `afterAll` una cadena— abandona los borrados de abajo.
+  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: beneficio }), data: { beneficioDestinoId: null } });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [beneficio, parcela, otraParcela] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: finca }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });

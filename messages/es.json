@@ -3438,7 +3438,21 @@
     "error_motivo_invalido": "Elige por qué se maneja aparte.",
     "error_otro_sin_nota": "Si el motivo es «otro», escribe cuál.",
     "error_sin_permiso": "No tienes permiso para esto.",
-    "error_generico": "No se pudo guardar. Revisa los datos."
+    "error_generico": "No se pudo guardar. Revisa los datos.",
+    "destinoTitulo": "Beneficio de destino",
+    "destinoIntro": "A qué beneficio va la cereza que se cosecha en {nombre}. Se declara una vez: cada jornada que se abra copiará este destino, y quien cosecha no tiene que elegirlo.",
+    "destinoActual": "Ahora envía a {beneficio}.",
+    "destinoNinguno": "Ahora no envía a ningún beneficio. Sus jornadas se abren igual, y sus entregas no aparecerán en la lista de ningún beneficio hasta que se les corrija el destino una por una.",
+    "destinoSinBeneficios": "No ves ningún beneficio al que enviar la cereza, así que no puedes declarar el destino de esta finca. Pide acceso de lectura al beneficio que la recibe; si el beneficio todavía no existe en el sistema, hay que darlo de alta antes.",
+    "destinoEtiqueta": "Enviar la cereza a",
+    "destinoQuitar": "No enviar a ningún beneficio",
+    "destinoGuardar": "Guardar el destino",
+    "destinoGuardado": "Destino guardado. Las jornadas que ya estaban abiertas no se mueven: cada una guardó el destino que tenía al abrirse.",
+    "destinoDeLaFinca": "Envía su cereza a {beneficio}.",
+    "destinoDeLaFincaFalta": "No envía a ningún beneficio todavía — quien gestione esta finca puede declararlo.",
+    "destinoEnlace": "Cambiar el destino",
+    "error_beneficio_no_valido": "Ese destino no es un beneficio que puedas ver. Elige uno de la lista.",
+    "error_finca_no_encontrada": "Esa finca no existe, o no es un sitio de finca."
   },
   "SeccionFinca": {
     "titulo": "Finca",
@@ -3617,8 +3631,6 @@
   "Jornadas": {
     "recibidaEnBeneficio": "recibida: {kg} kg en el beneficio ({dif} kg)",
     "rechazadaEnBeneficio": "rechazada en el beneficio: {motivo}",
-    "destino": "Beneficio de destino",
-    "sinBeneficioDestino": "No ves ningún beneficio al que enviar la cereza. Pide acceso al beneficio para abrir jornadas.",
     "error_beneficio_no_valido": "Elige el beneficio al que va la cereza de esta jornada.",
     "error_destino_fijo": "Esta jornada ya tiene entregas recibidas: su beneficio ya no se cambia.",
     "error_ya_recibida": "Esa entrega ya se recibió en el beneficio: no se anula desde la finca.",
