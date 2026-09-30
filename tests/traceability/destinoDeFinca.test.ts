@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { listarFincas } from "../../lib/traceability/fincas";
+import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 
 const RUN = `dst-${Date.now()}`;
 const nombre = (etiqueta: string) => `TEST ${etiqueta} (${RUN})`;
@@ -35,6 +36,8 @@ let gestor: string;
 let orgA: string;
 let fincaA: string;
 let beneficioA: string;
+/** Beneficio de OTRA organización: el gestor no lo ve, así que no puede enviarle su cereza. */
+let beneficioAjeno: string;
 
 async function cuenta(etiqueta: string) {
   const person = await prisma.person.create({
@@ -89,6 +92,27 @@ beforeAll(async () => {
   ubicaciones.push(ben.id);
   beneficioA = ben.id;
 
+  const orgOtra = await prisma.organization.create({
+    data: { organizationType: "farm", name: nombre("Finca B"), status: "approved", classification: "internal" },
+  });
+  organizaciones.push(orgOtra.id);
+  const sitioOtro = await prisma.location.create({
+    data: { name: nombre("Sitio B"), locationType: "site", classification: "internal", status: "approved", organizationId: orgOtra.id },
+  });
+  ubicaciones.push(sitioOtro.id);
+  const benOtro = await prisma.location.create({
+    data: {
+      name: nombre("Beneficio B"),
+      locationType: "beneficio",
+      classification: "internal",
+      status: "approved",
+      organizationId: orgOtra.id,
+      parentLocationId: sitioOtro.id,
+    },
+  });
+  ubicaciones.push(benOtro.id);
+  beneficioAjeno = benOtro.id;
+
   gestor = await cuenta("gestor");
   // Farm Manager de SU sitio. Nunca Platform Admin: ver la cabecera.
   await asignar(gestor, "Farm Manager", site.id);
@@ -96,6 +120,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const pasos: [string, () => Promise<unknown>][] = [
+    // PRIMERO soltar el destino: la FK es RESTRICT, así que un beneficio al que una finca envía
+    // no se puede borrar. Sin este paso el borrado de `location` lanza y arrastra a los de abajo.
+    ["destino", () => prisma.location.updateMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }), data: { beneficioDestinoId: null } })],
+    ["auditEvent", () => prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: ubicaciones } }) })],
     ["assignment", () => prisma.assignment.deleteMany({ where: assertDefinedWhere({ id: { in: asignaciones } }) })],
     ["scope", () => prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopes } }) })],
     ["location", () => prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }) })],
@@ -134,5 +162,67 @@ describe("el destino de una finca", () => {
     expect(finca!.beneficioDestino).toEqual({ id: beneficioA, name: nombre("Beneficio A") });
     // Se deja como estaba para no acoplar esta prueba con las que vengan después.
     await prisma.location.update({ where: { id: fincaA }, data: { beneficioDestinoId: null } });
+  });
+});
+
+describe("declararDestinoDeFinca", () => {
+  /**
+   * **Los DOS permisos, que es lo que un atajo se salta.** Diseño §4.1: gestionar la finca no basta
+   * para mandarle cereza a un beneficio cualquiera, porque el destino es una relación entre dos
+   * organizaciones que pueden no ser la misma —«no son la misma organizacion», Daniel, 2026-09-30—.
+   * Así que hace falta `lot:manage` sobre la finca **y** `lot:view` sobre el beneficio.
+   */
+  it("declararlo exige gestionar la finca Y poder ver el beneficio", async () => {
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioA });
+    const finca = (await listarFincas(gestor)).find((f) => f.siteId === fincaA);
+    expect(finca!.beneficioDestino!.id).toBe(beneficioA);
+
+    await expect(
+      declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioAjeno }),
+    ).rejects.toThrow(/beneficio_no_valido/);
+    // Y el rechazo no deja el destino a medias: sigue siendo el que era.
+    const despues = (await listarFincas(gestor)).find((f) => f.siteId === fincaA);
+    expect(despues!.beneficioDestino!.id).toBe(beneficioA);
+  });
+
+  /**
+   * Sólo un `beneficio`. El diseño §5 señala el duplicado vivo —un `site` llamado «Beneficio Las
+   * Nubes» junto al `beneficio` «Las Nubes»— y es exactamente el error que un nombre parecido
+   * invita a cometer. Aquí se usa el propio sitio de la finca, que el gestor **sí** ve: así el
+   * rechazo sólo lo puede explicar el tipo, no el permiso.
+   */
+  it("no acepta un site como destino, aunque quien declara lo vea", async () => {
+    await expect(
+      declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: fincaA }),
+    ).rejects.toThrow(/beneficio_no_valido/);
+  });
+
+  /** Quitarlo NO es un error: una finca puede dejar de enviar, y `null` es un estado legítimo. */
+  it("null lo desenlaza, y eso no es un error", async () => {
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioA });
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: null });
+    const finca = (await listarFincas(gestor)).find((f) => f.siteId === fincaA);
+    expect(finca!.beneficioDestino).toBeNull();
+  });
+
+  /**
+   * **El evento lleva el ANTES y el DESPUÉS, no sólo que existe.** `expect(evento).not.toBeNull()`
+   * pasa igual quitando el `tx`, y eso ya dejó cuatro guardias falsos el 2026-09-01. Que la
+   * escritura vaya en la misma transacción lo vigila `tests/arquitectura/audit-atomico.test.ts`
+   * leyendo la fuente; lo que esta prueba añade es que el contenido sirva para reconstruir el
+   * cambio: sin el `before`, el registro no dice de dónde venía.
+   */
+  it("audita el cambio con el antes y el después", async () => {
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: null });
+    await declararDestinoDeFinca(gestor, { fincaSiteId: fincaA, beneficioId: beneficioA });
+    const eventos = await prisma.auditEvent.findMany({
+      where: { entityId: fincaA, operation: "location.set_beneficio_destino" },
+      orderBy: { occurredAt: "asc" },
+    });
+    const ultimo = eventos[eventos.length - 1];
+    expect(ultimo).toBeDefined();
+    expect(ultimo!.before).toEqual({ beneficioDestinoId: null });
+    expect(ultimo!.after).toEqual({ beneficioDestinoId: beneficioA });
+    expect(ultimo!.actorUserAccountId).toBe(gestor);
   });
 });

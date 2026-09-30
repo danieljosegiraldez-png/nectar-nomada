@@ -29,7 +29,12 @@ async function sitioDeFinca(fincaSiteId: string) {
   return sitio;
 }
 
-async function exigeGestionarFinca(userAccountId: string, fincaSiteId: string) {
+/**
+ * `lot:manage` sobre el sitio de la finca. **Exportada, no duplicada** (2026-09-30): el destino
+ * de cereza por finca necesita la misma comprobación, y dos copias de «quién gestiona una finca»
+ * divergen en cuanto una de las dos cambie.
+ */
+export async function exigeGestionarFinca(userAccountId: string, fincaSiteId: string) {
   const sitio = await sitioDeFinca(fincaSiteId);
   await requireLotAccess(userAccountId, "manage", [{ locationId: sitio.id, classification: sitio.classification }]);
   return sitio;
@@ -117,7 +122,8 @@ export async function beneficiosDeDestino(userAccountId: string) {
   return salida;
 }
 
-async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
+/** Igual que la de arriba: la comparte `declararDestinoDeFinca`, que exige exactamente esto. */
+export async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
   const b = beneficioId ? await prisma.location.findUnique({ where: { id: beneficioId }, select: { id: true, locationType: true, classification: true } }) : null;
   if (!b || b.locationType !== "beneficio") throw new JornadaError("beneficio_no_valido");
   if (!(await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: b.id }, b.classification))) throw new JornadaError("beneficio_no_valido");
