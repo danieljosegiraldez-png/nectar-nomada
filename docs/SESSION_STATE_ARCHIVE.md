@@ -4557,3 +4557,35 @@ construida con 191 migraciones y cero errores — eso prueba que la contraseña 
 el rato:** una variable de entorno **no entra en vigor sin un build**, y con commits de sólo
 documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
 productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
+
+### 2026-09-14 · El presupuesto de Actions se agotó y volvió (archivado el 2026-09-30)
+
+Archivado porque el incidente se cerró la misma tarde y su lección duradera vive en `CLAUDE.md`:
+medido ahí, «`main` ya no tiene corrida» 1 vez y el disparador `push` 2, con `ADR-181` de control.
+
+**2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
+not started because an Actions budget is preventing further use»*. Se lee como el rojo
+de una compuerta propia —«¿Hay código en este cambio?: failure» y las otras tres
+`skipped`— y **no es el cambio**: el job nunca arrancó. Cuatro corridas seguidas, dos
+PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
+comandos están en `CLAUDE.md`.
+
+**Lo que bloqueaba:** la protección de `main` exige tres checks evaluados sobre el PR,
+así que nada se podía fusionar. No hay reintento que lo salte. Verificado que Vercel es
+independiente: llega como `status`, no como check-run, y siguió desplegando.
+
+**Restablecido la misma tarde**, medido y no supuesto: el PR #310 llevó las tres
+compuertas en `SUCCESS` con runner y pasos de verdad, contra el `runner_name` vacío y
+`steps: []` de las corridas muertas. **Ése es el discriminante**, no la conclusión: una
+corrida sin runner sale `failure` y se lee como un fallo del cambio. Mientras duró se
+fusionó con los dos carriles corridos en local sobre el árbol rebasado y con base creada
+desde cero — es peor evidencia que CI y hay que decirlo, no equipararla.
+
+**Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
+mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15
+canceladas solas. Consecuencia que hay que saber: **`main` ya no tiene corrida
+después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la protección
+lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
+rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
+fusionado queda corregida allí.
+
