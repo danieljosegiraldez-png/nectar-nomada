@@ -3125,7 +3125,13 @@
     "fichaVolteoTipo_covered": "covered",
     "fichaVolteoTipo_uncovered": "uncovered",
     "fichaVolteoTipo_other": "other",
-    "fichaVolverALaCola": "Back to the drying queue"
+    "fichaVolverALaCola": "Back to the drying queue",
+    "fichaGrafica": "How it is going",
+    "fichaGraficaSinDatos": "No readings to draw yet.",
+    "fichaGraficaEje": "Grain moisture against the target range, with room conditions and turns",
+    "fichaGraficaNotaTemperatura": "Room temperature uses its own scale, dashed.",
+    "fichaGraficaVolteo": "turn",
+    "fichaPesajes": "Weighings"
   },
   "Bodegas": {
     "titulo": "Storage rooms",
