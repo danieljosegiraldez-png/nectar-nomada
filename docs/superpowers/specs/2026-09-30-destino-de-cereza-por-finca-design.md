@@ -38,7 +38,7 @@ se puede derivar** del árbol ni de la organización — hay que declararlo.
 
 | qué | dónde | qué da |
 |---|---|---|
-| el encaminamiento actual | `entregasRecibibles` (`recepcionesDeCereza.ts:252`), `where: { estado: "enviada", jornada: { beneficioId }, … }` | la lista de entregas pendientes **de un beneficio**. Es la clave de encaminamiento, y por eso el campo no se puede volver opcional sin más: **vaciaría la pantalla del operador** |
+| el encaminamiento actual | `pendientesDeBeneficio` (`recepcionesDeCereza.ts:252`), `where: { estado: "enviada", jornada: { beneficioId }, … }` | la lista de entregas pendientes **de un beneficio**. Es la clave de encaminamiento, y por eso el campo no se puede volver opcional sin más: **vaciaría la pantalla del operador** |
 | la comprobación al recibir | `recibirCereza`, que bloquea la jornada `FOR UPDATE` y compara su destino (`:117-118`) | que una entrega no se reciba en un beneficio que no es el suyo |
 | el permiso de la finca | `exigeGestionarFinca` (`jornadasDeCosecha.ts:32`) | quien gestiona la finca; ya lo usa `abrirJornada` |
 | la corrección del destino | `cambiarDestinoDeJornada` (`:202`) y `beneficiosDeDestino` | **sobreviven**, con otro papel: ver §4.3 |
@@ -97,7 +97,7 @@ de la corrección.
 
 ### 4.4 Lo que NO cambia
 
-- `entregasRecibibles` sigue filtrando por `jornada: { beneficioId }`. **La clave de encaminamiento
+- `pendientesDeBeneficio` sigue filtrando por `jornada: { beneficioId }`. **La clave de encaminamiento
   es la misma**; lo que cambia es **quién la puso ahí**.
 - `recibirCereza` sigue bloqueando la jornada y comparando su destino.
 - El camino del proveedor no se toca.
@@ -120,7 +120,7 @@ de la corrección.
 - una finca con destino declarado → la jornada nace con ese `beneficioId` **copiado**;
 - **cambiar el destino de la finca después NO mueve la jornada ya abierta** — el control es leer su
   `beneficioId` antes y después, y que sea el mismo. Es la prueba de la instantánea;
-- una finca **sin** destino → la jornada se abre, y `entregasRecibibles` de **cualquier** beneficio
+- una finca **sin** destino → la jornada se abre, y `pendientesDeBeneficio` de **cualquier** beneficio
   **no** la trae. El control positivo es la misma consulta con la finca enlazada, que sí la trae;
 - quien abre la jornada **no** necesita permiso en el beneficio: una cuenta con
   `exigeGestionarFinca` sobre la finca y **sin** acceso al beneficio abre la jornada igual. Es la
