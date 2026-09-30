@@ -10068,7 +10068,12 @@ model ConsumableMaterial {
   /// **Avisa, no impide.** Decisión de Daniel: si alguien elige este producto para una plaga que no
   /// está aquí, la pantalla lo dice y deja registrar igual. En campo pasan cosas que la etiqueta no
   /// prevé, y con todas las listas vacías hoy, rechazar bloquearía usos legítimos.
-  plantProtectionTargets PlotInterventionTarget[] @map("plant_protection_targets")
+  /// **El `@default([])` es la ÚNICA lista escalar del esquema que lo lleva, y es a propósito.** La
+  /// migración le dio ese DEFAULT a la columna —medido en la base: `ARRAY[]::…`, mientras
+  /// `field_session.purposes` no tiene ninguno—, así que aquí se **declara lo que la base ya hace**,
+  /// que es la dirección que fija ADR-120 y que `tests/derivaDeMigraciones.test.ts` exige. Lo
+  /// contrario —quitarlo de la migración— obligaría a reescribir una migración ya aplicada.
+  plantProtectionTargets PlotInterventionTarget[] @default([]) @map("plant_protection_targets")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid
