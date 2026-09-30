@@ -24,8 +24,9 @@
  *
  * `cuando` puede caer antes de `ahora` si la corrida ya debería haber terminado y sigue abierta.
  * No se recorta a `ahora`: decir «ya debería estar libre» es información, y moverla a «ahora»
- * la escondería. Por eso `ahora` se recibe y no se usa para nada más que quedar disponible a
- * quien pinte el texto relativo; la función no lee el reloj, para que su prueba sea exacta.
+ * sería inventar una hora. `ahora` se recibe porque la firma del encargo lo pide y **hoy no se
+ * usa**: la función no lee el reloj y no devuelve `ahora`, y la decisión de no recortar es lo
+ * que lo hace prescindible.
  */
 
 export type Liberacion =
