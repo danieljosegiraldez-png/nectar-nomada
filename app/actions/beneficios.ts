@@ -48,7 +48,7 @@ export async function concederEdicionFormAction(_state: ConcesionFormState, form
     return { error: mensajeDeConcesion(error) };
   }
   revalidatePath("/beneficio/ajustes");
-  redirect("/beneficio/ajustes?ok=concesion");
+  redirect("/beneficio/ajustes?ok=concedido");
 }
 
 export async function quitarEdicionFormAction(_state: ConcesionFormState, form: FormData): Promise<ConcesionFormState> {
@@ -62,5 +62,5 @@ export async function quitarEdicionFormAction(_state: ConcesionFormState, form: 
     return { error: mensajeDeConcesion(error) };
   }
   revalidatePath("/beneficio/ajustes");
-  redirect("/beneficio/ajustes?ok=concesion");
+  redirect("/beneficio/ajustes?ok=retirado");
 }

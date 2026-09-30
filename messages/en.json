@@ -1768,7 +1768,11 @@
     "detalleDeLaMedicion": "Add detail",
     "cambiarContexto": "change",
     "resumenFaltaInstrumento": "no instrument",
-    "resumenFaltaZona": "no zone"
+    "resumenFaltaZona": "no zone",
+    "okAplicacion": "Application recorded.",
+    "okLiberacion": "Biological release recorded.",
+    "okManejoCultural": "Cultural management recorded.",
+    "okCorreccion": "Correction recorded."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",
@@ -3153,7 +3157,10 @@
     "error_sin_concesion": "There is no grant to remove.",
     "error_no_es_beneficio": "That location is not a mill.",
     "error_no_beneficio_edit_access": "You do not have permission to grant or remove editing on this mill.",
-    "error_conflicto_concurrente": "Someone else changed this at the same time. Please try again."
+    "error_conflicto_concurrente": "Someone else changed this at the same time. Please try again.",
+    "okGuardado": "Saved.",
+    "okConcedido": "Edit permission granted.",
+    "okRetirado": "Edit permission removed."
   },
   "SeccionBeneficio": {
     "navegacion": "Mill navigation",

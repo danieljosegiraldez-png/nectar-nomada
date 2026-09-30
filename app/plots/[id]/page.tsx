@@ -52,10 +52,13 @@ export default async function PlotDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ pestana?: string }>;
+  searchParams: Promise<{ pestana?: string; ok?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { pestana: pestanaCruda } = await searchParams;
+  // `?ok=<tipo>` confirma QUÉ se registró, no sólo que algo se registró: hay tres tipos de
+  // intervención y la pantalla ya los nombra distinto. Decisión de Daniel, 2026-09-30.
+  const { pestana: pestanaCruda, ok: okCrudo } = await searchParams;
+  const ok = Array.isArray(okCrudo) ? okCrudo[0] : okCrudo;
   const pestana = pestanaValida(pestanaCruda);
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -196,6 +199,9 @@ export default async function PlotDetailPage({
 
       <span className="nn-badge">{t("badge")}</span>
       <h1>{location.name}</h1>
+      {ok === "aplicacion" && <p className="nn-notice nn-notice-success" role="status">{t("okAplicacion")}</p>}
+      {ok === "liberacion" && <p className="nn-notice nn-notice-success" role="status">{t("okLiberacion")}</p>}
+      {ok === "manejo_cultural" && <p className="nn-notice nn-notice-success" role="status">{t("okManejoCultural")}</p>}
       {organizationName ? <p className="nn-detail-meta">{organizationName}</p> : null}
       {location.description ? <p className="nn-muted">{location.description}</p> : null}
       <p>

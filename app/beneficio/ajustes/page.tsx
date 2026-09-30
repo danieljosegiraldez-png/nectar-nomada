@@ -10,7 +10,18 @@ import { Concesiones } from "./Concesiones";
 import { NavegacionBeneficio } from "../../components/beneficio/NavegacionBeneficio";
 
 export const dynamic = "force-dynamic";
-export default async function AjustesDelBeneficioPage() {
+/**
+ * `?ok=<código>` confirma lo que acaba de entrar. Antes esta pantalla no leía `ok` y las tres
+ * acciones que redirigen aquí —guardar, conceder y retirar— no mostraban nada. Lo vigila
+ * `tests/arquitectura/confirmacion-que-se-lee.test.ts`.
+ */
+export default async function AjustesDelBeneficioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ok?: string | string[] }>;
+}) {
+  const okCrudo = (await searchParams).ok;
+  const ok = Array.isArray(okCrudo) ? okCrudo[0] : okCrudo;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("AjustesDelBeneficio");
@@ -46,6 +57,9 @@ export default async function AjustesDelBeneficioPage() {
 
   return <div className="nn-mill-page">
     <header className="nn-mill-header"><div><h1>{t("ajustesTitulo")}</h1><p>{t("ajustesIntro")}</p></div></header>
+    {ok === "guardado" && <p className="nn-notice nn-notice-success" role="status">{t("okGuardado")}</p>}
+    {ok === "concedido" && <p className="nn-notice nn-notice-success" role="status">{t("okConcedido")}</p>}
+    {ok === "retirado" && <p className="nn-notice nn-notice-success" role="status">{t("okRetirado")}</p>}
     <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/ajustes" />
     <section className="nn-mill-section"><h2>{t("misBeneficios")}</h2>
     {!beneficios.length && <p>{t("sinBeneficios")}</p>}

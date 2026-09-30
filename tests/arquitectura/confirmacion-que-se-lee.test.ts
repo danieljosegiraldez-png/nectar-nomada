@@ -33,11 +33,14 @@ const ACCIONES = "app/actions";
  * La que motivó el guardia —`/lots/<id>?ok=inspeccion`— NO está aquí: se arregló en el mismo
  * cambio. Si alguna de éstas se arregla, se borra de aquí y el guardia lo exige desde entonces.
  */
-const CONOCIDAS = new Set([
-  "/beneficio/ajustes?ok=guardado",
-  "/beneficio/ajustes?ok=concesion",
-  "/plots/${locationId}?ok=manejo",
-  "/plots/${locationId}/manejo/${nuevaId}?ok=corregido",
+const CONOCIDAS = new Set<string>([
+  // **Vacía desde el 2026-09-30, y es la forma buena de que esté.** Las cuatro que había
+  // —`/beneficio/ajustes` con `guardado` y `concesion`, `/plots/[id]` con `manejo`, y la
+  // corrección de un manejo— se arreglaron: las tres pantallas leen `ok` y lo pintan. Ya no hay
+  // ninguna excepción, así que el guardia exige la regla entera.
+  //
+  // Si algún día hay que añadir una, va con su fecha y su motivo, y el test de abajo obliga a
+  // borrarla en cuanto se arregle: una lista que nombra cosas ya hechas enseña a leerla por encima.
 ]);
 
 /** Cada `redirect("…?ok=…")` de las acciones: la ruta de destino y el código. */
