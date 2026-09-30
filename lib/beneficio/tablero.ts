@@ -15,6 +15,7 @@
  */
 import { estadoDeRitmo, puntajeDeUrgencia, RitmoError, type EstadoDeRitmo, type MetaConRitmo } from "../traceability/ritmo";
 import type { SinVeredicto } from "./desdeElLote";
+import { clasificar, resumir, type HechosDelEquipo, type ResumenDeDisponibilidad } from "../equipos/disponibilidad";
 
 export type GrupoDeAtencion = "critico" | "listo_para_decidir" | "aviso" | "sin_veredicto" | "en_curso";
 
@@ -177,4 +178,81 @@ export function colaDeAtencion(input: {
     if (ta !== tb) return ta - tb;
     return a.lotId.localeCompare(b.lotId);
   });
+}
+
+/**
+ * Una unidad del sitio **sin** su ocupación.
+ *
+ * `HechosDelEquipo` trae `enUso` ya derivado, y aquí se pide a propósito sin él: la ocupación la
+ * decide esta función a partir de las corridas, en la MISMA pasada que cuenta las que no declaran
+ * unidad y las que chocan. Con dos fuentes —un `enUso` que llega hecho y unas corridas que se
+ * recorren— podrían discrepar, y el que discrepa en silencio es el que dice «libre».
+ */
+export type UnidadDelSitio = Omit<HechosDelEquipo, "enUso">;
+
+/** Una corrida abierta, con lo que declara de su unidad. */
+export interface CorridaAbierta {
+  readonly equipmentId: string | null;
+  readonly bedLocationId: string | null;
+  /** El tanque nombrado a mano. **Nunca** se usa para asignar: ver `sinUnidadDeclarada`. */
+  readonly vesselNote: string | null;
+}
+
+export interface Ocupacion {
+  readonly tanques: ResumenDeDisponibilidad;
+  readonly camas: ResumenDeDisponibilidad;
+  /**
+   * Corridas que no dicen en qué unidad están. **No se asignan a ninguna.**
+   *
+   * Asignarlas por el nombre de `vesselNote` haría parecer libre un tanque que no lo está, y
+   * alguien le echaría cereza encima. Es el error caro, así que salen contadas y en voz alta.
+   */
+  readonly sinUnidadDeclarada: number;
+  /** Unidades con más de una corrida abierta: conflicto de datos, no doble ocupación. */
+  readonly conflictos: readonly string[];
+  /**
+   * Corridas que nombran una unidad que no es de este sitio. No ocupan nada aquí y **no se
+   * silencian**: contarlas como «sin unidad» mezclaría un dato incompleto con un filtro.
+   */
+  readonly ajenas: number;
+}
+
+export function ocupacionDelSitio(input: {
+  readonly tanques: readonly UnidadDelSitio[];
+  readonly camas: readonly UnidadDelSitio[];
+  readonly corridas: readonly CorridaAbierta[];
+}): Ocupacion {
+  const idsDeTanque = new Set(input.tanques.map((t) => t.id));
+  const idsDeCama = new Set(input.camas.map((c) => c.id));
+
+  const cuenta = new Map<string, number>();
+  let sinUnidadDeclarada = 0;
+  let ajenas = 0;
+
+  for (const c of input.corridas) {
+    const declarada = c.equipmentId ?? c.bedLocationId;
+    if (declarada == null) {
+      sinUnidadDeclarada += 1;
+      continue;
+    }
+    if (!idsDeTanque.has(declarada) && !idsDeCama.has(declarada)) {
+      ajenas += 1;
+      continue;
+    }
+    cuenta.set(declarada, (cuenta.get(declarada) ?? 0) + 1);
+  }
+
+  // El mismo `clasificar` para las dos, no una regla paralela: así el tablero y `app/equipos`
+  // dicen lo mismo del mismo tanque. Una unidad con dos corridas cuenta como UNA en uso — es una
+  // unidad, con un problema de datos —, y el conflicto se dice aparte.
+  const clasificarTodas = (us: readonly UnidadDelSitio[]) =>
+    resumir(us.map((u) => clasificar({ ...u, enUso: (cuenta.get(u.id) ?? 0) > 0 })));
+
+  return {
+    tanques: clasificarTodas(input.tanques),
+    camas: clasificarTodas(input.camas),
+    sinUnidadDeclarada,
+    conflictos: [...cuenta].filter(([, n]) => n > 1).map(([id]) => id).sort(),
+    ajenas,
+  };
 }

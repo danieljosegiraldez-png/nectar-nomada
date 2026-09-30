@@ -9,7 +9,11 @@
  * Hermética: sin base, así que NO va a `scripts/pruebas-por-compuerta.txt`.
  */
 import { describe, expect, it } from "vitest";
-import { colaDeAtencion, type EntradaDeLoteParaTablero } from "../../lib/beneficio/tablero";
+import {
+  colaDeAtencion,
+  ocupacionDelSitio,
+  type EntradaDeLoteParaTablero,
+} from "../../lib/beneficio/tablero";
 
 const HORA = 3_600_000;
 const AHORA = new Date("2026-03-10T12:00:00.000Z");
@@ -215,5 +219,100 @@ describe("colaDeAtencion", () => {
       ahora: AHORA,
     });
     expect(filas).toHaveLength(0);
+  });
+});
+
+describe("ocupacionDelSitio", () => {
+  const unidad = (id: string, over: { condicion?: string | null; retirado?: boolean } = {}) => ({
+    id,
+    lifecycleStatus: (over.retirado ? "retired" : "active") as "active" | "retired" | "disposed",
+    condicion: (over.condicion ?? null) as
+      | "operational"
+      | "needs_cleaning"
+      | "needs_maintenance"
+      | "faulty"
+      | "out_of_service"
+      | null,
+  });
+  const corrida = (over: Partial<{ equipmentId: string | null; bedLocationId: string | null; vesselNote: string | null }> = {}) => ({
+    equipmentId: null,
+    bedLocationId: null,
+    vesselNote: null,
+    ...over,
+  });
+
+  /**
+   * **El error caro.** Asignar una corrida por el texto libre de `vesselNote` haría parecer
+   * libre un tanque que no lo está, y alguien le echaría cereza encima. Así que no se asigna a
+   * ninguna unidad y se cuenta aparte, en voz alta.
+   */
+  it("una corrida con el tanque sólo en texto libre no ocupa ningún tanque", () => {
+    const o = ocupacionDelSitio({
+      tanques: [unidad("t1"), unidad("t2")],
+      camas: [],
+      corridas: [corrida({ vesselNote: "el de la esquina" })],
+    });
+    expect(o.sinUnidadDeclarada).toBe(1);
+    expect(o.tanques.enUso).toBe(0);
+    expect(o.tanques.libresYSanos).toBe(2);
+  });
+
+  it("un tanque libre pero averiado no cuenta como libre y sano", () => {
+    const o = ocupacionDelSitio({
+      tanques: [unidad("sano"), unidad("averiado", { condicion: "faulty" })],
+      camas: [],
+      corridas: [],
+    });
+    expect(o.tanques.total).toBe(2);
+    expect(o.tanques.libresYSanos).toBe(1);
+    expect(o.tanques.requierenIntervencion).toBe(1);
+    expect(o.tanques.enUso).toBe(0);
+  });
+
+  it("dos corridas abiertas en la misma unidad son un conflicto de datos", () => {
+    const o = ocupacionDelSitio({
+      tanques: [unidad("t1")],
+      camas: [],
+      corridas: [corrida({ equipmentId: "t1" }), corrida({ equipmentId: "t1" })],
+    });
+    expect(o.conflictos).toEqual(["t1"]);
+    // Sigue contando como UNO en uso, no dos: es una unidad, con un problema de datos.
+    expect(o.tanques.enUso).toBe(1);
+  });
+
+  it("una sola corrida en una unidad NO es conflicto", () => {
+    const o = ocupacionDelSitio({
+      tanques: [unidad("t1")],
+      camas: [],
+      corridas: [corrida({ equipmentId: "t1" })],
+    });
+    expect(o.conflictos).toEqual([]);
+    expect(o.tanques.enUso).toBe(1);
+    expect(o.tanques.libresYSanos).toBe(0);
+  });
+
+  /**
+   * Las camas se clasifican con el MISMO `clasificar` que los tanques, no con una regla
+   * paralela. Y su `condicion` es siempre `null`: una cama no tiene informe de condición, así
+   * que nunca puede salir «requiere intervención» por ese motivo.
+   */
+  it("las camas usan el mismo clasificador, y una con secado abierto está en uso", () => {
+    const o = ocupacionDelSitio({
+      tanques: [],
+      camas: [unidad("c1"), unidad("c2"), unidad("c3")],
+      corridas: [corrida({ bedLocationId: "c1" })],
+    });
+    expect(o.camas).toEqual({ total: 3, libresYSanos: 2, enUso: 1, requierenIntervencion: 0 });
+  });
+
+  it("una corrida que nombra una unidad que no es del sitio no ocupa nada y no se pierde", () => {
+    const o = ocupacionDelSitio({
+      tanques: [unidad("t1")],
+      camas: [],
+      corridas: [corrida({ equipmentId: "de-otro-sitio" })],
+    });
+    expect(o.tanques.enUso).toBe(0);
+    expect(o.sinUnidadDeclarada).toBe(0);
+    expect(o.ajenas).toBe(1);
   });
 });
