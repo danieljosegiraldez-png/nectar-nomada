@@ -62,41 +62,33 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
+### 2026-10-01 · El ambiente del secado: visto en un navegador, y la corrección cableada (PR #579, #583)
 
-**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
-imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
-errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
-Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
-peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
+**Lo que encontró el recorrido, y no habría encontrado una lectura del código.** La pantalla
+funciona: la rejilla pone cada lectura en su nivel y deja «sin lectura de este nivel» en el que no la
+tiene (1 de 3, el control), y la lectura sin estante sale como «General de la instalación». De paso
+quedó verificado en vivo el fallo del `tzOffsetMinutes` (#531): **tres lecturas seguidas sin recargar,
+3 de 3**. Lo que no funcionaba era corregir: **el motor estaba completo y probado desde el 2026-09-21
+y ninguna pantalla lo llamaba**, y los disparadores no dejan otra vía —el UPDATE sólo admite el sello
+de supersedida, **sin puerta de pruebas**—, así que un 310 °C tecleado en vez de 31 era permanente.
+Ninguna prueba del servicio podía ver ese hueco, porque el servicio estaba bien.
 
-**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
-la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
-error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
-sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
-Ahora descubre los archivos, con control del escáner y del detector por separado.
+**Tu decisión: la reemplazada se queda a la vista, rotulada.** De las dos listas, `vigentes` sigue
+filtrando —no es la condición actual de ningún punto— y `recientes` deja de filtrar, porque es el
+registro. El motivo se guarda en la fila **nueva**, así que se consulta desde su reemplazo en vez de
+buscarlo entre las 20: un motivo ausente se leería como «no se dio ninguno» cuando el servicio lo
+exige.
 
-**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
-la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
-esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
-01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
-#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
-manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
-que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
-`scripts/backup/`**. La corrida del lunes sale con él.
+**Y dos cosas que el flip-test tumbó antes de salir.** Una afirmación —que un array de dependencias
+estable deja el campo de la hora vacío— se probó en vivo en los dos caminos del formulario y **la hora
+sobrevivió igual**, así que se corrigió el comentario y **no se abrió** el pendiente que iba contra
+`MeasurementCorrectionForm` e `IntervencionForm`. Y una frase de la entrega anterior era falsa: ese
+componente **no es genérico**, está atado a `correctMeasurementFormAction` y a `lotId`; lo reusable era
+el patrón, no el componente.
 
-**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
-#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
-etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
-cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
-un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
-el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
-
-**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
-y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
-desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
-archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
-conflicto.
+**`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
+diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
+`paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.
 
 ## 3. Bloqueado, y en qué
 
@@ -127,20 +119,6 @@ salía «0 de 0». Verde no es lo mismo que probado.
 Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
 `ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
 compartida es tocar trabajo ajeno.
-
-#### El ambiente del secado: recorrido en navegador el 2026-10-01; queda la corrección
-
-**Decía «nunca se vio en un navegador». Ya se vio**, construyendo los datos por los formularios como
-pedía: instalación, estante de 3 × 4, tres lecturas. **Funciona**: la rejilla pone cada lectura en su
-nivel y deja «sin lectura de este nivel» en el que no la tiene (1 de 3, el control); «Últimas
-lecturas» y la «Vista rápida» dan valor, cielo, ventilación y edad; la lectura sin estante sale como
-«General de la instalación». Borrado todo, con control: 55 → 41 ubicaciones y 30 → 29 personas, las
-14 y la 1 predichas. **De paso cerró el fallo del `tzOffsetMinutes`** (#531): tres lecturas seguidas
-sin recargar, 3 de 3.
-
-**Sigue abierto `PENDING_IMPLEMENTATIONS/020`:** corregir una lectura no tiene pantalla y la base no
-deja otra vía —el UPDATE sólo admite el sello de supersedida, sin puerta de pruebas—. El motor está
-completo y probado; falta cablear el `MeasurementCorrectionForm` que ya usan otros dos sitios.
 
 #### Recolectores: darles su perfil (de Daniel)
 

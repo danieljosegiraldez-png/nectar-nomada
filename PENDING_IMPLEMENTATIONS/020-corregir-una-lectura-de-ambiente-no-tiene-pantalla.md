@@ -1,6 +1,18 @@
 # 020 · Corregir una lectura de ambiente no tiene pantalla, y la base no deja arreglarla de otra forma
 
-**Estado: abierto.** Encontrado el 2026-10-01 **recorriendo la pantalla en un navegador** —no leyendo
+**Estado: hecho**, en el PR #583, el mismo 2026-10-01 en que se encontró. La ficha se queda porque lo
+que enseñó no está en el diff: **el motor completo y probado no significa que exista la pantalla**, y
+ninguna prueba del servicio podía ver ese hueco porque el servicio estaba bien. Lo que se cableó, y
+las dos decisiones de Daniel que lo gobiernan —la reemplazada se queda a la vista rotulada; `vigentes`
+sigue filtrando y `recientes` no— están en el PR. Lo que sigue abajo es el hallazgo tal como se midió.
+
+**Y una cosa que el flip-test tumbó antes de que saliera de aquí:** el punto 4 de «lo que hay que
+hacer» iba acompañado de un pendiente contra `MeasurementCorrectionForm` e `IntervencionForm`, por
+usar un array de dependencias estable. Probado en vivo en los dos caminos del formulario, **la hora
+sobrevivió igual que sin array**, así que ese pendiente no se abrió: era una corazonada con forma de
+hallazgo.
+
+**Encontrado el 2026-10-01** **recorriendo la pantalla en un navegador** —no leyendo
 código—, al cerrar la entrada «El ambiente del secado, sin ver en navegador» de §3. Se construyeron
 los datos por los formularios de la aplicación (una instalación, un estante de 3 niveles × 4 puestos,
 tres lecturas) y se buscó cómo corregir una.
