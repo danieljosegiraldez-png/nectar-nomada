@@ -8,7 +8,7 @@
  * salta un importador, una reparación operativa o SQL directo, y en trazabilidad
  * eso es justo lo que no puede pasar.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import {
   abrirProceso,
@@ -187,14 +187,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH];
-  // Las transformaciones primero: sus filas de entrada y salida apuntan a los lotes.
-  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
-  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
-  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: transformacionId }) });
+  // Parte 1 (2026-10-01): los procesos van ANTES que la transformación, porque `divided_by_transformation_id`
+  // es RESTRICT: un proceso cerrado por esa división impediría borrarla.
   await prisma.lotProcessIntervention.deleteMany({
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
   await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  // Las transformaciones: sus filas de entrada y salida apuntan a los lotes.
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: transformacionId }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
@@ -658,6 +660,16 @@ describe("los CHECK de `lot_process`", () => {
       } as never,
     });
 
+  /**
+   * Parte 1 (2026-10-01): la limpieza de lo que crea un `it` va en un `afterEach`, que corre falle o no
+   * la prueba, y no en la última línea del cuerpo: una aserción que falla se salta ese borrado, la fila
+   * (seq 99 de `crudo`, 97 de la prueba del índice) se queda, y la prueba siguiente cae por unicidad en
+   * vez de por lo suyo. Un guardia que falla tiene que fallar solo.
+   */
+  afterEach(async () => {
+    await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: loteB, sequenceOrder: { in: [97, 99] } }) });
+  });
+
   it("rechaza una humedad objetivo por encima de 100", async () => {
     await expect(crudo({ targetMoisturePct: 105 })).rejects.toThrow(/lot_process_humedad_es_porcentaje/);
   });
@@ -751,20 +763,39 @@ describe("los CHECK de `lot_process`", () => {
     await expect(
       crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "divided", closingMoistureMeasurementId: medicionDeB, dividedByTransformationId: transformacionId }),
     ).rejects.toThrow(/lot_process_division_sin_medicion_y_con_transformacion/);
+    // Dividido sin medición pero SIN la transformación que lo dividió: rechazado. Es la otra mitad de la
+    // misma restricción; sin esta aserción, quitarle `AND divided_by_transformation_id IS NOT NULL` no
+    // hacía caer nada.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "divided" }),
+    ).rejects.toThrow(/lot_process_division_sin_medicion_y_con_transformacion/);
+    // Un ABIERTO no lleva medición de cierre. `closure_kind` es nulo, y con `=` en vez de IS NOT DISTINCT
+    // FROM el CHECK valdría NULL —y un CHECK que da NULL pasa—, así que esta fila entraba.
+    await expect(crudo({ closingMoistureMeasurementId: medicionDeB })).rejects.toThrow(
+      /lot_process_medicion_solo_si_por_humedad/,
+    );
+    // Ni la transformación que lo dividió: eso sólo lo tiene un proceso cerrado como `divided`.
+    await expect(crudo({ dividedByTransformationId: transformacionId })).rejects.toThrow(
+      /lot_process_transformacion_solo_si_dividido/,
+    );
     // Control positivo: el cierre bien formado SÍ entra, y se borra.
     const bien = await crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicionDeB });
-    await prisma.lotProcess.delete({ where: { id: (bien as { id: string }).id } });
+    await prisma.lotProcess.delete({ where: { id: bien.id } });
   });
 
   it("dos procesos abiertos en el mismo lote los rechaza la base (Parte 1, R2)", async () => {
     const primero = await crudo({});
+    // El mensaje de Prisma NO trae el nombre del índice (está en `meta`): dice los campos. Medido el
+    // 2026-10-01: este índice da «(`lot_id`)» y `UNIQUE(lot_id, sequence_order)` da «(`lot_id`, `sequence_order`)».
+    // El regex casa sólo el primero, y además la secuencia es otra (97 contra 99), así que el segundo
+    // no puede ser el que rechaza.
     await expect(
       prisma.lotProcess.create({ data: {
         lotId: loteB, sequenceOrder: 97, intent: "segundo abierto", targetMoisturePct: 10.5,
         startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record",
         processGradeValueId: valorGrado, cherryStateValueId: valorCereza,
       } }),
-    ).rejects.toThrow(/lot_process_un_abierto_por_lote|Unique constraint/);
-    await prisma.lotProcess.delete({ where: { id: (primero as { id: string }).id } });
+    ).rejects.toThrow(/Unique constraint failed on the fields: \(`lot_id`\)/);
+    await prisma.lotProcess.delete({ where: { id: primero.id } });
   });
 });

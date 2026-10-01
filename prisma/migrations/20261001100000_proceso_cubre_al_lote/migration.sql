@@ -43,12 +43,15 @@ ALTER TABLE "traceability"."lot_process"
 ALTER TABLE "traceability"."lot_process"
   ADD CONSTRAINT "lot_process_division_sin_medicion_y_con_transformacion"
   CHECK ("closure_kind" IS DISTINCT FROM 'divided' OR ("closing_moisture_measurement_id" IS NULL AND "divided_by_transformation_id" IS NOT NULL));
+-- Las dos de abajo usan IS NOT DISTINCT FROM y no `=` (corregido el 2026-10-01): con `closure_kind` nulo
+-- —todo proceso abierto— `"closure_kind" = 'moisture'` vale NULL, y un CHECK que da NULL PASA. Con `=`,
+-- un proceso abierto con medición de cierre, o con `divided_by_transformation_id`, entraba por la base.
 ALTER TABLE "traceability"."lot_process"
   ADD CONSTRAINT "lot_process_medicion_solo_si_por_humedad"
-  CHECK ("closing_moisture_measurement_id" IS NULL OR "closure_kind" = 'moisture');
+  CHECK ("closing_moisture_measurement_id" IS NULL OR "closure_kind" IS NOT DISTINCT FROM 'moisture');
 ALTER TABLE "traceability"."lot_process"
   ADD CONSTRAINT "lot_process_transformacion_solo_si_dividido"
-  CHECK ("divided_by_transformation_id" IS NULL OR "closure_kind" = 'divided');
+  CHECK ("divided_by_transformation_id" IS NULL OR "closure_kind" IS NOT DISTINCT FROM 'divided');
 
 ALTER TABLE "traceability"."lot_process" ADD CONSTRAINT "lot_process_divided_by_transformation_id_fkey"
   FOREIGN KEY ("divided_by_transformation_id") REFERENCES "traceability"."lot_transformation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

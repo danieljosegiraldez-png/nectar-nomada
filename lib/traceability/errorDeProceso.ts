@@ -1,7 +1,8 @@
 /**
- * El error de todo lo que toca el proceso de un lote.
+ * El error de todo lo que toca el proceso de un lote (Parte 1, 2026-09-30; sacado de `lotProcess.ts`
+ * el 2026-10-01, tarea 1).
  *
- * **Vive en su propio archivo** (Parte 1, §3.2): `procesoDelLinaje.ts` y `lots.ts` lo lanzan, y
+ * **Vive en su propio archivo** (diseño §3.2): `procesoDelLinaje.ts` y `lots.ts` lo lanzan, y
  * `lotProcess.ts` importa `lots.ts`. Si siguiera en `lotProcess.ts`, lanzarlo desde `lots.ts` cerraría
  * un ciclo de importación. Es el mismo movimiento que ya hizo `bandejaError.ts`.
  *
