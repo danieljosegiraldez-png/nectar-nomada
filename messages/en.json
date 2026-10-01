@@ -3254,7 +3254,7 @@
     "ritmoInvalido": "invalid rhythm data ({codigo})",
     "sinLectura": "no readings in this phase",
     "lineaTitulo": "Where the coffee is",
-    "lineaAyuda": "How many lots are in each stage. A stage is coloured only when something in it needs a decision.",
+    "lineaAyuda": "How many lots are in the stages that are recorded. Reception, flotation and sorting show no number: what gets logged for them is a past act, not where the lot is today (ADR-195). A stage is coloured only when something in it needs a decision.",
     "etapa_recepcion": "Reception",
     "etapa_flotacion": "Flotation",
     "etapa_seleccion": "Sorting",

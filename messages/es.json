@@ -3254,7 +3254,7 @@
     "ritmoInvalido": "datos de ritmo inválidos ({codigo})",
     "sinLectura": "sin lecturas en esta fase",
     "lineaTitulo": "Dónde está el café",
-    "lineaAyuda": "Cuántos lotes hay en cada etapa. Una etapa se colorea sólo cuando algo en ella pide una decisión.",
+    "lineaAyuda": "Cuántos lotes hay en las etapas que se registran. Recepción, flotación y selección no dicen un número: lo que se anota de ellas es un acto pasado, no dónde está el lote hoy (ADR-195). Una etapa se colorea sólo cuando algo en ella pide una decisión.",
     "etapa_recepcion": "Recepción",
     "etapa_flotacion": "Flotación",
     "etapa_seleccion": "Selección",
