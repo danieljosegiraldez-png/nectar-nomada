@@ -165,9 +165,14 @@ Daniel lo planteó así: «ambos llevan conexión con su hilo anterior para tene
 vuelven dos o más procesos». Cuando se divide (`split`) un lote **cubierto por un proceso abierto**:
 
 1. **Se divide el lote entero**, con su merma (decisión de Daniel). Para sacar 10 kg de PE-79 se
-   divide en PE-79-A (el resto) y PE-79-B (los 10 kg). Las partes y la merma tienen que sumar el
-   saldo del lote **con la tolerancia de `BalancePolicy`**, la misma con la que el libro de balance ya
-   reconcilia una división; lo que cae dentro de la tolerancia no es remanente. Además, **ningún otro
+   divide en PE-79-A (el resto) y PE-79-B (los 10 kg). Después de descontar lo declarado, el saldo
+   del lote tiene que quedar dentro de la **tolerancia de masa de la organización**
+   (`massBalanceTolerancePct`, 2 % si no la fija; `resolveTolerancePct`, `balance.ts`), la misma con
+   la que el libro de balance reconcilia una división. Lo que cae dentro de la tolerancia no es
+   remanente. *(Corregido al escribir el plan: la primera versión decía `BalancePolicy`, que es otra
+   cosa —la tolerancia de los evaluadores de recepción, `balanceDeMasas.ts`— y el libro nunca la
+   usa.)* **Si el lote no tiene libro de masa** (`recorded: false`), el remanente no se puede saber:
+   la división se acepta y el cierre lo dice en su auditoría (`sinLibroDeMasa: true`). Además, **ningún otro
    lote cubierto por el proceso puede conservar saldo**. Si lo conserva, se rechaza con
    `division_deja_remanente`: cerrar el proceso dejaría a ese café bajo un proceso dividido sin haber
    sido dividido. Es lo que pide `20` §1.1.
@@ -266,12 +271,12 @@ nueva queda cubierta por R1 y se une por R3.
 
 | Lector | Qué cambia |
 |---|---|
-| `listarProcesosDeLote` → la ficha | devuelve `vigente` y `cadena` |
+| la ficha y la página del proceso | pasan a una función nueva, `coberturaDelLote`, que devuelve `vigente`, `cadena` y `composicion`. `listarProcesosDeLote` **no cambia de forma**: sigue listando los procesos propios del lote, porque las pruebas la desestructuran 19 veces, y queda como excepción escrita del guardia |
 | `entradaDelLote` (grado de la ficha y del tablero) | **ficha y tablero le pasan lo mismo**: el resultado de R1 sobre el lote. Hoy cada llamador arma su entrada por su cuenta, que es justo por lo que pueden discrepar |
 | `datosDelTablero` | proceso, grado, fases y metas salen de R1 sobre el lote de la corrida |
 | `colaDeSecado` | igual. `estadoDeUnidad` recibe además si hay receta, y separa «sin receta declarada» (la etiqueta de hoy, `messages/es.json:3101`) de una nueva, «receta sin ritmo de secado», con su clave en es/en y su color (`app/beneficio/secado/page.tsx:34`). Desde que las corridas llevan proceso, la etiqueta única mentiría |
 | la lista de catas (`lib/sensory/sessions.ts:144,175`) | el grado de la muestra sale de R1 sobre su lote de origen |
-| la muestra verde (`samples.ts:117,161`) | **Con proceso:** exige el vigente cerrado por humedad, y rechaza uno `divided` o una continuación abierta. **Sin proceso, como hoy:** se sigue exigiendo un secado terminado en la ascendencia, pero `tieneSecadoTerminadoArriba` deja de cortar en silencio a las 6 generaciones (responde «no» al llegar al tope) y pasa al tope de 64, que lanza. La condición de bodega sigue garantizada por la precondición de la trilla, como explica hoy `samples.ts:146-160` |
+| la muestra verde (`samples.ts:117,161`) | **Con proceso, además de lo de hoy:** exige el vigente cerrado por humedad, y rechaza uno `divided` o una continuación abierta. Es aditivo: no quita ninguna de las comprobaciones que ya existen. **Sin proceso, como hoy:** se sigue exigiendo un secado terminado en la ascendencia, pero `tieneSecadoTerminadoArriba` deja de cortar en silencio a las 6 generaciones (responde «no» al llegar al tope) y pasa al tope de 64, que lanza. La condición de bodega sigue garantizada por la precondición de la trilla, como explica hoy `samples.ts:146-160` |
 | el reporte por proceso (`reporteDeProceso.ts`) | una fila `divided` no cuenta como proceso en los grupos y se rotula «dividido → PE-79-A, PE-79-B». El resto del reporte queda para la Parte 5 |
 | la ocupación de tanques (`lib/equipos/equipos.ts:883,906`) | el lote que ocupa el tanque sale de la transformación de apertura de la corrida, no del lote del proceso. Con R3, el del proceso sería la cereza y no el café que está fermentando |
 
@@ -317,8 +322,12 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 - **Un módulo nuevo**, `lib/traceability/procesoDelLinaje.ts`, que **no importa `lots.ts`**. Hoy
   `lotProcess.ts` importa de `lots.ts`, así que poner el resolvedor allí crearía un ciclo cuando
   `recordTransformation` lo llame. Contiene:
-  - `procesoQueCubre` (R1), con su consulta recursiva por ramas;
-  - `idsDeDescendencia`, que se mueve aquí y `lots.ts` reexporta;
+  - `procesoQueCubre` (R1), con su recorrido por ramas;
+  - `idsDeDescendencia`, que se mueve aquí desde `lots.ts`. Sus dos únicos llamadores están en
+    `lotProcess.ts` y pasan a importarla del módulo nuevo;
+  - `LotProcessError` se mueve a su propio archivo, `lib/traceability/errorDeProceso.ts`, como ya
+    hizo `bandejaError.ts`. `lotProcess.ts` la reexporta para que ningún importador cambie. Es lo
+    que deja a `lots.ts` lanzarla sin ciclo;
   - `bloquearLinaje`, `exigeSinOtroProcesoAbierto` y `loteDividido` (R2, R6);
   - los **núcleos con `tx`** de abrir, cerrar y copiar un proceso. Hoy `abrirProceso` y
     `cerrarProceso` leen con el cliente global, fuera de la transacción, y no sirven dentro de la de
@@ -418,7 +427,7 @@ La mutación quita la conducta, no el texto con el que casa un detector.
 | **R8** | |
 | Una v2 conserva las fases, y el localizador nuevo del guardia ve el bloque `fases:` | quitar la copia; quitar el bloque |
 | **Migración** | |
-| Aborta con dos procesos abiertos en un lote, y con un cerrado sin medición | se prueba sobre una base sembrada a propósito |
+| Aborta con dos procesos abiertos en un lote, y con un cerrado sin medición | **se comprueba una vez a mano**, con los comandos del plan: sobre una base nueva migrada hasta la migración anterior, se siembran las filas malas y se aplica ésta. No puede ser una prueba permanente, porque las restricciones que añade impiden fabricar después esas mismas filas |
 
 **Lo que hay que ajustar porque hoy no sigue estas reglas:**
 
