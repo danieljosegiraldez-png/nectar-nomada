@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -84,5 +85,57 @@ describe("el desfase horario sobrevive a un re-render", () => {
     const bueno = "useEffect(() => {\n    if (ref.current) ref.current.value = String(1);\n  });";
     expect(dependenciasDelEfecto(malo), "no señala la mala").toEqual({ hayEfecto: true, tieneArray: true });
     expect(dependenciasDelEfecto(bueno), "acusa a la buena").toEqual({ hayEfecto: true, tieneArray: false });
+  });
+});
+
+/**
+ * **Y la misma regla para TODO formulario que precargue una fecha en un efecto.**
+ *
+ * Lo de arriba vigila un archivo. El 2026-09-30 eso dejó pasar el caso de
+ * `app/beneficio/bandejas/Formularios.tsx`: un efecto con `[]` que rellenaba el campo `cuando`,
+ * cuyo propio comentario decía «Igual que MeasurementForm» — el formulario del que el PR #564 había
+ * quitado ese `[]` esa misma tarde—. El mecanismo es idéntico: React vacía el valor del DOM al
+ * re-renderizar, el efecto no se reaplica, y el campo obligatorio **bloquea el envío siguiente sin
+ * ningún error**.
+ *
+ * **Los archivos se DESCUBREN, no se enumeran.** Una lista escrita a mano deja fuera el formulario
+ * que alguien añada mañana, y el guardia seguiría verde — que es exactamente cómo sobrevivió éste.
+ */
+describe("ningún formulario precarga una fecha en un efecto que no se reaplica", () => {
+  const RAIZ = new URL("../../app", import.meta.url).pathname;
+
+  /** Todo `.tsx` bajo `app/` que precargue «ahora» en un campo de fecha. */
+  function formulariosQuePrecargan(): string[] {
+    const salida = execFileSync("grep", ["-rl", "--include=*.tsx", "paraCampoLocal(new Date())", RAIZ], {
+      encoding: "utf8",
+    });
+    return salida.split("\n").filter((l) => l.trim() !== "");
+  }
+
+  it("el escáner encuentra formularios — sin esto, un cero se leería como «ninguno incumple»", () => {
+    // Control positivo del INSTRUMENTO. Si `paraCampoLocal` se renombrara, la lista saldría vacía y
+    // la aserción de abajo pasaría sin haber mirado un solo archivo.
+    expect(formulariosQuePrecargan().length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("y ninguno de ellos tiene un efecto con array de dependencias vacío", () => {
+    const culpables = formulariosQuePrecargan()
+      .filter((f) => /\}\s*,\s*\[\]\s*\)\s*;/.test(readFileSync(f, "utf8")))
+      .map((f) => f.replace(RAIZ, "app"));
+    // El mensaje nombra los archivos: sin él el resumen dice «expected [ Array(1) ] to equal []»,
+    // que obliga a abrir la salida completa para saber de qué formulario habla.
+    expect(
+      culpables,
+      `estos formularios precargan una fecha en un efecto con \`[]\`, así que el valor se pierde al ` +
+        `re-renderizar y el campo obligatorio bloquea el envío sin error: ${culpables.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("el detector reconoce un efecto con `[]` cuando lo hay", () => {
+    // Control positivo del DETECTOR, aparte del escáner: son dos cosas distintas y cada una puede
+    // romperse sola.
+    const conDeps = "useEffect(() => {\n  ref.current.value = x;\n}, []);";
+    expect(/\}\s*,\s*\[\]\s*\)\s*;/.test(conDeps)).toBe(true);
+    expect(/\}\s*,\s*\[\]\s*\)\s*;/.test("useEffect(() => {\n  ref.current.value = x;\n});")).toBe(false);
   });
 });
