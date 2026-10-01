@@ -90,3 +90,22 @@ const SOLO_FITOSANITARIO: ReadonlySet<CampoDelProducto> = new Set([
 export function camposDe(clase: ClaseDeProducto): readonly CampoDelProducto[] {
   return clase === "fitosanitario" ? CAMPOS_DEL_PRODUCTO : CAMPOS_DEL_PRODUCTO.filter((c) => !SOLO_FITOSANITARIO.has(c));
 }
+
+/**
+ * «si»/«no» de un desplegable a booleano, y **cualquier otra cosa a NULO**.
+ *
+ * **Vive aquí y no en la acción de servidor por un motivo medido**, no por estilo: el 2026-10-01 su
+ * flip-test no cayó. Estaba dentro de `app/actions/inventario.ts`, las pruebas ejercitan el
+ * servicio y no la acción, y mutarla para que devolviera `valor === "si"` —o sea, para convertir el
+ * hueco en un «no daña»— dejó las 14 pruebas en verde. Un `"use server"` sólo puede exportar
+ * funciones `async`, así que exportarla allí rompería el build; moverla es lo que la hace probable.
+ *
+ * El hueco es la razón de existir de la función: un `Boolean(valor)` convertiría «sin responder» en
+ * la afirmación «este producto no daña polinizadores», sobre un producto real y sin que nadie la
+ * hiciera.
+ */
+export function danaPolinizadores(valor: string | null | undefined): boolean | null {
+  if (valor === "si") return true;
+  if (valor === "no") return false;
+  return null;
+}

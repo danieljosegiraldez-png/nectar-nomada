@@ -8,6 +8,7 @@ import { crearMaterial } from "../../lib/inventario/materiales";
 import { esPlaga } from "../../lib/traceability/plagas";
 import { recibirLote } from "../../lib/inventario/lotes";
 import { CAMPOS_NUMERICOS, camposDe, completarProducto, opcionesDeRecepcion, type CampoDelProducto, type ClaseDeProducto } from "../../lib/inventario/recepcion";
+import { danaPolinizadores } from "../../lib/inventario/camposDeProducto";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
 /**
@@ -31,18 +32,6 @@ function usoDeProducto(valor: string | null): "preventivo" | "control" | null {
   return valor === "preventivo" || valor === "control" ? valor : null;
 }
 
-/**
- * «si»/«no» del desplegable a booleano, y **cualquier otra cosa a NULO**.
- *
- * El hueco tiene que sobrevivir el viaje: un `Boolean(valor)` convertiría «sin responder» en
- * `false`, o sea en la afirmación «este producto no daña polinizadores» sobre un producto del que
- * nadie dijo nada. Esta casa deja faltando lo que falta.
- */
-function danaPolinizadores(valor: string | null): boolean | null {
-  if (valor === "si") return true;
-  if (valor === "no") return false;
-  return null;
-}
 
 export async function recibirMedicamentoFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
