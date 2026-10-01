@@ -4619,3 +4619,22 @@ plagas sólo se declaraban al **crear** el producto.
 fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
 el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
 firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
+
+### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
+
+**ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
+elige el destino **y** no necesita permiso en el beneficio. La finca declara una vez a qué beneficio
+envía; cada jornada lo **copia** al abrirse —instantánea, no referencia viva: si se resolviera en
+vivo, cambiar el destino movería jornadas ya cerradas con entregas ya recibidas—. `null` no es un
+hueco: Jaramillo y Artillería no envían a ningún beneficio propio, y sus jornadas se abren igual.
+`cambiarDestinoDeJornada` es la corrección, y la lista de fincas dice **qué falta**, no «0».
+
+**Dos flip-tests cazaron guardias falsos míos.** La prueba de la instantánea cambiaba el destino con
+un `prisma.update` directo, así que la mutación que debía cazar —propagar a las jornadas abiertas—
+la dejaba verde: ejercitaba el fixture, no el servicio. Y `rejects.toThrow(/destino_fijo/)` casaba
+también con la excepción del DISPARADOR, así que quitar la guarda del servicio no rompía nada; ahora
+exige la CLASE. Un tercer flip que probé no discriminaba y tenía razón: mover la lectura dentro de
+la transacción no es «resolver en vivo».
+
+**Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
+`null → valor`. Se dice, no se disfraza.
