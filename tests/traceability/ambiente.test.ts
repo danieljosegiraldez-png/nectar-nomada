@@ -255,7 +255,14 @@ describe("registrar una lectura de ambiente", () => {
     const u = m.operario.userAccountId;
     const { id: original } = await registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 42, unidad: "C" } });
     lecturaIds.push(original);
-    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 24, unidad: "C" }, supersedesId: original }), "datos_invalidos");
+    // Su propia clase, no `datos_invalidos`: desde que el formulario puede
+    // corregir, «falta el motivo» es el error que un operario va a ver, y el
+    // texto genérico («faltan datos obligatorios o hay valores que no
+    // corresponden») no le dice cuál falta.
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 24, unidad: "C" }, supersedesId: original }), "motivo_obligatorio");
+    // Acotado como las demás notas. El formulario es una puerta nueva para
+    // texto libre, así que el límite entra con la puerta.
+    await rechazaCon(registrarLecturaDeAmbiente(u, { facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora, temperatura: { valor: 24, unidad: "C" }, supersedesId: original, correctionReason: "x".repeat(301) }), "datos_invalidos");
     const { id: correccion } = await registrarLecturaDeAmbiente(u, {
       facilityLocationId: m.instalacion, rackLocationId: m.estante, rackLevel: 2, occurredAt: hora,
       temperatura: { valor: 24, unidad: "C" }, supersedesId: original, correctionReason: "tecleé 42 por 24",
@@ -275,7 +282,20 @@ describe("registrar una lectura de ambiente", () => {
     expect(filaOriginal.supersededAt).not.toBeNull();
     expect(filaCorreccion.supersedesId).toBe(original);
     expect(filaCorreccion.correctionReason).toBe("tecleé 42 por 24");
-    expect(recientes.map((r) => r.id)).not.toContain(original);
+    // CAMBIADO el 2026-10-01, decisión de Daniel. Esta línea decía
+    // `not.toContain(original)`: una lectura corregida desaparecía del
+    // registro, y el operario que la corregía la veía esfumarse sin saber si
+    // había guardado o borrado. Ahora el registro la conserva rotulada, como
+    // la pantalla de mediciones y la ficha de intervención; `vigentes` sigue
+    // sin ella, porque una reemplazada no es la condición actual de nada.
+    const enRecientes = recientes.find((r) => r.id === original);
+    expect(enRecientes, "la reemplazada sigue en el registro").toBeDefined();
+    expect(enRecientes?.reemplazada?.motivo).toBe("tecleé 42 por 24");
+    // El motivo vive en la fila NUEVA, así que llegar hasta aquí demuestra que
+    // se buscó en el reemplazo y no en la reemplazada, donde es null.
+    expect(filaOriginal.correctionReason).toBeNull();
+    // Y la corrección no se rotula a sí misma.
+    expect(recientes.find((r) => r.id === correccion)?.reemplazada).toBeNull();
   });
   it("vigentes: una por punto, la más reciente de cada uno; recientes, las últimas de todos", async () => {
     const u = m.operario.userAccountId;

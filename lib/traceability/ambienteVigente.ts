@@ -13,6 +13,29 @@ export type LecturaVigente = PuntoDeAmbiente & {
   skyCondition: string | null; ventilation: string | null; sourceType: string;
 };
 
+/**
+ * Una del registro, que SÍ puede estar reemplazada — `vigentes` no, porque una
+ * reemplazada no es la condición actual de ningún punto.
+ *
+ * `reemplazada` es un objeto o null, no dos campos sueltos: así «reemplazada
+ * sin saber por qué» no se puede representar por accidente. El motivo llega
+ * null sólo si alguien escribió la corrección por fuera del servicio, que lo
+ * exige; el `motivo` de la propia fila reemplazada es null siempre, porque el
+ * motivo se guarda en la fila NUEVA.
+ */
+export type LecturaReciente = LecturaVigente & {
+  reemplazada: { en: Date; motivo: string | null } | null;
+  /**
+   * Lo que no se enseña pero hace falta para PRECARGAR una corrección. Una
+   * corrección es una fila nueva: lo que el formulario no reenvíe se pierde en
+   * silencio, así que arreglar una temperatura sin esto se llevaría por delante
+   * las notas y la persona que tomó la muestra.
+   */
+  notaCielo: string | null;
+  notaVentilacion: string | null;
+  operadorPersonId: string | null;
+};
+
 export function lecturaDelPunto<T extends LecturaVigente>(vigentes: T[], punto: PuntoDeAmbiente): T | null {
   let mejor: T | null = null;
   for (const l of vigentes) {

@@ -73,7 +73,9 @@ describe("el envío manual de secado", () => {
         ...ZONAS_DE_MUESTRA.map((v) => `zona_${v}`), ...AMBIENTES_DE_SECADO.map((v) => `ambiente_${v}`),
         ...["sin_acceso", "datos_invalidos", "replica_con_zona", "zona_sin_identificar", "fecha_invalida", "rack_invalido", "tipo_invalido", "sombra_invalida"].map((v) => `error_${v}`),
         ...CIELOS.map((v) => `cielo_${v}`), ...VENTILACIONES.map((v) => `ventilacion_${v}`),
-        ...["lectura_vacia", "nota_sin_valor", "fuera_de_rango", "punto_invalido", "instalacion_invalida"].map((v) => `error_${v}`),
+        ...["lectura_vacia", "nota_sin_valor", "fuera_de_rango", "punto_invalido", "instalacion_invalida",
+          "motivo_obligatorio"].map((v) => `error_${v}`),
+        "ambienteCorregir", "ambienteReemplazada", "ambienteMotivo", "ambienteCorrigiendo",
         "ambienteTitulo", "ambienteIntro", "ambienteGeneral", "ambienteSinLectura", "ambienteSinLecturaDelNivel",
         "ambienteRecientes", "ambienteGuardado", "ambienteRegistrar", "ambientePunto", "ambientePuntoGeneral",
         "ambienteNivelOpcional", "ambienteTemperatura", "ambienteUnidad", "ambienteHumedadRelativa", "ambienteCielo",
@@ -99,6 +101,18 @@ describe("el envío manual de secado", () => {
     form.set("skyCondition", "cloudy"); form.set("unidadTemperatura", "K"); form.set("temperatura", "20");
     expect(() => leerLecturaDeAmbiente(form)).toThrow("datos_invalidos");
     form.set("unidadTemperatura", "C"); form.set("rackLevel", "dos"); expect(() => leerLecturaDeAmbiente(form)).toThrow("datos_invalidos");
+  });
+  it("una corrección llega con la lectura que supersede y su motivo; sin corregir, los dos quedan nulos", () => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries({ facilityLocationId: "cuarto", occurredAt: "2026-09-21T09:30",
+      tzOffsetMinutes: "300", humedadRelativaPct: "60" })) form.set(k, v);
+    // Nulos, no cadenas vacías: el motor pregunta por `input.supersedesId` para
+    // decidir si supersede, y `""` es falsy pero `correctionReason: ""` ya no
+    // distinguiría «no es una corrección» de «es una corrección sin motivo».
+    expect(leerLecturaDeAmbiente(form)).toMatchObject({ supersedesId: null, correctionReason: null });
+    form.set("supersedesId", "la-lectura-vieja");
+    form.set("correctionReason", "  apunté 310 y era 31  ");
+    expect(leerLecturaDeAmbiente(form)).toMatchObject({ supersedesId: "la-lectura-vieja", correctionReason: "apunté 310 y era 31" });
   });
   it("la sombra: grado de la escala de las parcelas y nota libre; vacías quedan nulas", () => {
     const form = new FormData(); form.set("name", "Cama bajo la guaba");

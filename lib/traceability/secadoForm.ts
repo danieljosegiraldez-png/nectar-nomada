@@ -102,5 +102,7 @@ export function leerLecturaDeAmbiente(form: FormData): LecturaDeAmbienteInput {
     notaCielo: texto(form, "skyNote") || null,
     ventilacion: ventilacion ? opcion(ventilacion, VENTILACIONES) : null,
     notaVentilacion: texto(form, "ventilationNote") || null,
+    supersedesId: texto(form, "supersedesId") || null,
+    correctionReason: texto(form, "correctionReason") || null,
   };
 }
