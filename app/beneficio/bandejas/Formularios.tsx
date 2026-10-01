@@ -121,10 +121,21 @@ export function FormularioPesaje({
   const [state, action] = useActionState(registrarPesajeAction, inicial);
   // El «ahora» se escribe al montar, no en el servidor: ahí el reloj de pared
   // sería el del servidor (UTC en producción). Igual que MeasurementForm.
+  //
+  // **Sin `[]`, y eso es el arreglo, no un descuido.** Con el array vacío el efecto corre una vez:
+  // React vacía el valor del DOM en cuanto este formulario se re-renderiza —y `useActionState` lo
+  // re-renderiza en cada envío— y nadie lo vuelve a rellenar. El campo es obligatorio, así que el
+  // navegador **bloquea el envío siguiente sin decir nada**: el botón responde, la acción no se
+  // dispara y no aparece ningún error. Es el mismo defecto que el PR #564 quitó de
+  // `MeasurementForm`, con el mismo mecanismo y el mismo arreglo; aquí sobrevivió porque el guardia
+  // sólo miraba `TimezoneOffsetField.tsx`.
+  //
+  // El `!value` de dentro es lo que hace segura la reaplicación: sólo rellena cuando está vacío,
+  // así que nunca pisa la hora que el operario corrigió.
   const cuandoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (cuandoRef.current && !cuandoRef.current.value) cuandoRef.current.value = paraCampoLocal(new Date());
-  }, []);
+  });
   return (
     <form action={action}>
       <Resultado state={state} />
