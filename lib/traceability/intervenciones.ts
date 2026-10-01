@@ -798,6 +798,18 @@ export interface MaterialFitosanitario {
   readonly defaultReentryHours: number | null;
   readonly safetyNotes: string | null;
   readonly storageConditions: string | null;
+  /**
+   * Lo que el producto declara de sí mismo, del alta en inventario (PR #554). **Viaja para que la
+   * pantalla pueda PROPONER, no para que el servidor escriba**: la dosis se propone como RANGO —es
+   * lo que dice la etiqueta— y nunca se rellena con un número de dentro de ese rango, que sería
+   * inventarle una precisión que nadie dio.
+   */
+  readonly plantProtectionUse: "preventivo" | "control" | null;
+  readonly doseMin: number | null;
+  readonly doseMax: number | null;
+  readonly doseUnit: string | null;
+  /** Las plagas que declara cubrir. **Vacío es «nadie lo declaró», no «ninguna»**, así que con la lista vacía no se avisa de nada. */
+  readonly plantProtectionTargets: readonly PlotInterventionTarget[];
   readonly lotes: readonly { readonly id: string; readonly batchLabel: string; readonly expiresAt: Date | null }[];
 }
 
@@ -821,6 +833,11 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
       defaultReentryHours: true,
       safetyNotes: true,
       storageConditions: true,
+      plantProtectionUse: true,
+      doseMin: true,
+      doseMax: true,
+      doseUnit: true,
+      plantProtectionTargets: true,
       lots: { select: { id: true, batchLabel: true, expiresAt: true } },
     },
     orderBy: { name: "asc" },
@@ -833,6 +850,13 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
     defaultReentryHours: m.defaultReentryHours,
     safetyNotes: m.safetyNotes,
     storageConditions: m.storageConditions,
+    plantProtectionUse: m.plantProtectionUse,
+    // `Decimal` no cruza al cliente: se convierte aquí, con el nulo INTACTO. Un `Number(null)` daría
+    // 0, y 0 no es «sin declarar» — es una dosis, y una que la base rechaza.
+    doseMin: m.doseMin === null ? null : Number(m.doseMin),
+    doseMax: m.doseMax === null ? null : Number(m.doseMax),
+    doseUnit: m.doseUnit,
+    plantProtectionTargets: m.plantProtectionTargets,
     lotes: m.lots,
   }));
 }

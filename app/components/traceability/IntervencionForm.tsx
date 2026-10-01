@@ -156,7 +156,7 @@ export function IntervencionForm({
         <fieldset>
           <legend>{t("manejoLineasLegend")}</legend>
           {lineas.map((linea, i) => (
-            <LineaDeIntervencion key={i} indice={i} valores={linea} productos={productos} />
+            <LineaDeIntervencion key={i} indice={i} valores={linea} productos={productos} target={target} />
           ))}
           <button type="button" className="nn-button-secondary" onClick={() => setLineas((prev) => [...prev, lineaVacia()])}>
             {t("manejoAddProductButton")}
