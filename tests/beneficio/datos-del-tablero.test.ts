@@ -19,7 +19,6 @@ import { prisma } from "../../lib/db";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { borrarVinculosDeLote } from "../helpers/borrarVinculosDeLote";
 
 const RUN = `dt-${Date.now()}`;
 const nombre = (etiqueta: string) => `TEST ${etiqueta} (${RUN})`;
@@ -35,7 +34,6 @@ const runIds: string[] = [];
 const transformationIds: string[] = [];
 const deviationIds: string[] = [];
 const correctiveIds: string[] = [];
-const recepcionIds: string[] = [];
 const procesoIds: string[] = [];
 const storageIds: string[] = [];
 const medicionIds: string[] = [];
@@ -198,9 +196,6 @@ afterAll(async () => {
     ["measurement (correcciones)", () => prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: medicionIds }, correctsId: { not: null } }) })],
     ["measurement", () => prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: medicionIds } }) })],
     ["storageAssignment", () => prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ id: { in: storageIds } }) })],
-    // El vínculo lote↔recepción es inmutable a propósito: sólo el ayudante lo borra sin apagar el guardia para todos.
-    ["loteDesdeRecepcion", () => borrarVinculosDeLote(recepcionIds)],
-    ["recepcionDeCereza", () => prisma.recepcionDeCereza.deleteMany({ where: assertDefinedWhere({ id: { in: recepcionIds } }) })],
     // Las transformaciones apuntan a sus corridas de secado y las corridas a su proceso: en este orden.
     ["transformationInput", () => prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) })],
     ["lotTransformation", () => prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) })],
@@ -317,12 +312,10 @@ describe("datosDelTablero", () => {
 // **Cada prueba de la línea mide una DIFERENCIA, no un valor absoluto**: otras pruebas del archivo
 // dejan lotes suyos vivos (los que fermentan), y el orden no debe importar. Y cada una sigue la misma
 // secuencia, que es el control positivo de la casa: (1) algo de OTRO sitio no mueve el número;
-// (2) algo MÍO que no cuenta —cerrado, anulado, de otro tipo— no lo mueve; (3) lo mío que sí cuenta
+// (2) algo MÍO que no cuenta —cerrado, terminado— no lo mueve; (3) lo mío que sí cuenta
 // lo sube en uno. Sin el paso (3) los dos ceros anteriores se leen como «funciona» cuando pueden ser
 // «no miré».
 // ---------------------------------------------------------------------------------------------
-
-let secuencia = 0;
 
 async function loteSimple(etiqueta: string, locationId: string, organizationId: string) {
   const lot = await prisma.lot.create({
@@ -337,44 +330,6 @@ async function loteSimple(etiqueta: string, locationId: string, organizationId: 
   });
   lotIds.push(lot.id);
   return lot.id;
-}
-
-async function recepcionDe(lotId: string, beneficioId: string, estado: "recibida" | "anulada") {
-  secuencia += 1;
-  const r = await prisma.recepcionDeCereza.create({
-    data: {
-      claveDeEnvio: `${RUN}-r${secuencia}`,
-      beneficioId,
-      // La base exige UN origen —una entrega o un proveedor—; aquí basta el proveedor.
-      proveedorId: miOrgId,
-      recibidaPor: operario,
-      recibidaAt: haceHoras(2),
-      brutoKg: 10,
-      recipientes: 1,
-      taraPorRecipienteKg: 1,
-      netoKg: 9,
-      // Nace SIEMPRE recibida: la base rechaza vincular un lote a una recepción ya anulada, y eso
-      // es lo correcto. Una anulada de verdad es una recibida que después se anuló.
-      estado: "recibida",
-      lotes: { create: [{ lotId, kg: 9 }] },
-    },
-  });
-  if (estado === "anulada") {
-    // **Este estado la base lo IMPIDE por los dos lados**: no deja vincular un lote a una recepción
-    // anulada, y no deja anular una que ya tiene lote (`recepcion_de_cereza_ya_tiene_lotes`). Por eso
-    // el filtro `estado: "recibida"` del cargador es una segunda barrera, y para probarla hay que
-    // fabricar el estado imposible. `SET LOCAL` en una transacción apaga los disparadores sólo ahí
-    // —es lo que hace `borrarVinculosDeLote`—, y la anulación sigue viniendo COMPLETA (cuándo, quién
-    // y por qué), que eso es un CHECK y no un disparador.
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
-      await tx.recepcionDeCereza.update({
-        where: { id: r.id },
-        data: { estado: "anulada", anuladaAt: haceHoras(1), anuladaPor: operario, motivoAnulacion: nombre("anulada") },
-      });
-    });
-  }
-  recepcionIds.push(r.id);
 }
 
 async function transformacionDe(
@@ -504,51 +459,22 @@ async function lotesEn(clave: string): Promise<number> {
 }
 
 describe("la línea de etapas", () => {
-  it("trae las seis etapas en orden, y la flotación dice «sin registro», no cero", async () => {
+  it("trae las seis etapas en orden; recepción, flotación y selección dicen «sin registro», no cero", async () => {
     const { etapas } = await datosDelTablero(operario, ahora);
     expect(etapas.map((e) => e.clave)).toEqual(["recepcion", "flotacion", "seleccion", "proceso", "secado", "almacen"]);
-    expect(etapas.find((e) => e.clave === "flotacion")!.estado).toEqual({ tipo: "sin_registro" });
-    // Control: las otras cinco SÍ cuentan. Sin esto, «la flotación dice sin_registro» también
+    // ADR-195: las tres son actos pasados (o un método), no «lo que hay ahora».
+    const sinRegistro = etapas.filter((e) => ["recepcion", "flotacion", "seleccion"].includes(e.clave));
+    expect(sinRegistro).toHaveLength(3);
+    expect(sinRegistro.map((e) => e.estado)).toEqual([
+      { tipo: "sin_registro" },
+      { tipo: "sin_registro" },
+      { tipo: "sin_registro" },
+    ]);
+    // Control: las otras tres SÍ cuentan. Sin esto, «las tres dicen sin_registro» también
     // pasaría si TODA la línea dijera sin_registro.
-    const otras = etapas.filter((e) => e.clave !== "flotacion");
-    expect(otras).toHaveLength(5);
+    const otras = etapas.filter((e) => !["recepcion", "flotacion", "seleccion"].includes(e.clave));
+    expect(otras.map((e) => e.clave)).toEqual(["proceso", "secado", "almacen"]);
     expect(otras.every((e) => e.estado.tipo === "cuenta")).toBe(true);
-  });
-
-  it("recepción: sólo lotes visibles con una recepción RECIBIDA, y un lote con dos cuenta una vez", async () => {
-    const antes = await lotesEn("recepcion");
-
-    const ajeno = await loteSimple("R-AJENO", otroSitio, otraOrgId);
-    await recepcionDe(ajeno, otroSitio, "recibida");
-    expect(await lotesEn("recepcion")).toBe(antes);
-
-    const mio = await loteSimple("R-MIO", miSitio, miOrgId);
-    await recepcionDe(mio, miSitio, "anulada");
-    expect(await lotesEn("recepcion")).toBe(antes);
-
-    await recepcionDe(mio, miSitio, "recibida");
-    expect(await lotesEn("recepcion")).toBe(antes + 1);
-
-    await recepcionDe(mio, miSitio, "recibida");
-    expect(await lotesEn("recepcion")).toBe(antes + 1);
-  });
-
-  it("selección: sólo la transformación de tipo `selection`, de un lote visible", async () => {
-    const antes = await lotesEn("seleccion");
-
-    const ajeno = await loteSimple("S-AJENO", otroSitio, otraOrgId);
-    await transformacionDe(ajeno, "selection");
-    expect(await lotesEn("seleccion")).toBe(antes);
-
-    const mio = await loteSimple("S-MIO", miSitio, miOrgId);
-    await transformacionDe(mio, "stage_change");
-    expect(await lotesEn("seleccion")).toBe(antes);
-
-    await transformacionDe(mio, "selection");
-    expect(await lotesEn("seleccion")).toBe(antes + 1);
-
-    await transformacionDe(mio, "selection");
-    expect(await lotesEn("seleccion")).toBe(antes + 1);
   });
 
   it("proceso: sólo el que sigue abierto, de un lote visible, y un lote con dos procesos abiertos cuenta una vez", async () => {

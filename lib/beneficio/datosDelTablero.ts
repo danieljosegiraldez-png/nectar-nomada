@@ -144,10 +144,11 @@ export async function datosDelTablero(
   //
   // Los recuentos de la línea de etapas se piden en la MISMA pasada y con el MISMO filtro
   // (`lotWhere`): cada uno cuenta LOTES visibles, nunca filas de la tabla de la etapa, así que dos
-  // recepciones de un mismo lote son una y las de un lote que no ves no cuentan. Qué registro cuenta
-  // cada etapa está medido en `lineaDeEtapas.ts`; aquí sólo se aplica.
+  // procesos abiertos de un mismo lote son uno y los de un lote que no ves no cuentan. Sólo se piden
+  // las tres etapas que dicen «hay» (proceso, secado, almacén); recepción, flotación y selección no
+  // cuentan y por qué está en `lineaDeEtapas.ts` (ADR-195). Qué registro cuenta cada una está medido allí.
   const cuentaLotes = (donde: Prisma.LotWhereInput) => prisma.lot.count({ where: { AND: [lotWhere, donde] } });
-  const [fermentaciones, secados, enRecepcion, enSeleccion, enProceso, enSecado, enAlmacen] = await Promise.all([
+  const [fermentaciones, secados, enProceso, enSecado, enAlmacen] = await Promise.all([
     prisma.fermentationRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
@@ -175,11 +176,6 @@ export async function datosDelTablero(
         },
       },
     }),
-    // Recepción: un lote armado desde una recepción RECIBIDA. Una rechazada o anulada no le
-    // dio café a ningún lote, y contarla sería contar lo que no entró.
-    cuentaLotes({ desdeRecepciones: { some: { recepcion: { estado: "recibida" } } } }),
-    // Selección: no tiene modelo propio; es la transformación de ese tipo (`selection.ts:142`).
-    cuentaLotes({ transformationInputs: { some: { transformation: { transformationType: "selection" } } } }),
     // Proceso, secado y almacén tienen fin declarado: «hay» es «sin terminar».
     cuentaLotes({ lotProcesses: { some: { endedAt: null } } }),
     cuentaLotes({ transformationInputs: { some: { transformation: { dryingRun: { endedAt: null } } } } }),
@@ -325,8 +321,6 @@ export async function datosDelTablero(
   }
 
   const etapas = lineaDeEtapas({
-    recepcion: enRecepcion,
-    seleccion: enSeleccion,
     proceso: enProceso,
     secado: enSecado,
     almacen: enAlmacen,

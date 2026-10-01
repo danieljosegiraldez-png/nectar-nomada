@@ -1,29 +1,44 @@
 /**
- * La línea de seis etapas del proceso, pura: cuántos lotes hay en cada una, y cuál NO se anota.
+ * La línea de seis etapas del proceso, pura: cuántos lotes hay en cada una **ahora**, y cuáles
+ * NO se anotan.
  *
  * **Sin base de datos a propósito**, igual que `tablero.ts`: recibe cuentas ya hechas y devuelve
  * la línea en orden, así que su prueba es hermética. Las lecturas viven en otro módulo.
  *
- * **Lo que este módulo existe para impedir** es que un cero y un «sin registro» se confundan.
- * Medido el 2026-09-30 contra `prisma/schema.prisma`: recepción (`RecepcionDeCereza`), proceso
- * (`LotProcess`), secado (`DryingRun`) y almacén (`StorageAssignment`) se registran; la
- * selección se cuenta filtrando `LotTransformation` por `transformationType: "selection"`.
+ * **Lo que este módulo existe para impedir** es que un cero, un acumulado y un «sin registro» se
+ * confundan. La línea responde «cuántos lotes **hay** en cada etapa» y §4.5 del diseño dice que la
+ * pieza responde «**dónde se atasca hoy**»: cada cuenta tiene que ser **lo que hay ahora**.
  *
- * **La flotación sí está en el esquema, pero como método de una selección, no como etapa
- * propia**: `LotTransformation.selectionMethodValue`, con `condicionDePesaje` obligatoria sólo
- * cuando el método es `flotacion` —la que moja la cereza—, decisión de Daniel del 2026-09-19.
- * (Las otras dos menciones, `PedidoDeCereza.maxFlotesPct` y
- * `VeredictoDeCalidadDePedido.flotesKg`, son un umbral y parte de un veredicto.) Por eso no se
- * puede contar aquí: un **método pasado** de una transformación no dice **cuánto hay en esa
- * etapa ahora**, que es lo que la línea muestra. Un cero dice «no hay nada ahí»; la flotación no
- * puede decir eso, porque el sistema no lo sabe. Si se pintara `0`, el operario leería que no
- * hay café flotando. §4.5 manda decir «sin registro de esta etapa» justo en este caso.
+ * **Tres etapas dicen `sin_registro`: recepción, flotación y selección** (decisión de Daniel, el
+ * 2026-09-30; ADR-195). Son el mismo caso:
  *
- * Por eso `flotacion` **no se recibe por parámetro**: que no se pueda pasar es a propósito, para
- * que nadie le meta un cero sin darse cuenta de lo que significa.
+ * - **Proceso, secado y almacén** tienen fin declarado (`LotProcess.endedAt`, `DryingRun.endedAt`,
+ *   `StorageAssignment.endedAt`): «hay» es «sin terminar», así que su cuenta es un presente.
+ * - **Recepción** (`RecepcionDeCereza`) y **selección** (`LotTransformation` de tipo
+ *   `selection`) son **actos pasados**: no tienen fin. Contar los lotes que alguna vez pasaron por
+ *   ahí da un **acumulado** —cuántos pasaron—, no un «cuántos hay»; con una temporada encima se
+ *   leería «Recepción 847 · Secado 3», y la columna más grande sería la que menos informa.
+ * - **Flotación** ni siquiera es una etapa del esquema: es un **método** de una selección
+ *   (`LotTransformation.selectionMethodValue`, con `condicionDePesaje` obligatoria sólo cuando el
+ *   método es `flotacion` —la que moja la cereza—, decisión de Daniel del 2026-09-19). Un **método
+ *   pasado** de una transformación no dice **cuánto hay en esa etapa ahora**. Si se pintara `0`, el
+ *   operario leería que no hay café flotando.
  *
- * **Si Daniel decide que la columna cuente «selecciones hechas por flotación»**, es un cambio de
- * esta función pura y de su prueba, sin migración ni datos nuevos: el método ya se guarda.
+ * El mismo razonamiento que prohibía pintar la flotación se aplicaba a las otras dos; aplicarlo a
+ * una sola de las tres era una inconsistencia, no una decisión. Un cero dice «no hay nada ahí»; un
+ * acumulado dice «pasaron tantos»; ninguno de los dos dice lo que la línea promete, y §4.5 manda
+ * decir «sin registro de esta etapa» justo en ese caso.
+ *
+ * Por eso `recepcion`, `flotacion` y `seleccion` **no se reciben por parámetro**: que no se pueda
+ * pasar es a propósito, para que nadie les meta un número sin darse cuenta de lo que significa.
+ *
+ * **Qué haría falta para que contaran de verdad** —no es un olvido, es una decisión—: una
+ * condición de **vigencia**, es decir, lo que hace «sin terminar» a las otras tres:
+ * - «en recepción» = recibido y **sin selección aún**;
+ * - «en selección» = con selección y **sin proceso abierto**;
+ * - «en flotación» no tiene forma sin una etapa propia en el esquema: hoy es un método.
+ * Con esas condiciones el cambio es de esta función pura, de su prueba y de `datosDelTablero.ts`
+ * (las dos consultas que ADR-195 quitó), sin migración para las dos primeras.
  *
  * Diseño: `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md` §4.5.
  */
@@ -40,9 +55,10 @@ export interface Etapa {
 /** Las etapas en el orden del proceso. La pantalla no debe poder reordenarlas. */
 const ORDEN = ["recepcion", "flotacion", "seleccion", "proceso", "secado", "almacen"] as const;
 
+/** Las que no cuentan, por lo dicho arriba. Un solo sitio: no se reparte entre ramas. */
+const SIN_REGISTRO: ReadonlySet<string> = new Set(["recepcion", "flotacion", "seleccion"]);
+
 export function lineaDeEtapas(input: {
-  readonly recepcion: number;
-  readonly seleccion: number;
   readonly proceso: number;
   readonly secado: number;
   readonly almacen: number;
@@ -50,14 +66,12 @@ export function lineaDeEtapas(input: {
   readonly pidenDecision: Readonly<Record<string, number>>;
 }): readonly Etapa[] {
   const cuentas: Record<string, number> = {
-    recepcion: input.recepcion,
-    seleccion: input.seleccion,
     proceso: input.proceso,
     secado: input.secado,
     almacen: input.almacen,
   };
   return ORDEN.map((clave): Etapa =>
-    clave === "flotacion"
+    SIN_REGISTRO.has(clave)
       ? { clave, estado: { tipo: "sin_registro" } }
       : {
           clave,

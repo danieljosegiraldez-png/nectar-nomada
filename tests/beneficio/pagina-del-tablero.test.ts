@@ -53,7 +53,7 @@ const haceHoras = (h: number) => new Date(AHORA.getTime() - h * 3_600_000);
 const aTexto = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
 const ETAPAS = lineaDeEtapas({
-  recepcion: 0, seleccion: 3, proceso: 2, secado: 1, almacen: 1, pidenDecision: {},
+  proceso: 2, secado: 1, almacen: 1, pidenDecision: {},
 });
 
 function datos(o: Partial<DatosDelTablero> = {}): DatosDelTablero {

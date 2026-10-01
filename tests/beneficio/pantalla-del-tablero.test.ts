@@ -225,7 +225,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
 
 describe("LineaDeEtapas — un cero no es «sin registro»", () => {
   const ETAPAS = lineaDeEtapas({
-    recepcion: 0, seleccion: 3, proceso: 2, secado: 0, almacen: 1,
+    proceso: 2, secado: 0, almacen: 1,
     pidenDecision: { proceso: 2 },
   });
 
@@ -234,29 +234,33 @@ describe("LineaDeEtapas — un cero no es «sin registro»", () => {
     return [...html.matchAll(/<li class="([^"]*)">(.*?)<\/li>/g)].map((m) => ({ clase: m[1]!, html: m[2]!, texto: aTexto(m[2]!) }));
   }
 
-  it("la flotación dice «sin registro de esta etapa», sin cuenta, sin dígitos y sin color", async () => {
+  it("recepción, flotación y selección dicen «sin registro de esta etapa», sin cuenta, sin dígitos y sin color", async () => {
     const f = await filas();
     expect(f).toHaveLength(6); // control: la línea entera está
     expect(f.map((x) => x.texto.split(" ")[0])).toEqual(["Recepción", "Flotación", "Selección", "Proceso", "Secado", "Almacén"]);
-    const flotacion = f[1]!;
-    expect(flotacion.texto).toContain("sin registro de esta etapa");
-    expect(flotacion.html).not.toContain("nn-etapa-cuenta");
-    expect(flotacion.texto).not.toMatch(/\d/);
-    expect(flotacion.clase).toContain("nn-etapa-sin-registro");
-    expect(flotacion.clase).not.toContain("nn-etapa-decide");
+    for (const i of [0, 1, 2]) {
+      const sinRegistro = f[i]!;
+      expect(sinRegistro.texto, `etapa ${i}`).toContain("sin registro de esta etapa");
+      expect(sinRegistro.html).not.toContain("nn-etapa-cuenta");
+      expect(sinRegistro.texto).not.toMatch(/\d/);
+      expect(sinRegistro.clase).toContain("nn-etapa-sin-registro");
+      expect(sinRegistro.clase).not.toContain("nn-etapa-decide");
+    }
+    // Control: las otras tres SÍ llevan cuenta, así que lo de arriba no es «toda la línea».
+    for (const i of [3, 4, 5]) expect(f[i]!.html).toContain("nn-etapa-cuenta");
     // MUTACIÓN: pintar `0` (o la cuenta) en una etapa `sin_registro` → cae.
   });
 
   it("un cero SÍ es un cero (no se colorea), y sólo se colorea la etapa que pide decisión", async () => {
     const f = await filas();
-    expect(f[0]!.texto).toBe("Recepción 0 lotes"); // 0 es un dato
-    expect(f[0]!.clase).toBe("nn-etapa");
+    expect(f[4]!.texto).toBe("Secado 0 lotes"); // 0 es un dato
+    expect(f[4]!.clase).toBe("nn-etapa");
     expect(f[3]!.clase).toContain("nn-etapa-decide");
     expect(f[3]!.texto).toContain("2 piden decisión");
     expect(f.filter((x) => x.clase.includes("nn-etapa-decide"))).toHaveLength(1);
     // Singular con su plural: una etapa con 1 lote dice «lote», no «lotes».
     expect(f[5]!.texto).toBe("Almacén 1 lote");
-    // MUTACIÓN: colorear con `pidenDecision >= 0` → cae por la recepción y el almacén.
+    // MUTACIÓN: colorear con `pidenDecision >= 0` → cae por el secado y el almacén.
   });
 });
 
