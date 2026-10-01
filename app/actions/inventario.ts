@@ -8,6 +8,7 @@ import { crearMaterial } from "../../lib/inventario/materiales";
 import { esPlaga } from "../../lib/traceability/plagas";
 import { recibirLote } from "../../lib/inventario/lotes";
 import { CAMPOS_NUMERICOS, camposDe, completarProducto, opcionesDeRecepcion, type CampoDelProducto, type ClaseDeProducto } from "../../lib/inventario/recepcion";
+import { danaPolinizadores } from "../../lib/inventario/camposDeProducto";
 import { fechaDeDia } from "../../lib/time/localDateTime";
 
 /**
@@ -30,6 +31,7 @@ import { fechaDeDia } from "../../lib/time/localDateTime";
 function usoDeProducto(valor: string | null): "preventivo" | "control" | null {
   return valor === "preventivo" || valor === "control" ? valor : null;
 }
+
 
 export async function recibirMedicamentoFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
@@ -85,6 +87,7 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
       doseMax: numero("p_doseMax"),
       doseUnit: texto("p_doseUnit"),
       plantProtectionTargets: formData.getAll("p_plantProtectionTargets").filter(esPlaga),
+      harmfulToPollinators: danaPolinizadores(texto("p_harmfulToPollinators")),
     });
     materialId = creado.id;
   } else if (materialId && sitio.puedeDefinirProducto) {
