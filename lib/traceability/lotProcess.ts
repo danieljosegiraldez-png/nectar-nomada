@@ -15,7 +15,8 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
-import { idsDeDescendencia } from "./procesoDelLinaje";
+import { abrirProcesoEnTx, bloquearLinaje, idsDeDescendencia } from "./procesoDelLinaje";
+import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 // El error vive en su propio archivo (Parte 1, §3.2) y se reexporta para que ningún importador cambie.
@@ -151,7 +152,9 @@ async function loteGestionable(userAccountId: string, lotId: string) {
  *
  * **Dos procesos abiertos a la vez no tienen sentido** y se rechazan: un lote
  * está en un proceso o en otro, y permitirlo haría que «el proceso actual de
- * este lote» dejara de tener respuesta.
+ * este lote» dejara de tener respuesta. Desde la Parte 1 (R2, 2026-10-01) la
+ * regla es del café y no del lote: se mira todo el linaje, y la hace
+ * `abrirProcesoEnTx` dentro de la transacción, con el linaje bloqueado.
  */
 export async function abrirProceso(userAccountId: string, input: AbrirProcesoInput) {
   await loteGestionable(userAccountId, input.lotId);
@@ -176,23 +179,13 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
   await exigeDelCatalogo(input.processGradeValueId, CATALOGO_GRADO_PROCESO, "process_grade");
   await exigeDelCatalogo(input.cherryStateValueId, CATALOGO_ESTADO_CEREZA, "cherry_state");
 
-  const abierto = await prisma.lotProcess.findFirst({
-    where: { lotId: input.lotId, endedAt: null },
-    select: { id: true },
-  });
-  if (abierto) throw new LotProcessError("process_already_open");
-
-  const ultimo = await prisma.lotProcess.findFirst({
-    where: { lotId: input.lotId },
-    orderBy: { sequenceOrder: "desc" },
-    select: { sequenceOrder: true },
-  });
-
-  return prisma.$transaction(async (tx) => {
-    const proceso = await tx.lotProcess.create({
-      data: {
+  // R2 (Parte 1, 2026-10-01): la comprobación de «otro proceso abierto» ya no se hace aquí, con el cliente
+  // global y fuera de la transacción: la hace `abrirProcesoEnTx` dentro, con el linaje bloqueado.
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await bloquearLinaje(tx, input.lotId);
+      return abrirProcesoEnTx(tx, userAccountId, {
         lotId: input.lotId,
-        sequenceOrder: (ultimo?.sequenceOrder ?? 0) + 1,
         processRecipeVersionId: input.processRecipeVersionId ?? null,
         intent: input.intent.trim(),
         processGradeValueId: input.processGradeValueId,
@@ -202,24 +195,16 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
         notes: input.notes?.trim() || null,
         provenanceClass: input.provenanceClass,
         sourceReference: input.sourceReference?.trim() || null,
-        createdBy: userAccountId,
-      },
+      });
     });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "lot_process.open",
-        entityType: "lot_process",
-        entityId: proceso.id,
-        after: proceso,
-        sourceInterface: "traceability.lotProcess",
-      },
-      tx,
-    );
-
-    return proceso;
-  });
+  } catch (error) {
+    // El índice único parcial es la red: si algo se colara entre el bloqueo y la escritura, sale con
+    // nombre y no como un error de restricción ilegible.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new LotProcessError("process_already_open");
+    }
+    throw error;
+  }
 }
 
 /**

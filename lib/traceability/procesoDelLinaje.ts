@@ -15,7 +15,8 @@
  * que recibe**, nunca con el cliente global: quien llama pasa el de su transacción, o el global si
  * sólo lee. Nada de aquí autoriza: quien llama ya autorizó.
  */
-import type { Prisma } from "../../generated/prisma/client";
+import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import { recordAuditEvent } from "../audit";
 import { LotProcessError } from "./errorDeProceso";
 
 /**
@@ -315,4 +316,92 @@ export async function procesosParaEntrada(
 export async function gradoDelProcesoQueCubre(tx: Prisma.TransactionClient, lotId: string): Promise<string | null> {
   const [p] = await procesosParaEntrada(tx, lotId);
   return p?.gradoDeProceso ?? null;
+}
+
+/**
+ * R2 (Parte 1, 2026-10-01). Un solo proceso abierto por café. La usan LAS DOS puertas que dejan un
+ * proceso abierto: abrir uno y devolver a secado (que abre una continuación). La primera versión del
+ * diseño sólo protegía la primera, y la revisión lo cazó.
+ *
+ * Se llama dentro de la transacción y DESPUÉS de `bloquearLinaje`: lee lo que la escritura va a
+ * cambiar, y el bloqueo es lo que impide que otra apertura en el mismo linaje se cuele entre la
+ * lectura y la escritura.
+ */
+export async function exigeSinOtroProcesoAbierto(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
+  const lote = await tx.lot.findUnique({ where: { id: lotId }, select: { lotType: true } });
+  if (!lote) throw new LotProcessError("lot_not_found");
+  if (lote.lotType === "honey") throw new LotProcessError("proceso_no_aplica_a_miel");
+  if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
+  const cobertura = await procesoQueCubre(tx, lotId);
+  if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
+  // Por el linaje, no sólo el vigente: el vigente sólo mira hacia arriba, así que no ve un proceso
+  // abierto en un descendiente, y un ancestro puede tener uno abierto más arriba de otro cerrado más
+  // cerca.
+  const linaje = [lotId, ...(await idsDeAscendencia(tx, lotId)), ...(await idsDeDescendencia(tx, lotId))];
+  const abierto = await tx.lotProcess.findFirst({
+    where: { lotId: { in: linaje }, endedAt: null },
+    select: { id: true },
+  });
+  if (abierto) throw new LotProcessError("process_already_open");
+  const enBodega = await tx.storageAssignment.findFirst({ where: { lotId, endedAt: null }, select: { id: true } });
+  if (enBodega) throw new LotProcessError("lote_en_bodega");
+}
+
+/** Lo que se escribe al abrir un proceso, ya validado por quien llama (R2). */
+export interface NucleoDeApertura {
+  lotId: string;
+  processRecipeVersionId: string | null;
+  intent: string;
+  processGradeValueId: string;
+  cherryStateValueId: string;
+  targetMoisturePct: number | Prisma.Decimal;
+  startedAt: Date;
+  notes: string | null;
+  provenanceClass: ProvenanceClass;
+  sourceReference: string | null;
+  /** R6.4 y R7: de qué proceso viene una parte de una división o una continuación. */
+  derivedFromLotProcessId?: string | null;
+}
+
+/**
+ * Abre un proceso DENTRO de una transacción que ya bloqueó el linaje (R2). No autoriza: los
+ * envoltorios (`abrirProceso`, la división, la devolución) ya lo hicieron. Su auditoría va con el
+ * mismo `tx`.
+ */
+export async function abrirProcesoEnTx(tx: Prisma.TransactionClient, userAccountId: string, input: NucleoDeApertura) {
+  await exigeSinOtroProcesoAbierto(tx, input.lotId);
+  const ultimo = await tx.lotProcess.findFirst({
+    where: { lotId: input.lotId },
+    orderBy: { sequenceOrder: "desc" },
+    select: { sequenceOrder: true },
+  });
+  const proceso = await tx.lotProcess.create({
+    data: {
+      lotId: input.lotId,
+      sequenceOrder: (ultimo?.sequenceOrder ?? 0) + 1,
+      processRecipeVersionId: input.processRecipeVersionId,
+      intent: input.intent,
+      processGradeValueId: input.processGradeValueId,
+      cherryStateValueId: input.cherryStateValueId,
+      targetMoisturePct: input.targetMoisturePct,
+      startedAt: input.startedAt,
+      notes: input.notes,
+      provenanceClass: input.provenanceClass,
+      sourceReference: input.sourceReference,
+      derivedFromLotProcessId: input.derivedFromLotProcessId ?? null,
+      createdBy: userAccountId,
+    },
+  });
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "lot_process.open",
+      entityType: "lot_process",
+      entityId: proceso.id,
+      after: proceso,
+      sourceInterface: "traceability.lotProcess",
+    },
+    tx,
+  );
+  return proceso;
 }

@@ -788,7 +788,7 @@
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
-      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
+      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje; desde R2 (2026-10-01), también el núcleo con `tx` que abre un proceso. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -896,6 +896,12 @@
       "archivo": "lib/beneficio/fichaDeUnidad.ts",
       "operacion": "fichaDeUnidad",
       "razon": "Recibe el principal y no llama a ningún guardia por su cuenta: **lo llama por dentro**. Lo primero que hace es `colaDeSecado(userAccountId)`, que acota por `resolveLotVisibility` sobre los lotes; si la unidad pedida no aparece en esa cola, devuelve `null` y la pantalla da 404. Todo lo que consulta después va acotado al `dryingRunId` de una unidad que YA pasó esa comprobación. No es una superficie autorizable independiente: no hay forma de llegar a un dato sin que la cola lo haya autorizado antes. Verificado al escribir ficha-de-la-unidad el 2026-09-30."
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "abrirProcesoEnTx",
+      "razon": "Núcleo con `tx` que abre un proceso y escribe su auditoría en la misma transacción (R2): primero `exigeSinOtroProcesoAbierto`, luego el `sequenceOrder` siguiente y el `create`. Recibe el principal sólo para firmar `createdBy` y el evento, no para decidir nada: no autoriza. Hoy sólo lo llama `abrirProceso`, después de `loteGestionable` (`requireLotAccess(\"manage\")` sobre el lote) y con el linaje ya bloqueado por `bloquearLinaje`. Quien lo llame debe haber hecho las dos cosas antes de abrir su transacción.",
+      "verificado": "2026-10-01"
     }
   ],
   "dependen_del_llamador": [
@@ -1425,6 +1431,12 @@
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "procesosParaEntrada",
       "razon": "Devuelve el cierre y el grado del proceso que cubre a un lote, con la misma forma para cualquier lector (R7). No recibe principal: quien la llame debe haber autorizado el lote que enseña. Devuelve el grado del proceso, nunca filas del lote.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "exigeSinOtroProcesoAbierto",
+      "razon": "Comprueba, sin escribir, que un lote puede recibir un proceso nuevo (R2): que no sea de miel, ni dividido, ni mezcla, que ni él ni sus ancestros ni sus descendientes tengan otro proceso abierto, y que no esté en bodega. Lanza `LotProcessError` con el motivo. No recibe principal ni devuelve datos del lote. Hoy sólo la llama `abrirProcesoEnTx`, dentro de la transacción de `abrirProceso`, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; quien la llame debe haber hecho lo mismo.",
       "verificado": "2026-10-01"
     }
   ]
