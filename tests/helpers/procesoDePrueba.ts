@@ -42,16 +42,34 @@ export async function abrirProcesoDePrueba(
 }
 
 const esHoja = (v: unknown) => v === null || typeof v !== "object" || v instanceof Date;
+const esValor = (v: unknown) => v !== undefined && esHoja(v);
+const OPERADORES_LOGICOS = new Set(["AND", "OR", "NOT"]);
 
 /**
- * ¿Tiene el filtro alguna condición con valor definido, a cualquier profundidad? `{}`, `{ id: {} }` y
- * `{ OR: [{}] }` casan con TODOS los lotes. Una lista de valores, aunque esté vacía, SÍ es una
- * condición: `in: []` no casa con nada, y es lo que queda cuando el `beforeAll` no llegó a crear nada.
+ * ¿Tiene el filtro alguna condición con valor definido, a cualquier profundidad? Es la guarda de
+ * `borrarProcesosDeLotesDonde`, y se exporta para probarla DIRECTAMENTE con entradas hostiles.
+ *
+ * Medido el 2026-10-01 en `nectar_test_recetas` (104 lotes): casan con TODOS los lotes `{}`, `{ id: {} }`,
+ * `{ id: undefined }`, `{ AND: [] }`, `{ NOT: [] }`, `{ AND: [{}] }`, `{ AND: {} }`, `{ NOT: {} }` y
+ * `{ NOT: [{}] }`; no casan con ninguno `{ OR: [] }`, `{ OR: [{}] }` e `{ id: { in: [] } }`. Ninguna de
+ * las del primer grupo cuenta como condición, ni las de `OR`, que no borrarían nada pero se rechazan por
+ * conservadoras.
+ *
+ * **Una lista significa dos cosas, según la clave que la lleve.** Bajo `AND`/`OR`/`NOT` es una lista de
+ * FILTROS: cuenta si alguno tiene condición, y una lista vacía no tiene ninguna (`[].every(...)` daría
+ * `true` y dejaba pasar `{ AND: [] }`: así falló la ronda 1). Bajo cualquier otra clave (`in`, `notIn`…)
+ * es una lista de VALORES: aunque esté vacía SÍ es una condición, porque `in: []` no casa con nada, y es lo
+ * que queda en el `afterAll` cuando el `beforeAll` no llegó a crear ningún lote.
+ *
+ * No mide cuánto estrecha un filtro: `NOT` con una condición cuenta como condición.
  */
-function tieneCondicion(w: unknown): boolean {
-  if (Array.isArray(w)) return w.every(esHoja) || w.some(tieneCondicion);
-  if (esHoja(w)) return w !== undefined;
-  return Object.values(w as Record<string, unknown>).some(tieneCondicion);
+export function tieneCondicion(w: unknown): boolean {
+  if (w === undefined) return false;
+  if (esHoja(w)) return true;
+  if (Array.isArray(w)) return w.every(esValor) || w.some(tieneCondicion);
+  return Object.entries(w as Record<string, unknown>).some(([clave, v]) =>
+    OPERADORES_LOGICOS.has(clave) && Array.isArray(v) ? v.some(tieneCondicion) : tieneCondicion(v),
+  );
 }
 
 /**

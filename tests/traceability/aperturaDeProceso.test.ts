@@ -1,12 +1,12 @@
 /**
  * R2 de la Parte 1: un solo proceso abierto por café, comprobado en el linaje y no sólo en el lote.
  */
+import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
-import type { Prisma } from "../../generated/prisma/client";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
-import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
-import { assertDefinedWhere, UnsafeWhereClauseError } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde, tieneCondicion } from "../helpers/procesoDePrueba";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `apertura-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string, gestor: string;
@@ -180,24 +180,102 @@ describe("R2 — un solo proceso abierto por café", () => {
   });
 });
 
-describe("borrarProcesosDeLotesDonde, el ayudante de limpieza", () => {
-  it("rechaza un filtro de lote sin condición, y no borra nada", async () => {
-    // `{ lot: {} }` casa con TODOS los lotes: sin esta guarda, un filtro vacío borraba todos los
-    // procesos de la base. Se cuenta SU proceso y no la tabla entera: los archivos de prueba corren
-    // en paralelo contra la misma base y la cuenta global se movería sola.
-    const l = await lote("P9-LIMPIEZA");
-    const p = await abrirProcesoDePrueba(gestor, l);
-    const suyos = () => prisma.lotProcess.count({ where: { id: p.id } });
-    expect(await suyos()).toBe(1);
-    const sinCondicion: Prisma.LotWhereInput[] = [{}, { id: {} }, { OR: [{}] }, { id: undefined }];
-    for (const filtro of sinCondicion) {
-      await expect(borrarProcesosDeLotesDonde(filtro), JSON.stringify(filtro)).rejects.toThrow(UnsafeWhereClauseError);
-      expect(await suyos(), `tras ${JSON.stringify(filtro)}`).toBe(1);
+describe("tieneCondicion, la guarda del ayudante de limpieza (función pura: no toca la base)", () => {
+  // Medido el 2026-10-01 en `nectar_test_recetas` (104 lotes), con `count` y sólo lectura
+  // (`.superpowers/sdd/…/out/r2-formas-vacias.txt`):
+  //   casan con TODOS los lotes:  {}, { id: {} }, { id: undefined }, { AND: [] }, { NOT: [] },
+  //                               { AND: [{}] }, { AND: {} }, { NOT: {} }, { NOT: [{}] }
+  //   no casan con NINGUNO:       { OR: [] }, { OR: [{}] }, { id: { in: [] } }
+  // Los peligrosos son los primeros; `{ AND: [] }` y `{ NOT: [] }` son los que la guarda de la ronda 1 dejaba
+  // pasar (una lista vacía contaba como condición). `{ OR: [] }` y `{ OR: [{}] }` no borrarían nada, pero se
+  // rechazan igual por conservadores. En la ronda 1 se creyó que `{ OR: [{}] }` casaba con todos: es falso.
+  //
+  // **Por qué se prueba la función y NO el ayudante.** El ayudante hace un `deleteMany` real, y una prueba que lo
+  // llamara con estos filtros dependería sólo de esta guarda para no borrar los procesos de todas las sesiones
+  // en una base compartida: el día que alguien la rompa, la prueba que la vigila sería la que borra. La función
+  // es pura; el cableado lo vigila la prueba de fuente de abajo.
+  const sinCondicion: [string, unknown][] = [
+    ["{}", {}],
+    ["{ id: {} }", { id: {} }],
+    // `undefined` no es una condición: Prisma lo descarta y el filtro queda como `{}`. Aquí lo rechaza esta
+    // guarda; en el ayudante salta ANTES de que `assertDefinedWhere` llegue a verlo.
+    ["{ id: undefined }", { id: undefined }],
+    ["{ AND: [] }", { AND: [] }],
+    ["{ NOT: [] }", { NOT: [] }],
+    ["{ OR: [] }", { OR: [] }],
+    ["{ OR: [{}] }", { OR: [{}] }],
+    ["{ AND: [{}] }", { AND: [{}] }],
+    ["{ AND: [{}, { id: undefined }] }", { AND: [{}, { id: undefined }] }],
+    ["{ AND: {} }", { AND: {} }],
+    ["{ NOT: {} }", { NOT: {} }],
+    ["{ NOT: [{}] }", { NOT: [{}] }],
+    ["{ AND: [{ OR: [] }] }", { AND: [{ OR: [] }] }],
+    ["{ lot: { AND: [] } } (anidado)", { lot: { AND: [] } }],
+    ["{ lot: { NOT: [] } } (anidado)", { lot: { NOT: [] } }],
+    ["{ lot: { id: undefined } } (anidado)", { lot: { id: undefined } }],
+    ["{ id: { in: [undefined] } }", { id: { in: [undefined] } }],
+  ];
+  it.each(sinCondicion)("rechaza %s: no es una condición", (_etiqueta, filtro) => {
+    expect(tieneCondicion(filtro)).toBe(false);
+  });
+
+  // Controles positivos: sin ellos, una función que devolviera siempre `false` pasaría todo lo de arriba.
+  const conCondicion: [string, unknown][] = [
+    ["{ id: 'x' }", { id: "x" }],
+    ["{ id: { in: ['x'] } }", { id: { in: ["x"] } }],
+    ["{ lotCode: { startsWith: 'TEST' } }", { lotCode: { startsWith: "TEST" } }],
+    ["{ AND: [{ id: 'x' }] }", { AND: [{ id: "x" }] }],
+    ["{ OR: [{ id: 'x' }] }", { OR: [{ id: "x" }] }],
+    ["{ AND: [], id: 'x' } (una lista vacía junto a una condición real)", { AND: [], id: "x" }],
+    ["{ lot: { id: 'x' } } (anidado)", { lot: { id: "x" } }],
+    // `in: []` SÍ es una condición: no casa con nada, y es lo que queda en el `afterAll` cuando el `beforeAll`
+    // no llegó a crear ningún lote. Si la guarda lo rechazara, esa limpieza lanzaría y abandonaría las líneas
+    // siguientes (un `afterAll` es una cadena).
+    ["{ id: { in: [] } } (lista de valores vacía)", { id: { in: [] } }],
+  ];
+  it.each(conCondicion)("acepta %s: sí es una condición", (_etiqueta, filtro) => {
+    expect(tieneCondicion(filtro)).toBe(true);
+  });
+});
+
+describe("borrarProcesosDeLotesDonde llama a la guarda antes de cualquier borrado (prueba de FUENTE)", () => {
+  // La guarda de arriba no sirve si el ayudante deja de llamarla, o la llama después de borrar. Se lee el
+  // archivo en vez de ejecutar el ayudante con filtros hostiles (ver la nota del bloque anterior).
+  const RAIZ = new URL("../..", import.meta.url).pathname;
+  const fuente = readFileSync(`${RAIZ}tests/helpers/procesoDePrueba.ts`, "utf8");
+
+  const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /** El cuerpo de `export async function <nombre>(…) {…}`, cerrado por llaves y no por indentación. */
+  function cuerpoDe(texto: string, nombre: string): string {
+    const ini = texto.indexOf(`export async function ${nombre}(`);
+    if (ini < 0) return "";
+    let i = texto.indexOf("(", ini);
+    for (let nivel = 0; i < texto.length; i++) {
+      if (texto[i] === "(") nivel++;
+      else if (texto[i] === ")" && --nivel === 0) break;
     }
-    // Control positivo: un filtro con condición sí borra, y `in: []` es una condición que no casa con nada.
-    await borrarProcesosDeLotesDonde({ id: { in: [] } });
-    expect(await suyos()).toBe(1);
-    await borrarProcesosDeLotesDonde({ id: { in: [l] } });
-    expect(await suyos()).toBe(0);
+    const abre = texto.indexOf("{", i);
+    let nivel = 0;
+    for (let j = abre; j < texto.length; j++) {
+      if (texto[j] === "{") nivel++;
+      else if (texto[j] === "}" && --nivel === 0) return texto.slice(abre, j + 1);
+    }
+    return "";
+  }
+
+  const cuerpo = sinComentarios(cuerpoDe(fuente, "borrarProcesosDeLotesDonde"));
+  const primerBorrado = cuerpo.search(/\.deleteMany\(/);
+  const guarda = /if\s*\(\s*!\s*tieneCondicion\(\s*lot\s*\)\s*\)\s*\{?\s*throw\s+new\s+UnsafeWhereClauseError\(/.exec(cuerpo);
+
+  it("el análisis encuentra el cuerpo del ayudante y sus dos borrados (control del propio análisis)", () => {
+    expect(cuerpo.length, "no se encontró el cuerpo de borrarProcesosDeLotesDonde").toBeGreaterThan(50);
+    expect(cuerpo.match(/\.deleteMany\(/g) ?? [], "el ayudante hace dos deleteMany: devoluciones y procesos").toHaveLength(2);
+    expect(primerBorrado).toBeGreaterThan(0);
+  });
+
+  it("lanza UnsafeWhereClauseError si !tieneCondicion(lot), y lo hace ANTES de su primer deleteMany", () => {
+    expect(guarda, "el ayudante no llama a `if (!tieneCondicion(lot)) throw new UnsafeWhereClauseError(…)`").not.toBeNull();
+    expect(guarda!.index, "la guarda va después del primer deleteMany").toBeLessThan(primerBorrado);
   });
 });
