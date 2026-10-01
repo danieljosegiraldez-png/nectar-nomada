@@ -31,6 +31,30 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **21** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
 
+> **La línea de etapas pierde dos consultas (2026-09-30, ADR-195): 596→596, 165 archivos, sin cambio.**
+> Decisión de Daniel: «recepción» y «selección» pasan a `sin_registro`, igual que la flotación,
+> porque contaban un acumulado (cuántos lotes pasaron alguna vez) donde proceso, secado y almacén
+> cuentan lo que hay ahora. `datosDelTablero` deja de hacer **dos** `prisma.lot.count` —la de
+> `desdeRecepciones` con recepción `recibida` y la de la transformación `selection`— y le quedan
+> **tres** en la línea (proceso, secado, almacén), todas con el mismo `lotWhere`. **Las cifras del
+> script no se mueven por la misma razón que no se movieron al añadirlas:** cuenta operaciones por
+> función y por archivo, y esas dos consultas vivían dentro de una función que ya estaba
+> inventariada como «guardia directo». O sea que quitar acceso **tampoco** aparece en el número:
+> la medición es `node scripts/inventario-de-acceso.mjs` (596 operaciones, 165 archivos, 458
+> guardia directo) y la confirman `cifras-del-inventario` y `acceso-a-datos`, no esta aritmética. La
+> razón de la allowlist se corrigió de «cinco recuentos» a «tres».
+
+> **Las tres piezas visuales del tablero (2026-09-30): 596→596, 165 archivos, sin cambio.** Diseño
+> §4.5. `datosDelTablero` ya estaba inventariada como «guardia directo» y sigue igual: la línea de
+> etapas, «cuándo se libera» y la curva de un lote son **más lecturas dentro de la misma función**
+> y de un ayudante **no exportado** (`curvaDeUnLote`), que el script no cuenta aparte. Que la cifra
+> no se mueva **no quiere decir que no haya acceso nuevo**: hay siete consultas crudas más, y por eso
+> la razón de la allowlist las nombra. Las cinco de la línea cuentan LOTES con el mismo `lotWhere` que
+> ya acota lo demás, y la curva comprueba con ese mismo `lotWhere` que el lote es visible **antes**
+> de leer una sola medición; si no lo es devuelve `null`, igual que si no se hubiera pedido —
+> distinguirlo diría que el lote existe. Medido con el script y confirmado por
+> `cifras-del-inventario` y `acceso-a-datos`, no por esta aritmética.
+
 > **La ficha de una unidad (2026-09-30): 595→596, 164→165 archivos y «recibía principal sin
 > guardia visible» 20→21.** Diseño §B.3. `lib/beneficio/fichaDeUnidad.ts` es archivo nuevo y su
 > autorización **no es propia: viene de `colaDeSecado`**, que ya acota por `resolveLotVisibility`

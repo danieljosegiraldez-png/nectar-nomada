@@ -12,7 +12,12 @@ import {
   type FilaDeAtencion,
   type GrupoDeAtencion,
 } from "../../lib/beneficio/tablero";
+import { LIENZO_DE_CURVA, leerCurvaPedida } from "../../lib/beneficio/curvaEnPantalla";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
+import { CurvaDeLote } from "../components/beneficio/CurvaDeLote";
+import { LiberacionDeUnidad } from "../components/beneficio/LiberacionDeUnidad";
+import { LineaDeEtapas } from "../components/beneficio/LineaDeEtapas";
+import { MapaDeUnidades } from "../components/beneficio/MapaDeUnidades";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
 import { NavegacionBeneficio } from "../components/beneficio/NavegacionBeneficio";
 import { destinosDelBeneficio, repartirDestinos } from "./destinos";
@@ -32,8 +37,23 @@ export const dynamic = "force-dynamic";
  * `destinos.ts` como función pura, y por eso tiene prueba — dentro del JSX estaba roto y nadie
  * podía verlo.
  *
- * **Componente de servidor, sin JavaScript de cliente y sin librería de gráficas.** La curva de
- * §4.5 del diseño y las otras dos piezas visuales son un plan aparte.
+ * **Componente de servidor, sin JavaScript de cliente y sin librería de gráficas.** La curva es
+ * un `<svg>` del servidor (`CurvaDeLote`), y elegir lote o variable es un enlace con parámetros de
+ * búsqueda (`?lote=…&variable=…`), no una ruta nueva ni un estado de cliente.
+ *
+ * **Cómo se acomodan las tres piezas, que es decisión de Daniel (diseño §4.5, 2026-09-18) y no
+ * una preferencia.** El orden del documento ES el orden del celular: la línea de etapas en dos
+ * filas de tres; debajo «qué hacer ahora» (la cola); debajo «¿puedo recibir?» reducido a dos
+ * números y a cuándo se libera la próxima unidad; y **la curva sólo al tocar un lote**. En
+ * pantalla ancha (`min-width: 60rem`, ver `globals.css`) las tres van juntas, con el mapa de
+ * tanques y camas completo.
+ *
+ * **El porqué:** a unos 375 px, seis etapas en fila dejan unos 55 px por etapa —se leen números,
+ * no etiquetas—, y la curva comprimida pierde la banda que la hace útil. Por eso no se pintan las
+ * tres juntas en el celular aunque «cupieran» apretadas.
+ *
+ * **Con `sinAmbito` la pantalla no pinta ni una línea de ceros ni «0 libres de 0»:** dice «no ves
+ * ninguno todavía», que no es «no hay ninguno». Se mira ANTES que nada.
  *
  * **Cada enlace sólo aparece si quien mira puede usarlo** (`permissionKeysAnywhere`), y la
  * autorización de verdad sigue en cada destino. Los lotes del tablero los acota
@@ -43,7 +63,7 @@ export const dynamic = "force-dynamic";
 export default async function BeneficioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; lote?: string | string[]; variable?: string | string[] }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -56,11 +76,13 @@ export default async function BeneficioPage({
   const destinos = destinosDelBeneficio(granted);
   const { operaciones, consultar, herramientas } = repartirDestinos(destinos);
 
-  const [tEq, { ok, error }, beneficios, datos] = await Promise.all([
+  const { ok, error, lote: loteCrudo, variable: variableCruda } = await searchParams;
+  // La curva sólo se pide si la URL trae un lote válido: nadie la toca → no se consulta.
+  const pedida = leerCurvaPedida({ lote: loteCrudo, variable: variableCruda });
+  const [tEq, beneficios, datos] = await Promise.all([
     getTranslations("Equipos"),
-    searchParams,
     listarBeneficios(user.userAccountId),
-    datosDelTablero(user.userAccountId),
+    datosDelTablero(user.userAccountId, undefined, pedida ? { curva: { ...pedida, ...LIENZO_DE_CURVA } } : {}),
   ]);
 
   const cola = colaDeAtencion({
@@ -112,77 +134,140 @@ export default async function BeneficioPage({
       </header>
       <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio" />
 
-      <section className="nn-mill-board" aria-labelledby="tablero-beneficio">
-        <h2 id="tablero-beneficio">{t("tablero")}</h2>
-        <p className="nn-muted">{t("tableroAyuda")}</p>
+      <div className="nn-tablero">
         {datos.sinAmbito ? (
-          // **No es «no hay lotes».** Decirlo así le diría a una cuenta nueva que el beneficio
-          // no tiene café fermentando.
-          <p className="nn-empty">{t("sinAmbito")}</p>
-        ) : cola.length === 0 ? (
-          <p className="nn-empty">{t("nadaPideAtencion")}</p>
+          // **No es «no hay lotes», y no se pinta ninguna línea ni ningún «0 de 0».** Decirlo así le
+          // diría a una cuenta nueva que el beneficio no tiene café fermentando ni tanques.
+          <section className="nn-mill-board nn-tablero-cola" aria-labelledby="tablero-beneficio">
+            <h2 id="tablero-beneficio">{t("tablero")}</h2>
+            <p className="nn-empty">{t("sinAmbito")}</p>
+          </section>
         ) : (
-          GRUPOS.map(({ grupo, clave, ayuda }) => {
-            const filas = cola.filter((f) => f.grupo === grupo);
-            if (filas.length === 0) return null;
-            return (
-              <div key={grupo} className={`nn-board-group nn-board-${grupo}`}>
-                <h3>{t(clave)} <small>({filas.length})</small></h3>
-                {ayuda ? <p className="nn-muted">{t(ayuda)}</p> : null}
-                <ul>
-                  {filas.map((f) => (
-                    <li key={f.lotId}>
-                      <Link href={`/lots/${f.lotId}`}><strong>{f.lotCode}</strong></Link>
-                      {/* TODOS los motivos, no el que ganó el grupo: un lote crítico Y listo
-                          para decidir tiene dos hechos, y esconder uno es esconder trabajo. */}
-                      <span className="nn-board-motivos">{f.motivos.join(" · ")}</span>
-                      <span className="nn-board-ritmo">{textoDeRitmo(f).join(" · ")}</span>
-                      {f.ultimaLectura === null ? (
-                        <span className="nn-board-sinlectura">{t("sinLectura")}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+          <>
+            <section className="nn-tablero-linea" aria-labelledby="linea-beneficio">
+              <h2 id="linea-beneficio">{t("lineaTitulo")}</h2>
+              <p className="nn-muted">{t("lineaAyuda")}</p>
+              <LineaDeEtapas etapas={datos.etapas} />
+            </section>
+
+            <section className="nn-mill-board nn-tablero-cola" aria-labelledby="tablero-beneficio">
+              <h2 id="tablero-beneficio">{t("tablero")}</h2>
+              <p className="nn-muted">{t("tableroAyuda")}</p>
+              {cola.length === 0 ? (
+                <p className="nn-empty">{t("nadaPideAtencion")}</p>
+              ) : (
+                GRUPOS.map(({ grupo, clave, ayuda }) => {
+                  const filas = cola.filter((f) => f.grupo === grupo);
+                  if (filas.length === 0) return null;
+                  return (
+                    <div key={grupo} className={`nn-board-group nn-board-${grupo}`}>
+                      <h3>{t(clave)} <small>({filas.length})</small></h3>
+                      {ayuda ? <p className="nn-muted">{t(ayuda)}</p> : null}
+                      <ul>
+                        {filas.map((f) => (
+                          <li key={f.lotId} aria-current={pedida?.lotId === f.lotId ? "true" : undefined}>
+                            {/* Tocar el lote abre su curva en esta misma pantalla; la ficha del lote
+                                queda en el segundo enlace. */}
+                            <Link href={`/beneficio?lote=${f.lotId}#curva-beneficio`}><strong>{f.lotCode}</strong></Link>
+                            {/* TODOS los motivos, no el que ganó el grupo: un lote crítico Y listo
+                                para decidir tiene dos hechos, y esconder uno es esconder trabajo. */}
+                            <span className="nn-board-motivos">{f.motivos.join(" · ")}</span>
+                            <span className="nn-board-ritmo">{textoDeRitmo(f).join(" · ")}</span>
+                            {f.ultimaLectura === null ? (
+                              <span className="nn-board-sinlectura">{t("sinLectura")}</span>
+                            ) : null}
+                            <Link className="nn-board-ficha" href={`/lots/${f.lotId}`}>{t("abrirLote")}</Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })
+              )}
+            </section>
+
+            <section className="nn-mill-capacity nn-tablero-capacidad" aria-labelledby="capacidad-beneficio">
+              <h2 id="capacidad-beneficio">{t("capacidad")}</h2>
+              {/* En el celular, SÓLO esto: dos números y cuándo se libera la próxima unidad. */}
+              {/* **«0 de 0» no es «no hay ninguno»**: con `total === 0` la lista de unidades que ve quien
+                  mira vino vacía, y eso no dice cuántas existen. Se dice lo que de verdad pasa. */}
+              <div className="nn-cap-numeros">
+                {ocupacion.tanques.total === 0 ? (
+                  <p className="nn-muted">{t("capacidadSinTanques")}</p>
+                ) : (
+                  <p>
+                    <strong>{ocupacion.tanques.libresYSanos}</strong>
+                    <span>{t("capacidadDeTotal", { total: ocupacion.tanques.total })}</span>
+                    <small>{t("capacidadNumeroTanques")}</small>
+                  </p>
+                )}
+                {ocupacion.camas.total === 0 ? (
+                  <p className="nn-muted">{t("capacidadSinCamas")}</p>
+                ) : (
+                  <p>
+                    <strong>{ocupacion.camas.libresYSanos}</strong>
+                    <span>{t("capacidadDeTotal", { total: ocupacion.camas.total })}</span>
+                    <small>{t("capacidadNumeroCamas")}</small>
+                  </p>
+                )}
               </div>
-            );
-          })
-        )}
-      </section>
+              <LiberacionDeUnidad liberacion={datos.liberacion} ahora={datos.medidoEn} />
+              {/* Los avisos sólo salen si hay algo que decir, y dicen POR QUÉ importan. */}
+              {ocupacion.sinUnidadDeclarada > 0 ? (
+                <p className="nn-warn">{t("sinUnidadDeclarada", { n: ocupacion.sinUnidadDeclarada })}</p>
+              ) : null}
+              {ocupacion.conflictos.length > 0 ? (
+                <p className="nn-warn">{t("conflictoDeDatos", { n: ocupacion.conflictos.length })}</p>
+              ) : null}
+              {ocupacion.ajenas > 0 ? <p className="nn-muted">{t("ocupacionAjena", { n: ocupacion.ajenas })}</p> : null}
+              {/* Sólo en pantalla ancha: el mapa completo, y el detalle que los dos números no dicen. */}
+              <div className="nn-cap-ancho">
+                <p>
+                  {ocupacion.tanques.total === 0
+                    ? t("capacidadSinTanques")
+                    : t("capacidadTanques", {
+                        libres: ocupacion.tanques.libresYSanos,
+                        total: ocupacion.tanques.total,
+                        intervencion: ocupacion.tanques.requierenIntervencion,
+                      })}
+                </p>
+                <p>
+                  {ocupacion.camas.total === 0
+                    ? t("capacidadSinCamas")
+                    : t("capacidadCamas", { libres: ocupacion.camas.libresYSanos, total: ocupacion.camas.total })}
+                </p>
+                <MapaDeUnidades tanques={ocupacion.mapa.tanques} camas={ocupacion.mapa.camas} />
+              </div>
+            </section>
 
-      <section className="nn-mill-capacity" aria-labelledby="capacidad-beneficio">
-        <h2 id="capacidad-beneficio">{t("capacidad")}</h2>
-        <p>
-          {t("capacidadTanques", {
-            libres: ocupacion.tanques.libresYSanos,
-            total: ocupacion.tanques.total,
-            intervencion: ocupacion.tanques.requierenIntervencion,
-          })}
-        </p>
-        <p>{t("capacidadCamas", { libres: ocupacion.camas.libresYSanos, total: ocupacion.camas.total })}</p>
-        {/* Los tres avisos sólo salen si hay algo que decir, y dicen POR QUÉ importan. */}
-        {ocupacion.sinUnidadDeclarada > 0 ? (
-          <p className="nn-warn">{t("sinUnidadDeclarada", { n: ocupacion.sinUnidadDeclarada })}</p>
-        ) : null}
-        {ocupacion.conflictos.length > 0 ? (
-          <p className="nn-warn">{t("conflictoDeDatos", { n: ocupacion.conflictos.length })}</p>
-        ) : null}
-        {ocupacion.ajenas > 0 ? <p className="nn-muted">{t("ocupacionAjena", { n: ocupacion.ajenas })}</p> : null}
-      </section>
-
-      <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
-        <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
-        {instrumentos.length === 0 ? (
-          <p className="nn-empty">{t("instrumentosNinguno")}</p>
-        ) : (
-          <ul>
-            {instrumentos.map((i) => (
-              <li key={i.id}>
-                <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
-              </li>
-            ))}
-          </ul>
+            <CurvaDeLote
+              pedida={pedida}
+              curva={datos.curva}
+              codigoDelLote={datos.lotes.find((l) => l.lotId === pedida?.lotId)?.lotCode ?? null}
+            />
+          </>
         )}
-      </section>
+      </div>
+
+      {/* **Con `sinAmbito` este bloque no se pinta**: `VACIO.instrumentos` es `[]` porque no se miró
+          nada, y «Ningún instrumento pide atención» sobre un `[]` sin medir se lee como «todo bien».
+          Es el mismo fallo que `etapas` ya guarda («Vacía cuando `sinAmbito`»), una sección más abajo. */}
+      {datos.sinAmbito ? null : (
+        <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
+          <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
+          {instrumentos.length === 0 ? (
+            <p className="nn-empty">{t("instrumentosNinguno")}</p>
+          ) : (
+            <ul>
+              {instrumentos.map((i) => (
+                <li key={i.id}>
+                  <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="nn-mill-primary" aria-labelledby="operaciones-beneficio">
         <h2 id="operaciones-beneficio">{t("operaciones")}</h2>

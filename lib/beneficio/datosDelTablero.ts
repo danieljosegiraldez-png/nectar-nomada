@@ -12,14 +12,19 @@ import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lo
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
 import { veredictoDelLote } from "./desdeElLote";
-import type {
-  CorridaAbierta,
-  EntradaDeLoteParaTablero,
-  EquipoParaTablero,
-  UnidadDelSitio,
-  VeredictoParaCola,
+import { curvaDeLote, type Curva } from "./curvaDeLote";
+import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
+import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
+import {
+  pidenDecisionPorEtapa,
+  type CorridaAbierta,
+  type EntradaDeLoteParaTablero,
+  type EquipoParaTablero,
+  type UnidadDelSitio,
+  type VeredictoParaCola,
 } from "./tablero";
 import type { MetaConRitmo } from "../traceability/ritmo";
+import type { Prisma } from "../../generated/prisma/client";
 
 export interface DatosDelTablero {
   readonly lotes: readonly EntradaDeLoteParaTablero[];
@@ -35,7 +40,36 @@ export interface DatosDelTablero {
    * que el beneficio no tiene café fermentando. Misma regla que `colaDeSecado` y `getLotList`.
    */
   readonly sinAmbito: boolean;
+  /**
+   * La línea de seis etapas, en orden. **Vacía cuando `sinAmbito`**: una línea de ceros le diría a
+   * quien no ve ningún lote que el beneficio no tiene café en ninguna etapa. Quien pinta mira
+   * `sinAmbito` ANTES que esto.
+   */
+  readonly etapas: readonly Etapa[];
+  /**
+   * Cuándo se libera la próxima unidad (tanque o cama) con una corrida abierta de un lote visible.
+   * `null` = ninguna corrida abierta **ocupa una unidad declarada Y visible** (la misma que cuenta
+   * la ocupación; una corrida de una unidad que no ves no entra); no es «sin ámbito» (eso lo
+   * dice `sinAmbito`) ni «sin duración» (eso es `sin_duracion_declarada`).
+   */
+  readonly liberacion: Liberacion | null;
+  /**
+   * La curva del lote pedido en `opciones.curva`, o `null` si no se pidió **o si ese lote no es
+   * visible para quien mira** — las dos cosas callan igual a propósito: decir «ese lote existe
+   * pero no lo ves» enseñaría que existe.
+   */
+  readonly curva: Curva | null;
   readonly medidoEn: Date;
+}
+
+/** Qué curva se pide: un lote, una variable y el lienzo en que se pintará. */
+export interface OpcionesDelTablero {
+  readonly curva?: {
+    readonly lotId: string;
+    readonly variable: string;
+    readonly ancho: number;
+    readonly alto: number;
+  };
 }
 
 const VACIO: Omit<DatosDelTablero, "medidoEn"> = {
@@ -46,6 +80,9 @@ const VACIO: Omit<DatosDelTablero, "medidoEn"> = {
   instrumentos: [],
   desviacionesAbiertasPorLote: new Map(),
   sinAmbito: true,
+  etapas: [],
+  liberacion: null,
+  curva: null,
 };
 
 /** Las metas con ritmo de una fase, con la última lectura de cada variable **dentro** de ella. */
@@ -69,7 +106,17 @@ const procesoSelect = {
   processRecipeVersion: {
     select: {
       fases: { select: { phase: true, expectedHours: true } },
-      targets: { select: { variable: true, everyHours: true, phase: true } },
+      targets: {
+        select: {
+          variable: true,
+          everyHours: true,
+          phase: true,
+          moment: true,
+          minValue: true,
+          maxValue: true,
+          targetValue: true,
+        },
+      },
     },
   },
 } as const;
@@ -87,13 +134,21 @@ const medicionSelect = {
 export async function datosDelTablero(
   userAccountId: string,
   ahora: Date = new Date(),
+  opciones: OpcionesDelTablero = {},
 ): Promise<DatosDelTablero> {
   const lotWhere = lotWhereFromVisibility(await resolveLotVisibility(userAccountId));
   if (lotWhere === null) return { ...VACIO, medidoEn: ahora };
 
   // Los lotes con una corrida ABIERTA, que es lo que el tablero vigila (§4.1). Un lote en reposo
   // no entra: su fase no tiene corrida, y el spec lo deja fuera de la cola a propósito.
-  const [fermentaciones, secados] = await Promise.all([
+  //
+  // Los recuentos de la línea de etapas se piden en la MISMA pasada y con el MISMO filtro
+  // (`lotWhere`): cada uno cuenta LOTES visibles, nunca filas de la tabla de la etapa, así que dos
+  // procesos abiertos de un mismo lote son uno y los de un lote que no ves no cuentan. Sólo se piden
+  // las tres etapas que dicen «hay» (proceso, secado, almacén); recepción, flotación y selección no
+  // cuentan y por qué está en `lineaDeEtapas.ts` (ADR-195). Qué registro cuenta cada una está medido allí.
+  const cuentaLotes = (donde: Prisma.LotWhereInput) => prisma.lot.count({ where: { AND: [lotWhere, donde] } });
+  const [fermentaciones, secados, enProceso, enSecado, enAlmacen] = await Promise.all([
     prisma.fermentationRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
@@ -121,6 +176,10 @@ export async function datosDelTablero(
         },
       },
     }),
+    // Proceso, secado y almacén tienen fin declarado: «hay» es «sin terminar».
+    cuentaLotes({ lotProcesses: { some: { endedAt: null } } }),
+    cuentaLotes({ transformationInputs: { some: { transformation: { dryingRun: { endedAt: null } } } } }),
+    cuentaLotes({ storageAssignments: { some: { endedAt: null } } }),
   ]);
 
   const corridas: CorridaAbierta[] = [
@@ -141,7 +200,30 @@ export async function datosDelTablero(
     ...secados.map((s) => ({ ...s, fase: "drying" as const })),
   ];
 
+  // **Una entrada por LOTE, no por corrida.** Este bucle recorre corridas, y un lote puede tener
+  // varias abiertas (dos secados, o una fermentación y un secado): sin esto el mismo lote saldría dos
+  // veces en `lotes` y la cola lo listaría dos veces con la misma clave de React; y, peor,
+  // `pidenDecision` contaría corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes, y una misma
+  // celda diría «1 lote · 2 piden decisión». Si el lote ya está, se queda la corrida que EMPEZÓ
+  // antes: es la que lleva más tiempo abierta, y esconder la más vieja es esconder la más atrasada.
+  const anotar = (destino: EntradaDeLoteParaTablero[], nueva: EntradaDeLoteParaTablero) => {
+    const i = destino.findIndex((e) => e.lotId === nueva.lotId);
+    if (i === -1) {
+      destino.push(nueva);
+    } else if (
+      nueva.faseIniciada !== null &&
+      (destino[i]!.faseIniciada === null || nueva.faseIniciada < destino[i]!.faseIniciada!)
+    ) {
+      destino[i] = nueva;
+    }
+  };
   const lotes: EntradaDeLoteParaTablero[] = [];
+  // Las mismas entradas, separadas por fase: la cola se calcula por fase para que «pide decisión»
+  // llegue a la etapa correcta aunque un lote tuviera las dos fases abiertas a la vez.
+  const entradasPorFase = {
+    fermentation: [] as EntradaDeLoteParaTablero[],
+    drying: [] as EntradaDeLoteParaTablero[],
+  };
   const organizaciones = new Set<string>();
 
   for (const c of crudas) {
@@ -191,7 +273,7 @@ export async function datosDelTablero(
     const fases = c.lotProcess?.processRecipeVersion?.fases ?? [];
     const targets = c.lotProcess?.processRecipeVersion?.targets ?? [];
 
-    lotes.push({
+    const entradaDeTablero: EntradaDeLoteParaTablero = {
       lotId: lot.id,
       lotCode: lot.lotCode,
       veredicto: typeof veredicto === "string" ? veredicto : (veredicto as unknown as VeredictoParaCola),
@@ -199,7 +281,9 @@ export async function datosDelTablero(
       expectedHours: fases.find((f) => f.phase === c.fase)?.expectedHours ?? null,
       metas: metasDeFase(targets, c.fase, ultimaPorVariable),
       ultimaLectura: mediciones[0]?.occurredAt ?? null,
-    });
+    };
+    anotar(lotes, entradaDeTablero);
+    anotar(entradasPorFase[c.fase], entradaDeTablero);
   }
 
   // Los equipos salen de `listarEquipos`, que YA filtra por `can(view, equipment)`: una sola
@@ -215,7 +299,7 @@ export async function datosDelTablero(
   const camas = organizaciones.size
     ? await prisma.location.findMany({
         where: { locationType: "drying_bed", organizationId: { in: [...organizaciones] } },
-        select: { id: true, status: true },
+        select: { id: true, name: true, status: true },
       })
     : [];
 
@@ -236,23 +320,150 @@ export async function datosDelTablero(
     }
   }
 
+  const etapas = lineaDeEtapas({
+    proceso: enProceso,
+    secado: enSecado,
+    almacen: enAlmacen,
+    pidenDecision: pidenDecisionPorEtapa({
+      fermentacion: entradasPorFase.fermentation,
+      secado: entradasPorFase.drying,
+      desviacionesAbiertasPorLote: porLote,
+      ahora,
+    }),
+  });
+
+  // **Sólo cuentan las corridas que ocupan una unidad declarada Y VISIBLE para quien mira.** «Cuándo
+  // se libera la próxima unidad» no puede responderlo una corrida con el tanque en texto libre o sin
+  // cama: no libera ninguna unidad del tablero (la ocupación ya las cuenta aparte como «sin unidad
+  // declarada»). Incluirlas haría que una corrida sin unidad y con duración dijera «se libera a las X»
+  // de una unidad que no existe.
+  //
+  // **Y tampoco la de una unidad que quien mira no ve** (un tanque que `listarEquipos` no le devolvió,
+  // una cama de otra organización): `ocupacionDelSitio` hace lo contrario con esa misma corrida —la
+  // manda a `ajenas` y se niega a contarla— y sus números no la incluyen. Si aquí sí contara, la
+  // pantalla diría «0 libres de 0» junto a «la próxima unidad se libera a las 14:00», sobre una unidad
+  // que no aparece en ninguno de sus números. El conjunto de ids es el MISMO que usa la ocupación
+  // (`tanques` ∪ `camas`, los dos de abajo), calculado aquí porque la ocupación lo calcula una función
+  // más allá, en la página.
+  const duracionDeFase = (
+    lotProcess: (typeof crudas)[number]["lotProcess"],
+    fase: "fermentation" | "drying",
+  ) => lotProcess?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
+  const tanquesVisibles: UnidadDelSitio[] = equipos
+    .filter((e) => e.kind === "vessel")
+    .map((e) => ({
+      id: e.id,
+      nombre: e.name,
+      lifecycleStatus: e.lifecycleStatus,
+      condicion: e.condicion?.condition ?? null,
+    }));
+  // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
+  // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
+  const camasVisibles: UnidadDelSitio[] = camas.map((c) => ({
+    id: c.id,
+    nombre: c.name,
+    // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
+    lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
+    condicion: null,
+  }));
+  const idsVisibles = new Set([...tanquesVisibles, ...camasVisibles].map((u) => u.id));
+  const corridasConDuracion: CorridaConDuracion[] = [
+    ...fermentaciones.map((f) => ({
+      equipmentId: f.vesselEquipmentId,
+      bedLocationId: null,
+      iniciadaEn: f.startedAt,
+      expectedHours: duracionDeFase(f.lotProcess, "fermentation"),
+    })),
+    ...secados.map((d) => ({
+      equipmentId: null,
+      bedLocationId: d.dryingBedLocationId,
+      iniciadaEn: d.startedAt,
+      expectedHours: duracionDeFase(d.lotProcess, "drying"),
+    })),
+  ].filter((c) => {
+    const declarada = c.equipmentId ?? c.bedLocationId;
+    return declarada !== null && idsVisibles.has(declarada);
+  });
+  const liberacion = proximaLiberacion({ corridas: corridasConDuracion, ahora });
+
+  const curva = opciones.curva ? await curvaDeUnLote(lotWhere, crudas, opciones.curva) : null;
+
   return {
     lotes,
-    tanques: equipos
-      .filter((e) => e.kind === "vessel")
-      .map((e) => ({ id: e.id, lifecycleStatus: e.lifecycleStatus, condicion: e.condicion?.condition ?? null })),
-    // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
-    // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
-    camas: camas.map((c) => ({
-      id: c.id,
-      // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
-      lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
-      condicion: null,
-    })),
+    tanques: tanquesVisibles,
+    camas: camasVisibles,
     corridas,
     instrumentos: equipos.map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
     desviacionesAbiertasPorLote: porLote,
     sinAmbito: false,
+    etapas,
+    liberacion,
+    curva,
     medidoEn: ahora,
   };
+}
+
+/**
+ * La curva de un lote, **sólo si ese lote es visible** (`lotWhere` ya viene de la visibilidad real).
+ *
+ * - Las lecturas son las de esa variable DENTRO de la fase abierta, igual que el ritmo; sin fase
+ *   abierta no hay ventana y van todas.
+ * - Una lectura corregida se excluye y entra su corrección: pintar las dos dibujaría un punto que ya
+ *   nadie sostiene (es la regla de `entradaDelLote`).
+ * - **La banda es la del objetivo `during` de la FASE del lote, y si no lo hay, la `final`.** Nunca
+ *   `initial`, y nunca un objetivo sin fase: no dice de qué fase habla (esquema de `ProcessTarget`),
+ *   y pintarlo sería una banda que nadie declaró. Sin objetivo, `curvaDeLote` dice
+ *   `sin_objetivo_declarado` y pinta los puntos igual.
+ */
+async function curvaDeUnLote(
+  lotWhere: Prisma.LotWhereInput,
+  crudas: readonly {
+    readonly fase: "fermentation" | "drying";
+    readonly startedAt: Date;
+    readonly lotProcess: {
+      readonly processRecipeVersion: {
+        readonly targets: readonly {
+          readonly variable: string;
+          readonly phase: string | null;
+          readonly moment: string;
+          readonly minValue: { toNumber(): number } | null;
+          readonly maxValue: { toNumber(): number } | null;
+          readonly targetValue: { toNumber(): number } | null;
+        }[];
+      } | null;
+    } | null;
+    readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
+  }[],
+  pedida: NonNullable<OpcionesDelTablero["curva"]>,
+): Promise<Curva | null> {
+  const { lotId, variable, ancho, alto } = pedida;
+  const visible = await prisma.lot.findFirst({ where: { AND: [lotWhere, { id: lotId }] }, select: { id: true } });
+  if (!visible) return null;
+
+  const abierta = crudas.find((c) => c.transformations.some((t) => t.inputs.some((i) => i.lot.id === lotId)));
+  const mediciones = await prisma.measurement.findMany({
+    where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
+    select: { id: true, value: true, occurredAt: true, correctsId: true },
+    orderBy: { occurredAt: "asc" },
+  });
+  const corregidas = new Set(mediciones.map((m) => m.correctsId).filter((id): id is string => id != null));
+
+  const metas = abierta?.lotProcess?.processRecipeVersion?.targets ?? [];
+  const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
+  const meta = delaFase.find((t) => t.moment === "during") ?? delaFase.find((t) => t.moment === "final");
+
+  return curvaDeLote({
+    lecturas: mediciones
+      .filter((m) => !corregidas.has(m.id))
+      .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
+    objetivo: meta
+      ? {
+          minValue: meta.minValue?.toNumber() ?? null,
+          maxValue: meta.maxValue?.toNumber() ?? null,
+          targetValue: meta.targetValue?.toNumber() ?? null,
+        }
+      : null,
+    ancho,
+    alto,
+  });
 }
