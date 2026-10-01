@@ -203,6 +203,12 @@ async function historiaArriba(tx: Prisma.TransactionClient, vigente: ProcesoEnCa
  *   devuelve su composición. Nunca se elige uno: «nunca se toma el valor del primer padre»
  *   (`20_modelo_ciclo_completo.md` §1.3).
  * - Sólo es `sin_proceso` si TODAS las ramas terminaron en raíces sin ninguno.
+ *
+ * **Lanza `lineage_too_deep` en dos casos, no en uno** (ronda de arreglo 1, 2026-10-01): cuando el
+ * recorrido que BUSCA el proceso pasa del tope, y también cuando el vigente ya resolvió pero la cadena
+ * hacia arriba (`historiaArriba`) pasa del tope. Decisión: la historia no se trunca en silencio. Una
+ * cadena cortada que contestara sin los procesos de más arriba se leería como «no hubo más», y la Parte
+ * 5 atribuye las tazas por esa cadena.
  */
 export async function procesoQueCubre(tx: Prisma.TransactionClient, lotId: string): Promise<Cobertura> {
   const encontrados = new Map<string, ProcesoEnCadena>();

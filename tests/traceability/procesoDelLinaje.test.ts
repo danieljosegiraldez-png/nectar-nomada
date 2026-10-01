@@ -107,7 +107,10 @@ describe("R1 — el proceso que cubre a un lote", () => {
     expect(c.vigente?.id).toBe(p);
     expect(c.vigente?.lotId).toBe(cereza);
     expect(c.vigente?.profundidad).toBe(2);
-    expect(fermentado).toBeDefined();
+    // El lote del medio ve el mismo proceso, una generación arriba: ni se salta ni se duplica.
+    const medio = await procesoQueCubre(prisma, fermentado!);
+    expect(medio.vigente?.id).toBe(p);
+    expect(medio.vigente?.profundidad).toBe(1);
   });
 
   it("sin proceso en ninguna rama es sin_proceso", async () => {
@@ -193,6 +196,71 @@ describe("R1 — el proceso que cubre a un lote", () => {
     const abajo = await idsDeDescendencia(prisma, ids[0]!);
     expect(abajo).toHaveLength(14);
   }, 60000);
+
+  // Ronda de arreglo 1 (2026-10-01). Cada comprobación del tope y cada conjunto de visitados tiene su
+  // PROPIA prueba: con una sola prueba por todas, mutarlas juntas no decía cuál guardaba cuál.
+  // Cadena de TOPE+2 = 66 lotes, L0..L65.
+
+  it(`la descendencia llega a ${TOPE_DE_LINAJE} generaciones y lanza en la ${TOPE_DE_LINAJE + 1}`, async () => {
+    const ids = await cadena("DESC", TOPE_DE_LINAJE + 2);
+    const desdeL1 = await idsDeDescendencia(prisma, ids[1]!); // L65 queda a 64 generaciones: el borde
+    expect(desdeL1).toHaveLength(TOPE_DE_LINAJE);
+    expect(desdeL1).toContain(ids[ids.length - 1]);
+    await expect(idsDeDescendencia(prisma, ids[0]!)).rejects.toThrow(new LotProcessError("lineage_too_deep")); // L65 a 65
+  }, 120000);
+
+  it(`la ascendencia llega a ${TOPE_DE_LINAJE} generaciones y lanza en la ${TOPE_DE_LINAJE + 1}`, async () => {
+    const ids = await cadena("ASC", TOPE_DE_LINAJE + 2);
+    const deL64 = await idsDeAscendencia(prisma, ids[TOPE_DE_LINAJE]!); // L0 queda a 64 generaciones: el borde
+    expect(deL64).toHaveLength(TOPE_DE_LINAJE);
+    expect(deL64).toContain(ids[0]);
+    await expect(idsDeAscendencia(prisma, ids[TOPE_DE_LINAJE + 1]!)).rejects.toThrow(new LotProcessError("lineage_too_deep")); // L0 a 65
+  }, 120000);
+
+  it(`la historia de arriba también tiene tope: el vigente con ${TOPE_DE_LINAJE} ancestros resuelve y con ${TOPE_DE_LINAJE + 1} lanza`, async () => {
+    // El proceso vive en L64, que tiene 64 ancestros sin proceso: la historia llega justo al tope.
+    const ids = await cadena("HIST", TOPE_DE_LINAJE + 2);
+    const p = await proceso(ids[TOPE_DE_LINAJE]!, "abierto");
+    const propio = await procesoQueCubre(prisma, ids[TOPE_DE_LINAJE]!);
+    expect(propio.vigente?.id).toBe(p);
+    expect(propio.cadena.map((x) => x.id)).toEqual([p]);
+    // Desde L65 el vigente se halla a una generación y ya no hay duda de quién cubre, pero sus ancestros
+    // llegan a la generación 65: la historia no se trunca en silencio, lanza.
+    await expect(procesoQueCubre(prisma, ids[TOPE_DE_LINAJE + 1]!)).rejects.toThrow(new LotProcessError("lineage_too_deep"));
+  }, 120000);
+
+  // Un ciclo no existe con datos reales —una transformación sólo añade hijos—, pero es lo único que
+  // distingue a un recorrido CON conjunto de visitados de uno sin él: sin conjunto da vueltas hasta el
+  // tope y lanza; con él termina. Las cuatro funciones que recorren el linaje tienen el suyo.
+  async function ciclo(prefijo: string): Promise<[string, string, string]> {
+    const c0 = await lote(`${prefijo}0`);
+    const c1 = await lote(`${prefijo}1`);
+    const c2 = await lote(`${prefijo}2`);
+    await enlazar("stage_change", [c0], [c1]);
+    await enlazar("stage_change", [c1], [c2]);
+    await enlazar("stage_change", [c2], [c0]);
+    return [c0, c1, c2];
+  }
+
+  it("en un ciclo, ascendencia y descendencia terminan y ven a los otros dos lotes", async () => {
+    const [c0, c1, c2] = await ciclo("CIC");
+    expect([...(await idsDeAscendencia(prisma, c0))].sort()).toEqual([c1, c2].sort());
+    expect([...(await idsDeDescendencia(prisma, c0))].sort()).toEqual([c1, c2].sort());
+  });
+
+  it("en un ciclo sin procesos, procesoQueCubre termina en vez de lanzar lineage_too_deep", async () => {
+    const [c0] = await ciclo("CICSIN");
+    const c = await procesoQueCubre(prisma, c0);
+    expect(c.estado).toBe("sin_proceso");
+  });
+
+  it("en un ciclo con un proceso, la historia de arriba termina y no repite el proceso", async () => {
+    const [c0, c1] = await ciclo("CICCON");
+    const p = await proceso(c1, "abierto");
+    const c = await procesoQueCubre(prisma, c0);
+    expect(c.vigente?.id).toBe(p);
+    expect(c.cadena.map((x) => x.id)).toEqual([p]);
+  });
 
   it("un lote es «dividido» sólo si es la entrada de una división que cerró un proceso", async () => {
     const x = await lote("DIV-X");

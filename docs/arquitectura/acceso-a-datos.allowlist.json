@@ -1394,13 +1394,13 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "procesoQueCubre",
-      "razon": "Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1). No expone nada por sí misma: sus llamadores (servicios de lotProcess, corridas, bodega, lectores) ya autorizaron el lote. Devuelve ids y estado del proceso, no filas de lote.",
+      "razon": "Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1): sube por las ramas hasta el primer lote con proceso y devuelve el vigente, la cadena y, si las ramas no coinciden, la composición de la mezcla. No recibe principal: quien la llame debe haber autorizado el lote de partida antes. Devuelve ids y estado de los procesos, no filas de lote.",
       "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "idsDeAscendencia",
-      "razon": "Devuelve los ids de todos los ancestros de un lote, recorriendo el linaje hacia arriba hasta el tope de 64 generaciones (R1). Sólo la usan `procesoQueCubre`, `bloquearLinajes` y los servicios que ya autorizaron el lote de partida con requireLotAccess. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use.",
+      "razon": "Devuelve los ids de todos los ancestros de un lote, recorriendo el linaje hacia arriba hasta el tope de 64 generaciones (R1). No recibe principal: hoy su único llamador es `bloquearLinajes`, en el mismo archivo, que la usa para saber qué filas bloquear. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use.",
       "verificado": "2026-10-01"
     },
     {
@@ -1412,19 +1412,19 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "bloquearLinajes",
-      "razon": "Bloquea con FOR UPDATE las filas de `lot` del lote y de sus ancestros (R2). No lee nada que se devuelva ni escribe: sólo serializa a quien opere sobre el mismo café. Sus llamadores (abrir, devolver a secado, corridas, cierre, división, bodega) ya autorizaron el lote antes de abrir su transacción.",
+      "razon": "Bloquea con FOR UPDATE las filas de `lot` del lote y de sus ancestros (R2). No devuelve nada ni escribe: sólo serializa a quien opere sobre el mismo café, y por eso no recibe principal. Quien la llame debe haber autorizado el lote antes de abrir su transacción.",
       "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "loteDividido",
-      "razon": "Responde sí o no a «¿es la entrada de una división que cerró un proceso?» (R6.6). No devuelve ningún dato de la fila. Sus llamadores (las compuertas de abrir, medir, muestrear y empezar corrida) ya autorizaron el lote.",
+      "razon": "Responde sí o no a «¿es la entrada de una división que cerró un proceso?» (R6.6). No devuelve ningún dato de la fila y no recibe principal: quien la llame debe haber autorizado el lote.",
       "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "procesosParaEntrada",
-      "razon": "Devuelve el cierre y el grado del proceso que cubre a un lote, con la misma forma para la ficha y el tablero (R7). Sus llamadores (ficha del lote, tablero del secado, lista de catas) ya autorizaron el lote que enseñan; devuelve el grado del proceso, nunca filas del lote.",
+      "razon": "Devuelve el cierre y el grado del proceso que cubre a un lote, con la misma forma para cualquier lector (R7). No recibe principal: quien la llame debe haber autorizado el lote que enseña. Devuelve el grado del proceso, nunca filas del lote.",
       "verificado": "2026-10-01"
     }
   ]
