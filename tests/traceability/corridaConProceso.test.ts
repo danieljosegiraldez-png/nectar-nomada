@@ -55,8 +55,8 @@ async function medicionDeHumedad(lotId: string) {
   mediciones.push(id);
   return id;
 }
-/** Un proceso CERRADO por humedad, insertado crudo: el servicio de cierre es de la tarea 5, y aquí sólo importa
- *  que el lote quede cubierto por un proceso que ya no está abierto. */
+/** Un proceso CERRADO por humedad, insertado crudo, sin pasar por `cerrarProceso` (que desde R5 mira las corridas
+ *  abiertas): aquí sólo importa que el lote quede cubierto por un proceso que ya no está abierto. */
 async function cerradoPorHumedad(lotId: string) {
   const [g, c] = await Promise.all([
     prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
