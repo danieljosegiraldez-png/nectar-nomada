@@ -50,7 +50,7 @@ listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencia
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566)
+### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
 
 **#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
 imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
@@ -64,9 +64,21 @@ error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregl�
 sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
 Ahora descubre los archivos, con control del escáner y del detector por separado.
 
-**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo.
-La maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. Relanzado y
-verificado: 212 tablas, 15.217 filas, cero errores.
+**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
+la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
+esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
+01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
+#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
+manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
+que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
+`scripts/backup/`**. La corrida del lunes sale con él.
+
+**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
+#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
+etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
+cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
+un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
+el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
 
 **§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
 y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
@@ -107,15 +119,6 @@ la transacción no es «resolver en vivo».
 `null → valor`. Se dice, no se disfraza.
 
 ## 3. Bloqueado, y en qué
-
-#### La propuesta de dosis en el formulario de intervención
-
-Rescatado al archivar «2026-09-30 · La dosis del fitosanitario» (PR #554), su único sitio —medido: 0
-en el histórico, 0 en `docs/`, 0 en `PENDING_IMPLEMENTATIONS/`, con 24 archivos de `docs/` que sí
-mencionan «dosis» como control de que el grep mira donde debe—. El dato ya **se guarda**: un producto
-fitosanitario declara uso, rango de dosis, unidad y qué plagas cubre. Falta **usarlo**: al registrar
-una aplicación, proponer la dosis del producto y avisar cuando un preventivo se use contra una plaga
-que no declara. Las cifras reales siguen esperando a Daniel (§1).
 
 #### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
 
