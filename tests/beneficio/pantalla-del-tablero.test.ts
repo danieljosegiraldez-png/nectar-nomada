@@ -115,7 +115,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     // o `alto * 0.2`) → las marcas anclan lejos del borde y cae esta prueba (y la de arriba, si es mayor).
   });
 
-  it("overflow: visible está en el CSS, y hace falta: el vértice del triángulo anclado queda fuera del viewBox", async () => {
+  it("el <svg> que se pinta lleva overflow: visible, y hace falta: el vértice del triángulo anclado queda fuera del viewBox", async () => {
     const html = await pintarCurva(CURVA_CON_FUERA);
     const vb = viewBoxDe(html);
     const fuera = marcas(html)
@@ -124,11 +124,14 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
       .some(([, y]) => y < vb.y || y > vb.y + vb.h);
     // Control: sin un vértice fuera, «overflow visible» no haría falta y esta prueba no diría nada.
     expect(fuera).toBe(true);
-    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
-    const regla = /\.nn-curva-svg\s*\{([^}]*)\}/.exec(css);
-    expect(regla, "la regla .nn-curva-svg existe").not.toBeNull();
-    expect(regla![1]).toMatch(/overflow:\s*visible/);
-    // MUTACIÓN: quitar `overflow: visible` de `.nn-curva-svg` → el vértice anclado se corta y cae esta prueba.
+    // Se afirma sobre el ELEMENTO renderizado, no sobre un archivo de estilos: una declaración en
+    // `globals.css` sobrevive a que el componente cambie de clase, a un override posterior o a un
+    // comentario, y daría verde sobre un `<svg>` que recorta.
+    const abre = /<svg\b[^>]*>/.exec(html);
+    expect(abre, "hay un <svg>").not.toBeNull();
+    expect(abre![0]).toMatch(/style="[^"]*overflow:\s*visible/);
+    // MUTACIÓN: quitar `style={{ overflow: "visible" }}` del `<svg>` (o renombrar su clase si el
+    // atributo dependiera de ella) → el vértice anclado se corta y cae esta prueba.
   });
 
   it("sin objetivo declarado se dibujan los puntos, NO la banda, y se dice", async () => {
@@ -168,6 +171,10 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     expect(marcas(html)).toHaveLength(2); // control: las lecturas se dibujan
     expect(texto).not.toContain("dentro del rango");
     expect(texto).toContain("ancho cero");
+    // La explicación VISIBLE, no sólo el `<desc>` (que sólo lee un lector de pantalla): `aTexto`
+    // junta los dos, y `toContain("ancho cero")` se conformaba con cualquiera.
+    expect(html).toContain('class="nn-warn nn-curva-ancho-cero"');
+    // MUTACIÓN: quitar la rama visible `banda_de_ancho_cero` del componente → cae (el `<desc>` sigue).
     // Control positivo: con una banda de verdad y lecturas dentro, SÍ lo dice (si no, el `not` de arriba no discrimina).
     const sana = aTexto(
       await pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }], objetivo: BANDA, ...LIENZO })),

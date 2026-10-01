@@ -31,7 +31,8 @@ import {
  *    página entera.
  * 2. **Más allá del margen, el punto se ancla en el borde con un triángulo** (`colocarPuntos`) y
  *    el texto cuenta cuántos son. No se recorta en silencio: se enseña, con un símbolo propio.
- * 3. **`overflow: visible` en el CSS** (`.nn-curva-svg`), sólo como cinturón: el trazo y el
+ * 3. **`overflow: visible` en el propio `<svg>` (`style`) y, de refuerzo, en el CSS
+ *    (`.nn-curva-svg`)**, sólo como cinturón: el trazo y el
  *    marcador de un punto pegado al borde no se cortan por la mitad.
  *
  * Las lecturas fuera de la banda usan un rombo, no sólo otro color: quien no distingue el rojo
@@ -117,6 +118,9 @@ export async function CurvaDeLote({
 
       <svg
         className="nn-curva-svg"
+        // En el propio elemento y no sólo en el CSS: lo que se pinta lo lleva, y ningún override de
+        // hoja de estilos ni un cambio de clase se lo quita (una prueba de render sí lo ve).
+        style={{ overflow: "visible" }}
         role="img"
         aria-labelledby="curva-svg-titulo curva-svg-desc"
         viewBox={`${-PAD_X} ${-margen} ${curva.ancho + 2 * PAD_X} ${curva.alto + 2 * margen}`}
