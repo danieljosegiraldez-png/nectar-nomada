@@ -31,6 +31,17 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **21** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
 
+> **Las tres piezas visuales del tablero (2026-09-30): 596→596, 165 archivos, sin cambio.** Diseño
+> §4.5. `datosDelTablero` ya estaba inventariada como «guardia directo» y sigue igual: la línea de
+> etapas, «cuándo se libera» y la curva de un lote son **más lecturas dentro de la misma función**
+> y de un ayudante **no exportado** (`curvaDeUnLote`), que el script no cuenta aparte. Que la cifra
+> no se mueva **no quiere decir que no haya acceso nuevo**: hay siete consultas crudas más, y por eso
+> la razón de la allowlist las nombra. Las cinco de la línea cuentan LOTES con el mismo `lotWhere` que
+> ya acota lo demás, y la curva comprueba con ese mismo `lotWhere` que el lote es visible **antes**
+> de leer una sola medición; si no lo es devuelve `null`, igual que si no se hubiera pedido —
+> distinguirlo diría que el lote existe. Medido con el script y confirmado por
+> `cifras-del-inventario` y `acceso-a-datos`, no por esta aritmética.
+
 > **La ficha de una unidad (2026-09-30): 595→596, 164→165 archivos y «recibía principal sin
 > guardia visible» 20→21.** Diseño §B.3. `lib/beneficio/fichaDeUnidad.ts` es archivo nuevo y su
 > autorización **no es propia: viene de `colaDeSecado`**, que ya acota por `resolveLotVisibility`
