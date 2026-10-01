@@ -12,6 +12,12 @@ export interface ProductoOption {
   defaultReentryHours: number | null;
   safetyNotes: string | null;
   storageConditions: string | null;
+  /** Lo que el producto declara, del alta en inventario (PR #554). Para PROPONER, no para escribir. */
+  plantProtectionUse: "preventivo" | "control" | null;
+  doseMin: number | null;
+  doseMax: number | null;
+  doseUnit: string | null;
+  plantProtectionTargets: readonly string[];
   lotes: readonly { id: string; batchLabel: string; expiresAt: Date | null }[];
 }
 
@@ -40,10 +46,13 @@ export function LineaDeIntervencion({
   indice,
   valores,
   productos,
+  target,
 }: {
   indice: number;
   valores: ValoresDeLinea;
   productos: readonly ProductoOption[];
+  /** El objetivo elegido arriba. Llega para poder avisar si el producto no declara cubrirlo. */
+  target?: string;
 }) {
   const t = useTranslations("Traceability");
   const [materialId, setMaterialId] = useState(valores.materialId);
@@ -63,6 +72,38 @@ export function LineaDeIntervencion({
   const origenDeReentrada = producto
     ? origenDeLaCarencia(valorMostradoDeReentrada, producto.defaultReentryHours, esElProductoOriginal)
     : null;
+  // La UNIDAD se precarga del producto con la misma regla que la carencia: visible, editable, y
+  // nunca escrita por el servidor. Es un valor que Daniel dio —«ml/L», «L/ha»—, no una invención.
+  const valorMostradoDeUnidad = esElProductoOriginal ? (valores.unit ?? null) : (producto?.doseUnit ?? null);
+
+  /**
+   * **La dosis se propone como RANGO y no como número.** La etiqueta da mínimo y máximo; elegir un
+   * valor de dentro —la media, el mínimo— sería inventarle una precisión que nadie declaró, que es
+   * lo que este repositorio prohíbe. Así que se enseña lo que dice la etiqueta y decide el operario.
+   */
+  const dosisDeclarada = (() => {
+    if (!producto) return null;
+    const { doseMin: min, doseMax: max, doseUnit: unidad } = producto;
+    if (min == null && max == null) return null;
+    const cifra = min != null && max != null ? (min === max ? `${min}` : `${min}–${max}`) : `${min ?? max}`;
+    return unidad ? `${cifra} ${unidad}` : cifra;
+  })();
+
+  /**
+   * **El aviso: este producto no declara cubrir el objetivo elegido.** No bloquea nada —puede ser
+   * deliberado, y «otro» no es una plaga concreta—, sólo lo dice.
+   *
+   * Con la lista VACÍA no avisa: vacío es «nadie lo declaró», no «no cubre ninguna». Avisar ahí
+   * convertiría un dato que falta en una afirmación, y además pondría un aviso en todos los
+   * productos hasta que alguien rellene el catálogo — que es cómo se enseña a ignorar un aviso.
+   */
+  const noDeclaraElObjetivo =
+    producto != null &&
+    target != null &&
+    target !== "otro" &&
+    producto.plantProtectionTargets.length > 0 &&
+    !producto.plantProtectionTargets.includes(target);
+
   const rotuloDeOrigen = (origen: ReturnType<typeof origenDeLaCarencia> | null) => {
     if (origen === "del_producto") return t("manejoOriginFromProduct");
     if (origen === "indicada_al_registrar") return t("manejoOriginDeclaredAtEntry");
@@ -103,6 +144,15 @@ export function LineaDeIntervencion({
           {t("manejoStorageConditionsLabel")}: {producto.storageConditions}
         </p>
       ) : null}
+      {dosisDeclarada ? (
+        <p className="nn-detail-meta">
+          <strong>{t("manejoDoseLabel")}:</strong> {dosisDeclarada}
+          {producto?.plantProtectionUse ? ` · ${t(`manejoUse_${producto.plantProtectionUse}`)}` : ""}
+        </p>
+      ) : null}
+      {noDeclaraElObjetivo ? (
+        <p className="nn-alerta nn-alerta-aviso">{t("manejoTargetNoDeclarado", { producto: producto!.name })}</p>
+      ) : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
         <div className="nn-field" style={{ flex: "1 1 120px" }}>
@@ -119,7 +169,18 @@ export function LineaDeIntervencion({
         </div>
         <div className="nn-field" style={{ flex: "1 1 100px" }}>
           <label htmlFor={`linea-${indice}-unit`}>{t("manejoUnitLabel")}</label>
-          <input id={`linea-${indice}-unit`} name={`lineas[${indice}].unit`} type="text" defaultValue={valores.unit ?? ""} />
+          {/* `key` fuerza el remonte al cambiar de producto: sin él `defaultValue` no se actualiza,
+              por el mismo motivo que los dos campos de carencia de abajo. */}
+          <input
+            key={materialId}
+            id={`linea-${indice}-unit`}
+            name={`lineas[${indice}].unit`}
+            type="text"
+            defaultValue={valorMostradoDeUnidad ?? ""}
+          />
+          {producto && valorMostradoDeUnidad && !esElProductoOriginal && producto.doseUnit === valorMostradoDeUnidad ? (
+            <p className="nn-muted">{t("manejoOriginFromProduct")}</p>
+          ) : null}
         </div>
       </div>
 

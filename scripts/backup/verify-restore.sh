@@ -109,17 +109,41 @@ pg_run "$PG_BIN/pg_restore" \
 RESTORE_RC=$?
 set -e
 
-RESTORE_ERRORS="$(grep -c '^pg_restore: error' "$WORK_DIR/restore.err" 2>/dev/null || true)"
-RESTORE_ERRORS="${RESTORE_ERRORS:-0}"
+RESTORE_ERRORS="$(restore_error_count "$WORK_DIR/restore.err")"
 
-if [ "$RESTORE_ERRORS" -gt 0 ]; then
-  echo "  pg_restore reported $RESTORE_ERRORS error(s) — first few:"
-  grep '^pg_restore: error' "$WORK_DIR/restore.err" | head -5 | sed 's/^/    /'
+# **Un error de `pg_restore` ya NO se lee como éxito.** Hasta el 2026-09-30 esto contaba los
+# errores, los imprimía, copiaba el log — y seguía adelante: si el censo de filas cuadraba, el
+# veredicto era PASS con «restore errors: N» enterrado en una línea del resumen. Un respaldo cuya
+# restauración falla a medias puede tener todas las filas y no tener una restricción, un índice o
+# una función; eso no es una copia restaurable, y el único guardia que vigila la red contra perder
+# datos no puede decir PASS sobre ella.
+#
+# Endurecerlo se midió antes de escribirlo, porque un guardia que nunca puede pasar es peor que
+# ninguno: los 27 conjuntos de este Mac llevan 29 veredictos, los 29 con `restore errors: 0`, y
+# ninguno dejó un `restore-errors.log`. Exigir cero es lo que ya ocurría en la práctica.
+if ! restauracion_limpia "$WORK_DIR/restore.err"; then
   cp "$WORK_DIR/restore.err" "$SET_DIR/restore-errors.log"
-  echo "    (full log copied to $SET_DIR/restore-errors.log)"
-else
-  echo "  restored with no errors"
+  echo ""
+  echo "FAIL — pg_restore reportó $RESTORE_ERRORS error(es); esta copia no se restaura limpia." >&2
+  echo "  Los primeros:" >&2
+  grep '^pg_restore: error' "$WORK_DIR/restore.err" | head -5 | sed 's/^/    /' >&2
+  echo "  (log completo en $SET_DIR/restore-errors.log)" >&2
+  echo "  El censo de filas NO se llega a comparar: daría igual que cuadrara." >&2
+  {
+    echo ""
+    echo "verified_at_utc:  $(date -u +%Y-%m-%dT%H%M%SZ)"
+    echo "verified_result:  FAIL — pg_restore: $RESTORE_ERRORS error(es); ver restore-errors.log"
+    echo "restore_exit_code: $RESTORE_RC"
+  } >> "$SET_DIR/MANIFEST.txt"
+  exit 1
 fi
+echo "  restored with no errors"
+
+# **`RESTORE_RC` se registra pero NO decide, y a propósito.** El guion lo guardaba desde siempre y
+# no lo usaba nunca; hacerlo fatal hoy sería apoyarse en un número que jamás se ha medido — los 29
+# veredictos del historial anotan los errores y no el código de salida, así que no se sabe si
+# `pg_restore` devuelve algo distinto de 0 ante un aviso benigno. Se anota en el MANIFEST desde
+# ahora; cuando haya corridas que lo respalden, se podrá exigir.
 
 # --- ¿se comporta como el original? ----------------------------------------
 # El censo de filas dice que están los datos; esto dice que las REGLAS son las mismas. Una copia
@@ -158,6 +182,7 @@ if diff -u "$SET_DIR/rowcounts.tsv" "$WORK_DIR/restored-rowcounts.tsv" > "$WORK_
     echo ""
     echo "verified_at_utc:  $(date -u +%Y-%m-%dT%H%M%SZ)"
     echo "verified_result:  PASS ($TABLES tables, $ROWS rows, restore errors: $RESTORE_ERRORS)"
+    echo "restore_exit_code: $RESTORE_RC"
   } >> "$SET_DIR/MANIFEST.txt"
   exit 0
 else

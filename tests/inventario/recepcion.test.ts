@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../../lib/db";
-import { crearMaterial, MaterialAccessError } from "../../lib/inventario/materiales";
+import { crearMaterial, MaterialAccessError, MaterialValidationError } from "../../lib/inventario/materiales";
 import { camposDe, completarProducto, opcionesDeRecepcion } from "../../lib/inventario/recepcion";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
@@ -119,5 +119,91 @@ describe("recibir un producto fitosanitario", () => {
     expect(o.productos.some((p) => p.name.startsWith("Fito"))).toBe(false);
     expect(o.productos.length).toBeGreaterThan(0);
     expect(o.productos.map((p) => p.id)).toContain(m.id);
+  }, 20000);
+});
+
+/**
+ * La dosis y el uso del producto — Daniel, 2026-09-30.
+ *
+ * Lo que hace estos casos necesarios y no adorno: una dosis NO es un entero. Hasta que se separaron
+ * `CAMPOS_ENTEROS` de `CAMPOS_DECIMALES`, `completarProducto` la validaba con `Number.isInteger` y
+ * habría rechazado «1,5 L/ha» —la forma típica— con un mensaje sobre negativos.
+ */
+describe("la dosis y el uso de un fitosanitario", () => {
+  const fito = (n: string) =>
+    crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Fito ${n} ${RUN_ID}`, defaultUnit: "l", isPlantProtection: true });
+
+  it("completa una dosis con decimales, y el uso y las plagas de una lista cerrada", async () => {
+    const m = await fito("dosis");
+    const despues = await completarProducto(gestorId, {
+      materialId: m.id,
+      locationId: bodega,
+      campos: { doseMin: 1.5, doseMax: 2.25, doseUnit: "L/ha", plantProtectionUse: "control" },
+      plantProtectionTargets: ["broca", "arana_roja"],
+    });
+    expect(Number(despues.doseMin)).toBe(1.5);
+    expect(Number(despues.doseMax)).toBe(2.25);
+    expect(despues.doseUnit).toBe("L/ha");
+    expect(despues.plantProtectionUse).toBe("control");
+    expect([...despues.plantProtectionTargets].sort()).toEqual(["arana_roja", "broca"]);
+  }, 20000);
+
+  it("rechaza una dosis de cero, un uso que no está en la lista, y el rango al revés", async () => {
+    const m = await fito("malas");
+    await expect(completarProducto(gestorId, { materialId: m.id, locationId: bodega, campos: { doseMin: 0 } })).rejects.toBeInstanceOf(
+      MaterialValidationError,
+    );
+    await expect(
+      completarProducto(gestorId, { materialId: m.id, locationId: bodega, campos: { plantProtectionUse: "cuando-toque" } }),
+    ).rejects.toBeInstanceOf(MaterialValidationError);
+    // El rango lo vigila la BASE, con su CHECK: un importador o un SQL directo tampoco lo saltan.
+    await expect(
+      completarProducto(gestorId, { materialId: m.id, locationId: bodega, campos: { doseMin: 5, doseMax: 1 } }),
+    ).rejects.toThrow();
+    // Control: nada de lo anterior se escribió a medias.
+    const quedo = await prisma.consumableMaterial.findUniqueOrThrow({ where: { id: m.id } });
+    expect(quedo.doseMin).toBeNull();
+    expect(quedo.plantProtectionUse).toBeNull();
+  }, 20000);
+
+  it("las plagas son un hueco que se rellena una vez, no un campo que se reemplaza", async () => {
+    const m = await crearMaterial(gestorId, {
+      locationId: bodega,
+      organizationId,
+      name: `Fito declarado ${RUN_ID}`,
+      defaultUnit: "l",
+      isPlantProtection: true,
+      plantProtectionTargets: ["broca"],
+    });
+    const despues = await completarProducto(gestorId, {
+      materialId: m.id,
+      locationId: bodega,
+      campos: {},
+      plantProtectionTargets: ["roya", "nematodos"],
+    });
+    expect(despues.plantProtectionTargets).toEqual(["broca"]);
+    // Control positivo del mismo servicio: sobre uno SIN declarar, sí escribe.
+    const vacio = await fito("sin-plagas");
+    const lleno = await completarProducto(gestorId, {
+      materialId: vacio.id,
+      locationId: bodega,
+      campos: {},
+      plantProtectionTargets: ["roya"],
+    });
+    expect(lleno.plantProtectionTargets).toEqual(["roya"]);
+  }, 20000);
+
+  it("crearMaterial rechaza el rango al revés con una frase, no con un error de Postgres", async () => {
+    await expect(
+      crearMaterial(gestorId, {
+        locationId: bodega,
+        organizationId,
+        name: `Fito rango ${RUN_ID}`,
+        defaultUnit: "l",
+        isPlantProtection: true,
+        doseMin: 9,
+        doseMax: 2,
+      }),
+    ).rejects.toBeInstanceOf(MaterialValidationError);
   }, 20000);
 });

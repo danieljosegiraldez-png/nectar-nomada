@@ -5,6 +5,7 @@ import { getCurrentUser } from "../../../../lib/auth/session";
 import { fichaDeUnidad } from "../../../../lib/beneficio/fichaDeUnidad";
 import { mostrarInstante } from "../../../../lib/time/mostrarInstante";
 import { NavegacionBeneficio } from "../../../components/beneficio/NavegacionBeneficio";
+import { GraficaDeSecado } from "./Grafica";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,26 @@ export default async function FichaDeUnidadPage({ params }: { params: Promise<{ 
             <dd>{mostrarInstante(ficha.entro, ficha.zona)}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="nn-section">
+        <h2>{t("fichaGrafica")}</h2>
+        <GraficaDeSecado
+          datos={ficha.grafica}
+          textos={{
+            sinDatos: t("fichaGraficaSinDatos"),
+            ejeHumedad: t("fichaGraficaEje"),
+            notaTemperatura: t("fichaGraficaNotaTemperatura"),
+            tituloVolteos: t("fichaGraficaVolteo"),
+          }}
+        />
+        {/* Los pesajes van en cifras y NO en la gráfica: cuatro pesajes no hacen una curva. */}
+        {ficha.pesajes.length > 0 ? (
+          <p className="nn-muted">
+            {t("fichaPesajes")}:{" "}
+            {ficha.pesajes.map((w) => `${w.netoKg} kg (${mostrarInstante(w.cuando, ficha.zona)})`).join(" · ")}
+          </p>
+        ) : null}
       </section>
 
       <section className="nn-section">

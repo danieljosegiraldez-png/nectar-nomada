@@ -5,27 +5,21 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { BotonDeEnvio } from "../BotonDeEnvio";
-import type { CampoDelProducto, ClaseDeProducto, OpcionesDeRecepcion } from "../../../lib/inventario/recepcion";
+import type { OpcionesDeRecepcion } from "../../../lib/inventario/recepcion";
+// **Del módulo puro, no del de servidor.** Aquí había una copia a mano de las cuatro listas, y su
+// propio comentario lo decía. Derivó en cuanto el producto ganó campos: ver `camposDeProducto.ts`.
+import {
+  CAMPOS_DECIMALES,
+  CAMPOS_DE_OPCIONES,
+  CAMPOS_LARGOS,
+  CAMPOS_NUMERICOS,
+  VALORES_DE_OPCIONES,
+  camposDe,
+  type CampoDelProducto,
+  type ClaseDeProducto,
+} from "../../../lib/inventario/camposDeProducto";
+import { PLAGAS } from "../../../lib/traceability/plagas";
 
-/** Los campos del producto, en el orden de la pantalla. Copia de `CAMPOS_DEL_PRODUCTO`: el módulo de servidor no se importa aquí. */
-const CAMPOS: readonly CampoDelProducto[] = [
-  "manufacturer",
-  "activeIngredient",
-  "sanitaryRegistration",
-  "defaultWithdrawalDays",
-  "avisarDiasAntes",
-  "storageConditions",
-  "safetyNotes",
-  "defaultReentryHours",
-];
-const NUMERICOS = new Set<CampoDelProducto>(["defaultWithdrawalDays", "avisarDiasAntes", "defaultReentryHours"]);
-const LARGOS = new Set<CampoDelProducto>(["storageConditions", "safetyNotes"]);
-
-/** Copia de `camposDe`: el módulo de servidor no se importa aquí. La reentrada
- *  no significa nada para un medicamento de colmena. */
-function camposDeLaClase(clase: ClaseDeProducto): readonly CampoDelProducto[] {
-  return clase === "fitosanitario" ? CAMPOS : CAMPOS.filter((c) => c !== "defaultReentryHours");
-}
 
 /**
  * El formulario de recepción del botiquín — botiquín, Tarea 9.
@@ -47,6 +41,7 @@ export function RecibirMedicamentoForm({
   clase: ClaseDeProducto;
 }) {
   const t = useTranslations("Inventario");
+  const tObjetivo = useTranslations("Traceability");
   const [locationId, setLocationId] = useState(sitios[0]?.id ?? "");
   const sitio = sitios.find((s) => s.id === locationId) ?? null;
   const deLaFinca = productos.filter((p) => p.organizationId === sitio?.organizationId);
@@ -55,7 +50,14 @@ export function RecibirMedicamentoForm({
   const nuevo = materialId === "__nuevo__";
   const [unit, setUnit] = useState("");
 
-  const aPedir: readonly CampoDelProducto[] = nuevo ? camposDeLaClase(clase) : producto && sitio?.puedeDefinirProducto ? producto.faltan : [];
+  const aPedir: readonly CampoDelProducto[] = nuevo ? camposDe(clase) : producto && sitio?.puedeDefinirProducto ? producto.faltan : [];
+  /**
+   * Las plagas se ofrecen con la misma regla de hueco que los demás campos: para un producto nuevo,
+   * y para uno existente que todavía no declara ninguna. Una lista vacía es «nadie lo declaró» —el
+   * servicio no la sobrescribe cuando ya hay algo, así que ofrecerla ahí sólo confundiría.
+   */
+  const ofrecerPlagas =
+    clase === "fitosanitario" && (nuevo || (producto !== null && sitio?.puedeDefinirProducto === true && producto.plagas.length === 0));
 
   return (
     <form action={action} className="nn-form">
@@ -104,24 +106,53 @@ export function RecibirMedicamentoForm({
         </div>
       ) : null}
 
-      {aPedir.length > 0 ? (
+      {aPedir.length > 0 || ofrecerPlagas ? (
         <fieldset>
           <legend>{nuevo ? t("productoCamposNuevo") : t("productoCamposFaltan")}</legend>
           {aPedir.map((c) => (
             <label key={c}>
               {t(`p_${c}`)}
-              {LARGOS.has(c) ? (
+              {CAMPOS_LARGOS.has(c) ? (
                 <textarea name={`p_${c}`} rows={2} />
+              ) : CAMPOS_DE_OPCIONES.has(c) ? (
+                <select name={`p_${c}`} defaultValue="">
+                  {/* Vacío es «no lo declaró», y es el valor por defecto a propósito: un desplegable
+                      que llega preseleccionado convierte el silencio en una respuesta. */}
+                  <option value="">—</option>
+                  {(VALORES_DE_OPCIONES[c] ?? []).map((o) => (
+                    <option key={o} value={o}>{t(`uso_${o}`)}</option>
+                  ))}
+                </select>
               ) : (
                 <input
-                  type={NUMERICOS.has(c) ? "number" : "text"}
+                  type={CAMPOS_NUMERICOS.has(c) ? "number" : "text"}
                   onWheel={soltarFocoConLaRueda}
                   name={`p_${c}`}
-                  {...(NUMERICOS.has(c) ? { min: 0, step: 1, inputMode: "numeric" as const } : {})}
+                  {...(CAMPOS_DECIMALES.has(c)
+                    ? // Una dosis lleva decimales —«1,5 L/ha»—: con `step={1}` el navegador rechaza
+                      // la mitad de las dosis reales antes de que el servidor las vea.
+                      { min: 0, step: "any", inputMode: "decimal" as const }
+                    : CAMPOS_NUMERICOS.has(c)
+                      ? { min: 0, step: 1, inputMode: "numeric" as const }
+                      : {})}
                 />
               )}
             </label>
           ))}
+          {ofrecerPlagas ? (
+            <fieldset>
+              <legend>{t("p_plantProtectionTargets")}</legend>
+              <p className="nn-muted">{t("p_plantProtectionTargetsAyuda")}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem 1rem" }}>
+                {PLAGAS.map((plaga) => (
+                  <label key={plaga} style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                    <input type="checkbox" name="p_plantProtectionTargets" value={plaga} />
+                    {tObjetivo(`manejoTarget_${plaga}`)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
           <p className="nn-muted">{t("productoCamposAyuda")}</p>
         </fieldset>
       ) : null}

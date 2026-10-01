@@ -4558,6 +4558,37 @@ el rato:** una variable de entorno **no entra en vigor sin un build**, y con com
 documentación el `ignoreCommand` lo cancela a los 8 s; hizo falta `--force`. **Sin hacer:** los seis
 productos de Finca Rosina, bloqueados en Daniel — tres etiquetas, y cantidad y lote de cada uno.
 
+### 2026-09-14 · El presupuesto de Actions se agotó y volvió (archivado el 2026-09-30)
+
+Archivado porque el incidente se cerró la misma tarde y su lección duradera vive en `CLAUDE.md`:
+medido ahí, «`main` ya no tiene corrida» 1 vez y el disparador `push` 2, con `ADR-181` de control.
+
+**2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
+not started because an Actions budget is preventing further use»*. Se lee como el rojo
+de una compuerta propia —«¿Hay código en este cambio?: failure» y las otras tres
+`skipped`— y **no es el cambio**: el job nunca arrancó. Cuatro corridas seguidas, dos
+PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
+comandos están en `CLAUDE.md`.
+
+**Lo que bloqueaba:** la protección de `main` exige tres checks evaluados sobre el PR,
+así que nada se podía fusionar. No hay reintento que lo salte. Verificado que Vercel es
+independiente: llega como `status`, no como check-run, y siguió desplegando.
+
+**Restablecido la misma tarde**, medido y no supuesto: el PR #310 llevó las tres
+compuertas en `SUCCESS` con runner y pasos de verdad, contra el `runner_name` vacío y
+`steps: []` de las corridas muertas. **Ése es el discriminante**, no la conclusión: una
+corrida sin runner sale `failure` y se lee como un fallo del cambio. Mientras duró se
+fusionó con los dos carriles corridos en local sobre el árbol rebasado y con base creada
+desde cero — es peor evidencia que CI y hay que decirlo, no equipararla.
+
+**Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
+mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15
+canceladas solas. Consecuencia que hay que saber: **`main` ya no tiene corrida
+después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la protección
+lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
+rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
+fusionado queda corregida allí.
+
 ### 2026-09-30 · El tablero del beneficio, paso 1 (PR #545)
 
 **Diseñado y aprobado el 2026-09-18, y tres semanas sin construir porque este archivo no lo nombraba.**
@@ -4568,3 +4599,42 @@ así que la diferencia la hace la pantalla o se pierde. Nueve flip-tests, **dos 
 Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `afterAll` dejó en la base compartida
 —es una cadena, el primer `deleteMany` que lanza abandona los nueve siguientes con la suite en verde— y un
 «1 ocupaciones». **Sin hacer:** la capacidad sin ejercer con unidades reales; §4.5 y el paso 2 son planes propios.
+
+### 2026-09-30 · La dosis del fitosanitario, y dos listas que estaban dos veces (PR #554)
+
+**Lo que Daniel pidió:** que registrar una aplicación no sea texto libre. Cuatro datos del PRODUCTO y
+no de cada aplicación —uso `preventivo`/`control`, dosis en **rango** porque la etiqueta da mínimo y
+máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una intervención—. Sus
+palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
+medicamento de colmena no ve ninguno de los cinco.
+
+**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —servidor y una
+copia a mano en `RecibirMedicamentoForm.tsx`, con su propio comentario diciéndolo— y **ya habían
+derivado**: el servidor ofrecía cuatro campos que el formulario no pintaba, lo que no falla en rojo.
+Unificarlas en módulos puros destapó dos más: `completarProducto` validaba **toda** dosis con
+`Number.isInteger` —«1,5 L/ha» se rechazaba por «negativa», y el formulario pintaba `step={1}`— y las
+plagas sólo se declaraban al **crear** el producto.
+
+**Verificado.** `verify` y `build` 0, y los DOS carriles de CI corridos en local sobre el árbol
+fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
+el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
+firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
+
+### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
+
+**ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
+elige el destino **y** no necesita permiso en el beneficio. La finca declara una vez a qué beneficio
+envía; cada jornada lo **copia** al abrirse —instantánea, no referencia viva: si se resolviera en
+vivo, cambiar el destino movería jornadas ya cerradas con entregas ya recibidas—. `null` no es un
+hueco: Jaramillo y Artillería no envían a ningún beneficio propio, y sus jornadas se abren igual.
+`cambiarDestinoDeJornada` es la corrección, y la lista de fincas dice **qué falta**, no «0».
+
+**Dos flip-tests cazaron guardias falsos míos.** La prueba de la instantánea cambiaba el destino con
+un `prisma.update` directo, así que la mutación que debía cazar —propagar a las jornadas abiertas—
+la dejaba verde: ejercitaba el fixture, no el servicio. Y `rejects.toThrow(/destino_fijo/)` casaba
+también con la excepción del DISPARADOR, así que quitar la guarda del servicio no rompía nada; ahora
+exige la CLASE. Un tercer flip que probé no discriminaba y tenía razón: mover la lectura dentro de
+la transacción no es «resolver en vivo».
+
+**Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
+`null → valor`. Se dice, no se disfraza.

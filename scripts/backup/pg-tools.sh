@@ -188,3 +188,30 @@ is_complete_set() {
   [ -f "${1:-}/MANIFEST.txt" ]
 }
 
+
+# --- ¿fue limpia la restauración? ------------------------------------------
+# Cuenta los errores de `pg_restore` en su log de stderr. Vive aquí, y no dentro
+# de `verify-restore.sh`, para poder ejercitarla directamente — el mismo motivo
+# que `is_complete_set` y `libpq_url` (ADR-077). Una versión de esta cuenta
+# reescrita en TypeScript podría coincidir consigo misma mientras el guion hace
+# otra cosa; por eso `tests/backup/restauracionLimpia.test.ts` llama a ESTA.
+#
+# Sólo cuenta `error`, no `warning`: con `--no-owner --no-privileges` los avisos
+# por los roles de Neon que aquí no existen son esperados, y hacerlos fatales
+# sería un guardia que nunca puede pasar.
+restore_error_count() {
+  local log="${1:-}"
+  [ -f "$log" ] || { echo 0; return 0; }
+  local n
+  n="$(grep -c '^pg_restore: error' "$log" 2>/dev/null || true)"
+  echo "${n:-0}"
+}
+
+# El veredicto: cero errores. **Medido antes de endurecerlo** — los 27 conjuntos
+# de respaldo de este Mac llevan 29 veredictos y los 29 dicen
+# `restore errors: 0`, y ninguno dejó un `restore-errors.log`. O sea que exigir
+# cero no rompe ninguna corrida real conocida; es lo que ya pasaba, ahora escrito
+# como condición en vez de como comentario.
+restauracion_limpia() {
+  [ "$(restore_error_count "${1:-}")" -eq 0 ]
+}

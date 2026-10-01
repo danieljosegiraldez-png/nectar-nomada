@@ -15,24 +15,10 @@ import type { PlotInterventionKind, PlotInterventionMethod, PlotInterventionTarg
 
 const initialState: TraceabilityActionState = {};
 
+import { PLAGAS } from "../../../lib/traceability/plagas";
+
 const KINDS: readonly PlotInterventionKind[] = ["aplicacion", "liberacion", "manejo_cultural"];
 
-// spec §2.5 — la lista es de Daniel; crecerla es una migración de una línea.
-const TARGETS: readonly PlotInterventionTarget[] = [
-  "arana_roja",
-  "broca",
-  "minador_hoja",
-  "cochinillas",
-  "nematodos",
-  "jobotos",
-  "roya",
-  "ojo_de_gallo",
-  "mancha_de_hierro",
-  "antracnosis",
-  "llaga_macana",
-  "chasparria",
-  "otro",
-];
 
 const METHODS: readonly PlotInterventionMethod[] = ["follaje", "tronco", "suelo", "riego", "cebo", "liberacion", "manual", "otro"];
 
@@ -170,7 +156,7 @@ export function IntervencionForm({
         <fieldset>
           <legend>{t("manejoLineasLegend")}</legend>
           {lineas.map((linea, i) => (
-            <LineaDeIntervencion key={i} indice={i} valores={linea} productos={productos} />
+            <LineaDeIntervencion key={i} indice={i} valores={linea} productos={productos} target={target} />
           ))}
           <button type="button" className="nn-button-secondary" onClick={() => setLineas((prev) => [...prev, lineaVacia()])}>
             {t("manejoAddProductButton")}
@@ -238,7 +224,7 @@ export function IntervencionForm({
       <div className="nn-field">
         <label htmlFor="manejo-target">{t("manejoTargetLabel")}</label>
         <select id="manejo-target" name="target" value={target} onChange={(e) => setTarget(e.target.value as PlotInterventionTarget)}>
-          {TARGETS.map((x) => (
+          {PLAGAS.map((x) => (
             <option key={x} value={x}>
               {textoDeObjetivo[x]}
             </option>

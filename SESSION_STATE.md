@@ -39,39 +39,67 @@ de «hecho y sin rastro».
 
 ---
 
+#### Los seis productos de Finca Rosina: qué falta exactamente
+
+Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle — **medido por
+dos sesiones en paralelo y con el mismo resultado**: 0 en §1, 0 en `PENDING_IMPLEMENTATIONS/`, 0 en
+`docs/`, y la única «Rosina» de §3 es la de Kenis el apicultor, otro asunto. Faltan de Daniel: la
+**etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote del
+fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
+listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
+
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
+### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
 
-**ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
-elige el destino **y** no necesita permiso en el beneficio. La finca declara una vez a qué beneficio
-envía; cada jornada lo **copia** al abrirse —instantánea, no referencia viva: si se resolviera en
-vivo, cambiar el destino movería jornadas ya cerradas con entregas ya recibidas—. `null` no es un
-hueco: Jaramillo y Artillería no envían a ningún beneficio propio, y sus jornadas se abren igual.
-`cambiarDestinoDeJornada` es la corrección, y la lista de fincas dice **qué falta**, no «0».
+**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
+imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
+errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
+Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
+peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
 
-**Dos flip-tests cazaron guardias falsos míos.** La prueba de la instantánea cambiaba el destino con
-un `prisma.update` directo, así que la mutación que debía cazar —propagar a las jornadas abiertas—
-la dejaba verde: ejercitaba el fixture, no el servicio. Y `rejects.toThrow(/destino_fijo/)` casaba
-también con la excepción del DISPARADOR, así que quitar la guarda del servicio no rompía nada; ahora
-exige la CLASE. Un tercer flip que probé no discriminaba y tenía razón: mover la lectura dentro de
-la transacción no es «resolver en vivo».
+**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
+la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
+error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
+sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
+Ahora descubre los archivos, con control del escáner y del detector por separado.
 
-**Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
-`null → valor`. Se dice, no se disfraza.
+**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
+la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
+esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
+01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
+#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
+manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
+que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
+`scripts/backup/`**. La corrida del lunes sale con él.
+
+**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
+#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
+etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
+cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
+un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
+el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
+
+**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
+y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
+desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
+archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
+conflicto.
+
+### 2026-09-30 · La gráfica de secado: «dentro del lienzo» y «legible» no son la misma propiedad (PR #564)
+
+*De la sesión que lo construyó; verificado aquí antes de anotarlo — `escalaDeAmbiente` está en
+`lib/beneficio/graficaDeSecado.ts` y sus dos aserciones por su nombre, líneas 128 y 134.*
+
+La humedad relativa del cuarto compartía el eje de porcentaje con la del grano. Renderizando el SVG en
+el servidor: con el aire dentro, la curva del grano usaba **96 px de 220 — el 44 %**; fuera, **204, el
+93 %**. Todas las pruebas que había afirmaban que las coordenadas eran finitas y caían dentro del
+lienzo, y lo eran. La forma: **la misma unidad no es la misma magnitud** — a la temperatura ya se le
+había dado escala propia porque su unidad es otra; a la HR no, *porque coincidía*. El guardia son dos
+aserciones: que el aire no estira el eje, y **cuánto lienzo le queda al grano** (>90 %); sin la
+segunda, una HR de rango pequeño pasaría sin que nadie note el aplastamiento.
 
 ## 3. Bloqueado, y en qué
-
-#### Los seis productos de Finca Rosina, bloqueados en Daniel
-
-Rescatado al archivar «2026-09-29 · La credencial rotada»: faltan **tres etiquetas**, y la
-**cantidad y el lote de cada uno** de los seis. Medido antes de mover la entrada — 0 en §1, 0 en
-`PENDING_IMPLEMENTATIONS/`, 0 en `docs/`, y la única mención de «Rosina» en §3 es la de Kenis el
-apicultor, otro asunto. **No vivía en ningún otro sitio.**
-
-#### El PASS del verificador de respaldos mira sólo el censo
-
-Rescatado al archivar «2026-09-28 · Los cuatro caminos»: un `pg_restore` con errores acaba en PASS — los cuenta y los registra, pero no bloquea. No vivía en ningún otro sitio.
 
 #### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
 
@@ -98,12 +126,6 @@ ruta la fijó **ADR-193**. El diseño sigue en
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
 
-#### La prueba que despertaría la divergencia de clasificación (PR #481)
-
-Rescatado al archivar «2026-09-27 · Lotes es operación»: falta **la prueba de que todo perfil con
-`lot:view` limpia `internal`**. Sin ella, `scopeOrClauses` no mira `classification` y una lista
-podría enseñar lo que su ficha niega. Hoy está dormida por ausencia de camino de escritura.
-
 #### Deuda de filas en `nectar_test` (PR #488, #498)
 
 Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
@@ -115,6 +137,12 @@ compartida es tocar trabajo ajeno.
 Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
 por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
 
+**Y por qué no es «abrir una pantalla», medido el 2026-09-30:** la copia local tiene **0**
+instalaciones de secado —ni estantes ni camas, 0 lecturas de ambiente, 0 tuestes, 0 tandas— así que
+abrirla verificaría el vacío. Hay que construir los datos por los formularios de la aplicación
+primero, lo cual ejercita el camino de escritura y es la mitad valiosa. Es su propia tarea, no un
+rato.
+
 #### Recolectores: darles su perfil (de Daniel)
 
 Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
@@ -123,11 +151,17 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 #### Kiva Estate: crear su terreno (de Daniel)
 
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
-Estate** desde `/fincas` → «sin terreno». El seed dice que es un nombre ficticio
-(`prisma/seed.ts:168`) y Daniel dice que es real: el comentario queda para que él decida.
-Y dos más de la misma entrega, rescatados al archivarla el 2026-09-30: **los comandos de Luis y Chris
-contra producción**, y que la organización Kiva Estate sigue marcada **«DEMO placeholder»** — falso en
-cuanto le cuelguen fincas reales, y el guión lo avisa cada vez.
+Estate** desde `/fincas` → «sin terreno».
+
+**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
+El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas 180-184 y 274— y usa `DEMO Rivera
+Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
+
+**Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
+`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
+tres guiones **simulan por defecto**. Si la descripción «DEMO placeholder» sigue o no en esa fila
+**no se ha medido** —leer producción de Neon está prohibido desde aquí—: el guión la comprueba él
+mismo y **aborta sin escribir** si alguien puso otro texto, que es por qué se puede correr a ciegas.
 
 
 #### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
@@ -142,34 +176,6 @@ Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigi
 `NOTEHUB_ROUTE_SECRET` en Vercel y en la ruta de Notehub, y registrar cada nodo con su UID de
 Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
 **cerrada por defecto** hasta entonces.
-
-#### El presupuesto de Actions se agotó y volvió — y `main` ya no tiene compuerta propia
-
-**2026-09-14.** Actions dejó de correr sobre las 17:00 con la anotación *«The job was
-not started because an Actions budget is preventing further use»*. Se lee como el rojo
-de una compuerta propia —«¿Hay código en este cambio?: failure» y las otras tres
-`skipped`— y **no es el cambio**: el job nunca arrancó. Cuatro corridas seguidas, dos
-PR de sesiones distintas y dos pushes a `main`. La trampa y su discriminante de dos
-comandos están en `CLAUDE.md`.
-
-**Lo que bloqueaba:** la protección de `main` exige tres checks evaluados sobre el PR,
-así que nada se podía fusionar. No hay reintento que lo salte. Verificado que Vercel es
-independiente: llega como `status`, no como check-run, y siguió desplegando.
-
-**Restablecido la misma tarde**, medido y no supuesto: el PR #310 llevó las tres
-compuertas en `SUCCESS` con runner y pasos de verdad, contra el `runner_name` vacío y
-`steps: []` de las corridas muertas. **Ése es el discriminante**, no la conclusión: una
-corrida sin runner sale `failure` y se lee como un fallo del cambio. Mientras duró se
-fusionó con los dos carriles corridos en local sobre el árbol rebasado y con base creada
-desde cero — es peor evidencia que CI y hay que decirlo, no equipararla.
-
-**Y por decisión del dueño se quitó el disparador `push` del workflow**, que era la
-mitad del gasto: 576 corridas desde el 1 de septiembre, **293 de `push`** y 15
-canceladas solas. Consecuencia que hay que saber: **`main` ya no tiene corrida
-después de fusionar.** Nada entra sin revisar —el PR sigue corriendo y la protección
-lo exige— pero se pierde la red de después, el caso de dos PR verdes que juntos
-rompen `main`. La sección de `CLAUDE.md` que mandaba leer el estado del commit
-fusionado queda corregida allí.
 
 #### Lo que se vio al recorrer las pantallas en un móvil de verdad
 
@@ -220,18 +226,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
-- **La protección de `main`, tal como quedó** — cerrada el 2026-09-05; no es un
-  bloqueo sino la configuración viva, con su detalle —sin revisiones exigidas y
-  `enforce_admins` en false, los dos a propósito— en
-  `docs/SESSION_STATE_ARCHIVE.md`.
-
-- ~~**PR B del manejo fitosanitario, pendiente de fusionar**~~ — **falso, y quitado el
-  2026-09-29.** `origin/fitosanitarios-pr-b` no tiene **ningún** commit que `main` no
-  tenga —control al revés: 384— y **cero** archivos que difieran; el trabajo está en
-  `main` (`lib/traceability/intervenciones.ts`, 36.710 bytes, con
-  `productosFitosanitarios`). No faltaba fusionar nada: faltaba borrar la línea, que
-  mandaba a la siguiente sesión a buscar trabajo a una rama vacía.
-
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
   y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
   que no hay densidad ni rendimiento por hectárea, que es lo único comparable
@@ -248,10 +242,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
   lentes**, y cada lente nueva ha encontrado algo que las anteriores no podían ver.
-- **El job de CI con base aún no es obligatorio** — la protección sólo exige
-  «Compuerta». CI pasó de 22 de 97 archivos a 94 de 100 (2026-09-06); quedan 6
-  fuera, dos de ellas deliberadas. Detalle en `docs/SESSION_STATE_ARCHIVE.md`.
-
 - **Nadie barre las claves de idempotencia de las cuentas que dejan de
   escribir** — es lo único que quedó abierto al cerrar la idempotencia de
   envíos. Un barrido global pediría una tarea periódica y una ruta protegida, y
@@ -354,6 +344,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
+| Fusionar `origin/fitosanitarios-pr-b` | No tiene **ningún** commit que `main` no tenga (medido 2026-09-29; control al revés: 384) y cero archivos que difieran. El trabajo ya está en `main`, en `lib/traceability/intervenciones.ts` |
 
 ---
 
