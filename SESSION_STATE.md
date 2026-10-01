@@ -86,19 +86,6 @@ desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera err
 archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
 conflicto.
 
-### 2026-09-30 · La gráfica de secado: «dentro del lienzo» y «legible» no son la misma propiedad (PR #564)
-
-*De la sesión que lo construyó; verificado aquí antes de anotarlo — `escalaDeAmbiente` está en
-`lib/beneficio/graficaDeSecado.ts` y sus dos aserciones por su nombre, líneas 128 y 134.*
-
-La humedad relativa del cuarto compartía el eje de porcentaje con la del grano. Renderizando el SVG en
-el servidor: con el aire dentro, la curva del grano usaba **96 px de 220 — el 44 %**; fuera, **204, el
-93 %**. Todas las pruebas que había afirmaban que las coordenadas eran finitas y caían dentro del
-lienzo, y lo eran. La forma: **la misma unidad no es la misma magnitud** — a la temperatura ya se le
-había dado escala propia porque su unidad es otra; a la HR no, *porque coincidía*. El guardia son dos
-aserciones: que el aire no estira el eje, y **cuánto lienzo le queda al grano** (>90 %); sin la
-segunda, una HR de rango pequeño pasaría sin que nadie note el aplastamiento.
-
 ## 3. Bloqueado, y en qué
 
 #### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
