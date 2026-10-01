@@ -194,13 +194,52 @@ describe("curvaDeLote", () => {
     expect(c.puntos).toEqual([{ x: 150, y: 0 }, { x: 150, y: 120 }]);
   });
 
-  it("una banda de ancho cero (min = max) no produce NaN", () => {
+  it("una banda de ancho cero (min = max) no produce NaN ni dibuja banda", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(10), value: 4.5 }, { occurredAt: t(14), value: 4.7 }],
       objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 300, alto: 120,
     });
-    expect(c.banda).toEqual({ tipo: "banda", yMin: 60, yMax: 60, yObjetivo: 60 });
+    // Como `banda_al_reves`: sin banda que dibujar. Una banda a media altura sería una banda en un
+    // sitio que ya no corresponde al valor 4,5 (los puntos se escalan contra sus datos).
+    expect(c.banda).toEqual({ tipo: "banda_de_ancho_cero" });
     expect(c.puntos.map((p) => Number.isNaN(p.y))).toEqual([false, false]);
+  });
+
+  it("con la banda de ancho cero una serie que varía NO sale plana: se escala contra sus datos (hallazgo de Codex)", () => {
+    // Antes `escalaY` mandaba TODO valor a media altura con `max === min` y la serie 4,5 → 4,9 → 4,7
+    // salía como una recta en y = 60: «nada cambió», contradiciendo el aviso de la propia pantalla.
+    const lecturas = [
+      { occurredAt: t(10), value: 4.5 },
+      { occurredAt: t(12), value: 4.9 },
+      { occurredAt: t(14), value: 4.7 },
+    ];
+    const c = curvaDeLote({
+      lecturas, objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 300, alto: 120,
+    });
+    // Coordenadas a mano, escala 4,5–4,9 (los propios datos): 4,5 abajo (120), 4,9 arriba (0), 4,7 al medio (60).
+    expect(c.puntos).toEqual([{ x: 0, y: 120 }, { x: 150, y: 0 }, { x: 300, y: 60 }]);
+    // Es exactamente lo que sale SIN objetivo: la geometría es la del camino «sin banda».
+    const sinBanda = curvaDeLote({ lecturas, objetivo: null, ancho: 300, alto: 120 });
+    expect(c.puntos).toEqual(sinBanda.puntos);
+    // Control: con ancho cero y lecturas TODAS iguales sí va a media altura (rango de datos cero), y no es NaN.
+    const iguales = curvaDeLote({
+      lecturas: [{ occurredAt: t(10), value: 4.5 }, { occurredAt: t(14), value: 4.5 }],
+      objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: null }, ancho: 300, alto: 120,
+    });
+    expect(iguales.puntos).toEqual([{ x: 0, y: 60 }, { x: 300, y: 60 }]);
+    // MUTACIÓN: en `curvaDeLote`, `hayBanda = minValue !== null && maxValue !== null && !alReves` (sin
+    // `&& !anchoCero`) → la serie vuelve a salir en y = 60 y cae esta prueba.
+  });
+
+  it("con la banda de ancho cero, dos lecturas a la misma hora con valores distintos NO se superponen", () => {
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(10), value: 4.5 }, { occurredAt: t(10), value: 9.9 }],
+      objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 300, alto: 120,
+    });
+    // Misma X (150, media anchura), Y distintas: 4,5 abajo y 9,9 arriba. Con la mutación caían las dos en (150, 60).
+    expect(c.puntos).toEqual([{ x: 150, y: 120 }, { x: 150, y: 0 }]);
+    expect(c.puntos[0]!.y).not.toBe(c.puntos[1]!.y);
+    // MUTACIÓN: la misma de arriba (`hayBanda` sin `&& !anchoCero`) → las dos en (150, 60) y cae.
   });
 
   it("sin lecturas devuelve una curva vacía, no un error", () => {

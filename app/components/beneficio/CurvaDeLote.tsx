@@ -43,6 +43,11 @@ import {
  * receta está mal cargada, no se cuenta ninguna lectura «fuera», y los puntos se escalan contra sus
  * propios datos para que «hacia arriba, el valor más alto» siga siendo cierto.
  *
+ * **Lo mismo con la banda de ancho cero (`minValue === maxValue`, `banda_de_ancho_cero`):** ni se
+ * dibuja banda ni se escala contra ella. Antes todo valor caía a media altura y una serie que
+ * variaba salía como una recta plana, junto a un aviso que decía que no se podía juzgar. Los
+ * puntos van contra sus propios datos; el aviso y la ausencia de juicio se quedan.
+ *
  * **Sin banda no se inventa una.** Con `sin_objetivo_declarado` se dibujan los puntos igual y se
  * dice que esa variable no tiene rango declarado en la receta —el diseño exige decirlo, no
  * callarlo—, y además que la escala va de la menor a la mayor lectura, para que una línea que sube

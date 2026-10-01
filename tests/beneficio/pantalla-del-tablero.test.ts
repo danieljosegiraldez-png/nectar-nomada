@@ -174,6 +174,14 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     // La explicación VISIBLE, no sólo el `<desc>` (que sólo lee un lector de pantalla): `aTexto`
     // junta los dos, y `toContain("ancho cero")` se conformaba con cualquiera.
     expect(html).toContain('class="nn-warn nn-curva-ancho-cero"');
+    // La serie que se dibuja NO es plana (4,5 → 9,9 es de borde a borde: de y = 200 a y = 0), y la banda de
+    // ancho cero no se pinta a media altura como si fuera la receta. Antes: recta en y = 100 y «nada cambió».
+    const linea = /class="nn-curva-linea"[^>]*points="([^"]+)"|points="([^"]+)"[^>]*class="nn-curva-linea"/.exec(html);
+    expect(linea, "debe haber una polilínea").not.toBeNull();
+    expect(vertices(linea![1] ?? linea![2]!)).toEqual([[0, 200], [480, 0]]);
+    expect(html).not.toContain("nn-curva-banda");
+    expect(html).not.toContain("nn-curva-objetivo");
+    // MUTACIÓN: en `curvaDeLote`, `hayBanda` sin `&& !anchoCero` → los dos vértices en y = 100 y cae.
     // MUTACIÓN: quitar la rama visible `banda_de_ancho_cero` del componente → cae (el `<desc>` sigue).
     // Control positivo: con una banda de verdad y lecturas dentro, SÍ lo dice (si no, el `not` de arriba no discrimina).
     const sana = aTexto(

@@ -151,8 +151,9 @@ describe("juicioDeBanda: qué se puede afirmar", () => {
     const c = curvaDeLote({
       lecturas: lec(4.5, 9.9), objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 480, alto: 200,
     });
-    // Control: de verdad ambas caen a media altura — es lo que engañaba a quien juzgaba en espacio-y.
-    expect(c.puntos.map((p) => p.y)).toEqual([100, 100]);
+    // Control: la geometría YA NO es la que engañaba (todo a media altura): 4,5 abajo y 9,9 arriba, contra
+    // sus datos. Por eso el juicio no puede venir de la `y` —aquí 9,9 estaría «arriba» del todo— sino del tipo de banda.
+    expect(c.puntos.map((p) => p.y)).toEqual([200, 0]);
     expect(juicioDeBanda(c, colocarPuntos(c))).toEqual({ tipo: "banda_de_ancho_cero" });
     // Y colocarPuntos tampoco dice `false` («dentro»): `null`.
     expect(colocarPuntos(c).map((p) => p.fueraDeBanda)).toEqual([null, null]);

@@ -63,9 +63,9 @@ export function colocarPuntos(curva: Curva, margen: number = margenVertical(curv
     return {
       x: p.x,
       y: fuera === "arriba" ? tope : fuera === "abajo" ? piso : p.y,
-      // Sin banda, o con una de ancho cero (`escalaY` manda TODO valor a media altura), no hay con
+      // Sin banda (también al revés o de ancho cero: no se dibuja ni se escala contra ella) no hay con
       // qué juzgar: `null`, no `false`. `false` diría «dentro» de un rango que no distingue nada.
-      fueraDeBanda: arriba === null || abajo === null || arriba === abajo ? null : p.y < arriba || p.y > abajo,
+      fueraDeBanda: arriba === null || abajo === null ? null : p.y < arriba || p.y > abajo,
       fuera,
     };
   });
@@ -100,10 +100,11 @@ export function leerCurvaPedida(params: {
  * que nadie escriba «todas dentro» donde no se midió nada.**
  *
  * - `sin_banda`: la receta no declara rango; no se juzga ninguna lectura.
- * - `banda_de_ancho_cero` (`minValue == maxValue`): `curvaDeLote` escala `max === min` a media
- *   altura para TODO valor (no hay rango que dividir), y `colocarPuntos` juzga en espacio-y, así
- *   que una lectura de 9,9 contra 4,5 «cae dentro». Con ese ancho **no se puede decir** qué
- *   lecturas quedan fuera, y callarlo (o decir «todas dentro») escondería justo la que se salió.
+ * - `banda_de_ancho_cero` (`minValue == maxValue`): `curvaDeLote` ya no escala contra ella (los
+ *   puntos van contra sus propios datos, como sin banda) y no la dibuja. Antes escalaba `max ===
+ *   min` a media altura para TODO valor y `colocarPuntos` juzgaba en espacio-y, así que una lectura
+ *   de 9,9 contra 4,5 «caía dentro». Con ese ancho **no se puede decir** qué lecturas quedan
+ *   fuera, y callarlo (o decir «todas dentro») escondería justo la que se salió.
  * - `sin_lecturas`: con cero lecturas no se afirma nada sobre el rango; un cero leído como «bien»
  *   es la forma que este módulo existe para impedir.
  * - `juzgada`: sólo aquí hay una cuenta, y sólo aquí cabe «todas dentro» (cuando `fuera` es 0).
@@ -125,8 +126,8 @@ export type JuicioDeBanda =
 export function juicioDeBanda(curva: Curva, puntos: readonly PuntoColocado[]): JuicioDeBanda {
   const banda = curva.banda;
   if (banda.tipo === "banda_al_reves") return { tipo: "banda_al_reves" };
+  if (banda.tipo === "banda_de_ancho_cero") return { tipo: "banda_de_ancho_cero" };
   if (banda.tipo !== "banda") return { tipo: "sin_banda" };
-  if (banda.yMin === banda.yMax) return { tipo: "banda_de_ancho_cero" };
   if (puntos.length === 0) return { tipo: "sin_lecturas" };
   return { tipo: "juzgada", fuera: puntos.filter((p) => p.fueraDeBanda === true).length, total: puntos.length };
 }

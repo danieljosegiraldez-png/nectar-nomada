@@ -18,6 +18,14 @@
  * cero; los puntos se escalan contra sus propios datos, igual que sin banda, y por eso el eje
  * vuelve a significar lo que dice.
  *
+ * **Una banda de ancho cero (`minValue === maxValue`) tampoco dibuja banda ni escala contra ella:
+ * `banda_de_ancho_cero`.** `escalaY` manda TODO valor a media altura cuando el rango es cero, así
+ * que escalar contra esa banda destruía la diferencia entre lecturas: una serie 4,5 → 4,9 → 4,7
+ * salía como una recta plana («nada cambió») y dos valores distintos a la misma hora se
+ * superponían exactamente — a la vez que la pantalla avisaba de que no puede juzgarlas. Ahora es el
+ * mismo camino que `banda_al_reves`: sin banda dibujada y puntos escalados contra sus propios
+ * datos. Qué lecturas «quedan dentro» sigue sin afirmarse (`juicioDeBanda`); sólo cambia la geometría.
+ *
  * **En SVG la Y crece hacia ABAJO.** El valor máximo de la escala queda arriba (`y = 0`) y el
  * mínimo abajo (`y = alto`). Con la Y al revés la curva seguiría pareciendo una curva, así que
  * sólo una prueba con números a mano lo ve.
@@ -26,7 +34,8 @@
  * - con banda, contra la banda: `minValue` → `alto`, `maxValue` → `0`. Un valor fuera de la banda
  *   queda fuera del lienzo (`y < 0` o `y > alto`); no se recorta aquí, porque recortar escondería
  *   justo la lectura que se salió de la receta. Qué hacer con eso lo decide quien pinta.
- * - sin banda, contra el mínimo y el máximo de los propios datos: es la única escala disponible.
+ * - sin banda (también con `banda_al_reves` y `banda_de_ancho_cero`), contra el mínimo y el máximo
+ *   de los propios datos: es la única escala disponible.
  *
  * **Los puntos degenerados no dan `NaN`.** Con una sola lectura, o con todas iguales, el rango
  * vale cero y dividir entre él da `NaN` (o `Infinity`). El valor va a **media altura** (`alto / 2`):
@@ -57,7 +66,9 @@ export type Banda =
     }
   | { readonly tipo: "sin_objetivo_declarado" }
   /** `minValue > maxValue`: no hay banda que dibujar sin espejar la curva. Ver el encabezado. */
-  | { readonly tipo: "banda_al_reves" };
+  | { readonly tipo: "banda_al_reves" }
+  /** `minValue === maxValue`: no hay rango contra el que escalar. Ver el encabezado. */
+  | { readonly tipo: "banda_de_ancho_cero" };
 
 export interface Curva {
   readonly puntos: readonly PuntoDeCurva[];
@@ -91,11 +102,14 @@ export function curvaDeLote(input: {
   const minValue = objetivo?.minValue ?? null;
   const maxValue = objetivo?.maxValue ?? null;
   const alReves = minValue !== null && maxValue !== null && minValue > maxValue;
-  const hayBanda = minValue !== null && maxValue !== null && !alReves;
+  const anchoCero = minValue !== null && maxValue !== null && minValue === maxValue;
+  const hayBanda = minValue !== null && maxValue !== null && !alReves && !anchoCero;
 
   const banda: Banda = alReves
     ? { tipo: "banda_al_reves" }
-    : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
+    : anchoCero
+      ? { tipo: "banda_de_ancho_cero" }
+      : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
   if (lecturas.length === 0) return { puntos: [], banda, ancho, alto };
 
   const valores = lecturas.map((l) => l.value);
