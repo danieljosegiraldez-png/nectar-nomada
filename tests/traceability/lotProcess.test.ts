@@ -667,9 +667,12 @@ describe("los CHECK de `lot_process`", () => {
   });
 
   it("rechaza un proceso que termina antes de empezar", async () => {
-    await expect(crudo({ endedAt: new Date("2026-02-01T12:00:00Z") })).rejects.toThrow(
-      /lot_process_termina_despues_de_empezar/,
-    );
+    // Parte 1 (2026-10-01): con el CHECK del tipo de cierre, una fila con `endedAt` y sin `closureKind`
+    // violaría dos restricciones, y Postgres las comprueba en orden alfabético. Se le da el tipo y la
+    // medición para que sólo falle la fecha, que es lo que esta prueba dice vigilar.
+    await expect(
+      crudo({ endedAt: new Date("2026-02-01T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicionDeB }),
+    ).rejects.toThrow(/lot_process_termina_despues_de_empezar/);
   });
 
   it("rechaza una intención vacía, que `NOT NULL` sola dejaría pasar", async () => {
@@ -733,5 +736,35 @@ describe("los CHECK de `lot_process`", () => {
     const creado = await crudo({});
     expect(creado.sequenceOrder).toBe(99);
     await prisma.lotProcess.delete({ where: { id: creado.id } });
+  });
+
+  it("un proceso cerrado declara cómo se cerró (Parte 1, R5/R6)", async () => {
+    // Cerrado sin tipo: la base lo rechaza, no sólo el servicio.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closingMoistureMeasurementId: medicionDeB }),
+    ).rejects.toThrow(/lot_process_cierre_sii_tipo/);
+    // Por humedad sin medición: rechazado.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture" }),
+    ).rejects.toThrow(/lot_process_cierre_por_humedad_lleva_medicion/);
+    // Dividido con medición: rechazado.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "divided", closingMoistureMeasurementId: medicionDeB, dividedByTransformationId: transformacionId }),
+    ).rejects.toThrow(/lot_process_division_sin_medicion_y_con_transformacion/);
+    // Control positivo: el cierre bien formado SÍ entra, y se borra.
+    const bien = await crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicionDeB });
+    await prisma.lotProcess.delete({ where: { id: (bien as { id: string }).id } });
+  });
+
+  it("dos procesos abiertos en el mismo lote los rechaza la base (Parte 1, R2)", async () => {
+    const primero = await crudo({});
+    await expect(
+      prisma.lotProcess.create({ data: {
+        lotId: loteB, sequenceOrder: 97, intent: "segundo abierto", targetMoisturePct: 10.5,
+        startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record",
+        processGradeValueId: valorGrado, cherryStateValueId: valorCereza,
+      } }),
+    ).rejects.toThrow(/lot_process_un_abierto_por_lote|Unique constraint/);
+    await prisma.lotProcess.delete({ where: { id: (primero as { id: string }).id } });
   });
 });

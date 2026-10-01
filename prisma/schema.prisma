@@ -226,6 +226,7 @@ model UserAccount {
   roastSessionsCreated              RoastSession[]               @relation("RoastSessionCreatedBy")
   lotProcessesCreated               LotProcess[]                 @relation("LotProcessCreatedBy")
   lotProcessInterventionsCreated    LotProcessIntervention[]     @relation("LotProcessInterventionCreatedBy")
+  lotProcessReturnsCreated          LotProcessReturn[]           @relation("LotProcessReturnCreatedBy")
   // P2 (ADR-098)
   processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
   processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
@@ -3565,6 +3566,8 @@ model LotTransformation {
   deviations     Deviation[]
   fieldEvents    FieldEvent[]
 
+  lotProcessesClosedByDivision LotProcess[] @relation("LotProcessDividedBy")
+
   @@index([occurredAt])
   @@index([fermentationRunId])
   @@index([dryingRunId])
@@ -4056,6 +4059,15 @@ model FermentationRun {
   @@schema("traceability")
 }
 
+/// Parte 1 (2026-09-30), R5/R6: cómo se cerró un proceso. `moisture` = con la medición de humedad
+/// que lo terminó; `divided` = el lote se dividió y cada parte siguió con su propio proceso.
+enum LotProcessClosure {
+  moisture
+  divided
+
+  @@schema("traceability")
+}
+
 /// El proceso por el que pasó un lote: la SECUENCIA, no una etiqueta.
 ///
 /// **Definición del dueño (2026-09-07), literal:** «uno o más eventos o procesos
@@ -4169,6 +4181,23 @@ model LotProcess {
   closingMoistureMeasurementId String?      @map("closing_moisture_measurement_id") @db.Uuid
   closingMoistureMeasurement   Measurement? @relation("LotProcessClosingMoisture", fields: [closingMoistureMeasurementId], references: [id], onDelete: Restrict)
 
+  /// Parte 1, R5/R6. Nulo mientras está abierto (lo exige un CHECK de la migración).
+  closureKind LotProcessClosure? @map("closure_kind")
+
+  /// Parte 1, R6.3: la división que cerró este proceso. Sólo con `closureKind: divided`.
+  dividedByTransformationId String?            @map("divided_by_transformation_id") @db.Uuid
+  dividedByTransformation   LotTransformation? @relation("LotProcessDividedBy", fields: [dividedByTransformationId], references: [id], onDelete: Restrict)
+
+  /// Parte 1, R6.4 y R7: de qué proceso viene una parte de una división o una continuación de una
+  /// devolución a secado. NoAction y no Restrict: así un `deleteMany` de padre e hijo en la misma
+  /// sentencia no choca consigo mismo, porque Postgres comprueba NO ACTION al final de la sentencia.
+  derivedFromLotProcessId String?      @map("derived_from_lot_process_id") @db.Uuid
+  derivedFrom             LotProcess?  @relation("LotProcessDerivation", fields: [derivedFromLotProcessId], references: [id], onDelete: NoAction)
+  derivations             LotProcess[] @relation("LotProcessDerivation")
+
+  returnsFromThis  LotProcessReturn[] @relation("LotProcessReturnClosed")
+  returnThatOpened LotProcessReturn?  @relation("LotProcessReturnContinuation")
+
   startedAt       DateTime        @map("started_at")
   endedAt         DateTime?       @map("ended_at")
   notes           String?
@@ -4188,6 +4217,8 @@ model LotProcess {
   @@index([processGradeValueId])
   @@index([cherryStateValueId])
   @@index([closingMoistureMeasurementId])
+  @@index([dividedByTransformationId])
+  @@index([derivedFromLotProcessId])
   @@map("lot_process")
   @@schema("traceability")
 }
@@ -4221,6 +4252,33 @@ model LotProcessIntervention {
   @@index([catalogValueId])
   @@index([occurredAt])
   @@map("lot_process_intervention")
+  @@schema("traceability")
+}
+
+/// Parte 1, R7 (2026-09-30): devolver a secado YA NO reabre el proceso cerrado; abre una
+/// continuación unida a él, y esta fila guarda por qué. Una por devolución: es lo que permite contar
+/// cuántas veces pasa y por qué, que es por lo que Daniel eligió una lista de motivos.
+model LotProcessReturn {
+  id                       String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  closedLotProcessId       String               @map("closed_lot_process_id") @db.Uuid
+  closedLotProcess         LotProcess           @relation("LotProcessReturnClosed", fields: [closedLotProcessId], references: [id], onDelete: Restrict)
+  continuationLotProcessId String               @unique @map("continuation_lot_process_id") @db.Uuid
+  continuationLotProcess   LotProcess           @relation("LotProcessReturnContinuation", fields: [continuationLotProcessId], references: [id], onDelete: Restrict)
+  reasonValueId            String               @map("reason_value_id") @db.Uuid
+  reasonValue              VariableCatalogValue @relation("LotProcessReturnReason", fields: [reasonValueId], references: [id], onDelete: Restrict)
+  note                     String?
+  /// La asignación de bodega que se terminó al devolver, si el lote estaba en bodega.
+  endedStorageAssignmentId String?            @map("ended_storage_assignment_id") @db.Uuid
+  endedStorageAssignment   StorageAssignment? @relation("LotProcessReturnEndedStorage", fields: [endedStorageAssignmentId], references: [id], onDelete: Restrict)
+  occurredAt               DateTime           @map("occurred_at")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  createdBy                String?            @map("created_by") @db.Uuid
+  creator                  UserAccount?       @relation("LotProcessReturnCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([closedLotProcessId])
+  @@index([reasonValueId])
+  @@index([endedStorageAssignmentId])
+  @@map("lot_process_return")
   @@schema("traceability")
 }
 
@@ -7445,6 +7503,7 @@ model StorageAssignment {
   creator       UserAccount? @relation("StorageAssignmentCreatedBy", fields: [createdBy], references: [id])
 
   measurements Measurement[]
+  endedByReturns LotProcessReturn[] @relation("LotProcessReturnEndedStorage")
 
   @@index([lotId])
   @@index([locationId])
@@ -9046,6 +9105,7 @@ model VariableCatalogValue {
   colonyLossCauses        ColonyLossCause[]            @relation("ColonyLossCauseValue")
   inspectionIrregularities InspectionIrregularity[]    @relation("InspectionIrregularity")
   gradeOfProcesses        LotProcess[]                 @relation("LotProcessGrade")
+  returnReasonOf          LotProcessReturn[]           @relation("LotProcessReturnReason")
   cherryStateOfProcesses  LotProcess[]                 @relation("LotProcessCherryState")
   cherryColorOfHarvests       HarvestEvent[]           @relation("HarvestCherryColor")
   cherryDefectsOfHarvests     HarvestEvent[]           @relation("HarvestCherryDefects")

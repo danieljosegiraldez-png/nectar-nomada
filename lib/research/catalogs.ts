@@ -686,6 +686,18 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       { value: "Hambre", definition: "Anexo B §2.3: «lo que el nivel de reservas anticipa»." },
     ],
   },
+  // Parte 1, R7 (Daniel, 2026-09-30): de bodega sólo se vuelve a secado por un defecto de humedad, y
+  // el motivo sale de una lista para poder contar cuántas veces pasa y por qué.
+  {
+    key: "motivo_devolucion_a_secado",
+    name: "Motivo de devolución a secado",
+    description: "Por qué un lote volvió a secado desde bodega o desde la entrada a bodega. «otro» exige nota.",
+    values: [
+      { value: "humedad_alta_por_error_de_manejo", definition: "La humedad quedó por encima del objetivo por un error en el manejo del secado." },
+      { value: "error_de_medicion", definition: "La medición con la que se cerró estaba mal tomada o el instrumento fallaba." },
+      { value: "otro", definition: "Siempre con nota libre." },
+    ],
+  },
 ] as const;
 
 // §3a — "Enums cerrados": small, product-owner-fixed vocabularies that

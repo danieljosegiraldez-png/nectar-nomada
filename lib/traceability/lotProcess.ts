@@ -17,7 +17,9 @@ import { recordAuditEvent } from "../audit";
 import { idsDeDescendencia, requireLotAccess } from "./lots";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
-export class LotProcessError extends Error {}
+// El error vive en su propio archivo (Parte 1, §3.2) y se reexporta para que ningún importador cambie.
+import { LotProcessError } from "./errorDeProceso";
+export { LotProcessError };
 
 /**
  * Los catálogos de los que puede salir una intervención de manejo.
@@ -44,6 +46,8 @@ export class LotProcessError extends Error {}
 /** Las claves de los dos catálogos que describen el batch, no un instante. */
 export const CATALOGO_GRADO_PROCESO = "grado_proceso";
 export const CATALOGO_ESTADO_CEREZA = "estado_cereza";
+/** Parte 1, R7: la lista de motivos de devolución a secado. */
+export const CATALOGO_MOTIVO_DEVOLUCION = "motivo_devolucion_a_secado";
 
 export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
   "condicion_oxigeno",
@@ -421,7 +425,8 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
   return prisma.$transaction(async (tx) => {
     const cerrado = await tx.lotProcess.update({
       where: { id: input.lotProcessId },
-      data: { endedAt: input.endedAt, closingMoistureMeasurementId: input.closingMoistureMeasurementId },
+      // Parte 1, R5/R6 (2026-10-01): todo cierre por esta puerta es por humedad, y la base lo exige (CHECK).
+      data: { endedAt: input.endedAt, closingMoistureMeasurementId: input.closingMoistureMeasurementId, closureKind: "moisture" },
     });
 
     await recordAuditEvent(
@@ -434,6 +439,7 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
         after: {
           endedAt: cerrado.endedAt,
           closingMoistureMeasurementId: cerrado.closingMoistureMeasurementId,
+          closureKind: cerrado.closureKind,
           targetMoisturePct: cerrado.targetMoisturePct,
         },
         sourceInterface: "traceability.lotProcess",
@@ -555,7 +561,9 @@ export async function devolverASecado(
   return prisma.$transaction(async (tx) => {
     const reabierto = await tx.lotProcess.update({
       where: { id: proceso.id },
-      data: { endedAt: null, closingMoistureMeasurementId: null },
+      // Parte 1 (2026-10-01): provisional hasta la tarea 8, que sustituye esta función entera. Limpia el
+      // tipo junto con la medición porque el CHECK exige que un proceso abierto no tenga tipo de cierre.
+      data: { endedAt: null, closingMoistureMeasurementId: null, closureKind: null },
     });
 
     await recordAuditEvent(
