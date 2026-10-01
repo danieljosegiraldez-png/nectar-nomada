@@ -307,6 +307,31 @@ describe("ocupacionDelSitio", () => {
     expect(o.camas).toEqual({ total: 3, libresYSanos: 2, enUso: 1, requierenIntervencion: 0 });
   });
 
+  /**
+   * El mapa sale de la MISMA pasada que los resúmenes: si pintar el mapa tuviera su propia
+   * cuenta, podría decir «libre» donde el resumen dice «en uso». Aquí se prueba que no pueden
+   * discrepar, y que una unidad ocupada Y averiada lleva sus dos motivos.
+   */
+  it("el mapa trae cada unidad con su nombre y sus motivos, y casa con el resumen", () => {
+    const o = ocupacionDelSitio({
+      tanques: [
+        { ...unidad("libre"), nombre: "Tanque 1" },
+        { ...unidad("ocupado"), nombre: "Tanque 2" },
+        { ...unidad("ambos", { condicion: "faulty" }), nombre: "Tanque 3" },
+        unidad("sinNombre"),
+      ],
+      camas: [{ ...unidad("c1"), nombre: "Cama 1" }],
+      corridas: [corrida({ equipmentId: "ocupado" }), corrida({ equipmentId: "ambos" }), corrida({ bedLocationId: "c1" })],
+    });
+    expect(o.mapa.tanques.map((c) => c.id)).toEqual(["libre", "ocupado", "ambos", "sinNombre"]);
+    expect(o.mapa.tanques.map((c) => c.nombre)).toEqual(["Tanque 1", "Tanque 2", "Tanque 3", null]);
+    expect(o.mapa.tanques.map((c) => c.motivos)).toEqual([[], ["EN_USO"], ["EN_USO", "CONDICION"], []]);
+    expect(o.mapa.camas).toEqual([{ id: "c1", nombre: "Cama 1", libreYSano: false, motivos: ["EN_USO"] }]);
+    // Casa con el resumen, que es lo que impide dos cuentas distintas.
+    expect(o.mapa.tanques.filter((c) => c.libreYSano)).toHaveLength(o.tanques.libresYSanos);
+    expect(o.mapa.camas.filter((c) => c.libreYSano)).toHaveLength(o.camas.libresYSanos);
+  });
+
   it("una corrida que nombra una unidad que no es del sitio no ocupa nada y no se pierde", () => {
     const o = ocupacionDelSitio({
       tanques: [unidad("t1")],

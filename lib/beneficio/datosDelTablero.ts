@@ -285,7 +285,7 @@ export async function datosDelTablero(
   const camas = organizaciones.size
     ? await prisma.location.findMany({
         where: { locationType: "drying_bed", organizationId: { in: [...organizaciones] } },
-        select: { id: true, status: true },
+        select: { id: true, name: true, status: true },
       })
     : [];
 
@@ -351,11 +351,17 @@ export async function datosDelTablero(
     lotes,
     tanques: equipos
       .filter((e) => e.kind === "vessel")
-      .map((e) => ({ id: e.id, lifecycleStatus: e.lifecycleStatus, condicion: e.condicion?.condition ?? null })),
+      .map((e) => ({
+        id: e.id,
+        nombre: e.name,
+        lifecycleStatus: e.lifecycleStatus,
+        condicion: e.condicion?.condition ?? null,
+      })),
     // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
     // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
     camas: camas.map((c) => ({
       id: c.id,
+      nombre: c.name,
       // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
       lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
       condicion: null,

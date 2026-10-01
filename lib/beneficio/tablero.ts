@@ -15,7 +15,14 @@
  */
 import { estadoDeRitmo, puntajeDeUrgencia, RitmoError, type EstadoDeRitmo, type MetaConRitmo } from "../traceability/ritmo";
 import type { SinVeredicto } from "./desdeElLote";
-import { clasificar, resumir, type HechosDelEquipo, type ResumenDeDisponibilidad } from "../equipos/disponibilidad";
+import {
+  clasificar,
+  resumir,
+  type Clasificacion,
+  type HechosDelEquipo,
+  type MotivoNoDisponible,
+  type ResumenDeDisponibilidad,
+} from "../equipos/disponibilidad";
 import type { EstadoDeVerificacion } from "../equipos/verificacion";
 
 export type GrupoDeAtencion = "critico" | "listo_para_decidir" | "aviso" | "sin_veredicto" | "en_curso";
@@ -216,7 +223,24 @@ export function pidenDecisionPorEtapa(input: {
  * unidad y las que chocan. Con dos fuentes —un `enUso` que llega hecho y unas corridas que se
  * recorren— podrían discrepar, y el que discrepa en silencio es el que dice «libre».
  */
-export type UnidadDelSitio = Omit<HechosDelEquipo, "enUso">;
+export type UnidadDelSitio = Omit<HechosDelEquipo, "enUso"> & {
+  /** Sólo para rotular el mapa. **No interviene en ninguna clasificación.** */
+  readonly nombre?: string | null;
+};
+
+/**
+ * Una celda del mapa de unidades: la clasificación de UNA unidad, con su nombre.
+ *
+ * Sale de la MISMA pasada que los resúmenes (ver `ocupacionDelSitio`), no de una cuenta paralela
+ * hecha por quien pinta: con dos cuentas podrían discrepar, y la que discrepa en silencio es la
+ * que dice «libre». `motivos` trae **todos** los que aplican, igual que `clasificar`.
+ */
+export interface CeldaDelMapa {
+  readonly id: string;
+  readonly nombre: string | null;
+  readonly libreYSano: boolean;
+  readonly motivos: readonly MotivoNoDisponible[];
+}
 
 /** Una corrida abierta, con lo que declara de su unidad. */
 export interface CorridaAbierta {
@@ -243,6 +267,11 @@ export interface Ocupacion {
    * silencian**: contarlas como «sin unidad» mezclaría un dato incompleto con un filtro.
    */
   readonly ajenas: number;
+  /** Cada unidad con su clasificación, en el orden recibido: lo que pinta el mapa. */
+  readonly mapa: {
+    readonly tanques: readonly CeldaDelMapa[];
+    readonly camas: readonly CeldaDelMapa[];
+  };
 }
 
 export function ocupacionDelSitio(input: {
@@ -273,12 +302,17 @@ export function ocupacionDelSitio(input: {
   // El mismo `clasificar` para las dos, no una regla paralela: así el tablero y `app/equipos`
   // dicen lo mismo del mismo tanque. Una unidad con dos corridas cuenta como UNA en uso — es una
   // unidad, con un problema de datos —, y el conflicto se dice aparte.
-  const clasificarTodas = (us: readonly UnidadDelSitio[]) =>
-    resumir(us.map((u) => clasificar({ ...u, enUso: (cuenta.get(u.id) ?? 0) > 0 })));
+  const clasificarTodas = (us: readonly UnidadDelSitio[]): Clasificacion[] =>
+    us.map((u) => clasificar({ ...u, enUso: (cuenta.get(u.id) ?? 0) > 0 }));
+  const celdas = (us: readonly UnidadDelSitio[], cs: readonly Clasificacion[]): CeldaDelMapa[] =>
+    cs.map((c, i) => ({ id: c.id, nombre: us[i]?.nombre ?? null, libreYSano: c.libreYSano, motivos: c.motivos }));
+  const clasifTanques = clasificarTodas(input.tanques);
+  const clasifCamas = clasificarTodas(input.camas);
 
   return {
-    tanques: clasificarTodas(input.tanques),
-    camas: clasificarTodas(input.camas),
+    tanques: resumir(clasifTanques),
+    camas: resumir(clasifCamas),
+    mapa: { tanques: celdas(input.tanques, clasifTanques), camas: celdas(input.camas, clasifCamas) },
     sinUnidadDeclarada,
     conflictos: [...cuenta].filter(([, n]) => n > 1).map(([id]) => id).sort(),
     ajenas,
