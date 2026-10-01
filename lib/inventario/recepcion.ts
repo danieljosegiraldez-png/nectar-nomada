@@ -128,7 +128,7 @@ export async function completarProducto(
     const sitio = await tx.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
     if (sitio?.organizationId !== antes.organizationId) throw new MaterialAccessError("forbidden");
 
-    const data: Record<string, string | number> = {};
+    const data: Record<string, string | number | boolean> = {};
     for (const campo of CAMPOS_DEL_PRODUCTO) {
       const valor = input.campos[campo];
       if (valor == null || valor === "") continue;
@@ -156,7 +156,9 @@ export async function completarProducto(
         if (!VALORES_DE_OPCIONES[campo]?.includes(texto)) {
           throw new MaterialValidationError(`${campo} inválido: ${texto}.`);
         }
-        data[campo] = texto;
+        // `harmfulToPollinators` es booleano en la base aunque se elija de una lista: su columna no
+        // acepta «si». Se traduce aquí, donde la lista cerrada ya lo validó.
+        data[campo] = campo === "harmfulToPollinators" ? texto === "si" : texto;
       } else {
         const texto = String(valor).trim();
         if (texto) data[campo] = texto;
