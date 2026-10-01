@@ -137,6 +137,25 @@ probar "P-H" "Des-retirar un modelo de equipo (hoy: no se puede)" \
 probar "P-I" "Cómo se da de alta un proveedor de equipos" \
   '! grep -qiE "^## ADR-[0-9]+.*alta de proveedores" docs/architecture/DECISIONS.md'
 
+# P-J · Daniel entregó DOS documentos de abamectina el 2026-09-30 y no son el mismo
+# producto: difieren en cultivos registrados y, lo que importa, en periodo de
+# reingreso — ABAMECTAN 1.8 EC dice «48 horas» y Abamectin 18 EC dice «24 horas»,
+# las dos citas literales en `docs/dominio/fitosanitarios-etiquetas.md`. Cuál está
+# en la bodega de Finca Rosina sólo lo sabe Daniel.
+#
+# **No es una cuestión de documentación.** El reingreso es el tiempo que un lote
+# tratado queda prohibido para las personas; registrar 24 donde son 48 manda a
+# alguien al cafetal doce horas antes de tiempo, y el error no se nota hasta que ya
+# entró. Por eso vive aquí y no sólo como nota de dominio: una ficha de referencia
+# no bloquea nada, y esta lista sale en el primer mensaje de cada sesión.
+#
+# El veredicto aterriza en un ADR porque la respuesta no cambia ningún otro
+# artefacto por sí sola — es la regla del corolario de `CLAUDE.md`: una decisión sin
+# sitio nombrado donde aterrizar no se distingue de «sin hacer».
+probar "P-J" "Cuál de los dos productos de abamectina está en la bodega (reingreso 24 h o 48 h)" \
+  '! grep -qiE "^## ADR-[0-9]+.*abamectina de la bodega" docs/architecture/DECISIONS.md'
+
+
 echo
 [ "$indeterminadas" -gt 0 ] && echo "$indeterminadas prueba(s) sin determinar. Eso NO es \"cerrada\"."
 if [ "$rotas" -gt 0 ]; then

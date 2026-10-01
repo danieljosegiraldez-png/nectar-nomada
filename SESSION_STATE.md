@@ -39,14 +39,26 @@ de «hecho y sin rastro».
 
 ---
 
-#### Los seis productos de Finca Rosina: qué falta exactamente
+#### Los seis productos de Finca Rosina: y la dosis en café NO está en sus etiquetas
 
-Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle — **medido por
-dos sesiones en paralelo y con el mismo resultado**: 0 en §1, 0 en `PENDING_IMPLEMENTATIONS/`, 0 en
-`docs/`, y la única «Rosina» de §3 es la de Kenis el apicultor, otro asunto. Faltan de Daniel: la
-**etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote del
-fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
-listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
+**CORREGIDO EL 2026-10-01: este bloque pedía «las etiquetas». Llegaron, y el bloqueo es otro.** Las
+cuatro que mandó Daniel **no registran café**: Regent (maíz, papa), Abamectin 18 EC y ABAMECTAN 1.8 EC
+(frutales y hortalizas). Cero menciones de café, cafeto, broca ni *Hypothenemus*, con control positivo
+de que los acentos se leen. Lo literal de cada una, con su procedencia, en
+`docs/dominio/fitosanitarios-etiquetas.md`.
+
+**Lo que falta de Daniel, en orden de lo que bloquea más:**
+
+1. **De dónde sale la dosis en café** — de la etiqueta no sale. Si es del técnico, de Anacafé o de la
+   práctica de la finca, se registra **con esa procedencia escrita**; lo que no se hace es tomar una
+   dosis de alcachofa y escribirla como de café.
+2. **Las páginas 2-4 de Bralic**, donde está su tabla. Esta máquina no tiene ninguna herramienta de PDF
+   y el visor nativo sólo rinde la primera; los otros caminos devolvieron nada **y su control también**.
+3. **Cuál de los DOS productos de abamectina** está en la bodega: sus reingresos son **24 h** y **48 h**,
+   que es la diferencia entre dejar entrar a alguien al lote o no.
+4. **Las imágenes de Beauveria**, perdidas al compactarse la conversación del 2026-09-30.
+5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
+   contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
 
 ## 2. Lo que se entregó — más nuevo primero
 
