@@ -120,7 +120,10 @@ export function RecibirMedicamentoForm({
                       que llega preseleccionado convierte el silencio en una respuesta. */}
                   <option value="">—</option>
                   {(VALORES_DE_OPCIONES[c] ?? []).map((o) => (
-                    <option key={o} value={o}>{t(`uso_${o}`)}</option>
+                    // Dos familias de rótulo: el uso del producto («preventivo»/«control») y las
+                    // respuestas sí/no. Se eligen por el campo, no por el valor, para que dos campos
+                    // con un valor homónimo no se roben la traducción.
+                    <option key={o} value={o}>{c === "plantProtectionUse" ? t(`uso_${o}`) : t(`opcion_${o}`)}</option>
                   ))}
                 </select>
               ) : (

@@ -26,6 +26,7 @@ export const CAMPOS_DEL_PRODUCTO = [
   "doseMin",
   "doseMax",
   "doseUnit",
+  "harmfulToPollinators",
 ] as const;
 
 export type CampoDelProducto = (typeof CAMPOS_DEL_PRODUCTO)[number];
@@ -57,7 +58,7 @@ export const CAMPOS_NUMERICOS: ReadonlySet<CampoDelProducto> = new Set([...CAMPO
 export const CAMPOS_LARGOS: ReadonlySet<CampoDelProducto> = new Set(["storageConditions", "safetyNotes"]);
 
 /** El que se elige de una lista cerrada en vez de escribirse. */
-export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plantProtectionUse"]);
+export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plantProtectionUse", "harmfulToPollinators"]);
 
 /**
  * Qué valores acepta cada uno de esos campos. **Es la única fuente**: la pantalla pinta de aquí y
@@ -66,6 +67,10 @@ export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plant
  */
 export const VALORES_DE_OPCIONES: Readonly<Partial<Record<CampoDelProducto, readonly string[]>>> = {
   plantProtectionUse: ["preventivo", "control"],
+  // **Tres valores y no un sí/no.** Dejar sin responder tiene que ser distinguible de «no daña»:
+  // lo primero es un hueco, lo segundo una afirmación sobre un producto real. El aviso sólo salta
+  // con `si`, así que un hueco nunca produce ruido.
+  harmfulToPollinators: ["si", "no"],
 };
 
 /**
@@ -78,6 +83,7 @@ const SOLO_FITOSANITARIO: ReadonlySet<CampoDelProducto> = new Set([
   "doseMin",
   "doseMax",
   "doseUnit",
+  "harmfulToPollinators",
 ]);
 
 /** Qué campos se piden según la clase del producto. */

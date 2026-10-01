@@ -56,6 +56,8 @@ export interface CrearMaterialInput {
   readonly doseMax?: number | null;
   readonly doseUnit?: string | null;
   readonly plantProtectionTargets?: readonly PlotInterventionTarget[];
+  /** ¿Daña polinizadores? **Nulo es «nadie lo declaró»**, no «no daña». */
+  readonly harmfulToPollinators?: boolean | null;
   /** Horas de reentrada por defecto. Nulo = no declarada; 0 = declarada cero. */
   readonly defaultReentryHours?: number | null;
   /**
@@ -150,6 +152,7 @@ export async function crearMaterial(userAccountId: string, input: CrearMaterialI
           doseMax: input.doseMax ?? null,
           doseUnit: input.doseUnit?.trim() || null,
           plantProtectionTargets: [...(input.plantProtectionTargets ?? [])],
+          harmfulToPollinators: input.harmfulToPollinators ?? null,
           createdBy: userAccountId,
         },
       });

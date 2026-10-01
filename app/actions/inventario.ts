@@ -31,6 +31,19 @@ function usoDeProducto(valor: string | null): "preventivo" | "control" | null {
   return valor === "preventivo" || valor === "control" ? valor : null;
 }
 
+/**
+ * «si»/«no» del desplegable a booleano, y **cualquier otra cosa a NULO**.
+ *
+ * El hueco tiene que sobrevivir el viaje: un `Boolean(valor)` convertiría «sin responder» en
+ * `false`, o sea en la afirmación «este producto no daña polinizadores» sobre un producto del que
+ * nadie dijo nada. Esta casa deja faltando lo que falta.
+ */
+function danaPolinizadores(valor: string | null): boolean | null {
+  if (valor === "si") return true;
+  if (valor === "no") return false;
+  return null;
+}
+
 export async function recibirMedicamentoFormAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -85,6 +98,7 @@ export async function recibirMedicamentoFormAction(formData: FormData): Promise<
       doseMax: numero("p_doseMax"),
       doseUnit: texto("p_doseUnit"),
       plantProtectionTargets: formData.getAll("p_plantProtectionTargets").filter(esPlaga),
+      harmfulToPollinators: danaPolinizadores(texto("p_harmfulToPollinators")),
     });
     materialId = creado.id;
   } else if (materialId && sitio.puedeDefinirProducto) {

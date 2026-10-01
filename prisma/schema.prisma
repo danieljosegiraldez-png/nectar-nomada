@@ -10090,6 +10090,17 @@ model ConsumableMaterial {
   /// que es la dirección que fija ADR-120 y que `tests/derivaDeMigraciones.test.ts` exige. Lo
   /// contrario —quitarlo de la migración— obligaría a reescribir una migración ya aplicada.
   plantProtectionTargets PlotInterventionTarget[] @default([]) @map("plant_protection_targets")
+  /// ¿Este producto daña a los polinizadores?
+  ///
+  /// **Nulo es «nadie lo declaró», y no se trata como «no».** Decisión de Daniel del 2026-10-01,
+  /// con sus palabras: lo que su finca aplica «no debe afectar las abejas, no es químico». Eso es
+  /// cierto de un repelente de ajo o de un hongo, y **falso de un fipronil**, así que el aviso no
+  /// puede depender de que haya floración: depende de QUÉ se aplica.
+  ///
+  /// Un aviso que saltara con Bralic o con Beauveria sería un aviso que salta con el uso correcto,
+  /// y esta casa ya sabe lo que eso produce: se aprende a ignorarlo. Por eso sólo avisa cuando el
+  /// producto lo declara, igual que las plagas que cubre.
+  harmfulToPollinators Boolean? @map("harmful_to_pollinators")
 
   createdAt DateTime     @default(now()) @map("created_at")
   createdBy String?      @map("created_by") @db.Uuid

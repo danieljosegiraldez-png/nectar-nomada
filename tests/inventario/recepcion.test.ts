@@ -207,3 +207,60 @@ describe("la dosis y el uso de un fitosanitario", () => {
     ).rejects.toBeInstanceOf(MaterialValidationError);
   }, 20000);
 });
+
+/**
+ * ¿Daña polinizadores? — Daniel, 2026-10-01.
+ *
+ * **El hueco tiene que sobrevivir, y es toda la razón de que el campo sea de TRES valores.** Su
+ * corrección fue que lo que su finca aplica «no debe afectar las abejas, no es químico»: cierto de
+ * un repelente de ajo o de un hongo, falso de un fipronil. Así que el aviso no puede depender de
+ * que haya floración —saltaría con el uso correcto, que es como se enseña a ignorar un aviso—:
+ * depende de qué producto es. Y «sin responder» no puede volverse «no daña», porque eso sería
+ * afirmar algo sobre un producto real que nadie afirmó.
+ */
+describe("¿daña polinizadores?", () => {
+  const fito = (n: string) =>
+    crearMaterial(gestorId, { locationId: bodega, organizationId, name: `Fito ${n} ${RUN_ID}`, defaultUnit: "l", isPlantProtection: true });
+
+  it("un producto que no lo declara queda NULO, no en falso", async () => {
+    const m = await fito("sin-declarar");
+    // Es la distinción entera: `false` diría «no daña», y nadie lo dijo.
+    expect(m.harmfulToPollinators).toBeNull();
+  });
+
+  it("se puede declarar que SÍ y que NO, y los dos se guardan", async () => {
+    const si = await crearMaterial(gestorId, {
+      locationId: bodega, organizationId, name: `Fito dana ${RUN_ID}`, defaultUnit: "l",
+      isPlantProtection: true, harmfulToPollinators: true,
+    });
+    const no = await crearMaterial(gestorId, {
+      locationId: bodega, organizationId, name: `Fito inocuo ${RUN_ID}`, defaultUnit: "l",
+      isPlantProtection: true, harmfulToPollinators: false,
+    });
+    expect(si.harmfulToPollinators).toBe(true);
+    expect(no.harmfulToPollinators).toBe(false);
+  });
+
+  it("completar lo rellena desde la lista cerrada, y traduce «si» al booleano", async () => {
+    const m = await fito("completar");
+    const despues = await completarProducto(gestorId, {
+      materialId: m.id, locationId: bodega, campos: { harmfulToPollinators: "si" },
+    });
+    expect(despues.harmfulToPollinators).toBe(true);
+  });
+
+  it("rechaza un valor fuera de la lista en vez de dejarlo llegar a Postgres", async () => {
+    const m = await fito("mal-valor");
+    await expect(
+      completarProducto(gestorId, { materialId: m.id, locationId: bodega, campos: { harmfulToPollinators: "quiza" } }),
+    ).rejects.toBeInstanceOf(MaterialValidationError);
+    // Control: nada se escribió a medias.
+    const quedo = await prisma.consumableMaterial.findUniqueOrThrow({ where: { id: m.id } });
+    expect(quedo.harmfulToPollinators).toBeNull();
+  });
+
+  it("y un medicamento de colmena NO lo pregunta: es un campo de fitosanitario", async () => {
+    expect(camposDe("fitosanitario")).toContain("harmfulToPollinators");
+    expect(camposDe("medicamento")).not.toContain("harmfulToPollinators");
+  });
+});
