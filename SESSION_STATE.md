@@ -100,26 +100,23 @@ conflicto.
 
 ## 3. Bloqueado, y en qué
 
-#### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
+#### El tablero del beneficio: el paso 1 y las tres piezas de §4.5 están en `main`
 
-**Corregido el 2026-09-30: esta entrada decía «la vista no existe» y era falso desde el PR
-#545**, que ejecutó el plan del paso 1. Medido pieza a pieza, no de memoria:
-`app/beneficio/page.tsx` cita el tablero 5 veces, `lib/beneficio/tablero.ts` y
-`datosDelTablero.ts` existen los dos, y la cola de §4.2 y la ocupación de §4.3 se pintan. La
-ruta la fijó **ADR-193**. El diseño sigue en
-`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
+**Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
+«la vista no existe», falso desde el #545. Medido contra `origin/main` `7bc07339` el 2026-10-01, con
+control negativo en 0: `lineaDeEtapas.ts`, `liberacionDeUnidad.ts` y `curvaDeLote.ts` existen los
+tres, con su `CurvaDeLote.tsx`. La ruta la fijó **ADR-193**; el diseño sigue en
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. Y la decisión que esta entrada
+pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
 
-**Lo que SIGUE abierto, medido contra el código el 2026-09-30:**
+**Lo que SIGUE abierto, medido el 2026-10-01:**
 
-- **§4.5 pieza 1, la línea por etapas.** No existe: los únicos archivos de `lib/beneficio/`
-  que dicen «etapa» son `balanceDeMasas.ts` y `comparacionDePesos.ts`, otro asunto.
-- **§4.5 pieza 2, su segunda mitad: «cuándo se libera».** La ocupación sí está; falta la hora
-  según `expectedHours` — sus dos citas en `tablero.ts` alimentan `estadoDeRitmo`, no esto.
-- **§4.5 pieza 3, la curva contra su banda.** No existe: el único `<svg>` de `app/` es la
-  rueda sensorial (control: 205 con `<div>`). El diseño la quiere sin librería.
-- **El paso 2, capacidad con migración: sin plan escrito** (0 archivos).
-- **Sin medir, y el diseño lo pide antes del plan:** si recepción y flotación se registran
-  como etapas propias; si no, esas columnas dicen «sin registro» y no un cero.
+- **El plan del #577, `2026-10-01-ejes-y-rubrica-de-la-curva.md`: escrito y sin ejecutar.** Sus
+  cuatro archivos no existen (`ejesDeLaCurva.ts`, `riesgoDeEsperar.ts` y sus dos pruebas), con
+  control positivo sobre dos que el plan cita como ya presentes.
+- **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
+- **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
+- **`PENDING_IMPLEMENTATIONS/014`–`019`**, los seis de la auditoría de Codex al #573.
 
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
@@ -131,16 +128,19 @@ Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`
 `ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
 compartida es tocar trabajo ajeno.
 
-#### El ambiente del secado, sin ver en navegador
+#### El ambiente del secado: recorrido en navegador el 2026-10-01; queda la corrección
 
-Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
-por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
+**Decía «nunca se vio en un navegador». Ya se vio**, construyendo los datos por los formularios como
+pedía: instalación, estante de 3 × 4, tres lecturas. **Funciona**: la rejilla pone cada lectura en su
+nivel y deja «sin lectura de este nivel» en el que no la tiene (1 de 3, el control); «Últimas
+lecturas» y la «Vista rápida» dan valor, cielo, ventilación y edad; la lectura sin estante sale como
+«General de la instalación». Borrado todo, con control: 55 → 41 ubicaciones y 30 → 29 personas, las
+14 y la 1 predichas. **De paso cerró el fallo del `tzOffsetMinutes`** (#531): tres lecturas seguidas
+sin recargar, 3 de 3.
 
-**Y por qué no es «abrir una pantalla», medido el 2026-09-30:** la copia local tiene **0**
-instalaciones de secado —ni estantes ni camas, 0 lecturas de ambiente, 0 tuestes, 0 tandas— así que
-abrirla verificaría el vacío. Hay que construir los datos por los formularios de la aplicación
-primero, lo cual ejercita el camino de escritura y es la mitad valiosa. Es su propia tarea, no un
-rato.
+**Sigue abierto `PENDING_IMPLEMENTATIONS/020`:** corregir una lectura no tiene pantalla y la base no
+deja otra vía —el UPDATE sólo admite el sello de supersedida, sin puerta de pruebas—. El motor está
+completo y probado; falta cablear el `MeasurementCorrectionForm` que ya usan otros dos sitios.
 
 #### Recolectores: darles su perfil (de Daniel)
 
