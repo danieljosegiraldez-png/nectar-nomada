@@ -1404,7 +1404,13 @@
     {
       "archivo": "lib/traceability/floracion.ts",
       "operacion": "enFloracion",
-      "razon": "Pregunta si una parcela estaba en floración en un instante. **No autoriza a propósito**: no recibe principal porque es una lectura de contexto para un aviso, y §32 sólo le permite proponer. Su llamadora prevista es el formulario de intervención, que ya pasó `requireLotAccess` sobre esa parcela antes de pintarse. **Hoy no tiene ninguna llamadora en producción — sólo su test —, y se dice aquí en vez de dejarlo implícito**: el aviso que la consume necesita el campo `harmfulToPollinators` del producto, que viaja en otra rama. Devuelve las ventanas de floración de UNA parcela que la llamadora ya nombró, no una lista que se pueda recorrer para descubrir parcelas ajenas.",
+      "razon": "Pregunta si una parcela estaba en floración en un instante. **No autoriza a propósito**: no recibe principal porque es una lectura de contexto para un aviso, y §32 sólo le permite proponer. Su llamadora prevista es el formulario de intervención, que ya pasó `requireLotAccess` sobre esa parcela antes de pintarse. **Desde el aviso de floración sí tiene llamadora**: `app/components/traceability/IntervencionForm.tsx` la usa a través de `hayFloracion`. La razón anterior decía que no tenía ninguna; se corrige en vez de dejarla envejecer. Devuelve las ventanas de floración de UNA parcela que la llamadora ya nombró, no una lista que se pueda recorrer para descubrir parcelas ajenas.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "operacion": "floracionesDeLaParcela",
+      "razon": "Devuelve las ventanas de floración de la parcela que la llamadora ya nombró **y de sus ascendientes y descendientes** —`ubicacionesEmparentadas`, el mismo ayudante y la misma regla que la carencia fitosanitaria §3.3: madre e hija sí, hermano no—, para que el navegador decida el aviso de polinizadores. Lee sólo tres columnas (`startsAt`, `endsAt`, `plotBlockId`): sin `select` viajaban al navegador `notes` y `observerPersonId`, y lo señaló una revisión. **No recibe principal porque no autoriza**: sus dos llamadoras son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, y las dos pasan por `contextoDeManejo` (`lot:view` sobre esa misma parcela) ANTES de llamarla. Devuelve todas las ventanas y no las de un instante a propósito: la fecha de la intervención la escribe el operario en el navegador y puede corregirla, así que decidir en el servidor para «ahora» dejaría el aviso equivocado en cuanto la cambiara. No lleva recorte temporal porque una parcela florece una o dos veces al año; cualquier «últimos N días» sería un número inventado.",
       "verificado": "2026-10-01"
     }
   ]

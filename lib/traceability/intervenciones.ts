@@ -810,6 +810,12 @@ export interface MaterialFitosanitario {
   readonly doseUnit: string | null;
   /** Las plagas que declara cubrir. **Vacío es «nadie lo declaró», no «ninguna»**, así que con la lista vacía no se avisa de nada. */
   readonly plantProtectionTargets: readonly PlotInterventionTarget[];
+  /**
+   * ¿Daña polinizadores? **Nulo es «nadie lo declaró»**, no «no daña», y el aviso sólo salta con
+   * `true`: un hueco nunca produce ruido. El campo lo añadió el PR #576; esto es lo que lo lleva
+   * desde el catálogo hasta la línea del formulario.
+   */
+  readonly harmfulToPollinators: boolean | null;
   readonly lotes: readonly { readonly id: string; readonly batchLabel: string; readonly expiresAt: Date | null }[];
 }
 
@@ -838,6 +844,7 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
       doseMax: true,
       doseUnit: true,
       plantProtectionTargets: true,
+      harmfulToPollinators: true,
       lots: { select: { id: true, batchLabel: true, expiresAt: true } },
     },
     orderBy: { name: "asc" },
@@ -857,6 +864,7 @@ export async function productosFitosanitarios(userAccountId: string, locationId:
     doseMax: m.doseMax === null ? null : Number(m.doseMax),
     doseUnit: m.doseUnit,
     plantProtectionTargets: m.plantProtectionTargets,
+    harmfulToPollinators: m.harmfulToPollinators,
     lotes: m.lots,
   }));
 }

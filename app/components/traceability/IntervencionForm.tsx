@@ -10,6 +10,7 @@ import { paraCampoLocal, instanteAPrecargar } from "../../../lib/time/localDateT
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { soltarFocoConLaRueda } from "../CampoNumerico";
 import { LineaDeIntervencion, type ProductoOption, type ValoresDeLinea } from "./LineaDeIntervencion";
+import { hayFloracion, type VentanaDeFloracion } from "../../../lib/traceability/floracionVigente";
 import { textoDeTipoDeManejo, textoDeObjetivoDeManejo, textoDeMetodoDeManejo } from "./etiquetasDeManejo";
 import type { PlotInterventionKind, PlotInterventionMethod, PlotInterventionTarget } from "../../../generated/prisma/client";
 
@@ -83,11 +84,18 @@ export function IntervencionForm({
   selfPersonId,
   specimens,
   bloques,
+  ventanasDeFloracion,
   claveDeEnvio,
   valores,
 }: {
   modo: "nuevo" | "corregir";
   locationId: string;
+  /**
+   * Las ventanas de floración de esta parcela. Van ENTERAS y la decisión se toma aquí porque la
+   * fecha vive aquí: el operario puede corregirla, y un aviso calculado en el servidor para «ahora»
+   * se equivocaría en cuanto lo hiciera. Vacío = nadie anotó floración, y entonces no avisa nada.
+   */
+  ventanasDeFloracion?: readonly VentanaDeFloracion[];
   /** Sólo en modo "corregir". */
   interventionId?: string;
   productos: readonly ProductoOption[];
@@ -120,6 +128,37 @@ export function IntervencionForm({
       refOccurredAt.current.value = paraCampoLocal(instanteAPrecargar(valores.occurredAt, new Date()));
     }
   }, [valores.occurredAt]);
+
+  /**
+   * **El aviso de floración se decide aquí, y se OBSERVA en vez de controlar.**
+   *
+   * El campo de fecha y las casillas de bloque son no controlados a propósito —`ref` y
+   * `defaultChecked`—, por el hallazgo 1 de arriba. Convertirlos en controlados para poder avisar
+   * sería un cambio mucho mayor que el aviso, así que se les añade un `onChange` que sólo mira:
+   * siguen siendo del DOM y aquí se guarda una copia para decidir.
+   *
+   * La fecha empieza en `null` porque el efecto de arriba la escribe DESPUÉS de montar.
+   * `instanteAPrecargar` da la misma respuesta que ese efecto, así que el aviso es correcto desde el
+   * primer render en vez de aparecer de golpe al tocar el campo.
+   */
+  const [cuandoElegido, setCuandoElegido] = useState<string | null>(null);
+  const [bloquesElegidos, setBloquesElegidos] = useState<readonly string[]>(valores.plotBlockIds);
+  // `new Date("2026-03-10T07:30")` sobre un reloj de pared sin zona lo interpreta en la zona de
+  // QUIEN EJECUTA. Aquí eso es correcto y no es casualidad: este código corre en el navegador, y la
+  // zona del dispositivo es exactamente la que el operario quiere decir — es la misma que el
+  // formulario manda en `TimezoneOffsetField` para que el servidor la combine. La misma línea en el
+  // servidor sería el fallo de husos que costó nueve sitios en tres módulos.
+  const cuandoSeAplica = cuandoElegido ? new Date(cuandoElegido) : instanteAPrecargar(valores.occurredAt, new Date());
+  /**
+   * **Una sola expresión, y el guardia la exige así.** La primera versión envolvía esto en un IIFE
+   * con un `if (ventanas.length === 0) return false` delante — innecesario, porque `hayFloracion`
+   * sobre una lista vacía ya devuelve `false` y eso tiene su propia prueba. Y el IIFE dejaba un
+   * hueco: una revisión adversaria le puso `const enFloracion = false && (() => {…})()`, el aviso
+   * dejó de salir para siempre, y el guardia siguió **verde 12/12** porque `hayFloracion(` seguía
+   * apareciendo en el archivo. Con la asignación directa, el guardia ancla `const enFloracion =
+   * hayFloracion(` y esa mutación ya no pasa.
+   */
+  const enFloracion = hayFloracion(ventanasDeFloracion ?? [], cuandoSeAplica, bloquesElegidos);
 
   // Tarea 8, ronda de arreglos 1 (menor #1): las tres tablas salen de
   // `etiquetasDeManejo.ts`, compartida con las otras pantallas que las usan.
@@ -156,7 +195,14 @@ export function IntervencionForm({
         <fieldset>
           <legend>{t("manejoLineasLegend")}</legend>
           {lineas.map((linea, i) => (
-            <LineaDeIntervencion key={i} indice={i} valores={linea} productos={productos} target={target} />
+            <LineaDeIntervencion
+              key={i}
+              indice={i}
+              valores={linea}
+              productos={productos}
+              target={target}
+              enFloracion={enFloracion}
+            />
           ))}
           <button type="button" className="nn-button-secondary" onClick={() => setLineas((prev) => [...prev, lineaVacia()])}>
             {t("manejoAddProductButton")}
@@ -212,6 +258,11 @@ export function IntervencionForm({
                     name="plotBlockIds"
                     value={b.id}
                     defaultChecked={valores.plotBlockIds.includes(b.id)}
+                    onChange={(e) =>
+                      setBloquesElegidos((prev) =>
+                        e.target.checked ? [...prev, b.id] : prev.filter((x) => x !== b.id),
+                      )
+                    }
                   />{" "}
                   {b.name}
                 </label>
@@ -263,7 +314,15 @@ export function IntervencionForm({
 
       <div className="nn-field">
         <label htmlFor="manejo-occurred-at">{t("manejoOccurredAtLabel")}</label>
-        <input id="manejo-occurred-at" name="occurredAt" type="datetime-local" required ref={refOccurredAt} defaultValue="" />
+        <input
+          id="manejo-occurred-at"
+          name="occurredAt"
+          type="datetime-local"
+          required
+          ref={refOccurredAt}
+          defaultValue=""
+          onChange={(e) => setCuandoElegido(e.target.value || null)}
+        />
       </div>
 
       <div className="nn-field">

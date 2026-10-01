@@ -958,6 +958,7 @@
     "manejoUse_preventivo": "preventive",
     "manejoUse_control": "control",
     "manejoTargetNoDeclarado": "{producto} does not declare covering the chosen target. This may be deliberate; it is recorded as entered.",
+    "manejoAvisoFloracion": "{producto} declares harm to pollinators, and flowering is recorded for this plot on the chosen date. It is recorded as entered.",
     "manejoUnitLabel": "Unit",
     "manejoLotLabel": "Bottle/batch",
     "manejoLotNone": "— no bottle —",
