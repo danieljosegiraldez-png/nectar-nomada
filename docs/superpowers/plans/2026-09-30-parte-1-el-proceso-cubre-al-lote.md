@@ -29,12 +29,12 @@ para a preguntar.
 
 - **Node:** `export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"` antes de cualquier `npm`/`npx`.
 - **Base de pruebas propia.** Todas las pruebas corren contra
-  `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas`, creada en la tarea 0.
+  `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas`, creada en la tarea 0.
   **Nunca** contra `nectar_test`, que es compartida por todas las sesiones.
 - **Prohibido:** `npm run test:db -- reset`, `prisma migrate reset`, `prisma db push --force-reset`,
   borrar bases ajenas, y fijar `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`.
 - **Toda orden de Prisma que escriba** lleva delante
-  `DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas`. El `.env` del repo apunta a
+  `DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas`. El `.env` del repo apunta a
   producción.
 - **Commits:**
   - `git add` archivo por archivo; **nunca** `git add -A`.
@@ -78,6 +78,91 @@ para a preguntar.
   `borrarProcesosDeLotesDonde` ya lo hace.
 - **Anclas de mutación únicas.** Toda mutación nombra el sitio exacto (función y línea) y se
   comprueba con `git diff --stat` que cambió UNA línea, o las que diga la fila.
+
+## Correcciones de la revisión previa (2026-10-01) — mandan sobre el texto de cada tarea
+
+Una revisión de las tareas entre sí, hecha antes de empezar, encontró lo de abajo. Donde una
+corrección contradice el texto de una tarea, **manda la corrección**.
+
+- **La base se llama `nectar_test_recetas`** (y `nectar_test_recetas_shadow`), no `nectar_recetas`;
+  el plan ya está cambiado. Los disparadores de limpieza de pruebas (ruedas sensoriales, ambiente de
+  secado) sólo se apagan con `nn.limpieza_de_pruebas` en bases cuyo nombre casa con
+  `^(nectar_test|nectar_ci|nn_flip_)`. Medido: `ruedas.test.ts` fallaba en `nectar_recetas` y pasa
+  7/7 en `nectar_test_recetas`. `test-db.sh` sólo maneja `nectar_test` exacto: el nombre nuevo no
+  lo toca.
+- **Ningún archivo de salida en `/tmp`**, que comparten todas las sesiones: los `/tmp/tsc.txt`,
+  `/tmp/tN.txt`, `/tmp/arq.txt`, `/tmp/msg-tN.txt`, `/tmp/mig-aborto`… van con el mismo nombre en
+  `.superpowers/sdd/2026-09-30-parte-1-el-proceso-cubre-al-lote/out/` del worktree (ignorado por git).
+- **Línea base ampliada** (además de la del paso 5 de la tarea 0), medida antes de la tarea 1:
+  `tests/traceability/{harvest,lotesDeBeneficio,veredictoDelLote,subproductos}.test.ts
+  tests/research/ro1.test.ts tests/apiary tests/envios tests/beneficio tests/sensory tests/equipos
+  tests/arquitectura tests/derivaDeMigraciones.test.ts` → 166 archivos, 2098 pruebas, 0 fallos.
+- **Tarea 1, paso 10 (la migración aborta).** Se comprueban los DOS casos del diseño, no uno: dos
+  abiertos en un lote, y un cerrado sin medición. Cómo montarlo sin `prisma.config` temporal:
+  `nectar_aborto` se crea con la misma receta que la tarea 0 (template0, builtin `C.UTF-8`) y se
+  restaura con `pg_restore --no-owner` del volcado
+  `/private/tmp/claude-501/-Users-danielsan/02029a71-7835-4736-b245-713ece44a3e2/scratchpad/nectar_test.dump`,
+  que está en la migración ANTERIOR a ésta (193 aplicadas, todas las del disco salvo la nueva). Las
+  filas malas usan ids reales por subconsulta: un lote (`select id from traceability.lot … limit 1`;
+  si no hay, se crea uno mínimo), y los valores `Washed` de `grado_proceso` y `despulpada` de
+  `estado_cereza`. Caso A: dos abiertos en el mismo lote → `salida=3` y `closure_kind` en 0. Se
+  borran. Caso B: un cerrado (`ended_at` una hora después de `started_at`) sin
+  `closing_moisture_measurement_id` → `salida=3` y `closure_kind` en 0. Se borra. Control: la misma
+  orden → `salida-control=0`. Al final `DROP DATABASE nectar_aborto`, que es la única base que esta
+  tarea puede borrar. Las cinco cifras van al mensaje del commit.
+- **Tarea 2.** Las comprobaciones `nivel > TOPE_DE_LINAJE` son cuatro, no tres: la mutación `>` → `>=`
+  se aplica a TODAS (contarlas antes con `grep -c` y comprobar que el diff cambia ese número de
+  líneas). Los otros `orderBy` iguales son dos, no tres; la ancla es el `where` que se nombra.
+- **Tareas 2 y 3, cabecera del módulo.** `procesoDelLinaje.ts` importa `../audit`, que importa
+  `./db`, así que «no importa `lib/db`» es falso. La cabecera dice: no importa `lots.ts` (sería un
+  ciclo) y trabaja siempre con el `tx` que recibe, nunca con el cliente global.
+- **Tarea 3.** `exigeSinOtroProcesoAbierto` va SIN el parámetro `ignorando`: nadie lo pasa en ninguna
+  tarea. El comentario que empieza «TODO el linaje…» se escribe como explicación («Por el linaje, no
+  sólo el vigente: …»), sin la palabra TODO.
+- **Tarea 6.** La mutación `closureKind: "divided"` → `"moisture"` va SÓLO en el `data:` del
+  `tx.lotProcess.update` de `dividirProcesoEnTx`, no en el `after:` de la auditoría. Y una fila más:
+  en `antesDeTransformar`, quitar `await exigeSinCorridasAbiertas(tx, …)` → tiene que caer la prueba
+  determinista de «dividir con una corrida en curso»; si sólo existe la de la carrera, correrla 10
+  veces como dice la tarea.
+- **Tarea 8, flip de «dividido».** Quitar las dos comprobaciones de dividido de `devolverASecado` no
+  hace caer su prueba: `abrirProcesoEnTx` → `exigeSinOtroProcesoAbierto` rechaza `lote_dividido`
+  igual. Las dos comprobaciones se quedan (dan el error antes de escribir nada) y el flip va en dos
+  pasos: (a) quitarlas → la prueba SIGUE verde, y se anota como esperado; (b) quitar además
+  `if (await loteDividido(tx, lotId)) throw …` de `exigeSinOtroProcesoAbierto` → cae «un lote
+  dividido no se devuelve a secado». Nombrar todas las que caigan.
+- **Tarea 9, paso 6.** `npm run dev:local` fija `DATABASE_URL=…/nectar_test` dentro del propio script
+  (`package.json`), y anteponer otra no la sobreescribe: correría contra la base compartida sin la
+  migración. No se usa. La comprobación en el navegador la hace el controlador después de revisar la
+  tarea; el implementador sólo prepara los datos en `nectar_test_recetas` con un script desechable
+  (no commiteado) e imprime id y código de: un pergamino cuyo proceso abierto vive en su cereza, un
+  lote sin proceso, un lote en bodega con su proceso cerrado, un lote dividido y un lote con 66
+  generaciones.
+- **Tarea 9, la ficha (diseño §3.3).** Enseña `recetaConVersion ?? etiqueta` del vigente; la cadena
+  cuando `cobertura.cadena.length > 1` (clave nueva `processChainShown`, «código · receta» del más
+  cercano al más lejano); y sin proceso abierto llama a `puedeAbrirProceso`: si se puede, la frase
+  `startRunNeedsOpenProcess` con enlace a `/lots/[id]/process`; si no, `processCannotOpen_${motivo}`,
+  las mismas claves que la página del proceso. Una frase única mentiría en un lote dividido o mezclado.
+- **Tarea 10.** El cuarto patrón casa también `where: { id: input.lotProcessId }`, que es un proceso
+  ya conocido —lo elige quien llama—, no la clave de una corrida; con él, `lotProcess.ts` da 4
+  lecturas y la cuarta prueba cae antes de mutar nada. El patrón pasa a
+  `/where:\s*\{\s*id:\s*(?!input\.)\w+\.lotProcessId\b/g`, con un caso de control más en «el detector
+  caza…»: `prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } })` → 0. Después se mide
+  `lotProcess.ts`: `n` es lo medido y la `razon` nombra CADA lectura que queda, por función; una
+  lectura por lote que no sea `listarProcesosDeLote` se pasa al resolvedor antes que justificarla. La
+  última fila del flip es «de n a n+1».
+- **Tareas 4 a 9, 11 y 12: archivos y `git add`.** Manda la regla global aunque la tarea no traiga el
+  bloque: archivo por archivo y `git diff --cached --stat` contado. Además de su lista, el commit
+  sólo puede llevar `messages/es.json`, `messages/en.json`, los dos archivos del inventario,
+  `scripts/pruebas-por-compuerta.txt` y las pruebas que su cambio obliga a ajustar, cada uno nombrado
+  en el mensaje.
+- **Tareas 4 a 9: cifras del inventario.** Las mide cada tarea con los dos guardias; las operaciones
+  nuevas (`procesoAbiertoParaCorrida` en la 4, las dos de la división en la 6) se clasifican como
+  pida el guardia, y el mensaje del commit dice las cifras antes → después.
+- **Dos puntos donde el plan se aparta de la letra del diseño, y se sigue el plan.** (1) `lots.ts` no
+  reexporta `idsDeDescendencia`: la tarea 2 cambia sus dos llamadores, que es el propósito del
+  diseño (que ninguno se rompa), y `tsc` lo garantiza. (2) No hay un `cerrarProcesoEnTx` exportado:
+  la división cierra con `divided` por su cuenta, y `cerrarProceso` (tarea 5) ya lee y escribe dentro
+  de su transacción con el linaje bloqueado, que es lo que el diseño perseguía.
 
 ## Mapa de archivos
 
@@ -143,10 +228,10 @@ B=postgresql://postgres@127.0.0.1:55433
 $PGBIN/pg_dump -Fc "$B/nectar_test" -f $SCR/nectar_test.dump; echo "dump=$?"
 # La MISMA receta que scripts/test-db.sh: template0 y colación builtin C.UTF-8. Con la del clúster,
 # lower('Í') no pliega como producción y las pruebas de colación fallarían por una causa ajena.
-for b in nectar_recetas nectar_recetas_shadow; do
+for b in nectar_test_recetas nectar_test_recetas_shadow; do
   $PGBIN/psql "$B/postgres" -c "create database $b template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8'"
 done
-$PGBIN/pg_restore --no-owner -d "$B/nectar_recetas" $SCR/nectar_test.dump; echo "restore=$?"
+$PGBIN/pg_restore --no-owner -d "$B/nectar_test_recetas" $SCR/nectar_test.dump; echo "restore=$?"
 ```
 
 `pg_dump` sólo lee: no molesta a quien use `nectar_test`. Si `pg_restore` sale distinto de 0, leer
@@ -159,8 +244,8 @@ sus errores antes de seguir; `--no-owner` evita los de propietario.
 cd ~/Developer/nectar-worktrees/recetas-base
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
-export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
-export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
+export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
+export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas_shadow
 npx prisma migrate deploy > /tmp/deploy.txt 2>&1; echo "deploy=$?"; grep -c 'Applying migration' /tmp/deploy.txt
 npm run db:seed > /tmp/seed.txt 2>&1; echo "seed=$?"
 # Control: la fila patrón tiene que existir ANTES de creer que la base sirve.
@@ -176,7 +261,7 @@ Esperado: `1` al final. Si sale `0`, la siembra no corrió: parar.
 cd ~/Developer/nectar-worktrees/recetas-base
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 SCR=/private/tmp/claude-501/-Users-danielsan/02029a71-7835-4736-b245-713ece44a3e2/scratchpad
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{lotProcess,fermentation,drying,e2e,samples,measurements,operations,massBalance,reports,venta-temprana,bandejasDelSecado,storage,selection,lots,recipeVersions,recipeAuthoring,reporteDeProceso}.test.ts tests/beneficio/{colaDeSecado,datos-del-tablero,entrada-del-lote}.test.ts tests/arquitectura/colacion-de-la-base.test.ts > $SCR/linea-base.txt 2>&1; echo "vitest=$?"
 grep -E 'Test Files|Tests ' $SCR/linea-base.txt
 grep -E '^ (FAIL|×)' $SCR/linea-base.txt | sort -u > $SCR/linea-base-fallos.txt; wc -l < $SCR/linea-base-fallos.txt
@@ -318,7 +403,7 @@ llama distinto, usar la humedad de `loteB` que ya exista allí.
 - [ ] **Paso 3: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/lotProcess.test.ts -t "declara cómo se cerró|dos procesos abiertos" > /tmp/t1.txt 2>&1; echo "vitest=$?"; grep -E '✓|×|FAIL' /tmp/t1.txt | head
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/lotProcess.test.ts -t "declara cómo se cerró|dos procesos abiertos" > /tmp/t1.txt 2>&1; echo "vitest=$?"; grep -E '✓|×|FAIL' /tmp/t1.txt | head
 ```
 
 Esperado: las dos fallan; `closureKind` todavía no existe, así que la primera ni compila en Prisma.
@@ -561,8 +646,8 @@ también tiene que escribir `closureKind`.
 - [ ] **Paso 8: Aplicar a la base propia y regenerar.**
 
 ```bash
-export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
-export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
+export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
+export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas_shadow
 npx prisma migrate deploy > /tmp/deploy.txt 2>&1; echo "deploy=$?"; grep 'proceso_cubre_al_lote' /tmp/deploy.txt
 npx prisma generate > /tmp/gen.txt 2>&1; echo "generate=$?"
 npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script --exit-code > /tmp/diff.sql 2>&1; echo "diff=$?"; cat /tmp/diff.sql
@@ -582,8 +667,8 @@ Esperado:
 ```bash
 cd ~/Developer/nectar-worktrees/recetas-base
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
-export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
+export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas_shadow
 npx vitest run tests/traceability/lotProcess.test.ts tests/derivaDeMigraciones.test.ts > /tmp/t1.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t1.txt
 ```
 
@@ -888,7 +973,7 @@ tests/traceability/procesoDelLinaje.test.ts
 - [ ] **Paso 2: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/procesoDelLinaje.test.ts > /tmp/t2.txt 2>&1; echo "vitest=$?"; grep -E 'Cannot find|Failed to load|FAIL' /tmp/t2.txt | head -3
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/procesoDelLinaje.test.ts > /tmp/t2.txt 2>&1; echo "vitest=$?"; grep -E 'Cannot find|Failed to load|FAIL' /tmp/t2.txt | head -3
 ```
 
 Esperado: falla al cargar porque el módulo no existe.
@@ -1234,7 +1319,7 @@ Esperado: sólo las dos líneas de `lotProcess.ts` y las de la prueba nueva.
 - [ ] **Paso 5: Verlas pasar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/procesoDelLinaje.test.ts tests/traceability/lotProcess.test.ts > /tmp/t2.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t2.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/procesoDelLinaje.test.ts tests/traceability/lotProcess.test.ts > /tmp/t2.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t2.txt
 ```
 
 Esperado: todo en verde. La prueba del tope crea 66 lotes; con su `timeout` de 120 s cabe.
@@ -1538,7 +1623,7 @@ Añadirla al grupo `base-sembrada` de `scripts/pruebas-por-compuerta.txt`.
 - [ ] **Paso 3: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/aperturaDeProceso.test.ts > /tmp/t3.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t3.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/aperturaDeProceso.test.ts > /tmp/t3.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t3.txt
 ```
 
 Esperado: caen todas menos «sí se abre un reproceso». La de concurrencia puede caer o salir verde por
@@ -1694,7 +1779,7 @@ errores de catálogo: si R2 corriera antes, esas pruebas recibirían `lote_en_bo
 - [ ] **Paso 6: Verlas pasar.** También las de antes.
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/aperturaDeProceso.test.ts tests/traceability/lotProcess.test.ts tests/traceability/procesoDelLinaje.test.ts tests/arquitectura/audit-atomico.test.ts > /tmp/t3.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t3.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/aperturaDeProceso.test.ts tests/traceability/lotProcess.test.ts tests/traceability/procesoDelLinaje.test.ts tests/arquitectura/audit-atomico.test.ts > /tmp/t3.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t3.txt
 ```
 
 Esperado: todo en verde. Repetir la de concurrencia cinco veces seguidas
@@ -1916,7 +2001,7 @@ Añadirla a `base-sembrada`.
 - [ ] **Paso 2: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/corridaConProceso.test.ts > /tmp/t4.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t4.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/corridaConProceso.test.ts > /tmp/t4.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t4.txt
 ```
 
 Esperado: caen todas menos **dos**, que ya pasan hoy y son controles:
@@ -2108,7 +2193,7 @@ variable.
 - [ ] **Paso 8: Verlas pasar, con la demo incluida.**
 
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{corridaConProceso,lotProcess,measurements,drying,fermentation,samples,reports,operations,e2e,venta-temprana,massBalance,bandejasDelSecado}.test.ts > /tmp/t4.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t4.txt
 ```
 
@@ -2204,7 +2289,7 @@ describe("R5 — no se cierra un proceso con corridas abiertas", () => {
 - [ ] **Paso 2: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/corridaConProceso.test.ts -t "R5" > /tmp/t5.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t5.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/corridaConProceso.test.ts -t "R5" > /tmp/t5.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t5.txt
 ```
 
 Esperado: caen las dos; hoy cerrar no mira las corridas.
@@ -2288,7 +2373,7 @@ Y añadir `exigeSinCorridasAbiertas` al import de `./procesoDelLinaje`.
 - [ ] **Paso 5: Verlas pasar, y las que cierran procesos en otros archivos.**
 
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{corridaConProceso,lotProcess,reporteDeProceso}.test.ts tests/beneficio/{colaDeSecado,datos-del-tablero}.test.ts > /tmp/t5.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests |corridas_abiertas' /tmp/t5.txt
 ```
 
@@ -2541,7 +2626,7 @@ Añadirla a `base-sembrada`.
 - [ ] **Paso 2: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/divisionBajoProceso.test.ts > /tmp/t6.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t6.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/divisionBajoProceso.test.ts > /tmp/t6.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t6.txt
 ```
 
 Esperado: caen todas menos «la miel sigue dividiendo» y «sin libro de masa…». Esa segunda cae
@@ -2737,7 +2822,7 @@ propio llega en la tarea 12.
 - [ ] **Paso 6: Verlas pasar.** También las de quien llama a `recordTransformation`.
 
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{divisionBajoProceso,lots,selection,massBalance,harvest,lotesDeBeneficio,veredictoDelLote,subproductos,venta-temprana,measurements,samples}.test.ts tests/research/ro1.test.ts tests/apiary > /tmp/t6.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t6.txt
 npx vitest run tests/arquitectura > /tmp/arq.txt 2>&1; echo "arq=$?"; grep -E '×' /tmp/arq.txt | head
 ```
@@ -2888,7 +2973,7 @@ Añadirla a `base-sembrada`.
 - [ ] **Paso 2: Verlas fallar.**
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/bodegaConProceso.test.ts > /tmp/t7.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t7.txt
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas npx vitest run tests/traceability/bodegaConProceso.test.ts > /tmp/t7.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t7.txt
 ```
 
 Esperado: cae «el pergamino… no entra» (hoy entra); la de concurrencia puede caer o no.
@@ -2996,7 +3081,7 @@ importando `cerrarProceso`. El objetivo del ayudante es 11,5 y la medición es 1
 - [ ] **Paso 5: Verlas pasar, con la demo.**
 
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{bodegaConProceso,lotProcess,e2e,storage,selection,measurements}.test.ts tests/envios > /tmp/t7.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t7.txt
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
 $PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c 'DROP DATABASE IF EXISTS nectar_demo_recetas' -c 'CREATE DATABASE nectar_demo_recetas'
@@ -3931,7 +4016,7 @@ Claves en `Traceability`:
 - [ ] **Paso 5: Verlas pasar, y todo lo que lee procesos.**
 
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_test_recetas
 npx vitest run tests/traceability/{bodegaConProceso,divisionBajoProceso,samples,reporteDeProceso,lotProcess}.test.ts tests/beneficio tests/sensory tests/equipos > /tmp/t9.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t9.txt
 npx vitest run tests/arquitectura > /tmp/arq.txt 2>&1; echo "arq=$?"; grep -E '×' /tmp/arq.txt | head
 npx tsc --noEmit > /tmp/tsc.txt 2>&1; echo "tsc=$?"
@@ -3942,7 +4027,7 @@ veía con la FK puesta), es el arreglo, no una regresión. Ajustar la expectativ
 commit, nombrando la prueba.
 
 - [ ] **Paso 6: Verlo en el navegador.** `npm run dev:local` contra la base propia
-  (`DATABASE_URL=…/nectar_recetas`). Comprobar:
+  (`DATABASE_URL=…/nectar_test_recetas`). Comprobar:
   - en la ficha de un pergamino cuyo proceso vive en la cereza, sale «Proceso de PE-…: …, abierto» y
     los botones de empezar;
   - en un lote sin proceso, sale la frase y no los botones;
@@ -4514,7 +4599,7 @@ pasan por la sesión coordinadora, que lleva el turno.
 
 ```bash
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
-for b in nectar_recetas nectar_recetas_shadow nectar_demo_recetas nectar_ci_recetas nectar_ci_recetas_shadow; do $PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c "DROP DATABASE IF EXISTS $b"; done
+for b in nectar_test_recetas nectar_test_recetas_shadow nectar_demo_recetas nectar_ci_recetas nectar_ci_recetas_shadow; do $PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c "DROP DATABASE IF EXISTS $b"; done
 ```
 
 Y el dump del scratchpad. **Nunca** `nectar_test`.
