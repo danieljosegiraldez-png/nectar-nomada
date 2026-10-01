@@ -14,7 +14,8 @@
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { idsDeDescendencia, requireLotAccess } from "./lots";
+import { requireLotAccess } from "./lots";
+import { idsDeDescendencia } from "./procesoDelLinaje";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 // El error vive en su propio archivo (Parte 1, §3.2) y se reexporta para que ningún importador cambie.
@@ -416,7 +417,7 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
   // mediciones de humedad en el lote del proceso). Lo que sigue prohibido es una medición de OTRA
   // rama, y el error se conserva con su nombre.
   if (medicion.lotId !== proceso.lotId) {
-    const descendencia = await idsDeDescendencia(proceso.lotId);
+    const descendencia = await idsDeDescendencia(prisma, proceso.lotId);
     if (!medicion.lotId || !descendencia.includes(medicion.lotId)) {
       throw new LotProcessError("measurement_belongs_to_another_lot");
     }
@@ -651,7 +652,7 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     }),
     // Las de este lote Y las de su descendencia, por lo mismo que `cerrarProceso`: la humedad que
     // cierra un proceso abierto en cereza se mide sobre el pergamino que salió de él.
-    idsDeDescendencia(lotId).then((descendencia) =>
+    idsDeDescendencia(prisma, lotId).then((descendencia) =>
       prisma.measurement.findMany({
         where: { lotId: { in: [lotId, ...descendencia] }, variable: "moisture" },
         orderBy: { occurredAt: "desc" },

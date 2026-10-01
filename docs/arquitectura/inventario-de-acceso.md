@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**596 operaciones** que tocan la base, en **165 archivos** — medido con
+**601 operaciones** que tocan la base, en **166 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -26,10 +26,21 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 |---:|---|---|
 | **458** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **83** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **88** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **21** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
+
+> **El resolvedor del proceso que cubre a un lote (2026-10-01): 596→601, 165→166 archivos y
+> «depende del llamador» 83→88.** Parte 1, R1. `lib/traceability/procesoDelLinaje.ts` es archivo
+> nuevo, y entra en `reciben_transaccion`: recibe el cliente del llamador y no abre conexión. Seis
+> operaciones suyas son **«depende del llamador»** —`procesoQueCubre`, `idsDeAscendencia`,
+> `idsDeDescendencia`, `bloquearLinajes`, `loteDividido` y `procesosParaEntrada`— porque ninguna
+> recibe principal: sus llamadores autorizan el lote antes de invocarlas. `idsDeDescendencia` ya
+> estaba en esa fila con otro archivo (`lots.ts`); se mueve aquí, así que la fila suma seis y
+> resta una. `bloquearLinaje` y `gradoDelProcesoQueCubre` **no** entran: sólo delegan en otras
+> exportadas, y fijarlas haría caer «no quedan fijadas operaciones que ya no dependen del
+> llamador».
 
 > **La ficha de una unidad (2026-09-30): 595→596, 164→165 archivos y «recibía principal sin
 > guardia visible» 20→21.** Diseño §B.3. `lib/beneficio/fichaDeUnidad.ts` es archivo nuevo y su

@@ -496,42 +496,6 @@ export async function recordTransformation(userAccountId: string, input: RecordT
 }
 
 /**
- * Los ids de todo lo que este lote llegó a ser: su descendencia, bajando por las transformaciones.
- *
- * **Para qué existe (2026-09-27).** `cerrarProceso` exigía que la medición de humedad de cierre
- * fuera del MISMO lote del proceso, y la fermentación crea un lote nuevo de pergamino: la humedad
- * se mide ahí. Medido ese día sobre una copia de prueba, el lote de un proceso abierto en cereza
- * tenía **0** mediciones de humedad, así que el formulario de cierre no ofrecía ninguna opción y el
- * proceso no se podía cerrar nunca. Decisión de Daniel: el cierre acepta la humedad de un
- * descendiente, porque es el mismo café.
- *
- * **Es el mismo SQL que `getLotLineage` ya usaba** para su mitad descendente, extraído para que las
- * dos preguntas no puedan divergir. Con un tope de profundidad que aquélla no tiene: una
- * transformación no debería poder formar un ciclo, pero un recorrido sin tope confía en que nunca
- * lo haga, y aquí no hay razón para confiar.
- *
- * No comprueba permisos: quien llame ya resolvió el acceso al lote de partida.
- */
-export async function idsDeDescendencia(lotId: string, profundidad = 12): Promise<string[]> {
-  const filas = await prisma.$queryRaw<Array<{ lot_id: string }>>`
-    WITH RECURSIVE descent AS (
-      SELECT lti.lot_id AS input_lot_id, lto.lot_id AS output_lot_id, 0 AS depth
-      FROM traceability.lot_transformation_input lti
-      JOIN traceability.lot_transformation_output lto ON lto.transformation_id = lti.transformation_id
-      WHERE lti.lot_id = ${lotId}::uuid
-      UNION ALL
-      SELECT lti.lot_id, lto.lot_id, descent.depth + 1
-      FROM descent
-      JOIN traceability.lot_transformation_input lti ON lti.lot_id = descent.output_lot_id
-      JOIN traceability.lot_transformation_output lto ON lto.transformation_id = lti.transformation_id
-      WHERE descent.depth + 1 < ${profundidad}
-    )
-    SELECT DISTINCT output_lot_id AS lot_id FROM descent;
-  `;
-  return filas.map((f) => f.lot_id).filter((id) => id !== lotId);
-}
-
-/**
  * Both directions of lineage, via recursive CTEs — "where did this come
  * from" (ancestors, walking output → input backward) and "what did this
  * become" (descendants, walking input → output forward). Execution plan

@@ -785,6 +785,10 @@
     {
       "archivo": "lib/traceability/samplingEvents.ts",
       "razon": "`crearInspeccionEnTransaccion(tx, userAccountId, input)` recibe el `tx` de `recordMeasurement` para crear la inspección IMPLÍCITA —la que nace cuando llega una zona de muestreo sin ninguna (Daniel, 2026-09-29)— dentro de la misma transacción que la medición. Anidar una transacción propia usaría otra conexión: la inspección podría quedar escrita mientras la medición se deshace, que es lo que la atomicidad existe para impedir. Misma forma y misma razón que `cerrarCorridaEnTransaccion` en drying.ts. `createSamplingEvent` pasa ahora por este mismo ayudante, así que no hay dos escrituras que puedan derivar."
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -1388,10 +1392,40 @@
       "verificado": "2026-09-25"
     },
     {
-      "archivo": "lib/traceability/lots.ts",
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesoQueCubre",
+      "razon": "Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1). No expone nada por sí misma: sus llamadores (servicios de lotProcess, corridas, bodega, lectores) ya autorizaron el lote. Devuelve ids y estado del proceso, no filas de lote.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "idsDeAscendencia",
+      "razon": "Devuelve los ids de todos los ancestros de un lote, recorriendo el linaje hacia arriba hasta el tope de 64 generaciones (R1). Sólo la usan `procesoQueCubre`, `bloquearLinajes` y los servicios que ya autorizaron el lote de partida con requireLotAccess. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "idsDeDescendencia",
-      "razon": "Devuelve los ids de la descendencia de un lote con el MISMO SQL recursivo que `getLotLineage` ya usaba, extraído para que las dos preguntas no divergan. No recibe principal: sus dos llamadoras autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
-      "verificado": "2026-09-27"
+      "razon": "Devuelve los ids de la descendencia de un lote (R1); es la que vivía en lots.ts, ahora con tx y el mismo tope de 64 generaciones. No recibe principal: sus llamadores autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "bloquearLinajes",
+      "razon": "Bloquea con FOR UPDATE las filas de `lot` del lote y de sus ancestros (R2). No lee nada que se devuelva ni escribe: sólo serializa a quien opere sobre el mismo café. Sus llamadores (abrir, devolver a secado, corridas, cierre, división, bodega) ya autorizaron el lote antes de abrir su transacción.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "loteDividido",
+      "razon": "Responde sí o no a «¿es la entrada de una división que cerró un proceso?» (R6.6). No devuelve ningún dato de la fila. Sus llamadores (las compuertas de abrir, medir, muestrear y empezar corrida) ya autorizaron el lote.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesosParaEntrada",
+      "razon": "Devuelve el cierre y el grado del proceso que cubre a un lote, con la misma forma para la ficha y el tablero (R7). Sus llamadores (ficha del lote, tablero del secado, lista de catas) ya autorizaron el lote que enseñan; devuelve el grado del proceso, nunca filas del lote.",
+      "verificado": "2026-10-01"
     }
   ]
 }
