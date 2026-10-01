@@ -3343,6 +3343,36 @@ que dos de las tres versiones no vieron.
 peor que no tener guardia, porque enseña a ignorarlo. Entre las dos orillas, el control es barato —
 correr el detector sobre TODAS las pantallas reales y mirar si alguna buena sale marcada.
 
+### «Dentro del lienzo» y «legible» no son la misma propiedad
+
+**2026-09-30, PR #564.** La gráfica de la unidad de secado dibujaba la **humedad relativa del
+cuarto** contra el mismo eje que la **humedad del grano**, porque las dos se miden en `%`. A la
+temperatura ya le había dado escala propia —unidad distinta, y eso era evidente—; a la HR no, y la
+coincidencia de unidad escondió que tampoco es la misma magnitud: una es el grano y la otra el aire.
+
+Renderizando el SVG en el servidor, con cuatro lecturas de grano (12–42 %) y tres de cuarto (55–78 %):
+
+| eje principal | la curva del grano usa |
+|---|---|
+| con el aire dentro | **96 px de 220 — el 44 %** |
+| sólo el grano y el rango de la receta | **204 px de 220 — el 93 %** |
+
+O sea: la serie que se viene a mirar quedaba aplastada en la mitad inferior por una serie de
+contexto. **Ninguna prueba podía verlo.** Las que había afirmaban que las coordenadas eran finitas y
+caían dentro del lienzo — y lo eran. Son dos propiedades distintas y sólo la primera estaba medida.
+
+**La regla, y vale para cualquier eje: la misma unidad no es la misma magnitud.** Dos series con el
+mismo `%` o el mismo `kg` comparten eje sólo si comparten orden de magnitud; si no, la pequeña
+desaparece y el gráfico sigue siendo técnicamente correcto. Lo mismo con un eje de tiempo donde una
+serie cubre horas y otra meses.
+
+**Y el guardia necesita DOS aserciones, no una.** La primera dice que la serie de contexto no estira
+el eje; la segunda dice **cuánto del lienzo le queda a la serie principal** (`> 0,9` del alto útil
+en `tests/beneficio/graficaDeSecado.test.ts`). Sin la segunda, devolver la serie de contexto con un
+rango que quepa dentro del de la principal pasa el guardia sin que nadie note el aplastamiento. La
+medición que lo motivó está en el comentario de `escalaDeAmbiente`, en
+`lib/beneficio/graficaDeSecado.ts`.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
