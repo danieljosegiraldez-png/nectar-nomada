@@ -16,18 +16,26 @@ const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace
 
 describe("tieneCondicion, la guarda del ayudante de limpieza (función pura: no toca la base)", () => {
   // Medido el 2026-10-01 en `nectar_test_recetas` (104 lotes), con `count` y sólo lectura
-  // (`.superpowers/sdd/…/out/r2-formas-vacias.txt` y `…/r3-formas-negativas.txt`):
+  // (`.superpowers/sdd/…/out/r2-formas-vacias.txt`, `…/r3-formas-negativas.txt` y `…/r4-formas.txt`):
   //   casan con TODOS los lotes:  {}, { id: {} }, { id: undefined }, { AND: [] }, { NOT: [] },
   //                               { AND: [{}] }, { AND: {} }, { NOT: {} }, { NOT: [{}] }
   //                               y TODA negación: { id: { notIn: [] } }, { id: { notIn: ['x'] } },
   //                               { NOT: { id: { in: [] } } }, { NOT: { id: 'x' } }, { id: { not: { in: [] } } },
   //                               { id: { not: 'x' } }, { organization: { isNot: … } }, { measurements: { none: … } }
   //                               y un modificador solo: { lotCode: { mode: 'insensitive' } }
-  //   no casan con NINGUNO:       { OR: [] }, { OR: [{}] }, { id: { in: [] } }
+  //                               y un OR con UNA rama que no estrecha: { OR: [{ id: { in: [real] } }, { NOT: … }] },
+  //                               { OR: [{ id: { in: [] } }, { id: { notIn: [] } }] }
+  //                               y `every`, que una relación vacía cumple: { lotProcesses: { every: … } }
+  //                               ({ measurements: { every: … } }: 94, los lotes sin mediciones)
+  //                               y una cadena vacía: { lotCode: { contains | startsWith | endsWith | gte | gt: '' } }
+  //                               y `null` en un campo casi siempre nulo: { releasedAt: null }
+  //   no casan con NINGUNO:       { OR: [] }, { OR: [{}] }, { id: { in: [] } }, { lotCode: '' }, { lotCode: { equals: '' } }
   // `{ AND: [] }` y `{ NOT: [] }` son los que la guarda de la ronda 1 dejaba pasar (una lista vacía contaba como
   // condición); `{ id: { notIn: [] } }`, `{ NOT: { id: { in: [] } } }` y `{ id: { not: { in: [] } } }`, los que dejaba
-  // pasar la de la ronda 2 (lo que colgaba de una negación contaba). `{ OR: [] }` y `{ OR: [{}] }` no borrarían
-  // nada, pero se rechazan igual por conservadores. En la ronda 1 se creyó que `{ OR: [{}] }` casaba con todos: es falso.
+  // pasar la de la ronda 2 (lo que colgaba de una negación contaba); los OR con una rama abierta, `every`, `''` y
+  // `null`, los que dejaba pasar la de la ronda 3. `{ OR: [] }`, `{ OR: [{}] }`, `{ lotCode: '' }` y `equals: ''` no
+  // borrarían nada, pero se rechazan igual por conservadores. En la ronda 1 se creyó que `{ OR: [{}] }` casaba con
+  // todos: es falso.
   //
   // **Por qué se prueba la función y NO el ayudante.** El ayudante hace un `deleteMany` real, y una prueba que lo
   // llamara con estos filtros dependería sólo de esta guarda para no borrar los procesos de todas las sesiones
@@ -72,6 +80,32 @@ describe("tieneCondicion, la guarda del ayudante de limpieza (función pura: no 
     ["{ NOT: { id: { in: ['x'] } }, AND: [] } (negación y una lista vacía)", { NOT: { id: { in: ["x"] } }, AND: [] }],
     // Un modificador no restringe nada: sin un valor al que modificar, el filtro es `{}`.
     ["{ lotCode: { mode: 'insensitive' } }", { lotCode: { mode: "insensitive" } }],
+    // OR casa con la UNIÓN de sus ramas: basta una rama que no estreche para abrirlo todo. Aquí falló la ronda 3,
+    // que trataba OR como AND y daba por buena la primera de estas como control positivo (medido: 104 de 104).
+    ["{ OR: [{ id: 'x' }, { NOT: { id: 'y' } }] } (una rama negada)", { OR: [{ id: "x" }, { NOT: { id: "y" } }] }],
+    ["{ OR: [{ id: { in: [] } }, { id: { notIn: [] } }] }", { OR: [{ id: { in: [] } }, { id: { notIn: [] } }] }],
+    ["{ OR: [{ id: 'x' }, {}] } (una rama vacía)", { OR: [{ id: "x" }, {}] }],
+    ["{ OR: [{ id: 'x' }, { AND: [] }] } (una rama vacía)", { OR: [{ id: "x" }, { AND: [] }] }],
+    ["{ OR: [{ id: 'x' }, { lotProcesses: { every: { id: 'y' } } }] }", { OR: [{ id: "x" }, { lotProcesses: { every: { id: "y" } } }] }],
+    ["{ OR: [{ id: 'x' }, { lotCode: { startsWith: '' } }] }", { OR: [{ id: "x" }, { lotCode: { startsWith: "" } }] }],
+    ["{ AND: [{ OR: [{ id: 'x' }, { NOT: { id: 'y' } }] }] } (OR bajo AND)", { AND: [{ OR: [{ id: "x" }, { NOT: { id: "y" } }] }] }],
+    ["{ lot: { OR: [{ id: 'x' }, { NOT: { id: 'y' } }] } } (anidado)", { lot: { OR: [{ id: "x" }, { NOT: { id: "y" } }] } }],
+    // `every` es un cuantificador vacuo: una relación sin filas lo cumple (medido: 104 de 104 y 94 de 104).
+    ["{ lotProcesses: { every: { id: 'x' } } }", { lotProcesses: { every: { id: "x" } } }],
+    ["{ measurements: { every: { id: 'x' } } }", { measurements: { every: { id: "x" } } }],
+    // Una cadena vacía no es una restricción: el accidente realista es un prefijo vaciado por una variable vacía.
+    ["{ lotCode: { contains: '' } }", { lotCode: { contains: "" } }],
+    ["{ lotCode: { startsWith: '' } } (un prefijo vaciado por una variable vacía)", { lotCode: { startsWith: "" } }],
+    ["{ lotCode: { endsWith: '' } }", { lotCode: { endsWith: "" } }],
+    ["{ lotCode: { contains: '', mode: 'insensitive' } }", { lotCode: { contains: "", mode: "insensitive" } }],
+    ["{ lotCode: { gte: '' } }", { lotCode: { gte: "" } }],
+    ["{ lotCode: { equals: '' } } (casa con 0: se rechaza por conservadora)", { lotCode: { equals: "" } }],
+    ["{ lotCode: '' } (casa con 0: se rechaza por conservadora)", { lotCode: "" }],
+    ["{ lot: { lotCode: { startsWith: '' } } } (anidado)", { lot: { lotCode: { startsWith: "" } } }],
+    // `null` tampoco: en un campo que casi siempre es nulo casa con casi todo (medido: 104 de 104).
+    ["{ releasedAt: null }", { releasedAt: null }],
+    ["{ greenGradeNote: { equals: null } }", { greenGradeNote: { equals: null } }],
+    ["{ project: { is: null } } (casa con 3: se rechaza por conservadora)", { project: { is: null } }],
   ];
   it.each(sinCondicion)("rechaza %s: no es una condición", (_etiqueta, filtro) => {
     expect(tieneCondicion(filtro)).toBe(false);
@@ -90,12 +124,19 @@ describe("tieneCondicion, la guarda del ayudante de limpieza (función pura: no 
     // no llegó a crear ningún lote. Si la guarda lo rechazara, esa limpieza lanzaría y abandonaría las líneas
     // siguientes (un `afterAll` es una cadena).
     ["{ id: { in: [] } } (lista de valores vacía)", { id: { in: [] } }],
-    // Una condición positiva Y además negaciones SÍ vale: lo positivo es lo que estrecha, lo negado sólo recorta.
+    // Una condición positiva Y además negaciones SÍ vale BAJO AND (las claves de un objeto son un AND): lo positivo
+    // estrecha y lo negado sólo recorta. Bajo OR es al revés: ver las hostiles de OR arriba.
     ["{ id: { in: ['x'] }, NOT: { lotCode: 'y' } } (positiva y una negación)", { id: { in: ["x"] }, NOT: { lotCode: "y" } }],
     ["{ id: { in: ['x'], notIn: ['y'] } } (en la misma clave)", { id: { in: ["x"], notIn: ["y"] } }],
     ["{ id: 'x', NOT: [] } (positiva y una negación vacía)", { id: "x", NOT: [] }],
-    ["{ OR: [{ id: 'x' }, { NOT: { id: 'y' } }] } (una rama positiva)", { OR: [{ id: "x" }, { NOT: { id: "y" } }] }],
     ["{ lot: { id: 'x', NOT: { lotCode: 'y' } } } (anidado)", { lot: { id: "x", NOT: { lotCode: "y" } } }],
+    // OR vale cuando TODAS sus ramas estrechan; y un OR que no estrecha no estropea a una positiva de al lado (AND).
+    ["{ OR: [{ id: 'x' }, { lotCode: { startsWith: 'TEST' } }] } (todas las ramas positivas)", { OR: [{ id: "x" }, { lotCode: { startsWith: "TEST" } }] }],
+    ["{ id: 'x', OR: [{ NOT: { id: 'y' } }] } (OR sin positiva junto a una positiva)", { id: "x", OR: [{ NOT: { id: "y" } }] }],
+    // `every` no cuenta, `some` sí: pide al menos una fila relacionada que case (medido: 0 de 104 con un id inexistente).
+    ["{ measurements: { some: { id: 'x' } } }", { measurements: { some: { id: "x" } } }],
+    // Un `null` junto a una positiva no la tapa.
+    ["{ id: 'x', releasedAt: null } (null junto a una positiva)", { id: "x", releasedAt: null }],
     ["{ lotCode: { contains: 'TEST', mode: 'insensitive' } } (el modificador acompaña a un valor)", { lotCode: { contains: "TEST", mode: "insensitive" } }],
   ];
   it.each(conCondicion)("acepta %s: sí es una condición", (_etiqueta, filtro) => {
