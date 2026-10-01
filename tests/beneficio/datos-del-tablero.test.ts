@@ -16,8 +16,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { datosDelTablero, pidenDecisionPorEtapa } from "../../lib/beneficio/datosDelTablero";
-import type { EntradaDeLoteParaTablero } from "../../lib/beneficio/tablero";
+import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { borrarVinculosDeLote } from "../helpers/borrarVinculosDeLote";
@@ -44,9 +43,12 @@ const recetaIds: string[] = [];
 const versionIds: string[] = [];
 const catalogoValorIds: string[] = [];
 const secadoIds: string[] = [];
+const equipoIds: string[] = [];
 
 let miOrgId: string, otraOrgId: string;
 let valorGrado: string, valorCereza: string;
+/** El valor REAL «Natural» del catálogo: es lo único que el motor traduce a un perfil (`PERFIL_POR_GRADO`). */
+let valorNatural: string;
 
 let operario: string;
 let miSitio: string, otroSitio: string;
@@ -160,6 +162,18 @@ beforeAll(async () => {
   valorGrado = vg.id;
   valorCereza = vc.id;
   catalogoValorIds.push(vg.id, vc.id);
+  // **«Natural» tiene que llamarse exactamente así**: `PERFIL_POR_GRADO` busca por texto, y con el
+  // valor `TEST Natural (RUN)` de arriba el lote cae en `GRADO_SIN_PERFIL` y no tiene veredicto —
+  // que es justo lo que NO sirve para probar «pide decisión». Si el catálogo real ya lo trae se
+  // reusa y NO se borra; si no, se crea y entra en la lista de lo que el `afterAll` quita.
+  const natural = await prisma.variableCatalogValue.findFirst({ where: { catalogId: grado.id, value: "Natural" } });
+  if (natural) {
+    valorNatural = natural.id;
+  } else {
+    const nuevo = await prisma.variableCatalogValue.create({ data: { catalogId: grado.id, value: "Natural" } });
+    valorNatural = nuevo.id;
+    catalogoValorIds.push(nuevo.id);
+  }
 
   const a = await loteFermentando("LOTE-A", miSitio, miOrg.id);
   const b = await loteFermentando("LOTE-B", miSitio, miOrg.id);
@@ -191,6 +205,10 @@ afterAll(async () => {
     ["transformationInput", () => prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) })],
     ["lotTransformation", () => prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) })],
     ["dryingRun", () => prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: secadoIds } }) })],
+    // La fermentación también apunta a su proceso (`lotProcessId`): antes que él, como la de secado.
+    ["fermentationRun", () => prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) })],
+    // El tanque lo referencia la corrida (`vesselEquipmentId`): después de ella.
+    ["equipment", () => prisma.equipment.deleteMany({ where: assertDefinedWhere({ id: { in: equipoIds } }) })],
     ["lotProcess", () => prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ id: { in: procesoIds } }) })],
     ["processTarget", () => prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) })],
     ["processRecipePhase", () => prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) })],
@@ -200,7 +218,6 @@ afterAll(async () => {
     ["variableCatalogValue", () => prisma.variableCatalogValue.deleteMany({ where: assertDefinedWhere({ id: { in: catalogoValorIds } }) })],
     ["correctiveAction", () => prisma.correctiveAction.deleteMany({ where: assertDefinedWhere({ id: { in: correctiveIds } }) })],
     ["deviation", () => prisma.deviation.deleteMany({ where: assertDefinedWhere({ id: { in: deviationIds } }) })],
-    ["fermentationRun", () => prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) })],
     ["lot", () => prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) })],
     ["assignment", () => prisma.assignment.deleteMany({ where: assertDefinedWhere({ id: { in: assignmentIds } }) })],
     ["scope", () => prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: scopeIds } }) })],
@@ -377,13 +394,17 @@ async function transformacionDe(
   transformationIds.push(t.id);
 }
 
-async function procesoDe(lotId: string, o: { cerrado?: boolean; versionId?: string } = {}) {
+async function procesoDe(
+  lotId: string,
+  o: { cerrado?: boolean; versionId?: string; secuencia?: number; natural?: boolean } = {},
+) {
   const p = await prisma.lotProcess.create({
     data: {
       lotId,
-      sequenceOrder: 1,
+      // La unicidad es `(lotId, sequenceOrder)`: un lote puede tener varios procesos abiertos.
+      sequenceOrder: o.secuencia ?? 1,
       intent: nombre("intención"),
-      processGradeValueId: valorGrado,
+      processGradeValueId: o.natural ? valorNatural : valorGrado,
       cherryStateValueId: valorCereza,
       targetMoisturePct: 11,
       startedAt: haceHoras(12),
@@ -411,6 +432,37 @@ async function secadoDe(
   });
   secadoIds.push(corrida.id);
   await transformacionDe(lotId, "stage_change", { dryingRunId: corrida.id });
+  return corrida.id;
+}
+
+/**
+ * Una fermentación ABIERTA de un lote, con lo que el tablero lee de ella: su proceso (de ahí salen
+ * el grado y la duración de la fase) y su tanque (`vesselEquipmentId`, que es lo que la ata a una
+ * unidad). `loteFermentando` no los acepta y los tres primeros lotes del archivo no los necesitan.
+ */
+async function fermentacionDe(
+  lotId: string,
+  o: { lotProcessId?: string; tanqueId?: string; inicio?: Date } = {},
+) {
+  const corrida = await prisma.fermentationRun.create({
+    data: {
+      startedAt: o.inicio ?? haceHoras(10),
+      vesselNote: nombre("tanque"),
+      lotProcessId: o.lotProcessId ?? null,
+      vesselEquipmentId: o.tanqueId ?? null,
+    },
+  });
+  runIds.push(corrida.id);
+  const t = await prisma.lotTransformation.create({
+    data: {
+      transformationType: "stage_change",
+      occurredAt: o.inicio ?? haceHoras(10),
+      provenanceClass: "original_record",
+      fermentationRunId: corrida.id,
+      inputs: { create: [{ lotId, quantity: 10, unit: "kg" }] },
+    },
+  });
+  transformationIds.push(t.id);
   return corrida.id;
 }
 
@@ -499,7 +551,7 @@ describe("la línea de etapas", () => {
     expect(await lotesEn("seleccion")).toBe(antes + 1);
   });
 
-  it("proceso: sólo el que sigue abierto, de un lote visible", async () => {
+  it("proceso: sólo el que sigue abierto, de un lote visible, y un lote con dos procesos abiertos cuenta una vez", async () => {
     const antes = await lotesEn("proceso");
 
     const ajeno = await loteSimple("P-AJENO", otroSitio, otraOrgId);
@@ -513,9 +565,14 @@ describe("la línea de etapas", () => {
     const abierto = await loteSimple("P-ABIERTO", miSitio, miOrgId);
     await procesoDe(abierto);
     expect(await lotesEn("proceso")).toBe(antes + 1);
+
+    // Un lote puede tener DOS procesos abiertos (la unicidad es `(lotId, sequenceOrder)`): la etapa
+    // cuenta LOTES, no filas. Mutación que la hace caer: contar `lotProcess` en vez de `lot`.
+    await procesoDe(abierto, { secuencia: 2 });
+    expect(await lotesEn("proceso")).toBe(antes + 1);
   });
 
-  it("secado: sólo la corrida abierta, de un lote visible", async () => {
+  it("secado: sólo la corrida abierta, de un lote visible, y un lote con dos corridas abiertas cuenta una vez", async () => {
     const antes = await lotesEn("secado");
 
     const ajeno = await loteSimple("D-AJENO", otroSitio, otraOrgId);
@@ -529,9 +586,13 @@ describe("la línea de etapas", () => {
     const abierto = await loteSimple("D-ABIERTO", miSitio, miOrgId);
     await secadoDe(abierto);
     expect(await lotesEn("secado")).toBe(antes + 1);
+
+    // La misma regla: una segunda corrida abierta del MISMO lote no sube el número.
+    await secadoDe(abierto);
+    expect(await lotesEn("secado")).toBe(antes + 1);
   });
 
-  it("almacén: sólo la asignación vigente, de un lote visible", async () => {
+  it("almacén: sólo la asignación vigente, de un lote visible, y un lote con dos asignaciones vigentes cuenta una vez", async () => {
     const antes = await lotesEn("almacen");
 
     const ajeno = await loteSimple("A-AJENO", otroSitio, otraOrgId);
@@ -545,64 +606,67 @@ describe("la línea de etapas", () => {
     const vigente = await loteSimple("A-VIGENTE", miSitio, miOrgId);
     await almacenDe(vigente, miSitio, false);
     expect(await lotesEn("almacen")).toBe(antes + 1);
+
+    // `storage_assignment` no tiene ninguna restricción que impida dos vigentes del mismo lote.
+    await almacenDe(vigente, miSitio, false);
+    expect(await lotesEn("almacen")).toBe(antes + 1);
   });
 });
 
-describe("«pide decisión» por etapa", () => {
-  // Hermético dentro de un archivo con base: armar un lote con veredicto crítico por la base exige
-  // receta, un grado con perfil y lecturas, y la regla a probar es sólo a qué etapa va cada grupo.
-  // Por eso se le dan a la función ENTRADAS ya armadas, que ninguna base sembrada produce.
-  const AHORA = new Date("2026-09-30T12:00:00Z");
-  const dictamen = (status: string, severity: "INFO" | "WARNING" | "CRITICAL") => ({ status, severity });
-  const entrada = (lotId: string, ph: ReturnType<typeof dictamen>): EntradaDeLoteParaTablero => ({
-    lotId,
-    lotCode: lotId,
-    veredicto: { ph, brix: null, secado: null },
-    faseIniciada: new Date("2026-09-30T02:00:00Z"),
-    expectedHours: null,
-    metas: [],
-    ultimaLectura: null,
-  });
-  const critico = (id: string) => entrada(id, dictamen("OUT_OF_RANGE", "CRITICAL"));
-  const listo = (id: string) => entrada(id, dictamen("TERMINATION_READY", "INFO"));
-  const aviso = (id: string) => entrada(id, dictamen("DRIFTING", "WARNING"));
-  const enCurso = (id: string) => entrada(id, dictamen("ON_TRACK", "INFO"));
-  const sinDesviaciones = new Map<string, number>();
+async function pidenEn(clave: string): Promise<number> {
+  const e = (await datosDelTablero(operario, ahora)).etapas.find((x) => x.clave === clave)!.estado;
+  if (e.tipo !== "cuenta") throw new Error(`la etapa ${clave} no cuenta: ${e.tipo}`);
+  return e.pidenDecision;
+}
 
-  it("cuenta crítico y listo para decidir, y cada grupo cae en la etapa de SU fase", () => {
-    const r = pidenDecisionPorEtapa({
-      // Fermentación: 2 piden decisión (crítico + listo) y 2 no (aviso, en curso).
-      fermentacion: [critico("f1"), listo("f2"), aviso("f3"), enCurso("f4")],
-      // Secado: 1 pide decisión. **Distinto de 2 a propósito**: con el mismo número en las dos, cruzar
-      // las fases pasaría la prueba.
-      secado: [critico("s1"), enCurso("s2")],
-      desviacionesAbiertasPorLote: sinDesviaciones,
-      ahora: AHORA,
-    });
-    // Mutaciones que la hacen caer: contar `aviso`; cruzar fermentación con secado; contar sólo
-    // `critico`; devolver sólo una de las dos claves.
-    expect(r).toEqual({ proceso: 2, secado: 1 });
-  });
+describe("«pide decisión» llega a la etapa de su fase", () => {
+  // La regla pura (qué grupo cuenta, y que cada fase caiga en SU clave) la prueban `tablero.test.ts`
+  // y sin base. Lo que sólo se ve AQUÍ es el cableado del cargador: que cada corrida abierta llegue
+  // a `entradasPorFase`, que las dos fases no se crucen y que el resultado alcance la línea.
+  //
+  // Lotes con veredicto REAL, no entradas fabricadas: grado «Natural» (el único que se traduce a
+  // perfil), y lecturas que lo dictaminan. Un pH de 3,0 está por debajo del umbral inmediato del
+  // perfil NATURAL (3,4) y es CRITICAL sin esperar confirmación; una humedad de 30 % sin bajar en dos
+  // ventanas de 24 h es `STALLED_MOLD_HAZARD`, también CRITICAL.
+  it("un lote visible con la fase abierta y un veredicto crítico sube SU etapa, y sólo ella", async () => {
+    const antesProceso = await pidenEn("proceso");
+    const antesSecado = await pidenEn("secado");
 
-  it("una desviación abierta sube a aviso, y aviso no pide decisión", () => {
-    const r = pidenDecisionPorEtapa({
-      fermentacion: [enCurso("f1")],
-      secado: [],
-      desviacionesAbiertasPorLote: new Map([["f1", 1]]),
-      ahora: AHORA,
-    });
-    expect(r).toEqual({ proceso: 0, secado: 0 });
-  });
+    // (1) Uno de OTRO sitio, crítico de verdad: no mueve nada.
+    const ajeno = await loteSimple("PD-AJENO", otroSitio, otraOrgId);
+    await fermentacionDe(ajeno, { lotProcessId: await procesoDe(ajeno, { natural: true }) });
+    await medicionDe(ajeno, "ph", 3.0, haceHoras(2));
+    expect(await pidenEn("proceso")).toBe(antesProceso);
 
-  it("sin entradas es 0 — y ese 0 sí es cierto, porque la etapa sí tiene cola", () => {
-    expect(
-      pidenDecisionPorEtapa({ fermentacion: [], secado: [], desviacionesAbiertasPorLote: sinDesviaciones, ahora: AHORA }),
-    ).toEqual({ proceso: 0, secado: 0 });
+    // (2) Uno MÍO que fermenta dentro de la ventana óptima: tiene veredicto y no pide decisión.
+    const sano = await loteSimple("PD-SANO", miSitio, miOrgId);
+    await fermentacionDe(sano, { lotProcessId: await procesoDe(sano, { natural: true }) });
+    await medicionDe(sano, "ph", 4.3, haceHoras(2));
+    expect(await pidenEn("proceso")).toBe(antesProceso);
+
+    // (3) Dos MÍOS en fermentación, críticos: la etapa «proceso» sube en DOS, «secado» no se mueve.
+    for (const etiqueta of ["PD-F1", "PD-F2"]) {
+      const lote = await loteSimple(etiqueta, miSitio, miOrgId);
+      await fermentacionDe(lote, { lotProcessId: await procesoDe(lote, { natural: true }) });
+      await medicionDe(lote, "ph", 3.0, haceHoras(2));
+    }
+    expect(await pidenEn("proceso")).toBe(antesProceso + 2);
+    expect(await pidenEn("secado")).toBe(antesSecado);
+
+    // (4) Uno MÍO en secado, crítico: «secado» sube en UNO y «proceso» se queda en +2. **Distinto de
+    // dos a propósito**: con el mismo número en las dos, cruzar las fases pasaría la prueba.
+    const secando = await loteSimple("PD-S1", miSitio, miOrgId);
+    const proceso = await procesoDe(secando, { natural: true });
+    await secadoDe(secando, { lotProcessId: proceso, inicio: haceHoras(40) });
+    await medicionDe(secando, "moisture", 30, haceHoras(30));
+    await medicionDe(secando, "moisture", 30, haceHoras(3));
+    expect(await pidenEn("secado")).toBe(antesSecado + 1);
+    expect(await pidenEn("proceso")).toBe(antesProceso + 2);
   });
 });
 
 describe("cuándo se libera la próxima unidad", () => {
-  let cama: string, camaAjena: string, versionCon48h: string;
+  let cama: string, camaAjena: string, versionCon48h: string, versionFermenta20h: string, tanque: string;
 
   beforeAll(async () => {
     const receta = await prisma.processRecipe.create({
@@ -629,6 +693,36 @@ describe("cuándo se libera la próxima unidad", () => {
     };
     cama = await nuevaCama("cama mía", miOrgId);
     camaAjena = await nuevaCama("cama ajena", otraOrgId);
+
+    // Una receta que declara SÓLO la fermentación (20 h) y ninguna duración de secado: así leer la
+    // fase equivocada da `null`, no otro número que pudiera coincidir por casualidad.
+    const recetaFerm = await prisma.processRecipe.create({
+      data: { name: nombre("receta fermenta 20h"), organizationId: miOrgId, status: "approved" },
+    });
+    recetaIds.push(recetaFerm.id);
+    const versionFerm = await prisma.processRecipeVersion.create({
+      data: {
+        recipeId: recetaFerm.id,
+        version: 1,
+        status: "approved",
+        fases: { create: [{ phase: "fermentation", expectedHours: 20 }] },
+      },
+    });
+    versionIds.push(versionFerm.id);
+    versionFermenta20h = versionFerm.id;
+
+    // Un tanque DE VERDAD (`vesselEquipmentId`), no el texto libre de las fermentaciones de arriba.
+    const t = await prisma.equipment.create({
+      data: {
+        name: nombre("tanque"),
+        kind: "vessel",
+        format: "other",
+        organizationId: miOrgId,
+        provenanceClass: "original_record",
+      },
+    });
+    equipoIds.push(t.id);
+    tanque = t.id;
   });
 
   it("dice null mientras ninguna corrida ocupe una unidad declarada; después, la duración declarada de la que sí", async () => {
@@ -657,6 +751,25 @@ describe("cuándo se libera la próxima unidad", () => {
     await secadoDe(ajeno, { camaId: camaAjena, lotProcessId: procesoAjeno, inicio: haceHoras(30) });
     expect((await datosDelTablero(operario, ahora)).liberacion).toEqual({ tipo: "a_las", cuando: esperada });
   });
+
+  // **Corre DESPUÉS de la de arriba a propósito**: aquélla exige `null` al empezar, y esta deja una
+  // fermentación en un tanque declarado.
+  it("un TANQUE se libera igual que una cama: lee la duración de la FERMENTACIÓN y llega como unidad declarada", async () => {
+    // La cama de la prueba anterior sigue ocupada y se libera dentro de 38 h. El tanque, que empezó
+    // hace 10 h y dura 20, se libera dentro de 10: gana, y `cuando` es **su** inicio + 20 h.
+    const lote = await loteSimple("T-TANQUE", miSitio, miOrgId);
+    const proceso = await procesoDe(lote, { versionId: versionFermenta20h });
+    const inicio = haceHoras(10);
+    await fermentacionDe(lote, { lotProcessId: proceso, tanqueId: tanque, inicio });
+
+    const d = await datosDelTablero(operario, ahora);
+    // Mutaciones que la hacen caer: `equipmentId: null` en las corridas con duración (el tanque deja
+    // de ser unidad y gana la cama), y leer la fase `"drying"` para la fermentación (la receta no
+    // la declara: `null`, ignorada, y gana la cama).
+    expect(d.liberacion).toEqual({ tipo: "a_las", cuando: new Date(inicio.getTime() + 20 * HORA) });
+    // Y el tanque llega también a la ocupación, que es OTRA línea del cargador (`corridas`).
+    expect(d.corridas.filter((c) => c.equipmentId === tanque)).toHaveLength(1);
+  });
 });
 
 describe("la curva de un lote", () => {
@@ -676,9 +789,29 @@ describe("la curva de un lote", () => {
         fases: { create: [{ phase: "drying", expectedHours: 48 }] },
         // Banda de humedad 10–12 con objetivo 11, en la fase de secado y `during`. **Del pH no hay
         // ninguna**: es el control de «sin objetivo declarado».
+        //
+        // Las demás son las **cuatro reglas de elección de banda** de `curvaDeUnLote`, cada una con una
+        // variable propia y con el objetivo **de cada candidato en un sitio distinto de su banda**
+        // (80, 50, 20…), para que `yObjetivo` diga CUÁL se eligió. Todas de 0 a 10 o de 20 a 30, así
+        // que el objetivo `t` cae en `yObjetivo = 100 − 100·(t − mín)/(máx − mín)` en el lienzo de 100.
         targets: {
           create: [
             { variable: "moisture", moment: "during", phase: "drying", minValue: 10, maxValue: 12, targetValue: 11, unit: "%" },
+            // Sólo `initial`: no se pinta nunca.
+            { variable: "temperature", moment: "initial", phase: "drying", minValue: 20, maxValue: 30, targetValue: 25, unit: "C" },
+            // `initial` Y `final`: sale la final (objetivo 22 → y = 80), no la inicial (1,5 → 50).
+            { variable: "brix", moment: "initial", phase: "drying", minValue: 1, maxValue: 2, targetValue: 1.5, unit: "Bx" },
+            { variable: "brix", moment: "final", phase: "drying", minValue: 20, maxValue: 30, targetValue: 22, unit: "Bx" },
+            // Un `during` SIN fase: no dice de qué fase habla, no se pinta.
+            { variable: "relative_humidity", moment: "during", phase: null, minValue: 40, maxValue: 60, targetValue: 50, unit: "%" },
+            // Un `during` de OTRA fase (el lote está secando): no se pinta.
+            { variable: "water_activity", moment: "during", phase: "fermentation", minValue: 0.5, maxValue: 0.6, targetValue: 0.55, unit: "aw" },
+            // `during` Y `final` de la fase: gana `during` (objetivo 2 → y = 80), no `final` (8 → 20).
+            { variable: "water_volume_pulping", moment: "during", phase: "drying", minValue: 0, maxValue: 10, targetValue: 2, unit: "L" },
+            { variable: "water_volume_pulping", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 8, unit: "L" },
+            // `during` sin fase Y `final` de la fase: gana la final (5 → y = 50), no el `during` huérfano (1 → 90).
+            { variable: "wash_medium_ph", moment: "during", phase: null, minValue: 0, maxValue: 10, targetValue: 1, unit: "pH" },
+            { variable: "wash_medium_ph", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 5, unit: "pH" },
           ],
         },
       },
@@ -700,7 +833,17 @@ describe("la curva de un lote", () => {
     // pH: dos lecturas, y ningún objetivo de pH en la receta.
     await medicionDe(lotK, "ph", 4.2, haceHoras(7));
     await medicionDe(lotK, "ph", 4.0, haceHoras(3));
+    // **Una lectura de humedad de OTRO lote, dentro de la ventana de la fase (hace 5 h), sembrada AQUÍ.**
+    // Sembrada después de las pruebas de coordenadas, como estaba, el filtro `lotId` no lo guardaba
+    // nada: quitarlo dejaba las 18 en verde porque la única prueba que la veía sólo afirmaba
+    // `not.toBeNull()`. En el `beforeAll` la ve la prueba que cuenta puntos.
+    await medicionDe(loteAjeno, "moisture", 11, haceHoras(5));
   });
+
+  const bandaDe = async (variable: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable, ...LIENZO } });
+    return curva!.banda;
+  };
 
   it("dibuja las lecturas de la fase contra la banda de su receta, sin la anterior y sin la corregida", async () => {
     const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable: "moisture", ...LIENZO } });
@@ -709,7 +852,9 @@ describe("la curva de un lote", () => {
     expect(curva!.banda).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
     // Exactamente tres puntos, en x = 0, 150, 300 (8, 6 y 4 h) y y = -100, -50, 0 (14, 13, 12).
     // **Los valores discriminan**: sumar la lectura de hace 20 h (30) o la equivocada (99) cambia el
-    // número de puntos, y usar la equivocada en vez de su corrección cambia el último y.
+    // número de puntos, y usar la equivocada en vez de su corrección cambia el último y. **Y sumar la
+    // lectura de otro lote** (hace 5 h, sembrada en el `beforeAll`) lo vuelve cuatro: es lo que guarda
+    // el `lotId` del `where`.
     expect(curva!.puntos).toEqual([
       { x: 0, y: -100 },
       { x: 150, y: -50 },
@@ -726,13 +871,37 @@ describe("la curva de un lote", () => {
   });
 
   it("un lote que quien mira no ve da null, aunque exista y tenga lecturas", async () => {
-    // El lote ajeno TIENE una lectura: si el filtro faltara, saldría una curva con un punto.
-    await medicionDe(loteAjeno, "moisture", 11, haceHoras(2));
+    // El lote ajeno TIENE una lectura (la del `beforeAll`): si el filtro de visibilidad faltara,
+    // saldría una curva con un punto.
     const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: loteAjeno, variable: "moisture", ...LIENZO } });
     expect(curva).toBeNull();
     // Control positivo de que la llamada funciona cuando el lote SÍ se ve.
     const propia = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable: "moisture", ...LIENZO } });
     expect(propia.curva).not.toBeNull();
+  });
+
+  // **Las cuatro reglas de elección de banda** (`curvaDeUnLote`): «nunca `initial`, nunca un objetivo
+  // sin fase, `during` y si no `final`». Pintar la banda de otra fase —o la de un momento que no es
+  // el que se vigila— es exactamente «una banda que nadie declaró», que el diseño prohíbe.
+  it("nunca un objetivo `initial`: si es el único, no hay banda", async () => {
+    expect(await bandaDe("temperature")).toEqual({ tipo: "sin_objetivo_declarado" });
+  });
+
+  it("sin `during`, la banda es la `final`, y no la `initial` que la acompaña", async () => {
+    // y = 80 es el objetivo 22 de la final (20–30); el de la inicial (1,5 en 1–2) daría 50.
+    expect(await bandaDe("brix")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
+  });
+
+  it("un objetivo SIN fase, o de OTRA fase, no se pinta", async () => {
+    expect(await bandaDe("relative_humidity")).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(await bandaDe("water_activity")).toEqual({ tipo: "sin_objetivo_declarado" });
+  });
+
+  it("`during` gana a `final`; y un `during` sin fase no le gana a una `final` que sí la tiene", async () => {
+    // Objetivo 2 de la `during` → 80; el 8 de la `final` daría 20.
+    expect(await bandaDe("water_volume_pulping")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
+    // Objetivo 5 de la `final` → 50; el 1 del `during` huérfano daría 90.
+    expect(await bandaDe("wash_medium_ph")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
   });
 
   it("sin pedir curva, no hay curva", async () => {

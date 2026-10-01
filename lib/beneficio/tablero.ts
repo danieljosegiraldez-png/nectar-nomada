@@ -181,6 +181,33 @@ export function colaDeAtencion(input: {
   });
 }
 
+/** Los grupos de la cola que piden que alguien decida algo (§4.5: «qué pide decisión»). */
+const PIDEN_DECISION = new Set<FilaDeAtencion["grupo"]>(["critico", "listo_para_decidir"]);
+
+/**
+ * Cuántos lotes piden decisión en cada etapa de la línea, calculado con la cola de cada fase.
+ *
+ * **Sólo dos etapas tienen cola**: la fermentación es la fase abierta del `proceso` y el `secado` es
+ * el secado. Las demás no tienen una corrida que vigilar, así que no pueden pedir nada y no
+ * aparecen (la línea lee un ausente como 0, que aquí sí es cierto: no hay cola de esa etapa).
+ *
+ * **La cola se calcula POR FASE, y por eso recibe las entradas separadas**: así «pide decisión» llega
+ * a la etapa correcta aunque un lote tuviera las dos fases abiertas a la vez, y una prueba puede
+ * darle entradas que ninguna base sembrada produce y comprobar que cada grupo cae en SU etapa.
+ */
+export function pidenDecisionPorEtapa(input: {
+  readonly fermentacion: readonly EntradaDeLoteParaTablero[];
+  readonly secado: readonly EntradaDeLoteParaTablero[];
+  readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
+  readonly ahora: Date;
+}): Record<string, number> {
+  const cuenta = (lotes: readonly EntradaDeLoteParaTablero[]) =>
+    colaDeAtencion({ lotes, desviacionesAbiertasPorLote: input.desviacionesAbiertasPorLote, ahora: input.ahora }).filter(
+      (f) => PIDEN_DECISION.has(f.grupo),
+    ).length;
+  return { proceso: cuenta(input.fermentacion), secado: cuenta(input.secado) };
+}
+
 /**
  * Una unidad del sitio **sin** su ocupación.
  *

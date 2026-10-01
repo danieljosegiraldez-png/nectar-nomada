@@ -13,6 +13,7 @@ import {
   colaDeAtencion,
   ocupacionDelSitio,
   instrumentosQuePidenAtencion,
+  pidenDecisionPorEtapa,
   type EntradaDeLoteParaTablero,
 } from "../../lib/beneficio/tablero";
 
@@ -355,5 +356,59 @@ describe("instrumentosQuePidenAtencion", () => {
 
   it("sin nada que pida atención devuelve una lista vacía, no null", () => {
     expect(instrumentosQuePidenAtencion([eq("ok", "instrument", "VERIFICADO")])).toEqual([]);
+  });
+});
+
+describe("pidenDecisionPorEtapa", () => {
+  // Hermético: la regla a probar es sólo a qué etapa va cada grupo de la cola, así que se le dan
+  // ENTRADAS ya armadas, que ninguna base sembrada produce. (Vivió en `datosDelTablero.ts`, que
+  // importa la base; es pura y su sitio es éste, junto a `colaDeAtencion`.)
+  const entrada = (lotId: string, ph: ReturnType<typeof dictamen>): EntradaDeLoteParaTablero => ({
+    lotId,
+    lotCode: lotId,
+    veredicto: { ph, brix: null, secado: null },
+    faseIniciada: haceHoras(10),
+    expectedHours: null,
+    metas: [],
+    ultimaLectura: null,
+  });
+  const critico = (id: string) => entrada(id, dictamen("OUT_OF_RANGE", "CRITICAL"));
+  const listo = (id: string) => entrada(id, dictamen("TERMINATION_READY", "INFO"));
+  const aviso = (id: string) => entrada(id, dictamen("DRIFTING", "WARNING"));
+  const enCurso = (id: string) => entrada(id, dictamen("ON_TRACK", "INFO"));
+
+  it("cuenta crítico y listo para decidir, y cada grupo cae en la etapa de SU fase", () => {
+    const r = pidenDecisionPorEtapa({
+      // Fermentación: 2 piden decisión (crítico + listo) y 2 no (aviso, en curso).
+      fermentacion: [critico("f1"), listo("f2"), aviso("f3"), enCurso("f4")],
+      // Secado: 1 pide decisión. **Distinto de 2 a propósito**: con el mismo número en las dos, cruzar
+      // las fases pasaría la prueba.
+      secado: [critico("s1"), enCurso("s2")],
+      desviacionesAbiertasPorLote: SIN_DESVIACIONES,
+      ahora: AHORA,
+    });
+    // Mutaciones que la hacen caer: contar `aviso`; cruzar fermentación con secado; contar sólo
+    // `critico`; devolver sólo una de las dos claves.
+    expect(r).toEqual({ proceso: 2, secado: 1 });
+  });
+
+  it("una desviación abierta sube a aviso, y aviso no pide decisión", () => {
+    // **Lo que esto NO guarda, dicho:** el mapa de desviaciones no puede cambiar este recuento. Una
+    // desviación sólo sube a `aviso` a quien NO era crítico ni listo (`colaDeAtencion`), y `aviso` no
+    // cuenta; con un `new Map()` en su lugar el resultado es el mismo. Esta prueba comprueba que una
+    // desviación no rompe la cuenta, no que el mapa llegue hasta aquí.
+    const r = pidenDecisionPorEtapa({
+      fermentacion: [enCurso("f1")],
+      secado: [],
+      desviacionesAbiertasPorLote: new Map([["f1", 1]]),
+      ahora: AHORA,
+    });
+    expect(r).toEqual({ proceso: 0, secado: 0 });
+  });
+
+  it("sin entradas es 0 — y ese 0 sí es cierto, porque la etapa sí tiene cola", () => {
+    expect(
+      pidenDecisionPorEtapa({ fermentacion: [], secado: [], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA }),
+    ).toEqual({ proceso: 0, secado: 0 });
   });
 });
