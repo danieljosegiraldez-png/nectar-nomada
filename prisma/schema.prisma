@@ -269,6 +269,7 @@ model UserAccount {
   specimensCreated                  Specimen[]                   @relation("SpecimenCreatedBy")
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
   plotBlocksCreados                 PlotBlock[]                  @relation("PlotBlockCreatedBy")
+  plotBlockRangesCreados PlotBlockRange[] @relation("PlotBlockRangeCreatedBy")
   trapRulesCreadas                  TrapRule[]                   @relation("TrapRuleCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
@@ -811,6 +812,19 @@ enum Aspect {
 // parentLocationId is set; nullable everywhere else, same as every other
 // F1 attribute. `other` always pairs with subdivisionReasonNote — the
 // "typed value + free note" rule (§1) applies here too.
+/// Desde qué esquina se cuenta la rejilla de una parcela (diseño §4.1, D3).
+/// **Catálogo cerrado y no texto libre:** «noroeste» escrito de cuatro maneras
+/// no es un origen, y una coordenada que no se puede comparar no nombra una
+/// planta.
+enum GridOrigin {
+  noroeste
+  noreste
+  suroeste
+  sureste
+
+  @@schema("core")
+}
+
 enum SubdivisionReason {
   altitude
   shade
@@ -895,6 +909,23 @@ model Location {
   aspect             Aspect?                 @map("aspect")
   soilType           String?                 @map("soil_type")
   plantSpacingMeters Decimal?                @map("plant_spacing_meters") @db.Decimal(5, 2)
+
+  /// La rejilla de la parcela (diseño §4.1, D3). **Los cuatro juntos o ninguno**,
+  /// y lo impone un CHECK: media rejilla no es una rejilla. Sin rejilla la
+  /// pantalla dice «sin rejilla» y nunca un cero (ADR-080).
+  gridOrigin       GridOrigin? @map("grid_origin")
+  rowCount         Int?        @map("row_count")
+  plantsPerRow     Int?        @map("plants_per_row")
+  rowSpacingMeters Decimal?    @map("row_spacing_meters") @db.Decimal(5, 2)
+
+  /// El rango de la microparcela dentro de la rejilla de SU PARCELA (D3).
+  /// **Opcional a propósito**: sin él sólo se pierde una comprobación. Una misma
+  /// tabla lleva rejilla y rango sin contradicción — como padre declaras tu
+  /// rejilla, como hija tu sitio en la de tu padre.
+  rangeRowFrom   Int? @map("range_row_from")
+  rangeRowTo     Int? @map("range_row_to")
+  rangePlantFrom Int? @map("range_plant_from")
+  rangePlantTo   Int? @map("range_plant_to")
   /// Sólo para `drying_facility`: qué clase de ambiente es. Es lo que hoy vive
   /// como texto libre en `DryingRun.method`.
   dryingEnvironment DryingEnvironment? @map("drying_environment")
@@ -7063,9 +7094,38 @@ model PlotBlock {
   blooms PlotBloom[]
   @@unique([locationId, name])
   @@index([locationId])
+  /// Los rangos de celdas que forman el bloque (D5). Tabla hija y no cuatro
+  /// columnas: un bloque irregular se describe con dos o tres rangos.
+  rangos PlotBlockRange[]
+
   @@map("plot_block")
   @@schema("traceability")
 }
+/// Un tramo rectangular de la rejilla que forma parte de un bloque (D5).
+///
+/// Las coordenadas son **de la parcela**, no del bloque ni de la microparcela:
+/// una sola numeración (D3), así que «hilera 12, planta 30» nombra la misma
+/// planta mire quien mire. Un bloque rectangular tiene una fila; uno irregular,
+/// dos o tres.
+model PlotBlockRange {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plotBlockId String    @map("plot_block_id") @db.Uuid
+  plotBlock   PlotBlock @relation(fields: [plotBlockId], references: [id], onDelete: Cascade)
+
+  rowFrom   Int @map("row_from")
+  rowTo     Int @map("row_to")
+  plantFrom Int @map("plant_from")
+  plantTo   Int @map("plant_to")
+
+  createdAt DateTime    @default(now()) @map("created_at")
+  createdBy String      @map("created_by") @db.Uuid
+  creator   UserAccount @relation("PlotBlockRangeCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([plotBlockId])
+  @@map("plot_block_range")
+  @@schema("traceability")
+}
+
 
 /// Spec 2026-09-18 jornada y entrega de cosecha — quién recolecta en una finca, desde cuándo.
 /// Recolector = `Person`, con cuenta o sin ella (el repositorio prohíbe una segunda identidad).

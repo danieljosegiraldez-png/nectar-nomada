@@ -14,6 +14,7 @@
 # porque hay pruebas que pasan acompañadas y fallan solas.
 
 # @grupo: base-sembrada
+tests/territorio/rejillaEnLaBase.test.ts
 tests/arquitectura/colacion-de-la-base.test.ts
 # Necesitan base, y les basta `migrate deploy` + `db:seed` con las banderas
 # `SEED_DEMO_*`. Las corre `scripts/ci-con-base.sh` contra el Postgres de
