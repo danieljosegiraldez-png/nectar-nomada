@@ -3373,6 +3373,65 @@ rango que quepa dentro del de la principal pasa el guardia sin que nadie note el
 medición que lo motivó está en el comentario de `escalaDeAmbiente`, en
 `lib/beneficio/graficaDeSecado.ts`.
 
+### El nombre de la base desechable decide si cuatro suites pasan
+
+**2026-10-01, y me costó tres corridas del carril completo más un control que no
+valía.** Verificando una fusión, creé bases desechables llamadas `nectar_fusion`,
+`nectar_tras_576`, `nectar_578b` y `nectar_ctl`. El carril con base dio
+**4 archivos fallidos** en los cuatro casos:
+
+```
+tests/sensory/ruedas.test.ts
+tests/traceability/ambiente.test.ts
+tests/traceability/capacidadDeBandeja.test.ts
+tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
+```
+
+**Causa.** Esas tres familias de tablas son de **sólo-añadir**, con disparadores
+que rechazan el `DELETE` (`P0001`: «Un pesaje no se borra: se corrige con un
+registro nuevo que lo supersede», y dos hermanas). La limpieza de esas pruebas
+abre la escotilla con `SET LOCAL nn.limpieza_de_pruebas = 'on'` — y **el
+disparador exige DOS cosas**, no una:
+
+```sql
+IF current_setting('nn.limpieza_de_pruebas', true) = 'on'
+   AND current_database() ~ '^(nectar_test|nectar_ci|nn_flip_)' THEN
+```
+
+El segundo requisito es deliberado y bueno —el ajuste solo no abre nada en
+producción— pero significa que **una base desechable con otro nombre deja esas
+cuatro suites sin poder limpiar**, y mueren en su `afterAll`.
+
+**Por qué engaña más de lo que debería.** Mueren DESPUÉS de que sus 48 pruebas
+pasen, así que la salida dice:
+
+```
+ Test Files  4 failed | 190 passed (194)
+      Tests  2273 passed (2273)
+```
+
+«2273 passed (2273)» con **cero** líneas `×` se lee como verde, y un filtro por
+`×` —el que se usa para listar fallos— no devuelve nada. **El veredicto está en
+la línea `Test Files`, no en la de `Tests`.**
+
+**Y el control que me dejó seguir equivocado.** Comparé el árbol fusionado contra
+`origin/main` limpio, salió el mismo cuarteto en los dos, y lo leí como «no es de
+mi PR, es de `main`». Lo primero era cierto; lo segundo, falso. **Los dos brazos
+tenían el nombre malo**, así que el control mantuvo constante justo la variable
+que importaba: habría dado el mismo resultado con la respuesta contraria. El que
+sí discrimina cambia **sólo el nombre**, sobre el mismo árbol:
+
+| base | ¿casa `^(nectar_test|nectar_ci|nn_flip_)`? | las 4 suites |
+|---|---|---|
+| `nectar_ci_control` | sí | **4 passed** |
+| `nectar_nombre_malo` | no | **4 failed** |
+
+**La regla: una base desechable para el carril con base se llama `nectar_ci_<algo>`
+o `nn_flip_<algo>`.** Cualquier otro nombre no es «una base vacía más»: desarma la
+escotilla de limpieza y produce cuatro fallos que no son del código. El comentario
+de `scripts/ci-con-base.sh` dice «o cualquier base vacía», y es lo único de esa
+línea que no es cierto.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
