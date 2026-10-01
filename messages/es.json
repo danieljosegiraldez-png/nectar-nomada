@@ -3230,8 +3230,8 @@
     "grupoSinVeredictoAyuda": "No saber no es ir bien: falta el dato o el instrumento para poder juzgar.",
     "grupoListoAyuda": "No son problemas: son decisiones que se estropean si esperan.",
     "capacidad": "¿Puedo recibir?",
-    "capacidadTanques": "Tanques: {libres} libres y sanos de {total} · {intervencion} requieren intervención",
-    "capacidadCamas": "Camas: {libres} libres de {total}",
+    "capacidadTanques": "Tanques: {libres, plural, one {# libre y sano} other {# libres y sanos}} de {total} · {intervencion, plural, one {# requiere intervención} other {# requieren intervención}}",
+    "capacidadCamas": "Camas: {libres, plural, one {# libre} other {# libres}} de {total}",
     "sinUnidadDeclarada": "{n, plural, one {# ocupación sin unidad declarada} other {# ocupaciones sin unidad declarada}} — no se asignan a ninguna, porque asignarlas por su nombre haría parecer libre un tanque que no lo está.",
     "conflictoDeDatos": "{n, plural, one {# unidad con dos corridas abiertas} other {# unidades con dos corridas abiertas}}: es un conflicto de datos, no doble ocupación.",
     "ocupacionAjena": "{n, plural, one {# corrida nombra} other {# corridas nombran}} una unidad que no es de aquí.",
@@ -3291,7 +3291,9 @@
     "curvaFueraDeBanda": "{n, plural, one {# lectura fuera del rango de la receta} other {# lecturas fuera del rango de la receta}}",
     "curvaFueraDeEscala": "{n, plural, one {# lectura queda más allá de lo que cabe en el dibujo y se marca con un triángulo en el borde.} other {# lecturas quedan más allá de lo que cabe en el dibujo y se marcan con un triángulo en el borde.}}",
     "curvaLecturas": "{n, plural, one {# lectura} other {# lecturas}}",
-    "curvaEjes": "A la derecha, lo más reciente; hacia arriba, el valor más alto."
+    "curvaEjes": "A la derecha, lo más reciente; hacia arriba, el valor más alto.",
+    "curvaBandaAnchoCero": "La receta declara un rango de ancho cero (mínimo igual a máximo): la escala no distingue valores, así que no se afirma qué lecturas quedan dentro o fuera. Compara las lecturas con ese valor a mano.",
+    "curvaBandaAnchoCeroCorto": "rango de ancho cero en la receta: no se juzgan las lecturas"
   },
   "Bandejas": {
     "nuevoTipoAyuda": "Define las medidas de un tipo de bandeja reutilizable.",

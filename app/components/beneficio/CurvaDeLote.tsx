@@ -4,6 +4,7 @@ import type { Curva } from "../../../lib/beneficio/curvaDeLote";
 import {
   VARIABLES_DE_CURVA,
   colocarPuntos,
+  juicioDeBanda,
   margenVertical,
   type VariableDeCurva,
 } from "../../../lib/beneficio/curvaEnPantalla";
@@ -98,8 +99,8 @@ export async function CurvaDeLote({
   const PAD_X = 10; // para que un punto en x = 0 o x = ancho no quede cortado por la mitad
   const puntos = colocarPuntos(curva, margen);
   const banda = curva.banda;
-  const hayBanda = banda.tipo === "banda";
-  const fueraDeBanda = puntos.filter((p) => p.fueraDeBanda === true).length;
+  // Qué se puede afirmar sobre las lecturas y la banda: lo decide UNA función (ver `JuicioDeBanda`).
+  const juicio = juicioDeBanda(curva, puntos);
   const fueraDeEscala = puntos.filter((p) => p.fuera !== null).length;
 
   const titulo = t("curvaTitulo", { variable: nombreVariable, lote });
@@ -124,7 +125,9 @@ export async function CurvaDeLote({
         <title id="curva-svg-titulo">{titulo}</title>
         <desc id="curva-svg-desc">
           {resumen}
-          {hayBanda ? ` · ${t("curvaFueraDeBanda", { n: fueraDeBanda })}` : ` · ${t("curvaSinBandaCorto")}`}
+          {juicio.tipo === "juzgada" ? ` · ${t("curvaFueraDeBanda", { n: juicio.fuera })}` : null}
+          {juicio.tipo === "sin_banda" ? ` · ${t("curvaSinBandaCorto")}` : null}
+          {juicio.tipo === "banda_de_ancho_cero" ? ` · ${t("curvaBandaAnchoCeroCorto")}` : null}
         </desc>
 
         <rect className="nn-curva-lienzo" x={0} y={0} width={curva.ancho} height={curva.alto} />
@@ -171,16 +174,24 @@ export async function CurvaDeLote({
         )}
       </svg>
 
-      {banda.tipo === "sin_objetivo_declarado" ? (
+      {juicio.tipo === "sin_banda" ? (
         <p className="nn-warn nn-curva-sin-banda">{t("curvaSinBanda")}</p>
+      ) : juicio.tipo === "banda_de_ancho_cero" ? (
+        // **No se afirma «todas dentro»**: con min = max la escala no distingue valores.
+        <p className="nn-warn nn-curva-ancho-cero">{t("curvaBandaAnchoCero")}</p>
       ) : (
         <>
-          <p className="nn-muted">
-            {banda.yObjetivo !== null ? t("curvaBandaConObjetivo") : t("curvaBandaSinObjetivo")}
-          </p>
-          <p className={fueraDeBanda > 0 ? "nn-warn" : "nn-muted"}>
-            {fueraDeBanda > 0 ? t("curvaFueraDeBanda", { n: fueraDeBanda }) : t("curvaTodasDentro")}
-          </p>
+          {banda.tipo === "banda" ? (
+            <p className="nn-muted">
+              {banda.yObjetivo !== null ? t("curvaBandaConObjetivo") : t("curvaBandaSinObjetivo")}
+            </p>
+          ) : null}
+          {/* Con cero lecturas no se dice nada del rango: «no hay curva que dibujar» ya está arriba. */}
+          {juicio.tipo === "juzgada" ? (
+            <p className={juicio.fuera > 0 ? "nn-warn" : "nn-muted"}>
+              {juicio.fuera > 0 ? t("curvaFueraDeBanda", { n: juicio.fuera }) : t("curvaTodasDentro")}
+            </p>
+          ) : null}
         </>
       )}
       {fueraDeEscala > 0 ? <p className="nn-muted">{t("curvaFueraDeEscala", { n: fueraDeEscala })}</p> : null}

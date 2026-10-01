@@ -3230,7 +3230,7 @@
     "grupoSinVeredictoAyuda": "Not knowing is not the same as going well: the reading or the instrument is missing.",
     "grupoListoAyuda": "These are not problems: they are decisions that spoil if they wait.",
     "capacidad": "Can I receive more?",
-    "capacidadTanques": "Tanks: {libres} free and sound of {total} · {intervencion} need attention",
+    "capacidadTanques": "Tanks: {libres} free and sound of {total} · {intervencion, plural, one {# needs attention} other {# need attention}}",
     "capacidadCamas": "Beds: {libres} free of {total}",
     "sinUnidadDeclarada": "{n, plural, one {# occupancy with no declared unit} other {# occupancies with no declared unit}} — they are not assigned to any, because assigning them by name would make a tank look free when it is not.",
     "conflictoDeDatos": "{n, plural, one {# unit with two open runs} other {# units with two open runs}}: that is a data conflict, not double occupancy.",
@@ -3291,7 +3291,9 @@
     "curvaFueraDeBanda": "{n, plural, one {# reading outside the recipe's range} other {# readings outside the recipe's range}}",
     "curvaFueraDeEscala": "{n, plural, one {# reading falls beyond what fits in the drawing and is marked with a triangle at the edge.} other {# readings fall beyond what fits in the drawing and are marked with a triangle at the edge.}}",
     "curvaLecturas": "{n, plural, one {# reading} other {# readings}}",
-    "curvaEjes": "Right is most recent; up is the highest value."
+    "curvaEjes": "Right is most recent; up is the highest value.",
+    "curvaBandaAnchoCero": "The recipe declares a zero-width range (minimum equal to maximum): the scale cannot tell values apart, so nothing is claimed about which readings are inside or outside. Compare the readings with that value by hand.",
+    "curvaBandaAnchoCeroCorto": "zero-width range in the recipe: readings are not judged"
   },
   "Bandejas": {
     "nuevoTipoAyuda": "Define the dimensions of a reusable tray type.",

@@ -63,7 +63,9 @@ export function colocarPuntos(curva: Curva, margen: number = margenVertical(curv
     return {
       x: p.x,
       y: fuera === "arriba" ? tope : fuera === "abajo" ? piso : p.y,
-      fueraDeBanda: arriba === null || abajo === null ? null : p.y < arriba || p.y > abajo,
+      // Sin banda, o con una de ancho cero (`escalaY` manda TODO valor a media altura), no hay con
+      // qué juzgar: `null`, no `false`. `false` diría «dentro» de un rango que no distingue nada.
+      fueraDeBanda: arriba === null || abajo === null || arriba === abajo ? null : p.y < arriba || p.y > abajo,
       fuera,
     };
   });
@@ -91,4 +93,33 @@ export function leerCurvaPedida(params: {
   if (typeof lote !== "string" || !UUID.test(lote)) return null;
   const v = VARIABLES_DE_CURVA.find((x) => x === variable) ?? VARIABLES_DE_CURVA[0];
   return { lotId: lote.toLowerCase(), variable: v };
+}
+
+/**
+ * Qué puede afirmar la pantalla sobre las lecturas y la banda. **Una sola función decide, para
+ * que nadie escriba «todas dentro» donde no se midió nada.**
+ *
+ * - `sin_banda`: la receta no declara rango; no se juzga ninguna lectura.
+ * - `banda_de_ancho_cero` (`minValue == maxValue`): `curvaDeLote` escala `max === min` a media
+ *   altura para TODO valor (no hay rango que dividir), y `colocarPuntos` juzga en espacio-y, así
+ *   que una lectura de 9,9 contra 4,5 «cae dentro». Con ese ancho **no se puede decir** qué
+ *   lecturas quedan fuera, y callarlo (o decir «todas dentro») escondería justo la que se salió.
+ * - `sin_lecturas`: con cero lecturas no se afirma nada sobre el rango; un cero leído como «bien»
+ *   es la forma que este módulo existe para impedir.
+ * - `juzgada`: sólo aquí hay una cuenta, y sólo aquí cabe «todas dentro» (cuando `fuera` es 0).
+ *
+ * Una banda al revés (min > max) NO es ancho cero: tiene extremos distintos y se juzga ordenada.
+ */
+export type JuicioDeBanda =
+  | { readonly tipo: "sin_banda" }
+  | { readonly tipo: "banda_de_ancho_cero" }
+  | { readonly tipo: "sin_lecturas" }
+  | { readonly tipo: "juzgada"; readonly fuera: number; readonly total: number };
+
+export function juicioDeBanda(curva: Curva, puntos: readonly PuntoColocado[]): JuicioDeBanda {
+  const banda = curva.banda;
+  if (banda.tipo !== "banda") return { tipo: "sin_banda" };
+  if (banda.yMin === banda.yMax) return { tipo: "banda_de_ancho_cero" };
+  if (puntos.length === 0) return { tipo: "sin_lecturas" };
+  return { tipo: "juzgada", fuera: puntos.filter((p) => p.fueraDeBanda === true).length, total: puntos.length };
 }

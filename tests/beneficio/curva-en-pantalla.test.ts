@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
 import {
   colocarPuntos,
+  juicioDeBanda,
   leerCurvaPedida,
   margenVertical,
 } from "../../lib/beneficio/curvaEnPantalla";
@@ -126,5 +127,44 @@ describe("leerCurvaPedida", () => {
     expect(leerCurvaPedida({ lote: ID, variable: ["brix", "ph"] })?.variable).toBe("ph");
     // Control: no es que siempre devuelva pH.
     expect(leerCurvaPedida({ lote: ID, variable: "moisture" })?.variable).toBe("moisture");
+  });
+});
+
+describe("juicioDeBanda: qué se puede afirmar", () => {
+  const lec = (...v: number[]) => v.map((value, i) => ({ occurredAt: t(8 + i), value }));
+  const juzgar = (lecturas: ReturnType<typeof lec>, objetivo: Parameters<typeof curvaDeLote>[0]["objetivo"]) => {
+    const c = curvaDeLote({ lecturas, objetivo, ancho: 480, alto: 200 });
+    return juicioDeBanda(c, colocarPuntos(c));
+  };
+
+  it("con banda y lecturas, cuenta las de fuera (y 0 sí es un resultado)", () => {
+    expect(juzgar(lec(4.3, 5.1, 3.9), BANDA)).toEqual({ tipo: "juzgada", fuera: 2, total: 3 });
+    expect(juzgar(lec(4.2, 4.4), BANDA)).toEqual({ tipo: "juzgada", fuera: 0, total: 2 });
+  });
+
+  it("con banda y CERO lecturas no hay juicio: un cero no es «todas dentro»", () => {
+    expect(juzgar([], BANDA)).toEqual({ tipo: "sin_lecturas" });
+  });
+
+  it("con la banda de ancho cero no hay juicio, aunque la lectura sea 9,9 contra 4,5", () => {
+    const c = curvaDeLote({
+      lecturas: lec(4.5, 9.9), objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 480, alto: 200,
+    });
+    // Control: de verdad ambas caen a media altura — es lo que engañaba a quien juzgaba en espacio-y.
+    expect(c.puntos.map((p) => p.y)).toEqual([100, 100]);
+    expect(juicioDeBanda(c, colocarPuntos(c))).toEqual({ tipo: "banda_de_ancho_cero" });
+    // Y colocarPuntos tampoco dice `false` («dentro»): `null`.
+    expect(colocarPuntos(c).map((p) => p.fueraDeBanda)).toEqual([null, null]);
+  });
+
+  it("una banda al revés NO es de ancho cero: se juzga", () => {
+    expect(juzgar(lec(4.5, 6), { minValue: 5.0, maxValue: 4.0, targetValue: null })).toEqual({
+      tipo: "juzgada", fuera: 1, total: 2,
+    });
+  });
+
+  it("sin banda, ni con lecturas ni sin ellas, no se juzga", () => {
+    expect(juzgar(lec(4.5, 9), null)).toEqual({ tipo: "sin_banda" });
+    expect(juzgar([], null)).toEqual({ tipo: "sin_banda" });
   });
 });

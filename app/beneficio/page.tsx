@@ -13,9 +13,9 @@ import {
   type GrupoDeAtencion,
 } from "../../lib/beneficio/tablero";
 import { LIENZO_DE_CURVA, leerCurvaPedida } from "../../lib/beneficio/curvaEnPantalla";
-import { mostrarInstante } from "../../lib/time/mostrarInstante";
 import { AvisoDeRutina } from "../components/rutinas/AvisoDeRutina";
 import { CurvaDeLote } from "../components/beneficio/CurvaDeLote";
+import { LiberacionDeUnidad } from "../components/beneficio/LiberacionDeUnidad";
 import { LineaDeEtapas } from "../components/beneficio/LineaDeEtapas";
 import { MapaDeUnidades } from "../components/beneficio/MapaDeUnidades";
 import { RutinasDeLugar } from "../components/rutinas/RutinasDeLugar";
@@ -201,19 +201,7 @@ export default async function BeneficioPage({
                   <small>{t("capacidadNumeroCamas")}</small>
                 </p>
               </div>
-              <p className="nn-cap-liberacion">
-                <strong>{t("liberacionTitulo")}</strong>{" "}
-                {datos.liberacion === null
-                  ? t("liberacionNinguna")
-                  : datos.liberacion.tipo === "sin_duracion_declarada"
-                    ? // **Nunca una hora**: la receta no declara cuánto dura, y una hora puesta aquí se
-                      // leería como un dato. Hay una unidad en uso y no se sabe cuándo acaba.
-                      t("liberacionSinDuracion")
-                    : datos.liberacion.cuando.getTime() < datos.medidoEn.getTime()
-                      ? // Vencida: «ya debería estar libre» es información; moverla a «ahora» sería inventar.
-                        t("liberacionVencida", { cuando: mostrarInstante(datos.liberacion.cuando, null) })
-                      : t("liberacionALas", { cuando: mostrarInstante(datos.liberacion.cuando, null) })}
-              </p>
+              <LiberacionDeUnidad liberacion={datos.liberacion} ahora={datos.medidoEn} />
               {/* Los avisos sólo salen si hay algo que decir, y dicen POR QUÉ importan. */}
               {ocupacion.sinUnidadDeclarada > 0 ? (
                 <p className="nn-warn">{t("sinUnidadDeclarada", { n: ocupacion.sinUnidadDeclarada })}</p>
