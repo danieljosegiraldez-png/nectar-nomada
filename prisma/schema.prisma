@@ -150,6 +150,7 @@ model Person {
   plotInterventionsOperadas PlotIntervention[] @relation("PlotInterventionOperator")
   dryingTrayWeighingsOperated DryingTrayWeighing[] @relation("DryingTrayWeighingOperator")
   dryingAmbientReadingsOperated DryingAmbientReading[] @relation("DryingAmbientReadingOperator")
+  plotBloomsObserved PlotBloom[]
 }
 
 enum UserAccountStatus {
@@ -1003,6 +1004,7 @@ model Location {
   byproductBatchesProduced ByproductBatch[] @relation("ByproductBatchProducedAt")
   consumableLots ConsumableLot[] @relation("ConsumableLotLocation")
   consumableCustodies ConsumableCustody[] @relation("ConsumableCustodyLocation")
+  plotBlooms PlotBloom[]
 }
 
 enum DryingRoomLightExposure {
@@ -4904,6 +4906,47 @@ model PlotIntervention {
 ///
 /// **PR B.** `specimenId` es anulable y entra `plotBlockId`: exactamente uno de
 /// los dos, CHECK en la base (`plot_intervention_area_planta_o_bloque`).
+/// La floración de una parcela — decisión de Daniel, 2026-10-01: «parcela, microparcela o bloque».
+///
+/// **Misma forma que una intervención, y por el mismo motivo**: se dirige por `locationId` —que es
+/// un `plot` o un `micro_plot`— y se acota opcionalmente a un bloque. No es una familia de
+/// entidades nueva, igual que un bloque no lo es.
+///
+/// **Por qué una VENTANA y no tres eventos sueltos.** El dato que hace falta es «¿esta parcela
+/// estaba en floración el día X?», y eso con eventos `inicio`/`pico`/`fin` obliga a emparejarlos y
+/// a decidir qué hacer con un inicio sin fin. Con una fila que lleva las dos fechas, `endsAt` nulo
+/// significa **floración abierta**, que es el estado real de campo mientras dura.
+///
+/// Varios bloques floreciendo en fechas distintas son varias filas, que es honesto: florecen
+/// cuando florecen.
+model PlotBloom {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id])
+
+  /// El bloque, cuando la floración se anota más fina que la parcela. Nulo = la parcela entera.
+  plotBlockId String?    @map("plot_block_id") @db.Uuid
+  plotBlock   PlotBlock? @relation(fields: [plotBlockId], references: [id], onDelete: Restrict)
+
+  /// Campo de DÍA, como el resto de fechas de día de la casa: se parsea con `fechaDeDia`.
+  startsAt DateTime  @map("starts_at")
+  /// Nulo = **todavía abierta**. No es un hueco: es el estado mientras la floración dura.
+  endsAt   DateTime? @map("ends_at")
+
+  notes String?
+
+  observerPersonId String? @map("observer_person_id") @db.Uuid
+  observer         Person? @relation(fields: [observerPersonId], references: [id])
+
+  provenanceClass ProvenanceClass @map("provenance_class")
+  createdBy       String          @map("created_by") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([locationId, startsAt])
+  @@map("plot_bloom")
+  @@schema("traceability")
+}
+
 model PlotInterventionArea {
   id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   interventionId String           @map("intervention_id") @db.Uuid
@@ -7017,6 +7060,7 @@ model PlotBlock {
   entregasDeCosecha EntregaDeCosecha[]
   fieldEvents       FieldEvent[]       @relation("FieldEventBloque")
   intervencionesSobreEl PlotInterventionArea[] @relation("PlotInterventionAreaBlock")
+  blooms PlotBloom[]
   @@unique([locationId, name])
   @@index([locationId])
   @@map("plot_block")

@@ -673,6 +673,10 @@
     {
       "archivo": "lib/traceability/destinoDeFinca.ts",
       "razon": "Módulo de dominio: a qué beneficio envía su cereza una finca (ADR-194, diseño 2026-09-30 §4.1). Una sola escritura, `location.beneficioDestinoId`, y va detrás de DOS permisos reusados —`exigeGestionarFinca` (lot:manage sobre la finca) y `exigeBeneficioDeDestino` (lot:view sobre el beneficio)— que corren ANTES de abrir la transacción. No lee nada que no sea el valor anterior, y sólo para poder auditar el `before`."
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
     }
   ],
   "reciben_transaccion": [
@@ -785,6 +789,10 @@
     {
       "archivo": "lib/traceability/samplingEvents.ts",
       "razon": "`crearInspeccionEnTransaccion(tx, userAccountId, input)` recibe el `tx` de `recordMeasurement` para crear la inspección IMPLÍCITA —la que nace cuando llega una zona de muestreo sin ninguna (Daniel, 2026-09-29)— dentro de la misma transacción que la medición. Anidar una transacción propia usaría otra conexión: la inspección podría quedar escrita mientras la medición se deshace, que es lo que la atomicidad existe para impedir. Misma forma y misma razón que `cerrarCorridaEnTransaccion` en drying.ts. `createSamplingEvent` pasa ahora por este mismo ayudante, así que no hay dos escrituras que puedan derivar."
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
     }
   ],
   "operaciones_sin_patron": [
@@ -1392,6 +1400,12 @@
       "operacion": "idsDeDescendencia",
       "razon": "Devuelve los ids de la descendencia de un lote con el MISMO SQL recursivo que `getLotLineage` ya usaba, extraído para que las dos preguntas no divergan. No recibe principal: sus dos llamadoras autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
       "verificado": "2026-09-27"
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "operacion": "enFloracion",
+      "razon": "Pregunta si una parcela estaba en floración en un instante. **No autoriza a propósito**: no recibe principal porque es una lectura de contexto para un aviso, y §32 sólo le permite proponer. Su llamadora prevista es el formulario de intervención, que ya pasó `requireLotAccess` sobre esa parcela antes de pintarse. **Hoy no tiene ninguna llamadora en producción — sólo su test —, y se dice aquí en vez de dejarlo implícito**: el aviso que la consume necesita el campo `harmfulToPollinators` del producto, que viaja en otra rama. Devuelve las ventanas de floración de UNA parcela que la llamadora ya nombró, no una lista que se pueda recorrer para descubrir parcelas ajenas.",
+      "verificado": "2026-10-01"
     }
   ]
 }
