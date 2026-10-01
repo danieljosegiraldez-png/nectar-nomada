@@ -43,6 +43,25 @@ describe("colocarPuntos", () => {
     expect(p[2]!.y).toBeGreaterThan(200);
   });
 
+  /**
+   * El caso que el navegador destapó: con una banda ESTRECHA (pH 4,0–4,6), una lectura corriente
+   * como 4,8 —un tercio de banda por encima— quedaba anclada en el borde con el margen del 20 %.
+   * Una desviación de ese tamaño se dibuja donde está, no se marca como «no cabe».
+   */
+  it("una banda estrecha no ancla las desviaciones corrientes: 4,8 y 3,8 sobre 4,0–4,6 se dibujan en su sitio", () => {
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.8 }, { occurredAt: t(16), value: 3.8 }],
+      objetivo: { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }, ancho: 480, alto: 200,
+    });
+    // Control: de verdad quedan fuera del lienzo (`y < 0`, `y > alto`); si no, la prueba no dice nada.
+    expect(c.puntos[1]!.y).toBeLessThan(0);
+    expect(c.puntos[2]!.y).toBeGreaterThan(200);
+    const p = colocarPuntos(c);
+    expect(p.map((x) => x.fuera)).toEqual([null, null, null]);
+    expect(p[1]!.y).toBe(c.puntos[1]!.y);
+    expect(p[2]!.y).toBe(c.puntos[2]!.y);
+  });
+
   it("una lectura que no cabe ni en el margen se ancla en el borde y se marca, no desaparece", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 55 }, { occurredAt: t(16), value: -40 }],

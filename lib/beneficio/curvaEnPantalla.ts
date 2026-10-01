@@ -25,9 +25,18 @@ import type { Curva } from "./curvaDeLote";
 /** El lienzo en que se pide la curva. El `viewBox` real lo amplía `margenVertical`. */
 export const LIENZO_DE_CURVA = { ancho: 480, alto: 200 } as const;
 
-/** Cuánto del alto se añade arriba y abajo para que quepan las lecturas fuera de la banda. */
+/**
+ * Cuánto del alto se añade arriba y abajo para que quepan las lecturas fuera de la banda.
+ *
+ * **La mitad del alto, y no menos: medido en el navegador.** Con el 20 % una banda de pH 4,0–4,6
+ * dejaba fuera del margen una lectura de 4,9 —media banda por encima, una desviación corriente— y
+ * la anclaba en el borde en vez de dibujarla donde está. La banda ocupa TODO el alto del lienzo
+ * (`curvaDeLote` escala `minValue → alto`, `maxValue → 0`), así que una lectura a media banda de
+ * distancia cae a medio alto. Con el 50 % se dibujan en su sitio verdadero las que se pasan hasta
+ * media banda por cada lado; el resto se ancla y se marca.
+ */
 export function margenVertical(alto: number): number {
-  return alto * 0.2;
+  return alto * 0.5;
 }
 
 export interface PuntoColocado {
