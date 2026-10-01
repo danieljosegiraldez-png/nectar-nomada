@@ -48,7 +48,8 @@ export interface DatosDelTablero {
   readonly etapas: readonly Etapa[];
   /**
    * Cuándo se libera la próxima unidad (tanque o cama) con una corrida abierta de un lote visible.
-   * `null` = ninguna corrida abierta **ocupa una unidad declarada**; no es «sin ámbito» (eso lo
+   * `null` = ninguna corrida abierta **ocupa una unidad declarada Y visible** (la misma que cuenta
+   * la ocupación; una corrida de una unidad que no ves no entra); no es «sin ámbito» (eso lo
    * dice `sinAmbito`) ni «sin duración» (eso es `sin_duracion_declarada`).
    */
   readonly liberacion: Liberacion | null;
@@ -203,6 +204,23 @@ export async function datosDelTablero(
     ...secados.map((s) => ({ ...s, fase: "drying" as const })),
   ];
 
+  // **Una entrada por LOTE, no por corrida.** Este bucle recorre corridas, y un lote puede tener
+  // varias abiertas (dos secados, o una fermentación y un secado): sin esto el mismo lote saldría dos
+  // veces en `lotes` y la cola lo listaría dos veces con la misma clave de React; y, peor,
+  // `pidenDecision` contaría corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes, y una misma
+  // celda diría «1 lote · 2 piden decisión». Si el lote ya está, se queda la corrida que EMPEZÓ
+  // antes: es la que lleva más tiempo abierta, y esconder la más vieja es esconder la más atrasada.
+  const anotar = (destino: EntradaDeLoteParaTablero[], nueva: EntradaDeLoteParaTablero) => {
+    const i = destino.findIndex((e) => e.lotId === nueva.lotId);
+    if (i === -1) {
+      destino.push(nueva);
+    } else if (
+      nueva.faseIniciada !== null &&
+      (destino[i]!.faseIniciada === null || nueva.faseIniciada < destino[i]!.faseIniciada!)
+    ) {
+      destino[i] = nueva;
+    }
+  };
   const lotes: EntradaDeLoteParaTablero[] = [];
   // Las mismas entradas, separadas por fase: la cola se calcula por fase para que «pide decisión»
   // llegue a la etapa correcta aunque un lote tuviera las dos fases abiertas a la vez.
@@ -268,8 +286,8 @@ export async function datosDelTablero(
       metas: metasDeFase(targets, c.fase, ultimaPorVariable),
       ultimaLectura: mediciones[0]?.occurredAt ?? null,
     };
-    lotes.push(entradaDeTablero);
-    entradasPorFase[c.fase].push(entradaDeTablero);
+    anotar(lotes, entradaDeTablero);
+    anotar(entradasPorFase[c.fase], entradaDeTablero);
   }
 
   // Los equipos salen de `listarEquipos`, que YA filtra por `can(view, equipment)`: una sola
@@ -320,15 +338,41 @@ export async function datosDelTablero(
     }),
   });
 
-  // **Sólo cuentan las corridas que ocupan una unidad declarada.** «Cuándo se libera la próxima
-  // unidad» no puede responderlo una corrida con el tanque en texto libre o sin cama: no libera
-  // ninguna unidad del tablero (la ocupación ya las cuenta aparte como «sin unidad declarada»).
-  // Incluirlas haría que una corrida sin unidad y con duración dijera «se libera a las X» de una
-  // unidad que no existe.
+  // **Sólo cuentan las corridas que ocupan una unidad declarada Y VISIBLE para quien mira.** «Cuándo
+  // se libera la próxima unidad» no puede responderlo una corrida con el tanque en texto libre o sin
+  // cama: no libera ninguna unidad del tablero (la ocupación ya las cuenta aparte como «sin unidad
+  // declarada»). Incluirlas haría que una corrida sin unidad y con duración dijera «se libera a las X»
+  // de una unidad que no existe.
+  //
+  // **Y tampoco la de una unidad que quien mira no ve** (un tanque que `listarEquipos` no le devolvió,
+  // una cama de otra organización): `ocupacionDelSitio` hace lo contrario con esa misma corrida —la
+  // manda a `ajenas` y se niega a contarla— y sus números no la incluyen. Si aquí sí contara, la
+  // pantalla diría «0 libres de 0» junto a «la próxima unidad se libera a las 14:00», sobre una unidad
+  // que no aparece en ninguno de sus números. El conjunto de ids es el MISMO que usa la ocupación
+  // (`tanques` ∪ `camas`, los dos de abajo), calculado aquí porque la ocupación lo calcula una función
+  // más allá, en la página.
   const duracionDeFase = (
     lotProcess: (typeof crudas)[number]["lotProcess"],
     fase: "fermentation" | "drying",
   ) => lotProcess?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
+  const tanquesVisibles: UnidadDelSitio[] = equipos
+    .filter((e) => e.kind === "vessel")
+    .map((e) => ({
+      id: e.id,
+      nombre: e.name,
+      lifecycleStatus: e.lifecycleStatus,
+      condicion: e.condicion?.condition ?? null,
+    }));
+  // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
+  // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
+  const camasVisibles: UnidadDelSitio[] = camas.map((c) => ({
+    id: c.id,
+    nombre: c.name,
+    // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
+    lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
+    condicion: null,
+  }));
+  const idsVisibles = new Set([...tanquesVisibles, ...camasVisibles].map((u) => u.id));
   const corridasConDuracion: CorridaConDuracion[] = [
     ...fermentaciones.map((f) => ({
       equipmentId: f.vesselEquipmentId,
@@ -342,30 +386,18 @@ export async function datosDelTablero(
       iniciadaEn: d.startedAt,
       expectedHours: duracionDeFase(d.lotProcess, "drying"),
     })),
-  ].filter((c) => c.equipmentId !== null || c.bedLocationId !== null);
+  ].filter((c) => {
+    const declarada = c.equipmentId ?? c.bedLocationId;
+    return declarada !== null && idsVisibles.has(declarada);
+  });
   const liberacion = proximaLiberacion({ corridas: corridasConDuracion, ahora });
 
   const curva = opciones.curva ? await curvaDeUnLote(lotWhere, crudas, opciones.curva) : null;
 
   return {
     lotes,
-    tanques: equipos
-      .filter((e) => e.kind === "vessel")
-      .map((e) => ({
-        id: e.id,
-        nombre: e.name,
-        lifecycleStatus: e.lifecycleStatus,
-        condicion: e.condicion?.condition ?? null,
-      })),
-    // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
-    // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
-    camas: camas.map((c) => ({
-      id: c.id,
-      nombre: c.name,
-      // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
-      lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
-      condicion: null,
-    })),
+    tanques: tanquesVisibles,
+    camas: camasVisibles,
     corridas,
     instrumentos: equipos.map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
     desviacionesAbiertasPorLote: porLote,

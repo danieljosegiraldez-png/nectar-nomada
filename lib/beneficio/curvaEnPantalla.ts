@@ -51,8 +51,8 @@ export interface PuntoColocado {
 
 export function colocarPuntos(curva: Curva, margen: number = margenVertical(curva.alto)): PuntoColocado[] {
   const banda = curva.banda;
-  // `yMin >= yMax` salvo que la receta venga al revés (min > max): se juzga con los dos
-  // extremos ordenados, no con la suposición.
+  // Los extremos se ordenan en vez de suponer `yMin >= yMax`. Una receta al revés (min > max) ya no
+  // llega aquí como banda: `curvaDeLote` la devuelve como `banda_al_reves` y no se juzga.
   const arriba = banda.tipo === "banda" ? Math.min(banda.yMin, banda.yMax) : null;
   const abajo = banda.tipo === "banda" ? Math.max(banda.yMin, banda.yMax) : null;
 
@@ -108,16 +108,23 @@ export function leerCurvaPedida(params: {
  *   es la forma que este módulo existe para impedir.
  * - `juzgada`: sólo aquí hay una cuenta, y sólo aquí cabe «todas dentro» (cuando `fuera` es 0).
  *
- * Una banda al revés (min > max) NO es ancho cero: tiene extremos distintos y se juzga ordenada.
+ * - `banda_al_reves` (`minValue > maxValue`): una receta mal cargada. `curvaDeLote` ya no escala
+ *   contra ella —la banda saldría idéntica a la de una correcta y los puntos, espejados—, así que
+ *   no hay banda ni «fuera de banda» que contar. No se afirma nada y se dice por qué.
+ *
+ * Una banda al revés NO es ancho cero (sus extremos son distintos) ni se juzga ordenada: se
+ * niega, porque «ordenarla» sería decidir en silencio cuál de los dos números era el error.
  */
 export type JuicioDeBanda =
   | { readonly tipo: "sin_banda" }
   | { readonly tipo: "banda_de_ancho_cero" }
+  | { readonly tipo: "banda_al_reves" }
   | { readonly tipo: "sin_lecturas" }
   | { readonly tipo: "juzgada"; readonly fuera: number; readonly total: number };
 
 export function juicioDeBanda(curva: Curva, puntos: readonly PuntoColocado[]): JuicioDeBanda {
   const banda = curva.banda;
+  if (banda.tipo === "banda_al_reves") return { tipo: "banda_al_reves" };
   if (banda.tipo !== "banda") return { tipo: "sin_banda" };
   if (banda.yMin === banda.yMax) return { tipo: "banda_de_ancho_cero" };
   if (puntos.length === 0) return { tipo: "sin_lecturas" };

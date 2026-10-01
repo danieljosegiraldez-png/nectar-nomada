@@ -38,6 +38,11 @@ import {
  * Las lecturas fuera de la banda usan un rombo, no sólo otro color: quien no distingue el rojo
  * del ocre también las ve. Y el texto de debajo las cuenta.
  *
+ * **Con la receta al revés (`minValue > maxValue`) tampoco se dibuja banda** (`banda_al_reves`):
+ * saldría idéntica a la de una receta buena y la curva, espejada, sin un solo aviso. Se dice que la
+ * receta está mal cargada, no se cuenta ninguna lectura «fuera», y los puntos se escalan contra sus
+ * propios datos para que «hacia arriba, el valor más alto» siga siendo cierto.
+ *
  * **Sin banda no se inventa una.** Con `sin_objetivo_declarado` se dibujan los puntos igual y se
  * dice que esa variable no tiene rango declarado en la receta —el diseño exige decirlo, no
  * callarlo—, y además que la escala va de la menor a la mayor lectura, para que una línea que sube
@@ -132,6 +137,7 @@ export async function CurvaDeLote({
           {juicio.tipo === "juzgada" ? ` · ${t("curvaFueraDeBanda", { n: juicio.fuera })}` : null}
           {juicio.tipo === "sin_banda" ? ` · ${t("curvaSinBandaCorto")}` : null}
           {juicio.tipo === "banda_de_ancho_cero" ? ` · ${t("curvaBandaAnchoCeroCorto")}` : null}
+          {juicio.tipo === "banda_al_reves" ? ` · ${t("curvaBandaAlRevesCorto")}` : null}
         </desc>
 
         <rect className="nn-curva-lienzo" x={0} y={0} width={curva.ancho} height={curva.alto} />
@@ -183,6 +189,10 @@ export async function CurvaDeLote({
       ) : juicio.tipo === "banda_de_ancho_cero" ? (
         // **No se afirma «todas dentro»**: con min = max la escala no distingue valores.
         <p className="nn-warn nn-curva-ancho-cero">{t("curvaBandaAnchoCero")}</p>
+      ) : juicio.tipo === "banda_al_reves" ? (
+        // **No se dibuja la banda ni se cuenta nada «fuera»**: con min > max la banda saldría igual
+        // que la de una receta buena y la curva, espejada. Se dice que la receta está mal cargada.
+        <p className="nn-warn nn-curva-al-reves">{t("curvaBandaAlReves")}</p>
       ) : (
         <>
           {banda.tipo === "banda" ? (

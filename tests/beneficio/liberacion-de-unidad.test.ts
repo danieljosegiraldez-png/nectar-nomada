@@ -101,4 +101,38 @@ describe("proximaLiberacion", () => {
       expect(r, `expectedHours=${expectedHours}`).toEqual({ tipo: "sin_duracion_declarada" });
     }
   });
+
+  it("expectedHours 0 o negativo NO es una duración: ni da una hora ni le gana a una declarada (hallazgo 1)", () => {
+    // Los otros dos consumidores del repositorio ya lo tratan como inválido: la escritura lo
+    // rechaza (`expected_hours_must_be_positive`) y la cola lo declara
+    // (`duracion_esperada_invalida_en_la_base`). Aquí cuenta como no declarado, igual que NaN.
+    for (const expectedHours of [0, -5]) {
+      const sola = proximaLiberacion({
+        ahora: AHORA,
+        corridas: [{ equipmentId: "t1", bedLocationId: null, iniciadaEn: AHORA, expectedHours }],
+      });
+      expect(sola, `expectedHours=${expectedHours}`).toEqual({ tipo: "sin_duracion_declarada" });
+
+      // Con una que sí habla: el 0 / -5 daría una hora ANTERIOR (o igual) al inicio y ganaría por
+      // «la que se libera antes». Gana la de 6 h.
+      const conOtra = proximaLiberacion({
+        ahora: AHORA,
+        corridas: [
+          { equipmentId: "mala", bedLocationId: null, iniciadaEn: AHORA, expectedHours },
+          { equipmentId: "buena", bedLocationId: null, iniciadaEn: AHORA, expectedHours: 6 },
+        ],
+      });
+      expect(conOtra, `expectedHours=${expectedHours} + 6`).toEqual({
+        tipo: "a_las",
+        cuando: new Date("2026-03-10T18:00:00.000Z"),
+      });
+    }
+    // Control: la duración positiva más pequeña SÍ es una duración (si no, `<= 0` podría ser `<= 1000`).
+    expect(
+      proximaLiberacion({
+        ahora: AHORA,
+        corridas: [{ equipmentId: "t1", bedLocationId: null, iniciadaEn: AHORA, expectedHours: 0.5 }],
+      }),
+    ).toEqual({ tipo: "a_las", cuando: new Date("2026-03-10T12:30:00.000Z") });
+  });
 });

@@ -663,6 +663,53 @@ describe("«pide decisión» llega a la etapa de su fase", () => {
     expect(await pidenEn("secado")).toBe(antesSecado + 1);
     expect(await pidenEn("proceso")).toBe(antesProceso + 2);
   });
+
+  it("un lote con DOS corridas abiertas sale UNA vez en `lotes` y cuenta UNA vez entre los que piden decisión (hallazgo 3)", async () => {
+    const antesLotes = await lotesEn("proceso");
+    const antesPiden = await pidenEn("proceso");
+
+    // Dos fermentaciones abiertas del MISMO lote, las dos con veredicto crítico (pH 3,0 dentro de
+    // las dos ventanas). Sin deduplicar, `pidenDecision` cuenta corridas: +2 contra un lote.
+    const doble = await loteSimple("PD-DOBLE", miSitio, miOrgId);
+    const proceso = await procesoDe(doble, { natural: true });
+    await fermentacionDe(doble, { lotProcessId: proceso, inicio: haceHoras(10) });
+    await fermentacionDe(doble, { lotProcessId: proceso, inicio: haceHoras(11) });
+    await medicionDe(doble, "ph", 3.0, haceHoras(2));
+
+    const d = await datosDelTablero(operario, ahora);
+    // Control: el lote SÍ tiene sus dos corridas abiertas y las dos llegan al cargador. Sin esto,
+    // «una vez» podría ser «no llegó ninguna».
+    expect(await prisma.fermentationRun.count({ where: { endedAt: null, lotProcessId: proceso } })).toBe(2);
+    expect(d.lotes.filter((l) => l.lotId === doble)).toHaveLength(1);
+    // Y en TODO el tablero: ningún lote repetido (es la clave de React de la cola, `key={f.lotId}`).
+    // Cubre también al lote de «secado» de arriba, que tiene dos corridas abiertas.
+    const ids = d.lotes.map((l) => l.lotId);
+    expect(new Set(ids).size).toBe(ids.length);
+    // La celda no se contradice: +1 lote y +1 pide decisión, nunca «1 lote · 2 piden decisión».
+    expect(await lotesEn("proceso")).toBe(antesLotes + 1);
+    expect(await pidenEn("proceso")).toBe(antesPiden + 1);
+    // MUTACIÓN: volver a `lotes.push(...)` y `entradasPorFase[c.fase].push(...)` (una entrada por
+    // CORRIDA) → cae por el `toHaveLength(1)`, por los ids repetidos y por el +2.
+  });
+
+  it("un lote con una corrida de CADA fase sale una vez en `lotes`, y en las dos etapas cuenta con su fase (hallazgo 3)", async () => {
+    const antesProceso = await pidenEn("proceso");
+    const antesSecado = await pidenEn("secado");
+    const lote = await loteSimple("PD-DOS-FASES", miSitio, miOrgId);
+    const proceso = await procesoDe(lote, { natural: true });
+    await fermentacionDe(lote, { lotProcessId: proceso, inicio: haceHoras(20) });
+    await secadoDe(lote, { lotProcessId: proceso, inicio: haceHoras(40) });
+    await medicionDe(lote, "ph", 3.0, haceHoras(2));
+    await medicionDe(lote, "moisture", 30, haceHoras(30));
+    await medicionDe(lote, "moisture", 30, haceHoras(3));
+
+    const d = await datosDelTablero(operario, ahora);
+    expect(d.lotes.filter((l) => l.lotId === lote)).toHaveLength(1);
+    // Cada fase conserva su lote: la cola de la etapa «secado» y la de «proceso» son distintas, y
+    // deduplicar a lo ancho sin cuidado apagaría una de las dos.
+    expect(await pidenEn("proceso")).toBe(antesProceso + 1);
+    expect(await pidenEn("secado")).toBe(antesSecado + 1);
+  });
 });
 
 describe("cuándo se libera la próxima unidad", () => {
@@ -723,6 +770,11 @@ describe("cuándo se libera la próxima unidad", () => {
     });
     equipoIds.push(t.id);
     tanque = t.id;
+    // **Sin este traslado el tanque NO lo ve quien mira**: `listarEquipos` acota por el último lugar
+    // del equipo (`objetivoDeEquipo`), y un tanque sin traslado cae en el ámbito de plataforma. La
+    // prueba de abajo pasó así hasta el hallazgo 4 de la revisión final, y pasaba por la razón
+    // equivocada: `liberacion` contaba la corrida de una unidad que el usuario no veía.
+    await prisma.equipmentTransfer.create({ data: { equipmentId: t.id, toLocationId: miSitio, occurredAt: haceHoras(100) } });
   });
 
   it("dice null mientras ninguna corrida ocupe una unidad declarada; después, la duración declarada de la que sí", async () => {
@@ -769,6 +821,53 @@ describe("cuándo se libera la próxima unidad", () => {
     expect(d.liberacion).toEqual({ tipo: "a_las", cuando: new Date(inicio.getTime() + 20 * HORA) });
     // Y el tanque llega también a la ocupación, que es OTRA línea del cargador (`corridas`).
     expect(d.corridas.filter((c) => c.equipmentId === tanque)).toHaveLength(1);
+  });
+
+  it("una corrida de una unidad que quien mira NO ve no mueve la liberación (hallazgo 4)", async () => {
+    const antes = (await datosDelTablero(operario, ahora)).liberacion;
+    // Control: parte de una hora real, no de `null`; si no, «no se mueve» podría ser «nunca hubo nada».
+    expect(antes?.tipo).toBe("a_las");
+
+    const nuevoTanque = async (etiqueta: string, org: string) => {
+      const t = await prisma.equipment.create({
+        data: { name: nombre(etiqueta), kind: "vessel", format: "other", organizationId: org, provenanceClass: "original_record" },
+      });
+      equipoIds.push(t.id);
+      // El último lugar del equipo es lo que decide quién lo ve (`objetivoDeEquipo`): mi sitio → lo
+      // veo; el sitio de la otra organización → no.
+      await prisma.equipmentTransfer.create({
+        data: { equipmentId: t.id, toLocationId: org === miOrgId ? miSitio : otroSitio, occurredAt: haceHoras(100) },
+      });
+      return t.id;
+    };
+    // Un tanque de OTRA organización, ocupado por un lote VISIBLE (mi sitio), con una duración que
+    // lo liberaría ANTES que todo lo demás: empezó hace 30 h y dura 20, o sea vencido hace 10 h. Sin
+    // el filtro de unidades visibles ganaría y `cuando` cambiaría.
+    const ajeno = await nuevoTanque("tanque que no veo", otraOrgId);
+    const lote = await loteSimple("U-NO-VISIBLE", miSitio, miOrgId);
+    const proceso = await procesoDe(lote, { versionId: versionFermenta20h });
+    await fermentacionDe(lote, { lotProcessId: proceso, tanqueId: ajeno, inicio: haceHoras(30) });
+
+    const d = await datosDelTablero(operario, ahora);
+    // Control: la corrida SÍ llega (la ocupación la contará como «ajena») y el tanque NO está entre
+    // los que quien mira ve. Sin estas dos líneas, el `toEqual` de abajo no distinguiría «filtrada»
+    // de «nunca existió».
+    expect(d.corridas.filter((c) => c.equipmentId === ajeno)).toHaveLength(1);
+    expect(d.tanques.map((x) => x.id)).not.toContain(ajeno);
+    expect(d.liberacion).toEqual(antes);
+
+    // Control positivo del fixture: la MISMA corrida en un tanque MÍO sí mueve la liberación, a su
+    // inicio + 20 h (vencida, anterior a `ahora`). Prueba que el caso de arriba podía fallar.
+    const mio = await nuevoTanque("tanque que sí veo", miOrgId);
+    const lote2 = await loteSimple("U-VISIBLE", miSitio, miOrgId);
+    const proceso2 = await procesoDe(lote2, { versionId: versionFermenta20h });
+    const inicio = haceHoras(30);
+    await fermentacionDe(lote2, { lotProcessId: proceso2, tanqueId: mio, inicio });
+    const despues = await datosDelTablero(operario, ahora);
+    expect(despues.tanques.map((x) => x.id)).toContain(mio);
+    expect(despues.liberacion).toEqual({ tipo: "a_las", cuando: new Date(inicio.getTime() + 20 * HORA) });
+    // MUTACIÓN: filtrar `corridasConDuracion` sólo por `equipmentId !== null || bedLocationId !== null`
+    // (sin `idsVisibles`) → cae en el `toEqual(antes)`.
   });
 });
 

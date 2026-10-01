@@ -37,7 +37,10 @@ export interface CorridaConDuracion {
   readonly equipmentId: string | null;
   readonly bedLocationId: string | null;
   readonly iniciadaEn: Date;
-  /** De la versión de receta de su `LotProcess`. `null` = la receta no lo declara. */
+  /**
+   * De la versión de receta de su `LotProcess`. `null` = la receta no lo declara. Un valor que no es
+   * una duración (no finito, cero o negativo) cuenta como no declarado: ver `proximaLiberacion`.
+   */
   readonly expectedHours: number | null;
 }
 
@@ -52,9 +55,15 @@ export function proximaLiberacion(input: {
 
   let proxima: number | null = null;
   for (const c of input.corridas) {
-    // `null` y no-finito (NaN, Infinity) cuentan igual: no declarada. NaN daría una fecha
-    // inválida que se pintaría como hora.
-    if (c.expectedHours === null || !Number.isFinite(c.expectedHours)) continue;
+    // `null`, no-finito (NaN, Infinity) y no positivo (0, negativo) cuentan igual: no declarada.
+    // NaN daría una fecha inválida que se pintaría como hora; 0 o un negativo darían el INICIO de
+    // la corrida, o una hora anterior a él, y se leería como «ya debía liberarse» de una duración
+    // que ninguna receta puede declarar. **Es la misma regla de los otros dos consumidores**: la
+    // escritura la rechaza (`validateExpectedHours`, `processTargets.ts`: `expected_hours_must_be_positive`)
+    // y la cola la declara inválida (`estadoDeRitmo`, `ritmo.ts`: `duracion_esperada_invalida_en_la_base`).
+    // Aquí no se lanza —la base puede traerlo corrupto y la pantalla no debe caer—, pero tampoco se
+    // trata como duración: en la misma pantalla la cola diría «inválida» y esta línea la citaría.
+    if (c.expectedHours === null || !Number.isFinite(c.expectedHours) || c.expectedHours <= 0) continue;
     const fin = c.iniciadaEn.getTime() + c.expectedHours * MS_POR_HORA;
     if (proxima === null || fin < proxima) proxima = fin;
   }

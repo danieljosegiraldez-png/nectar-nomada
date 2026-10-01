@@ -183,6 +183,39 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     // MUTACIÓN: quitar el caso `banda_de_ancho_cero` de `juicioDeBanda` → cae.
   });
 
+  it("con la receta AL REVÉS (min > max) no dibuja banda, no cuenta nada «fuera» y no espeja la curva (hallazgo 2)", async () => {
+    const lecturas = [
+      { occurredAt: t(8), value: 4.2 },
+      { occurredAt: t(12), value: 4.9 }, // sobrefermentado: va ARRIBA, donde está el valor más alto
+      { occurredAt: t(16), value: 4.0 },
+    ];
+    const html = await pintarCurva(
+      curvaDeLote({ lecturas, objetivo: { minValue: 4.6, maxValue: 4.0, targetValue: 4.3 }, ...LIENZO }),
+    );
+    const texto = aTexto(html);
+    expect(marcas(html)).toHaveLength(3); // control: las lecturas se dibujan
+    // Ni la banda ni la línea del objetivo: una banda dibujada se leería como la receta.
+    expect(html).not.toContain("nn-curva-banda");
+    expect(html).not.toContain("nn-curva-objetivo");
+    expect(texto).not.toContain("dentro del rango");
+    expect(texto).not.toMatch(/\d+ lecturas? fuera del rango de la receta/);
+    // La explicación VISIBLE (no sólo el `<desc>`).
+    expect(html).toContain('class="nn-warn nn-curva-al-reves"');
+    expect(texto).toContain("rango al revés");
+    // El 4,9 queda en la parte ALTA del dibujo y el 4,0 en la baja: `curvaEjes` dice la verdad.
+    const ys = marcas(html).map((m) => centro(m.vertices)[1]);
+    expect(ys[1]!).toBeLessThan(ys[0]!);
+    expect(ys[0]!).toBeLessThan(ys[2]!);
+    // Control positivo: la misma receta bien puesta SÍ dibuja la banda (si no, los `not` de arriba no distinguen).
+    const bien = await pintarCurva(
+      curvaDeLote({ lecturas, objetivo: { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }, ...LIENZO }),
+    );
+    expect(bien).toContain('class="nn-curva-banda"');
+    expect(bien).not.toContain("nn-curva-al-reves");
+    // MUTACIÓN: quitar el caso `banda_al_reves` de `curvaDeLote` (escalar contra la banda al revés)
+    // → cae por el orden de los puntos y por la banda dibujada.
+  });
+
   it("con lecturas fuera de la banda las cuenta, con plural", async () => {
     const texto = aTexto(await pintarCurva(CURVA_CON_FUERA));
     // 4,8 / 12 / -5 están fuera de 4,0–4,6.

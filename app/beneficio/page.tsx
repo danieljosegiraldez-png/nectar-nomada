@@ -189,17 +189,27 @@ export default async function BeneficioPage({
             <section className="nn-mill-capacity nn-tablero-capacidad" aria-labelledby="capacidad-beneficio">
               <h2 id="capacidad-beneficio">{t("capacidad")}</h2>
               {/* En el celular, SÓLO esto: dos números y cuándo se libera la próxima unidad. */}
+              {/* **«0 de 0» no es «no hay ninguno»**: con `total === 0` la lista de unidades que ve quien
+                  mira vino vacía, y eso no dice cuántas existen. Se dice lo que de verdad pasa. */}
               <div className="nn-cap-numeros">
-                <p>
-                  <strong>{ocupacion.tanques.libresYSanos}</strong>
-                  <span>{t("capacidadDeTotal", { total: ocupacion.tanques.total })}</span>
-                  <small>{t("capacidadNumeroTanques")}</small>
-                </p>
-                <p>
-                  <strong>{ocupacion.camas.libresYSanos}</strong>
-                  <span>{t("capacidadDeTotal", { total: ocupacion.camas.total })}</span>
-                  <small>{t("capacidadNumeroCamas")}</small>
-                </p>
+                {ocupacion.tanques.total === 0 ? (
+                  <p className="nn-muted">{t("capacidadSinTanques")}</p>
+                ) : (
+                  <p>
+                    <strong>{ocupacion.tanques.libresYSanos}</strong>
+                    <span>{t("capacidadDeTotal", { total: ocupacion.tanques.total })}</span>
+                    <small>{t("capacidadNumeroTanques")}</small>
+                  </p>
+                )}
+                {ocupacion.camas.total === 0 ? (
+                  <p className="nn-muted">{t("capacidadSinCamas")}</p>
+                ) : (
+                  <p>
+                    <strong>{ocupacion.camas.libresYSanos}</strong>
+                    <span>{t("capacidadDeTotal", { total: ocupacion.camas.total })}</span>
+                    <small>{t("capacidadNumeroCamas")}</small>
+                  </p>
+                )}
               </div>
               <LiberacionDeUnidad liberacion={datos.liberacion} ahora={datos.medidoEn} />
               {/* Los avisos sólo salen si hay algo que decir, y dicen POR QUÉ importan. */}
@@ -213,13 +223,19 @@ export default async function BeneficioPage({
               {/* Sólo en pantalla ancha: el mapa completo, y el detalle que los dos números no dicen. */}
               <div className="nn-cap-ancho">
                 <p>
-                  {t("capacidadTanques", {
-                    libres: ocupacion.tanques.libresYSanos,
-                    total: ocupacion.tanques.total,
-                    intervencion: ocupacion.tanques.requierenIntervencion,
-                  })}
+                  {ocupacion.tanques.total === 0
+                    ? t("capacidadSinTanques")
+                    : t("capacidadTanques", {
+                        libres: ocupacion.tanques.libresYSanos,
+                        total: ocupacion.tanques.total,
+                        intervencion: ocupacion.tanques.requierenIntervencion,
+                      })}
                 </p>
-                <p>{t("capacidadCamas", { libres: ocupacion.camas.libresYSanos, total: ocupacion.camas.total })}</p>
+                <p>
+                  {ocupacion.camas.total === 0
+                    ? t("capacidadSinCamas")
+                    : t("capacidadCamas", { libres: ocupacion.camas.libresYSanos, total: ocupacion.camas.total })}
+                </p>
                 <MapaDeUnidades tanques={ocupacion.mapa.tanques} camas={ocupacion.mapa.camas} />
               </div>
             </section>
@@ -233,20 +249,25 @@ export default async function BeneficioPage({
         )}
       </div>
 
-      <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
-        <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
-        {instrumentos.length === 0 ? (
-          <p className="nn-empty">{t("instrumentosNinguno")}</p>
-        ) : (
-          <ul>
-            {instrumentos.map((i) => (
-              <li key={i.id}>
-                <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* **Con `sinAmbito` este bloque no se pinta**: `VACIO.instrumentos` es `[]` porque no se miró
+          nada, y «Ningún instrumento pide atención» sobre un `[]` sin medir se lee como «todo bien».
+          Es el mismo fallo que `etapas` ya guarda («Vacía cuando `sinAmbito`»), una sección más abajo. */}
+      {datos.sinAmbito ? null : (
+        <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
+          <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
+          {instrumentos.length === 0 ? (
+            <p className="nn-empty">{t("instrumentosNinguno")}</p>
+          ) : (
+            <ul>
+              {instrumentos.map((i) => (
+                <li key={i.id}>
+                  <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="nn-mill-primary" aria-labelledby="operaciones-beneficio">
         <h2 id="operaciones-beneficio">{t("operaciones")}</h2>

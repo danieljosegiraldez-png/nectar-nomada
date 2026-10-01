@@ -91,15 +91,16 @@ describe("colocarPuntos", () => {
     expect(p.map((x) => x.fueraDeBanda)).toEqual([null, null]);
   });
 
-  it("con la receta al revés (min > max) también se juzga con los extremos ordenados", () => {
+  it("con la receta al revés (min > max) no hay banda que juzgar: ninguna lectura se marca dentro ni fuera", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 6 }],
       objetivo: { minValue: 5.0, maxValue: 4.0, targetValue: null }, ancho: 480, alto: 200,
     });
+    expect(c.banda.tipo).toBe("banda_al_reves"); // control: es ESTE caso, no «sin objetivo»
     const p = colocarPuntos(c);
     expect(p).toHaveLength(2);
-    expect(p[0]!.fueraDeBanda).toBe(false);
-    expect(p[1]!.fueraDeBanda).toBe(true);
+    // `null`, no `false`/`true`: con la banda espejada «dentro» y «fuera» no significan nada.
+    expect(p.map((x) => x.fueraDeBanda)).toEqual([null, null]);
   });
 });
 
@@ -157,8 +158,13 @@ describe("juicioDeBanda: qué se puede afirmar", () => {
     expect(colocarPuntos(c).map((p) => p.fueraDeBanda)).toEqual([null, null]);
   });
 
-  it("una banda al revés NO es de ancho cero: se juzga", () => {
-    expect(juzgar(lec(4.5, 6), { minValue: 5.0, maxValue: 4.0, targetValue: null })).toEqual({
+  it("una banda al revés NO es de ancho cero y NO se juzga: se niega, con lecturas y sin ellas (hallazgo 2)", () => {
+    const alReves = { minValue: 5.0, maxValue: 4.0, targetValue: null };
+    expect(juzgar(lec(4.5, 6), alReves)).toEqual({ tipo: "banda_al_reves" });
+    expect(juzgar([], alReves)).toEqual({ tipo: "banda_al_reves" });
+    // Control: la MISMA receta bien puesta (4,0–5,0) con las MISMAS lecturas sí se juzga. Sin esta
+    // fila, «banda_al_reves» podría salir siempre y las dos de arriba también pasarían.
+    expect(juzgar(lec(4.5, 6), { minValue: 4.0, maxValue: 5.0, targetValue: null })).toEqual({
       tipo: "juzgada", fuera: 1, total: 2,
     });
   });

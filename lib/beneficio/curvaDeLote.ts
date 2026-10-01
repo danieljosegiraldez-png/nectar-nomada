@@ -10,6 +10,14 @@
  * un ancho inventado— sería una banda que nadie declaró, y el operario la leería como la receta.
  * Los puntos se devuelven igualmente: «sin banda» no es «sin curva».
  *
+ * **Una receta al revés (`minValue > maxValue`) tampoco dibuja banda: `banda_al_reves`.** Escalar
+ * contra ella daría una banda IDÉNTICA a la de una receta correcta (`escalaY` manda `minValue` a
+ * `alto` y `maxValue` a `0` sin mirar cuál es mayor) y los PUNTOS saldrían espejados: un pH de 4,9
+ * sobrefermentado se pintaría abajo, donde una receta buena pone los valores bajos, y «hacia
+ * arriba, el valor más alto» sería falso. Se niega a dibujar la banda y lo dice, como con ancho
+ * cero; los puntos se escalan contra sus propios datos, igual que sin banda, y por eso el eje
+ * vuelve a significar lo que dice.
+ *
  * **En SVG la Y crece hacia ABAJO.** El valor máximo de la escala queda arriba (`y = 0`) y el
  * mínimo abajo (`y = alto`). Con la Y al revés la curva seguiría pareciendo una curva, así que
  * sólo una prueba con números a mano lo ve.
@@ -47,7 +55,9 @@ export type Banda =
       readonly yMax: number;
       readonly yObjetivo: number | null;
     }
-  | { readonly tipo: "sin_objetivo_declarado" };
+  | { readonly tipo: "sin_objetivo_declarado" }
+  /** `minValue > maxValue`: no hay banda que dibujar sin espejar la curva. Ver el encabezado. */
+  | { readonly tipo: "banda_al_reves" };
 
 export interface Curva {
   readonly puntos: readonly PuntoDeCurva[];
@@ -80,9 +90,12 @@ export function curvaDeLote(input: {
 
   const minValue = objetivo?.minValue ?? null;
   const maxValue = objetivo?.maxValue ?? null;
-  const hayBanda = minValue !== null && maxValue !== null;
+  const alReves = minValue !== null && maxValue !== null && minValue > maxValue;
+  const hayBanda = minValue !== null && maxValue !== null && !alReves;
 
-  const banda = bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
+  const banda: Banda = alReves
+    ? { tipo: "banda_al_reves" }
+    : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
   if (lecturas.length === 0) return { puntos: [], banda, ancho, alto };
 
   const valores = lecturas.map((l) => l.value);

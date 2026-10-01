@@ -210,4 +210,29 @@ describe("curvaDeLote", () => {
     expect(c.ancho).toBe(300);
     expect(c.alto).toBe(120);
   });
+
+  it("una receta al revés (min > max) no dibuja banda y NO espeja los puntos (hallazgo 2)", () => {
+    // Medido: con la receta al revés la banda salía IDÉNTICA a la correcta (yMin=alto, yMax=0) y lo
+    // que se invertía eran los puntos. Un pH de 4,9 sobrefermentado se pintaba ABAJO.
+    const lecturas = [
+      { occurredAt: t(8), value: 4.2 },
+      { occurredAt: t(12), value: 4.9 },
+      { occurredAt: t(16), value: 4.0 },
+    ];
+    const alReves = curvaDeLote({
+      lecturas, objetivo: { minValue: 5.0, maxValue: 4.0, targetValue: 4.5 }, ancho: 480, alto: 200,
+    });
+    expect(alReves.banda).toEqual({ tipo: "banda_al_reves" });
+    // Los puntos se escalan contra sus propios datos (4,0–4,9), como sin banda: «hacia arriba, el
+    // valor más alto» vuelve a ser cierto. El 4,9 queda ARRIBA (y=0) y el 4,0 ABAJO (y=alto).
+    const sinBanda = curvaDeLote({ lecturas, objetivo: null, ancho: 480, alto: 200 });
+    expect(alReves.puntos).toEqual(sinBanda.puntos);
+    expect(alReves.puntos[1]).toEqual({ x: 240, y: 0 });
+    expect(alReves.puntos[2]).toEqual({ x: 480, y: 200 });
+    // Control: la receta bien puesta SÍ dibuja banda (si no, `banda_al_reves` podría salir siempre).
+    const bien = curvaDeLote({
+      lecturas, objetivo: { minValue: 4.0, maxValue: 5.0, targetValue: 4.5 }, ancho: 480, alto: 200,
+    });
+    expect(bien.banda.tipo).toBe("banda");
+  });
 });

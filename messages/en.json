@@ -3265,8 +3265,10 @@
     "liberacionNinguna": "no declared unit is occupied by an open run",
     "mapaTanques": "Tanks",
     "mapaCamas": "Beds",
-    "mapaSinTanques": "No tanks declared.",
-    "mapaSinCamas": "No beds declared for the lots you can see.",
+    "mapaSinTanques": "No tank in view: that does not mean none exist, it means none shows up among the ones your account can see.",
+    "mapaSinCamas": "No bed in view for the lots you can see: that does not mean none exist.",
+    "capacidadSinTanques": "No tank in view: it is not that there are none, it is that none shows up among the ones your account can see. How many are free cannot be said.",
+    "capacidadSinCamas": "No bed in view for the lots you can see: how many are free cannot be said.",
     "unidadSinNombre": "unnamed unit",
     "unidadLibre": "free and sound",
     "unidadMotivo_EN_USO": "in use",
@@ -3293,7 +3295,9 @@
     "curvaLecturas": "{n, plural, one {# reading} other {# readings}}",
     "curvaEjes": "Right is most recent; up is the highest value.",
     "curvaBandaAnchoCero": "The recipe declares a zero-width range (minimum equal to maximum): the scale cannot tell values apart, so nothing is claimed about which readings are inside or outside. Compare the readings with that value by hand.",
-    "curvaBandaAnchoCeroCorto": "zero-width range in the recipe: readings are not judged"
+    "curvaBandaAnchoCeroCorto": "zero-width range in the recipe: readings are not judged",
+    "curvaBandaAlReves": "The recipe declares its range backwards (minimum greater than maximum): the band is not drawn and nothing is claimed about which readings are inside or outside, because the curve would come out mirrored. The readings are drawn anyway, from the lowest to the highest. Tell whoever manages the recipe so it can be fixed.",
+    "curvaBandaAlRevesCorto": "range declared backwards in the recipe: readings are not judged"
   },
   "Bandejas": {
     "nuevoTipoAyuda": "Define the dimensions of a reusable tray type.",
