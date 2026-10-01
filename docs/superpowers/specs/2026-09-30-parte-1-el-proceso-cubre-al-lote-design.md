@@ -1,7 +1,7 @@
 # Parte 1 — El proceso cubre al lote y a su descendencia
 
-**Fecha:** 2026-09-30 · **Estado:** reglas aprobadas por Daniel ese día, una por una; espera su
-revisión de este documento antes del plan. **Va primero** de las seis partes de
+**Fecha:** 2026-09-30 · **Estado:** **aprobado por Daniel el 2026-09-30**: las reglas una por una,
+y el documento entero al revisarlo. Lo siguiente es el plan de trabajo. **Va primero** de las seis partes de
 `2026-09-30-recetas-del-beneficio-design.md`: sin ella, una receta cargada no hace su trabajo.
 
 **Revisado antes de llegarle, en dos rondas.**
@@ -12,8 +12,9 @@ revisión de este documento antes del plan. **Va primero** de las seis partes de
   repasó los suyos. Quedaban 9 sin cerrar del todo y aparecieron 11 nuevos, casi todos menores.
 
 Esta versión los corrige. Tres de ellos eran decisiones que nadie había tomado, y Daniel las tomó el
-mismo día. Cada regla dice si es **decisión de Daniel** o **propuesta**; las propuestas esperan su
-visto bueno en esta revisión.
+mismo día. Cada regla dice si nació como **decisión de Daniel** o como **propuesta**. **Daniel aprobó
+todas las propuestas el 2026-09-30** al revisar este documento, así que hoy todas son reglas
+aprobadas; la etiqueta queda para saber de dónde salió cada una.
 
 **El criterio** (Daniel, literal): «poder medir para poder reusar recetas y reproducir, replicar,
 ser consistente con los resultados». La Parte 1 no compara nada todavía; hace que **todo lo que le
@@ -103,8 +104,8 @@ un proceso abierto**: abrir uno y devolver a secado (R7). Rechaza cuando:
 | Hay un proceso abierto en el lote, en algún ancestro o en algún descendiente | `process_already_open` | Daniel |
 | El lote fue dividido bajo un proceso (R6) | `lote_dividido` | normativo, `20` §1.1 |
 | El lote está en bodega (asignación de almacenamiento activa) | `lote_en_bodega` | Daniel, 2026-09-30 |
-| El lote es una mezcla (R1) | `lote_mezclado` | propuesta |
-| El lote es de miel: `LotProcess` es del café | `proceso_no_aplica_a_miel` | propuesta |
+| El lote es una mezcla (R1) | `lote_mezclado` | propuesta, aprobada |
+| El lote es de miel: `LotProcess` es del café | `proceso_no_aplica_a_miel` | propuesta, aprobada |
 
 - **Abrir un proceso nuevo sobre un lote cubierto por uno CERRADO está permitido.** Es el reproceso,
   y un lote puede pasar por varios procesos (decisión de Daniel).
@@ -151,7 +152,7 @@ El servicio escribe en la corrida la versión del proceso vigente y **rechaza** 
 proceso, sólo para leer. Si el proceso es «Sin receta», la corrida también: **la receta se elige al
 abrir el proceso**.
 
-### R5. No se cierra un proceso con corridas abiertas — propuesta
+### R5. No se cierra un proceso con corridas abiertas — propuesta, aprobada por Daniel
 
 `cerrarProceso` rechaza con `corridas_abiertas` mientras quede alguna fermentación o secado abierto
 **en el linaje que el proceso cubre**: tanto las unidas por `lotProcessId` como las que empezaron
@@ -203,7 +204,7 @@ vuelven dos o más procesos». Cuando se divide (`split`) un lote **cubierto por
    `recordTransformation`** para todo `selection`, y no sólo en `recordSelection`, porque la
    clasificación del verde por malla llama directo (`greenGrading.ts:93`). Esa clasificación ocurre
    con el proceso ya cerrado, así que no la afecta.
-8. **Una fusión con proceso abierto se rechaza** (`fusion_bajo_proceso_abierto`) — propuesta. Hoy
+8. **Una fusión con proceso abierto se rechaza** (`fusion_bajo_proceso_abierto`) — propuesta, aprobada. Hoy
    ninguna pantalla fusiona, y cómo se procesa una mezcla queda para cuando Daniel lo decida.
 
 **Lo que garantizan juntas R2 y R6, y en lo que se apoya R7:** bajo un proceso abierto hay **una sola
@@ -220,7 +221,7 @@ rama hermana.
   después de bloquear el linaje. Hoy comprueba antes de la transacción (`storage.ts:35`).
 - **Exige** que el proceso vigente esté cerrado por humedad (`closureKind: moisture`), con la medición
   de cierre en el objetivo o por debajo. Un proceso dividido sale como `lote_dividido`, y una mezcla
-  como `lote_mezclado` (propuesta).
+  como `lote_mezclado` (propuesta, aprobada).
 - **Un lote sin proceso pasa, como hoy.** Así lo dice su propia cabecera, y así queda hasta el
   reimport (R9).
 - **Sólo al entrar a bodega.** `moveLotToStorage` también se usa para **reubicar** un lote que ya está
@@ -233,7 +234,7 @@ rama hermana.
 2026-09-16 («depende el arreglo») y confirmó el 2026-09-30.
 
 **De bodega a secado, sólo por un defecto de humedad.** `devolverASecado` **ya no reabre el proceso
-cerrado: abre una continuación unida a él.** Es propuesta, y su razón es que reabrir tenía tres
+cerrado: abre una continuación unida a él.** Nació como propuesta y Daniel la aprobó el 2026-09-30. Su razón es que reabrir tenía tres
 defectos:
 - borraba la medición de cierre, un hecho que sí ocurrió;
 - volvía a abrir el proceso para **todos** los lotes que cubre, también los hermanos ya guardados;
