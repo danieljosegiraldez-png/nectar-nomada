@@ -11,11 +11,12 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
+## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**603 operaciones** que tocan la base, en **166 archivos** — medido con
-`node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
-(`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
+**603 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
+`node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1
+(el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
+rama de las lecturas de la clasificación de verde por malla):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -29,7 +30,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 | **89** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **22** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
+| **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cuatro que entraron después, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, que recibe el principal sólo para firmar |
 
 > **Abrir un proceso, un solo proceso abierto por café (2026-10-01): 601→603, 166 archivos,
 > «depende del llamador» 88→89 y «recibía principal sin guardia visible» 21→22.** Parte 1, R2. Dos

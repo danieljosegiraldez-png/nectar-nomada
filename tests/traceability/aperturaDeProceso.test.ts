@@ -3,9 +3,10 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
+import type { Prisma } from "../../generated/prisma/client";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
-import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { assertDefinedWhere, UnsafeWhereClauseError } from "../helpers/assertDefinedWhere";
 
 const RUN = `apertura-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string, gestor: string;
@@ -64,6 +65,7 @@ afterAll(async () => {
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformaciones } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformaciones } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: gestor }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: gestor }) });
@@ -151,4 +153,51 @@ describe("R2 — un solo proceso abierto por café", () => {
     expect(fallo.reason).toBeInstanceOf(LotProcessError);
     expect((fallo.reason as Error).message).toBe("process_already_open");
   }, 20000);
+
+  it("no se abre bajo un ancestro abierto aunque haya uno cerrado más cerca", async () => {
+    // G (raíz, sin proceso) → P (con un proceso CERRADO) → C. G abre sin problema, porque P está
+    // cerrado; desde entonces C no puede: su proceso vigente es el cerrado de P, que no ve el
+    // abierto de G, y sólo el recorrido del linaje entero lo encuentra.
+    const g = await lote("P7-G");
+    const p = await lote("P7-P");
+    const c = await lote("P7-C");
+    await enlazar("stage_change", [g], [p]);
+    await enlazar("stage_change", [p], [c]);
+    await cerradoCrudo(p);
+    const deG = await abrirProcesoDePrueba(gestor, g);
+    expect(deG.endedAt).toBeNull();
+    await expect(abrirProcesoDePrueba(gestor, c)).rejects.toThrow(new LotProcessError("process_already_open"));
+  });
+
+  it("abrir un proceso escribe su evento de auditoría lot_process.open", async () => {
+    // Las tareas 6 y 8 reutilizan el núcleo de apertura y cuentan con este evento.
+    const l = await lote("P8-AUDITORIA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const evento = await prisma.auditEvent.findFirst({
+      where: { operation: "lot_process.open", entityType: "lot_process", entityId: p.id },
+    });
+    expect(evento, "abrir un proceso no dejó su evento lot_process.open").not.toBeNull();
+  });
+});
+
+describe("borrarProcesosDeLotesDonde, el ayudante de limpieza", () => {
+  it("rechaza un filtro de lote sin condición, y no borra nada", async () => {
+    // `{ lot: {} }` casa con TODOS los lotes: sin esta guarda, un filtro vacío borraba todos los
+    // procesos de la base. Se cuenta SU proceso y no la tabla entera: los archivos de prueba corren
+    // en paralelo contra la misma base y la cuenta global se movería sola.
+    const l = await lote("P9-LIMPIEZA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const suyos = () => prisma.lotProcess.count({ where: { id: p.id } });
+    expect(await suyos()).toBe(1);
+    const sinCondicion: Prisma.LotWhereInput[] = [{}, { id: {} }, { OR: [{}] }, { id: undefined }];
+    for (const filtro of sinCondicion) {
+      await expect(borrarProcesosDeLotesDonde(filtro), JSON.stringify(filtro)).rejects.toThrow(UnsafeWhereClauseError);
+      expect(await suyos(), `tras ${JSON.stringify(filtro)}`).toBe(1);
+    }
+    // Control positivo: un filtro con condición sí borra, y `in: []` es una condición que no casa con nada.
+    await borrarProcesosDeLotesDonde({ id: { in: [] } });
+    expect(await suyos()).toBe(1);
+    await borrarProcesosDeLotesDonde({ id: { in: [l] } });
+    expect(await suyos()).toBe(0);
+  });
 });
