@@ -15,6 +15,7 @@
  */
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 export interface E2eFixtureIds {
   blindSampleId: string;
@@ -46,10 +47,10 @@ export async function cleanupE2eFixtures(runId: string, ids: E2eFixtureIds) {
   await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: ids.protocolVersionId }) });
   await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: ids.protocolId }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: ids.sampleId }) });
-  // Parte 1: el proceso va antes que sus mediciones de cierre y que sus lotes (los dos RESTRICT).
-  await prisma.lotProcess.deleteMany({
-    where: assertDefinedWhere({ lotId: { in: [ids.cherryLotId, ids.dryingStageLotId, ids.greenLotId] } }),
-  });
+  // Parte 1: el proceso va antes que sus mediciones de cierre y que sus lotes (los dos RESTRICT). Por el ayudante, que
+  // borra también la auditoría de esos procesos (ronda de arreglo 1 de la tarea 4): con `lotProcess.deleteMany` a secas
+  // el `lot_process.open` de cada corrida quedaba huérfano. Un id sin asignar lo rechaza igual (`assertDefinedWhere`).
+  await borrarProcesosDeLotesDonde({ id: { in: [ids.cherryLotId, ids.dryingStageLotId, ids.greenLotId] } });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: ids.greenLotId }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ id: ids.storageAssignmentId }) });
 

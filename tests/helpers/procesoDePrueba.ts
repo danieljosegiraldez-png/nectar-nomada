@@ -58,6 +58,16 @@ export async function borrarProcesosDeLotesDonde(lot: Prisma.LotWhereInput): Pro
       "borrarProcesosDeLotesDonde: el filtro de lote no tiene ninguna condición definida — casaría con TODOS los lotes y borraría TODOS los procesos de la base",
     );
   }
+  // Los eventos de auditoría de un proceso (`lot_process.open`, `…close`…) cuelgan del PROCESO por su `entityId`, y la
+  // base no los borra con él ni con su usuario (el actor es SET NULL): sin esto quedaban huérfanos, y la tarea 4 sumó
+  // 26 aperturas por corrida de la suite (ronda de arreglo 1, 2026-10-01; medidos 1306 en `nectar_test_recetas`). Se
+  // borran por los ids de los procesos que ESTA llamada va a borrar —filtro positivo: `entityType` y `entityId in`—, y
+  // sin procesos no se toca nada.
+  const procesos = await prisma.lotProcess.findMany({ where: assertDefinedWhere({ lot }), select: { id: true } });
+  const ids = procesos.map((p) => p.id);
+  if (ids.length > 0) {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "lot_process", entityId: { in: ids } }) });
+  }
   await prisma.lotProcessReturn.deleteMany({
     where: assertDefinedWhere({ OR: [{ closedLotProcess: { lot } }, { continuationLotProcess: { lot } }] }),
   });
