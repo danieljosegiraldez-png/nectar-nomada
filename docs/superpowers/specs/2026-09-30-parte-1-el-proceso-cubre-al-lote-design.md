@@ -64,7 +64,7 @@ lote aceptado  ← aquí se abre el proceso (decisión del 2026-09-19)
 
 Para saber su proceso, un lote **lo busca hacia arriba**. Daniel eligió esto frente a escribir el
 proceso en cada lote al nacer, así que no se guarda ningún dato nuevo en el lote y la respuesta no
-puede contradecir al linaje. Lo resuelve **una sola función**, `procesoQueCubre(lotId, tx)`, que
+puede contradecir al linaje. Lo resuelve **una sola función**, `procesoQueCubre(tx, lotId)`, que
 devuelve:
 
 - **`vigente`:** el proceso más reciente del lote más cercano, él incluido, que tenga alguno. Es lo
@@ -96,7 +96,7 @@ Casos límite:
 
 ### R2. Un solo proceso abierto por café — decisión de Daniel
 
-Una sola comprobación, `exigeSinOtroProcesoAbierto(lotId, tx)`, que usan **las dos puertas que dejan
+Una sola comprobación, `exigeSinOtroProcesoAbierto(tx, lotId)`, que usan **las dos puertas que dejan
 un proceso abierto**: abrir uno y devolver a secado (R7). Rechaza cuando:
 
 | Caso | Código | De quién |
@@ -114,7 +114,7 @@ un proceso abierto**: abrir uno y devolver a secado (R7). Rechaza cuando:
   `20260908070000_grado_y_cereza_obligatorios`.
 
 **Concurrencia: se bloquea el linaje, no se usa `Serializable`.** Toda transacción que lea o cambie
-la cobertura empieza por `bloquearLinaje(lotId, tx)`: un `SELECT … FOR UPDATE` de las filas de `lot`
+la cobertura empieza por `bloquearLinaje(tx, lotId)`: un `SELECT … FOR UPDATE` de las filas de `lot`
 del lote y de **todos sus ancestros**, en orden de id. Lo hacen abrir, devolver a secado, empezar una
 corrida, cerrar, dividir, seleccionar, fusionar y almacenar.
 - **Dos operaciones sobre el mismo café siempre comparten al menos una fila:** el ancestro común, o
@@ -198,7 +198,7 @@ vuelven dos o más procesos». Cuando se divide (`split`) un lote **cubierto por
    `20` §1.2, sin duplicar filas.
 6. **El lote dividido queda cerrado** (`20` §1.1): no admite proceso, corridas, mediciones ni
    muestras.
-   - Lo decide **una sola función**, `loteDividido(lotId, tx)`: el lote es la entrada de una división
+   - Lo decide **una sola función**, `loteDividido(tx, lotId)`: el lote es la entrada de una división
      que cerró un proceso (`dividedByTransformationId`).
    - La usan R2, R3, `recordMeasurement` y `createSampleFromLot`, y todos rechazan con `lote_dividido`.
    - Vale **sólo** para divisiones hechas bajo un proceso. La miel divide en parcial a propósito
@@ -359,7 +359,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 - **Errores en español y en inglés, uno por código:** `sin_proceso_abierto`, `lote_dividido`,
   `lote_mezclado`, `lote_en_bodega`, `proceso_no_aplica_a_miel`, `corridas_abiertas`,
   `division_deja_remanente`, `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`,
-  `receta_distinta_del_proceso` y `lineage_too_deep`. Hoy `LotProcessError` se traduce con un
+  `receta_distinta_del_proceso`, `lineage_too_deep` y `motivo_otro_requiere_nota`, y también el ya
+  existente `process_already_open`, que ahora dice «en este café». Hoy `LotProcessError` se traduce con un
   mensaje genérico que enseña el código crudo (`traceability.ts:176`); se sigue el patrón de
   `BandejaError`. Las clases nuevas entran en `friendlyError` en el mismo cambio; sin eso, son un 500.
 

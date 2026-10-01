@@ -59,7 +59,25 @@ para a preguntar.
   `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`, `receta_distinta_del_proceso`,
   `lineage_too_deep`, `motivo_otro_requiere_nota`.
 - **Empezar una corrida no escribe ningún evento de auditoría nuevo** (R3).
-- **El tope del linaje es 64 generaciones** (R1).
+- **El tope del linaje es 64 generaciones** (R1). Una cadena de 64 ancestros se resuelve; con 65,
+  lanza.
+- **Inventarios de acceso: en TODA tarea que toque `lib/` o `app/`.** Antes del commit, correr
+  `npx vitest run tests/arquitectura/acceso-a-datos.test.ts tests/arquitectura/cifras-del-inventario.test.ts`.
+  Si cambian las cifras, `docs/arquitectura/inventario-de-acceso.md` y
+  `docs/arquitectura/acceso-a-datos.allowlist.json` **entran en ese commit**.
+  - `cifras-del-inventario` lee el árbol de trabajo: pasa en local con el `.md` editado y sin
+    commitear, y **cae en CI** con lo commiteado.
+  - Después del commit, `git status --short docs/arquitectura` tiene que salir vacío.
+  - En `dependen_del_llamador` se añaden **sólo** las operaciones que el guardia pide. Una función que
+    sólo delega en otras exportadas, como `bloquearLinaje` o `gradoDelProcesoQueCubre`, no es
+    operación, y fijarla hace caer «no quedan fijadas operaciones que ya no dependen del llamador».
+- **Cada bloque de órdenes se corre en una shell NUEVA.** La herramienta no conserva variables, así
+  que cada bloque repite las suyas (`PATH`, `PGBIN`, `SCR`, `DATABASE_URL`, `TEST_DATABASE_URL`).
+- **Limpieza de pruebas: el proceso va ANTES que sus mediciones de cierre y que sus lotes**, porque
+  las dos claves son RESTRICT. Las devoluciones (`lot_process_return`) van antes que los procesos;
+  `borrarProcesosDeLotesDonde` ya lo hace.
+- **Anclas de mutación únicas.** Toda mutación nombra el sitio exacto (función y línea) y se
+  comprueba con `git diff --stat` que cambió UNA línea, o las que diga la fila.
 
 ## Mapa de archivos
 
@@ -121,41 +139,51 @@ Esperado: `npm ci=0` y `generate=0`. Si `npm ci` falla, mirar `df -h` antes que 
 ```bash
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
 SCR=/private/tmp/claude-501/-Users-danielsan/02029a71-7835-4736-b245-713ece44a3e2/scratchpad
-$PGBIN/pg_dump -Fc "postgresql://postgres@127.0.0.1:55433/nectar_test" -f $SCR/nectar_test.dump; echo "dump=$?"
-$PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c 'CREATE DATABASE nectar_recetas'
-$PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c 'CREATE DATABASE nectar_recetas_shadow'
-$PGBIN/pg_restore --no-owner -d "postgresql://postgres@127.0.0.1:55433/nectar_recetas" $SCR/nectar_test.dump; echo "restore=$?"
+B=postgresql://postgres@127.0.0.1:55433
+$PGBIN/pg_dump -Fc "$B/nectar_test" -f $SCR/nectar_test.dump; echo "dump=$?"
+# La MISMA receta que scripts/test-db.sh: template0 y colación builtin C.UTF-8. Con la del clúster,
+# lower('Í') no pliega como producción y las pruebas de colación fallarían por una causa ajena.
+for b in nectar_recetas nectar_recetas_shadow; do
+  $PGBIN/psql "$B/postgres" -c "create database $b template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8'"
+done
+$PGBIN/pg_restore --no-owner -d "$B/nectar_recetas" $SCR/nectar_test.dump; echo "restore=$?"
 ```
 
 `pg_dump` sólo lee: no molesta a quien use `nectar_test`. Si `pg_restore` sale distinto de 0, leer
 sus errores antes de seguir; `--no-owner` evita los de propietario.
 
-- [ ] **Paso 4: Poner la copia al día con `main` y sembrar catálogos y permisos.**
+- [ ] **Paso 4: Poner la copia al día con `main` y sembrar catálogos y permisos.** El bloque es
+  autosuficiente.
 
 ```bash
+cd ~/Developer/nectar-worktrees/recetas-base
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
 export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
 export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
 npx prisma migrate deploy > /tmp/deploy.txt 2>&1; echo "deploy=$?"; grep -c 'Applying migration' /tmp/deploy.txt
 npm run db:seed > /tmp/seed.txt 2>&1; echo "seed=$?"
-```
-
-Control: la fila patrón tiene que existir **antes** de creer que la base sirve.
-
-```bash
+# Control: la fila patrón tiene que existir ANTES de creer que la base sirve.
 $PGBIN/psql "$DATABASE_URL" -At -c "select count(*) from research.variable_catalog_value v join research.variable_catalog c on c.id=v.catalog_id where c.key='grado_proceso' and v.value='Washed'"
 ```
 
-Esperado: `1`. Si sale `0`, la siembra no corrió: parar.
+Esperado: `1` al final. Si sale `0`, la siembra no corrió: parar.
 
 - [ ] **Paso 5: Línea base de las pruebas que esta parte va a tocar.** Sin ella, un fallo previo se
-  leería como propio.
+  leería como propio. El bloque es autosuficiente.
 
 ```bash
+cd ~/Developer/nectar-worktrees/recetas-base
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+SCR=/private/tmp/claude-501/-Users-danielsan/02029a71-7835-4736-b245-713ece44a3e2/scratchpad
 export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
-npx vitest run tests/traceability/{lotProcess,fermentation,drying,e2e,samples,measurements,operations,massBalance,reports,venta-temprana,bandejasDelSecado,storage,selection,lots,recipeVersions,recipeAuthoring,reporteDeProceso}.test.ts tests/beneficio/{colaDeSecado,datos-del-tablero,entrada-del-lote}.test.ts > $SCR/linea-base.txt 2>&1; echo "vitest=$?"
+npx vitest run tests/traceability/{lotProcess,fermentation,drying,e2e,samples,measurements,operations,massBalance,reports,venta-temprana,bandejasDelSecado,storage,selection,lots,recipeVersions,recipeAuthoring,reporteDeProceso}.test.ts tests/beneficio/{colaDeSecado,datos-del-tablero,entrada-del-lote}.test.ts tests/arquitectura/colacion-de-la-base.test.ts > $SCR/linea-base.txt 2>&1; echo "vitest=$?"
 grep -E 'Test Files|Tests ' $SCR/linea-base.txt
 grep -E '^ (FAIL|×)' $SCR/linea-base.txt | sort -u > $SCR/linea-base-fallos.txt; wc -l < $SCR/linea-base-fallos.txt
 ```
+
+`colacion-de-la-base` es el control de que la copia pliega como producción: si falla aquí, la base
+propia está mal creada, no el código.
 
 Anotar el recuento. Cualquier prueba que falle aquí **no es de esta parte**. Si después falla una
 distinta, sí lo es.
@@ -537,26 +565,29 @@ export DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
 export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
 npx prisma migrate deploy > /tmp/deploy.txt 2>&1; echo "deploy=$?"; grep 'proceso_cubre_al_lote' /tmp/deploy.txt
 npx prisma generate > /tmp/gen.txt 2>&1; echo "generate=$?"
-npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script > /tmp/diff.sql 2>&1; echo "diff=$?"; wc -l < /tmp/diff.sql
+npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --script --exit-code > /tmp/diff.sql 2>&1; echo "diff=$?"; cat /tmp/diff.sql
 npm run db:seed > /tmp/seed.txt 2>&1; echo "seed=$?"
 ```
 
 Esperado:
 - `deploy=0`, nombrando la migración;
 - `generate=0`;
-- un diff que sólo puede mencionar el índice parcial y los `CHECK`, que viven en SQL y no en el
-  esquema;
+- `diff=0`, con una salida que sólo dice `-- This is an empty migration.` Prisma ignora los índices
+  parciales y los `CHECK`, como ya pasa con `reinas` y `ruedas_sensoriales`, así que **cualquier
+  línea de más es un fallo**: el esquema y el SQL no casan. Corregir antes de seguir;
 - `seed=0`.
 
-Si el diff nombra columnas o tablas, el esquema y el SQL no casan: corregir antes de seguir.
-
-- [ ] **Paso 9: Verlas pasar.**
+- [ ] **Paso 9: Verlas pasar,** junto con el guardia de deriva, que exige ese diff vacío.
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/lotProcess.test.ts > /tmp/t1.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t1.txt
+cd ~/Developer/nectar-worktrees/recetas-base
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+export TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas
+export SHADOW_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas_shadow
+npx vitest run tests/traceability/lotProcess.test.ts tests/derivaDeMigraciones.test.ts > /tmp/t1.txt 2>&1; echo "vitest=$?"; grep -E 'Test Files|Tests ' /tmp/t1.txt
 ```
 
-Esperado: todo el archivo en verde, con las dos pruebas nuevas.
+Esperado: todo en verde, con las dos pruebas nuevas.
 
 - [ ] **Paso 10: Comprobar UNA vez a mano que la migración aborta.** Esto no puede ser una prueba
   permanente: las restricciones nuevas impiden fabricar después las filas malas (§4 del diseño).
@@ -569,12 +600,25 @@ mkdir -p /tmp/mig-aborto && cp -R prisma/migrations /tmp/mig-aborto/ && rm -rf /
 # migrar SÓLO hasta la anterior: con un prisma.config temporal que apunte a /tmp/mig-aborto/migrations,
 # o aplicando los SQL en orden con psql. Después sembrar dos abiertos en un lote:
 $PGBIN/psql "$B/nectar_aborto" -c "insert into traceability.lot_process (lot_id, sequence_order, intent, target_moisture_pct, started_at, provenance_class, process_grade_value_id, cherry_state_value_id) values ('<lote>', 1, 'a', 11, now(), 'original_record', '<grado>', '<cereza>'), ('<lote>', 2, 'b', 11, now(), 'original_record', '<grado>', '<cereza>')"
-$PGBIN/psql "$B/nectar_aborto" -f prisma/migrations/<marca>_proceso_cubre_al_lote/migration.sql; echo "salida=$?"
+# SIN ON_ERROR_STOP, psql sale con 0 aunque una sentencia falle, y sigue con las de después fuera de
+# toda transacción: el código de salida no mediría nada. Con ON_ERROR_STOP sale 3; --single-transaction
+# hace que no quede nada a medias.
+$PGBIN/psql "$B/nectar_aborto" -v ON_ERROR_STOP=1 --single-transaction -f prisma/migrations/<marca>_proceso_cubre_al_lote/migration.sql; echo "salida=$?"
+# Control de que NADA quedó aplicado:
+$PGBIN/psql "$B/nectar_aborto" -At -c "select count(*) from information_schema.columns where table_schema='traceability' and table_name='lot_process' and column_name='closure_kind'"
+# Control positivo: sin las filas dobles, la misma orden SÍ aplica.
+$PGBIN/psql "$B/nectar_aborto" -c "delete from traceability.lot_process where intent in ('a','b')"
+$PGBIN/psql "$B/nectar_aborto" -v ON_ERROR_STOP=1 --single-transaction -f prisma/migrations/<marca>_proceso_cubre_al_lote/migration.sql; echo "salida-control=$?"
 $PGBIN/psql "$B/postgres" -c 'DROP DATABASE nectar_aborto'
 ```
 
-Esperado: `salida` distinta de 0, con el mensaje «más de un proceso abierto». Anotar el resultado en
-el mensaje del commit. Si no se pudo montar, decirlo así en el commit; no darlo por comprobado.
+Esperado:
+- `salida=3`, con el mensaje «más de un proceso abierto»;
+- el recuento de `closure_kind` en `0`;
+- `salida-control=0`.
+
+Las tres juntas son la prueba; una sola no lo es. Anotar las tres cifras en el mensaje del commit. Si
+no se pudo montar, decirlo así en el commit; no darlo por comprobado.
 
 - [ ] **Paso 11: Compuerta y commit.**
 
@@ -791,6 +835,13 @@ describe("R1 — el proceso que cubre a un lote", () => {
     expect([...arriba].sort()).toEqual([raiz, s1, s2].sort());
   });
 
+  it(`el borde: ${TOPE_DE_LINAJE} generaciones exactas se resuelven`, async () => {
+    const ids = await cadena("BORDE", TOPE_DE_LINAJE + 1);
+    await proceso(ids[0]!, "abierto");
+    const c = await procesoQueCubre(prisma, ids[ids.length - 1]!);
+    expect(c.vigente?.profundidad).toBe(TOPE_DE_LINAJE);
+  }, 120000);
+
   it(`un linaje que pasa del tope (${TOPE_DE_LINAJE}) lanza en vez de decir «sin proceso»`, async () => {
     const ids = await cadena("HONDO", TOPE_DE_LINAJE + 2);
     const ultimo = ids[ids.length - 1]!;
@@ -865,7 +916,10 @@ Esperado: falla al cargar porque el módulo no existe.
 import type { Prisma } from "../../generated/prisma/client";
 import { LotProcessError } from "./errorDeProceso";
 
-/** R1: 64 generaciones en las dos direcciones. Un multiproceso real tiene unas diez. */
+/**
+ * R1: 64 generaciones en las dos direcciones. Un multiproceso real tiene unas diez. Una cadena de 64
+ * ancestros se resuelve; la generación 65 lanza (`nivel > TOPE` al empezar cada vuelta).
+ */
 export const TOPE_DE_LINAJE = 64;
 
 export type OrigenDelProceso = "original" | "parte_de_division" | "continuacion";
@@ -963,7 +1017,7 @@ export async function idsDeAscendencia(tx: Prisma.TransactionClient, lotId: stri
   const vistos = new Set<string>([lotId]);
   let frontera = [lotId];
   for (let nivel = 0; frontera.length > 0; nivel++) {
-    if (nivel >= TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
+    if (nivel > TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
     const padres = await padresDe(tx, frontera);
     const siguiente: string[] = [];
     for (const ps of padres.values()) {
@@ -988,7 +1042,7 @@ export async function idsDeDescendencia(tx: Prisma.TransactionClient, lotId: str
   const vistos = new Set<string>([lotId]);
   let frontera = [lotId];
   for (let nivel = 0; frontera.length > 0; nivel++) {
-    if (nivel >= TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
+    if (nivel > TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
     const hijos = await hijosDe(tx, frontera);
     const siguiente: string[] = [];
     for (const h of hijos) {
@@ -1055,7 +1109,7 @@ export async function procesoQueCubre(tx: Prisma.TransactionClient, lotId: strin
   let frontera = [lotId];
 
   for (let nivel = 0; frontera.length > 0; nivel++) {
-    if (nivel >= TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
+    if (nivel > TOPE_DE_LINAJE) throw new LotProcessError("lineage_too_deep");
     const procesos = await tx.lotProcess.findMany({
       where: { lotId: { in: frontera } },
       orderBy: { sequenceOrder: "desc" },
@@ -1196,36 +1250,43 @@ node scripts/inventario-de-acceso.mjs --json > /tmp/inv.json; node -e 'const j=r
 Qué entradas se esperan en `docs/arquitectura/acceso-a-datos.allowlist.json`, con su `razon`:
 
 - **`reciben_transaccion`:** `{ "archivo": "lib/traceability/procesoDelLinaje.ts", "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote." }`
-- **`dependen_del_llamador`:** una entrada por cada operación de `procesoDelLinaje.ts` que el inventario
-  clasifique así (`procesoQueCubre`, `idsDeAscendencia`, `idsDeDescendencia`, `bloquearLinaje`,
-  `bloquearLinajes`, `loteDividido`, `procesosParaEntrada` y `gradoDelProcesoQueCubre`). Cada una con
-  `"verificado": "<fecha de hoy>"` y una razón que nombre a sus llamadores autorizados, por ejemplo:
-  `"Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1). No expone nada por sí
-  misma: sus llamadores (servicios de lotProcess, corridas, bodega, lectores) ya autorizaron el lote."`
+- **`dependen_del_llamador`:** las **seis** operaciones que el inventario clasifica así:
+  `procesoQueCubre`, `idsDeAscendencia`, `idsDeDescendencia`, `bloquearLinajes`, `loteDividido` y
+  `procesosParaEntrada`. `bloquearLinaje` y `gradoDelProcesoQueCubre` NO entran: sólo delegan, y
+  fijarlas hace caer el guardia. Cada una lleva `"verificado": "<fecha de hoy>"` y una razón que
+  nombre a sus llamadores autorizados, por ejemplo: `"Lee el linaje y los procesos de un lote para
+  decidir cuál lo cubre (R1). No expone nada por sí misma: sus llamadores (servicios de lotProcess,
+  corridas, bodega, lectores) ya autorizaron el lote."`
 - **Quitar** la entrada de `lib/traceability/lots.ts` / `idsDeDescendencia`, porque la función ya no
   vive allí.
 
-Si `cifras-del-inventario` pide cifras nuevas en `docs/arquitectura/inventario-de-acceso.md`, poner
-las que el propio guardia imprime.
+**`docs/arquitectura/inventario-de-acceso.md` cambia SIEMPRE con esta tarea.** Medido aplicando el
+código del plan: **601 operaciones en 166 archivos**, y «depende del llamador» pasa a **88**. Las demás
+filas de su tabla siguen en 458/20/10/4 y «recibe principal, sin guardia visible» en 21. Poner esas
+cifras; si el guardia imprime otras, mandan las suyas y se dice en el commit.
 
 - [ ] **Paso 7: Compuerta, commit y flip-test.**
 
 ```bash
 npx tsc --noEmit > /tmp/tsc.txt 2>&1; echo "tsc=$?"
 npx vitest run tests/arquitectura > /tmp/arq.txt 2>&1; echo "arq=$?"; grep -E 'Test Files|Tests ' /tmp/arq.txt
-git add lib/traceability/procesoDelLinaje.ts lib/traceability/lots.ts lib/traceability/lotProcess.ts tests/traceability/procesoDelLinaje.test.ts scripts/pruebas-por-compuerta.txt docs/arquitectura/acceso-a-datos.allowlist.json
-git diff --cached --stat
+git add lib/traceability/procesoDelLinaje.ts lib/traceability/lots.ts lib/traceability/lotProcess.ts tests/traceability/procesoDelLinaje.test.ts scripts/pruebas-por-compuerta.txt docs/arquitectura/acceso-a-datos.allowlist.json docs/arquitectura/inventario-de-acceso.md
+git diff --cached --stat     # 7 archivos
 git commit -F /tmp/msg-t2.txt
+git status --short docs/arquitectura   # vacío
 ```
 
-Flip-tests, cada uno sobre el commit y restaurado con `git checkout -- lib/traceability/procesoDelLinaje.ts`:
+Flip-tests, cada uno sobre el commit y restaurado con
+`git checkout -- lib/traceability/procesoDelLinaje.ts`. Cada mutación cambia UNA línea, en el sitio
+que se nombra, y se comprueba con `git diff --stat`:
 
 | Mutación en `procesoDelLinaje.ts` | Debe caer |
 |---|---|
 | en `procesoQueCubre`, `if (distintos.length > 1 \|\| ramaSinProceso)` → `if (false)` | «…procesos distintos es mezcla…» |
-| en `procesoQueCubre`, devolver `cadena: [vigente]` | «reproceso: el verde tiene P2…» |
-| en `idsDeAscendencia`, `throw new LotProcessError("lineage_too_deep")` → `return [...vistos]` | «un linaje que pasa del tope…» |
-| en `procesoQueCubre`, `orderBy: { sequenceOrder: "desc" }` → `"asc"` | «si el lote tiene dos procesos, el vigente es el más reciente…» |
+| en `procesoQueCubre`, `const cadena = [vigente, ...(await historiaArriba(tx, vigente))];` → `const cadena = [vigente];` | «reproceso: el verde tiene P2…» |
+| **sólo en `idsDeAscendencia`** (hay otras tres iguales), su `throw new LotProcessError("lineage_too_deep")` → `return [...vistos]` | «un linaje que pasa del tope…» (la segunda aserción) |
+| **sólo en el `findMany` de `procesoQueCubre`** (el que tiene `where: { lotId: { in: frontera } }`; hay otros tres `orderBy` iguales), `"desc"` → `"asc"` | «si el lote tiene dos procesos, el vigente es el más reciente…» |
+| en las tres comprobaciones del tope, `nivel > TOPE_DE_LINAJE` → `nivel >= TOPE_DE_LINAJE` | «el borde: 64 generaciones exactas se resuelven» |
 
 *(Que el diamante no multiplique caminos no tiene flip-test: las funciones devuelven un conjunto, así
 que quitar la deduplicación no cambia ninguna salida, sólo el coste. Se dice aquí para que nadie
@@ -1240,7 +1301,8 @@ cuente esa prueba como su guardia.)*
 - Modificar: `lib/traceability/lotProcess.ts` (`abrirProceso` pasa a ser envoltorio)
 - Crear: `tests/helpers/procesoDePrueba.ts`
 - Crear: `tests/traceability/aperturaDeProceso.test.ts`
-- Modificar: `scripts/pruebas-por-compuerta.txt`, `docs/arquitectura/acceso-a-datos.allowlist.json`
+- Modificar: `scripts/pruebas-por-compuerta.txt`, `docs/arquitectura/acceso-a-datos.allowlist.json`,
+  `docs/arquitectura/inventario-de-acceso.md`
 
 **Interfaces:**
 - Consume: `procesoQueCubre`, `idsDeAscendencia`, `idsDeDescendencia`, `loteDividido` y `bloquearLinaje`
@@ -1450,6 +1512,14 @@ describe("R2 — un solo proceso abierto por café", () => {
     await expect(abrirProcesoDePrueba(gestor, miel)).rejects.toThrow(new LotProcessError("proceso_no_aplica_a_miel"));
   });
 
+  it("un descendiente a más de 12 generaciones con proceso abierto impide abrir arriba", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 15; i++) ids.push(await lote(`P6-${i}`));
+    for (let i = 1; i < 15; i++) await enlazar("stage_change", [ids[i - 1]!], [ids[i]!]);
+    await abrirProcesoDePrueba(gestor, ids[14]!);
+    await expect(abrirProcesoDePrueba(gestor, ids[0]!)).rejects.toThrow(new LotProcessError("process_already_open"));
+  }, 60000);
+
   it("dos aperturas a la vez en padre e hijo: sólo una sale bien, y la otra con nombre", async () => {
     const padre = await lote("P5-PADRE");
     const hijo = await lote("P5-HIJO");
@@ -1632,13 +1702,20 @@ Esperado: todo en verde. Repetir la de concurrencia cinco veces seguidas
 
 - [ ] **Paso 7: Inventarios, compuerta y commit.** Repetir el paso 6 de la tarea 2: las operaciones
   nuevas `exigeSinOtroProcesoAbierto` y `abrirProcesoEnTx` piden su entrada.
+  - `exigeSinOtroProcesoAbierto` va en `dependen_del_llamador`.
   - `abrirProcesoEnTx` recibe principal y no tiene guardia visible, así que va en
     `operaciones_sin_patron`, con la razón: «Núcleo con `tx`: sólo lo llaman `abrirProceso`,
     `dividirProcesoEnTx` y `devolverASecado`, todos después de `requireLotAccess(\"manage\")` sobre el
     lote».
-  - Commit con `procesoDelLinaje.ts`, `lotProcess.ts`, `tests/helpers/procesoDePrueba.ts`,
-    `tests/traceability/aperturaDeProceso.test.ts`, `scripts/pruebas-por-compuerta.txt` y el JSON de
-    inventario.
+  - `docs/arquitectura/inventario-de-acceso.md`, medido aplicando el plan: **603 operaciones en 166
+    archivos**, «depende del llamador» **89** y «recibe principal, sin guardia visible» **22**.
+
+```bash
+git add lib/traceability/procesoDelLinaje.ts lib/traceability/lotProcess.ts tests/helpers/procesoDePrueba.ts tests/traceability/aperturaDeProceso.test.ts scripts/pruebas-por-compuerta.txt docs/arquitectura/acceso-a-datos.allowlist.json docs/arquitectura/inventario-de-acceso.md
+git diff --cached --stat     # 7 archivos
+git commit -F /tmp/msg-t3.txt
+git status --short docs/arquitectura   # vacío
+```
 
 Flip-tests, sobre el commit:
 
@@ -1647,6 +1724,8 @@ Flip-tests, sobre el commit:
 | en `exigeSinOtroProcesoAbierto`, `const linaje = [lotId, ...]` → `const linaje = [lotId]` | «no se abre en el hijo si el padre…» y «…en el padre si un hijo…» |
 | quitar la línea `if (enBodega) throw …` | «rechaza dividido, en bodega, mezcla y miel…» |
 | en `abrirProceso`, quitar `await bloquearLinaje(tx, input.lotId);` | «dos aperturas a la vez…». Correrla 10 veces: es una carrera, y basta con que caiga una |
+| **sólo en `idsDeDescendencia`**, su `if (nivel > TOPE_DE_LINAJE) throw …` → `if (nivel >= 12) break;` (el corte silencioso de antes) | «un descendiente a más de 12 generaciones…» |
+| en `exigeSinOtroProcesoAbierto`, quitar `endedAt: null, ` del `findFirst` del linaje (cualquier proceso, abierto o no, cuenta como abierto) | «sí se abre un reproceso bajo un proceso CERRADO» |
 
 ---
 
@@ -1688,6 +1767,9 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `corrida-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string, gestor: string, intruso: string;
+/** Una segunda parcela con un usuario que SÓLO la gestiona a ella: R3 dice que el permiso es sobre el
+ *  lote de la corrida, nunca sobre el lote donde vive el proceso. */
+let plotB: string, scopeB: string, soloB: string;
 let recetaVersionId: string, otraVersionId: string;
 const lotes: string[] = [];
 const transformaciones: string[] = [];
@@ -1696,9 +1778,9 @@ async function cuenta(label: string) {
   const p = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN})`, locale: "es" } });
   return (await prisma.userAccount.create({ data: { personId: p.id, authProvider: "credentials", status: "active" } })).id;
 }
-async function lote(codigo: string) {
+async function lote(codigo: string, locationId: string = plotId) {
   const id = (await prisma.lot.create({ data: {
-    lotCode: `${codigo}-${RUN}`, lotType: "cherry", organizationId: orgId, locationId: plotId, status: "approved", classification: "internal", createdBy: gestor,
+    lotCode: `${codigo}-${RUN}`, lotType: "cherry", organizationId: orgId, locationId, status: "approved", classification: "internal", createdBy: gestor,
   } })).id;
   lotes.push(id);
   return id;
@@ -1720,6 +1802,10 @@ beforeAll(async () => {
   scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
+  plotB = (await prisma.location.create({ data: { locationType: "plot", name: `TEST plot B ${RUN}`, organizationId: orgId, status: "approved", classification: "internal" } })).id;
+  soloB = await cuenta("SoloB");
+  scopeB = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotB } })).id;
+  await prisma.assignment.create({ data: { userAccountId: soloB, roleProfileId: farm.id, scopeId: scopeB } });
   const receta = await prisma.processRecipe.create({ data: { name: `TEST Lavado ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
   recetaVersionId = (await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "approved", createdBy: gestor } })).id;
   otraVersionId = (await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 2, status: "approved", createdBy: gestor } })).id;
@@ -1743,15 +1829,24 @@ afterAll(async () => {
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN } }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [gestor, intruso] } }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId: { in: [scopeId, scopeB] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [scopeId, scopeB] } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [gestor, intruso, soloB] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [plotId, plotB] } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });
 }, 60000);
 
 describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
+  it("quien gestiona el hijo y NO el lote del proceso puede empezar: el permiso es sobre el lote de la corrida", async () => {
+    const abuelo = await lote("R3-PARCELA-A");
+    const hijo = await lote("R3-PARCELA-B", plotB);
+    await enlazar([abuelo], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, abuelo);
+    const { run } = await startDryingRun(soloB, { lotId: hijo, startedAt: ahora(), provenanceClass: "original_record" });
+    expect(run.lotProcessId).toBe(p.id);
+  });
+
   it("sin proceso abierto, empezar una fermentación se rechaza con nombre", async () => {
     const l = await lote("R3-SIN");
     await expect(
@@ -1824,7 +1919,10 @@ Añadirla a `base-sembrada`.
 TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_recetas npx vitest run tests/traceability/corridaConProceso.test.ts > /tmp/t4.txt 2>&1; echo "vitest=$?"; grep -E '✓|×' /tmp/t4.txt
 ```
 
-Esperado: caen todas menos la del permiso; ésa ya pasa hoy y es el control.
+Esperado: caen todas menos **dos**, que ya pasan hoy y son controles:
+- «el permiso se pide sobre el lote de la corrida…» (el intruso);
+- «en un proceso «Sin receta» la corrida tampoco lleva receta». Hoy la corrida ya guarda la receta
+  nula cuando no se pide ninguna. Es un control de no regresión y no tiene flip-test.
 
 - [ ] **Paso 3: El núcleo.** En `lib/traceability/procesoDelLinaje.ts`, al final:
 
@@ -1968,13 +2066,21 @@ En `tests/traceability/e2e-cleanup.ts`, después de la línea 48 (`sample.delete
   });
 ```
 
-Contar antes y después. Tienen que salir los mismos 30 sitios, y `abrirProcesoDePrueba` en todos los
-que dice la tabla:
+Contar antes y después, **sólo en los diez archivos de la tabla**. Los archivos nuevos de las tareas
+3 y 4 también llaman a estas funciones y descuadrarían la cuenta.
 
 ```bash
-echo "llamadas start*Run en pruebas:"; grep -rnE 'start(Fermentation|Drying)Run\(' tests | grep -v import | wc -l
-echo "aperturas de prueba:"; grep -rn 'abrirProcesoDePrueba(' tests | grep -v -E 'import|helpers/procesoDePrueba' | wc -l
+cd ~/Developer/nectar-worktrees/recetas-base
+DIEZ="tests/traceability/measurements.test.ts tests/traceability/drying.test.ts tests/traceability/fermentation.test.ts tests/traceability/samples.test.ts tests/traceability/reports.test.ts tests/traceability/operations.test.ts tests/traceability/e2e.test.ts tests/traceability/venta-temprana.test.ts tests/traceability/massBalance.test.ts tests/traceability/bandejasDelSecado.test.ts"
+echo "control: 10 archivos -> $(ls $(echo $DIEZ) | wc -l)"
+echo "start*Run( en los diez (esperado 30):"; cat $(echo $DIEZ) | grep -cE 'start(Fermentation|Drying)Run\('
+echo "abrirProcesoDePrueba( en los diez (esperado 26 = 30 menos los 4 «no abrir»):"; cat $(echo $DIEZ) | grep -c 'abrirProcesoDePrueba('
 ```
+
+`$(echo $DIEZ)` y no `$DIEZ` a secas: en zsh, una variable sin comillas no se parte en palabras.
+
+Las 4 llamadas sin apertura propia son drying 185 y fermentation 184 (las del usuario de otro
+proyecto), y e2e 129 y reports 137 (descendientes, ya cubiertos).
 
 **La demo** (`prisma/seed.ts`):
 - importar `abrirProceso` de `../lib/traceability/lotProcess`;
@@ -2029,6 +2135,10 @@ base `nectar_demo_recetas` se reutiliza en la tarea 7 y se borra en la 13.
 | en `startDryingRun`, quitar `lotProcessId: proceso.id,` | «un secado en el nieto queda unido al proceso del abuelo» |
 | en `procesoAbiertoParaCorrida`, `throw new LotProcessError("sin_proceso_abierto")` → `return { id: "00000000-0000-0000-0000-000000000000", processRecipeVersionId: null }` (compila; un `if (false)` NO compila, porque TypeScript deja de saber que `vigente` no es nulo, y una mutación que no compila no prueba nada) | «sin proceso abierto, empezar una fermentación…» |
 | en `startFermentationRun`, quitar el `if` de R4 | «rechaza otra versión distinta…» |
+| en `startDryingRun`, detrás de `const proceso = …`, exigir también el permiso sobre el lote del proceso: `const delProceso = await tx.lotProcess.findUniqueOrThrow({ where: { id: proceso.id } }); await requireLotAccess(userAccountId, "manage", [await tx.lot.findUniqueOrThrow({ where: { id: delProceso.lotId } })]);` | «quien gestiona el hijo y NO el lote del proceso puede empezar…» |
+
+`colgarCorrida` era un «guardia directo» en el inventario: al quitarlo cambian las cifras de
+`docs/arquitectura/inventario-de-acceso.md`, que entra en este commit (regla global).
 
 ---
 
@@ -2047,8 +2157,10 @@ base `nectar_demo_recetas` se reutiliza en la tarea 7 y se borra en la 13.
   - añadir a los imports `endDryingRun` (de `../../lib/traceability/drying`) y `cerrarProceso` (de
     `../../lib/traceability/lotProcess`);
   - añadir la lista `const mediciones: string[] = [];`;
-  - en el `afterAll`, antes de `borrarProcesosDeLotesDonde`, añadir
+  - en el `afterAll`, **DESPUÉS** de `borrarProcesosDeLotesDonde` y antes de `lot.deleteMany`, añadir
     `await prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: mediciones } }) });`.
+    Al revés reventaría: un proceso cerrado apunta a su medición de cierre con una clave RESTRICT, y
+    el `afterAll` se cortaría dejando lotes, cuentas y organización en la base.
 
 Y este bloque:
 
@@ -2191,6 +2303,10 @@ cruda, `prisma.dryingRun.update({ where: { id }, data: { endedAt: <fecha> } })` 
 |---|---|
 | en `exigeSinCorridasAbiertas`, quitar la segunda rama del `OR` | «cuenta también una corrida abierta que NO quedó unida» |
 | en `cerrarProceso`, quitar `await exigeSinCorridasAbiertas(…)` | «con un secado abierto unido al proceso, cerrar se rechaza…» |
+| en `cerrarProceso`, quitar `closureKind: "moisture"` del `data` del `update` | «…terminado, cierra por humedad» (el `CHECK lot_process_cierre_sii_tipo` lo rechaza) |
+
+`exigeSinCorridasAbiertas` es una operación nueva: `docs/arquitectura/inventario-de-acceso.md` y el
+JSON entran en este commit (regla global).
 
 ---
 
@@ -2281,7 +2397,7 @@ afterAll(async () => {
   }));
   await borrarProcesosDeLotesDonde({ id: { in: lotes } });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
-  await prisma.deviation.deleteMany({ where: assertDefinedWhere({ transformationId: { in: ts.map((t) => t.id) } }) });
+  await prisma.deviation.deleteMany({ where: assertDefinedWhere({ lotTransformationId: { in: ts.map((t) => t.id) } }) });
   await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: ts.map((t) => t.id) } }) });
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: ts.map((t) => t.id) } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: ts.map((t) => t.id) } }) });
@@ -2357,10 +2473,37 @@ describe("R6 — dividir bajo un proceso abierto", () => {
     expect(JSON.stringify(evento!.after)).toContain('"sinLibroDeMasa":true');
   });
 
-  it("la miel sigue dividiendo en parcial", async () => {
+  it("la miel sigue dividiendo en parcial, aunque tenga un proceso abierto colado", async () => {
     const m = await lote("D6-MIEL", "honey");
     await conSaldo(m, 10);
+    // Un proceso ABIERTO insertado crudo (por servicio no se puede: R2 lo rechaza para miel). Sin él
+    // la condición de miel de `recordTransformation` no tendría guardia: sin proceso arriba,
+    // `antesDeTransformar` devuelve null por su cuenta y la división parcial pasaría igual.
+    const [g, c] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    await prisma.lotProcess.create({ data: {
+      lotId: m, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 18, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+    } });
     await expect(dividir(m, 4, [4])).resolves.toBeDefined();
+  });
+
+  it("si otro lote cubierto conserva saldo, no se divide: quedaría bajo un proceso dividido", async () => {
+    const c = await lote("D11-C");
+    await conSaldo(c, 100);
+    const p = await abrirProcesoDePrueba(gestor, c);
+    const f = await lote("D11-F");
+    // F es hija de C sin consumirla: una transformación cruda no toca el libro de masa, así que C
+    // sigue con sus 100 kg.
+    await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: T, provenanceClass: "original_record",
+      inputs: { create: [{ lotId: c }] }, outputs: { create: [{ lotId: f }] },
+    } });
+    await conSaldo(f, 50);
+    await expect(dividir(f, 50, [25, 25])).rejects.toThrow(new LotProcessError("division_deja_remanente"));
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p.id } })).endedAt).toBeNull();
   });
 
   it("seleccionar bajo un proceso abierto se rechaza, también por recordTransformation directo", async () => {
@@ -2609,7 +2752,18 @@ Comparar con la línea base. Repetir cinco veces la prueba de concurrencia.
 | en `dividirProcesoEnTx`, quitar el bucle de `copias` | «cierra el padre como dividido…» |
 | en `dividirProcesoEnTx`, `if (saldo.quantity.greaterThan(tolerancia))` → `if (false && …)` | «dejar remanente fuera de la tolerancia…» |
 | en `antesDeTransformar`, quitar `if (args.tipo === "selection") throw …` | «seleccionar bajo un proceso abierto…» |
-| en `recordTransformation`, `tocaProceso` sin la condición de miel | «la miel sigue dividiendo en parcial» |
+| en `recordTransformation`, `tocaProceso` sin la condición de miel | «la miel sigue dividiendo en parcial…» (cae con `division_deja_remanente`) |
+| en `dividirProcesoEnTx`, quitar el bucle `for (const id of cubiertos)` | «si otro lote cubierto conserva saldo…» |
+| en `dividirProcesoEnTx`, en el `abrirProcesoEnTx` de las copias, `startedAt: args.occurredAt` → `startedAt: new Date()` | «cierra el padre como dividido…» (la aserción del inicio de cada copia) |
+| en `recordMeasurement`, quitar la línea de `loteDividido` | «cierra el padre como dividido…» (la aserción de la medición) |
+| en `antesDeTransformar`, quitar `if (args.tipo === "merge" \|\| …) throw …` (cambia 3 líneas: el `if`, su `throw` y su llave) | «fusionar con un proceso abierto se rechaza» |
+
+**Sin flip propio, y se dice:** «dividir a la vez que se empieza una corrida» depende de la carrera.
+Su mutación —quitar `bloquearLinajes` de `antesDeTransformar`— se corre 10 veces y basta con que caiga
+una; si no cae ninguna, se anota que la carrera no se reprodujo, no que el bloqueo sobre.
+
+`docs/arquitectura/inventario-de-acceso.md` y el JSON cambian con las dos operaciones nuevas: entran
+en este commit (regla global).
 
 ---
 
@@ -2628,8 +2782,9 @@ Comparar con la línea base. Repetir cinco veces la prueba de concurrencia.
 
 - [ ] **Paso 1: Las pruebas.** Crear `tests/traceability/bodegaConProceso.test.ts`. Su fixture es el
   de `corridaConProceso.test.ts`: `cuenta`, `lote`, `enlazar`, `beforeAll` y `afterAll`, **copiados
-  enteros**, con `RUN = \`bodega-${Date.now()}\`` y una lista `mediciones` que el `afterAll` borra
-  antes que los procesos. Las pruebas:
+  enteros**, con `RUN = \`bodega-${Date.now()}\``. Lleva una lista `mediciones` que el `afterAll`
+  borra **DESPUÉS** de `borrarProcesosDeLotesDonde`: la medición de cierre es RESTRICT. También
+  lleva `admin`, buscado como en la tarea 6. Las pruebas:
 
 ```ts
 import { moveLotToStorage } from "../../lib/traceability/storage";
@@ -2683,6 +2838,38 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
   it("un lote sin proceso entra como hoy", async () => {
     const l = await lote("B5");
     await expect(moveLotToStorage(gestor, { lotId: l, locationId: plotId, startedAt: ahora() })).resolves.toBeDefined();
+  });
+
+  it("la compuerta rechaza un lote dividido y una mezcla, cada uno con su código", async () => {
+    const [g, c] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    // Dividido: la entrada de una división que cerró un proceso.
+    const x = await lote("B7-X");
+    const x1 = await lote("B7-X1");
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "split", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      inputs: { create: [{ lotId: x }] }, outputs: { create: [{ lotId: x1 }] },
+    } });
+    transformaciones.push(t.id);
+    await prisma.lotProcess.create({ data: {
+      lotId: x, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+      endedAt: ahora(), closureKind: "divided", dividedByTransformationId: t.id,
+    } });
+    await expect(moveLotToStorage(gestor, { lotId: x, locationId: plotId, startedAt: ahora() })).rejects.toThrow(new LotProcessError("lote_dividido"));
+
+    // Mezcla: dos ramas cerradas por humedad, con procesos distintos.
+    const a = await lote("B7-A");
+    const b = await lote("B7-B");
+    const pa = await abrirProcesoDePrueba(gestor, a);
+    await cerrarProceso(gestor, { lotProcessId: pa.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
+    const pb = await abrirProcesoDePrueba(gestor, b);
+    await cerrarProceso(gestor, { lotProcessId: pb.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(b, 11) });
+    const m = await lote("B7-M");
+    await enlazar([a, b], [m]);
+    await expect(moveLotToStorage(gestor, { lotId: m, locationId: plotId, startedAt: ahora() })).rejects.toThrow(new LotProcessError("lote_mezclado"));
   });
 
   it("almacenar a la vez que se abre un proceso que lo cubre: no salen bien las dos", async () => {
@@ -2828,7 +3015,9 @@ Esperado: `seed=0` y `2`: los dos procesos de la demo, cerrados por humedad.
 
 | Mutación | Debe caer |
 |---|---|
-| en `exigeSecadoTerminado`, `procesoQueCubre(tx, lotId)` → sólo el propio lote: `tx.lotProcess.findFirst({ where: { lotId }, orderBy: { sequenceOrder: "desc" } })`, devolviendo si es null | «el pergamino cuyo proceso vive en la cereza…» |
+| en `exigeSecadoTerminado`, sustituir `const cobertura = await procesoQueCubre(tx, lotId);` por la lectura del propio lote, que compila: `const propio = await tx.lotProcess.findFirst({ where: { lotId }, orderBy: { sequenceOrder: "desc" } }); const cobertura = (propio ? { estado: propio.endedAt === null ? "abierto" : "cerrado", vigente: { id: propio.id }, cadena: [], composicion: null } : { estado: "sin_proceso", vigente: null, cadena: [], composicion: null }) as Awaited<ReturnType<typeof procesoQueCubre>>;` | «el pergamino cuyo proceso vive en la cereza…» |
+| en `exigeSecadoTerminado`, quitar **las dos** comprobaciones de dividido: el `if (await loteDividido(…))` y el `if (proceso.closureKind === "divided")`. Con una sola, la otra sigue rechazando | «la compuerta rechaza un lote dividido y una mezcla…» |
+| en `exigeSecadoTerminado`, `throw new LotProcessError("lote_mezclado")` → `return` (compila; quitar la línea entera no, porque TypeScript deja de saber que `vigente` no es nulo) | la misma |
 | en `storage.ts`, quitar el `if (!openAssignment)` y llamar siempre | «reubicar dentro de bodega…» |
 | en `storage.ts`, quitar `await bloquearLinaje(tx, input.lotId);` | «almacenar a la vez…»: correrla 10 veces, es una carrera |
 
@@ -2874,6 +3063,13 @@ conducta nueva. Importar `CATALOGO_MOTIVO_DEVOLUCION`. Queda así:
     expect(JSON.stringify(evento!.after)).toContain("vuelve a cama");
   });
 ```
+
+**La limpieza de `lotProcess.test.ts` cambia en esta misma tarea.** Este archivo crea ahora una fila
+`lot_process_return`, y sus dos claves hacia `lot_process` son RESTRICT. En su `afterAll`, sustituir
+`await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });` (línea
+~197) por `await borrarProcesosDeLotesDonde({ id: { in: lotes } });`, importado de
+`../helpers/procesoDePrueba`. El `lotProcessIntervention.deleteMany` de la línea anterior se queda
+donde está. Sin esto el `afterAll` revienta y deja lotes, personas y la organización TEST en la base.
 
 Las pruebas que siguen en ese bloque —«la medición descartada sigue existiendo» y el cierre con
 10,2 seguido de `moveLotToStorage`— siguen valiendo:
@@ -2921,6 +3117,27 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(l, 11) });
     await expect(devolverASecado(gestor, { lotId: l, motivoValueId: await motivo("otro"), ocurrioEn: ahora() }))
       .rejects.toThrow(new LotProcessError("motivo_otro_requiere_nota"));
+  });
+
+  it("un lote dividido no se devuelve a secado", async () => {
+    const [g, c] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    const x = await lote("V3-X");
+    const x1 = await lote("V3-X1");
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "split", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      inputs: { create: [{ lotId: x }] }, outputs: { create: [{ lotId: x1 }] },
+    } });
+    transformaciones.push(t.id);
+    await prisma.lotProcess.create({ data: {
+      lotId: x, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+      endedAt: ahora(), closureKind: "divided", dividedByTransformationId: t.id,
+    } });
+    await expect(devolverASecado(gestor, { lotId: x, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("lote_dividido"));
   });
 });
 ```
@@ -3133,6 +3350,9 @@ En `en.json`:
 | en `devolverASecado`, mover el `if (bodega) … update` DESPUÉS de `abrirProcesoEnTx` | «desde bodega: termina la bodega…» (sale `lote_en_bodega`) |
 | en `devolverASecado`, quitar `if (motivo.value === "otro" && !nota) throw …` | ««otro» exige nota…» |
 | en `devolverASecado`, en vez de la continuación, `tx.lotProcess.update({ where: { id: cerrado.id }, data: { endedAt: null, closingMoistureMeasurementId: null, closureKind: null } })` y devolver ese proceso como `continuacion` | «devolver a secado abre una continuación…» y «…deja a los hermanos bajo el cerrado» |
+| en `devolverASecado`, quitar **las dos** comprobaciones de dividido: `if (await loteDividido(…))` y `if (cerrado.closureKind !== "moisture")`. Con una sola, la otra sigue rechazando | «un lote dividido no se devuelve a secado» |
+
+La tarea 8 también toca `lotProcess.test.ts` (su `afterAll`): entra en la lista del commit.
 
 ---
 
@@ -3149,7 +3369,10 @@ En `en.json`:
 - Modificar: `messages/es.json` y `messages/en.json`
 - Modificar las pruebas: `tests/beneficio/colaDeSecado.test.ts`,
   `tests/traceability/divisionBajoProceso.test.ts`, `tests/traceability/bodegaConProceso.test.ts`,
-  `tests/traceability/samples.test.ts`
+  `tests/traceability/samples.test.ts`, `tests/traceability/corridaConProceso.test.ts`
+- Modificar, si cambian las cifras (regla global): `docs/arquitectura/inventario-de-acceso.md` y
+  `docs/arquitectura/acceso-a-datos.allowlist.json`. `coberturaDelLote` y `puedeAbrirProceso` son
+  operaciones nuevas.
 
 **Interfaces:**
 - Consume: `procesoQueCubre`, `procesosParaEntrada`, `gradoDelProcesoQueCubre` y
@@ -3163,25 +3386,108 @@ En `en.json`:
 - [ ] **Paso 1: Las pruebas que fijan la conducta nueva.**
 
 **Muestra verde.** En `bodegaConProceso.test.ts`:
-- importar `createSampleFromLot` y `devolverASecado`;
-- en el `beforeAll`, buscar el admin, como en la tarea 6.
+- importar `createSampleFromLot`, `devolverASecado`, `startDryingRun` y `endDryingRun`;
+- el `afterAll` borra primero las muestras:
+  `await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: { in: lotes } }) });`.
+
+La prueba se arma para que la compuerta **vieja PASE**: un pergamino salido de un secado terminado
+con `target_reached`. Así sólo la condición nueva puede rechazarla. Con un lote sin secado, la
+compuerta vieja ya lanza el mismo error, y la prueba pasaría igual sin el código nuevo: un guardia
+de adorno, como cazó la revisión.
 
 ```ts
+/**
+ * La entrada de una muestra verde que el servicio ACEPTA. COPIAR los campos de la prueba de
+ * `tests/traceability/samples.test.ts` que acepta una muestra verde (la que no lleva `rejects`),
+ * cambiando sólo el lote y el código. No inventar campos: el servicio valida varios.
+ */
+function muestraVerde(sourceLotId: string, codigo: string): Parameters<typeof createSampleFromLot>[1] {
+  return { /* ← campos de esa prueba */ sourceLotId, sampleCode: `${codigo}-${RUN}` } as Parameters<typeof createSampleFromLot>[1];
+}
+
 describe("R7 — la muestra verde con proceso exige el proceso cerrado por humedad", () => {
-  it("con una continuación abierta (devuelto a secado) no se saca muestra verde", async () => {
+  it("con el proceso cerrado se saca; devuelto a secado (continuación abierta), ya no", async () => {
     const cereza = await lote("MV-C");
-    const verde = await lote("MV-V");
-    await enlazar([cereza], [verde]);
     const p = await abrirProcesoDePrueba(gestor, cereza);
-    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(verde, 11) });
+    const { run } = await startDryingRun(gestor, { lotId: cereza, startedAt: ahora(), provenanceClass: "original_record" });
+    const { outputLot: pergamino } = await endDryingRun(gestor, {
+      dryingRunId: run.id, endedAt: ahora(), outputLotCode: `MV-P-${RUN}`, outputLotType: "parchment",
+      provenanceClass: "original_record", endedOutcome: "target_reached",
+    });
+    lotes.push(pergamino.id);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino.id, 11) });
+    // Control positivo: con el proceso cerrado por humedad, las dos compuertas dejan pasar.
+    await expect(createSampleFromLot(admin, muestraVerde(pergamino.id, "MV-1"))).resolves.toBeDefined();
+
     const motivo = (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } })).id;
-    await devolverASecado(gestor, { lotId: verde, motivoValueId: motivo, ocurrioEn: ahora() });
-    await expect(createSampleFromLot(admin, {
-      sourceLotId: verde, sampleCode: `MV-${RUN}`, sampleType: "green_coffee", materialState: "GREEN", occurredAt: ahora(), provenanceClass: "original_record",
-    } as Parameters<typeof createSampleFromLot>[1])).rejects.toThrow(/green_sample_before_reposo/);
+    await devolverASecado(gestor, { lotId: pergamino.id, motivoValueId: motivo, ocurrioEn: ahora() });
+    // Ahora SÓLO la compuerta nueva rechaza: la vieja sigue viendo el secado terminado.
+    await expect(createSampleFromLot(admin, muestraVerde(pergamino.id, "MV-2"))).rejects.toThrow(/green_sample_before_reposo/);
+  });
+
+  it("sin proceso, la muestra verde sigue entrando con un secado terminado a más de 6 generaciones", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) ids.push(await lote(`G${i}`));
+    // Un secado VIEJO, crudo y terminado con objetivo alcanzado, de G0 a G1.
+    const secado = await prisma.dryingRun.create({ data: { startedAt: new Date("2026-02-01T12:00:00Z"), endedAt: new Date("2026-02-10T12:00:00Z"), endedOutcome: "target_reached", createdBy: gestor } });
+    const ts = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: new Date("2026-02-10T12:00:00Z"), provenanceClass: "original_record", createdBy: gestor,
+      dryingRunId: secado.id, inputs: { create: [{ lotId: ids[0]! }] }, outputs: { create: [{ lotId: ids[1]! }] },
+    } });
+    transformaciones.push(ts.id);
+    for (let i = 2; i < 10; i++) await enlazar([ids[i - 1]!], [ids[i]!]);
+    await prisma.lot.update({ where: { id: ids[9]! }, data: { lotType: "green" } });
+    // G1 queda a 8 generaciones de G9: el tope viejo de 6 no llegaba y decía «no».
+    await expect(createSampleFromLot(admin, muestraVerde(ids[9]!, "G9"))).resolves.toBeDefined();
+  }, 60000);
+});
+```
+
+**Las pruebas existentes de `samples.test.ts` que ACEPTAN una muestra verde.** Desde la tarea 4 abren
+un proceso con `abrirProcesoDePrueba` que nunca se cierra, y la compuerta nueva las rechazaría. En cada
+una (buscar `createSampleFromLot` con `materialState: "GREEN"` y sin `rejects`):
+- guardar el proceso, con `const proceso = await abrirProcesoDePrueba(…)` donde la tarea 4 lo abrió;
+- tras el `endDryingRun` y antes de `createSampleFromLot`, añadir:
+
+```ts
+    // Parte 1, R7: con proceso, la muestra verde exige el proceso cerrado por humedad.
+    const humedadDeCierre = await prisma.measurement.create({ data: {
+      variable: "moisture", value: 11, unit: "%", occurredAt: <una fecha posterior al fin del secado>,
+      lotId: <el lote de salida del secado>, provenanceClass: "measured_fact",
+    } });
+    await cerrarProceso(<el mismo usuario>, { lotProcessId: proceso.id, endedAt: <la misma fecha>, closingMoistureMeasurementId: humedadDeCierre.id });
+```
+
+- en su limpieza, la medición se borra DESPUÉS de los procesos.
+
+**Tablero.** En `corridaConProceso.test.ts`, importar `datosDelTablero` (de
+`../../lib/beneficio/datosDelTablero`) y añadir:
+
+```ts
+describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no esté unida", () => {
+  it("una fermentación vieja (sin lotProcessId) en un hijo no sale «sin grado»", async () => {
+    const padre = await lote("TAB-P");
+    const hijo = await lote("TAB-H");
+    await enlazar([padre], [hijo]);
+    await abrirProcesoDePrueba(gestor, padre);
+    const corrida = await prisma.fermentationRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      fermentationRunId: corrida.id, inputs: { create: [{ lotId: hijo }] },
+    } });
+    transformaciones.push(t.id);
+    const d = await datosDelTablero(gestor);
+    const entrada = d.lotes.find((l) => l.lotId === hijo);
+    expect(entrada, "el hijo con fermentación abierta tiene que estar en el tablero").toBeDefined();
+    expect(entrada!.veredicto).not.toBe("SIN_GRADO_DECLARADO");
+    await prisma.lotTransformation.update({ where: { id: t.id }, data: { fermentationRunId: null } });
+    await prisma.fermentationRun.delete({ where: { id: corrida.id } });
   });
 });
 ```
+
+Si el tipo de retorno de `datosDelTablero` no llama `lotes` a su lista, usar el nombre que dé
+`tsc`.
 
 **Reporte.** En `divisionBajoProceso.test.ts`, importar `reporteDeProceso`
 (de `../../lib/traceability/reporteDeProceso`) y añadir:
@@ -3212,12 +3518,23 @@ it("con receta pero sin ritmo de secado, la cola lo dice así y no «sin receta�
 });
 ```
 
+Y en las **dos llamadas que ya existen** a `estadoDeUnidad` en ese archivo (líneas ~342 y ~346),
+añadir `tieneReceta: false,` a su entrada. `tieneReceta` pasa a ser obligatorio, y `tsconfig` incluye
+las pruebas: sin esto, `tsc` falla con dos errores.
+
 **Ficha y tablero.** Su igualdad la fija la prueba «ficha y tablero reciben lo mismo…» de la tarea 2:
 los dos pasan a llamar a `procesosParaEntrada`. Aquí no hace falta otra prueba; hace falta que los
 dos la llamen (paso 3).
 
-- [ ] **Paso 2: Verlas fallar.** Correr los tres archivos. Caen las tres pruebas nuevas, y
-  `colaDeSecado` ni compila: `tieneReceta` no existe.
+- [ ] **Paso 2: Verlas fallar.** Correr `bodegaConProceso`, `divisionBajoProceso`,
+  `corridaConProceso`, `samples` y `colaDeSecado`. Esperado:
+  - caen la muestra verde con continuación, la de más de 6 generaciones, la del reporte y la del
+    tablero;
+  - `colaDeSecado` ni compila, porque `tieneReceta` no existe;
+  - las muestras verdes ajustadas de `samples.test.ts` siguen en verde (hoy no hay compuerta de proceso).
+
+  Si la de más de 6 generaciones NO cae, la cadena no quedó a 8 generaciones: revisar el armado antes
+  de seguir.
 
 - [ ] **Paso 3: Los lectores.**
 
@@ -3409,9 +3726,11 @@ En `messages/es.json` y `en.json`, namespace `Secado`, junto a `"colaEstado_sin_
 - en el `include` de `lotProcesses`, añadir `derivations: { select: { lot: { select: { lotCode: true } } } },`;
 - en el `filas.push({…})`, añadir
   `divididoEn: p.closureKind === "divided" ? p.derivations.map((d) => d.lot.lotCode) : null,`;
-- donde se calculan `agrupar` y `faltan`, trabajar sobre
-  `const filasQueCuentan = filas.filter((f) => f.divididoEn === null);` en vez de `filas`. El campo
-  `filas` del reporte sigue devolviendo todas, con su marca.
+- declarar `const filasQueCuentan = filas.filter((f) => f.divididoEn === null);` detrás del bucle, y
+  usarla en vez de `filas` en **todos** los cálculos de grupo: en `agrupar`, en `faltan` y **en los
+  recuentos `filas: … .length` de `porProceso` y de `porGrado`** (líneas ~230 y ~237). Estos últimos
+  se calculan fuera de `agrupar` y son justo lo que mira la prueba. El campo `filas` del reporte
+  sigue devolviendo todas, con su marca.
 
 En `app/reports/proceso/page.tsx`, línea 138, `<td>{f.etiqueta}</td>` pasa a:
 
@@ -3548,7 +3867,10 @@ y pasar `recetaDelProceso={recetaDelProceso}`. Importar `coberturaDelLote`.
 **`app/lots/[id]/page.tsx`, la ficha:**
 1. Mover `const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;`
    (línea 463) a **antes** de `const availableActions` (línea 404).
-2. Antes de `const canSelect` (línea 358), añadir:
+2. **En el lugar de la línea 318**, sustituyendo
+   `const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];`. Tiene
+   que ir antes de `entradaDelLote` (línea 332), que lo usa; ponerlo antes de `canSelect` (358) dejaría
+   `cobertura` usada antes de declararse (TS2448). Añadir:
 
 ```ts
   // Parte 1, R3/R7: el proceso que CUBRE al lote decide qué se ofrece y qué grado ve el veredicto.
@@ -3568,10 +3890,10 @@ y pasar `recetaDelProceso={recetaDelProceso}`. Importar `coberturaDelLote`.
 4. La entrada de los botones de fermentación y secado pasa de
    `...(!esMiel && !activeFermentation && !activeDrying ? ([…]) : [])` a
    `...(!esMiel && !activeFermentation && !activeDrying && procesoAbierto && !currentStorage ? ([…]) : [])`.
-5. Sustituir `const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];`
-   y el `procesos: procesos.map(…)` de `entradaDelLote` por `procesos: cobertura?.paraEntrada ?? [],`.
-   Borrar la constante.
-6. Donde se pinta la lista de acciones (buscar `availableActions.map`), justo después:
+5. En `entradaDelLote({…})`, sustituir `procesos: procesos.map(…)` por
+   `procesos: cobertura?.paraEntrada ?? [],`. La constante `procesos` ya la quitó el punto 2.
+6. Donde se pinta la fila de botones (`batchActions.map`, línea ~885; `availableActions.map` no
+   existe), justo después del `</div>` que cierra esa fila:
 
 ```tsx
       {!esMiel && !activeFermentation && !activeDrying && !procesoAbierto ? (
@@ -3625,7 +3947,9 @@ commit, nombrando la prueba.
     los botones de empezar;
   - en un lote sin proceso, sale la frase y no los botones;
   - en la página del proceso de un lote en bodega, sale «Devolver a secado» con la lista;
-  - la cola de secado pinta la etiqueta nueva.
+  - la cola de secado pinta la etiqueta nueva;
+  - la ficha y la página del proceso de un lote con 66 generaciones de linaje dicen
+    `processLineageTooDeep`, no un 500 ni un 404.
 
 Captura de pantalla de cada una para el PR.
 
@@ -3633,10 +3957,16 @@ Captura de pantalla de cada una para el PR.
 
 | Mutación | Debe caer |
 |---|---|
-| en `samples.ts`, quitar el bloque nuevo de la compuerta verde | «con una continuación abierta… no se saca muestra verde» |
-| en `reporteDeProceso.ts`, `agrupar` sobre `filas` en vez de `filasQueCuentan` | «el reporte no cuenta la fila del proceso dividido…» |
-| en `colaDeSecado.ts`, devolver siempre `"sin receta declarada"` | «con receta pero sin ritmo de secado…» |
-| en `datosDelTablero.ts`, volver a `procesos: []` | (lo cubre la prueba de la tarea 2 sobre `procesosParaEntrada` sólo si el tablero la llama: comprobar con `git grep -n procesosParaEntrada lib/beneficio/datosDelTablero.ts` que la llama, y decirlo) |
+| en `samples.ts`, quitar el bloque nuevo de la compuerta verde | «con el proceso cerrado se saca; devuelto a secado…, ya no» |
+| en `samples.ts`, devolver a `tieneSecadoTerminadoArriba` el bucle viejo con tope 6 (`for (let nivel = 0; nivel < 6 …)`) | «sin proceso, la muestra verde sigue entrando… más de 6 generaciones» |
+| en `reporteDeProceso.ts`, el recuento `filas: … .length` de `porProceso` sobre `filas` en vez de `filasQueCuentan` | «el reporte no cuenta la fila del proceso dividido…» |
+| en `colaDeSecado.ts`, `return input.tieneReceta ? "receta sin ritmo de secado" : "sin receta declarada"` → `return "sin receta declarada"` | «con receta pero sin ritmo de secado…» |
+| en `datosDelTablero.ts`, `procesos,` → `procesos: [],` en la llamada a `entradaDelLote` | «una fermentación vieja (sin lotProcessId) en un hijo no sale «sin grado»» |
+
+**Sin prueba automática, y se dice:** que la ficha y la página del proceso enseñen `lineage_too_deep`
+en vez de un 500. Las páginas no se renderizan en pruebas. Se comprueba a mano en el paso 6: se
+fabrica en la base propia una cadena de 66 lotes (el ayudante `cadena` de la tarea 2, en un script
+desechable) y se abre la ficha del último.
 
 La lista de catas y la ocupación de tanques las vigila el guardia de fuente de la tarea 10, no una
 prueba con base. Se dice aquí para que nadie las cuente dos veces.
@@ -3662,11 +3992,13 @@ prueba con base. Se dice aquí para que nadie las cuente dos veces.
  * pasó todos a `procesoQueCubre`. Esto impide que uno nuevo vuelva al camino viejo.
  *
  * ## Qué mira
- * Tres formas de leer procesos POR LOTE, fuera de `lib/traceability/procesoDelLinaje.ts`:
- * - `lotProcess.find…({ where: { lotId`
+ * Cuatro formas de leer el proceso de un lote sin el resolvedor, fuera de
+ * `lib/traceability/procesoDelLinaje.ts`:
+ * - `lotProcess.find…({ where: { lotId` (por el propio lote)
  * - `lotProcesses:` (un `include`, `select` o `where` desde el lote)
- * - `lotProcess: { select: { lotId` (subir de una corrida al lote del proceso)
- * Las de `findUnique({ where: { id` no: buscan un proceso ya conocido.
+ * - `lotProcess: { select|include` (por la clave de una corrida: el camino del tablero y la cola)
+ * - `where: { id: x.lotProcessId` (lo mismo, en dos pasos)
+ * Las de `findUnique({ where: { id` con un id ya resuelto no: buscan un proceso ya conocido.
  *
  * ## Qué NO mira
  * Una lectura escrita de otra forma (por ejemplo, un `where` construido en una variable aparte) no la
@@ -3679,20 +4011,31 @@ import { join, relative } from "node:path";
 const RAIZ = join(__dirname, "..", "..");
 const DUENO = "lib/traceability/procesoDelLinaje.ts";
 
-/** Excepciones, cada una con su razón. */
-const EXCEPCIONES: Record<string, string> = {
-  "lib/traceability/lotProcess.ts":
-    "listarProcesosDeLote lista los procesos PROPIOS del lote (otra pregunta; la usan las pruebas), y coberturaDelLote carga por id lo que el resolvedor ya decidió.",
-  "lib/traceability/reporteDeProceso.ts":
-    "El reporte agrupa los procesos de cada lote por fila; su lectura por linaje es la Parte 5.",
+/**
+ * Excepciones, cada una con su razón y con el NÚMERO EXACTO de lecturas que justifica. Con un
+ * «al menos una», una segunda lectura por lote dentro del mismo archivo —por ejemplo en la compuerta
+ * de bodega, que vive en lotProcess.ts— pasaría en verde. Así no.
+ */
+const EXCEPCIONES: Record<string, { razon: string; n: number }> = {
+  "lib/traceability/lotProcess.ts": {
+    razon: "listarProcesosDeLote lista los procesos PROPIOS del lote (otra pregunta; la usan las pruebas). Es la única.",
+    n: 1,
+  },
+  "lib/traceability/reporteDeProceso.ts": {
+    razon: "El reporte agrupa los procesos de cada lote por fila (`lotProcesses:`); su lectura por linaje es la Parte 5.",
+    n: 1,
+  },
 };
 
 export function lecturasPorLote(fuente: string): string[] {
   const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
   const patrones = [
+    // por lote
     /lotProcess\.(?:findFirst|findMany|findUnique|findFirstOrThrow|findUniqueOrThrow|count)\(\s*\{\s*where:\s*\{\s*lotId\b/g,
     /\blotProcesses\s*:/g,
-    /\blotProcess\s*:\s*\{\s*select\s*:\s*\{\s*lotId\b/g,
+    // por la clave de la CORRIDA: el camino del incidente original (tablero, cola, tanques)
+    /\blotProcess\s*:\s*\{\s*(?:select|include)\b/g,
+    /where:\s*\{\s*id:\s*\w+\.lotProcessId\b/g,
   ];
   return patrones.flatMap((p) => [...sinComentarios.matchAll(p)].map((m) => m[0]));
 }
@@ -3708,11 +4051,14 @@ function fuentes(dir: string): string[] {
 }
 
 describe("el proceso de un lote se lee por el resolvedor", () => {
-  it("el detector caza las tres formas (control del propio análisis)", () => {
+  it("el detector caza las cuatro formas (control del propio análisis)", () => {
     expect(lecturasPorLote("prisma.lotProcess.findFirst({ where: { lotId } })")).toHaveLength(1);
     expect(lecturasPorLote("include: { lotProcesses: { take: 1 } }")).toHaveLength(1);
     expect(lecturasPorLote("lotProcess: { select: { lotId: true } }")).toHaveLength(1);
+    expect(lecturasPorLote("lotProcess: { select: procesoSelect }")).toHaveLength(1);
+    expect(lecturasPorLote("prisma.lotProcess.findUnique({ where: { id: c.lotProcessId } })")).toHaveLength(1);
     expect(lecturasPorLote("prisma.lotProcess.findUnique({ where: { id } })")).toHaveLength(0);
+    expect(lecturasPorLote("lotProcessId: proceso.id,")).toHaveLength(0);
     expect(lecturasPorLote("// lotProcess.findFirst({ where: { lotId } })")).toHaveLength(0);
   });
 
@@ -3729,9 +4075,9 @@ describe("el proceso de un lote se lee por el resolvedor", () => {
     expect(culpables, `leen el proceso por lote sin pasar por ${DUENO}: ${culpables.join(", ")}`).toEqual([]);
   });
 
-  it("las excepciones siguen siendo necesarias (no se quedan de adorno)", () => {
-    for (const f of Object.keys(EXCEPCIONES)) {
-      expect(lecturasPorLote(readFileSync(join(RAIZ, f), "utf8")).length, `${f} ya no lee por lote: quitar la excepción`).toBeGreaterThan(0);
+  it("cada excepción lee EXACTAMENTE lo que justifica: ni una de más, ni de adorno", () => {
+    for (const [f, { n }] of Object.entries(EXCEPCIONES)) {
+      expect(lecturasPorLote(readFileSync(join(RAIZ, f), "utf8")).length, `${f}: se esperaban ${n} lecturas por lote`).toBe(n);
     }
   });
 });
@@ -3744,12 +4090,24 @@ lint lo rechaza, quitar el `export`.
   Si cae la tercera prueba, nombra el archivo que lee el proceso por el camino viejo: pasarlo al
   resolvedor, no a las excepciones, salvo que haya una razón que escribir.
 
-- [ ] **Paso 3: Commit y flip-test.**
+- [ ] **Paso 3: Compuerta, commit y flip-test.**
+
+```bash
+npx tsc --noEmit > /tmp/tsc.txt 2>&1; echo "tsc=$?"
+git add tests/arquitectura/proceso-por-el-resolvedor.test.ts
+git diff --cached --stat     # 1 archivo
+git commit -F /tmp/msg-t10.txt
+```
+
+Las mutaciones son **aditivas**: añaden la lectura vieja sin quitar la nueva. Quitar la nueva
+dejaría código que no compila, y un flip que no compila no prueba nada.
 
 | Mutación | Debe caer |
 |---|---|
-| en `lib/sensory/sessions.ts`, volver a poner `lotProcesses: { select: { processGradeValue: { select: { value: true } } }, take: 1 }` en el `select` de `sourceLot` | «fuera del resolvedor… nadie lee procesos por lote» |
-| en `lib/equipos/equipos.ts`, volver a `lotProcess: { select: { lotId: true } }` | la misma |
+| en `lib/sensory/sessions.ts`, añadir `lotProcesses: { select: { processGradeValue: { select: { value: true } } }, take: 1 },` al `select` de `sourceLot` | «fuera del resolvedor… nadie lee procesos por lote» |
+| en `lib/equipos/equipos.ts`, añadir `lotProcess: { select: { lotId: true } },` junto a `transformations` en el `select` de la corrida | la misma |
+| en `lib/beneficio/datosDelTablero.ts`, añadir `lotProcess: { select: procesoSelect },` a la consulta de fermentaciones | la misma |
+| en `exigeSecadoTerminado` (`lotProcess.ts`), añadir al principio `await tx.lotProcess.findFirst({ where: { lotId } });` | «cada excepción lee EXACTAMENTE lo que justifica…» (`lotProcess.ts` pasa de 1 a 2) |
 
 ---
 
@@ -3772,6 +4130,8 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
       targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4 }],
       fases: [{ phase: "drying", expectedHours: 192, turnEveryHours: 1, targetMoistureMinPct: 11, targetMoistureMaxPct: 12 }],
     });
+    // Para que el `afterAll` borre también su auditoría, que limpia por `created.recipeIds`.
+    created.recipeIds.push(r.id);
     const v2 = await createRecipeVersion(admin, r.id, [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.1 }]);
     const secado = v2.fases.find((f) => f.phase === "drying");
     expect(secado?.turnEveryHours).toBe(1);
@@ -3891,13 +4251,14 @@ describe("R8 — las fases llegan por las dos puertas", () => {
 | Mutación | Debe caer |
 |---|---|
 | `fasesDeLaVersion` siempre `[]` cuando no llegan | «publicar una v2 sin fases copia las de la v1» |
-| quitar `turnEveryHours: f.turnEveryHours,` del bloque `fases:` del `create` | «LOS DOS servicios escriben todas las columnas de fase» |
+| quitar `turnEveryHours: f.turnEveryHours,` **sólo en el bloque `fases:` del `create`**, la línea con 16 espacios dentro de `create: fasesDeLaVersion.map`. La misma línea aparece también en el `.map` de la rama de copia; quitar ésa no compila | «LOS DOS servicios escriben todas las columnas de fase» |
 
 ---
 
 ### Tarea 12: Cada código, su texto (errores)
 
 **Archivos:**
+- Modificar: `lib/traceability/errorDeProceso.ts` (`claveDeErrorDeProceso`)
 - Modificar: `app/actions/traceability.ts` (`friendlyError`)
 - Modificar: `messages/es.json` y `messages/en.json`
 - Crear: `tests/traceability/mensajesDeProceso.test.ts` (hermético)
@@ -3910,9 +4271,11 @@ describe("R8 — las fases llegan por las dos puertas", () => {
  * Hermética: lee los JSON. El patrón es `tests/beneficio/mensajesDeAjustes.test.ts`.
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import es from "../../messages/es.json";
 import en from "../../messages/en.json";
-import { CODIGOS_DE_PROCESO_TRADUCIDOS } from "../../lib/traceability/errorDeProceso";
+import { CODIGOS_DE_PROCESO_TRADUCIDOS, LotProcessError, claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 
 describe("los códigos del proceso tienen su texto en es y en", () => {
   it("control: la lista no está vacía", () => {
@@ -3926,6 +4289,21 @@ describe("los códigos del proceso tienen su texto en es y en", () => {
       if (!(en.Traceability as Record<string, string>)[clave]) faltan.push(`en:${clave}`);
     }
     expect(faltan).toEqual([]);
+  });
+  it("cada código da su clave; otro código u otra clase, ninguna", () => {
+    for (const c of CODIGOS_DE_PROCESO_TRADUCIDOS) {
+      expect(claveDeErrorDeProceso(new LotProcessError(c))).toBe(`error_proceso_${c}`);
+    }
+    expect(claveDeErrorDeProceso(new LotProcessError("process_not_found"))).toBeNull();
+    expect(claveDeErrorDeProceso(new Error("sin_proceso_abierto"))).toBeNull();
+  });
+  it("friendlyError la consulta ANTES de la rama genérica del proceso (guardia de fuente)", () => {
+    const src = readFileSync(join(__dirname, "..", "..", "app", "actions", "traceability.ts"), "utf8");
+    const especifica = src.indexOf("claveDeErrorDeProceso(error)");
+    const generica = src.indexOf('t("error_lot_process"');
+    expect(especifica, "friendlyError no llama a claveDeErrorDeProceso").toBeGreaterThan(-1);
+    expect(generica, "control: la rama genérica sigue existiendo").toBeGreaterThan(-1);
+    expect(especifica).toBeLessThan(generica);
   });
 });
 ```
@@ -3971,30 +4349,52 @@ En `en.json`:
     "error_proceso_process_already_open": "There is already an open process in this coffee (in this lot, above or below it).",
 ```
 
-- [ ] **Paso 4: La rama en `friendlyError`.** En `app/actions/traceability.ts`:
-- importar `CODIGOS_DE_PROCESO_TRADUCIDOS` y `type CodigoDeProcesoTraducido` de
-  `../../lib/traceability/errorDeProceso`. Es un archivo `"use server"`: se importa, no se exporta
-  nada nuevo de él;
+- [ ] **Paso 4: La función pura y la rama en `friendlyError`.**
+
+En `lib/traceability/errorDeProceso.ts`, añadir al final:
+
+```ts
+/**
+ * La clave de `Traceability` de un error del proceso, o null si no tiene texto propio. Vive aquí, y
+ * no en la acción, para poder PROBARLA: `friendlyError` no se exporta (su archivo es "use server").
+ */
+export function claveDeErrorDeProceso(error: unknown): `error_proceso_${CodigoDeProcesoTraducido}` | null {
+  if (error instanceof LotProcessError && (CODIGOS_DE_PROCESO_TRADUCIDOS as readonly string[]).includes(error.message)) {
+    return `error_proceso_${error.message as CodigoDeProcesoTraducido}`;
+  }
+  return null;
+}
+```
+
+En `app/actions/traceability.ts`:
+- importar `claveDeErrorDeProceso` de `../../lib/traceability/errorDeProceso`. Es un archivo
+  `"use server"`: se importa, no se exporta nada nuevo de él;
 - justo ANTES de `if (error instanceof LotProcessError) return t("error_lot_process", …);`, añadir:
 
 ```ts
   // Parte 1: un texto por código. El genérico de abajo sigue para los demás, con el código de detalle.
-  if (error instanceof LotProcessError && (CODIGOS_DE_PROCESO_TRADUCIDOS as readonly string[]).includes(error.message)) {
-    return t(`error_proceso_${error.message as CodigoDeProcesoTraducido}` as "error_proceso_sin_proceso_abierto");
-  }
+  const claveDeProceso = claveDeErrorDeProceso(error);
+  if (claveDeProceso) return t(claveDeProceso as "error_proceso_sin_proceso_abierto");
   // R6.6 lanza `lote_dividido` también desde las mediciones y las muestras, con sus propias clases.
   if ((error instanceof MeasurementValidationError || error instanceof SampleFromLotValidationError) && error.message === "lote_dividido") {
     return t("error_proceso_lote_dividido");
   }
 ```
 
-  Las ramas específicas van ANTES de las genéricas de su clase (`friendlyError` las mira en orden).
+Las ramas específicas van ANTES de las genéricas de su clase, porque `friendlyError` las mira en
+orden. El guardia de fuente de la prueba busca el texto literal `claveDeErrorDeProceso(error)`, así
+que la llamada va escrita así.
 
 - [ ] **Paso 5: Verla pasar** y correr los guardias de arquitectura: `acciones-traducen-sus-errores`
   y `claves-de-traduccion-existen`.
 
-- [ ] **Paso 6: Commit y flip-test.** Mutación: borrar la clave
-  `error_proceso_lote_en_bodega` de `en.json`. Debe caer «cada código tiene… en los dos idiomas».
+- [ ] **Paso 6: Commit y flip-test.**
+
+| Mutación | Debe caer |
+|---|---|
+| borrar la clave `error_proceso_lote_en_bodega` de `en.json` | «cada código tiene… en los dos idiomas» |
+| en `claveDeErrorDeProceso`, `return null;` como primera línea | «cada código da su clave…» |
+| en `friendlyError`, quitar las dos líneas de `claveDeProceso` | «friendlyError la consulta ANTES de la rama genérica…» |
 
 ---
 
@@ -4005,10 +4405,30 @@ En `en.json`:
   si algo cambió al construir
 - Modificar: `docs/superpowers/specs/2026-09-30-recetas-del-beneficio-design.md` (estado de la Parte 1)
 
+- [ ] **Paso 0: Traer `main` antes de nada.** Desde la tarea 0 habrán entrado otras fusiones, y
+  tocan los mismos archivos de textos que esta parte. Una compuerta corrida sobre un árbol viejo no
+  dice nada del que se fusionaría.
+
+```bash
+cd ~/Developer/nectar-worktrees/recetas-base
+git fetch origin main
+git rebase origin/main > /tmp/rebase.txt 2>&1; echo "rebase=$?"; tail -3 /tmp/rebase.txt
+git status --porcelain | wc -l    # 0: nada a medias
+```
+
+Si el rebase trajo una migración nueva:
+- aplicarla a la base propia con `migrate deploy`;
+- si ordena DESPUÉS de la de esta parte, renombrar la carpeta de ésta a una marca posterior (sin
+  cambiar su SQL) y volver a probar.
+
+Una fusión sin conflictos puede dejar código roto: la compuerta del paso 1 es la que lo dice.
+
 - [ ] **Paso 1: La compuerta entera, sin tubería.**
 
 ```bash
+cd ~/Developer/nectar-worktrees/recetas-base
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+npx prisma generate > /tmp/gen.txt 2>&1; echo "generate=$?"
 npm run verify > /tmp/verify.txt 2>&1; echo "verify=$?"; tail -5 /tmp/verify.txt
 bash scripts/ci.sh > /tmp/ci.txt 2>&1; echo "ci=$?"; grep -E 'Test Files|Tests ' /tmp/ci.txt
 npm run build > /tmp/build.txt 2>&1; echo "build=$?"; tail -5 /tmp/build.txt
@@ -4017,9 +4437,14 @@ npm run build > /tmp/build.txt 2>&1; echo "build=$?"; tail -5 /tmp/build.txt
 Después, el carril con base, sobre una base vacía y propia, como lo corre CI:
 
 ```bash
+cd ~/Developer/nectar-worktrees/recetas-base
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
-$PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c 'DROP DATABASE IF EXISTS nectar_ci_recetas' -c 'CREATE DATABASE nectar_ci_recetas'
-TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_ci_recetas bash scripts/ci-con-base.sh > /tmp/cibase.txt 2>&1; echo "ci-con-base=$?"; grep -E 'Correrá|Test Files|Tests |ABORTA' /tmp/cibase.txt
+B=postgresql://postgres@127.0.0.1:55433
+# ci-con-base.sh crea además <base>_shadow: se borra también, para empezar de cero.
+for b in nectar_ci_recetas nectar_ci_recetas_shadow; do $PGBIN/psql "$B/postgres" -c "DROP DATABASE IF EXISTS $b"; done
+$PGBIN/psql "$B/postgres" -c "create database nectar_ci_recetas template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8'"
+TEST_DATABASE_URL=$B/nectar_ci_recetas bash scripts/ci-con-base.sh > /tmp/cibase.txt 2>&1; echo "ci-con-base=$?"; grep -E 'Correrá|Test Files|Tests |ABORTA' /tmp/cibase.txt
 ```
 
 Comprobar, además:
@@ -4031,42 +4456,65 @@ Comparar los fallos de `/tmp/cibase.txt` con la línea base de la tarea 0. No pu
 nuevo.
 
 - [ ] **Paso 2: El diseño dice lo que se construyó.** Si algo se construyó distinto de como dice el
-  diseño, corregir el diseño y decirlo. **Dos cosas se saben ya:**
+  diseño, corregir el diseño y decirlo, **antes de empujar**, para no repetir el CI. Lo que ya se sabe
+  que difiere, y se corrige en el diseño:
   - la tabla de lectores nombra `coberturaDelLote`;
-  - la lista de catas y los tanques se vigilan con el guardia de fuente, no con prueba con base.
+  - la lista de catas y los tanques se vigilan con el guardia de fuente, no con una prueba con base;
+  - el diamante no tiene flip-test (§4);
+  - el flip del guardia de arquitectura usa `sessions.ts`, `equipos.ts`, `datosDelTablero.ts` y
+    `lotProcess.ts`.
 
-  En el diseño general, la línea de la Parte 1 pasa a «construida, PR #<n>».
+  En el diseño general, la línea de la Parte 1 gana «Estado: construida (rama `recetas-base`)». El
+  número del PR lo añade quien fusione.
 
 - [ ] **Paso 3: Contar lo que lleva la rama y empujar.**
 
 ```bash
+cd ~/Developer/nectar-worktrees/recetas-base
+git status --porcelain | wc -l             # 0: nada sin commitear (el inventario, sobre todo)
 git log --oneline origin/main..HEAD
 git diff --name-only origin/main...HEAD | wc -l
 git push -u origin recetas-base
 git rev-parse HEAD; git rev-parse @{u}      # iguales, o el push no llegó
 ```
 
-- [ ] **Paso 4: El PR, y la fusión por la coordinadora.** Abrir el PR con
-  `gh pr create -R danieljosegiraldez-png/nectar-nomada --body-file <archivo>`.
+- [ ] **Paso 4: El PR, y la fusión por la coordinadora.**
 
-  El cuerpo lleva:
-  - qué hace, regla por regla;
-  - la línea base;
-  - los flip-tests corridos, con la prueba que cayó en cada uno;
-  - las capturas;
-  - la migración y su comprobación manual del aborto.
+```bash
+gh pr create -R danieljosegiraldez-png/nectar-nomada --base main --head recetas-base \
+  --title "Parte 1: el proceso cubre al lote (recetas del beneficio)" --body-file /tmp/pr-parte1.md
+```
 
-  Termina con `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+El cuerpo (`/tmp/pr-parte1.md`) lleva:
+- qué hace, regla por regla;
+- la línea base;
+- los flip-tests corridos, con la prueba que cayó en cada uno;
+- la migración y su comprobación manual del aborto, con sus tres cifras;
+- la descripción de las capturas (las imágenes se adjuntan después por la web: `--body-file` no
+  sube archivos).
 
-  Contar archivos con `gh pr view <n> -R … --json changedFiles --jq .changedFiles` (no con `files`, que
-  se corta en 100). **No se fusiona desde esta sesión:** en el OS, la fusión y cualquier edición de
-  `SESSION_STATE.md` pasan por la sesión coordinadora, que lleva el turno.
+Termina con `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+
+Después del PR:
+- contar archivos con `gh pr view <n> -R danieljosegiraldez-png/nectar-nomada --json changedFiles --jq .changedFiles`
+  (no con `files`, que se corta en 100);
+- comprobar que no está en conflicto y que están las comprobaciones que deben estar:
+
+```bash
+gh pr view <n> -R danieljosegiraldez-png/nectar-nomada --json mergeable,mergeStateStatus --jq '"\(.mergeable) \(.mergeStateStatus)"'
+gh pr view <n> -R danieljosegiraldez-png/nectar-nomada --json statusCheckRollup --jq '[.statusCheckRollup[]?] | length'   # 6 cuando terminen
+```
+
+Un PR en conflicto no arranca sus compuertas, y eso se lee como «sin rojo».
+
+**No se fusiona desde esta sesión.** En el OS, la fusión y cualquier edición de `SESSION_STATE.md`
+pasan por la sesión coordinadora, que lleva el turno.
 
 - [ ] **Paso 5: Limpiar las bases locales propias.** Cuando el PR esté fusionado, o si se abandona:
 
 ```bash
 PGBIN=/Applications/Postgres.app/Contents/Versions/latest/bin
-for b in nectar_recetas nectar_recetas_shadow nectar_demo_recetas nectar_ci_recetas; do $PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c "DROP DATABASE IF EXISTS $b"; done
+for b in nectar_recetas nectar_recetas_shadow nectar_demo_recetas nectar_ci_recetas nectar_ci_recetas_shadow; do $PGBIN/psql "postgresql://postgres@127.0.0.1:55433/postgres" -c "DROP DATABASE IF EXISTS $b"; done
 ```
 
 Y el dump del scratchpad. **Nunca** `nectar_test`.
@@ -4087,4 +4535,54 @@ Y el dump del scratchpad. **Nunca** `nectar_test`.
 | R8 copia de fases y su guardia | 11 |
 | R9 nada se rellena; transición «sin proceso como hoy» | 7, 9 (compuertas que dejan pasar sin proceso) |
 | Errores en es/en | 12 |
+
+### Cada fila de la tabla §4 del diseño: su prueba y su flip-test
+
+Los huecos se dicen; no se cuentan como cubiertos.
+
+| Fila del diseño | Prueba (tarea) | Flip-test |
+|---|---|---|
+| reproceso: P2 vigente, P1 en la cadena | «reproceso…» (2) | sí (2) |
+| mezcla con composición, aunque una rama llegue antes | «…procesos distintos es mezcla…» (2) | sí (2) |
+| pasar del tope lanza | «un linaje que pasa del tope…» (2) | sí, en `idsDeAscendencia` (2); el `throw` de `procesoQueCubre` lo cubre la primera aserción, sin mutación propia |
+| descendiente a más de 12 generaciones | «un descendiente a más de 12 generaciones…» (3) | sí (3) |
+| un diamante no multiplica caminos | «un diamante… no es mezcla» (2) | **no se puede**: la salida es un conjunto (dicho en la 2) |
+| la ficha dice `lineage_too_deep` | **sin prueba automática**: comprobación a mano (9, paso 6) | no |
+| no abrir bajo ni encima de uno abierto | (3) | sí (3) |
+| rechaza dividido, bodega, mezcla y miel | una prueba con cuatro aserciones (3) | sólo bodega (3); las otras tres comparten prueba |
+| abrir bajo uno CERRADO sí se puede | «sí se abre un reproceso…» (3) | sí (3) |
+| dos aperturas a la vez | (3) | carrera: 10 corridas (3) |
+| almacenar a la vez que se abre | (7) | carrera: 10 corridas (7) |
+| índice único parcial | «dos procesos abiertos en el mismo lote los rechaza la base» (1) | no: deshacer el índice exige re-migrar |
+| corrida unida al proceso que la cubre | (4) | sí (4) |
+| empezar sin proceso, en bodega o dividido se rechaza | (4) y (6) | sin proceso (4); dividido, vía la división (6) |
+| dividir a la vez que se empieza una corrida | (6) | carrera: 10 corridas (6) |
+| permiso sólo sobre el lote de la corrida | «quien gestiona el hijo y NO el lote del proceso…» (4) | sí (4) |
+| receta del proceso; «Sin receta» sin receta | (4) | la distinta sí (4); «Sin receta» es control, sin flip |
+| no cerrar con corridas abiertas, unidas o no | (5) | sí, las dos (5) |
+| cerrar escribe `moisture`; el `CHECK` rechaza un cerrado sin tipo | (5) y (1) | sí (5) |
+| dividir con corrida en curso | (6) | **no hay fila propia**: la comparte con la carrera |
+| remanente propio y saldo en otro lote cubierto | (6) | sí, los dos (6) |
+| `divided` con su transformación y una copia por parte | (6) | sí (6) |
+| la copia empieza en el instante de la división | (6) | sí (6) |
+| la parte ve la historia | (6), por la cadena | la cubre el flip de la cadena (2) |
+| lote dividido: ni proceso, ni corrida, ni medición, ni muestra | (6) | la medición (6); el resto comparte prueba |
+| la miel divide en parcial | (6), con proceso colado | sí (6) |
+| selección y fusión bajo proceso abierto | (6) | sí, las dos (6) |
+| compuerta sobre el pergamino | (7) | sí (7) |
+| compuerta dentro de la transacción | carrera (7) | carrera (7) |
+| compuerta: dividido y mezcla; sin proceso pasa | (7) | dividido y mezcla sí (7); «sin proceso pasa» es control |
+| reubicar no pasa la compuerta | (7) | sí (7) |
+| devolver: continuación, bodega terminada, hermanos intactos, motivo | (8) | sí (8) |
+| devolver rechaza `divided`; «otro» exige nota | (8) | sí (8) |
+| ficha y tablero, mismo grado | `procesosParaEntrada` (2) y tablero (9) | sí (9) |
+| lista de catas | guardia de fuente (10) | sí (10) |
+| muestra verde: con continuación abierta, no | (9) | sí (9) |
+| muestra verde sin proceso, más allá de 6 generaciones | (9) | sí (9) |
+| cola: «receta sin ritmo» | (9) | sí (9) |
+| tanque: el lote que fermenta | guardia de fuente (10) | sí (10) |
+| reporte: la fila `divided` no cuenta | (9) | sí (9) |
+| guardia de arquitectura | (10) | sí, cuatro (10) |
+| una v2 conserva las fases; su localizador | (11) | sí, los dos (11) |
+| la migración aborta | **a mano** (1, paso 10) | no |
 
