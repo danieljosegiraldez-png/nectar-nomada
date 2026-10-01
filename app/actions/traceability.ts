@@ -502,7 +502,6 @@ export async function startFermentationAction(
       inoculationNote: emptyToNull(formData.get("inoculationNote")),
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
-      processRecipeVersionId: emptyToNull(formData.get("processRecipeVersionId")),
       // T9.5 §3(b): starting a run is an action taken, not a measurement.
       provenanceClass: "original_record",
     });

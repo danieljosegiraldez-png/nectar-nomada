@@ -46,6 +46,10 @@ export async function cleanupE2eFixtures(runId: string, ids: E2eFixtureIds) {
   await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: ids.protocolVersionId }) });
   await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: ids.protocolId }) });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: ids.sampleId }) });
+  // Parte 1: el proceso va antes que sus mediciones de cierre y que sus lotes (los dos RESTRICT).
+  await prisma.lotProcess.deleteMany({
+    where: assertDefinedWhere({ lotId: { in: [ids.cherryLotId, ids.dryingStageLotId, ids.greenLotId] } }),
+  });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: ids.greenLotId }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ id: ids.storageAssignmentId }) });
 

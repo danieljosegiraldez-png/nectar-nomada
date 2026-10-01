@@ -4,7 +4,6 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import { FermentationForm } from "../../../../components/traceability/FermentationForm";
-import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
 
@@ -23,21 +22,14 @@ export default async function NewFermentationPage({ params }: { params: Promise<
     throw error;
   }
 
-  // Already filtered to approved versions belonging to this batch's
-  // organization, or shared ones (ADR-099). An empty list hides the field
-  // rather than offering a question with no answers.
-  const recipeVersions = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
-    id: v.id,
-    label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
-  }));
-
   return (
     <div>
       <Link href={`/lots/${id}`} className="nn-back-link">
         {t("backToLot", { lotCode: lot.lotCode })}
       </Link>
       <h1>{t("startFermentationButton")}</h1>
-      <FermentationForm lotId={id} recipeVersions={recipeVersions} />
+      {/* Parte 1, R4 (2026-10-01): la receta se lee del proceso que cubre al lote. Tarea 9 lo rellena. */}
+      <FermentationForm lotId={id} recetaDelProceso={null} />
     </div>
   );
 }

@@ -1438,6 +1438,12 @@
       "operacion": "exigeSinOtroProcesoAbierto",
       "razon": "Comprueba, sin escribir, que un lote puede recibir un proceso nuevo (R2): que no sea de miel, ni dividido, ni mezcla, que ni él ni sus ancestros ni sus descendientes tengan otro proceso abierto, y que no esté en bodega. Lanza `LotProcessError` con el motivo. No recibe principal ni devuelve datos del lote. Hoy sólo la llama `abrirProcesoEnTx`, dentro de la transacción de `abrirProceso`, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; quien la llame debe haber hecho lo mismo.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesoAbiertoParaCorrida",
+      "razon": "Resuelve a qué proceso se une una corrida que empieza sobre un lote (R3/R4): bloquea el linaje y lanza `LotProcessError` si el lote está dividido, en bodega o es una mezcla, o si no lo cubre un proceso abierto; si lo hay, devuelve su id y su versión de receta. No escribe ni recibe principal. Hoy la llaman `startFermentationRun` y `startDryingRun`, dentro de su transacción y después de `requireLotAccess(\"manage\")` sobre el lote de la corrida, que es el único permiso que se pide.",
+      "verificado": "2026-10-01"
     }
   ]
 }

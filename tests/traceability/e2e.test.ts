@@ -26,6 +26,7 @@ import { createSampleFromLot } from "../../lib/traceability/samples";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { getLotReport } from "../../lib/traceability/reports";
 import { cleanupE2eFixtures } from "./e2e-cleanup";
+import { abrirProcesoDePrueba } from "../helpers/procesoDePrueba";
 
 const RUN_ID = `t14-e2e-${Date.now()}`;
 
@@ -105,6 +106,7 @@ beforeAll(async () => {
   cherryLotId = cherryLot.id;
 
   // --- 2. Fermentation: cherry lot (500 kg in) -> drying-stage lot (480 kg out) ---
+  await abrirProcesoDePrueba(operatorUserAccountId, cherryLotId);
   const { run: fermentationRun } = await startFermentationRun(operatorUserAccountId, {
     lotId: cherryLotId,
     startedAt: new Date("2027-01-15T10:00:00Z"),

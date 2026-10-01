@@ -24,6 +24,7 @@ import { recordTransformation } from "../lib/traceability/lots";
 import { recordHarvestEvent } from "../lib/traceability/harvest";
 import { startFermentationRun, endFermentationRun } from "../lib/traceability/fermentation";
 import { startDryingRun, endDryingRun } from "../lib/traceability/drying";
+import { abrirProceso } from "../lib/traceability/lotProcess";
 import { moveLotToStorage } from "../lib/traceability/storage";
 import { createSampleFromLot } from "../lib/traceability/samples";
 import { createHive, createColony } from "../lib/apiary/hives";
@@ -880,6 +881,19 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
 
   for (const [index, batch] of batches.entries()) {
     const suffix = index === 0 ? "A" : "B";
+
+    // Parte 1, R3 (2026-10-01): no se empieza una corrida sin proceso abierto. Se abre sobre cada
+    // tanda, DESPUÉS de dividir —abrirlo antes sobre la cereza haría que la división cerrara el
+    // proceso como «dividido» (R6)—. Valores DEMO (CLAUDE.md §54).
+    const proceso = await abrirProceso(operatorId, {
+      lotId: batch.id,
+      intent: "DEMO: lavado, 48 h de fermentación y secado en cama",
+      processGradeValueId: (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } })).id,
+      cherryStateValueId: (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } })).id,
+      targetMoisturePct: 11,
+      startedAt: new Date("2027-01-20T09:30:00Z"),
+      provenanceClass: "original_record",
+    });
 
     // --- Fermentation ---
     const { run: fermentationRun } = await startFermentationRun(operatorId, {

@@ -30,6 +30,8 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
+import { procesoAbiertoParaCorrida } from "./procesoDelLinaje";
+import { LotProcessError } from "./errorDeProceso";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(fermentationRunId: string) {
@@ -58,8 +60,9 @@ export interface StartFermentationRunInput {
   // measurement (per T9.5 §3(b)'s "lot merge or transformation" example).
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
-  // ADR-099 — optional. A run improvised without a recipe is a legitimate
-  // state, and most existing runs are exactly that.
+  // ADR-099, cambiado por la Parte 1 (R4, 2026-10-01): la receta ya no se elige aquí, es la del
+  // proceso que cubre al lote. Si viene, tiene que ser ESA; otra se rechaza con
+  // `receta_distinta_del_proceso`. Un proceso «Sin receta» da una corrida sin receta.
   processRecipeVersionId?: string | null;
 }
 
@@ -70,13 +73,22 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
   const result = await prisma.$transaction(async (tx) => {
+    // Parte 1, R3/R4 (2026-10-01): la corrida se une SOLA al proceso abierto que cubre al lote —el
+    // suyo o el de un ancestro—, y sin proceso no empieza. El permiso ya se pidió arriba, sobre ESTE
+    // lote: nunca se exige gestionar el lote donde vive el proceso.
+    const proceso = await procesoAbiertoParaCorrida(tx, input.lotId);
+    // R4: la receta es la del proceso. Una distinta pedida a mano es una contradicción, no una opción.
+    if (input.processRecipeVersionId && input.processRecipeVersionId !== proceso.processRecipeVersionId) {
+      throw new LotProcessError("receta_distinta_del_proceso");
+    }
     const run = await tx.fermentationRun.create({
       data: {
         vesselNote: input.vesselNote ?? null,
         startedAt: input.startedAt,
         operatorPersonId: input.operatorPersonId ?? null,
         inoculated: input.inoculated ?? false,
-      processRecipeVersionId: input.processRecipeVersionId ?? null,
+        processRecipeVersionId: proceso.processRecipeVersionId,
+        lotProcessId: proceso.id,
         inoculationNote: input.inoculationNote ?? null,
         createdBy: userAccountId,
       },

@@ -438,43 +438,6 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
 }
 
 /**
- * Cuelga una corrida de fermentación o de secado que ya existe del proceso.
- *
- * Se hace en dos pasos —crear la corrida, colgarla— y no al crearla, porque las
- * corridas ya existían antes que `LotProcess` y sus caminos de creación siguen
- * funcionando sin él. Forzar el proceso ahí habría roto lo que ya se registra.
- */
-export async function colgarCorrida(
-  userAccountId: string,
-  input: { lotProcessId: string; tipo: "fermentation" | "drying"; runId: string },
-) {
-  const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
-  if (!proceso) throw new LotProcessError("process_not_found");
-  await loteGestionable(userAccountId, proceso.lotId);
-
-  return prisma.$transaction(async (tx) => {
-    const actualizada =
-      input.tipo === "fermentation"
-        ? await tx.fermentationRun.update({ where: { id: input.runId }, data: { lotProcessId: proceso.id } })
-        : await tx.dryingRun.update({ where: { id: input.runId }, data: { lotProcessId: proceso.id } });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "lot_process.attach_run",
-        entityType: input.tipo === "fermentation" ? "fermentation_run" : "drying_run",
-        entityId: input.runId,
-        after: { lotProcessId: proceso.id },
-        sourceInterface: "traceability.lotProcess",
-      },
-      tx,
-    );
-
-    return actualizada;
-  });
-}
-
-/**
  * La compuerta de bodega: un lote **no sale de secado** antes de llegar a su
  * objetivo de humedad.
  *

@@ -405,3 +405,28 @@ export async function abrirProcesoEnTx(tx: Prisma.TransactionClient, userAccount
   );
   return proceso;
 }
+
+/**
+ * R3/R4 (Parte 1, 2026-10-01). El proceso al que se une una corrida que empieza sobre `lotId`, o el
+ * rechazo con nombre. Bloquea el linaje: una división o un cierre a la vez no pueden dejar la corrida
+ * bajo un proceso que ya no está abierto.
+ *
+ * Se llama dentro de la transacción que crea la corrida. No autoriza: el permiso se pidió fuera, sobre
+ * el lote de la corrida, y nunca se exige gestionar el lote donde vive el proceso.
+ */
+export async function procesoAbiertoParaCorrida(
+  tx: Prisma.TransactionClient,
+  lotId: string,
+): Promise<{ id: string; processRecipeVersionId: string | null }> {
+  await bloquearLinaje(tx, lotId);
+  if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
+  const enBodega = await tx.storageAssignment.findFirst({ where: { lotId, endedAt: null }, select: { id: true } });
+  if (enBodega) throw new LotProcessError("lote_en_bodega");
+  const cobertura = await procesoQueCubre(tx, lotId);
+  if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
+  if (cobertura.estado !== "abierto") throw new LotProcessError("sin_proceso_abierto");
+  return tx.lotProcess.findUniqueOrThrow({
+    where: { id: cobertura.vigente.id },
+    select: { id: true, processRecipeVersionId: true },
+  });
+}

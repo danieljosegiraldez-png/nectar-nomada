@@ -19,6 +19,7 @@ import { createSampleFromLot } from "../../lib/traceability/samples";
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { getLotReport } from "../../lib/traceability/reports";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 const RUN_ID = `t13-report-${Date.now()}`;
 
@@ -113,6 +114,7 @@ beforeAll(async () => {
   });
 
   // --- Fermentation: harvestLot -> dryingLot ---
+  await abrirProcesoDePrueba(authorizedUserAccountId, harvestLotId);
   const { run: fermentationRun } = await startFermentationRun(authorizedUserAccountId, {
     lotId: harvestLotId,
     startedAt: new Date("2027-01-15T10:00:00Z"),
@@ -219,6 +221,8 @@ afterAll(async () => {
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: dryingRunId }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: fermentationRunId }) });
   await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ resultingLotId: harvestLotId }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: allLotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: allLotIds } }) });
 
   const userAccountIds = [authorizedUserAccountId, wrongProjectUserAccountId];

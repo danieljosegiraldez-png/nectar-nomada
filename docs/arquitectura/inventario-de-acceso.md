@@ -25,12 +25,21 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **458** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **457** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **89** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **90** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cuatro que entraron después, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, que recibe el principal sólo para firmar |
+
+> **Empezar una corrida bajo el proceso que cubre al lote (2026-10-01): 603→603, 166 archivos,
+> «guardia directo» 458→457 y «depende del llamador» 89→90.** Parte 1, R3. Sale una operación y entra
+> otra, así que el total no cambia. Sale `colgarCorrida`, de `lotProcess.ts`, que era **guardia
+> directo** y autorizaba contra el lote del proceso. Entra `procesoAbiertoParaCorrida`, en
+> `procesoDelLinaje.ts`, que es **«depende del llamador»**: no recibe principal, bloquea el linaje,
+> lanza el motivo si el lote no admite una corrida y devuelve el proceso y su receta. Sus dos
+> llamadores, `startFermentationRun` y `startDryingRun`, piden el permiso sobre el lote de la corrida
+> antes de abrir la transacción.
 
 > **Abrir un proceso, un solo proceso abierto por café (2026-10-01): 601→603, 166 archivos,
 > «depende del llamador» 88→89 y «recibía principal sin guardia visible» 21→22.** Parte 1, R2. Dos

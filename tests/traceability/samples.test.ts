@@ -12,6 +12,7 @@ import { createSampleFromLot, retirarMuestra, SampleValidationError } from "../.
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { registrarTrilla } from "../../lib/traceability/trilla";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t5-${Date.now()}`;
@@ -91,6 +92,8 @@ afterAll(async () => {
     where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: lotIds } } } }, { outputs: { some: { lotId: { in: lotIds } } } }] }),
   });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: dryingRunIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   if (beneficioLocationId) await prisma.location.deleteMany({ where: assertDefinedWhere({ id: beneficioLocationId }) });
 
@@ -297,6 +300,7 @@ describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-
       provenanceClass: "measured_fact", lotId: enSecado.id, eventType: "received",
       quantity: 100, unit: "kg", occurredAt: new Date("2026-04-01"),
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, enSecado.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: enSecado.id, startedAt: new Date("2026-04-02"), provenanceClass: "original_record",
     });
@@ -527,6 +531,7 @@ describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),
@@ -552,6 +557,7 @@ describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(Date.now() - 86_400_000),

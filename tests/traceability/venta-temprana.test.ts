@@ -24,6 +24,7 @@ import { createLot, recordTransformation } from "../../lib/traceability/lots";
 import { recordQuantityEvent } from "../../lib/traceability/quantity";
 import { endDryingRun, startDryingRun } from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `vt-${Date.now()}`;
@@ -53,6 +54,7 @@ async function loteConReposoDe(dias: number, sufijo: string) {
     occurredAt: haceDias(dias + 20),
     provenanceClass: "measured_fact",
   });
+  await abrirProcesoDePrueba(operarioId, pergamino.id);
   const { run } = await startDryingRun(operarioId, {
     provenanceClass: "original_record",
     lotId: pergamino.id,
@@ -119,6 +121,8 @@ afterAll(async () => {
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: tIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: tIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: ids } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: operarioId }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });

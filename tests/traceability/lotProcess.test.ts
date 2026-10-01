@@ -17,7 +17,6 @@ import {
   exigeSecadoTerminado,
   cambiarObjetivoDeHumedad,
   cerrarProceso,
-  colgarCorrida,
   listarProcesosDeLote,
   opcionesParaProceso,
   registrarIntervencion,
@@ -467,23 +466,6 @@ describe("cerrar el proceso con su medición de humedad", () => {
     expect(p2.sequenceOrder).toBe(2);
   });
 });
-
-describe("colgar del proceso las corridas que ya existían", () => {
-  it("una corrida de secado pasa a pertenecer al proceso", async () => {
-    const [p] = await listarProcesosDeLote(gestor, loteC);
-    const secado = await prisma.dryingRun.create({
-      data: { method: "raised_bed", startedAt: new Date("2026-03-03T12:00:00Z"), createdBy: gestor },
-    });
-
-    await colgarCorrida(gestor, { lotProcessId: p!.id, tipo: "drying", runId: secado.id });
-
-    const [leido] = await listarProcesosDeLote(gestor, loteC);
-    expect(leido!.dryingRuns.map((d) => d.id)).toContain(secado.id);
-
-    await prisma.dryingRun.delete({ where: { id: secado.id } });
-  });
-});
-
 
 /**
  * **La compuerta de bodega.** Regla del dueño, literal: «bloquear, alertar,
