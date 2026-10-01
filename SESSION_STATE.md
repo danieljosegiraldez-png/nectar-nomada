@@ -62,41 +62,32 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
+### 2026-10-01 · Las etiquetas llegaron y ninguna registra café (PR #572)
 
-**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
-imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
-errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
-Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
-peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
+**Daniel entregó los cuatro PDF que §1 pedía, y leerlos cambió el bloqueo en vez de cerrarlo.**
+Regent (maíz, papa), Abamectin 18 EC y ABAMECTAN 1.8 EC (frutales y hortalizas): **cero** menciones
+de café, cafeto, broca ni *Hypothenemus*. Lo literal de cada una, con su procedencia, en
+`docs/dominio/fitosanitarios-etiquetas.md`.
 
-**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
-la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
-error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
-sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
-Ahora descubre los archivos, con control del escáner y del detector por separado.
+**Ese cero vale porque el control funciona:** «aplicación» sale 8 y 17 veces en los mismos textos y
+«ó» 52 y 101, así que los acentos se leen. Sin esa comprobación, un cero sobre una palabra acentuada
+no habría probado nada — y el extractor de PDF **sí** devuelve el texto con un espacio entre cada
+letra, que es justo lo que hace fallar un `grep` por palabras.
 
-**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
-la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
-esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
-01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
-#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
-manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
-que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
-`scripts/backup/`**. La corrida del lunes sale con él.
+**Y lo que NO se escribió es la mitad del trabajo.** De Bralic sólo se pudo rendir la página 1: esta
+máquina no tiene ninguna herramienta de PDF, y los otros tres caminos devolvieron nada **y su control
+también**. Queda como «sin leer», no como «no tiene café» — la primera frase pide una foto, la
+segunda habría dirigido una aplicación real en una finca. La ausencia de herramientas y qué funciona
+en su lugar quedó en `~/.claude/CLAUDE.md`.
 
-**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
-#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
-etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
-cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
-un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
-el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
+**P-J, y es de la otra sesión la idea.** Los dos documentos de abamectina no son el mismo producto y
+sus reingresos difieren —**24 h y 48 h**—, que es el tiempo que un lote queda prohibido para las
+personas. Eso no puede vivir sólo en prosa de §1: pasó a `open-decisions.sh`, que sale en el primer
+mensaje de cada sesión. **Es la única decisión abierta hoy** (`abiertas=1, rotas=0`).
 
-**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
-y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
-desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
-archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
-conflicto.
+**El guardia del recuento de decisiones hizo su trabajo sin que yo supiera que existía:**
+`tests/decisiones-discriminan.test.ts` cuenta las pruebas del guion y cayó al añadir la décima sin su
+pareja de mundos, diciendo exactamente qué faltaba.
 
 ## 3. Bloqueado, y en qué
 
