@@ -50,6 +50,43 @@ listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencia
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566)
+
+**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
+imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
+errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
+Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
+peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
+
+**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
+la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
+error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
+sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
+Ahora descubre los archivos, con control del escáner y del detector por separado.
+
+**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo.
+La maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. Relanzado y
+verificado: 212 tablas, 15.217 filas, cero errores.
+
+**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
+y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
+desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
+archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
+conflicto.
+
+### 2026-09-30 · La gráfica de secado: «dentro del lienzo» y «legible» no son la misma propiedad (PR #564)
+
+*De la sesión que lo construyó; verificado aquí antes de anotarlo — `escalaDeAmbiente` está en
+`lib/beneficio/graficaDeSecado.ts` y sus dos aserciones por su nombre, líneas 128 y 134.*
+
+La humedad relativa del cuarto compartía el eje de porcentaje con la del grano. Renderizando el SVG en
+el servidor: con el aire dentro, la curva del grano usaba **96 px de 220 — el 44 %**; fuera, **204, el
+93 %**. Todas las pruebas que había afirmaban que las coordenadas eran finitas y caían dentro del
+lienzo, y lo eran. La forma: **la misma unidad no es la misma magnitud** — a la temperatura ya se le
+había dado escala propia porque su unidad es otra; a la HR no, *porque coincidía*. El guardia son dos
+aserciones: que el aire no estira el eje, y **cuánto lienzo le queda al grano** (>90 %); sin la
+segunda, una HR de rango pequeño pasaría sin que nadie note el aplastamiento.
+
 ### 2026-09-30 · El destino de la cereza lo lleva la finca (PR #556)
 
 **ADR-194 queda cerrado en sus DOS mitades**, cada una con su prueba con nombre: el cosechador no
@@ -69,45 +106,16 @@ la transacción no es «resolver en vivo».
 **Y el paso «implementar» de una tarea era un no-op**: `cambiarDestinoDeJornada` ya admitía
 `null → valor`. Se dice, no se disfraza.
 
-### 2026-09-30 · La dosis del fitosanitario, y dos listas que estaban dos veces (PR #554)
-
-**Lo que Daniel pidió:** que registrar una aplicación no sea texto libre. Cuatro datos del PRODUCTO y
-no de cada aplicación —uso `preventivo`/`control`, dosis en **rango** porque la etiqueta da mínimo y
-máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una intervención—. Sus
-palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
-medicamento de colmena no ve ninguno de los cinco.
-
-**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —servidor y una
-copia a mano en `RecibirMedicamentoForm.tsx`, con su propio comentario diciéndolo— y **ya habían
-derivado**: el servidor ofrecía cuatro campos que el formulario no pintaba, lo que no falla en rojo.
-Unificarlas en módulos puros destapó dos más: `completarProducto` validaba **toda** dosis con
-`Number.isInteger` —«1,5 L/ha» se rechazaba por «negativa», y el formulario pintaba `step={1}`— y las
-plagas sólo se declaraban al **crear** el producto.
-
-**Verificado.** `verify` y `build` 0, y los DOS carriles de CI corridos en local sobre el árbol
-fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
-el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
-firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
-
 ## 3. Bloqueado, y en qué
 
-#### Nueve formularios guardan UNA sola medición por carga de página
+#### La propuesta de dosis en el formulario de intervención
 
-Rescatado al archivar «2026-09-29 · El secado tiene cola» (PR #531), su único sitio: medido **0** veces
-en `CLAUDE.md`, que describe el mecanismo pero no dice que siga abierto ni en cuántas pantallas. Un
-efecto con `[]` escribe el desfase una vez y React lo borra al re-renderizar: el campo de la hora se
-vacía y —por obligatorio— **el navegador bloquea el envío sin ningún error**. #531 lo arregló donde
-tocaba; **afecta a los nueve con `TimezoneOffsetField`**, y es anterior a ese trabajo.
-
-#### La migración de la dosis ya está aplicada en la base de pruebas compartida
-
-`20260930170000_dosis_y_uso_del_producto` se aplicó al 55433 con `migrate deploy` —aditiva y sin
-riesgo— y **sigue sin fusionar** (PR #554): quien compare migraciones verá una en la BASE que no está en
-su árbol, y **no es trabajo sin commitear de nadie**. Muere al fusionarse el PR.
-
-#### El PASS del verificador de respaldos mira sólo el censo
-
-Rescatado al archivar «2026-09-28 · Los cuatro caminos»: un `pg_restore` con errores acaba en PASS — los cuenta y los registra, pero no bloquea. No vivía en ningún otro sitio.
+Rescatado al archivar «2026-09-30 · La dosis del fitosanitario» (PR #554), su único sitio —medido: 0
+en el histórico, 0 en `docs/`, 0 en `PENDING_IMPLEMENTATIONS/`, con 24 archivos de `docs/` que sí
+mencionan «dosis» como control de que el grep mira donde debe—. El dato ya **se guarda**: un producto
+fitosanitario declara uso, rango de dosis, unidad y qué plagas cubre. Falta **usarlo**: al registrar
+una aplicación, proponer la dosis del producto y avisar cuando un preventivo se use contra una plaga
+que no declara. Las cifras reales siguen esperando a Daniel (§1).
 
 #### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
 
@@ -134,12 +142,6 @@ ruta la fijó **ADR-193**. El diseño sigue en
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
 
-#### La prueba que despertaría la divergencia de clasificación (PR #481)
-
-Rescatado al archivar «2026-09-27 · Lotes es operación»: falta **la prueba de que todo perfil con
-`lot:view` limpia `internal`**. Sin ella, `scopeOrClauses` no mira `classification` y una lista
-podría enseñar lo que su ficha niega. Hoy está dormida por ausencia de camino de escritura.
-
 #### Deuda de filas en `nectar_test` (PR #488, #498)
 
 Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
@@ -150,6 +152,12 @@ compartida es tocar trabajo ajeno.
 
 Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
 por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
+
+**Y por qué no es «abrir una pantalla», medido el 2026-09-30:** la copia local tiene **0**
+instalaciones de secado —ni estantes ni camas, 0 lecturas de ambiente, 0 tuestes, 0 tandas— así que
+abrirla verificaría el vacío. Hay que construir los datos por los formularios de la aplicación
+primero, lo cual ejercita el camino de escritura y es la mitad valiosa. Es su propia tarea, no un
+rato.
 
 #### Recolectores: darles su perfil (de Daniel)
 
@@ -250,10 +258,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
   lentes**, y cada lente nueva ha encontrado algo que las anteriores no podían ver.
-- **El job de CI con base aún no es obligatorio** — la protección sólo exige
-  «Compuerta». CI pasó de 22 de 97 archivos a 94 de 100 (2026-09-06); quedan 6
-  fuera, dos de ellas deliberadas. Detalle en `docs/SESSION_STATE_ARCHIVE.md`.
-
 - **Nadie barre las claves de idempotencia de las cuentas que dejan de
   escribir** — es lo único que quedó abierto al cerrar la idempotencia de
   envíos. Un barrido global pediría una tarea periódica y una ruta protegida, y

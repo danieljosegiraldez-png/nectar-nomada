@@ -4599,3 +4599,23 @@ así que la diferencia la hace la pantalla o se pierde. Nueve flip-tests, **dos 
 Y dos cosas que sólo se vieron en el navegador: **22 filas TEST** que mi `afterAll` dejó en la base compartida
 —es una cadena, el primer `deleteMany` que lanza abandona los nueve siguientes con la suite en verde— y un
 «1 ocupaciones». **Sin hacer:** la capacidad sin ejercer con unidades reales; §4.5 y el paso 2 son planes propios.
+
+### 2026-09-30 · La dosis del fitosanitario, y dos listas que estaban dos veces (PR #554)
+
+**Lo que Daniel pidió:** que registrar una aplicación no sea texto libre. Cuatro datos del PRODUCTO y
+no de cada aplicación —uso `preventivo`/`control`, dosis en **rango** porque la etiqueta da mínimo y
+máximo, su unidad, y las plagas que cubre, del mismo enum al que apunta una intervención—. Sus
+palabras: Bralic y Beauveria son preventivos; Regent y Abamectina «solo si hay una infestacion». Un
+medicamento de colmena no ve ninguno de los cinco.
+
+**La parte que enseña, y no se buscaba.** Los campos del producto estaban **dos veces** —servidor y una
+copia a mano en `RecibirMedicamentoForm.tsx`, con su propio comentario diciéndolo— y **ya habían
+derivado**: el servidor ofrecía cuatro campos que el formulario no pintaba, lo que no falla en rojo.
+Unificarlas en módulos puros destapó dos más: `completarProducto` validaba **toda** dosis con
+`Number.isInteger` —«1,5 L/ha» se rechazaba por «negativa», y el formulario pintaba `step={1}`— y las
+plagas sólo se declaraban al **crear** el producto.
+
+**Verificado.** `verify` y `build` 0, y los DOS carriles de CI corridos en local sobre el árbol
+fusionado — hermético 163/2102, con base 194/2248. Cuatro flip-tests con sha antes/después, «compila» y
+el test caído **por su nombre**: el primer intento del cuarto **no compilaba** y sus dos rojos no se
+firmaron. **Sin hacer:** la propuesta de dosis en el formulario de intervención.
