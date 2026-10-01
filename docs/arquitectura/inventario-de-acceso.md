@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**603 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
+**604 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1
 (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
@@ -27,10 +27,18 @@ rama de las lecturas de la clasificación de verde por malla):
 |---:|---|---|
 | **457** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **90** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **91** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cuatro que entraron después, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, que recibe el principal sólo para firmar |
+
+> **No se cierra un proceso con corridas abiertas (2026-10-01): 603→604, 166 archivos y «depende del
+> llamador» 90→91.** Parte 1, R5. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:
+> `exigeSinCorridasAbiertas` es **«depende del llamador»**. No recibe principal, sólo cuenta las
+> fermentaciones y los secados abiertos del linaje que cubre el proceso y lanza `corridas_abiertas`.
+> Su único llamador, `cerrarProceso`, autoriza con `loteGestionable` y toma el linaje antes de llamarla.
+> `cerrarProceso` sigue siendo la misma operación, con guardia directo: ahora relee el proceso y cuenta las
+> corridas dentro de su transacción, con el linaje bloqueado.
 
 > **Empezar una corrida bajo el proceso que cubre al lote (2026-10-01): 603→603, 166 archivos,
 > «guardia directo» 458→457 y «depende del llamador» 89→90.** Parte 1, R3. Sale una operación y entra

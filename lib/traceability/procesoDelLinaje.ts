@@ -430,3 +430,29 @@ export async function procesoAbiertoParaCorrida(
     select: { id: true, processRecipeVersionId: true },
   });
 }
+
+/**
+ * R5 (Parte 1, 2026-10-01). Ninguna fermentación ni secado abierto en el linaje que el proceso cubre:
+ * ni las unidas por `lotProcessId`, ni las que empezaron sobre un lote cubierto sin quedar unidas —las
+ * de antes de esta parte, que R9 no rellena—. Cuenta las dos clases de corrida, porque las dos puertas
+ * (`startFermentationRun`, `startDryingRun`) las abren. La usan el cierre y la división (R6.2).
+ *
+ * Se llama dentro de la transacción y DESPUÉS de `bloquearLinaje`: lee lo que el cierre va a decidir, y
+ * el bloqueo es lo que impide que una corrida empiece entre esta lectura y la escritura.
+ */
+export async function exigeSinCorridasAbiertas(
+  tx: Prisma.TransactionClient,
+  proceso: { id: string; lotId: string },
+): Promise<void> {
+  const cubiertos = [proceso.lotId, ...(await idsDeDescendencia(tx, proceso.lotId))];
+  const donde = {
+    endedAt: null,
+    OR: [
+      { lotProcessId: proceso.id },
+      { transformations: { some: { inputs: { some: { lotId: { in: cubiertos } } } } } },
+    ],
+  };
+  const fermentaciones = await tx.fermentationRun.count({ where: donde });
+  const secados = await tx.dryingRun.count({ where: donde });
+  if (fermentaciones + secados > 0) throw new LotProcessError("corridas_abiertas");
+}

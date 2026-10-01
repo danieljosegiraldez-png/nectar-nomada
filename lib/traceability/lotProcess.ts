@@ -15,7 +15,7 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
-import { abrirProcesoEnTx, bloquearLinaje, idsDeDescendencia } from "./procesoDelLinaje";
+import { abrirProcesoEnTx, bloquearLinaje, exigeSinCorridasAbiertas, idsDeDescendencia } from "./procesoDelLinaje";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -385,6 +385,9 @@ export interface CerrarProcesoInput {
  * **No exige haber alcanzado el objetivo.** Se puede cerrar por encima, y el
  * reporte enseñará la diferencia: la receta declara el objetivo y la corrida
  * registra lo que pasó, que es la frase del propio dueño en `ProcessRecipe`.
+ *
+ * **R5 (Parte 1, 2026-10-01): no cierra con corridas abiertas** en el linaje que cubre
+ * (`exigeSinCorridasAbiertas`), y lo decide dentro de la transacción con el linaje bloqueado.
  */
 export async function cerrarProceso(userAccountId: string, input: CerrarProcesoInput) {
   const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
@@ -396,19 +399,27 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
   const medicion = await prisma.measurement.findUnique({ where: { id: input.closingMoistureMeasurementId } });
   if (!medicion) throw new LotProcessError("measurement_not_found");
   if (medicion.variable !== "moisture") throw new LotProcessError("measurement_is_not_moisture");
-  // Daniel, 2026-09-27: la humedad de cierre puede ser de un DESCENDIENTE del lote del proceso,
-  // porque es el mismo café. El proceso se abre sobre la cereza y la fermentación crea un lote nuevo
-  // de pergamino: exigir el mismo lote dejaba el proceso sin poder cerrarse nunca (medido: cero
-  // mediciones de humedad en el lote del proceso). Lo que sigue prohibido es una medición de OTRA
-  // rama, y el error se conserva con su nombre.
-  if (medicion.lotId !== proceso.lotId) {
-    const descendencia = await idsDeDescendencia(prisma, proceso.lotId);
-    if (!medicion.lotId || !descendencia.includes(medicion.lotId)) {
-      throw new LotProcessError("measurement_belongs_to_another_lot");
-    }
-  }
 
   return prisma.$transaction(async (tx) => {
+    // R5 (Parte 1, 2026-10-01): con el linaje bloqueado, para que ninguna corrida empiece entre la
+    // comprobación y el cierre. Lo que sigue se decide con el bloqueo ya tomado: otro cierre que
+    // ganó la espera se ve aquí, y no se pisa.
+    await bloquearLinaje(tx, proceso.lotId);
+    const actual = await tx.lotProcess.findUniqueOrThrow({ where: { id: proceso.id } });
+    if (actual.endedAt !== null) throw new LotProcessError("process_already_closed");
+    // Daniel, 2026-09-27: la humedad de cierre puede ser de un DESCENDIENTE del lote del proceso,
+    // porque es el mismo café. El proceso se abre sobre la cereza y la fermentación crea un lote nuevo
+    // de pergamino: exigir el mismo lote dejaba el proceso sin poder cerrarse nunca (medido: cero
+    // mediciones de humedad en el lote del proceso). Lo que sigue prohibido es una medición de OTRA
+    // rama, y el error se conserva con su nombre.
+    if (medicion.lotId !== proceso.lotId) {
+      const descendencia = await idsDeDescendencia(tx, proceso.lotId);
+      if (!medicion.lotId || !descendencia.includes(medicion.lotId)) {
+        throw new LotProcessError("measurement_belongs_to_another_lot");
+      }
+    }
+    await exigeSinCorridasAbiertas(tx, { id: proceso.id, lotId: proceso.lotId });
+
     const cerrado = await tx.lotProcess.update({
       where: { id: input.lotProcessId },
       // Parte 1, R5/R6 (2026-10-01): todo cierre por esta puerta es por humedad, y la base lo exige (CHECK).

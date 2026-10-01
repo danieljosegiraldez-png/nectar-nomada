@@ -1444,6 +1444,12 @@
       "operacion": "procesoAbiertoParaCorrida",
       "razon": "Resuelve a qué proceso se une una corrida que empieza sobre un lote (R3/R4): bloquea el linaje y lanza `LotProcessError` si el lote está dividido, en bodega o es una mezcla, o si no lo cubre un proceso abierto; si lo hay, devuelve su id y su versión de receta. No escribe ni recibe principal. Hoy la llaman `startFermentationRun` y `startDryingRun`, dentro de su transacción y después de `requireLotAccess(\"manage\")` sobre el lote de la corrida, que es el único permiso que se pide.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "exigeSinCorridasAbiertas",
+      "razon": "Comprueba, sin escribir, que ninguna fermentación ni secado abierto cuelgue del linaje que cubre un proceso (R5): las unidas por `lotProcessId` y las que empezaron sobre el lote del proceso o un descendiente sin quedar unidas. Lanza `LotProcessError` con `corridas_abiertas`. No recibe principal ni devuelve datos de las corridas. Hoy sólo la llama `cerrarProceso`, dentro de su transacción, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; quien la llame debe haber hecho lo mismo.",
+      "verificado": "2026-10-01"
     }
   ]
 }

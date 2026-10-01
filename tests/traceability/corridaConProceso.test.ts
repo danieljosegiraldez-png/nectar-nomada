@@ -4,8 +4,9 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
-import { startFermentationRun } from "../../lib/traceability/fermentation";
-import { startDryingRun } from "../../lib/traceability/drying";
+import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
+import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
+import { cerrarProceso } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
@@ -22,6 +23,8 @@ let recetaVersionId: string, otraVersionId: string;
 const lotes: string[] = [];
 const transformaciones: string[] = [];
 const mediciones: string[] = [];
+/** Secados insertados crudos SIN transformación (R5): el `afterAll` no los encuentra por un lote de entrada. */
+const sueltas: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN})`, locale: "es" } });
@@ -168,7 +171,7 @@ afterAll(async () => {
   const sec = corridas.map((c) => c.dryingRunId).filter((x): x is string => x !== null);
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...ferm, ...sec] } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: ferm } }) });
-  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: sec } }) });
+  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: [...sec, ...sueltas] } }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN } }) });
@@ -472,6 +475,139 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
     await abrirProcesoDePrueba(gestor, l);
     const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
     expect(run.processRecipeVersionId).toBeNull();
+  });
+});
+
+describe("R5 — no se cierra un proceso con corridas abiertas", () => {
+  // La humedad de cierre es la del propio lote del proceso (`medicionDeHumedad`, de arriba): lo que se prueba aquí
+  // son las corridas, no de qué lote es la medición. Se borra DESPUÉS de los procesos (`mediciones`, en el afterAll).
+  const cerrar = (procesoId: string, medicionId: string) =>
+    cerrarProceso(gestor, { lotProcessId: procesoId, endedAt: ahora(), closingMoistureMeasurementId: medicionId });
+  const cerradoEn = async (procesoId: string) =>
+    (await prisma.lotProcess.findUniqueOrThrow({ where: { id: procesoId }, select: { endedAt: true } })).endedAt;
+
+  it("con un secado abierto unido al proceso, cerrar se rechaza; terminado, cierra por humedad", async () => {
+    const l = await lote("R5-UNIDA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const { run } = await startDryingRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const m = await medicionDeHumedad(l);
+    // Control: el secado SÍ quedó unido al proceso; sin esto, el rechazo de abajo podría ser de cualquier otra cosa.
+    expect(run.lotProcessId).toBe(p.id);
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    // El rechazo es de la transacción entera: el proceso sigue abierto.
+    expect(await cerradoEn(p.id)).toBeNull();
+    const { outputLot } = await endDryingRun(gestor, { dryingRunId: run.id, endedAt: ahora(), outputLotCode: `R5-SAL-${RUN}`, outputLotType: "parchment", provenanceClass: "original_record" });
+    lotes.push(outputLot.id);
+    const cerrado = await cerrar(p.id, m);
+    expect(cerrado.closureKind).toBe("moisture");
+  });
+
+  it("una fermentación abierta unida al proceso también impide cerrarlo; terminada, cierra", async () => {
+    const l = await lote("R5-FERM");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const m = await medicionDeHumedad(l);
+    expect(run.lotProcessId).toBe(p.id);
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+    const { outputLot } = await endFermentationRun(gestor, { fermentationRunId: run.id, endedAt: ahora(), outputLotCode: `R5-FERM-SAL-${RUN}`, outputLotType: "cherry", provenanceClass: "original_record" });
+    lotes.push(outputLot.id);
+    expect((await cerrar(p.id, m)).closureKind).toBe("moisture");
+  });
+
+  it("cuenta también una corrida abierta que NO quedó unida (las de antes de esta parte)", async () => {
+    const l = await lote("R5-SUELTA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    // Una corrida de antes de la Parte 1: sobre el lote, SIN `lotProcessId`. Su limpieza la hace el `afterAll`: la
+    // encuentra por el lote de entrada de su transformación, que va en `transformaciones` por si acaso.
+    const suelta = await prisma.dryingRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      dryingRunId: suelta.id, inputs: { create: [{ lotId: l }] },
+    } });
+    transformaciones.push(t.id);
+    const m = await medicionDeHumedad(l);
+    // Control: de verdad no está unida, así que sólo la segunda rama de la cuenta puede verla.
+    expect(suelta.lotProcessId).toBeNull();
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+  });
+
+  it("cuenta una corrida abierta que empezó en un DESCENDIENTE del lote del proceso y no quedó unida", async () => {
+    const padre = await lote("R5-DESC-PADRE");
+    const hijo = await lote("R5-DESC-HIJO");
+    await enlazar([padre], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, padre);
+    const suelta = await prisma.dryingRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    transformaciones.push((await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      dryingRunId: suelta.id, inputs: { create: [{ lotId: hijo }] },
+    } })).id);
+    const m = await medicionDeHumedad(padre);
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+  });
+
+  it("cuenta una corrida abierta unida por lotProcessId aunque ninguna transformación la ligue al linaje", async () => {
+    const l = await lote("R5-SOLO-ID");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    // La puerta vieja (`colgarCorrida`) colgaba corridas de un proceso sin mirar su linaje: la única señal que queda es
+    // el `lotProcessId`. Sin transformación, ninguna entrada de lote la delata.
+    const colgada = await prisma.dryingRun.create({ data: { startedAt: ahora(), lotProcessId: p.id, createdBy: gestor } });
+    sueltas.push(colgada.id);
+    const m = await medicionDeHumedad(l);
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+  });
+
+  it("una corrida abierta de OTRO café no impide cerrar: la cuenta es del linaje, no de la base", async () => {
+    const mio = await lote("R5-MIO");
+    const ajeno = await lote("R5-AJENO");
+    const p = await abrirProcesoDePrueba(gestor, mio);
+    await abrirProcesoDePrueba(gestor, ajeno);
+    const { run } = await startDryingRun(gestor, { lotId: ajeno, startedAt: ahora(), provenanceClass: "original_record" });
+    const m = await medicionDeHumedad(mio);
+    // Control: la corrida ajena SÍ está abierta; si no, que el cierre salga bien no diría nada de cómo se cuenta.
+    expect((await prisma.dryingRun.findUniqueOrThrow({ where: { id: run.id } })).endedAt).toBeNull();
+    expect((await cerrar(p.id, m)).closureKind).toBe("moisture");
+  });
+
+  it("cerrar decide DESPUÉS de tener el linaje: si otra transacción cierra el proceso mientras espera, se rechaza con process_already_closed", async () => {
+    const l = await lote("R5-CARRERA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const ganadora = await medicionDeHumedad(l);
+    const perdedora = await medicionDeHumedad(l);
+
+    // Otra transacción toma la fila del lote del proceso y, dentro de ella, lo CIERRA en crudo. Todavía no confirma:
+    // quien lea ahora ve el proceso abierto.
+    const cierra = retener(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${l}::uuid FOR UPDATE`;
+      await tx.lotProcess.update({
+        where: { id: p.id },
+        data: { endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: ganadora },
+      });
+    });
+    let cierre: Promise<Resultado<unknown>> | undefined;
+    try {
+      const pid = await cierra.pid;
+      cierre = resultadoDe(cerrar(p.id, perdedora));
+      await esperarQueAlguienEspere(pid, "el cierre no esperó a la otra transacción");
+      cierra.soltar();
+      await cierra.hecho; // COMMIT: el proceso queda cerrado por la otra
+      const v = await cierre;
+      expect(v.ok, "el segundo cierre pasó por encima del primero").toBe(false);
+      if (!v.ok) {
+        expect(v.error).toBeInstanceOf(LotProcessError);
+        expect((v.error as LotProcessError).message).toBe("process_already_closed");
+      }
+      // Control: el cierre que ganó es el de la otra transacción, y nadie lo sobrescribió.
+      const final = await prisma.lotProcess.findUniqueOrThrow({ where: { id: p.id }, select: { closingMoistureMeasurementId: true } });
+      expect(final.closingMoistureMeasurementId).toBe(ganadora);
+    } finally {
+      cierra.soltar();
+      await cierra.hecho.catch(() => undefined);
+      await cierre;
+    }
   });
 });
 
