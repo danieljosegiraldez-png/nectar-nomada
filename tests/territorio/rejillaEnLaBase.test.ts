@@ -286,6 +286,49 @@ describe("los solapes dependen del tipo de bloque (D7)", () => {
   });
 
   /**
+   * **El mismo caso al revés, y no es redundante: es la ÚNICA prueba que ejerce
+   * el filtro interno del disparador.** En las de arriba la trampa entra
+   * primero, así que el segundo `INSERT` sale por el `RETURN NEW` de «no soy de
+   * trampa» y el `WHERE b2."block_type" = 'trampa'` no se evalúa nunca. Medido
+   * con el flip-test, no deducido: cambiar ese filtro por `IS NOT NULL` dejaba
+   * las quince pruebas en verde. Aquí la trampa entra SEGUNDA, encima de un
+   * experimental, que es lo que obliga al disparador a mirar de qué tipo es el
+   * otro bloque.
+   */
+  it("una trampa entra encima de un EXPERIMENTAL: sólo otra trampa la bloquea", async () => {
+    await conRejilla();
+    const ex = await bloque("Ensayo A", "experimental");
+    const t = await bloque("Trampas Alto", "trampa");
+    await prisma.plotBlockRange.create({
+      data: { ...RANGO, plotBlockId: ex.id, createdBy: usuario.userAccountId },
+    });
+    const ok = await prisma.plotBlockRange.create({
+      data: { ...RANGO, plotBlockId: t.id, createdBy: usuario.userAccountId },
+    });
+    expect(ok.plotBlockId).toBe(t.id);
+  });
+
+  /**
+   * Y el otro lado de ADR-080, también por el orden que lo ejerce: un bloque
+   * SIN TIPO tampoco bloquea a una trampa que llegue después. «Desconocido» no
+   * es «es de trampa» igual que no es «no es de trampa» — un filtro escrito
+   * como `IS DISTINCT FROM 'experimental'` dejaría pasar los NULL y rechazaría
+   * esta trampa por un bloque del que no se sabe nada.
+   */
+  it("una trampa entra encima de un bloque SIN TIPO", async () => {
+    await conRejilla();
+    const sin = await bloque("Viejo sin tipo", null);
+    const t = await bloque("Trampas Alto", "trampa");
+    await prisma.plotBlockRange.create({
+      data: { ...RANGO, plotBlockId: sin.id, createdBy: usuario.userAccountId },
+    });
+    const ok = await prisma.plotBlockRange.create({
+      data: { ...RANGO, plotBlockId: t.id, createdBy: usuario.userAccountId },
+    });
+    expect(ok.plotBlockId).toBe(t.id);
+  });
+
+  /**
    * ADR-080: «desconocido» no es «no es de trampa». Un bloque de antes del
    * 2026-09-19 puede tener el tipo en NULL —la migración
    * `20260919150000_bloque_sin_microparcela` dejó así a los que fueron
