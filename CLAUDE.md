@@ -3275,6 +3275,47 @@ conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
 **Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
 que estén **las que deben estar**. Una comprobación ausente no tiene color.
 
+### Un guardia puede vigilar UN ARCHIVO creyendo vigilar una clase
+
+**2026-09-30.** `tests/arquitectura/desfase-horario-sobrevive-al-render.test.ts` existía para una
+clase de defecto —un efecto con `[]` que precarga un campo de fecha, cuyo valor React borra al
+re-renderizar— y leía **una sola ruta**: `app/components/TimezoneOffsetField.tsx`. Pasaba, y pasaba
+con razón sobre ese archivo.
+
+El mismo defecto estaba vivo en `app/beneficio/bandejas/Formularios.tsx`, cuyo comentario decía
+literalmente «Igual que MeasurementForm» — el formulario del que se había quitado esa misma tarde. En
+el pesaje de bandejas sólo se podía registrar **un pesaje por carga de página**: el campo obligatorio
+se vaciaba y el navegador bloqueaba el envío **sin ningún error**.
+
+**Lo que no lo caza:** releer el guardia. Pasa, y su nombre dice «el desfase horario sobrevive a un
+re-render», que suena a propiedad del sistema. Lo cazó medir la POBLACIÓN: cuántos archivos hacen eso
+—4 precargan «ahora»— contra cuántos vigila el guardia —1—.
+
+**La regla: un guardia de clase descubre sus archivos, no los enumera.** Una lista escrita a mano deja
+fuera el que alguien añada mañana y sigue verde; así sobrevivió éste. Y el escáner necesita su propio
+control positivo —que encuentre ≥N archivos—, porque si el patrón de búsqueda deja de casar la lista
+sale vacía y «ninguno incumple» se lee igual que «no miré».
+
+### `SESSION_STATE.md` envejece sin avisar, y manda a hacer trabajo ya hecho
+
+**2026-09-30: cinco afirmaciones de §3 medidas falsas el mismo día, y dos costaron trabajo real.**
+Escribí media prueba de divergencia de clasificación antes de encontrar la que existía desde el 26 —con
+un caso llamado literalmente igual que la nota que pedía escribirla—. Otra nota decía que nueve
+formularios tenían un defecto ya arreglado en la raíz, y además eran 21 archivos, no nueve.
+
+**Por qué importa más que un conflicto de fusión:** este es el único archivo que toda sesión lee al
+arrancar, así que una entrada vieja no desorienta a una persona — dirige una jornada. El coste no se
+nota: se parece a trabajar.
+
+**Y por qué envejece así, que es la parte accionable.** Las cinco llegaron de **rescates al archivar**:
+se mueve una entrega al histórico, se rescata a §3 lo que parecía vivo, y nadie vuelve a medirlo. Dos
+de las cinco se rescataron **después** de que el trabajo estuviera hecho — una, un día después.
+
+**La regla: al rescatar un hecho a §3, medirlo contra el árbol, no contra la entrada que se archiva.**
+La entrada describe el día en que se escribió; §3 afirma el presente. Y al leer §3 para elegir trabajo,
+la primera acción sobre cualquier bloque es comprobar que siga siendo cierto — con control positivo,
+porque «no encuentro la prueba que falta» y «no busqué donde está» se leen igual.
+
 ### Un guardia que lee la fuente puede quedar satisfecho por la DECLARACIÓN
 
 **2026-09-29.** Escribí un guardia para una clase de defecto real: una acción que redirige con
