@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
+import { RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 /**
@@ -361,5 +362,111 @@ describe("los solapes dependen del tipo de bloque (D7)", () => {
         data: { rowFrom: 0, rowTo: 5, plantFrom: 1, plantTo: 10, plotBlockId: b.id, createdBy: usuario.userAccountId },
       }),
     ).rejects.toThrow(/plot_block_range_es_celda/);
+  });
+});
+
+/**
+ * La rejilla a través del SERVICIO, que es por donde entra de verdad.
+ *
+ * Tarea 3 del plan. Lo de arriba prueba la base; esto prueba que el servicio da
+ * **el mensaje** antes de que la base dé la garantía — y que lo que la base
+ * rechaza llega como una clase de error traducible, no como un error de Prisma
+ * crudo, que en una acción es la pantalla de error del PR #433 otra vez.
+ */
+describe("updateLocationAttributes y la rejilla (D3)", () => {
+  it("guarda la rejilla entera — el control positivo", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.gridOrigin).toBe("noroeste");
+    expect(l.rowCount).toBe(10);
+    expect(l.plantsPerRow).toBe(20);
+    expect(Number(l.rowSpacingMeters)).toBe(2.5);
+  });
+
+  /**
+   * Las dos mitades: que lo rechace **con su clase** y que **no haya llegado a la
+   * base**. Sin la segunda, la prueba no distingue «el servicio lo paró» de «lo
+   * paró el CHECK y el error subió envuelto», que es justo lo que hay que medir.
+   */
+  it("media rejilla la rechaza el SERVICIO, antes de llegar a la base", async () => {
+    await expect(
+      updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, rowCount: 10 }),
+    ).rejects.toThrow(RejillaInvalida);
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.rowCount).toBeNull();
+  });
+
+  /**
+   * **El nombre del código importa y por eso no es `no_entera`:** el 0 y el −3
+   * SON enteros. La propiedad es «entero y desde 1», y un código que dijera
+   * «no entera» mentiría en dos de estos cinco casos. Es la misma corrección que
+   * se le hizo a `no_es_celda` en la tarea 1.
+   */
+  it("una cuenta que no sea un entero desde 1 la rechaza el servicio", async () => {
+    for (const malo of [{ rowCount: 0 }, { rowCount: -3 }, { rowCount: 10.5 }, { plantsPerRow: 0 }, { plantsPerRow: 18.5 }]) {
+      await expect(
+        updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, ...malo }),
+      ).rejects.toThrow(/rejilla_no_entera_positiva/);
+    }
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.rowCount).toBeNull();
+  });
+
+  /**
+   * **Lo que la base rechaza tiene que salir del servicio como `RejillaInvalida`.**
+   * El disparador de D4 habla con un `RAISE EXCEPTION`, y nadie en el repositorio
+   * traduce un `P0001` — medido: 0 archivos, con el control de que el mismo
+   * `grep` encuentra `PrismaClientKnownRequestError` en 19. Sin esta traducción,
+   * un operario que encoge la rejilla de su parcela se come un 500, que es
+   * exactamente la clase de defecto del PR #433 y del #514.
+   */
+  it("encoger con algo fuera sale como RejillaInvalida y NOMBRA lo que estorba", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const b = await bloque("Ensayo A", "experimental");
+    await prisma.plotBlockRange.create({
+      data: { rowFrom: 8, rowTo: 9, plantFrom: 1, plantTo: 5, plotBlockId: b.id, createdBy: usuario.userAccountId },
+    });
+    await expect(
+      updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, rowCount: 5 }),
+    ).rejects.toThrow(/rejilla_con_huerfanos.*Ensayo A/);
+  });
+
+  /**
+   * **El caso que mi propio plan rompía, y no lo vio nadie hasta tocar el código.**
+   * El plan contaba los campos del INPUT, así que con una rejilla ya puesta,
+   * cambiar sólo `plantsPerRow` —la edición más normal que existe— manda un campo
+   * y se habría leído como «media rejilla». Se cuenta la FILA RESULTANTE, igual
+   * que la altitud hace en esa misma función, y así el servicio dice lo mismo que
+   * el `CHECK` de la base, que es `num_nonnulls(...) IN (0, 4)` sobre la fila.
+   */
+  it("con la rejilla puesta, cambiar UN campo no es media rejilla", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, plantsPerRow: 25 });
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.plantsPerRow).toBe(25);
+    expect(l.rowCount).toBe(10);
+  });
+
+  /** Y borrarla entera también es legítimo: cero puestos, no «media». */
+  it("borrar la rejilla entera se permite", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: parcela.id,
+      gridOrigin: null,
+      rowCount: null,
+      plantsPerRow: null,
+      rowSpacingMeters: null,
+    });
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.rowCount).toBeNull();
+    expect(l.gridOrigin).toBeNull();
+  });
+
+  /** Y el control de que esa traducción no se come un encogimiento legítimo. */
+  it("encoger sin nada fuera sí entra — el control de que no rechaza de más", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, rowCount: 5 });
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.rowCount).toBe(5);
   });
 });

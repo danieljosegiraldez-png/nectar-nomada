@@ -1776,7 +1776,10 @@
     "okAplicacion": "Aplicación registrada.",
     "okLiberacion": "Liberación biológica registrada.",
     "okManejoCultural": "Manejo cultural registrado.",
-    "okCorreccion": "Corrección registrada."
+    "okCorreccion": "Corrección registrada.",
+    "error_rejilla_a_medias": "La rejilla se declara entera: esquina de origen, número de hileras, plantas por hilera y separación entre hileras. O las cuatro, o ninguna.",
+    "error_rejilla_no_entera_positiva": "Las hileras y las plantas por hilera se cuentan en números enteros desde 1.",
+    "error_rejilla_con_huerfanos": "No se puede encoger la rejilla: {value} se queda fuera. Muévelo o bórralo primero."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

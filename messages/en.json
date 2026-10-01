@@ -1776,7 +1776,10 @@
     "okAplicacion": "Application recorded.",
     "okLiberacion": "Biological release recorded.",
     "okManejoCultural": "Cultural management recorded.",
-    "okCorreccion": "Correction recorded."
+    "okCorreccion": "Correction recorded.",
+    "error_rejilla_a_medias": "A grid is declared whole: origin corner, number of rows, plants per row, and row spacing. All four, or none.",
+    "error_rejilla_no_entera_positiva": "Rows and plants per row are counted in whole numbers starting at 1.",
+    "error_rejilla_con_huerfanos": "The grid can't shrink: {value} would be left outside. Move it or delete it first."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

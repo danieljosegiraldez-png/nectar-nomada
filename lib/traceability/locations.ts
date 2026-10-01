@@ -15,7 +15,7 @@ import { can } from "../rbac/service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
-import type { Aspect, LocationType, Prisma, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
+import type { Aspect, GridOrigin, LocationType, Prisma, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
 
@@ -73,6 +73,51 @@ export async function resolveOrganizationForLocation(locationId: string): Promis
   return null;
 }
 export class LocationValidationError extends Error {}
+
+/**
+ * La rejilla de la parcela (diseño D3/D4). Clase propia y no `LocationValidationError`
+ * porque sus códigos tienen frase propia: «media rejilla» y «algo queda fuera» se
+ * corrigen de maneras distintas, y un `detail` con el código crudo no le dice al
+ * operario cuál de las dos le pasó.
+ *
+ * `friendlyError` **tiene** que conocerla. No es opcional: una clase que una acción
+ * no sabe traducir se relanza y el formulario recibe un 500 en vez de un mensaje
+ * — el defecto del PR #433 —, y `tests/arquitectura/acciones-traducen-sus-errores.test.ts`
+ * lo exige por su cuenta.
+ */
+export class RejillaInvalida extends Error {}
+
+/**
+ * El `RAISE EXCEPTION` de un disparador, tal como llega a traves de Prisma.
+ *
+ * **La forma esta medida, no deducida** (2026-10-01, sonda contra la base): un
+ * `RAISE` de plpgsql llega como `PrismaClientKnownRequestError` con `code` de
+ * Prisma `P2039`, y el unico sitio donde aparece el codigo de Postgres es
+ * `meta.driverAdapterError.cause.originalCode`. La clase NO discrimina: el
+ * control —un `update` de una fila que no existe— es la misma clase con `P2025`.
+ *
+ * Nadie mas en el repositorio traduce un `P0001`; medido el mismo dia: 0
+ * archivos, con el control de que el mismo `grep` encuentra
+ * `PrismaClientKnownRequestError` en 19. O sea que hasta hoy el `RAISE` de
+ * cualquier disparador era una pantalla de error.
+ */
+function mensajeDeDisparador(error: unknown): string | null {
+  const meta = (error as { meta?: { driverAdapterError?: { cause?: { originalCode?: string; originalMessage?: string } } } })
+    .meta;
+  const causa = meta?.driverAdapterError?.cause;
+  return causa?.originalCode === "P0001" ? (causa.originalMessage ?? null) : null;
+}
+
+/**
+ * La frase del disparador de D4, para sacarle de dentro QUE estorba.
+ *
+ * Acopla este archivo a la redaccion del `RAISE` de
+ * `20261001224423_rejilla_y_rangos`, y por eso hay una prueba que lo ejerce
+ * contra el disparador de verdad —«encoger con algo fuera sale como
+ * RejillaInvalida y NOMBRA lo que estorba»—: si la redaccion cambia, esa prueba
+ * cae en vez de que el acople se pudra en silencio.
+ */
+const HUERFANO = /^No se puede encoger la rejilla: (.+) queda fuera$/;
 
 /**
  * `Location` carries no `projectId` of its own (a farm's plots aren't
@@ -277,6 +322,14 @@ export interface UpdateLocationAttributesInput {
   aspect?: Aspect | null;
   soilType?: string | null;
   plantSpacingMeters?: number | null;
+  // La rejilla de la parcela (D3): UNA sola numeración, la de la parcela, y los
+  // cuatro campos juntos o ninguno. El `CHECK` de la base es la garantía; esto es
+  // el mensaje. La aritmética de los rangos que cuelgan de ella vive aparte, en
+  // `lib/territorio/rejilla.ts`.
+  gridOrigin?: GridOrigin | null;
+  rowCount?: number | null;
+  plantsPerRow?: number | null;
+  rowSpacingMeters?: number | null;
   // P1 §3 — declared block area. Not derived from a boundary polygon: none
   // exists, and a producer knows their hectares before anyone walks the
   // perimeter. When polygons arrive this becomes the value to reconcile the
@@ -306,8 +359,28 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
     throw new LocationValidationError("altitude_min_exceeds_max");
   }
 
+  // **Se cuenta la FILA RESULTANTE, no el input**, por lo mismo que la altitud de
+  // arriba: con una rejilla ya puesta, cambiar sólo `rowCount` manda UN campo, y
+  // contar el input llamaría «media rejilla» a la edición más normal que existe.
+  // El `CHECK` de la base es `num_nonnulls(...) IN (0, 4)` sobre la fila, así que
+  // contar otra cosa haría que el servicio y la base no dijeran lo mismo.
+  const rejilla = {
+    gridOrigin: input.gridOrigin !== undefined ? input.gridOrigin : existing.gridOrigin,
+    rowCount: input.rowCount !== undefined ? input.rowCount : existing.rowCount,
+    plantsPerRow: input.plantsPerRow !== undefined ? input.plantsPerRow : existing.plantsPerRow,
+    rowSpacingMeters: input.rowSpacingMeters !== undefined ? input.rowSpacingMeters : existing.rowSpacingMeters,
+  };
+  const puestos = Object.values(rejilla).filter((v) => v !== null && v !== undefined).length;
+  if (puestos !== 0 && puestos !== 4) throw new RejillaInvalida("rejilla_a_medias");
+  // «No entera» seria falso para el 0 y el -3, que SON enteros. La propiedad es
+  // «entero y desde 1», y el codigo lo dice entera: la misma correccion que se le
+  // hizo a `no_es_celda` en `lib/territorio/rejilla.ts`.
+  for (const v of [rejilla.rowCount, rejilla.plantsPerRow]) {
+    if (v != null && (!Number.isInteger(v) || v < 1)) throw new RejillaInvalida("rejilla_no_entera_positiva");
+  }
+
   const before = existing;
-  const after = await prisma.$transaction(async (tx) => {
+  const escritura = prisma.$transaction(async (tx) => {
     const after = await tx.location.update({
       where: { id: input.locationId },
       data: {
@@ -319,6 +392,10 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
         ...(input.aspect !== undefined ? { aspect: input.aspect } : {}),
         ...(input.soilType !== undefined ? { soilType: input.soilType } : {}),
         ...(input.plantSpacingMeters !== undefined ? { plantSpacingMeters: input.plantSpacingMeters } : {}),
+        ...(input.gridOrigin !== undefined ? { gridOrigin: input.gridOrigin } : {}),
+        ...(input.rowCount !== undefined ? { rowCount: input.rowCount } : {}),
+        ...(input.plantsPerRow !== undefined ? { plantsPerRow: input.plantsPerRow } : {}),
+        ...(input.rowSpacingMeters !== undefined ? { rowSpacingMeters: input.rowSpacingMeters } : {}),
         ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
       },
@@ -343,6 +420,19 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
 
     return after;
   });
+
+  // Lo que la base rechaza sale de aqui como `RejillaInvalida`, con lo que
+  // estorba dentro del mensaje. Si la frase del `RAISE` no casa, se relanza el
+  // error original: equivocarse de mensaje es peor que no dar ninguno.
+  let after;
+  try {
+    after = await escritura;
+  } catch (error) {
+    const raise = mensajeDeDisparador(error);
+    const culpable = raise?.match(HUERFANO);
+    if (culpable) throw new RejillaInvalida(`rejilla_con_huerfanos:${culpable[1]}`);
+    throw error;
+  }
 
   return after;
 }

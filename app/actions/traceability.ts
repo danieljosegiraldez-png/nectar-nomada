@@ -82,6 +82,7 @@ import {
   updateLocationAttributes,
   LocationAccessError,
   LocationValidationError,
+  RejillaInvalida,
 } from "../../lib/traceability/locations";
 import {
   createBiocharBatch,
@@ -180,6 +181,15 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
+  // La rejilla tiene frase POR CODIGO, como `PropositoInvalido`: «media rejilla» y
+  // «algo queda fuera» se corrigen de maneras distintas, y el segundo trae dentro
+  // QUE estorba. Sin esta rama la clase cae al `throw` final y encoger la rejilla
+  // de una parcela es un 500 — el defecto del PR #433, que
+  // `tests/arquitectura/acciones-traducen-sus-errores.test.ts` ya vigila solo.
+  if (error instanceof RejillaInvalida) {
+    const [clave, ...resto] = error.message.split(":");
+    return t(`error_${clave}` as "error_rejilla_a_medias", { value: resto.join(":").trim() });
+  }
   if (error instanceof PlantingEventValidationError) return t("error_production", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
