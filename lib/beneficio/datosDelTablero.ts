@@ -249,6 +249,31 @@ export async function datosDelTablero(
   };
   const organizaciones = new Set<string>();
 
+  // **Qué mediciones de estos lotes ya fueron corregidas, SIN ninguna ventana de fecha**
+  // (`PENDING_IMPLEMENTATIONS/018`). `entradaDelLote` lo deducía de las mediciones que recibe, y ésas
+  // llegan acotadas a la fase abierta: una corrección cuya fecha cae antes del inicio de la fase
+  // —`correctMeasurement` permite corregir la fecha— quedaba fuera, su `correctsId` no entraba, y la
+  // original ya corregida volvía a contarse como vigente.
+  //
+  // Una sola consulta para todos los lotes crudos, no una por vuelta del bucle: trae dos columnas y
+  // sólo las filas que corrigen algo.
+  const idsDeLotesCrudos = [
+    ...new Set(crudas.map((c) => c.transformations[0]?.inputs[0]?.lot?.id).filter((id): id is string => id != null)),
+  ];
+  const correcciones = idsDeLotesCrudos.length
+    ? await prisma.measurement.findMany({
+        where: { lotId: { in: idsDeLotesCrudos }, correctsId: { not: null } },
+        select: { lotId: true, correctsId: true },
+      })
+    : [];
+  const corregidasPorLote = new Map<string, Set<string>>();
+  for (const c of correcciones) {
+    if (c.lotId === null || c.correctsId === null) continue;
+    const yaHay = corregidasPorLote.get(c.lotId);
+    if (yaHay) yaHay.add(c.correctsId);
+    else corregidasPorLote.set(c.lotId, new Set([c.correctsId]));
+  }
+
   for (const c of crudas) {
     const lot = c.transformations[0]?.inputs[0]?.lot;
     if (!lot) continue;
@@ -285,6 +310,9 @@ export async function datosDelTablero(
         correctsId: m.correctsId,
         instrumentId: m.instrumentId,
       })),
+      // Un lote sin ninguna corrección no tiene fila en el mapa, y el conjunto vacío es la
+      // traducción fiel de eso — no un valor por defecto que tape nada.
+      idsCorregidos: corregidasPorLote.get(lot.id) ?? new Set<string>(),
       estadosDeInstrumento,
       ahora,
     });
@@ -515,12 +543,32 @@ async function curvaDeUnLote(
   if (!visible) return null;
 
   const abierta = crudas.find((c) => c.transformations.some((t) => t.inputs.some((i) => i.lot.id === lotId)));
-  const mediciones = await prisma.measurement.findMany({
-    where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
-    select: { id: true, value: true, occurredAt: true, correctsId: true },
-    orderBy: { occurredAt: "asc" },
-  });
-  const corregidas = new Set(mediciones.map((m) => m.correctsId).filter((id): id is string => id != null));
+  // **Dos consultas, y el orden importa** (`PENDING_IMPLEMENTATIONS/018`). La vigencia de una
+  // medición —«¿alguien la corrigió?»— es una propiedad de la **cadena de correcciones**, no de la
+  // ventana de la pantalla: se resuelve ANTES de aplicar la ventana, o el filtro de tiempo decide
+  // qué correcciones existen.
+  //
+  // Esto hacía lo contrario: filtraba por la ventana de la fase y **después** armaba `corregidas`
+  // con los `correctsId` de lo que quedó dentro. `correctMeasurement` permite corregir la **fecha**,
+  // así que una corrección cuya fecha cae antes del inicio de la fase quedaba fuera de la consulta,
+  // su `correctsId` nunca entraba, y **la original, ya corregida, se seguía dibujando**: una lectura
+  // que nadie sostiene volvía a la pantalla.
+  //
+  // La segunda consulta no lleva ventana y trae una sola columna. Una corrección anterior a la fase
+  // deja la original oculta y **tampoco se dibuja ella**, que es correcto: su propia fecha la deja
+  // fuera de la ventana.
+  const [mediciones, correcciones] = await Promise.all([
+    prisma.measurement.findMany({
+      where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
+      select: { id: true, value: true, occurredAt: true, correctsId: true },
+      orderBy: { occurredAt: "asc" },
+    }),
+    prisma.measurement.findMany({
+      where: { lotId, variable, correctsId: { not: null } },
+      select: { correctsId: true },
+    }),
+  ]);
+  const corregidas = new Set(correcciones.map((m) => m.correctsId).filter((id): id is string => id != null));
 
   const metas = abierta?.lotProcess?.processRecipeVersion?.targets ?? [];
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);

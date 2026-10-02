@@ -1137,3 +1137,81 @@ describe("la ocupación cuenta las corridas sin filtrar por lote (015)", () => {
     expect(libre!.loteNoVisible).toBe(false);
   });
 });
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/018`: una corrección puede resucitar la lectura
+ * que corrige.**
+ *
+ * `correctMeasurement` permite corregir la **fecha**, así que la corrección es una fila nueva con su
+ * propio `occurredAt`. La consulta de la curva filtraba por la ventana de la fase y **después**
+ * armaba el conjunto de corregidas con los `correctsId` de lo que quedó dentro: una corrección con
+ * fecha anterior al inicio de la fase quedaba fuera, su `correctsId` nunca entraba, y **la original,
+ * ya corregida, se seguía dibujando**.
+ *
+ * Es el caso que ningún test ejercía: corrección **fuera** de la ventana, original **dentro**. Vive
+ * aquí y no en una prueba pura porque el defecto no estaba en cómo se decide la vigencia sino en
+ * **qué filas llegan a decidirla**, y eso sólo lo ejerce la consulta.
+ */
+describe("la vigencia de una medición no la decide la ventana de la pantalla (018)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let fuera: string, sinCorregir: string, dentro: string;
+
+  beforeAll(async () => {
+    // Tres lotes, cada uno con su secado abierto empezado hace 10 h: la ventana va de ahí en adelante.
+    const conSecado = async (etiqueta: string) => {
+      const l = await loteSimple(etiqueta, miSitio, miOrgId);
+      await secadoDe(l, { inicio: haceHoras(10) });
+      return l;
+    };
+    fuera = await conSecado("L-018-FUERA");
+    sinCorregir = await conSecado("L-018-SIN");
+    dentro = await conSecado("L-018-DENTRO");
+
+    // **El caso roto.** Original DENTRO de la fase; su corrección, con fecha ANTERIOR al inicio.
+    const original = await medicionDe(fuera, "moisture", 30, haceHoras(5));
+    await medicionDe(fuera, "moisture", 12, haceHoras(20), { id: original });
+
+    // Control 1: la misma original, sin corregir.
+    await medicionDe(sinCorregir, "moisture", 30, haceHoras(5));
+
+    // Control 2: corrección DENTRO de la ventana — el caso que ya funcionaba.
+    const originalDentro = await medicionDe(dentro, "moisture", 30, haceHoras(5));
+    await medicionDe(dentro, "moisture", 12, haceHoras(4), { id: originalDentro });
+  });
+
+  const valoresDe = async (lotId: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId, variable: "moisture", ...LIENZO } });
+    expect(curva, "la curva se calcula").not.toBeNull();
+    return curva!.lecturas.map((l) => l.value);
+  };
+
+  it("una corrección ANTERIOR a la fase oculta la original, y tampoco se dibuja ella", async () => {
+    // Ninguna de las dos: la original porque está corregida, la corrección porque su fecha la deja
+    // fuera de la ventana — y eso es correcto, no un hueco.
+    expect(await valoresDe(fuera)).toEqual([]);
+  });
+
+  it("CONTROL: la MISMA lectura sin corregir SÍ se dibuja", async () => {
+    // Sin esta fila, un `[]` podría venir de que la consulta no trae nada y la prueba de arriba
+    // pasaría sobre una curva vacía por cualquier motivo.
+    expect(await valoresDe(sinCorregir)).toEqual([30]);
+  });
+
+  it("CONTROL: con la corrección DENTRO de la ventana sale la corrección y no la original", async () => {
+    // El caso que ya funcionaba antes del arreglo: 12 es la corrección, 30 la original.
+    expect(await valoresDe(dentro)).toEqual([12]);
+  });
+
+  /**
+   * **La otra mitad del defecto —`entradaDelLote` deduciendo el conjunto de las mediciones ya
+   * acotadas— no se afirma aquí, y conviene decir por qué.** `EntradaDeLoteParaTablero` no expone
+   * las mediciones, y sus tres campos observables no sirven de testigo: `ultimaLectura` sale de la
+   * lista cruda sin mirar las corregidas, `metas` necesita una receta con ritmo que este fixture no
+   * tiene, y el `veredicto` de estos lotes ya es `SinVeredicto` por falta de grado — así que una
+   * aserción sobre él saldría igual con el defecto puesto y sin él.
+   *
+   * Esa mitad la guardan dos pruebas PURAS en `tests/beneficio/entrada-del-lote.test.ts`: «una
+   * corrección que NO está entre las mediciones corrige igual, si el llamador la conoce» y su
+   * control. Escribir aquí un testigo que no discrimina sería peor que no escribirlo.
+   */
+});

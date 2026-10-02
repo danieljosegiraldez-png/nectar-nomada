@@ -46,6 +46,7 @@ describe("entradaDelLote", () => {
         ultimoSecadoTerminado: null,
         procesos: [],
         mediciones: [],
+        idsCorregidos: new Set(),
         estadosDeInstrumento: new Map(),
         ahora: AHORA,
       }),
@@ -59,6 +60,7 @@ describe("entradaDelLote", () => {
       ultimoSecadoTerminado: null,
       procesos: [{ endedAt: null, gradoDeProceso: "lavado" }],
       mediciones: [medicion({ id: "a" }), medicion({ id: "b", variable: "brix", value: 18 })],
+      idsCorregidos: new Set(),
       estadosDeInstrumento: new Map([["a", "VERIFICADO" as const]]),
       ahora: AHORA,
     });
@@ -84,6 +86,7 @@ describe("entradaDelLote", () => {
         { endedAt: haceHoras(10), gradoDeProceso: "lavado" },
       ],
       mediciones: [],
+      idsCorregidos: new Set(),
       estadosDeInstrumento: new Map(),
       ahora: AHORA,
     });
@@ -99,6 +102,7 @@ describe("entradaDelLote", () => {
       ultimoSecadoTerminado: null,
       procesos: [{ endedAt: null, gradoDeProceso: "lavado" }],
       mediciones: [medicion({ id: "con" }), medicion({ id: "sin" })],
+      idsCorregidos: new Set(),
       estadosDeInstrumento: new Map([["con", "REVISION_VENCIDA" as const]]),
       ahora: AHORA,
     });
@@ -123,11 +127,56 @@ describe("entradaDelLote", () => {
         medicion({ id: "vieja" }),
         medicion({ id: "nueva", correctsId: "vieja", value: 4.2 }),
       ],
+      idsCorregidos: new Set(["vieja"]),
       estadosDeInstrumento: new Map(),
       ahora: AHORA,
     });
 
     expect(entrada!.mediciones[0]!.fueCorregida).toBe(true);
     expect(entrada!.mediciones[1]!.fueCorregida).toBe(false);
+  });
+
+  /**
+   * **El defecto de `PENDING_IMPLEMENTATIONS/018`: una corrección puede resucitar la lectura que
+   * corrige.**
+   *
+   * `correctMeasurement` permite corregir la FECHA, así que la corrección es una fila nueva con su
+   * propio `occurredAt`. Si cae antes del inicio de la fase, queda fuera de la ventana de la
+   * consulta — y el conjunto de corregidas se armaba **desde las mediciones ya acotadas**, así que su
+   * `correctsId` no entraba y la original, ya corregida, volvía a la pantalla.
+   *
+   * La vigencia de una medición es una propiedad de la **cadena de correcciones**, no de la ventana
+   * de la pantalla: se resuelve antes. Por eso el conjunto lo arma ahora el llamador, sobre TODAS las
+   * mediciones del lote, y entra por `idsCorregidos`.
+   */
+  it("una corrección que NO está entre las mediciones corrige igual, si el llamador la conoce", () => {
+    const entrada = entradaDelLote({
+      fermentacionAbierta: { startedAt: INICIO },
+      secadoAbierto: null,
+      ultimoSecadoTerminado: null,
+      procesos: [{ endedAt: null, gradoDeProceso: "lavado" }],
+      // La corrección no está aquí: su fecha la dejó fuera de la ventana.
+      mediciones: [medicion({ id: "vieja" })],
+      idsCorregidos: new Set(["vieja"]),
+      estadosDeInstrumento: new Map(),
+      ahora: AHORA,
+    });
+
+    expect(entrada!.mediciones[0]!.fueCorregida).toBe(true);
+  });
+
+  it("CONTROL: la MISMA llamada sin ese id no la marca — si no, «corregida» saldría siempre", () => {
+    const entrada = entradaDelLote({
+      fermentacionAbierta: { startedAt: INICIO },
+      secadoAbierto: null,
+      ultimoSecadoTerminado: null,
+      procesos: [{ endedAt: null, gradoDeProceso: "lavado" }],
+      mediciones: [medicion({ id: "vieja" })],
+      idsCorregidos: new Set(),
+      estadosDeInstrumento: new Map(),
+      ahora: AHORA,
+    });
+
+    expect(entrada!.mediciones[0]!.fueCorregida).toBe(false);
   });
 });
