@@ -51,8 +51,16 @@ function fail(mensaje: string, ...detalle: string[]): never {
   process.exit(1);
 }
 
-/** Las columnas que apuntan a `core.person.id`, preguntadas al esquema. */
-async function columnasQueApuntanAPersona(): Promise<{ esquema: string; tabla: string; columna: string }[]> {
+/**
+ * Las columnas que apuntan a `core.<tabla>.<columna>`, preguntadas al esquema.
+ *
+ * Parametrizada porque hay DOS cosas que este guion hace desaparecer —una ficha de persona y una
+ * cuenta— y durante un día midió sólo la primera. Ver la segunda guarda en `consolidar`.
+ */
+async function columnasQueApuntanA(
+  tablaDestino: string,
+  columnaDestino: string,
+): Promise<{ esquema: string; tabla: string; columna: string }[]> {
   return prisma.$queryRaw<{ esquema: string; tabla: string; columna: string }[]>`
     select tc.table_schema as esquema, tc.table_name as tabla, kcu.column_name as columna
     from information_schema.table_constraints tc
@@ -61,20 +69,23 @@ async function columnasQueApuntanAPersona(): Promise<{ esquema: string; tabla: s
     join information_schema.constraint_column_usage ccu
       on ccu.constraint_name = tc.constraint_name
     where tc.constraint_type = 'FOREIGN KEY'
-      and ccu.table_schema = 'core' and ccu.table_name = 'person' and ccu.column_name = 'id'
+      and ccu.table_schema = 'core' and ccu.table_name = ${tablaDestino} and ccu.column_name = ${columnaDestino}
     order by tc.table_schema, tc.table_name, kcu.column_name`;
 }
 
-async function referenciasA(personId: string): Promise<{ donde: string; n: number }[]> {
-  const columnas = await columnasQueApuntanAPersona();
+async function referenciasA(
+  id: string,
+  destino: { tabla: string; columna: string } = { tabla: "person", columna: "id" },
+): Promise<{ donde: string; n: number }[]> {
+  const columnas = await columnasQueApuntanA(destino.tabla, destino.columna);
   if (columnas.length === 0) {
-    fail("el esquema no devolvió ninguna columna que apunte a core.person — la guarda no puede medir");
+    fail(`el esquema no devolvió ninguna columna que apunte a core.${destino.tabla}.${destino.columna} — la guarda no puede medir`);
   }
   const salida: { donde: string; n: number }[] = [];
   for (const c of columnas) {
     const filas = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
       `select count(*)::bigint as n from "${c.esquema}"."${c.tabla}" where "${c.columna}" = $1::uuid`,
-      personId,
+      id,
     );
     const n = Number(filas[0]?.n ?? 0);
     if (n > 0) salida.push({ donde: `${c.esquema}.${c.tabla}.${c.columna}`, n });
@@ -141,7 +152,7 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   // LA GUARDA. Generada del esquema, no de una lista.
   const refs = await referenciasA(duplicadaId);
   const fuera = refs.filter((r) => r.donde !== "core.user_account.person_id");
-  console.log(`\n  Referencias a la duplicada, medidas en ${(await columnasQueApuntanAPersona()).length} columnas:`);
+  console.log(`\n  Referencias a la duplicada, medidas en ${(await columnasQueApuntanA("person", "id")).length} columnas:`);
   for (const r of refs) console.log(`    ${r.donde}: ${r.n}`);
   if (fuera.length > 0) {
     fail(
@@ -158,24 +169,71 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   const cuentaQueSeQueda = duplicada.userAccount.id;
   const cuentaQueSeVa = canonica.userAccount?.id ?? null;
 
-  const asignacionesAntes = cuentaQueSeVa
+  // **LA SEGUNDA GUARDA: lo que apunta a la CUENTA QUE SE BORRA.**
+  //
+  // La guarda de arriba mide referencias a la PERSONA duplicada, y durante un día fue la única. No
+  // ve nada de esto: el paso 2 borra una `core.user_account`, y
+  // `core.audit_event.actor_user_account_id` es `ON DELETE SET NULL` —leído en la migración
+  // `20260809221638_init_identity`, no deducido del esquema—. Así que borrar una cuenta que haya
+  // actuado **no falla**: deja sus filas de auditoría sin actor, en silencio, que es exactamente lo
+  // que §35 prohíbe. Lo mismo con cada `created_by` de la base, y `core.external_identity` es
+  // `ON DELETE CASCADE`: su enlace con Google desaparecería sin dejar rastro.
+  //
+  // La cabecera de este archivo ya decía que sobrevive la cuenta que ya actuó. Lo que faltaba era
+  // COMPROBARLO en vez de suponerlo por su `status`.
+  if (cuentaQueSeVa) {
+    const columnasDeCuenta = await columnasQueApuntanA("user_account", "id");
+    const refsCuenta = await referenciasA(cuentaQueSeVa, { tabla: "user_account", columna: "id" });
+    // Las asignaciones no cuentan: el paso 1 las mueve antes de borrar.
+    const fueraDeCuenta = refsCuenta.filter((r) => r.donde !== "core.assignment.user_account_id");
+    console.log(`\n  Referencias a la cuenta que se borra (${cuentaQueSeVa}), medidas en ${columnasDeCuenta.length} columnas:`);
+    if (refsCuenta.length === 0) console.log("    (ninguna)");
+    for (const r of refsCuenta) console.log(`    ${r.donde}: ${r.n}`);
+    if (fueraDeCuenta.length > 0) {
+      fail(
+        "la cuenta que se iba a borrar TIENE historia — borrarla la perdería en silencio:",
+        ...fueraDeCuenta.map((r) => `  ${r.donde}: ${r.n}`),
+        "core.audit_event.actor_user_account_id es ON DELETE SET NULL: el borrado no falla, deja la fila sin actor (§35).",
+        "Qué hacer con esas filas es otra decisión y no la toma este guion.",
+      );
+    }
+  }
+
+  const asignacionesQueSeMueven = cuentaQueSeVa
     ? await prisma.assignment.count({ where: { userAccountId: cuentaQueSeVa } })
     : 0;
+  // **Las que la cuenta superviviente YA TIENE, y por eso existe esta variable.**
+  // La post-condicion de abajo comparaba las de despues contra las que se mueven, y esa
+  // igualdad solo vale cuando la superviviente esta vacia. En la pareja real de Chris
+  // Huerbsch no lo estaba: `grant-platform-admin.sql` concede buscando
+  // `p.email = :email AND ua.auth_provider = 'credentials'`, y ese correo vive en la ficha
+  // DUPLICADA, asi que su Platform Admin cuelga justo de la cuenta que sobrevive. Con 2 que
+  // se mueven y 1 propia, la post-condicion habria dicho «esperaba 2, hay 3» sobre una
+  // consolidacion CORRECTA — y se lee despues de confirmar la transaccion, asi que habria
+  // dejado el escrito hecho y un error en pantalla. Es la misma forma que el 89 congelado y
+  // el recuento sin ambito de ese mismo guion: una post-condicion que mide algo distinto de
+  // lo que afirma.
+  const asignacionesPropias = await prisma.assignment.count({ where: { userAccountId: cuentaQueSeQueda } });
+  const asignacionesEsperadas = asignacionesQueSeMueven + asignacionesPropias;
   const totalAsignaciones = await prisma.assignment.count();
   const totalAuditoria = await prisma.auditEvent.count();
 
   console.log("\n  Plan");
-  console.log(`    1. mover ${asignacionesAntes} asignación(es) de ${cuentaQueSeVa ?? "(no hay cuenta vieja)"} a ${cuentaQueSeQueda}`);
+  console.log(`    1. mover ${asignacionesQueSeMueven} asignación(es) de ${cuentaQueSeVa ?? "(no hay cuenta vieja)"} a ${cuentaQueSeQueda}`);
   console.log(`    2. borrar la cuenta ${cuentaQueSeVa ?? "(nada que borrar)"}`);
   console.log(`    3. repuntar la cuenta ${cuentaQueSeQueda} a la persona ${canonicaId}`);
   console.log(`    4. mover el correo ${duplicada.email ?? "(ninguno)"} a la canónica`);
   console.log(`    5. borrar la ficha ${duplicadaId}`);
   console.log("\n  Post-condiciones que se exigirán");
   console.log(`    · la canónica tiene el correo y EXACTAMENTE una cuenta`);
-  console.log(`    · esa cuenta tiene ${asignacionesAntes} asignación(es)`);
+  console.log(
+    `    · esa cuenta tiene ${asignacionesEsperadas} asignación(es): ${asignacionesPropias} propia(s) + ${asignacionesQueSeMueven} movida(s)`,
+  );
   console.log(`    · la duplicada ya no existe`);
   console.log(`    · core.assignment sigue en ${totalAsignaciones} filas (no se crea ni se pierde ninguna)`);
-  console.log(`    · core.audit_event pasa de ${totalAuditoria} a ${totalAuditoria + 1} (sólo la fila de esto)`);
+  console.log(
+    `    · la fila de core.audit_event de esto se puede volver a leer, y el total (${totalAuditoria}) no decrece`,
+  );
 
   if (!aplicar) {
     console.log("\n  ENSAYO: no se escribió nada. Añade --aplicar para hacerlo.\n");
@@ -183,7 +241,9 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   }
 
   const correo = duplicada.email;
-  await prisma.$transaction(async (tx) => {
+  // La transacción devuelve el id de SU fila de auditoría: la post-condición la busca por ese id
+  // en vez de deducirla de un recuento global. Ver el comentario de abajo.
+  const idDeAuditoria = await prisma.$transaction(async (tx) => {
     if (cuentaQueSeVa) {
       await tx.assignment.updateMany({ where: { userAccountId: cuentaQueSeVa }, data: { userAccountId: cuentaQueSeQueda } });
       await tx.userAccount.delete({ where: { id: cuentaQueSeVa } });
@@ -199,18 +259,27 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
     // fusionó con qué. El actor es nulo porque esto corre fuera de la aplicación,
     // igual que `grant-platform-admin`, y el registro lo dice en vez de nombrar a
     // un apoderado.
-    await tx.auditEvent.create({
+    const fila = await tx.auditEvent.create({
+      select: { id: true },
       data: {
         actorUserAccountId: null,
         operation: "update",
         entityType: "person",
         entityId: canonicaId,
         before: { duplicada: { id: duplicadaId, displayName: duplicada.displayName, email: correo }, cuentaBorrada: cuentaQueSeVa },
-        after: { id: canonicaId, displayName: canonica.displayName, email: correo, cuenta: cuentaQueSeQueda, asignacionesMovidas: asignacionesAntes },
+        after: {
+          id: canonicaId,
+          displayName: canonica.displayName,
+          email: correo,
+          cuenta: cuentaQueSeQueda,
+          asignacionesMovidas: asignacionesQueSeMueven,
+          asignacionesPropias,
+        },
         reason: "consolidación de dos fichas de la misma persona (§2: no se duplican personas canónicas)",
         sourceInterface: "cli",
       },
     });
+    return fila.id;
   });
 
   // Post-condiciones, leídas DESPUÉS y fuera de la transacción.
@@ -219,15 +288,32 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   const asignacionesDespues = await prisma.assignment.count({ where: { userAccountId: cuentaQueSeQueda } });
   const totalAsignacionesDespues = await prisma.assignment.count();
   const totalAuditoriaDespues = await prisma.auditEvent.count();
+  // **SU fila se busca por id; el total sólo se usa para la regla de §35.**
+  // Esta comprobación exigía `totalAuditoria + 1`, y `core.audit_event` es la tabla más escrita de
+  // la aplicación: cada operación deja fila, un inicio de sesión incluido. Si alguien usa la
+  // aplicación durante la consolidación —y el día que se escribió esto se le estaba dando acceso
+  // justo a la persona que se consolida— el total crece de más, la consolidación es CORRECTA y la
+  // post-condición grita. Es la misma forma que la de las asignaciones: una invariante global que
+  // esta operación no posee. Lo que sí posee es su propia fila.
+  const filaDeAuditoria = await prisma.auditEvent.findUnique({ where: { id: idDeAuditoria }, select: { id: true } });
 
   const problemas: string[] = [];
   if (correo && despues?.email !== correo) problemas.push(`la canónica no tiene el correo: ${despues?.email ?? "(ninguno)"}`);
   if (!despues?.userAccount) problemas.push("la canónica quedó sin cuenta");
   if (despues?.userAccount && despues.userAccount.id !== cuentaQueSeQueda) problemas.push("la cuenta de la canónica no es la que debía quedarse");
   if (siguePresente) problemas.push("la ficha duplicada sigue existiendo");
-  if (asignacionesDespues !== asignacionesAntes) problemas.push(`asignaciones: esperaba ${asignacionesAntes}, hay ${asignacionesDespues}`);
+  if (asignacionesDespues !== asignacionesEsperadas) {
+    problemas.push(
+      `asignaciones en ${cuentaQueSeQueda}: esperaba ${asignacionesEsperadas} (${asignacionesPropias} propias + ${asignacionesQueSeMueven} movidas), hay ${asignacionesDespues}`,
+    );
+  }
   if (totalAsignacionesDespues !== totalAsignaciones) problemas.push(`core.assignment pasó de ${totalAsignaciones} a ${totalAsignacionesDespues}`);
-  if (totalAuditoriaDespues !== totalAuditoria + 1) problemas.push(`core.audit_event pasó de ${totalAuditoria} a ${totalAuditoriaDespues}, esperaba ${totalAuditoria + 1}`);
+  if (!filaDeAuditoria) problemas.push(`la fila de core.audit_event ${idDeAuditoria} no se puede volver a leer: la transacción no confirmó`);
+  if (totalAuditoriaDespues < totalAuditoria + 1) {
+    problemas.push(
+      `core.audit_event pasó de ${totalAuditoria} a ${totalAuditoriaDespues}: no creció, y §35 dice que es de sólo-añadir`,
+    );
+  }
 
   if (problemas.length > 0) {
     fail("la consolidación se escribió pero las post-condiciones NO cuadran:", ...problemas.map((p) => `  ${p}`));
