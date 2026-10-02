@@ -2364,24 +2364,36 @@ vercel inspect --logs <url-de-produccion> --scope <scope>
 ## Revisión independiente
 
 `docs/CODEX_REVIEW.md`. El CLI de Codex funciona y está autenticado; **no está
-en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
-El paquete de revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
+en el PATH**, y **la ruta cambió el 2026-09-30**:
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
 
-**CORREGIDO EL 2026-10-02: esta línea decía `Contents/Resources/codex` y esa ruta
-ya no existe.** La app se actualizó el 2026-09-30 y el CLI se movió dentro de
-`codex-cli/bin/`; ahí quedó `codex-cli 0.159.2`, con sesión. Dos cosas que cuesta
-un rato descubrir si no están escritas: en `Contents/Resources` lo único que
-conserva ese nombre son **dos archivos de sonido**, así que un `ls` descuidado
-parece encontrar algo; y el brief versionado `docs/CODEX_REVIEW.brief.md` lleva el
-encuadre del **último** cambio que se revisó —hoy el de `auth:grant-admin`— así que
-reusarlo tal cual le da al revisor el marco equivocado: se escribe uno propio y no
-se pisa ése.
+**La corrigieron dos sesiones por separado el 2026-10-02**, cada una con la mitad
+que la otra no tenía; esto conserva las dos, y el hecho de que coincidieran dice
+que la instrucción vieja llevaba tiempo desorientando.
+
+La ruta vieja era la misma **sin** `codex-cli/bin`, y ya no existe. Tres cosas que
+cuesta un rato descubrir si no están escritas:
+
+- **No falla en rojo de forma visible.** `exec` sobre la ruta vieja devuelve 127
+  con «no such file or directory», pero si ese comando va en una línea compuesta
+  que termina en un `echo`, **el conjunto sale 0** con la salida vacía — o sea con
+  la forma exacta de una revisión que no encontró nada. Comprobar `[ -x ]` sobre
+  la ruta antes de usarla, y leer el **tamaño** de la salida.
+- **En `Contents/Resources` lo único que conserva ese nombre son dos archivos de
+  sonido**, así que un `ls` descuidado parece encontrar algo.
+- **El brief versionado `docs/CODEX_REVIEW.brief.md` lleva el encuadre del ÚLTIMO
+  cambio que se revisó** —hoy el de `auth:grant-admin`—, así que reusarlo tal cual
+  le da al revisor el marco equivocado: se escribe uno propio y no se pisa ése.
+
+Ahí quedó `codex-cli 0.159.2`, con sesión. El paquete de revisión lo arma
+`tools/pack-for-review.sh`, mecánicamente.
 
 ## Salud del repositorio — comprobado el 2026-08-28
 
 - Remoto `https://github.com/danieljosegiraldez-png/nectar-nomada.git`, rama `main`, árbol limpio.
 - `vercel` autenticado; vive en `~/.nvm/versions/node/v24.19.0/bin`.
-- Codex `0.150.0-alpha.12.2`, `login status` → «Logged in using ChatGPT».
+- Codex **`0.159.2`** (medido el 2026-10-01; decía `0.150.0-alpha.12.2`),
+  `login status` → «Logged in using ChatGPT».
 - Backups: `NN_BACKUP_DIR` está en `~/.zshrc` y apunta a Google Drive; el
   destino existe; `com.nectarnomada.backup` está cargado en launchd con último
   estado de salida 0; el log vive en `~/Library/Logs/nectar-nomada-backup.log`.

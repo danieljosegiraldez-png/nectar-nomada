@@ -82,6 +82,7 @@ import {
   updateLocationAttributes,
   LocationAccessError,
   LocationValidationError,
+  RejillaInvalida,
 } from "../../lib/traceability/locations";
 import {
   createBiocharBatch,
@@ -180,6 +181,26 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
+  // La rejilla tiene frase POR CODIGO, como `PropositoInvalido`: «media rejilla» y
+  // «algo queda fuera» se corrigen de maneras distintas, y el segundo trae dentro
+  // QUE estorba. Sin esta rama la clase cae al `throw` final y encoger la rejilla
+  // de una parcela es un 500 — el defecto del PR #433, que
+  // `tests/arquitectura/acciones-traducen-sus-errores.test.ts` ya vigila solo.
+  if (error instanceof RejillaInvalida) {
+    const [clave, ...resto] = error.message.split(":");
+    const valor = resto.join(":").trim();
+    // La planta trae DOS numeros, y van como parametros numericos. Lo que NO
+    // puede pasar es que la frase del disparador entre entera en `{value}`: eso
+    // hacia que la pantalla en INGLES dijera «una planta en la hilera 9, planta
+    // 3», que es el RULING que las bandejas ya habian resuelto mas abajo.
+    if (clave === "rejilla_con_planta_fuera") {
+      // `noUncheckedIndexedAccess`: el destructurado puede dar `undefined`, y un
+      // mensaje con un hueco vacio es peor que uno que no se imprime.
+      const [hilera = "?", planta = "?"] = valor.split(",");
+      return t("error_rejilla_con_planta_fuera", { hilera, planta });
+    }
+    return t(`error_${clave}` as "error_rejilla_a_medias", { value: valor });
+  }
   if (error instanceof PlantingEventValidationError) return t("error_production", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
