@@ -189,7 +189,15 @@ export interface SolapeAvisado {
  * parcela, así que la raíz es el sitio del bloque cuando ése la tiene, y su padre
  * cuando no.
  */
-async function rejillaDelBloque(locationId: string) {
+/**
+ * **Se exporta desde el 2026-10-02, y el nombre es mas estrecho que la funcion.**
+ * Toma un `locationId`, no un bloque: resuelve la parcela que pone la numeracion
+ * para CUALQUIER sitio. `lib/traceability/specimens.ts` la importa con alias
+ * `rejillaDelSitio`, que es como se lee alli. No se renombra aqui para no tocar sus
+ * siete sitios de llamada; es la misma regla que `core.raiz_de_la_numeracion` en la
+ * base, y vive en un solo sitio por la misma razon.
+ */
+export async function rejillaDelBloque(locationId: string) {
   const sitio = await prisma.location.findUnique({
     where: { id: locationId },
     select: {

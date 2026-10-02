@@ -19,6 +19,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { updateLocationAttributes } from "../../lib/traceability/locations";
+import { createSpecimen, SpecimenValidationError } from "../../lib/traceability/specimens";
 import { crearFinca, crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 
 let actor: string;
@@ -129,5 +130,40 @@ describe("el tablero limita dónde se sitúa un plantón", () => {
 
   it("una parcela sin rejilla no admite coordenadas: no hay tablero donde situarlas", async () => {
     await expect(plantar(1, 1, parcelaSinRejillaId)).rejects.toThrow(/no tiene rejilla/);
+  });
+
+  /**
+   * **El servicio tambien valida, y esto lo prueba.** Las de arriba usan
+   * `prisma.specimen.create` a proposito, para ejercer la GARANTIA de la base
+   * saltandose el servicio. Pero sin estas dos, mutar la validacion de
+   * `createSpecimen` no tumbaria ninguna prueba: el cableado estaria sin cubrir.
+   */
+  describe("y el servicio da la frase antes de llegar a la base", () => {
+    const porElServicio = (gridRow: number | null, gridPosition: number | null, locationId = parcelaId) =>
+      createSpecimen(actor, {
+        locationId,
+        specimenType: "plant",
+        commonName: "TEST cafeto por el servicio",
+        provenanceClass: "direct_observation",
+        gridRow,
+        gridPosition,
+      });
+
+    it("una celda del tablero entra por el servicio", async () => {
+      const s = await porElServicio(7, 12);
+      expect(s.gridRow).toBe(7);
+    });
+
+    it("una celda fuera vuelve como SpecimenValidationError, no como un error de Prisma", async () => {
+      const caido = await porElServicio(99, 1).catch((e) => e);
+      expect(caido).toBeInstanceOf(SpecimenValidationError);
+      expect(caido.message).toBe("celda_fuera_de_la_rejilla");
+    });
+
+    it("una parcela sin rejilla vuelve con su propio codigo", async () => {
+      const caido = await porElServicio(1, 1, parcelaSinRejillaId).catch((e) => e);
+      expect(caido).toBeInstanceOf(SpecimenValidationError);
+      expect(caido.message).toBe("celda_sin_rejilla");
+    });
   });
 });

@@ -20,6 +20,9 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
+import { celdaCabeEnLaRejilla } from "../territorio/rejilla";
+// El nombre de origen es mas estrecho que la funcion: toma un `locationId`.
+import { rejillaDelBloque as rejillaDelSitio } from "./plotBlocks";
 import type { ScopeTarget } from "../rbac/types";
 import type {
   DataQuality,
@@ -83,6 +86,18 @@ export async function createSpecimen(userAccountId: string, input: CreateSpecime
 
   await resolveLocationScope(input.locationId);
   await requireSpecimenAccess(userAccountId, "manage", input.locationId);
+
+  // La base lo garantiza con `specimen_exigir_planton_en_la_rejilla`; esto es la
+  // mitad que da la FRASE. Sin ella el `P0001` crudo llega a la pantalla como un
+  // 500 (PR #433). **No fuerza la eleccion entre `sectorSimple` y la celda:** sigue
+  // valiendo el §3 del docstring de arriba.
+  if (input.gridRow != null || input.gridPosition != null) {
+    const { rejilla } = await rejillaDelSitio(input.locationId);
+    if (!rejilla) throw new SpecimenValidationError("celda_sin_rejilla");
+    if (!celdaCabeEnLaRejilla(rejilla, input.gridRow ?? null, input.gridPosition ?? null)) {
+      throw new SpecimenValidationError("celda_fuera_de_la_rejilla");
+    }
+  }
 
   const specimen = await prisma.$transaction(async (tx) => {
     const specimen = await tx.specimen.create({
