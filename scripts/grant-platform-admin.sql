@@ -16,6 +16,21 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
+-- La foto de lo que el rol SIGNIFICA, tomada antes de escribir nada. La
+-- post-condicion de abajo compara contra esto, no contra un numero escrito aqui:
+-- un numero se queda viejo cada vez que el catalogo gana un permiso, y entonces
+-- este guion deja de poder conceder nada. Paso el 2026-10-01: decia 89 --la suma
+-- de los trece perfiles acotados cuando se escribio-- y la base tenia 144, que es
+-- esos 89 mas los 55 que Platform Admin recibe por llevar el catalogo entero
+-- (ROLE_PROFILES en lib/rbac/catalog.ts lo define como PERMISSIONS.map(...)).
+-- El guardia aborto una concesion legitima, y su mensaje --«permission grants
+-- changed»-- se lee como si alguien hubiera tocado los permisos.
+--
+-- Antes/despues no envejece, y comprueba la propiedad que el comentario de abajo
+-- siempre quiso: que conceder un rol a una persona no altere el rol.
+CREATE TEMP TABLE permisos_antes ON COMMIT DROP AS
+  SELECT count(*) AS n FROM core.role_profile_permission;
+
 CREATE TEMP TABLE target ON COMMIT DROP AS
   SELECT ua.id AS account_id
   FROM core.user_account ua
@@ -69,7 +84,7 @@ SELECT gen_random_uuid(), NULL, 'create', 'assignment', inserted.id,
 FROM inserted;
 
 DO $$
-DECLARE n int;
+DECLARE n int; antes int;
 BEGIN
   SELECT count(*) INTO n
   FROM core.assignment a
@@ -79,9 +94,14 @@ BEGIN
   IF n <> 1 THEN RAISE EXCEPTION 'expected exactly 1 active Platform Admin assignment, found %', n; END IF;
 
   -- Role definitions are seed-managed (ADR-064). This grants a role to a
-  -- person; it must never alter what the role itself means.
+  -- person; it must never alter what the role itself means. Se compara contra la
+  -- foto del principio de la transaccion, no contra una constante: ver el
+  -- comentario de permisos_antes.
   SELECT count(*) INTO n FROM core.role_profile_permission;
-  IF n <> 89 THEN RAISE EXCEPTION 'permission grants changed: % (expected 89)', n; END IF;
+  SELECT pa.n INTO antes FROM permisos_antes pa;
+  IF n <> antes THEN
+    RAISE EXCEPTION 'este guion altero lo que el rol SIGNIFICA: core.role_profile_permission paso de % a %', antes, n;
+  END IF;
 
   RAISE NOTICE 'OK — Platform Admin granted at platform scope; role definitions unchanged';
 END $$;

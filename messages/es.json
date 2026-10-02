@@ -958,6 +958,7 @@
     "manejoUse_preventivo": "preventivo",
     "manejoUse_control": "de control",
     "manejoTargetNoDeclarado": "{producto} no declara cubrir el objetivo elegido. Puede ser deliberado; queda anotado tal como se registre.",
+    "manejoAvisoFloracion": "{producto} declara que daña polinizadores, y hay floración anotada en esta parcela para la fecha elegida. Queda anotado tal como se registre.",
     "manejoUnitLabel": "Unidad",
     "manejoLotLabel": "Frasco",
     "manejoLotNone": "— sin frasco —",
