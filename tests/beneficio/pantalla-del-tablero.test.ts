@@ -692,7 +692,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   });
 
   it("la banda 4,50–5,20 va CONDICIONADA: «si el pH se estanca», nunca «aquí hay riesgo» como un hecho", async () => {
-    // El módulo no ve la tendencia: `riesgoDeEsperar(variable, valor)`. En el documento esa banda es
+    // El módulo no ve la tendencia: `riesgoDeEsperar(variable, valor, perfil)`. En el documento esa banda es
     // `LAG_PHASE` antes de la ventana de gracia y `STALLED_ROT_HAZARD` después, y TODO lote sano pasa
     // por 4,5–5,2 bajando. ADR-181 define «estancado» por la tendencia del pH, no por la banda.
     const html = await conUnPh(4.8);
@@ -761,9 +761,14 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   // lote declara— y se pasa por la misma función que decide su perfil (`perfilDeLaFaseAbierta`), no de una clave escrita a mano:
   // así la prueba cae tanto si la pantalla ignora el perfil como si el mapeo grado→perfil presta el del lavado a otro grado.
   describe("sólo con el perfil de la matriz: un lote que no es lavado NO recibe la cita del lavado", () => {
-    /** El perfil de un lote cuya fase abierta tiene un proceso de grado `grado`; con `faseAbierta = false`, de uno sin fase abierta. */
-    const perfilDe = (grado: string | null, faseAbierta = true) =>
-      perfilDeLaFaseAbierta(faseAbierta ? { lotProcess: { processGradeValue: grado === null ? null : { value: grado } } } : undefined);
+    /**
+     * El perfil de un lote cuya fase abierta es `fase` (por omisión, fermentación) y tiene un proceso de grado `grado`;
+     * con `fase = null`, el de un lote SIN fase abierta.
+     */
+    const perfilDe = (grado: string | null, fase: "fermentation" | "drying" | null = "fermentation") =>
+      perfilDeLaFaseAbierta(
+        fase === null ? undefined : { fase, lotProcess: { processGradeValue: grado === null ? null : { value: grado } } },
+      );
     /** 4,7 está DENTRO de la ventana óptima de NATURAL (3,9–4,8) y, en la matriz del lavado, es «proliferación butírica y mohos». */
     const PH = 4.7;
     const pintarConPerfil = (perfil: ClaveDePerfil | null, valor = PH) =>
@@ -797,12 +802,32 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     });
 
     it("un lote Washed SIN fase abierta no pinta: sin fase no hay qué esperar (I1)", async () => {
-      const sinFase = perfilDe("Washed", false);
+      const sinFase = perfilDe("Washed", null);
       expect(sinFase).toBeNull();
       expect(bloqueDeRiesgo(await pintarConPerfil(sinFase))).toBeNull();
       // Control: con fase abierta, el mismo grado sí pinta.
-      expect(bloqueDeRiesgo(await pintarConPerfil(perfilDe("Washed", true)))).not.toBeNull();
+      expect(bloqueDeRiesgo(await pintarConPerfil(perfilDe("Washed", "fermentation")))).not.toBeNull();
       // MUTACIÓN: quitar `if (!abierta) return null;` de `perfilDeLaFaseAbierta` → revienta con `undefined` y cae.
+    });
+
+    // **La otra mitad de C1: la matriz es de una FASE, la fermentación.** `10_ph_fermentation.md` §1 es la matriz de pH de la
+    // fermentación y `13_drying_moisture.md` no tiene ninguna: un lote Washed con una corrida de SECADO abierta tiene perfil
+    // `WASHED_STANDARD`, y con un pH dentro de una ventana de secado la pantalla le citaría cinética de fermentación.
+    it("un lote Washed con SECADO abierto no pinta; el mismo con FERMENTACIÓN abierta sí (la matriz es de la fermentación)", async () => {
+      const secando = perfilDe("Washed", "drying");
+      expect(secando, "con secado abierto no hay perfil que citar").toBeNull();
+      const htmlSecando = await pintarConPerfil(secando);
+      expect(bloqueDeRiesgo(htmlSecando)).toBeNull();
+      expect(aTexto(htmlSecando)).not.toContain("Criterio de Néctar Nómada");
+      expect(aTexto(htmlSecando)).not.toContain("stinker");
+      // Tampoco con otros grados que sí tienen perfil: es la fase, no el grado.
+      expect(perfilDe("Natural", "drying")).toBeNull();
+      // Control, con el MISMO grado y el MISMO dato: con fermentación abierta SÍ pinta, y es la cita del lavado.
+      const fermentando = perfilDe("Washed", "fermentation");
+      expect(fermentando).toBe("WASHED_STANDARD");
+      expect(aTexto(bloqueDeRiesgo(await pintarConPerfil(fermentando))!)).toContain("stinker");
+      // MUTACIÓN: quitar `if (abierta.fase !== "fermentation") return null;` de `perfilDeLaFaseAbierta` → el secado cita «stinker» y cae.
+      // MUTACIÓN: invertirlo (`=== "fermentation"`) → cae el control de la fermentación.
     });
 
     it("la fuente NOMBRA el perfil de la matriz, detrás del toque, en los dos idiomas", async () => {

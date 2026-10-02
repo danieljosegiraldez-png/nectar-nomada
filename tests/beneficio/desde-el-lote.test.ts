@@ -33,7 +33,8 @@ const lectura = (v: number, hora: number, extra: Partial<MedicionDelLote> = {}):
 
 describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta, o null — nunca «el de siempre»", () => {
   /** Una corrida abierta cuyo proceso declara `grado` (`null` = proceso sin grado; `"sin-proceso"` = corrida sin proceso). */
-  const abiertaCon = (grado: string | null | "sin-proceso") => ({
+  const abiertaCon = (grado: string | null | "sin-proceso", fase: "fermentation" | "drying" = "fermentation") => ({
+    fase,
     lotProcess: grado === "sin-proceso" ? null : { processGradeValue: grado === null ? null : { value: grado } },
   });
 
@@ -55,6 +56,19 @@ describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta,
     expect(perfilDeLaFaseAbierta(abiertaCon(""))).toBeNull();
     // Control: la misma llamada con una corrida que sí tiene grado con perfil lo devuelve, así que los `null` de arriba no son «siempre null».
     expect(perfilDeLaFaseAbierta(abiertaCon("Washed"))).not.toBeNull();
+  });
+
+  it("sólo la FERMENTACIÓN tiene perfil que citar: con secado abierto es null aunque el grado sea Washed", () => {
+    // La matriz de pH que se cita (`10_ph_fermentation.md` §1) es de la fermentación; `13_drying_moisture.md` no tiene ninguna.
+    for (const grado of ["Washed", "Natural"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado, "drying")), `${grado} con secado`).toBeNull();
+    }
+    // Control: los MISMOS grados con la fermentación abierta sí tienen perfil, así que el null de arriba es de la fase y no del grado.
+    expect(perfilDeLaFaseAbierta(abiertaCon("Washed", "fermentation"))).toBe("WASHED_STANDARD");
+    expect(perfilDeLaFaseAbierta(abiertaCon("Natural", "fermentation"))).toBe("NATURAL");
+    // Una fase que no es ninguna de las dos que existen hoy tampoco la tiene (la guarda es «es fermentación», no «no es secado»).
+    const rara = { fase: "reposo", lotProcess: { processGradeValue: { value: "Washed" } } } as unknown as Parameters<typeof perfilDeLaFaseAbierta>[0];
+    expect(perfilDeLaFaseAbierta(rara)).toBeNull();
   });
 
   it("un grado que es una propiedad heredada del objeto no es un perfil", () => {

@@ -33,7 +33,8 @@ import type { Prisma } from "../../generated/prisma/client";
  *
  * **`perfilDelLote` es `null` cuando no se puede decir, y `null` NO es «el de siempre»:** el lote no tiene
  * ninguna fase abierta (sin fase no hay umbrales que aplicar, como `SIN_PROCESO_ABIERTO` en
- * `veredictoDelLote`), no declara grado, o su grado no tiene perfil escrito (`Honey` y los dos
+ * `veredictoDelLote`), la que tiene abierta no es de fermentación (la matriz de pH que se cita lo es; con
+ * secado no hay ninguna), no declara grado, o su grado no tiene perfil escrito (`Honey` y los dos
  * `Semi Wash`). Quien pinta calla con `null`.
  */
 export interface CurvaDelTablero extends Curva {
@@ -429,7 +430,7 @@ export async function datosDelTablero(
  *   y pintarlo sería una banda que nadie declaró. Sin objetivo, `curvaDeLote` dice
  *   `sin_objetivo_declarado` y pinta los puntos igual.
  * - **El perfil que rige el lote** (`perfilDelLote`) sale del grado del proceso de LA FASE ABIERTA, por el
- *   mismo mapeo que su veredicto; sin fase abierta es `null`.
+ *   mismo mapeo que su veredicto; sin fase abierta, o con una que no es de fermentación, es `null`.
  */
 async function curvaDeUnLote(
   lotWhere: Prisma.LotWhereInput,
@@ -472,7 +473,7 @@ async function curvaDeUnLote(
   // **El perfil que rige el lote, de la misma fuente que su veredicto** (`PERFIL_POR_GRADO` en
   // `desdeElLote.ts`): el grado del proceso de LA FASE ABIERTA. Sin fase abierta (`abierta` indefinida)
   // sale `null` y el bloque de «qué sugiere el dato si se espera» calla: sobre un lote que no espera
-  // nada no se escribe qué pasa si espera.
+  // nada no se escribe qué pasa si espera. Y con una fase de secado también: la matriz es de fermentación.
   const perfilDelLote = perfilDeLaFaseAbierta(abierta);
 
   const curva = curvaDeLote({

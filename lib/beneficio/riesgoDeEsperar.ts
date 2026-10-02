@@ -18,6 +18,12 @@
  * con cualquiera que no sea el de la matriz —también con `null`, «no se sabe cuál»—:** no hay un umbral
  * escrito para ningún otro y escribirlo no es de este módulo.
  *
+ * **La matriz es también de una FASE: la fermentación.** Que el lote sea `Washed` no basta: con una corrida de
+ * secado abierta, citarle esta matriz sería decirle cinética de fermentación sobre un pH de secado. Esa guarda
+ * no vive aquí —esta función sólo recibe el perfil— sino en quien lo calcula (`perfilDeLaFaseAbierta`, que
+ * devuelve `null` con una fase que no sea de fermentación), y `13_drying_moisture.md` no tiene ninguna matriz
+ * de pH con la que sustituirla.
+ *
  * **Sin base de datos ni imports a propósito**, igual que `curvaDeLote.ts` y `ejesDeLaCurva.ts`.
  *
  * **Las ocho filas de abajo están TRANSCRITAS**, columna «Banda» y columna «Riesgo / vector» de

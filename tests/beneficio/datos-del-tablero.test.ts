@@ -45,8 +45,10 @@ const equipoIds: string[] = [];
 
 let miOrgId: string, otraOrgId: string;
 let valorGrado: string, valorCereza: string;
-/** El valor REAL «Natural» del catálogo: es lo único que el motor traduce a un perfil (`PERFIL_POR_GRADO`). */
+/** El valor REAL «Natural» del catálogo: es lo único que el motor traduce a un perfil (`PERFIL_POR_GRADO`) junto con «Washed». */
 let valorNatural: string;
+/** El valor REAL «Washed» del catálogo: el único cuyo perfil (`WASHED_STANDARD`) tiene matriz de pH citable. */
+let valorWashed: string;
 
 let operario: string;
 let miSitio: string, otroSitio: string;
@@ -170,6 +172,15 @@ beforeAll(async () => {
   } else {
     const nuevo = await prisma.variableCatalogValue.create({ data: { catalogId: grado.id, value: "Natural" } });
     valorNatural = nuevo.id;
+    catalogoValorIds.push(nuevo.id);
+  }
+  // «Washed», con la misma regla que «Natural»: se reusa el del catálogo real si existe y no se borra; si no, se crea y se quita.
+  const washed = await prisma.variableCatalogValue.findFirst({ where: { catalogId: grado.id, value: "Washed" } });
+  if (washed) {
+    valorWashed = washed.id;
+  } else {
+    const nuevo = await prisma.variableCatalogValue.create({ data: { catalogId: grado.id, value: "Washed" } });
+    valorWashed = nuevo.id;
     catalogoValorIds.push(nuevo.id);
   }
 
@@ -351,7 +362,7 @@ async function transformacionDe(
 
 async function procesoDe(
   lotId: string,
-  o: { cerrado?: boolean; versionId?: string; secuencia?: number; natural?: boolean } = {},
+  o: { cerrado?: boolean; versionId?: string; secuencia?: number; natural?: boolean; washed?: boolean } = {},
 ) {
   const p = await prisma.lotProcess.create({
     data: {
@@ -359,7 +370,7 @@ async function procesoDe(
       // La unicidad es `(lotId, sequenceOrder)`: un lote puede tener varios procesos abiertos.
       sequenceOrder: o.secuencia ?? 1,
       intent: nombre("intención"),
-      processGradeValueId: o.natural ? valorNatural : valorGrado,
+      processGradeValueId: o.washed ? valorWashed : o.natural ? valorNatural : valorGrado,
       cherryStateValueId: valorCereza,
       targetMoisturePct: 11,
       startedAt: haceHoras(12),
@@ -933,18 +944,32 @@ describe("la curva de un lote", () => {
   // tabla que el veredicto (`PERFIL_POR_GRADO`). Con él decide la pantalla si pinta «qué sugiere el dato si se
   // espera»: la matriz es la del lavado y a un lote que no lo es no se le cita. La lógica del mapeo la prueban
   // `desde-el-lote.test.ts` y la pantalla, sin base; esto prueba el CABLEADO real: que la consulta trae el grado.
-  it("`perfilDelLote` sale del grado del proceso de la fase abierta: Natural → NATURAL; grado sin perfil → null; sin fase abierta → null", async () => {
+  //
+  // **Y sólo si esa fase es de FERMENTACIÓN**: la matriz de pH que se cita es la de `10_ph_fermentation.md` §1, y
+  // `13_drying_moisture.md` no tiene ninguna. Un lote Washed con una corrida de SECADO abierta no tiene perfil que citar.
+  it("`perfilDelLote` sale del grado del proceso de la fase abierta, y sólo si es de fermentación: Washed + fermentación → WASHED_STANDARD; el mismo con secado → null", async () => {
     const perfilDe = async (lotId: string) =>
       (await datosDelTablero(operario, ahora, { curva: { lotId, variable: "ph", ...LIENZO } })).curva!.perfilDelLote;
     // `lotK` seca, con un proceso cuyo grado es `TEST Natural (RUN)`: no es «Natural» ni «Washed», y no tiene perfil.
     expect(await perfilDe(lotK)).toBeNull();
-    // Control: el mismo recorrido con un grado que SÍ tiene perfil (el valor real «Natural»).
-    const natural = await loteSimple("K-PERFIL-NATURAL", miSitio, miOrgId);
-    await fermentacionDe(natural, { lotProcessId: await procesoDe(natural, { natural: true }) });
-    expect(await perfilDe(natural)).toBe("NATURAL");
+    // Control positivo: un grado que SÍ tiene perfil y la fase de fermentación abierta (el valor real «Washed»).
+    const lavadoFermentando = await loteSimple("K-PERFIL-WASHED-FERMENTA", miSitio, miOrgId);
+    await fermentacionDe(lavadoFermentando, { lotProcessId: await procesoDe(lavadoFermentando, { washed: true }) });
+    expect(await perfilDe(lavadoFermentando)).toBe("WASHED_STANDARD");
+    // El MISMO grado con un SECADO abierto: no hay perfil. Es la fase, no el grado (el control de arriba es el mismo grado).
+    const lavadoSecando = await loteSimple("K-PERFIL-WASHED-SECA", miSitio, miOrgId);
+    await secadoDe(lavadoSecando, { lotProcessId: await procesoDe(lavadoSecando, { washed: true }) });
+    expect(await perfilDe(lavadoSecando)).toBeNull();
+    // Y «Natural»: con fermentación tiene su perfil, con secado no.
+    const naturalFermentando = await loteSimple("K-PERFIL-NATURAL-FERMENTA", miSitio, miOrgId);
+    await fermentacionDe(naturalFermentando, { lotProcessId: await procesoDe(naturalFermentando, { natural: true }) });
+    expect(await perfilDe(naturalFermentando)).toBe("NATURAL");
+    const naturalSecando = await loteSimple("K-PERFIL-NATURAL-SECA", miSitio, miOrgId);
+    await secadoDe(naturalSecando, { lotProcessId: await procesoDe(naturalSecando, { natural: true }) });
+    expect(await perfilDe(naturalSecando)).toBeNull();
     // Y el mismo grado SIN fase abierta (el proceso existe y está abierto, pero ninguna corrida): no hay perfil.
     const sinFase = await loteSimple("K-PERFIL-SIN-FASE", miSitio, miOrgId);
-    await procesoDe(sinFase, { natural: true });
+    await procesoDe(sinFase, { washed: true });
     expect(await perfilDe(sinFase)).toBeNull();
   });
 

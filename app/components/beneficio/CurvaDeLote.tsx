@@ -41,7 +41,7 @@ const DOCUMENTO_DEL_RIESGO = "docs/beneficio/10_ph_fermentation.md";
  *
  * - `"tal_cual"`: «con tu última lectura el dato sugiere: <cita>».
  * - `"si_se_estanca"`: la banda `[4.50, 5.20)` es, en el documento, `LAG_PHASE` ANTES de la ventana de
- *   gracia y `STALLED_ROT_HAZARD` DESPUÉS. `riesgoDeEsperar(variable, valor)` no ve la tendencia, y
+ *   gracia y `STALLED_ROT_HAZARD` DESPUÉS. `riesgoDeEsperar(variable, valor, perfil)` no ve la tendencia, y
  *   TODO lote sano pasa por 4,5–5,2 bajando, así que decir «hay proliferación butírica» ahí como un
  *   hecho sería falso para casi todos los lotes. ADR-181 define «estancado» por la tendencia del pH,
  *   no por la banda: la frase va CONDICIONADA («si el pH se estanca…»).
@@ -142,10 +142,11 @@ function textoDelValor(v: number): string {
  * - **Lo que se cita es la ÚLTIMA lectura** y se dice cuál, para no hacer adivinar de qué habla. **Si varias
  *   comparten el instante máximo no hay una «última» y no se cita ninguna** (`ultimaLectura`): el orden entre
  *   ellas es el que devolvió la base, y elegir una sería presentar una lectura cualquiera como «tu última».
- * - **Sólo con el perfil de la matriz.** La matriz de §1 es la del perfil `WASHED_STANDARD`; con el
- *   `perfilDelLote` de cualquier otro lote —`NATURAL`, o `null` (sin fase abierta, sin grado o un grado sin
- *   perfil: `Honey`, `Semi Wash`)— `riesgoDeEsperar` devuelve `null` y **no se escribe nada**, ni una frase
- *   neutra: prestarle al lote los umbrales del lavado sería decirle una cinética que no es la suya.
+ * - **Sólo con el perfil de la matriz.** La matriz de §1 es la del perfil `WASHED_STANDARD` y de la fase de
+ *   fermentación; con el `perfilDelLote` de cualquier otro lote —`NATURAL`, o `null` (sin fase abierta, con una
+ *   fase de secado, sin grado o un grado sin perfil: `Honey`, `Semi Wash`)— `riesgoDeEsperar` devuelve `null`
+ *   y **no se escribe nada**, ni una frase neutra: prestarle al lote los umbrales del lavado, o los de la
+ *   fermentación sobre un pH de secado, sería decirle una cinética que no es la suya.
  *
  * **Qué filas de `riesgoDeEsperar` se pintan lo decide la BANDA** (`BANDAS_QUE_SE_PINTAN`), el
  * identificador estable del documento, nunca buscar palabras dentro del texto del riesgo. Una banda

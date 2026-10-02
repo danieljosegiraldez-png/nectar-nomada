@@ -73,6 +73,13 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
  * aplicar, sin proceso o sin grado tampoco, y un grado que no casa no se completa con el del lavado.** `null`
  * es «no se sabe», nunca «el de siempre».
  *
+ * **Y sólo si la fase abierta es de FERMENTACIÓN.** La matriz que se cita es de un protocolo **y de una
+ * fase**: `10_ph_fermentation.md` §1 es la matriz de pH de la fermentación, y `13_drying_moisture.md` no tiene
+ * ninguna. Un lote `Washed` con una corrida de SECADO abierta tiene perfil `WASHED_STANDARD` pero su pH, si lo
+ * hubiera, cae dentro de una ventana de secado: citarle la cinética de la fermentación sería afirmar algo que
+ * no se sostiene. Con secado —o con cualquier fase que no sea fermentación— devuelve `null`; no se inventa una
+ * matriz de secado.
+ *
  * `abierta` es la corrida abierta del lote (fermentación o secado) tal como la trae `datosDelTablero`;
  * `undefined` = el lote no tiene ninguna. El grado sale del proceso de ESA corrida, no de otro lugar: es lo
  * que hace que sin fase abierta no haya perfil.
@@ -82,10 +89,15 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
  */
 export function perfilDeLaFaseAbierta(
   abierta:
-    | { readonly lotProcess: { readonly processGradeValue: { readonly value: string } | null } | null }
+    | {
+        readonly fase: "fermentation" | "drying";
+        readonly lotProcess: { readonly processGradeValue: { readonly value: string } | null } | null;
+      }
     | undefined,
 ): ClaveDePerfil | null {
   if (!abierta) return null;
+  // La matriz de pH es de la fermentación: con cualquier otra fase no hay umbral citable (ver arriba).
+  if (abierta.fase !== "fermentation") return null;
   const grado = abierta.lotProcess?.processGradeValue?.value;
   if (!grado || !Object.hasOwn(PERFIL_POR_GRADO, grado)) return null;
   return PERFIL_POR_GRADO[grado] ?? null;
