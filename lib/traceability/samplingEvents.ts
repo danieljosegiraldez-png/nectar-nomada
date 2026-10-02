@@ -2,6 +2,8 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { loteDividido } from "./procesoDelLinaje";
+import { SampleValidationError } from "./samples";
 import type { ClassificationLevel } from "../rbac/types";
 import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import type { MaterialState, Prisma, SamplingEvent, SamplingRole, SamplingZone } from "../../generated/prisma/client";
@@ -157,6 +159,10 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }, ...contextos]);
 
   return prisma.$transaction(async (tx) => {
+    // Parte 1, R6.6 (ronda de arreglo 1, 2026-10-01): un lote dividido bajo un proceso no admite muestras, y las de
+    // una inspección lo son (`sourceLotId`). Era la tercera puerta, sin la regla de `createSampleFromLot`. La misma
+    // clase que allí, y antes de escribir nada.
+    if (await loteDividido(tx, lot.id)) throw new SampleValidationError("lote_dividido");
     const event = await tx.samplingEvent.create({
       data: {
         dryingBedLocationId: input.dryingBedLocationId ?? null,
@@ -234,6 +240,8 @@ export async function opcionesParaInspeccion(userAccountId: string) {
   for (const lot of lots) {
     try {
       await requireSamplingAccess(userAccountId, lot);
+      // Parte 1, R6.6 (ronda de arreglo 1, 2026-10-01): no se ofrece lo que `registrarInspeccion` va a rechazar.
+      if (await loteDividido(prisma, lot.id)) continue;
       lotes.push({ id: lot.id, name: lot.lotCode });
       anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
     } catch (error) {

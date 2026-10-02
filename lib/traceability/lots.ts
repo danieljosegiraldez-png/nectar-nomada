@@ -340,6 +340,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       ? await antesDeTransformar(tx, {
           tipo: input.transformationType as TipoConReglaDeProceso,
           inputLotIds: input.inputs.map((i) => i.lotId),
+          numeroDePartes: input.outputs.length,
         })
       : null;
     const transformation = await tx.lotTransformation.create({

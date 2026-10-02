@@ -469,15 +469,19 @@ export type TipoConReglaDeProceso = "split" | "selection" | "merge" | "blend";
  * - bajo un proceso abierto no se selecciona (R6.7: «primero se selecciona, después el proceso») ni se
  *   fusiona (R6.8), y una «división» con varias entradas también junta cafés;
  * - un `split` bajo un proceso abierto devuelve ese proceso, que `dividirProcesoEnTx` cerrará y copiará
- *   DESPUÉS de crear las partes. Antes rechaza si hay una corrida en curso (R6.2).
+ *   DESPUÉS de crear las partes. Antes rechaza si no trae ninguna parte (R6.1) o si hay una corrida en
+ *   curso (R6.2).
  *
  * Es lo PRIMERO de la transacción de `recordTransformation`: el bloqueo va antes que cualquier otra fila
  * que la transacción toque, para no romper el orden global por id (R2). Todo lo que decide lo lee después
  * del bloqueo: una corrida que empiece a la vez sobre el mismo café espera, o se ve aquí.
+ *
+ * `numeroDePartes` (ronda de arreglo 1, 2026-10-01) son las salidas que la transformación va a crear: se
+ * pasa aquí, y no se mira en `dividirProcesoEnTx`, para que el rechazo llegue antes de escribir nada.
  */
 export async function antesDeTransformar(
   tx: Prisma.TransactionClient,
-  args: { tipo: TipoConReglaDeProceso; inputLotIds: readonly string[] },
+  args: { tipo: TipoConReglaDeProceso; inputLotIds: readonly string[]; numeroDePartes: number },
 ): Promise<{ procesoId: string } | null> {
   await bloquearLinajes(tx, args.inputLotIds);
   for (const lotId of args.inputLotIds) {
@@ -493,6 +497,10 @@ export async function antesDeTransformar(
   if (args.tipo === "merge" || args.tipo === "blend" || args.inputLotIds.length > 1) {
     throw new LotProcessError("fusion_bajo_proceso_abierto");
   }
+  // R6.1 (ronda de arreglo 1, 2026-10-01): se divide el lote ENTERO en sus partes. Sin ninguna, TODO el café queda
+  // fuera de ellas, y sin libro de masa nada más lo vería: el proceso se cerraba como dividido sin una sola copia, y
+  // el café se quedaba sin proceso en un lote cerrado a todo.
+  if (args.numeroDePartes === 0) throw new LotProcessError("division_deja_remanente");
   const vigente = abiertos[0]!;
   await exigeSinCorridasAbiertas(tx, { id: vigente.id, lotId: vigente.lotId });
   return { procesoId: vigente.id };

@@ -3076,6 +3076,7 @@
     "error_estante_no_se_reduce": "Un estante no se reduce: las posiciones pueden tener historia.",
     "bodegas": "Bodegas",
     "error_persona_no_permitida": "Esa persona no es de esta finca ni del equipo Néctar Nómada. Elige a otra de la lista.",
+    "error_lote_dividido": "Ese lote se dividió bajo un proceso y quedó cerrado: la inspección se registra en una de sus partes.",
     "colaTitulo": "Secado",
     "colaIntro": "Qué hay en cada área y qué le toca ahora.",
     "colaSinAmbito": "No ves ningún lote todavía. Cuando tengas permiso sobre una finca, sus secados aparecerán aquí.",

@@ -3076,6 +3076,7 @@
     "error_estante_no_se_reduce": "A rack cannot shrink: its positions may have history.",
     "bodegas": "Storage",
     "error_persona_no_permitida": "That person is not from this farm or the Néctar Nómada team. Choose someone from the list.",
+    "error_lote_dividido": "That lot was split under a process and is now closed: record the inspection on one of its parts.",
     "colaTitulo": "Drying",
     "colaIntro": "What is in each area and what it needs now.",
     "colaSinAmbito": "You cannot see any lots yet. Once you have permission over a farm, its drying runs appear here.",
