@@ -779,7 +779,13 @@ describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no est�
     const padre = await lote("TAB-P");
     const hijo = await lote("TAB-H");
     await enlazar([padre], [hijo]);
-    await abrirProcesoDePrueba(gestor, padre);
+    // El proceso del padre lleva una receta cuya fase de fermentación declara sus horas: el tablero las lee del MISMO proceso
+    // que da el grado. La versión cuelga de la receta de esta corrida, y cae con ella en el `afterAll` (Cascade).
+    const { recipeId } = await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: recetaVersionId }, select: { recipeId: true } });
+    const conFase = await prisma.processRecipeVersion.create({ data: {
+      recipeId, version: 3, status: "approved", createdBy: gestor, fases: { create: [{ phase: "fermentation", expectedHours: 36 }] },
+    } });
+    await abrirProcesoDePrueba(gestor, padre, { processRecipeVersionId: conFase.id });
     // Una corrida de ANTES de la Parte 1: cruda, sin `lotProcessId` (R9 no la rellena). La limpia el `afterAll`, que encuentra
     // la corrida por la entrada de su transformación (`hijo` está en `lotes`): nada de borrarla debajo de las aserciones.
     const corrida = await prisma.fermentationRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
@@ -792,5 +798,6 @@ describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no est�
     const entrada = d.lotes.find((l) => l.lotId === hijo);
     expect(entrada, "el hijo con fermentación abierta tiene que estar en el tablero").toBeDefined();
     expect(entrada!.veredicto).not.toBe("SIN_GRADO_DECLARADO");
+    expect(entrada!.expectedHours, "el tablero no leyó las horas de la fase del proceso que cubre al lote").toBe(36);
   });
 });

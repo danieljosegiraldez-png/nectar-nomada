@@ -11,6 +11,7 @@ import { moveLotToStorage } from "../../lib/traceability/storage";
 import {
   abrirProceso,
   cerrarProceso,
+  coberturaDelLote,
   devolverASecado,
   puedeAbrirProceso,
   puedeDevolverASecado,
@@ -21,7 +22,7 @@ import {
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { recordTransformation } from "../../lib/traceability/lots";
-import { loteDividido, procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
+import { loteDividido, procesoQueCubre, procesosParaEntrada } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -163,6 +164,9 @@ afterAll(async () => {
   const todasLasTransformaciones = [...new Set([...transformaciones, ...deServicios.map((t) => t.id)])];
   const todosLosSecados = [...new Set([...secados, ...deServicios.flatMap((t) => (t.dryingRunId ? [t.dryingRunId] : []))])];
   await borrarProcesosDeLotesDonde({ id: { in: lotes } });
+  // Las recetas de `coberturaDelLote`, DESPUÉS de los procesos que las usan (`process_recipe_version_id` es RESTRICT); sus
+  // versiones caen con ellas (Cascade).
+  await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN } }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: mediciones } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
@@ -915,5 +919,66 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
       }
     }
     expect(faltan).toEqual([]);
+  });
+});
+
+/**
+ * `coberturaDelLote` (tarea 9): lo que la ficha y la página del proceso enseñan. Sin prueba propia, el flip lo midió: dejar
+ * `recetaConVersion` siempre nulo, cortar la cadena al vigente o dejar `paraEntrada` vacío no hacía caer nada —las pantallas
+ * no se renderizan en pruebas—. Esto fija lo que esas pantallas leen.
+ */
+describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso enseñan", () => {
+  async function versionDeReceta(nombre: string) {
+    const receta = await prisma.processRecipe.create({ data: { name: `TEST ${nombre} ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
+    return (await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "approved", createdBy: gestor } })).id;
+  }
+
+  it("el pergamino enseña el proceso de la cereza: en qué lote vive, su receta con versión, y al veredicto le llega lo mismo que al tablero", async () => {
+    const cereza = await lote("CB1-C");
+    const pergamino = await lote("CB1-P");
+    await enlazar([cereza], [pergamino]);
+    const p = await abrirProcesoDePrueba(gestor, cereza, { processRecipeVersionId: await versionDeReceta("Lavado CB1") });
+    const c = await coberturaDelLote(gestor, pergamino);
+    expect(c.estado).toBe("abierto");
+    expect(c.vigente?.id).toBe(p.id);
+    expect(c.vigente?.lot.lotCode, "la ficha no sabría decir en qué lote vive el proceso").toBe(`CB1-C-${RUN}`);
+    expect(c.vigente?.etiqueta).toBe(`TEST Lavado CB1 ${RUN}`);
+    expect(c.vigente?.recetaConVersion, "la ficha y el formulario de fermentación leen la receta con su versión").toBe(`TEST Lavado CB1 ${RUN} · v1`);
+    expect(c.vigente?.origen).toBe("original");
+    expect(c.vigente?.profundidad).toBe(1);
+    // Lo que la ficha pasa al veredicto es lo que el tablero le pasa: la misma función, y no vacío.
+    expect(c.paraEntrada).toEqual(await procesosParaEntrada(prisma, pergamino));
+    expect(c.paraEntrada).toEqual([{ endedAt: null, gradoDeProceso: "Washed" }]);
+  });
+
+  it("un reproceso enseña la cadena entera, del más cercano al más lejano, y un proceso sin receta no inventa versión", async () => {
+    const cereza = await lote("CB2-C");
+    const pergamino = await lote("CB2-P");
+    await enlazar([cereza], [pergamino]);
+    const p1 = await abrirProcesoDePrueba(gestor, cereza); // «Sin receta»
+    await cerrarProceso(gestor, { lotProcessId: p1.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino, 11) });
+    const p2 = await abrirProcesoDePrueba(gestor, pergamino, { processRecipeVersionId: await versionDeReceta("Reproceso CB2") });
+    const c = await coberturaDelLote(gestor, pergamino);
+    expect(c.vigente?.id).toBe(p2.id);
+    expect(c.cadena.map((p) => p.id), "la cadena perdió la historia de arriba").toEqual([p2.id, p1.id]);
+    expect(c.cadena.map((p) => p.lot.lotCode)).toEqual([`CB2-P-${RUN}`, `CB2-C-${RUN}`]);
+    expect(c.cadena[1]!.etiqueta).toBe("Sin receta");
+    expect(c.cadena[1]!.recetaConVersion, "«Sin receta» no tiene versión que enseñar").toBeNull();
+    expect(c.cadena[1]!.humedadDeCierre).toBe(11);
+  });
+
+  it("una mezcla devuelve su composición, ningún vigente y nada para el veredicto", async () => {
+    const a = await lote("CB3-A");
+    const b = await lote("CB3-B");
+    const m = await lote("CB3-M");
+    const pa = await abrirProcesoDePrueba(gestor, a);
+    const pb = await abrirProcesoDePrueba(gestor, b);
+    await enlazar([a, b], [m]);
+    const c = await coberturaDelLote(gestor, m);
+    expect(c.estado).toBe("mezcla");
+    expect(c.vigente).toBeNull();
+    expect(c.composicion?.procesos.map((p) => p.id).sort()).toEqual([pa.id, pb.id].sort());
+    expect(c.composicion?.ramaSinProceso).toBe(false);
+    expect(c.paraEntrada).toEqual([]);
   });
 });
