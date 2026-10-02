@@ -36,7 +36,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { riesgoDeEsperar, type Riesgo } from "../../lib/beneficio/riesgoDeEsperar";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
@@ -219,14 +219,20 @@ describe("la guía «Qué hace el operario» de 10_ph_fermentation.md §1", () =
     // archivo quiere dejar pasar— los controles dejarían de ser lo que dicen y el archivo caería
     // por el camino bueno. Lo que pase en el documento y en el módulo reales sólo lo mide la
     // prueba de arriba.
-    const vacio = vaciada(DOCUMENTO);
+    // En un `beforeAll` y no al declararlo: si el documento pierde la columna, `vaciada` lanza, y
+    // lanzar al recoger el archivo da «no tests» (algo que no cargó) en vez de pruebas que caen por nombre.
+    let vacio = "";
+    beforeAll(() => {
+      vacio = vaciada(DOCUMENTO);
+    });
 
     it("la base de los controles: documento vaciado y módulo sin guía pasan, con siete filas alcanzadas", () => {
       const r = revisar(vacio, sinGuia);
       expect(r.problemas).toEqual([]);
       expect(r.alcanzadas).toHaveLength(7);
       expect(r.fueraDeAlcance).toEqual([RETIRADA]);
-      expect(matriz(vacio).filas.every((f) => f[matriz(vacio).cabecera.indexOf(COLUMNA)] === "")).toBe(true);
+      const m = matriz(vacio);
+      expect(m.filas.every((f) => f[m.cabecera.indexOf(COLUMNA)] === "")).toBe(true);
     });
 
     it.each(real.alcanzadas)("celda rellena y no expuesta, fila «%s»: cae y dice cuál", (banda) => {
