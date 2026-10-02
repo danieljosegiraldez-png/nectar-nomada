@@ -37,17 +37,25 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
     tipo: "StorageAssignment",
     recuperar: (id) => prisma.storageAssignment.findUniqueOrThrow({ where: { id } }),
     crear: async (tx) => {
+    // Parte 1, R2 (ronda de arreglo 1, 2026-10-02): el linaje se bloquea PRIMERO y en TODA llamada, también
+    // en una reubicación. El diseño lo dice sin excepción —«toda transacción que lea o cambie la cobertura
+    // empieza por `bloquearLinaje` … almacenar»— y de ello depende lo que sigue: si la asignación abierta se
+    // leyera antes del bloqueo, o sólo se bloqueara al entrar, una reubicación concurrente a una operación
+    // que termina la asignación de bodega y deja un proceso abierto (`devolverASecado`, tarea 8) leería la
+    // asignación vieja, iría por la rama de reubicación —sin compuerta— y volvería a meter el lote en bodega
+    // con el proceso abierto. Es lo PRIMERO de la transacción: ninguna fila de `lot` se toca antes, así que
+    // el orden global de bloqueo por id (R2) se conserva.
+    await bloquearLinaje(tx, input.lotId);
     const openAssignment = await tx.storageAssignment.findFirst({
       where: { lotId: input.lotId, endedAt: null },
     });
     // «No debe salir de secado antes bajo ninguna circunstancia» (Daniel, 2026-09-07), y desde la
     // Parte 1 (R7) mirando el proceso que CUBRE al lote, dentro de esta transacción y con el linaje
     // bloqueado. Sólo al ENTRAR a bodega: reubicar un lote que ya está dentro no vuelve a juzgar el
-    // secado. Un reenvío idempotente (`recuperarDeOtroEnvio`) no pasa por `crear`, así que tampoco
-    // por aquí: devuelve la fila que ya pasó la compuerta. Lanza en vez de avisar; para deshacerlo
-    // está `devolverASecado`.
+    // secado (pero sí espera en fila, por el bloqueo de arriba). Un reenvío idempotente
+    // (`recuperarDeOtroEnvio`) no pasa por `crear`, así que tampoco por aquí: devuelve la fila que ya
+    // pasó la compuerta. Lanza en vez de avisar; para deshacerlo está `devolverASecado`.
     if (!openAssignment) {
-      await bloquearLinaje(tx, input.lotId);
       await exigeSecadoTerminado(tx, input.lotId);
     }
     if (openAssignment) {

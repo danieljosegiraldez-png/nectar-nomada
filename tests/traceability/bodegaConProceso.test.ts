@@ -8,6 +8,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { abrirProceso, cerrarProceso } from "../../lib/traceability/lotProcess";
+import { recordTransformation } from "../../lib/traceability/lots";
+import { loteDividido, procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -319,6 +321,103 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
       abre.soltar();
       await abre.hecho.catch(() => undefined);
       await entrada;
+    }
+  });
+
+  it("un lote dividido sigue fuera de bodega aunque su ancestro se reprocese y cierre en el objetivo: lo rechaza `loteDividido`, no el proceso vigente", async () => {
+    // Ronda de arreglo 1 (2026-10-01). La PRIMERA comprobación de `exigeSecadoTerminado` (`loteDividido`) NO es redundante con la
+    // del proceso vigente (`closureKind: divided`), y el informe de la tarea 7 se equivocó al decirlo. El estado es alcanzable
+    // sólo por servicios, y R2 lo permite («abrir un proceso nuevo sobre un lote cubierto por uno CERRADO está permitido»):
+    //   C (cereza) -> L (stage_change); un proceso P1 abierto sobre C, que cubre a L;
+    //   se divide L bajo P1 (L queda dividido; P1 queda `divided`; cada parte recibe su copia);
+    //   se cierran por humedad las copias de las partes;
+    //   se abre un proceso NUEVO P2 sobre C —el reproceso— y se cierra por humedad en el objetivo.
+    // Ahora el proceso que CUBRE a L es P2 (el más reciente de C): cerrado por humedad, en el objetivo. Sólo `loteDividido(L)` —que
+    // mira la división de la que L es entrada, no el vigente— lo deja fuera de bodega.
+    const c = await lote("B10-C");
+    const paso = await recordTransformation(gestor, {
+      transformationType: "stage_change", occurredAt: new Date("2026-03-02T12:00:00Z"), provenanceClass: "original_record",
+      inputs: [{ lotId: c, quantity: null, unit: null }],
+      outputs: [{ lotCode: `B10-L-${RUN}`, lotType: "processing", quantity: null, unit: null }],
+    });
+    transformaciones.push(paso.transformation.id);
+    lotes.push(...paso.outputLots.map((x) => x.id));
+    const l = paso.outputLots[0]!.id;
+    const p1 = await abrirProcesoDePrueba(gestor, c, { startedAt: new Date("2026-03-01T12:00:00Z") });
+
+    const division = await recordTransformation(gestor, {
+      transformationType: "split", occurredAt: new Date("2026-03-10T12:00:00Z"), provenanceClass: "original_record",
+      inputs: [{ lotId: l, quantity: null, unit: null }],
+      outputs: ["A", "B"].map((x) => ({ lotCode: `B10-${x}-${RUN}`, lotType: "processing" as const, quantity: null, unit: null })),
+    });
+    transformaciones.push(division.transformation.id);
+    lotes.push(...division.outputLots.map((x) => x.id));
+    const partes = division.outputLots.map((x) => x.id);
+    for (const parte of partes) {
+      const copia = await prisma.lotProcess.findFirstOrThrow({ where: { lotId: parte } });
+      await cerrarProceso(gestor, { lotProcessId: copia.id, endedAt: new Date("2026-03-20T12:00:00Z"), closingMoistureMeasurementId: await humedad(parte, 11) });
+    }
+    // El reproceso sobre el ancestro, cerrado por humedad en el objetivo (11 contra 11,5).
+    const p2 = await abrirProcesoDePrueba(gestor, c, { startedAt: new Date("2026-04-01T12:00:00Z") });
+    await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-04-20T12:00:00Z"), closingMoistureMeasurementId: await humedad(c, 11) });
+
+    // Controles de que el estado es el que se quiere probar: sin ellos, el rechazo de abajo podría venir de cualquier otra cosa.
+    expect(await loteDividido(prisma, l), "L debería ser la entrada de una división que cerró un proceso").toBe(true);
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p1.id } })).closureKind, "P1 debería haber quedado dividido").toBe("divided");
+    const cobertura = await procesoQueCubre(prisma, l);
+    expect(cobertura.estado).toBe("cerrado");
+    expect(cobertura.vigente?.id, "el proceso que cubre a L debería ser el reproceso P2, no el dividido P1").toBe(p2.id);
+    const vigente = await prisma.lotProcess.findUniqueOrThrow({ where: { id: p2.id }, include: { closingMoistureMeasurement: true } });
+    expect(vigente.closureKind).toBe("moisture");
+    expect(vigente.closingMoistureMeasurement!.value.toNumber()).toBeLessThanOrEqual(vigente.targetMoisturePct.toNumber());
+
+    await expect(moveLotToStorage(gestor, { lotId: l, locationId: plotId, startedAt: ahora() })).rejects.toThrow(new LotProcessError("lote_dividido"));
+    expect((await asignaciones(l)).todas, "una entrada rechazada dejó una asignación escrita").toBe(0);
+    // Control positivo: una PARTE de esa división, con su copia cerrada por humedad en el objetivo, sí entra por la misma compuerta.
+    const entrada = await moveLotToStorage(gestor, { lotId: partes[0]!, locationId: plotId, startedAt: ahora() });
+    expect(entrada.lotId).toBe(partes[0]);
+  });
+
+  it("una reubicación decide DESPUÉS de tener el linaje: si mientras esperaba el lote salió de bodega, entra por la compuerta y se rechaza", async () => {
+    // Ronda de arreglo 1 (2026-10-01): la lectura de la asignación abierta —la que decide entre ENTRADA (con compuerta) y
+    // REUBICACIÓN (sin ella)— va DESPUÉS de `bloquearLinaje`, y el bloqueo se toma en toda llamada. Lo que lo amenaza es
+    // `devolverASecado` (tarea 8): termina la asignación de bodega y abre una continuación. Aquí una transacción ajena hace
+    // lo primero con el proceso que cubre al lote ABIERTO (el ancestro lo tiene, como en «reubicar dentro de bodega…»).
+    const cereza = await lote("B11-C");
+    const guardado = await lote("B11-G");
+    await enlazar([cereza], [guardado]);
+    const vieja = await prisma.storageAssignment.create({ data: { lotId: guardado, locationId: plotId, startedAt: new Date("2026-03-01T12:00:00Z") } });
+    await abrirProcesoDePrueba(gestor, cereza);
+
+    const saca = retener(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${guardado}::uuid FOR UPDATE`;
+      await tx.storageAssignment.update({ where: { id: vieja.id }, data: { endedAt: new Date("2026-03-15T12:00:00Z") } });
+    });
+    let reubicacion: Promise<Resultado<unknown>> | undefined;
+    try {
+      const pid = await saca.pid;
+      // Sin COMMIT todavía: quien lea ahora la asignación del lote la ve abierta, y la llamada iría por la rama de reubicación.
+      reubicacion = resultadoDe(moveLotToStorage(gestor, { lotId: guardado, locationId: plotId, startedAt: ahora() }));
+      // La llamada queda en espera de la otra transacción: con el arreglo, en `bloquearLinaje` (la fila del lote); sin él, más tarde, en
+      // la fila de la asignación que va a cerrar. Esta espera sólo prueba que la llamada está en vuelo; lo que prueba el ORDEN es el
+      // resultado de abajo.
+      await esperarQueAlguienEspere(pid, "la reubicación no quedó esperando a la otra transacción");
+      saca.soltar();
+      await saca.hecho; // COMMIT: la asignación abierta ya no existe
+      const v = await reubicacion;
+      expect(v.ok, "la llamada leyó la asignación antes de tener el linaje: fue por la rama de reubicación, sin compuerta, y metió el lote en bodega con el proceso abierto").toBe(false);
+      if (!v.ok) {
+        expect(v.error).toBeInstanceOf(LotProcessError);
+        expect((v.error as LotProcessError).message).toBe("drying_not_finished");
+      }
+      // Sólo queda la que cerró la otra transacción: la llamada rechazada no escribió nada.
+      expect(await asignaciones(guardado)).toEqual({ todas: 1, abiertas: 0 });
+      // Control: el proceso del ancestro sigue ABIERTO; sin esto, «rechazó» podría ser cualquier otra cosa.
+      expect(await prisma.lotProcess.count({ where: { lotId: cereza, endedAt: null } })).toBe(1);
+    } finally {
+      saca.soltar();
+      await saca.hecho.catch(() => undefined);
+      await reubicacion;
     }
   });
 });

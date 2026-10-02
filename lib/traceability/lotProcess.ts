@@ -6,10 +6,13 @@
  * H deseado a almacenar». El proceso es la SECUENCIA; esto es la cabecera que
  * la agrupa, y los eventos —fermentaciones, secados— ya existían sueltos.
  *
- * **Qué NO hace este archivo, y es deliberado.** No toca bodega. El
- * `targetMoisturePct` se declara y se compara, pero almacenar un lote por
- * encima de su objetivo no se bloquea ni se marca: esa decisión sigue abierta
- * con el dueño, y construirla por adivinanza es peor que no tenerla.
+ * **Bodega.** La compuerta de bodega vive aquí, en `exigeSecadoTerminado`
+ * (regla del dueño, 2026-09-07: «no debe salir de secado antes bajo ninguna
+ * circunstancia»; R7 de la Parte 1, 2026-10-01). Un lote por encima de su
+ * `targetMoisturePct` NO entra a bodega. Corre dentro de `moveLotToStorage`,
+ * en su transacción y con el linaje bloqueado, y sólo al ENTRAR: reubicar un
+ * lote que ya está dentro no la consulta. La deshace `devolverASecado` (tarea
+ * 8 de la Parte 1).
  */
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
@@ -467,6 +470,10 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
  * la parte «Re-importar» rehaga el histórico (R9).
  */
 export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
+  // R6.6 (ronda de arreglo 1, 2026-10-02). NO es redundante con la de `closureKind` de más abajo, aunque lo parezca: con un REPROCESO
+  // del ancestro (R2 lo permite sobre un proceso cerrado), el proceso que cubre a un lote dividido es el reproceso —cerrado por
+  // humedad, en el objetivo—, no el `divided`. Sólo esta línea, que mira la división de la que el lote es entrada, lo deja fuera.
+  // Lo prueba `bodegaConProceso.test.ts` («un lote dividido sigue fuera de bodega aunque su ancestro se reprocese…»).
   if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
   const cobertura = await procesoQueCubre(tx, lotId);
   if (cobertura.estado === "sin_proceso") return;
