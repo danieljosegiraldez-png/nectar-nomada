@@ -87,3 +87,58 @@ export function celdasEnComun(a: Rango, b: Rango): number {
   const plantas = Math.min(a.plantTo, b.plantTo) - Math.max(a.plantFrom, b.plantFrom) + 1;
   return hileras * plantas;
 }
+
+/**
+ * Cuántas celdas comparte un rango nuevo con **un conjunto** de rangos.
+ *
+ * **No es la suma de `celdasEnComun`, y confundirlas fue un defecto real.**
+ * Medido el 2026-10-02 por una revisión independiente: un bloque vecino con los
+ * rangos `1–5` y `4–8` de las mismas plantas, contra un rango nuevo `1–5`,
+ * informaba **70 celdas compartidas donde hay 50** — sumaba dos intersecciones
+ * que se pisan entre sí. Un número inflado en un aviso es peor que ningún aviso:
+ * el agronómo decide sobre él.
+ *
+ * Y la razón por la que no se vio: **con un vecino de un solo rango, la suma y la
+ * unión coinciden**, que es lo que todas las pruebas tenían. Nada impide hoy que
+ * los rangos de un mismo bloque se solapen entre sí.
+ *
+ * Se cuenta por compresión de coordenadas: se parten las hileras en bandas por
+ * los bordes de todos los trozos, y en cada banda se mide la unión de los
+ * intervalos de plantas. Exacto, y sin recorrer celda por celda — una rejilla
+ * grande tiene millones y esto corre al leer una pantalla.
+ */
+export function celdasEnComunConVarios(rangos: readonly Rango[], otro: Rango): number {
+  const trozos = rangos
+    .filter((r) => seSolapan(r, otro))
+    .map((r) => ({
+      rowFrom: Math.max(r.rowFrom, otro.rowFrom),
+      rowTo: Math.min(r.rowTo, otro.rowTo),
+      plantFrom: Math.max(r.plantFrom, otro.plantFrom),
+      plantTo: Math.min(r.plantTo, otro.plantTo),
+    }));
+  if (trozos.length === 0) return 0;
+
+  const bordes = [...new Set(trozos.flatMap((t) => [t.rowFrom, t.rowTo + 1]))].sort((a, b) => a - b);
+  let total = 0;
+  for (let i = 0; i < bordes.length - 1; i += 1) {
+    const desde = bordes[i]!;
+    const hasta = bordes[i + 1]! - 1;
+    const alto = hasta - desde + 1;
+    if (alto <= 0) continue;
+    const intervalos = trozos
+      .filter((t) => t.rowFrom <= desde && t.rowTo >= hasta)
+      .map((t) => [t.plantFrom, t.plantTo] as const)
+      .sort((a, b) => a[0] - b[0]);
+    let cubiertas = 0;
+    let finAnterior = -Infinity;
+    for (const [a, b] of intervalos) {
+      const desdeReal = Math.max(a, finAnterior + 1);
+      if (b >= desdeReal) {
+        cubiertas += b - desdeReal + 1;
+        finAnterior = b;
+      }
+    }
+    total += alto * cubiertas;
+  }
+  return total;
+}

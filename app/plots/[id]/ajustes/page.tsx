@@ -11,6 +11,8 @@ import { estadosPorCohorte } from "../../../../lib/traceability/estadoDeProducci
 import { recortarPorPrecision } from "../../../../lib/time/recortarPorPrecision";
 import { PlantingCohortForm } from "../../../components/traceability/PlantingCohortForm";
 import { PlotAttributesForm } from "../../../components/traceability/PlotAttributesForm";
+import { RejillaForm } from "../../../components/traceability/RejillaForm";
+import { RangosDeBloqueForm } from "../../../components/traceability/RangosDeBloqueForm";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
@@ -190,6 +192,24 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         />
       </section>
 
+      {/* La rejilla va en su propia sección y no dentro de las condiciones del
+          terreno: son la numeración del suelo, no una propiedad suya, y de ella
+          cuelgan los rangos de los bloques de más abajo. */}
+      <section className="nn-section" id="rejilla">
+        <h2>{t("rejillaHeading")}</h2>
+        <RejillaForm
+          locationId={location.id}
+          rejilla={{
+            gridOrigin: location.gridOrigin,
+            rowCount: location.rowCount,
+            plantsPerRow: location.plantsPerRow,
+            // Decimal como cadena, igual que el área: `Number()` sobre un
+            // Decimal(5,2) puede redondear.
+            rowSpacingMeters: location.rowSpacingMeters?.toString() ?? null,
+          }}
+        />
+      </section>
+
       <section className="nn-section" id="calicatas">
         <h2>{t("soilProfileHeading")}</h2>
         {calicatas.length === 0 ? <p className="nn-muted">{t("soilNoProfiles")}</p> : null}
@@ -237,6 +257,14 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
                 {b.blockType == null ? (
                   <AsignarTipoDeBloqueForm locationId={location.id} plotBlockId={b.id} />
                 ) : null}
+                <details>
+                  <summary>{t("rejillaRangosDeBloqueTitulo")}</summary>
+                  <RangosDeBloqueForm
+                    locationId={location.id}
+                    plotBlockId={b.id}
+                    rangos={b.rangos}
+                  />
+                </details>
               </li>
             ))}
           </ul>

@@ -2,7 +2,7 @@ import { Prisma, type PlotBlockRange, type PlotBlockType } from "../../generated
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { CODIGO_DEL_RANGO, RejillaInvalida, requireLocationAttributeAccess } from "./locations";
-import { celdasEnComun, seSolapan, validarRango } from "../territorio/rejilla";
+import { celdasEnComunConVarios, seSolapan, validarRango } from "../territorio/rejilla";
 import { TIPOS_DE_BLOQUE } from "./tiposDeBloque";
 
 export class PlotBlockValidationError extends Error {}
@@ -105,7 +105,14 @@ export async function setPlotBlockType(userAccountId: string, input: SetPlotBloc
 
 export async function listPlotBlocks(userAccountId: string, locationId: string) {
   await requireLocationAttributeAccess(userAccountId, locationId);
-  return prisma.plotBlock.findMany({ where: { locationId }, orderBy: { name: "asc" } });
+  // Los rangos vienen con el bloque: la pantalla de ajustes los lista y deja
+  // quitarlos, y pedirlos aparte serían N consultas más para lo mismo. Ordenados
+  // por hilera para que la lista se lea como se recorre el terreno.
+  return prisma.plotBlock.findMany({
+    where: { locationId },
+    orderBy: { name: "asc" },
+    include: { rangos: { orderBy: [{ rowFrom: "asc" }, { plantFrom: "asc" }] } },
+  });
 }
 
 /**
@@ -216,7 +223,10 @@ export async function anadirRangoAlBloque(
 
   const solapesAvisados: SolapeAvisado[] = [];
   for (const v of vecinos) {
-    const celdas = v.rangos.reduce((suma, r) => suma + celdasEnComun(r, input), 0);
+    // La UNIÓN de las celdas, no la suma de las intersecciones: dos rangos del
+    // mismo vecino que se pisen entre sí contarían dos veces lo compartido.
+    // Medido: 70 donde hay 50.
+    const celdas = celdasEnComunConVarios(v.rangos, input);
     if (celdas > 0) solapesAvisados.push({ bloque: v.name, celdas });
   }
 

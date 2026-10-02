@@ -446,6 +446,14 @@ export interface RejillaDeclarada {
   readonly rowCount: number;
   readonly plantsPerRow: number;
   readonly rango: Rango | null;
+  /**
+   * `false` cuando la rejilla es de la MADRE.
+   *
+   * Y es la diferencia que decide si se puede comparar: una microparcela usa la
+   * numeración de su parcela (D3), pero su suelo es **el trozo que ocupa**, no la
+   * parcela entera. Sin rango declarado no hay con qué comparar.
+   */
+  readonly propia: boolean;
 }
 
 /**
@@ -477,6 +485,7 @@ export interface RejillaDeclarada {
  */
 export type ComparacionDeLaRejilla =
   | { status: "sin_rejilla" }
+  | { status: "sin_rango" }
   | { status: "sin_cohortes"; capacidad: number }
   | {
       status: "conteo_incompleto";
@@ -492,6 +501,23 @@ export function compararConLaRejilla(
   cohorts: ReadonlyArray<{ plantCount: number | null; status: PlantingCohortStatus }>,
 ): ComparacionDeLaRejilla {
   if (!rejilla) return { status: "sin_rejilla" };
+
+  // **Rejilla heredada y sin rango: NO se compara.** Lo encontró una revisión
+  // independiente el 2026-10-02, y era el peor defecto de esta tanda: una
+  // microparcela usa la numeración de su parcela (D3), pero su suelo es el trozo
+  // que ocupa. Comparando sus siembras contra la capacidad de la madre, toda
+  // microparcela decía «Caben 200 y hay 70 contadas: una diferencia de 130» sobre
+  // un suelo que no es suyo — y hoy **ninguna pantalla puede declarar ese rango**
+  // (medido: cero archivos de `app/` escriben `rangeRowFrom`), así que le pasaría
+  // a todas.
+  //
+  // Peor todavía: la primera versión de `rejillaEnGetPlotDetail.test.ts` fijaba
+  // esa conducta como correcta. Una prueba que certifica un defecto es más dañina
+  // que la ausencia de prueba.
+  //
+  // D3 dice que sin rango sólo se pierde una comprobación, no que se compare
+  // contra otro suelo.
+  if (!rejilla.propia && !rejilla.rango) return { status: "sin_rango" };
 
   // **D3: la capacidad de una microparcela es su RANGO, no la rejilla entera.**
   // La numeración es una sola, la de la parcela, así que una microparcela de la
@@ -519,6 +545,52 @@ export function compararConLaRejilla(
   }
 
   return { status: "ok", capacidad, contadas, diferencia: capacidad - contadas };
+}
+
+/**
+ * La frase que pinta la ficha para cada estado, y los números que lleva dentro.
+ *
+ * **Devuelve la clave y los parámetros; no renderiza nada.** Es el mismo patrón
+ * que `claveDeTituloDeBloque` en `plotBlocks.ts`, y existe por el mismo motivo:
+ * así se puede probar sin montar un navegador — este repositorio no tiene
+ * infraestructura para renderizar componentes y sus cuatro guardias de pantalla
+ * leen la fuente.
+ *
+ * **Cada estado pasa sólo los números que su frase puede afirmar.** `sin_cohortes`
+ * no lleva `contadas`, porque un `0` ahí se leería como «0 de 200» — la
+ * afirmación que ADR-080 prohíbe. Y `conteo_incompleto` no lleva `diferencia`,
+ * porque la resta sobre un total incompleto es un número que parece cierto: si
+ * llegara a la plantilla, un descuido de redacción lo pintaría.
+ */
+export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
+  clave:
+    | "rejillaSinDeclarar"
+    | "rejillaSinRango"
+    | "rejillaSinSiembras"
+    | "rejillaConteoIncompleto"
+    | "rejillaComparada";
+  params: Record<string, number>;
+} {
+  switch (c.status) {
+    case "sin_rejilla":
+      return { clave: "rejillaSinDeclarar", params: {} };
+    case "sin_rango":
+      // Sin ningún número a propósito: pasar la capacidad de la madre es
+      // exactamente el error que este estado existe para no cometer.
+      return { clave: "rejillaSinRango", params: {} };
+    case "sin_cohortes":
+      return { clave: "rejillaSinSiembras", params: { capacidad: c.capacidad } };
+    case "conteo_incompleto":
+      return {
+        clave: "rejillaConteoIncompleto",
+        params: { capacidad: c.capacidad, contadas: c.contadas, sinContar: c.cohortesSinConteo },
+      };
+    case "ok":
+      return {
+        clave: "rejillaComparada",
+        params: { capacidad: c.capacidad, contadas: c.contadas, diferencia: c.diferencia },
+      };
+  }
 }
 
 /**
@@ -799,7 +871,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     (madre?.rowCount != null && madre.plantsPerRow != null
       ? { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow }
       : null);
-  const rejillaDeclarada: RejillaDeclarada | null = base ? { ...base, rango } : null;
+  const rejillaDeclarada: RejillaDeclarada | null = base ? { ...base, rango, propia: propia !== null } : null;
 
   return {
     location,
