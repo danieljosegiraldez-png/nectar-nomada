@@ -42,6 +42,28 @@ describe("ejesDeLaCurva", () => {
     expect(e.x).toEqual([{ pos: 0, texto: "0 h" }, { pos: 300, texto: "8 h" }]);
   });
 
+  it("las horas llevan UN decimal: un vano de 7 h 30 se rotula «7.5 h», no «8 h»", () => {
+    // Redondear a horas enteras (`Math.round(ms / 3_600_000)`) errería hasta 29 min en una curva cuyo sentido es «cuánto lleva».
+    const e = ejesDeLaCurva({
+      lecturas: [
+        { occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.5 },
+        { occurredAt: new Date("2026-03-10T15:30:00Z"), value: 4.1 },
+      ],
+      banda: null, ancho: 300, alto: 120,
+    });
+    expect(e.x).toEqual([{ pos: 0, texto: "0 h" }, { pos: 300, texto: "7.5 h" }]);
+    // Control: las horas enteras siguen sin decimal («8 h», no «8.0 h»), y es lo que ya fija la prueba de arriba. Un cuarto de hora se redondea a un decimal.
+    const cuarto = ejesDeLaCurva({
+      lecturas: [
+        { occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.5 },
+        { occurredAt: new Date("2026-03-10T10:15:00Z"), value: 4.1 },
+      ],
+      banda: null, ancho: 300, alto: 120,
+    });
+    expect(cuarto.x[1]?.texto).toBe("2.3 h");
+    // MUTACIÓN: `Math.round((ms / 3_600_000) * 10) / 10` → `Math.round(ms / 3_600_000)`: «8 h» en vez de «7.5 h» y «2 h» en vez de «2.3 h», y cae.
+  });
+
   it("una sola lectura no produce NaN ni un eje X de 0 h a 0 h", () => {
     const e = ejesDeLaCurva({
       lecturas: [{ occurredAt: new Date("2026-03-10T10:00:00Z"), value: 4.3 }],
