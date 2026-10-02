@@ -2229,6 +2229,34 @@ a.nn-card-link:active {
   vector-effect: non-scaling-stroke;
 }
 
+/* Los ejes van DENTRO del <svg>: sus unidades son las del viewBox, no píxeles de pantalla (por eso 18). */
+.nn-curva-eje {
+  fill: var(--nn-ink-muted);
+  font-size: 18px;
+}
+
+.nn-curva-marca {
+  stroke: var(--nn-border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Una frase con su fuente detrás de un toque: «a las cinco de la mañana nadie lee tres párrafos». */
+.nn-curva-riesgo {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-left: 4px solid var(--nn-aviso);
+  background: var(--nn-surface);
+}
+
+.nn-curva-riesgo > p {
+  margin: 0;
+}
+
+.nn-curva-riesgo-cita {
+  font-weight: 600;
+}
+
 .nn-curva-cerrar {
   display: inline-block;
   margin-top: 0.5rem;

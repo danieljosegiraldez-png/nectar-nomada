@@ -275,3 +275,52 @@ describe("curvaDeLote", () => {
     expect(bien.banda.tipo).toBe("banda");
   });
 });
+
+describe("curvaDeLote — lo que devuelve para quien rotula (los ejes y el riesgo de esperar)", () => {
+  // La pantalla recibe una `Curva` y NADA más: los puntos son coordenadas, y la banda son las
+  // coordenadas `0` y `alto` de siempre. De ahí no se recupera a qué pH está la banda ni cuál fue
+  // la última lectura, que es lo que piden los ejes (`ejesDeLaCurva`) y el riesgo (`riesgoDeEsperar`).
+  // Por eso la curva trae también, tal cual, lo que ya tenía en la mano.
+
+  it("trae las lecturas por hora —aunque lleguen desordenadas—, con su valor", () => {
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(14), value: 4.2 }, { occurredAt: t(10), value: 4.8 }, { occurredAt: t(12), value: 4.5 }],
+      objetivo: BANDA, ancho: 300, alto: 120,
+    });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.8, 4.5, 4.2]);
+    expect(c.lecturas.map((l) => l.occurredAt.getTime())).toEqual([t(10).getTime(), t(12).getTime(), t(14).getTime()]);
+    // Control: son las MISMAS lecturas de las que salieron los puntos (tantas como puntos).
+    expect(c.lecturas).toHaveLength(c.puntos.length);
+  });
+
+  it("trae el rango que declaró la receta, tal cual; `null` si falta un extremo", () => {
+    const lecturas = [{ occurredAt: t(10), value: 4.8 }];
+    expect(curvaDeLote({ lecturas, objetivo: BANDA, ancho: 300, alto: 120 }).rango).toEqual({ min: 4.0, max: 5.0 });
+    // Sin objetivo, o con un extremo vacío, no hay rango: ni se inventa uno ni se completa con el otro extremo.
+    expect(curvaDeLote({ lecturas, objetivo: null, ancho: 300, alto: 120 }).rango).toBeNull();
+    expect(
+      curvaDeLote({ lecturas, objetivo: { minValue: 4.0, maxValue: null, targetValue: 4.5 }, ancho: 300, alto: 120 }).rango,
+    ).toBeNull();
+    expect(
+      curvaDeLote({ lecturas, objetivo: { minValue: null, maxValue: 5.0, targetValue: 4.5 }, ancho: 300, alto: 120 }).rango,
+    ).toBeNull();
+  });
+
+  it("el rango al revés o de ancho cero se devuelve IGUAL: quien rotula decide, no esta función", () => {
+    // `banda` ya dice «no se dibuja»; `rango` es el dato declarado. Esconderlo aquí obligaría a quien
+    // rotula a adivinar si «sin rango» significa «la receta no lo declara» o «la receta lo declaró mal».
+    const lecturas = [{ occurredAt: t(10), value: 4.8 }];
+    const alReves = curvaDeLote({ lecturas, objetivo: { minValue: 5.0, maxValue: 4.0, targetValue: 4.5 }, ancho: 300, alto: 120 });
+    expect(alReves.banda).toEqual({ tipo: "banda_al_reves" });
+    expect(alReves.rango).toEqual({ min: 5.0, max: 4.0 });
+    const ceroAncho = curvaDeLote({ lecturas, objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 300, alto: 120 });
+    expect(ceroAncho.banda).toEqual({ tipo: "banda_de_ancho_cero" });
+    expect(ceroAncho.rango).toEqual({ min: 4.5, max: 4.5 });
+  });
+
+  it("sin lecturas no hay lecturas, y el rango se conserva", () => {
+    const c = curvaDeLote({ lecturas: [], objetivo: BANDA, ancho: 300, alto: 120 });
+    expect(c.lecturas).toEqual([]);
+    expect(c.rango).toEqual({ min: 4.0, max: 5.0 });
+  });
+});
