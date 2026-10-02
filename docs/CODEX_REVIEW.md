@@ -3,11 +3,21 @@
 El binario **no está en el PATH**:
 
 ```bash
-CODEX=/Applications/ChatGPT.app/Contents/Resources/codex
+CODEX=/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex
 ```
 
-Verificado el 2026-08-28: `codex-cli 0.150.0-alpha.12.2`, `codex login status`
-responde «Logged in using ChatGPT».
+**CORREGIDO EL 2026-10-02: la ruta cambió y la vieja ya no existe.** Este archivo
+decía `Contents/Resources/codex`, a secas. La app se actualizó el **2026-09-30** y
+ahora el CLI vive dentro de `codex-cli/bin/`; en `Contents/Resources` lo único que
+queda con ese nombre son dos archivos de sonido (`codex-classic.wav`,
+`codex-notification.wav`). Verificado ese día: **`codex-cli 0.159.2`**, y
+`login status` responde «Logged in using ChatGPT».
+
+Y la comprobación que lo destapó llevaba su control positivo al lado, que es lo
+que la hace valer: `[ -x "$CODEX" ]` dio **no** mientras `command -v git` daba
+**sí**, así que el «no está» no era una comprobación mal escrita. Sin ese control,
+un «no está» se lee igual que un `test` con una errata — y esta sección existe
+precisamente porque un CLI quedó marcado como no autenticado durante semanas.
 
 **`codex login status` escribe ese mensaje en stderr, no en stdout.** Una
 comprobación con `codex login status | grep -qi "logged in"` falla siempre y

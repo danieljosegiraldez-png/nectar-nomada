@@ -2364,8 +2364,18 @@ vercel inspect --logs <url-de-produccion> --scope <scope>
 ## Revisión independiente
 
 `docs/CODEX_REVIEW.md`. El CLI de Codex funciona y está autenticado; **no está
-en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex`. El paquete de
-revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
+en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
+El paquete de revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
+
+**CORREGIDO EL 2026-10-02: esta línea decía `Contents/Resources/codex` y esa ruta
+ya no existe.** La app se actualizó el 2026-09-30 y el CLI se movió dentro de
+`codex-cli/bin/`; ahí quedó `codex-cli 0.159.2`, con sesión. Dos cosas que cuesta
+un rato descubrir si no están escritas: en `Contents/Resources` lo único que
+conserva ese nombre son **dos archivos de sonido**, así que un `ls` descuidado
+parece encontrar algo; y el brief versionado `docs/CODEX_REVIEW.brief.md` lleva el
+encuadre del **último** cambio que se revisó —hoy el de `auth:grant-admin`— así que
+reusarlo tal cual le da al revisor el marco equivocado: se escribe uno propio y no
+se pisa ése.
 
 ## Salud del repositorio — comprobado el 2026-08-28
 
