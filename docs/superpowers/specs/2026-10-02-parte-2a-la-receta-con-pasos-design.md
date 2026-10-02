@@ -1,9 +1,10 @@
 # Parte 2a — La receta con pasos
 
 **Fecha:** 2026-10-02 · **Estado:** diseño aprobado por Daniel en conversación, sección por sección;
-pendiente de su lectura del spec escrito. **Base:** escrito sobre `origin/main` `85eab6da`. Depende
-de la Parte 1, que vive en la rama `recetas-base` (sin fusionar al escribir esto), y de su diseño
-general, en la misma rama:
+**corregido tras dos revisiones adversarias** (Codex y un revisor Claude, §11); pendiente de su
+lectura del spec escrito. **Base:** escrito sobre `origin/main` `85eab6da`. Depende de la Parte 1,
+que vive en la rama `recetas-base` (sin fusionar al escribir esto), y de su diseño general, en la
+misma rama:
 
 - `docs/superpowers/specs/2026-09-30-recetas-del-beneficio-design.md` (general, §5 «Parte 2»)
 - `docs/superpowers/specs/2026-09-30-parte-1-el-proceso-cubre-al-lote-design.md` (R1–R9)
@@ -23,31 +24,52 @@ Con lo decidido el 2026-10-02, la Parte 2 juntaba el modelo de pasos, la pantall
 la ventana de la prefermentación, el aviso de humedad, los dos reposos y los motores. Se parte:
 
 - **2a — este documento.** La receta como lista ordenada de pasos, su pantalla, su vocabulario, la
-  receta libre, y cómo cada registro del lote se une a su paso.
+  receta libre, la receta obligatoria, y cómo cada registro del lote se une a su paso.
 - **2b — después, encima de la 2a.** Lo que la receta vigila en el lote: ventana de la
   prefermentación y su aviso, humedad que sube sin intención declarada, los dos reposos (muestra y
-  venta, con la venta bloqueada), y que los motores juzguen por la receta (ADR-181).
+  venta, con la venta bloqueada), que los motores juzguen por la receta (ADR-181) y que **el grado se
+  ate a la receta** (lo promete el general, §5).
 
 **La receta obligatoria entra aquí, en la 2a** (decisión de Daniel, 2026-10-02, a pregunta de la
 coordinadora): la Parte 1 sale como está aprobada, con la receta opcional, y la exigencia llega junto
 con la receta libre, que necesita los pasos para armar su borrador. Ver §5.
 
 El desenlace de secado «salida a tratamiento» (`DryingOutcome`) **no es de la Parte 2**: va a la
-Parte 1 por la coordinadora.
+Parte 1 por la coordinadora. **La 2a no depende de él para unir registros a pasos**: hoy un secado
+que se corta para un tratamiento se termina con `abandoned` o `interrupted`, y su corrida sigue
+unida a su paso. Lo que ese desenlace arregla es que la etiqueta diga la verdad. Nota: el diseño de
+la Parte 1 (R7) dice que salir de secado a un tratamiento «no necesita ninguna acción nueva»; la
+decisión de Daniel del 2026-10-02 lo corrige, y ese texto lo actualiza la coordinadora.
+
+**Lo que compara lo real con lo declarado** (D2) **es de la Parte 5**: la 2a guarda los dos lados.
 
 ---
 
 ## 1. Lo que hay hoy, medido en `85eab6da`
 
 - `ProcessRecipeVersion` tiene **fases** (`ProcessRecipePhase`: `fermentation` | `drying`, con horas,
-  volteo y banda de humedad) y **metas** (`ProcessTarget`: variable, momento `initial|during|final`,
-  rango, unidad). **No tiene pasos.**
+  volteo y banda de humedad), **únicas por versión y fase** (`schema.prisma:4372`), y **metas**
+  (`ProcessTarget`: variable, momento `initial|during|final`, rango, unidad, `phase` y **`everyHours`**,
+  únicas por `[recipeVersionId, phase, variable, moment]`, `schema.prisma:4416` y `:4436`).
+  **No tiene pasos.**
+- **Toda versión nace `approved`** (`lib/traceability/processTargets.ts:406–411`, `:658`); no hay
+  borrador ni función de edición. `abrirProceso` sólo rechaza una receta archivada
+  (`lotProcess.ts:159–166`).
 - `FermentationRun` lleva `processRecipeVersionId` y `lotProcessId`; no dice qué paso cumple.
-- `LotTransformationType` tiene `selection`, `stage_change` y `hulling`, entre otros.
-- El vocabulario controlado vive como **datos, no esquema**: `lib/research/catalogs.ts`
-  (`VariableCatalog` / `VariableCatalogValue`, con `aliasOf` y `definition`). Añadir un valor es una
-  línea y una resiembra, sin migración. El honey ya se guarda por porcentaje, con el color como
-  etiqueta (RO1.1).
+- **Empezar y terminar una corrida crea `stage_change`** (`fermentation.ts:87,177`;
+  `drying.ts:72,287`; también los tuestes). Ningún camino registra el despulpado o el lavado como
+  transformación.
+- **`LotProcessIntervention`** (`schema.prisma:4238`) registra, con `registrarIntervencion`
+  (`lotProcess.ts:324`), «un manejo que no es una fermentación ni un secado: flotado, despulpado,
+  reposo, mover a sombra», con un valor de los `CATALOGOS_DE_INTERVENCION`. `FermentationIntervention`
+  registra lo que pasa dentro de una fermentación, con tipos que incluyen `inoculation` y `addition`.
+- **Los catálogos de los ejes ya existen** en `lib/research/catalogs.ts`: `condicion_oxigeno`,
+  `manejo_temperatura` (con `cold_hold_prefermentativo`), `fuente_microbiana`, `sustrato_anadido`
+  (con `doble_mosto`), `estado_cereza`, `medio_lavado` (con `mosto_de_otro_lote`), `recipiente`. Un
+  comentario de `lotProcess.ts` recuerda por qué no se crean paralelos: Daniel, 2026-09-07, «la lista
+  ya está de antes».
+- `VariableCatalogValueDef` (`catalogs.ts:20–36`) sólo tiene `value`, `definition`, `aliasOf`,
+  `displayOrder` e `impliesUnknownIdentity`.
 
 ---
 
@@ -61,6 +83,7 @@ Parte 1 por la coordinadora.
 | D4 | Enfoque | **El registro apunta al paso** (no una tabla de «paso ejecutado», no JSON) |
 | D5 | Paso fuera de la receta | **Desviación con motivo obligatorio, sin bloquear** |
 | D6 | Regla 8 del paquete («sólo bloquear por seguridad y ley») | **Mandan las reglas de la casa**: la regla 8 vale para umbrales de referencia |
+| D7 | Cuándo entra la receta obligatoria | **En la 2a**, con la receta libre |
 
 ---
 
@@ -70,107 +93,211 @@ Tabla nueva `ProcessRecipeStep`, hija de `ProcessRecipeVersion`:
 
 | Grupo | Campos |
 |---|---|
-| Identidad | `seq` (único por versión), `stepType` (catálogo `tipo_paso`), `intencion` (texto corto), `opcional` |
-| Ejes (catálogos) | `estadoFruto` (A) y `mucilagoRetenidoPct`; `oxigeno` (B); `regimenTemperatura` (C) y `temperaturaMinC`/`MaxC`; `fuenteMicrobiana` (D); `fisico` (F); `modoSecado` (G); `recipiente` |
-| Adiciones (E) | filas hijas: sustancia (catálogo), cantidad, unidad, `momento: pre_verde | post_verde` |
+| Identidad | `seq` (único por versión), `stepType` (catálogo nuevo `tipo_paso`), `intencion` (texto corto), `opcional` |
+| Ejes — **catálogos existentes** | A `estadoFruto` → `estado_cereza`, y `mucilagoRetenidoPct`; B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; `recipiente` → `recipiente` |
+| Ejes — catálogos nuevos | F `fisico` (agitación, ultrasonido…), G `modoSecado` (cama africana, patio, marquesina…) |
+| Adiciones (E) | filas hijas: sustancia (→ `sustrato_anadido`), cantidad, unidad, `momento: pre_verde | post_verde` |
 | Valores por defecto | `horasMin`, `horasSugeridas`, `horasMax`; sólo secado: `volteoCadaHoras`, `humedadMinPct`, `humedadMaxPct` |
-| Fin (D2) | `finPorTiempo` (sí/no) + filas de fin: variable, operador, valor, unidad; `reglaDeFin: primero | ambas` |
-| Plan de medición | **`ProcessTarget` reutilizado**: gana `recipeStepId` (nulo = meta de la versión entera, como hoy) y `cadaHoras` |
+| Fin (D2) | `finPorTiempo` (sí/no: el paso termina al cumplir `horasSugeridas` desde su inicio) + filas de fin: variable, operador, valor, unidad; `reglaDeFin: primero | todas`. Con tiempo y varias filas, «primero» = la primera condición que se cumple; «todas» = todas, incluido el tiempo |
+| Plan de medición | **`ProcessTarget` reutilizado** con su `everyHours`, más `recipeStepId` (§3.2) |
 
-**Qué ejes aplican a qué tipo** vive junto al catálogo `tipo_paso` (datos), y lo usan la pantalla y
-la validación del servicio: un secado no declara oxígeno; un lavado no declara volteo.
+### 3.1 Qué lee cada consumidor, con pasos
 
-**Las fases se derivan de los pasos.** Al publicar una versión con pasos, el servicio escribe sus
-`ProcessRecipePhase` desde ellos (horas, volteo y banda de humedad del secado; horas de la
-fermentación). Los pasos son la única fuente; la cola de secado y los motores siguen leyendo fases
-sin cambio. Una versión **sin** pasos conserva sus fases como hoy.
+`ProcessRecipePhase` es única por versión y fase, así que **no puede representar dos secados
+distintos** ni prefermentación + fermentación con parámetros propios. Por eso:
 
-**Versiones.** Una versión usada por algún `LotProcess` no se edita: cambiarla crea la siguiente,
-que copia pasos, adiciones, fines y metas (extiende R8, que hoy copia las fases).
+- **Una corrida con `recipeStepId` lee sus valores (horas, volteo, banda) de su paso.** La cola de
+  secado (`colaDeSecado.ts:263–275`) y el tablero (`datosDelTablero.ts:274–282, 351, 451`) cambian
+  para mirar primero el paso de la corrida.
+- **Las fases quedan como compatibilidad** para corridas sin paso (históricas y procesos viejos sin
+  receta). Una versión con pasos escribe al publicarse **una** fase por tipo, con los valores del
+  **primer** paso de esa fase en `seq` — sólo para esos lectores antiguos —, y
+  `ProcessRecipeVersion.expectedHours` = la suma de `horasSugeridas` de los pasos no opcionales.
+- La copia de R8 deja de copiar fases cuando la versión tiene pasos: las fases se derivan, los pasos
+  mandan.
 
-**Plantillas.** Las recetas con `organizationId` nulo son de todas las organizaciones y ninguna las
-edita. Una organización **deriva** una copia propia: receta nueva con `derivadaDeVersionId`.
+### 3.2 Las metas por paso
+
+- `ProcessTarget` gana `recipeStepId` (nulo = meta de la versión, como hoy).
+- **Unicidad:** dos índices parciales — `[recipeVersionId, phase, variable, moment]` donde
+  `recipeStepId IS NULL` (lo de hoy) y `[recipeStepId, variable, moment]` donde no es nulo. Así la
+  fiebre y la fermentación pueden pedir las dos pH inicial, y dos secados su humedad final.
+- Una meta con paso toma `phase` del tipo de paso cuando el tipo tiene fase (fermentativos →
+  `fermentation`, `drying` → `drying`) y **nulo** si no la tiene (lavado, despulpado…).
+  `validateTargets` deja de exigir `phase` cuando hay `recipeStepId`.
+- El paso tiene que ser de la misma versión que la meta (`paso_de_otra_version`).
+- **Los lectores que filtran metas de la versión por fase** (`datosDelTablero.ts`, `colaDeSecado.ts`)
+  filtran `recipeStepId IS NULL`, y las metas de la corrida salen de su paso.
+
+### 3.3 Versiones: borrador y publicada
+
+- **Estado real de borrador.** Una versión nace `draft` y sólo un borrador se edita (pasos,
+  adiciones, fines, metas). **Publicar** la pasa a `approved` y desde ahí es inmutable. Cambiar una
+  publicada crea la siguiente versión en borrador, copiando pasos, adiciones, fines y metas, **con las
+  referencias remapeadas a los pasos nuevos** (extiende R8).
+- `abrirProceso`, el selector de recetas y los lectores **exigen `approved`**.
+- **Concurrencia:** editar, publicar y abrir un proceso con esa versión bloquean la fila de la versión
+  (`SELECT … FOR UPDATE`) dentro de su transacción.
+- Las versiones `approved` de hoy siguen siendo publicadas; ninguna se reabre.
+
+### 3.4 Plantillas
+
+Las recetas con `organizationId` nulo son de todas las organizaciones y ninguna las edita. Una
+organización **deriva** una copia propia: receta nueva con `derivadaDeVersionId`.
+
+### 3.5 Qué ejes aplican a cada tipo, y la referencia del paquete
+
+`VariableCatalogValueDef` no tiene dónde guardarlo, así que vive **en código**, junto a los
+catálogos: una constante `EJES_POR_TIPO_DE_PASO` (tipo → ejes que aplican) que usan la pantalla y la
+validación del servicio, y un archivo de datos con las **referencias** del paquete que la pantalla
+muestra (valor, fuente, confianza), copiadas de `04_reference_parameters.json` con su procedencia.
+Ninguna de las dos escribe en la base.
 
 ---
 
 ## 4. Cómo se une el lote a su paso
 
-**4.1 Cada registro lleva su tipo de paso y, si lo hay, el paso que cumple.** Columnas nuevas
-`stepType` y `recipeStepId` (nulo permitido) en `FermentationRun`, `DryingRun` y `LotTransformation`
-(sólo `stage_change` y `hulling`).
+### 4.1 Qué registro cumple qué paso
 
 | Registro | Tipos de paso que puede cumplir |
 |---|---|
 | `FermentationRun` | `fermentation`, `prefermentacion`, `cold_hold`, `soaking`, `immersion_hot`, `immersion_cold` |
 | `DryingRun` | `drying` |
-| `LotTransformation` `stage_change` | `pulping`, `demucilage`, `washing` |
-| `LotTransformation` `hulling` | `milling` |
-| evento dentro de una corrida | `inoculation`, `addition` |
+| `LotProcessIntervention` | `pulping`, `demucilage`, `washing`, `sorting_flotation`, `sanitation`, `inoculation`, `addition` |
+| `FermentationIntervention` de tipo `inoculation` o `addition` | `inoculation`, `addition` (los que ocurren dentro de una fermentación) |
 
-**4.2 Guardián de coherencia — bloquea.** Con `recipeStepId`: el paso es de la versión del proceso
-vigente (R1 de la Parte 1), y su `stepType` está en la fila del registro. Si no, se rechaza con
-`paso_de_otra_receta` o `paso_no_corresponde`. Es trazabilidad, no un umbral (D6).
+**Las cuatro tablas ganan** `stepType` (anulable), `recipeStepId` (anulable) y `motivoDesviacion`
+(anulable). **Los `stage_change` no se tocan**: los crea la corrida al empezar y terminar, y el paso
+lo cumple la corrida, no su transformación técnica.
 
-**4.3 El formulario propone el siguiente paso pendiente** por `seq`, y deja elegir otro: saltar un
+Para que el despulpado y el lavado se puedan registrar, sus valores entran en el catálogo de
+intervenciones (§7).
+
+### 4.2 Guardián de coherencia — bloquea
+
+Con `recipeStepId`:
+- el paso es de la versión del **proceso vigente** (R1), si no `paso_de_otra_receta`;
+- el tipo del paso está en la fila del registro (4.1), si no `paso_no_corresponde`;
+- y **el `stepType` del registro se toma del paso**: no se puede declarar otro. Una fermentación con
+  `stepType=fermentation` no puede cumplir un paso `prefermentacion`.
+
+Es trazabilidad, no un umbral (D6).
+
+### 4.3 El avance se calcula sobre la cadena
+
+Lo pendiente no se calcula sobre el proceso vigente solo: tras una división (R6) o una devolución a
+secado (R7) cada parte o continuación es un proceso nuevo, con la misma versión, cuya historia viene
+por la `cadena` de R1. **Lo ejecutado = los registros de todos los procesos de la cadena que
+comparten la versión del vigente**, en orden de inicio. Un proceso anterior de **otra** receta corta
+la cadena.
+
+El formulario propone el siguiente paso pendiente según esa historia, y deja elegir otro: saltar un
 opcional, o repetir uno (el multiproceso secado → tratamiento → secado; si la receta declara el
 recorrido, cada registro se une a su paso).
 
-**4.4 Desviación (D5).** Un registro sin `recipeStepId` bajo una receta con pasos es una
-**desviación**: exige `motivoDesviacion` (texto) y queda marcado. No bloquea. La Parte 5 separa
-esos lotes al comparar.
+### 4.4 Desviación (D5)
 
-**4.5 Recepción y clasificación** ocurren antes de abrir el proceso, que se abre sobre el lote
-aceptado. No se unen por paso: al abrir el proceso, el servicio busca en la ascendencia del lote su
-recepción y su selección y **las compara con la receta** (por ejemplo, Brix de recepción fuera de
-18–24 → aviso). Avisa, no bloquea.
+Una desviación es un registro **sin `recipeStepId`** de uno de los cuatro tipos de 4.1, bajo un
+proceso **abierto** cuya receta **tiene pasos** y **no es «Libre»**. Exige `motivoDesviacion`
+(`desviacion_sin_motivo`), queda marcado, y no bloquea. La Parte 5 separa esos lotes al comparar.
 
-**4.6 Lo que no tiene registro hoy** (`sanitation`, `freezing`, `sorting_flotation` fuera de la
-selección, `aging`, `monsooning`, `barrel_aging`, `decaf`, `reposo` y `storage`) existe en el
-catálogo y se puede escribir en una receta, pero ningún registro lo cumple todavía. `reposo` y
-`storage` los lee la 2b desde la asignación de bodega. Lo posterior al verde queda fuera.
+**No son desviación:** un registro con paso; cualquier registro bajo «Libre», bajo una receta sin
+pasos o bajo un proceso viejo sin receta; la trilla y los tuestes, que ocurren con el proceso cerrado
+y ninguna receta declara.
+
+### 4.5 Recepción y clasificación
+
+Ocurren antes de abrir el proceso, que se abre sobre el lote aceptado. No se unen por paso: al abrir
+el proceso, el servicio busca en la ascendencia del lote **todas** sus recepciones
+(`LoteDesdeRecepcion`, puede haber varias) y las compara **una por una** con el paso `reception` de la
+receta, si lo declara (por ejemplo Brix 18–24). Una recepción fuera de rango → aviso con esa
+recepción nombrada; **ninguna recepción en la ascendencia** → aviso propio. Avisa, no bloquea.
+
+El aviso **no se guarda**: se calcula al leer, desde la recepción y la versión, que sí están
+guardadas, así que cualquiera lo reproduce. El veredicto fijo 18–24 de `brixDeRecepcion.ts` sigue
+siendo el de la recepción; el de la receta es el del proceso.
+
+### 4.6 Lo que no tiene registro
+
+`freezing`, `aging`, `monsooning`, `barrel_aging`, `decaf`, `hulling_wet` y `milling` existen en el
+catálogo y se pueden escribir en una receta, pero ningún registro los cumple todavía. `reception` se
+compara como en 4.5. `reposo` y `storage` los lee la 2b desde la asignación de bodega. Lo posterior
+al verde queda fuera.
 
 ---
 
-## 5. La receta libre (D3) y la receta obligatoria
+## 5. La receta obligatoria y la receta libre (D3, D7)
 
-- **Abrir un proceso exige receta.** `abrirProceso` rechaza sin `recipeVersionId` con
-  `sin_receta`. Para experimentar está la receta libre. Los procesos abiertos antes sin receta no se
-  rellenan (R9): el reimport los rehace.
-- Cada organización tiene una receta **«Libre»** sin pasos, creada al primer uso.
-- Bajo ella, cada registro lleva sólo `stepType`; no hay desviación posible.
-- Al cerrar el proceso, el servicio arma un **borrador de receta**: un paso por registro, en orden de
-  inicio, con su tipo, los ejes que el registro guarda, las horas reales como `horasSugeridas`, y
-  como fin las mediciones con que se cerró cada paso.
-- Daniel lo nombra y lo publica. El proceso conserva que se hizo con «Libre» (es lo que ocurrió) y
-  gana `origenDeRecetaVersionId`. La Parte 5 lo agrupa con los lotes de esa receta, marcado como
-  origen.
+### 5.1 La receta obligatoria
+
+- **`abrirProceso` exige receta** y rechaza sin `recipeVersionId` con `sin_receta`. La comprobación
+  vive en `abrirProceso` (lo que abre un proceso a pedido de alguien), **no** en los núcleos de
+  división (R6) ni de devolución (R7), que copian el proceso vigente tal cual: así un proceso viejo
+  sin receta se puede dividir y devolver.
+- **Transición (R9):** los procesos sin receta que ya existen **no se convierten en «Libre»** ni se
+  rellenan. Siguen abiertos y se cierran como hoy; sus registros nuevos llevan `stepType` sin paso y
+  no son desviación. El reimport los rehace.
+- Las columnas nuevas de 4.1 son anulables: lo histórico queda nulo y no se deduce.
+
+### 5.2 La receta libre
+
+- Cada organización tiene **una** receta «Libre», marcada por una columna `esLibre` (única por
+  organización donde es verdadera), no por su nombre. Una receta propia llamada «Libre» no choca.
+- Se crea **dentro de la transacción de apertura**, la primera vez que alguien abre un proceso con
+  ella, **sin exigir `edit_beneficio`**: un operario que puede abrir procesos puede usarla. Dos
+  primeras aperturas a la vez no chocan, porque es un `upsert` sobre esa unicidad.
+- No tiene pasos. Bajo ella, cada registro lleva sólo `stepType`.
+
+### 5.3 El borrador al cerrar
+
+- Se arma **sólo al cerrar por humedad** (`closureKind: moisture`) el proceso vigente, recorriendo la
+  cadena como en 4.3. Al cerrar `divided` no se arma nada: cada parte arma el suyo al cerrar, con el
+  prefijo común incluido.
+- Un paso por registro, en orden de inicio, con su tipo, los ejes que el registro guarda y las horas
+  reales como `horasSugeridas`.
+- **Fin:** al terminar una corrida o registrar una intervención, el operario puede **marcar las
+  lecturas que motivaron el cierre** (`lecturasDeCierre`, opcional). El borrador sólo propone como fin
+  esas lecturas, y nunca deduce un umbral de una lectura que nadie marcó. Si no hay ninguna marcada,
+  el fin del paso es por tiempo.
+- Daniel lo nombra y lo publica (§3.3). El proceso conserva que se hizo con «Libre» (es lo que
+  ocurrió) y gana `origenDeRecetaVersionId`, que cuenta como uso de esa versión. La Parte 5 lo agrupa
+  con los lotes de esa receta, marcado como origen.
 
 ---
 
 ## 6. La pantalla
 
-- La receta se ve como **lista de pasos en orden**: añadir, quitar, mover, marcar opcional.
-- Cada paso se abre en un formulario corto: primero el tipo, y sólo aparecen los ejes que le aplican.
+- La receta se ve como **lista de pasos en orden**: añadir, quitar, mover, marcar opcional. Sólo en
+  borrador.
+- Cada paso se abre en un formulario corto: primero el tipo, y sólo aparecen los ejes que le aplican
+  (`EJES_POR_TIPO_DE_PASO`).
 - Junto a cada valor por defecto, **la referencia del paquete** con fuente y confianza (por ejemplo
   «volteo ≥ 3–4 al día · Cenicafé · alta»). Informativa: la receta decide. Los valores `low` y `NN`
   se marcan visiblemente.
-- Publicar fija la versión. Esta pantalla sustituye a la «pantalla de fases» que la Parte 1 dejó
+- «Publicar» fija la versión. Esta pantalla sustituye a la «pantalla de fases» que la Parte 1 dejó
   fuera.
+- Al terminar una corrida o registrar una intervención, la casilla para marcar las lecturas de
+  cierre (§5.3).
 - Textos en es y en.
 
 ---
 
 ## 7. El vocabulario
 
-Catálogos nuevos en `lib/research/catalogs.ts`: `tipo_paso`, `estado_fruto`, `oxigeno`,
-`regimen_temperatura`, `fuente_microbiana`, `adicion`, `fisico`, `modo_secado`; y valores nuevos en
-`recipiente`.
+**Se amplían los catálogos que ya existen; no se crean paralelos.**
 
-- Valores de la casa: **cama africana, sacos de cosecha (fiebre), atomizado, mosto de otro
-  fermento**.
-- Sinónimos del paquete como alias (`aliasOf`): mosto = mossto = lixiviado = «previous-batch
-  starter».
-- Definiciones de la casa en `definition`:
+- **Nuevos, porque no existe nada parecido:** `tipo_paso` (los 23 + `prefermentacion`), `fisico`,
+  `modo_secado`.
+- **Valores nuevos en catálogos existentes:**
+  - `recipiente`: cama africana, sacos de cosecha (fiebre), bolsa anaeróbica.
+  - `fuente_microbiana`: mosto propio, bioprotección, atomizado. «Mosto de otro fermento» **no** es
+    valor nuevo: es `mosto_de_otro_lote` de `medio_lavado`, y se pone como alias.
+  - `estado_cereza`: los estados de mucílago que aún falten (en mucílago, lavado).
+  - El catálogo de intervenciones gana los valores de despulpado, desmucilaginado y lavado, para que
+    `LotProcessIntervention` los registre (4.1).
+- **Sinónimos del paquete como alias** (`aliasOf`): mosto = mossto = lixiviado = «previous-batch
+  starter» → `doble_mosto` / `mosto_de_otro_lote` según el caso.
+- **Definiciones de la casa** en `definition`:
   - **Lavado:** a la cama de secado sin nada de mucílago; si llega con mucílago es semi-lavado.
   - **Honey:** 100 % del mucílago retenido; con menos, semi-lavado.
   - **Fiebre:** cereza entera en sus sacos de cosecha sin sellar, se calienta; prefermentativo por
@@ -178,21 +305,29 @@ Catálogos nuevos en `lib/research/catalogs.ts`: `tipo_paso`, `estado_fruto`, `o
   - **Láctico, málico, acético:** resultados, no métodos; exigen datos medidos o se publican como
     perfil buscado.
 
+Antes de añadir cualquier valor, el plan mide la base: qué catálogos y valores existen ese día.
+
 ---
 
 ## 8. Pruebas — cada guardián con su flip-test
 
-| Guardián | Prueba | Flip-test |
+Cada prueba lleva su **control válido** al lado, para que no pase vacía.
+
+| Guardián | Prueba (con control) | Flip-test |
 |---|---|---|
-| 4.2 paso de otra receta | rechaza `paso_de_otra_receta` | quitar la comprobación → la prueba cae |
-| 4.2 tipo que no corresponde | una `DryingRun` con un paso `washing` se rechaza | idem |
-| 4.4 desviación | sin `recipeStepId` y sin motivo se rechaza; con motivo pasa y queda marcada | idem |
-| §3 versión usada | editar una versión con proceso se rechaza | idem |
-| §3 v2 copia | pasos, adiciones, fines y metas llegan iguales a la v2 | quitar la copia de una de las cuatro → cae |
-| §3 fases derivadas | publicar con pasos escribe las fases que leen la cola y los motores | idem |
-| §5 receta libre | el borrador reproduce lo ejecutado en orden, con horas reales | invertir el orden → cae |
-| §5 receta obligatoria | abrir sin receta se rechaza con `sin_receta`; con «Libre» pasa | quitar la comprobación → cae |
-| 4.5 recepción | Brix 26 con receta 18–24 → aviso; Brix 20 → sin aviso | las dos ramas, para que no pase vacía |
+| 4.2 paso de otra receta | rechaza `paso_de_otra_receta`; el mismo registro con un paso de su versión pasa | quitar la comprobación → cae |
+| 4.2 tipo que no corresponde | una `DryingRun` con un paso `washing` **de la misma versión** se rechaza `paso_no_corresponde` (así no la tapa la regla anterior); con un paso `drying` pasa | idem |
+| 4.2 tipo igual al del paso | una `FermentationRun` declarando `fermentation` sobre un paso `prefermentacion` acaba con `prefermentacion` o se rechaza | quitar la igualdad → cae |
+| 4.4 desviación | sin paso y sin motivo bajo receta con pasos → rechazo; con motivo pasa marcada; **bajo «Libre», bajo receta sin pasos y en una trilla → no exige motivo** | «exigir motivo siempre» → caen los tres negativos |
+| §3.1 dos secados | una versión con dos pasos `drying` de volteo distinto: cada corrida lee el suyo en la cola | leer de la fase → cae |
+| §3.2 metas por paso | pH inicial en `prefermentacion` y en `fermentation` de la misma versión se guardan las dos; repetirla en el mismo paso se rechaza | quitar `recipeStepId` de la unicidad → cae |
+| §3.3 borrador | editar una versión `approved` se rechaza; un borrador sí; abrir proceso con un borrador se rechaza | idem |
+| §3.3 copia | una v1 con **las cuatro colecciones no vacías** → la v2 trae ids nuevos, y **cada `recipeStepId` de sus metas apunta a un paso de la v2**, no de la v1 | no remapear → cae |
+| 4.3 cadena | tras dividir un proceso con dos pasos hechos, la parte propone el tercero | calcular sólo sobre el vigente → propone el primero |
+| §5.1 receta obligatoria | abrir sin receta → `sin_receta`; con «Libre» pasa; dividir un proceso viejo sin receta pasa | quitar la comprobación → cae; moverla al núcleo → cae la división |
+| §5.2 «Libre» | dos aperturas concurrentes crean una sola «Libre»; una receta propia llamada «Libre» no la sustituye | buscar por nombre → cae |
+| §5.3 borrador libre | tres registros insertados **fuera de orden** con fechas distintas → el borrador sale en orden de inicio, con el despulpado incluido; con una lectura marcada el fin es esa lectura, sin marcar es tiempo | invertir el orden → cae |
+| 4.5 recepción | dos recepciones (Brix 26 y 20) → un aviso que nombra la de 26; sin recepción → aviso propio; una de 20 → ninguno | las tres ramas |
 
 Si una tarea toca TypeScript, su plan manda `npm run build`, no sólo el runner de pruebas.
 
@@ -201,13 +336,39 @@ Si una tarea toca TypeScript, su plan manda `npm run build`, no sólo el runner 
 ## 9. Lo que la 2a no hace
 
 - La vigilancia en el lote: prefermentación, humedad sin intención, reposos, venta bloqueada,
-  motores por receta. **Es la 2b.**
+  motores por receta, grado atado a la receta. **Es la 2b.**
+- Comparar lo real con lo declarado y lotes de la misma receta. **Es la Parte 5.**
 - Cargar Lavado, Natural y Honey. **Es la Parte 3**, que ahora las escribe como pasos.
 - El plan del lote paso a paso, visible para el operario. **Es la Parte 4.**
-- Comparar lotes de la misma receta. **Es la Parte 5.**
+- El desenlace «salida a tratamiento». **Es de la Parte 1**, por la coordinadora.
 - Lo posterior al verde (añejado, monzón, barrica, descafeinado): existe en el catálogo, sin registro.
 
 ## 10. Dependencia y orden
 
 Se construye **encima de la Parte 1 fusionada**: necesita que toda corrida esté unida a su proceso
-(R3) y el resolvedor R1. El plan de la 2a se escribe cuando la Parte 1 esté en `main`.
+(R3), el resolvedor R1 con su `cadena`, y los cierres `moisture` / `divided`. El plan de la 2a se
+escribe cuando la Parte 1 esté en `main`, y empieza midiendo de nuevo todo lo que §1 afirma.
+
+## 11. Revisión adversaria del 2026-10-02
+
+Dos revisores independientes, en sólo lectura y sin verse entre sí: Codex (10 hallazgos) y un
+revisor Claude (12). Coincidieron en los cuatro graves. Cada hallazgo se comprobó contra el código
+antes de corregir; ninguno tocaba una decisión de Daniel.
+
+| Hallazgo | Corrección |
+|---|---|
+| Una sola fase por versión y tipo: el multiproceso no cabe | §3.1: la corrida lee su paso; las fases son compatibilidad |
+| `everyHours` ya existía; la unicidad de metas impedía repetir variable entre pasos | §3.2 |
+| Los `stage_change` los crean las corridas; el guardián los habría rechazado | §4.1: no se tocan |
+| El despulpado y el lavado ya se registran como `LotProcessIntervention` | §4.1 |
+| Inoculación y adición sin registro enlazado | §4.1: las dos tablas de intervención |
+| Catálogos «nuevos» que ya existían — **la misma equivocación que Daniel corrigió el 2026-09-07** | §7: se amplían los existentes |
+| No había borrador: toda versión nace `approved` | §3.3 |
+| Avance y borrador libre ignoraban la cadena de divisiones y devoluciones | §4.3, §5.3 |
+| «Libre» identificada por nombre; permiso; concurrencia | §5.2 |
+| Receta obligatoria contra procesos viejos y núcleos R6/R7 | §5.1 |
+| Las lecturas «de cierre» no existen como dato | §5.3: el operario las marca |
+| Tipo del registro distinto del tipo del paso | §4.2 |
+| Trilla y tuestes caían como desviación | §4.4 |
+| Varias recepciones por lote | §4.5 |
+| Pruebas que pasaban vacías | §8: cada una con su control |
