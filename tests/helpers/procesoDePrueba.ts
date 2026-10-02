@@ -43,7 +43,7 @@ export async function abrirProcesoDePrueba(
 }
 
 /**
- * Borra los procesos de los lotes que cumplan `lot`, y antes sus devoluciones a secado. Va ANTES de
+ * Borra los procesos de los lotes que cumplan `lot`, y antes sus devoluciones a secado (con su auditoría). Va ANTES de
  * borrar esos lotes: `lot_process.lot_id` es RESTRICT. Se le pasa el mismo `where` con el que el
  * archivo borra sus lotes.
  *
@@ -65,8 +65,24 @@ export async function borrarProcesosDeLotesDonde(lot: Prisma.LotWhereInput): Pro
   // sin procesos no se toca nada.
   const procesos = await prisma.lotProcess.findMany({ where: assertDefinedWhere({ lot }), select: { id: true } });
   const ids = procesos.map((p) => p.id);
-  if (ids.length > 0) {
-    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "lot_process", entityId: { in: ids } }) });
+  // Parte 1, R7 (tarea 8): `devolverASecado` escribe además su propio evento (`lot_process.return_to_drying`, entidad
+  // `lot_process_return`), que cuelga de la DEVOLUCIÓN y no del proceso. Se borra en el MISMO `deleteMany` de la
+  // auditoría —sigue habiendo tres borrados, que es lo que `tests/helpers/tieneCondicion.test.ts` cuenta en la fuente—, por
+  // los ids de las devoluciones que ESTA llamada va a borrar (el mismo filtro positivo) y antes de borrarlas.
+  const devoluciones = await prisma.lotProcessReturn.findMany({
+    where: assertDefinedWhere({ OR: [{ closedLotProcess: { lot } }, { continuationLotProcess: { lot } }] }),
+    select: { id: true },
+  });
+  const idsDeDevoluciones = devoluciones.map((d) => d.id);
+  if (ids.length > 0 || idsDeDevoluciones.length > 0) {
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({
+        OR: [
+          { entityType: "lot_process", entityId: { in: ids } },
+          { entityType: "lot_process_return", entityId: { in: idsDeDevoluciones } },
+        ],
+      }),
+    });
   }
   await prisma.lotProcessReturn.deleteMany({
     where: assertDefinedWhere({ OR: [{ closedLotProcess: { lot } }, { continuationLotProcess: { lot } }] }),

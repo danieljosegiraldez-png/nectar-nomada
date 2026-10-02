@@ -11,8 +11,8 @@
  * circunstancia»; R7 de la Parte 1, 2026-10-01). Un lote por encima de su
  * `targetMoisturePct` NO entra a bodega. Corre dentro de `moveLotToStorage`,
  * en su transacción y con el linaje bloqueado, y sólo al ENTRAR: reubicar un
- * lote que ya está dentro no la consulta. La deshace `devolverASecado` (tarea
- * 8 de la Parte 1).
+ * lote que ya está dentro no la consulta. La deshace `devolverASecado`, que desde la
+ * tarea 8 de la Parte 1 (R7) no reabre nada: abre una continuación unida al proceso cerrado.
  */
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
@@ -490,64 +490,95 @@ export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: 
   if (medida > objetivo) throw new LotProcessError("moisture_above_target");
 }
 
+export interface DevolverASecadoInput {
+  lotId: string;
+  /** Del catálogo `motivo_devolucion_a_secado`. */
+  motivoValueId: string;
+  /** Obligatoria con «otro». */
+  nota?: string | null;
+  ocurrioEn: Date;
+}
+
 /**
- * Devuelve el lote a secado: reabre su proceso más reciente.
+ * Devuelve el lote a secado — Parte 1, R7 (2026-09-30).
  *
- * **Es la acción que el dueño pidió junto al bloqueo.** Reabrir contradice la
- * regla de «cerrado no se toca», y por eso **exige un motivo** y lo deja en el
- * `AuditEvent` con lo que se está deshaciendo: qué humedad de cierre se
- * descarta y contra qué objetivo. Sin el motivo, reabrir sería indistinguible de
- * un descuido.
+ * **Es la acción que el dueño pidió junto al bloqueo de bodega** (2026-09-07: «bloquear, alertar, acción
+ * para regresar a secado»). **Ya no reabre el proceso cerrado: abre una continuación unida a él.** Reabrir
+ * tenía tres defectos: borraba la medición de cierre, que es un hecho que sí ocurrió; volvía a abrir el
+ * proceso para TODOS los lotes que cubre, también los hermanos ya guardados; y se saltaba R2. Daniel aprobó
+ * el cambio el 2026-09-30.
  *
- * No borra la medición: la suelta. La fila de `Measurement` sigue donde estaba,
- * porque es un hecho medido y no deja de haber ocurrido.
+ * **Sólo por un defecto de humedad**: el motivo sale de una lista y se guarda en su propia fila
+ * (`LotProcessReturn`), para poder contar cuántas veces pasa y por qué. «otro» exige nota.
+ *
+ * Todo en una transacción y con el linaje bloqueado PRIMERO —antes de leer o terminar la asignación de
+ * bodega, el mismo orden que `moveLotToStorage`—: si un paso falla, no queda nada a medias.
  */
-export async function devolverASecado(
-  userAccountId: string,
-  input: { lotId: string; motivo: string },
-) {
+export async function devolverASecado(userAccountId: string, input: DevolverASecadoInput) {
   await loteGestionable(userAccountId, input.lotId);
-
-  const motivo = input.motivo.trim();
-  if (motivo.length === 0) throw new LotProcessError("motivo_required");
-
-  const proceso = await prisma.lotProcess.findFirst({
-    where: { lotId: input.lotId },
-    orderBy: { sequenceOrder: "desc" },
-    include: { closingMoistureMeasurement: true },
-  });
-  if (!proceso) throw new LotProcessError("process_not_found");
-  if (proceso.endedAt === null) throw new LotProcessError("process_already_open");
-
-  const antes = {
-    endedAt: proceso.endedAt,
-    closingMoistureMeasurementId: proceso.closingMoistureMeasurementId,
-    humedadDeCierre: proceso.closingMoistureMeasurement?.value.toNumber() ?? null,
-    targetMoisturePct: proceso.targetMoisturePct.toNumber(),
-  };
+  const motivo = input.motivoValueId
+    ? await prisma.variableCatalogValue.findUnique({ where: { id: input.motivoValueId }, include: { catalog: true } })
+    : null;
+  if (!motivo || motivo.catalog.key !== CATALOGO_MOTIVO_DEVOLUCION) throw new LotProcessError("motivo_required");
+  const nota = input.nota?.trim() || null;
+  if (motivo.value === "otro" && !nota) throw new LotProcessError("motivo_otro_requiere_nota");
 
   return prisma.$transaction(async (tx) => {
-    const reabierto = await tx.lotProcess.update({
-      where: { id: proceso.id },
-      // Parte 1 (2026-10-01): provisional hasta la tarea 8, que sustituye esta función entera. Limpia el
-      // tipo junto con la medición porque el CHECK exige que un proceso abierto no tenga tipo de cierre.
-      data: { endedAt: null, closingMoistureMeasurementId: null, closureKind: null },
-    });
+    await bloquearLinaje(tx, input.lotId);
+    // Las dos comprobaciones de dividido dan el rechazo ANTES de escribir nada. No son lo único que lo impediría:
+    // `abrirProcesoEnTx` rechaza `lote_dividido` igual, por R2. Aquí el error sale con su código antes de que la
+    // asignación de bodega se haya tocado.
+    if (await loteDividido(tx, input.lotId)) throw new LotProcessError("lote_dividido");
+    const cobertura = await procesoQueCubre(tx, input.lotId);
+    if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
+    if (cobertura.estado === "sin_proceso") throw new LotProcessError("process_not_found");
+    if (cobertura.estado === "abierto") throw new LotProcessError("process_already_open");
+    const cerrado = await tx.lotProcess.findUniqueOrThrow({ where: { id: cobertura.vigente.id } });
+    if (cerrado.closureKind !== "moisture") throw new LotProcessError("lote_dividido");
 
+    // Primero sale de bodega, DESPUÉS se comprueba R2 dentro de `abrirProcesoEnTx`: si fuera al revés, R2 lo
+    // rechazaría por estar en bodega, que es justo de donde se le está sacando.
+    const bodega = await tx.storageAssignment.findFirst({ where: { lotId: input.lotId, endedAt: null } });
+    if (bodega) await tx.storageAssignment.update({ where: { id: bodega.id }, data: { endedAt: input.ocurrioEn } });
+
+    // La continuación se abre sobre el lote DEVUELTO, no sobre el lote donde vive el proceso cerrado: los
+    // hermanos siguen bajo el cerrado. Copia sus atributos y lleva el hilo (`derivedFromLotProcessId`).
+    const continuacion = await abrirProcesoEnTx(tx, userAccountId, {
+      lotId: input.lotId,
+      processRecipeVersionId: cerrado.processRecipeVersionId,
+      intent: cerrado.intent,
+      processGradeValueId: cerrado.processGradeValueId,
+      cherryStateValueId: cerrado.cherryStateValueId,
+      targetMoisturePct: cerrado.targetMoisturePct,
+      startedAt: input.ocurrioEn,
+      notes: cerrado.notes,
+      provenanceClass: cerrado.provenanceClass,
+      sourceReference: cerrado.sourceReference,
+      derivedFromLotProcessId: cerrado.id,
+    });
+    const devolucion = await tx.lotProcessReturn.create({
+      data: {
+        closedLotProcessId: cerrado.id,
+        continuationLotProcessId: continuacion.id,
+        reasonValueId: motivo.id,
+        note: nota,
+        endedStorageAssignmentId: bodega?.id ?? null,
+        occurredAt: input.ocurrioEn,
+        createdBy: userAccountId,
+      },
+    });
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
-        operation: "lot_process.reopen_for_drying",
-        entityType: "lot_process",
-        entityId: proceso.id,
-        before: antes,
-        after: { endedAt: null, closingMoistureMeasurementId: null, motivo },
+        operation: "lot_process.return_to_drying",
+        entityType: "lot_process_return",
+        entityId: devolucion.id,
+        after: devolucion,
         sourceInterface: "traceability.lotProcess",
       },
       tx,
     );
-
-    return reabierto;
+    return { continuacion, devolucion };
   });
 }
 
@@ -629,7 +660,7 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     ),
   ]);
 
-  const [grados, estados] = await Promise.all([
+  const [grados, estados, motivos] = await Promise.all([
     prisma.variableCatalogValue.findMany({
       where: { catalog: { key: CATALOGO_GRADO_PROCESO } },
       orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
@@ -638,11 +669,17 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
       where: { catalog: { key: CATALOGO_ESTADO_CEREZA } },
       orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
     }),
+    // Parte 1, R7: la lista de motivos de «devolver a secado».
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+    }),
   ]);
 
   return {
     grados: grados.map((v) => ({ id: v.id, label: v.value })),
     estadosDeCereza: estados.map((v) => ({ id: v.id, label: v.value })),
+    motivosDeDevolucion: motivos.map((v) => ({ id: v.id, label: v.value })),
     intervenciones: valores.map((v) => ({ id: v.id, label: `${v.catalog.name} · ${v.value}` })),
     // El código del lote va en la etiqueta cuando la medición NO es de este lote: ofrecer una
     // humedad de otro lote sin decir de cuál es pedirle al operario que adivine (ADR-080: un id

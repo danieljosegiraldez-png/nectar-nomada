@@ -2532,7 +2532,12 @@ export async function devolverASecadoAction(
 
   const lotId = String(formData.get("lotId") ?? "");
   try {
-    await devolverASecado(user.userAccountId, { lotId, motivo: String(formData.get("motivo") ?? "") });
+    await devolverASecado(user.userAccountId, {
+      lotId,
+      motivoValueId: String(formData.get("motivoValueId") ?? ""),
+      nota: emptyToNull(formData.get("nota")),
+      ocurrioEn: new Date(),
+    });
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }

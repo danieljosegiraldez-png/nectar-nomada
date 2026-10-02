@@ -22,12 +22,14 @@ import {
   registrarIntervencion,
   CATALOGO_ESTADO_CEREZA,
   CATALOGO_GRADO_PROCESO,
+  CATALOGO_MOTIVO_DEVOLUCION,
   CATALOGOS_DE_INTERVENCION,
   LotProcessError,
   SIN_RECETA,
 } from "../../lib/traceability/lotProcess";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 const RUN = `proc-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
@@ -191,7 +193,9 @@ afterAll(async () => {
   await prisma.lotProcessIntervention.deleteMany({
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
-  await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  // Parte 1, R7 (tarea 8): este archivo crea ahora filas `lot_process_return`, y sus dos claves hacia `lot_process` son
+  // RESTRICT. El ayudante borra primero las devoluciones y la auditoría de los procesos, y después los procesos.
+  await borrarProcesosDeLotesDonde({ id: { in: lotes } });
   // Las transformaciones: sus filas de entrada y salida apuntan a los lotes.
   await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
@@ -518,30 +522,31 @@ describe("un lote no sale de secado antes de su objetivo", () => {
     await expect(exigeSecadoTerminado(prisma, loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
   });
 
-  it("`devolverASecado` reabre el proceso y exige un motivo", async () => {
-    await expect(devolverASecado(gestor, { lotId: loteA, motivo: "  " })).rejects.toThrow(
-      new LotProcessError("motivo_required"),
-    );
-
-    const reabierto = await devolverASecado(gestor, { lotId: loteA, motivo: "11,2 % sobre 10,5 %: vuelve a cama" });
-    expect(reabierto.endedAt).toBeNull();
-    expect(reabierto.closingMoistureMeasurementId).toBeNull();
-
-    // Reabrir contradice «cerrado no se toca», así que el rastro dice qué se
-    // deshizo y por qué.
-    const evento = await prisma.auditEvent.findFirst({
-      where: assertDefinedWhere({ entityId: reabierto.id, operation: "lot_process.reopen_for_drying" }),
-      orderBy: { occurredAt: "desc" },
+  it("devolver a secado abre una continuación unida al proceso cerrado, que conserva su cierre", async () => {
+    const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "humedad_alta_por_error_de_manejo", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
     });
-    expect(JSON.stringify(evento!.before)).toContain("11.2");
+    await expect(devolverASecado(gestor, { lotId: loteA, motivoValueId: "", ocurrioEn: new Date("2026-03-22T12:00:00Z") }))
+      .rejects.toThrow(new LotProcessError("motivo_required"));
+    const cerradoAntes = (await listarProcesosDeLote(gestor, loteA)).at(-1)!;
+    const { continuacion, devolucion } = await devolverASecado(gestor, {
+      lotId: loteA, motivoValueId: motivo.id, nota: "11,2 % sobre 10,5 %: vuelve a cama", ocurrioEn: new Date("2026-03-22T12:00:00Z"),
+    });
+    expect(continuacion.endedAt).toBeNull();
+    expect(continuacion.derivedFromLotProcessId).toBe(cerradoAntes.id);
+    const cerrado = await prisma.lotProcess.findUniqueOrThrow({ where: { id: cerradoAntes.id } });
+    expect(cerrado.endedAt).not.toBeNull();
+    expect(cerrado.closingMoistureMeasurementId).toBe(cerradoAntes.closingMoistureMeasurementId);
+    expect(devolucion.reasonValueId).toBe(motivo.id);
+    const evento = await prisma.auditEvent.findFirst({ where: assertDefinedWhere({ entityId: devolucion.id, operation: "lot_process.return_to_drying" }) });
     expect(JSON.stringify(evento!.after)).toContain("vuelve a cama");
   });
 
-  it("y la medición descartada NO se borra: es un hecho medido", async () => {
+  it("y la medición de cierre del proceso devuelto NO se borra: es un hecho medido", async () => {
     const sigue = await prisma.measurement.findFirst({
       where: assertDefinedWhere({ lotId: loteA, variable: "moisture", value: 11.2 }),
     });
-    expect(sigue, "soltar el puntero no puede borrar la medición").not.toBeNull();
+    expect(sigue, "devolver a secado no puede borrar la medición").not.toBeNull();
   });
 
   it("cerrado POR DEBAJO del objetivo, bodega se abre", async () => {

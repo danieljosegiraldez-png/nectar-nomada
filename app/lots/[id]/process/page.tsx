@@ -18,6 +18,7 @@ import { getCurrentUser } from "../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError, puedeGestionarLote } from "../../../../lib/traceability/lots";
 import { listarProcesosDeLote, opcionesParaProceso, LotProcessError } from "../../../../lib/traceability/lotProcess";
 import { listRecipeVersionsForLot } from "../../../../lib/traceability/processTargets";
+import { getCurrentStorageAssignment } from "../../../../lib/traceability/storage";
 import {
   AbrirProcesoForm,
   CambiarIntencionForm,
@@ -53,7 +54,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   }
 
   const puedeGestionar = await puedeGestionarLote(user.userAccountId, lot);
-  const { intervenciones, mediciones, grados, estadosDeCereza } = await opcionesParaProceso(user.userAccountId, id);
+  const { intervenciones, mediciones, grados, estadosDeCereza, motivosDeDevolucion } = await opcionesParaProceso(user.userAccountId, id);
   // La misma etiqueta que ya usa la página del lote, para que una receta se
   // llame igual en las dos pantallas.
   const recetas = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
@@ -67,6 +68,10 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   // único desde el que `devolverASecado` tiene sentido.
   const bloqueado =
     ultimo !== null && ultimo.endedAt !== null && (ultimo.diferenciaContraObjetivo ?? 0) > 0;
+  // Parte 1, R7: «devolver a secado» se ofrece en todo lote en bodega o bloqueado al entrar. Antes
+  // sólo salía con el cierre por encima del objetivo, y como la compuerta impide guardar algo así,
+  // un lote EN BODEGA nunca lo veía, que es justo el caso que pide Daniel.
+  const enBodega = (await getCurrentStorageAssignment(user.userAccountId, id)) !== null;
 
   const fecha = (d: Date | null) => (d === null ? "—" : d.toISOString().slice(0, 10));
 
@@ -160,11 +165,11 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         </>
       ) : null}
 
-      {bloqueado && puedeGestionar ? (
+      {(bloqueado || enBodega) && puedeGestionar ? (
         <section className="nn-section">
           <h2>{t("processBackToDryingButton")}</h2>
-          <p className="nn-error">{t("processBlockedFromStorage")}</p>
-          <DevolverASecadoForm lotId={id} />
+          {bloqueado ? <p className="nn-error">{t("processBlockedFromStorage")}</p> : null}
+          <DevolverASecadoForm lotId={id} motivos={motivosDeDevolucion} />
         </section>
       ) : null}
 

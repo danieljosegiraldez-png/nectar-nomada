@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { moveLotToStorage } from "../../lib/traceability/storage";
-import { abrirProceso, cerrarProceso } from "../../lib/traceability/lotProcess";
+import { abrirProceso, cerrarProceso, devolverASecado, CATALOGO_MOTIVO_DEVOLUCION } from "../../lib/traceability/lotProcess";
 import { recordTransformation } from "../../lib/traceability/lots";
 import { loteDividido, procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
@@ -418,6 +418,155 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
       saca.soltar();
       await saca.hecho.catch(() => undefined);
       await reubicacion;
+    }
+  });
+});
+
+describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
+  async function motivo(valor: string) {
+    return (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: valor, catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } })).id;
+  }
+
+  it("desde bodega: termina la bodega, abre la continuación y deja a los hermanos bajo el cerrado", async () => {
+    const cereza = await lote("V1-C");
+    const a = await lote("V1-A");
+    const b = await lote("V1-B");
+    await enlazar([cereza], [a, b]);
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
+    await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
+    await moveLotToStorage(gestor, { lotId: b, locationId: plotId, startedAt: ahora() });
+
+    const { continuacion, devolucion } = await devolverASecado(gestor, { lotId: a, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: ahora() });
+    expect(continuacion.lotId).toBe(a);
+    expect(devolucion.endedStorageAssignmentId).not.toBeNull();
+    expect(await prisma.storageAssignment.count({ where: { lotId: a, endedAt: null } })).toBe(0);
+    // El hermano sigue bajo el proceso CERRADO y en bodega.
+    const cobB = await procesoQueCubre(prisma, b);
+    expect(cobB.vigente?.id).toBe(p.id);
+    expect(cobB.estado).toBe("cerrado");
+    expect(await prisma.storageAssignment.count({ where: { lotId: b, endedAt: null } })).toBe(1);
+  });
+
+  it("«otro» exige nota", async () => {
+    const l = await lote("V2");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(l, 11) });
+    await expect(devolverASecado(gestor, { lotId: l, motivoValueId: await motivo("otro"), ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("motivo_otro_requiere_nota"));
+  });
+
+  it("un lote dividido no se devuelve a secado", async () => {
+    const [g, c] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    const x = await lote("V3-X");
+    const x1 = await lote("V3-X1");
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "split", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      inputs: { create: [{ lotId: x }] }, outputs: { create: [{ lotId: x1 }] },
+    } });
+    transformaciones.push(t.id);
+    await prisma.lotProcess.create({ data: {
+      lotId: x, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+      endedAt: ahora(), closureKind: "divided", dividedByTransformationId: t.id,
+    } });
+    await expect(devolverASecado(gestor, { lotId: x, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("lote_dividido"));
+  });
+
+  // Lo que sigue lo añade la tarea 8 al encargo: cada prueba fija una comprobación de `devolverASecado` que las tres de arriba
+  // no cubren, y cada una cae con su mutación (ver el informe de la tarea).
+
+  /** Un lote cuyo proceso (en el propio lote) ya cerró por humedad en el objetivo, y cuántas devoluciones tiene ese proceso. */
+  async function loteCerrado(codigo: string) {
+    const l = await lote(codigo);
+    const p = await abrirProcesoDePrueba(gestor, l);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(l, 11) });
+    return { l, p };
+  }
+  const devolucionesDe = (procesoId: string) => prisma.lotProcessReturn.count({ where: { closedLotProcessId: procesoId } });
+
+  it("un valor que no es del catálogo de motivos no vale: una clave foránea válida no basta", async () => {
+    const { l, p } = await loteCerrado("V4");
+    // `gradoId` es un valor REAL de `grado_proceso`: pasa la clave foránea de `reason_value_id` y contaminaría la lista de motivos.
+    await expect(devolverASecado(gestor, { lotId: l, motivoValueId: gradoId, ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("motivo_required"));
+    expect(await devolucionesDe(p.id), "un motivo de otro catálogo dejó una devolución escrita").toBe(0);
+  });
+
+  it("«otro» con nota se devuelve y la nota queda sin sus espacios; con una nota de sólo espacios, no", async () => {
+    const { l, p } = await loteCerrado("V6");
+    const otro = await motivo("otro");
+    await expect(devolverASecado(gestor, { lotId: l, motivoValueId: otro, nota: "   ", ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("motivo_otro_requiere_nota"));
+    expect(await devolucionesDe(p.id), "una nota de espacios dejó una devolución escrita").toBe(0);
+    const { devolucion } = await devolverASecado(gestor, { lotId: l, motivoValueId: otro, nota: "  se pesó mal la muestra  ", ocurrioEn: ahora() });
+    expect(devolucion.note).toBe("se pesó mal la muestra");
+    // El lote no estaba en bodega (sólo cerró su proceso): no hay asignación que terminar.
+    expect(devolucion.endedStorageAssignmentId).toBeNull();
+    expect(await devolucionesDe(p.id)).toBe(1);
+  });
+
+  it("sin proceso, con el proceso abierto, o en una mezcla, no hay nada que devolver: cada uno con su código", async () => {
+    const m = await motivo("error_de_medicion");
+    const sin = await lote("V7-S");
+    await expect(devolverASecado(gestor, { lotId: sin, motivoValueId: m, ocurrioEn: ahora() })).rejects.toThrow(new LotProcessError("process_not_found"));
+    // Abierto: sin esta comprobación, `closureKind` nulo se leería como «no cerrado por humedad» y saldría `lote_dividido`, que miente.
+    const abierto = await lote("V7-O");
+    await abrirProcesoDePrueba(gestor, abierto);
+    await expect(devolverASecado(gestor, { lotId: abierto, motivoValueId: m, ocurrioEn: ahora() })).rejects.toThrow(new LotProcessError("process_already_open"));
+    // Mezcla: dos ramas cerradas por humedad con procesos distintos.
+    const a = (await loteCerrado("V7-A")).l;
+    const b = (await loteCerrado("V7-B")).l;
+    const mezcla = await lote("V7-M");
+    await enlazar([a, b], [mezcla]);
+    await expect(devolverASecado(gestor, { lotId: mezcla, motivoValueId: m, ocurrioEn: ahora() })).rejects.toThrow(new LotProcessError("lote_mezclado"));
+  });
+
+  it("devolver a secado decide DESPUÉS de tener el linaje: si mientras esperaba el lote se reubicó, termina la asignación NUEVA", async () => {
+    // R2: `devolverASecado` es la operación que `moveLotToStorage` espera en su orden de bloqueo (tarea 7, ronda de arreglo 1). Aquí una
+    // transacción ajena hace lo que haría una reubicación —retiene la fila del lote, termina la asignación vieja y abre otra— y no
+    // confirma. La llamada tiene que ESPERAR; al confirmar, lee la asignación abierta que hay entonces (la nueva) y la termina.
+    // Sin `bloquearLinaje` al principio la llamada lee la vieja antes de esperar, la sobrescribe al soltarse, y `lote_en_bodega` la rechaza
+    // al ver la nueva abierta —o, si no la rechazara, dejaría la nueva abierta con una continuación abierta encima.
+    const cereza = await lote("V8-C");
+    const a = await lote("V8-A");
+    await enlazar([cereza], [a]);
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
+    const vieja = await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
+    const motivoId = await motivo("error_de_medicion");
+
+    let nuevaId: string | undefined;
+    const reubica = retener(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${a}::uuid FOR UPDATE`;
+      await tx.storageAssignment.update({ where: { id: vieja.id }, data: { endedAt: ahora() } });
+      nuevaId = (await tx.storageAssignment.create({ data: { lotId: a, locationId: plotId, startedAt: ahora() } })).id;
+    });
+    let devolucion: Promise<Resultado<Awaited<ReturnType<typeof devolverASecado>>>> | undefined;
+    try {
+      const pid = await reubica.pid;
+      // Sin COMMIT todavía: quien lea ahora la asignación del lote ve la VIEJA abierta.
+      devolucion = resultadoDe(devolverASecado(gestor, { lotId: a, motivoValueId: motivoId, ocurrioEn: ahora() }));
+      await esperarQueAlguienEspere(pid, "la devolución no quedó esperando a la otra transacción");
+      reubica.soltar();
+      await reubica.hecho; // COMMIT: la vieja está terminada y hay una nueva abierta
+      const v = await devolucion;
+      expect(v.ok, "la devolución decidió antes de tener el linaje y fue rechazada (o dejó una continuación sobre un lote que sigue en bodega)").toBe(true);
+      if (v.ok) {
+        expect(v.valor.devolucion.endedStorageAssignmentId, "terminó la asignación VIEJA, ya terminada, y dejó la nueva abierta").toBe(nuevaId);
+        expect(v.valor.continuacion.lotId).toBe(a);
+      }
+      // Las dos terminadas: nada abierto en bodega, y la continuación abierta (control de que de verdad pasó).
+      expect(await asignaciones(a)).toEqual({ todas: 2, abiertas: 0 });
+      expect(await prisma.lotProcess.count({ where: { lotId: a, endedAt: null } })).toBe(1);
+    } finally {
+      reubica.soltar();
+      await reubica.hecho.catch(() => undefined);
+      await devolucion;
     }
   });
 });
