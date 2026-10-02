@@ -209,7 +209,12 @@ async function main() {
 
   console.log(`\n  ${person.displayName}: ${previous ?? "(none)"} → ${email}`);
   if (createdAccount) console.log("  created a credentials account (invited, no password yet)");
-  console.log(`\n  Next:  npm run auth:set-password -- ${email}\n`);
+  // Esta línea decía `Next: npm run auth:set-password` SIN CONDICIÓN, contra lo que la
+  // cabecera de este mismo archivo dice que ADR-083 corrigió: la dirección basta, la persona
+  // entra con Google y la cuenta se activa. Mandar a fijar una contraseña era volver a
+  // instalar el paso que esa decisión quitó.
+  console.log(`\n  Siguiente: que ${email} entre con Google; la cuenta se activa al aceptar.`);
+  console.log("  Una contraseña sólo hace falta donde Google no sea opción:  npm run auth:set-password\n");
 }
 
 main()
