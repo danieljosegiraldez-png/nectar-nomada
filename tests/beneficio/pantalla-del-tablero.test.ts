@@ -252,15 +252,25 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
     expect(e.y).toHaveLength(3);
     expect(new Set(e.y.map((m) => m.pos)).size).toBe(3);
 
-    // El MÁXIMO (4,6): su punto da 0 y su marca da 0. **No caza nada**: con un `alto` equivocado de
-    // 110 el máximo sigue dando 0. Está para que el trío cuente la historia entera, no por lo que prueba.
+    // **Cada par deja pasar una divergencia distinta, y por eso van los TRES** (medido ejecutando las
+    // dos mutaciones de abajo, no deducido). Qué par cae con cada una:
+    //
+    //   | divergencia de una de las dos escalas   | máximo (4,6) | centro (4,3) | mínimo (4,0) |
+    //   | `alto` equivocado (110 en vez de 120)   | **pasa** 0=0 | cae 60≠55    | cae 120≠110  |
+    //   | escala INVERTIDA (sin el `tamano -`)    | cae 0≠120    | **pasa** 60=60 | cae 120≠0  |
+    //
+    // El MÁXIMO (4,6) da 0 en las dos escalas bien puestas: no ve un `alto` divergido, pero sí la inversión.
     expect(yDelPunto(4.6)).toBe(e.y[0]!.pos);
-    // El CENTRO (4,3): 60 con `alto` 120. Caza un `alto` divergido (con 110 daría 55 contra 60).
+    // El CENTRO (4,3) da 60: ve un `alto` divergido (55 contra 60) y NO ve la inversión (el centro de
+    // una escala invertida sigue siendo el centro).
     expect(yDelPunto(4.3)).toBe(e.y[1]!.pos);
-    // El MÍNIMO (4,0): 120. Caza una escala INVERTIDA (la marca daría 0 y el punto 120).
+    // El MÍNIMO (4,0) da 120: ve las dos. Es el par más fuerte; los otros dos acotan DÓNDE diverge.
     expect(yDelPunto(4.0)).toBe(e.y[2]!.pos);
-    // MUTACIÓN: en `ejesDeLaCurva.escalaY`, quitar el `tamano -` (escala invertida) → cae el mínimo y el centro.
-    // MUTACIÓN: en `ejesDeLaCurva`, `escalaY(v, min, max, alto - 10)` → cae el centro y el mínimo (el máximo NO).
+    // MUTACIÓN: en `ejesDeLaCurva.escalaY`, quitar el `tamano -` → cae el máximo (0≠120) y el mínimo; el centro NO.
+    // MUTACIÓN: en `ejesDeLaCurva`, `escalaY(v, min, max, alto - 10)` → cae el centro (60≠55) y el mínimo; el máximo NO.
+    // Ninguna de las dos mutaciones hace caer SÓLO a esta prueba: las de `ejesDeLaCurva` fijan los mismos
+    // números. Lo que esta prueba añade es cubrir lo que NINGUNA de las dos suites ve sola: que las dos
+    // escalas sean la misma, no que cada una sea la que su suite escribió.
   });
 
   it("el eje X coincide con la X de la primera y la última lectura", () => {
@@ -494,7 +504,8 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   it("con cero lecturas no hay riesgo que citar", async () => {
     const html = await pintarCurva(curvaDeLote({ lecturas: [], objetivo: BANDA, ...LIENZO }));
     expect(bloqueDeRiesgo(html)).toBeNull();
-    // MUTACIÓN: `riesgoDeEsperar("ph", curva.lecturas.at(-1)?.value ?? 0)` → cero lecturas cita «Daño consumado» y cae.
+    // MUTACIÓN: `const ultima = curva.lecturas.at(-1) ?? { value: 3 }` → cero lecturas cita «Daño consumado» y cae.
+    // (Con `{ value: 0 }` NO cae, medido: 0 es «fuera de [2.50, 8.00]», la fila del electrodo, que no se pinta.)
   });
 
   it("ninguna frase ORDENA: «el dato sugiere», nunca «lave ahora»", async () => {
