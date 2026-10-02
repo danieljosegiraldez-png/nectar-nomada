@@ -44,6 +44,16 @@ export interface Riesgo {
   readonly banda: string;
   /** La columna «Riesgo / vector», literal del documento. */
   readonly riesgo: string;
+  /**
+   * La columna «Qué hace el operario» de la misma tabla, literal, **si Daniel ya la rellenó**. Hoy
+   * ninguna de las ocho celdas lo está: ninguna fila la lleva, `riesgoDeEsperar` no la devuelve y
+   * la pantalla no dice qué hacer. Ausente o `null` es «no hay registro», no «no hay nada que
+   * hacer»; nunca una frase de este módulo. Que el día que se rellene una celda el módulo la
+   * recoja —y que no diga nada que la celda no diga— lo obliga
+   * `tests/arquitectura/guia-no-inventada.test.ts`. La fila retirada por ADR-181 no la puede
+   * exponer nunca: su rango devuelve `null`.
+   */
+  readonly queHaceElOperario?: string | null;
 }
 
 interface FilaDePh extends Riesgo {

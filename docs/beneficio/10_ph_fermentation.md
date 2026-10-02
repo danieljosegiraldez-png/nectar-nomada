@@ -17,16 +17,29 @@
 
 Los intervalos son **semiabiertos `[inferior, superior)`**. Ningún valor pertenece a dos bandas. Esta disciplina de frontera corrige la ambigüedad de la v2.5, donde pH = 4.50 satisfacía simultáneamente «ventana óptima» y «estancado».
 
-| Banda | Estado | Riesgo / vector | Acción del software |
-| :--- | :--- | :--- | :--- |
-| `[6.50, 8.00]` | `SUSPECT_DILUTION` | El mucílago fresco no supera pH ~6.0. Un valor mayor sugiere agua de enjuague, electrodo fuera del líquido o descalibración | `WARNING` sobre el dato, no sobre el lote |
-| `[5.20, 6.50)` | `INITIAL_PHASE` | Inactividad microbiológica si se prolonga | `INFO`. Iniciar reloj de seguridad de masa |
-| `[4.50, 5.20)` | `LAG_PHASE` antes de la gracia; `STALLED_ROT_HAZARD` después | Proliferación butírica y mohos → defecto *stinker* | `INFO` antes de `ph_stall_grace_hours`; `CRITICAL` (con confirmación) después |
-| `[3.80, 4.50)` | `OPTIMAL_ACTIVE` | Ninguno. Desarrollo ideal de precursores | Trazar curva de descenso |
-| `[3.50, 3.80)` | `WATCH_APPROACHING_LOW` | Aproximación a sobrefermentación | `WARNING` — preparar lavado |
-| `[3.30, 3.50)` | `OVER_FERMENTED_CRITICAL` | Degradación ácida, decoloración del pergamino | `CRITICAL` **con confirmación** |
-| `< 3.30` | `OVER_FERMENTED_CRITICAL` | Daño consumado | `CRITICAL` **disparo inmediato** |
-| fuera de `[2.50, 8.00]` | `SENSOR_FAULT` | Electrodo dañado o fuera de rango medible | `WARNING` — no altera el estado del lote |
+> **Columna «Qué hace el operario»: vacía a propósito.** «Acción del software» dice lo que hace el
+> **programa** (`INFO`, `WARNING`, `CRITICAL`), no lo que hace la persona, y ninguna otra fuente del
+> proyecto lo dice. **Las celdas de esa columna las rellena Daniel, nadie más**, y **hasta entonces la
+> pantalla no dice qué hacer**: enseña qué sugiere el dato si se sigue esperando, citado de la columna
+> «Riesgo / vector», y deja la decisión al productor. **Por qué:** rúbrica 21 §4
+> (`docs/beneficio/21_rubrica_veracidad.md`), «Una guía que recomienda lavar un lote con falsa seguridad
+> es peor que una que dice qué sugiere el dato y devuelve la decisión al productor». **El día que Daniel
+> rellene una celda,** `tests/arquitectura/guia-no-inventada.test.ts` falla hasta que `riesgoDeEsperar`
+> (`lib/beneficio/riesgoDeEsperar.ts`) la exponga en `queHaceElOperario`, palabra por palabra: la guía
+> llega al código en vez de quedarse muerta en este `.md`. Una fila queda fuera de ese guardia: la de
+> `[6.50, 8.00]`, que la nota de ADR-181 retira y `riesgoDeEsperar` no devuelve, así que lo que se escriba
+> en su celda la pantalla no lo puede decir.
+
+| Banda | Estado | Riesgo / vector | Acción del software | Qué hace el operario |
+| :--- | :--- | :--- | :--- | :--- |
+| `[6.50, 8.00]` | `SUSPECT_DILUTION` | El mucílago fresco no supera pH ~6.0. Un valor mayor sugiere agua de enjuague, electrodo fuera del líquido o descalibración | `WARNING` sobre el dato, no sobre el lote | |
+| `[5.20, 6.50)` | `INITIAL_PHASE` | Inactividad microbiológica si se prolonga | `INFO`. Iniciar reloj de seguridad de masa | |
+| `[4.50, 5.20)` | `LAG_PHASE` antes de la gracia; `STALLED_ROT_HAZARD` después | Proliferación butírica y mohos → defecto *stinker* | `INFO` antes de `ph_stall_grace_hours`; `CRITICAL` (con confirmación) después | |
+| `[3.80, 4.50)` | `OPTIMAL_ACTIVE` | Ninguno. Desarrollo ideal de precursores | Trazar curva de descenso | |
+| `[3.50, 3.80)` | `WATCH_APPROACHING_LOW` | Aproximación a sobrefermentación | `WARNING` — preparar lavado | |
+| `[3.30, 3.50)` | `OVER_FERMENTED_CRITICAL` | Degradación ácida, decoloración del pergamino | `CRITICAL` **con confirmación** | |
+| `< 3.30` | `OVER_FERMENTED_CRITICAL` | Daño consumado | `CRITICAL` **disparo inmediato** | |
+| fuera de `[2.50, 8.00]` | `SENSOR_FAULT` | Electrodo dañado o fuera de rango medible | `WARNING` — no altera el estado del lote | |
 
 Las bandas cubren `[2.50, 8.00]` sin hueco ni solape. Los bordes de banda que no dependen del protocolo (`5.20`, `6.50`) y los límites físicos viven en `constants.py`; los que sí dependen del protocolo vienen de `ProtocolProfile`.
 
