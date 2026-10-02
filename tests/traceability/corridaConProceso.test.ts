@@ -2,6 +2,7 @@
  * R3 y R4 de la Parte 1: una corrida se une sola al proceso que cubre a su lote; sin proceso abierto
  * no empieza; la fermentación lleva la receta del proceso y no otra.
  */
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
@@ -9,7 +10,7 @@ import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { cerrarProceso } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
-import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
+import { procesoQueCubre, idsDeAscendencia, bloquearLinajes } from "../../lib/traceability/procesoDelLinaje";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -607,6 +608,140 @@ describe("R5 — no se cierra un proceso con corridas abiertas", () => {
       cierra.soltar();
       await cierra.hecho.catch(() => undefined);
       await cierre;
+    }
+  });
+
+  it("cerrar cuenta las corridas DESPUÉS de tener el linaje: una que otra transacción confirma mientras espera lo rechaza con corridas_abiertas", async () => {
+    const l = await lote("R5-CORRIDA-EN-CARRERA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const m = await medicionDeHumedad(l); // creada ANTES, fuera de la transacción que retiene
+
+    // Otra transacción toma la fila del lote (la que `bloquearLinaje` necesita) y, dentro de ella, EMPIEZA un secado unido al
+    // proceso, como lo hace `startDryingRun` con el linaje bloqueado. Todavía no confirma: quien cuente las corridas ahora
+    // no la ve. Su id va a la lista de limpieza en cuanto existe, así que el `afterAll` la borra aunque la prueba falle.
+    let corridaId = "";
+    const empieza = retener(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${l}::uuid FOR UPDATE`;
+      const run = await tx.dryingRun.create({ data: { startedAt: ahora(), lotProcessId: p.id, createdBy: gestor } });
+      corridaId = run.id;
+      sueltas.push(run.id);
+    });
+    let cierre: Promise<Resultado<unknown>> | undefined;
+    try {
+      const pid = await empieza.pid;
+      cierre = resultadoDe(cerrar(p.id, m));
+      // Sin `bloquearLinaje` al principio de la transacción de cierre, aquí nunca aparece nadie bloqueado.
+      await esperarQueAlguienEspere(pid, "el cierre no esperó la fila del lote: no bloqueó el linaje");
+      empieza.soltar();
+      await empieza.hecho; // COMMIT: el secado queda confirmado, unido a un proceso abierto
+      const v = await cierre;
+      // Si `exigeSinCorridasAbiertas` cuenta ANTES de tener el linaje —por encima de `bloquearLinaje`, o con el cliente global
+      // antes de la transacción—, cuenta cero (el secado aún no estaba confirmado) y el cierre sale: un proceso cerrado por
+      // humedad con un secado abierto unido, el estado que R5 prohíbe.
+      expect(v.ok, "el cierre contó las corridas antes de tener el linaje y cerró un proceso con un secado abierto unido").toBe(false);
+      if (!v.ok) {
+        expect(v.error).toBeInstanceOf(LotProcessError);
+        expect((v.error as LotProcessError).message).toBe("corridas_abiertas");
+      }
+      expect(await cerradoEn(p.id), "el proceso se cerró").toBeNull();
+      // Control: el secado SÍ quedó confirmado, abierto y unido a ESTE proceso; sin esto, «rechazó» podría ser cualquier otra cosa.
+      expect(await prisma.dryingRun.count({ where: { id: corridaId, endedAt: null, lotProcessId: p.id } })).toBe(1);
+    } finally {
+      empieza.soltar();
+      await empieza.hecho.catch(() => undefined);
+      await cierre;
+    }
+  });
+
+  it("una corrida abierta sobre un ANCESTRO del lote del proceso no impide cerrar: el proceso cubre el lote y su descendencia, no lo de arriba", async () => {
+    const padre = await lote("R5-ANC-PADRE");
+    const hijo = await lote("R5-ANC-HIJO");
+    await enlazar([padre], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, hijo);
+    const suelta = await prisma.dryingRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    transformaciones.push((await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      dryingRunId: suelta.id, inputs: { create: [{ lotId: padre }] },
+    } })).id);
+    const m = await medicionDeHumedad(hijo);
+    // Controles: el padre SÍ es un ancestro del lote del proceso, y la corrida SÍ está abierta y sin unir; sin esto, que el cierre
+    // salga bien no diría nada de cómo se cuenta la ascendencia.
+    expect(await idsDeAscendencia(prisma, hijo)).toContain(padre);
+    expect(suelta.endedAt).toBeNull();
+    expect(suelta.lotProcessId).toBeNull();
+    expect((await cerrar(p.id, m)).closureKind).toBe("moisture");
+  });
+
+  /** Una fermentación de ANTES de la Parte 1: abierta, sin `lotProcessId`, y su única señal es la transformación que la ligó a `lotId`. */
+  async function fermentacionSuelta(lotId: string) {
+    const f = await prisma.fermentationRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    transformaciones.push((await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      fermentationRunId: f.id, inputs: { create: [{ lotId }] },
+    } })).id);
+    return f;
+  }
+
+  it("cuenta también una FERMENTACIÓN abierta que NO quedó unida, sobre el propio lote del proceso", async () => {
+    const l = await lote("R5-FERM-SUELTA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const suelta = await fermentacionSuelta(l);
+    const m = await medicionDeHumedad(l);
+    // Control: de verdad está abierta y no unida, así que sólo la segunda rama de la cuenta de fermentaciones puede verla.
+    expect(suelta.endedAt).toBeNull();
+    expect(suelta.lotProcessId).toBeNull();
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+  });
+
+  it("cuenta también una FERMENTACIÓN abierta que NO quedó unida y empezó en un DESCENDIENTE del lote del proceso", async () => {
+    const padre = await lote("R5-FERM-DESC-PADRE");
+    const hijo = await lote("R5-FERM-DESC-HIJO");
+    await enlazar([padre], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, padre);
+    const suelta = await fermentacionSuelta(hijo);
+    const m = await medicionDeHumedad(padre);
+    expect(suelta.endedAt).toBeNull();
+    expect(suelta.lotProcessId).toBeNull();
+    await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));
+    expect(await cerradoEn(p.id)).toBeNull();
+  });
+});
+
+describe("R2 — el orden del bloqueo del linaje no depende de la caja del uuid", () => {
+  it("un uuid en mayúsculas se bloquea en el orden de los minúsculos: la fila menor se toma ANTES de esperar la mayor", async () => {
+    // Dos lotes sin parentesco con id elegido: en el orden de cadenas, «B» (mayúscula) va ANTES que «a», y «b» después.
+    // Sin normalizar, quien pide `[B…, a…]` esperaría a la fila `b` SIN haber tomado la `a`, y otra transacción que pida
+    // `[a…, b…]` en minúsculas la esperaría a ella: un interbloqueo. Con el orden normalizado toma la `a` y luego espera la `b`.
+    const menor = `a${randomUUID().slice(1)}`;
+    const mayor = `b${randomUUID().slice(1)}`;
+    for (const id of [menor, mayor]) {
+      await prisma.lot.create({ data: {
+        id, lotCode: `R2-ORDEN-${id.slice(0, 8)}-${RUN}`, lotType: "cherry", organizationId: orgId, locationId: plotId,
+        status: "approved", classification: "internal", createdBy: gestor,
+      } });
+      lotes.push(id);
+    }
+    // Otra transacción retiene la fila MAYOR.
+    const retiene = retener((tx) => tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${mayor}::uuid FOR UPDATE`);
+    let bloqueo: Promise<Resultado<unknown>> | undefined;
+    try {
+      const pid = await retiene.pid;
+      bloqueo = resultadoDe(prisma.$transaction((tx) => bloquearLinajes(tx, [mayor.toUpperCase(), menor]), { timeout: 30000, maxWait: 10000 }));
+      await esperarQueAlguienEspere(pid, "el bloqueo no esperó la fila mayor que retiene la otra transacción");
+      // Control de la herramienta: la fila mayor SÍ está retenida, así que `lotesLibres` no la devuelve.
+      expect(await lotesLibres([mayor]), "la fila mayor no está retenida: la prueba no mide nada").toEqual([]);
+      expect(await lotesLibres([menor]), "el bloqueo esperó la fila mayor SIN haber tomado la menor: el orden no está normalizado").toEqual([]);
+      retiene.soltar();
+      await retiene.hecho;
+      const v = await bloqueo;
+      expect(v.ok, "el bloqueo no terminó bien tras soltar la fila mayor").toBe(true);
+      // Control: terminado el bloqueo, las dos filas SÍ se pueden tomar. El `[]` de antes no era que la consulta no sirve.
+      expect(await lotesLibres([menor, mayor])).toEqual([menor, mayor]);
+    } finally {
+      retiene.soltar();
+      await retiene.hecho.catch(() => undefined);
+      await bloqueo;
     }
   });
 });

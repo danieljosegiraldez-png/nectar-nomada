@@ -378,7 +378,10 @@ export interface CerrarProcesoInput {
  * crearía dos verdades que pueden divergir, y CLAUDE.md §49 prohíbe mezclar la
  * medición con el valor derivado. El reporte lee la medición.
  *
- * **La medición tiene que ser de humedad y de ESTE lote.** Sin las dos
+ * **La medición tiene que ser de humedad y del lote del proceso o de un
+ * DESCENDIENTE suyo, nunca de otra rama.** Desde el 2026-09-27 se admite la de un
+ * descendiente: el proceso se abre sobre la cereza y la humedad se mide en el
+ * lote nuevo que crea cada corrida, que es el mismo café. Sin las dos
  * comprobaciones, cerrar con la medición de otro café —o con un Brix— produce
  * un proceso que parece completo y cuyo número no significa lo que dice.
  *

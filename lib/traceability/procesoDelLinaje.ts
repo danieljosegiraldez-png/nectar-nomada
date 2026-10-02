@@ -18,6 +18,7 @@
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
 import { LotProcessError } from "./errorDeProceso";
+import { ordenDeBloqueo } from "./ordenDeBloqueo";
 
 /**
  * R1: 64 generaciones en las dos direcciones. Un multiproceso real tiene unas diez. Una cadena de 64
@@ -276,7 +277,8 @@ export async function bloquearLinajes(tx: Prisma.TransactionClient, lotIds: read
     todos.add(id);
     for (const a of await idsDeAscendencia(tx, id)) todos.add(a);
   }
-  for (const id of [...todos].sort()) {
+  // R2: `ordenDeBloqueo` y no un `.sort()` aquí: un uuid en mayúsculas apunta a la misma fila con otra posición.
+  for (const id of ordenDeBloqueo([...todos])) {
     await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${id}::uuid FOR UPDATE`;
   }
 }
