@@ -11,6 +11,27 @@ import {
   type VariableDeCurva,
 } from "../../../lib/beneficio/curvaEnPantalla";
 
+/** Relleno horizontal del `viewBox`: para que un punto en x = 0 o x = ancho no quede cortado por la mitad. */
+export const PAD_X = 10;
+
+/**
+ * Hueco a la izquierda del lienzo para los números del eje Y: caben **dentro** del `viewBox` hasta
+ * «10.25» a 18 de cuerpo, en vez de depender de `overflow: visible`. **Es una declaración, y la
+ * propiedad la afirma `pantalla-del-tablero.test.ts`**: lee del markup dónde caen los rótulos y que
+ * el más ancho cabe. Sin esa prueba, poner esto en 0 deja 88 pruebas en verde.
+ */
+export const ESPACIO_DE_LOS_VALORES = 52;
+
+/**
+ * Franja propia, **debajo de TODO el margen vertical**, para las horas del eje X. No van pegadas al
+ * lienzo: ese margen es donde `colocarPuntos` dibuja las lecturas por debajo del mínimo de la banda, y
+ * la última lectura cae siempre en `x = ancho`, justo donde va el rótulo «N h» alineado a la derecha.
+ * Con las horas a 22 bajo el lienzo, un pH de 3,72 contra una banda 3,8–4,5 (`y ≈ 223`) se pintaba
+ * encima de la «h» —y es la curva de la sobrefermentación, la que se mira con prisa—. En esta franja
+ * no puede caer ningún punto ni el vértice de un triángulo anclado (`piso + 7`).
+ */
+export const FRANJA_DE_LAS_HORAS = 34;
+
 /** El documento de donde `riesgoDeEsperar` cita, tal como se le nombra a quien pregunta de dónde sale. */
 const DOCUMENTO_DEL_RIESGO = "docs/beneficio/10_ph_fermentation.md";
 
@@ -104,7 +125,9 @@ function textoDelValor(v: number): string {
  * sin banda, los de los datos) y cuánto lleva la fase (eje X: horas desde la primera lectura). Van
  * **dentro del mismo `<svg>`**, así que comparten su `viewBox` y su `overflow: visible`. A la izquierda
  * el `viewBox` se ensancha (`ESPACIO_DE_LOS_VALORES`) para que los números quepan DENTRO del dibujo en
- * vez de depender de `overflow`. Que la marca de un valor cae donde está el punto de ese valor lo
+ * vez de depender de `overflow`, y debajo se le añade una franja (`FRANJA_DE_LAS_HORAS`) para las horas,
+ * fuera del margen donde se dibujan las lecturas que se salieron de la banda. Que los rótulos caben, se
+ * leen y no tapan ningún punto lo afirma la prueba leyendo el markup. Que la marca de un valor cae donde está el punto de ese valor lo
  * prueba `pantalla-del-tablero.test.ts`: `ejesDeLaCurva` repite la escala de `curvaDeLote` y sólo esa
  * prueba las pone frente a frente.
  *
@@ -181,9 +204,6 @@ export async function CurvaDeLote({
   }
 
   const margen = margenVertical(curva.alto);
-  const PAD_X = 10; // para que un punto en x = 0 o x = ancho no quede cortado por la mitad
-  // A la izquierda caben los números del eje Y (hasta «10.25» a 18 de cuerpo): dentro del dibujo, no por `overflow`.
-  const ESPACIO_DE_LOS_VALORES = 52;
   const ejes = ejesDeLaCurva({ lecturas: curva.lecturas, banda: curva.rango, ancho: curva.ancho, alto: curva.alto });
   // Qué sugiere la ÚLTIMA lectura si se espera. `curvaDeLote` las ordena por hora: la última es la más reciente.
   const ultima = curva.lecturas[curva.lecturas.length - 1];
@@ -214,7 +234,7 @@ export async function CurvaDeLote({
         style={{ overflow: "visible" }}
         role="img"
         aria-labelledby="curva-svg-titulo curva-svg-desc"
-        viewBox={`${-(PAD_X + ESPACIO_DE_LOS_VALORES)} ${-margen} ${curva.ancho + 2 * PAD_X + ESPACIO_DE_LOS_VALORES} ${curva.alto + 2 * margen}`}
+        viewBox={`${-(PAD_X + ESPACIO_DE_LOS_VALORES)} ${-margen} ${curva.ancho + 2 * PAD_X + ESPACIO_DE_LOS_VALORES} ${curva.alto + 2 * margen + FRANJA_DE_LAS_HORAS}`}
         preserveAspectRatio="xMidYMid meet"
       >
         <title id="curva-svg-titulo">{titulo}</title>
@@ -254,7 +274,8 @@ export async function CurvaDeLote({
             key={`x${i}`}
             className="nn-curva-eje nn-curva-eje-x"
             x={m.pos}
-            y={curva.alto + 22}
+            // Línea de base a 6 del borde de la franja: debajo del `piso` (alto + margen), donde ya no cae ningún punto.
+            y={curva.alto + margen + FRANJA_DE_LAS_HORAS - 6}
             textAnchor={m.pos <= 0 ? "start" : m.pos >= curva.ancho ? "end" : "middle"}
           >
             {m.texto}

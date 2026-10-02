@@ -37,7 +37,7 @@ vi.mock("next-intl/server", async () => {
   };
 });
 
-const { CurvaDeLote } = await import("../../app/components/beneficio/CurvaDeLote");
+const { CurvaDeLote, ESPACIO_DE_LOS_VALORES, FRANJA_DE_LAS_HORAS, PAD_X } = await import("../../app/components/beneficio/CurvaDeLote");
 const { LineaDeEtapas } = await import("../../app/components/beneficio/LineaDeEtapas");
 const { LiberacionDeUnidad } = await import("../../app/components/beneficio/LiberacionDeUnidad");
 
@@ -112,7 +112,9 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     const ys = lejos.map((x) => centro(x.vertices)[1]).sort((a, b) => a - b);
     // El triángulo de arriba tiene el vértice 7 por encima y la base 5 por debajo: centro = y + 1.
     expect(ys[0]).toBeCloseTo(vb.y + 1, 6);
-    expect(ys[1]).toBeCloseTo(vb.y + vb.h - 1, 6);
+    // El borde de ABAJO del dibujo de las marcas es el `piso` (alto + margen): el viewBox lleva debajo la franja de las horas,
+    // que no es margen de marcas (`FRANJA_DE_LAS_HORAS`; ahí no cae ningún punto y ahí van los rótulos).
+    expect(ys[1]).toBeCloseTo(vb.y + vb.h - FRANJA_DE_LAS_HORAS - 1, 6);
     // MUTACIÓN: pasar a `colocarPuntos` un margen distinto del que usa el `viewBox` (p. ej. `margen * 2`
     // o `alto * 0.2`) → las marcas anclan lejos del borde y cae esta prueba (y la de arriba, si es mayor).
   });
@@ -313,6 +315,7 @@ function rotulos(html: string, eje: "x" | "y") {
     texto: m[2]!,
     x: Number(/\bx="([-\d.]+)"/.exec(m[1]!)?.[1]),
     y: Number(/\by="([-\d.]+)"/.exec(m[1]!)?.[1]),
+    ancla: /text-anchor="(\w+)"/.exec(m[1]!)?.[1] ?? "start",
   }));
 }
 const soloElSvg = (html: string) => /<svg\b[\s\S]*<\/svg>/.exec(html)![0];
@@ -383,6 +386,188 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
     expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivo: BANDA, ...LIENZO })), "x")).toHaveLength(2);
     // MUTACIÓN: rotular las horas con `0 h` y `0 h` aunque no haya lecturas → cae por `rotulos(…, "x")`.
     // MUTACIÓN: rotular con una banda inventada cuando no hay objetivo ni lecturas → cae por `sinNada`.
+  });
+});
+
+// ── La GEOMETRÍA de los ejes. «Dentro del lienzo» y «legible» no son la misma propiedad (la lección del PR #564, en el
+// CLAUDE.md): las pruebas de arriba miran que el texto, la clase y UNA coordenada estén; ninguna miraba DÓNDE caen los
+// rótulos ni cuánto miden. Medido antes de escribir esto: con `ESPACIO_DE_LOS_VALORES` en 0, los rótulos Y en `x = -200`, las
+// horas a `alto + 2000` o encima de los puntos, el ancla fija en `middle`, los ejes pintados DESPUÉS de los puntos y el cuerpo
+// en 10 px, las 88 pruebas seguían en verde. Todo lo de abajo lee del MARKUP renderizado —no de las constantes del componente—.
+const CSS_DE_LA_APP = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+/** El cuerpo de los rótulos, leído del CSS real (`.nn-curva-eje { font-size: …px }`), en unidades del viewBox. */
+const CUERPO_DE_LOS_EJES = Number(/\.nn-curva-eje\s*\{[^}]*?font-size:\s*([\d.]+)px/.exec(CSS_DE_LA_APP)?.[1]);
+/**
+ * Ancho de un rótulo según un MODELO deliberadamente grueso, porque no hay navegador aquí: dígitos y letras a 0,6 em, punto y
+ * espacio a 0,3 em. Una tipografía de sistema da ~0,55 em al dígito, así que el modelo se pasa de ancho un poco: prefiere un
+ * falso «no cabe» a un falso «cabe». El paso 7 del navegador mira lo que este modelo no puede.
+ */
+const anchoDeTexto = (texto: string) => [...texto].reduce((a, c) => a + (/[. ]/.test(c) ? 0.3 : 0.6) * CUERPO_DE_LOS_EJES, 0);
+type Rotulo = ReturnType<typeof rotulos>[number];
+/** De dónde a dónde se extiende el rótulo en X, según su ancla (`start` crece a la derecha, `end` a la izquierda). */
+function extensionEnX(r: Rotulo): [number, number] {
+  const w = anchoDeTexto(r.texto);
+  return r.ancla === "end" ? [r.x - w, r.x] : r.ancla === "middle" ? [r.x - w / 2, r.x + w / 2] : [r.x, r.x + w];
+}
+/** De dónde a dónde se extiende un rótulo del eje X en Y: de la altura de las mayúsculas sobre la línea de base a un poco por debajo. */
+const extensionEnY = (r: Rotulo): [number, number] => [r.y - 0.8 * CUERPO_DE_LOS_EJES, r.y + 0.2 * CUERPO_DE_LOS_EJES];
+/** Los vértices de TODAS las marcas, con el vértice de un triángulo anclado incluido. */
+function cajaDeLasMarcas(html: string) {
+  const v = marcas(html).flatMap((m) => m.vertices);
+  return { minX: Math.min(...v.map((p) => p[0])), maxX: Math.max(...v.map((p) => p[0])), minY: Math.min(...v.map((p) => p[1])), maxY: Math.max(...v.map((p) => p[1])), n: marcas(html).length };
+}
+const seSolapan = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
+/** Ancho del contenido de un teléfono de 375 px con 16 px de margen por lado (supuesto: el paso 7 lee el ancho real del <svg>). */
+const ANCHO_DE_UN_TELEFONO = 343;
+
+describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometría, no sólo la presencia)", () => {
+  const LECTURAS_8H = [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(16), value: 4.4 }];
+  const BANDA_BAJA = { minValue: 3.8, maxValue: 4.5, targetValue: 4.15 };
+  /** Las tres curvas que más aprietan las horas: la lectura de sobrefermentación va justo debajo del mínimo de la banda. */
+  const CURVAS_QUE_APRIETAN = {
+    "la ÚLTIMA lectura apenas bajo el mínimo (3,72 contra 3,8–4,5)": [{ occurredAt: t(8), value: 4.2 }, { occurredAt: t(16), value: 3.72 }],
+    "la PRIMERA lectura apenas bajo el mínimo": [{ occurredAt: t(8), value: 3.72 }, { occurredAt: t(16), value: 4.2 }],
+    "una lectura TAN abajo que se ancla en el borde (0 contra 3,8–4,5)": [{ occurredAt: t(8), value: 4.2 }, { occurredAt: t(16), value: 0 }],
+  } as const;
+  const pintar = (lecturas: readonly { occurredAt: Date; value: number }[], objetivo = BANDA_BAJA, variable: "ph" | "brix" | "moisture" = "ph") =>
+    pintarCurva(curvaDeLote({ lecturas: [...lecturas], objetivo, ...LIENZO }), variable);
+
+  it("el cuerpo de los rótulos se lee del CSS real (control de la prueba: si el patrón no casa, todo lo de abajo mediría con NaN)", () => {
+    expect(Number.isFinite(CUERPO_DE_LOS_EJES)).toBe(true);
+    expect(CUERPO_DE_LOS_EJES).toBeGreaterThan(0);
+    // Y el modelo de ancho es el que se cree: «10.25» (4 dígitos y un punto) es más ancho que «4.6».
+    expect(anchoDeTexto("10.25")).toBeGreaterThan(anchoDeTexto("4.6"));
+  });
+
+  it("los rótulos del eje Y quedan a la IZQUIERDA del lienzo y DENTRO del viewBox ensanchado", async () => {
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const vb = viewBoxDe(html);
+    const y = rotulos(html, "y");
+    expect(y).toHaveLength(3); // control: están los tres
+    for (const r of y) {
+      const [izq, der] = extensionEnX(r);
+      expect(der, `«${r.texto}»: su borde derecho debe quedar a la izquierda del lienzo (x < 0)`).toBeLessThan(0);
+      expect(izq, `«${r.texto}»: su borde izquierdo (${izq.toFixed(1)}) debe caber en el viewBox (desde ${vb.x})`).toBeGreaterThanOrEqual(vb.x);
+    }
+    // MUTACIÓN: `ESPACIO_DE_LOS_VALORES = 0` → el viewBox arranca en −10 y «4.6» (≈ −36) se sale → cae.
+    // MUTACIÓN: los rótulos Y a `x={-200}` → se salen del viewBox por la izquierda → cae.
+  });
+
+  it("el rótulo MÁS ANCHO posible («10.25») también cabe, y sólo cabe porque el viewBox se ensanchó", async () => {
+    const html = await pintar(
+      [{ occurredAt: t(8), value: 10 }, { occurredAt: t(16), value: 10.1 }],
+      { minValue: 9.5, maxValue: 10.25, targetValue: 10 },
+      "moisture",
+    );
+    const vb = viewBoxDe(html);
+    const ancho = rotulos(html, "y").find((r) => r.texto === "10.25");
+    expect(ancho, "hay un rótulo «10.25»").toBeDefined();
+    const [izq] = extensionEnX(ancho!);
+    expect(izq).toBeGreaterThanOrEqual(vb.x);
+    // El ensanche hace falta: con sólo el relleno de siempre (`PAD_X`) este rótulo se saldría. Es lo que convierte la
+    // declaración «52 unidades para que quepan» en una propiedad: si el hueco sobrara, esta línea caería.
+    expect(izq, "sin el hueco reservado, «10.25» no cabría").toBeLessThan(-PAD_X);
+    // MUTACIÓN: `ESPACIO_DE_LOS_VALORES = 0` → cae por la primera aserción. `CUERPO` a 30 px en el CSS → cae (no cabe).
+  });
+
+  it("el viewBox mide exactamente lo que dice, leído del ATRIBUTO: ancho + relleno + hueco, y la franja de las horas debajo", async () => {
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const vb = viewBoxDe(html);
+    expect(vb.x).toBe(-(PAD_X + ESPACIO_DE_LOS_VALORES));
+    expect(vb.w).toBe(LIENZO.ancho + 2 * PAD_X + ESPACIO_DE_LOS_VALORES);
+    // El borde derecho cubre el último punto con su marcador (radio 4,5, vértice a 6): si el ancho olvidara el hueco, se cortaría.
+    expect(vb.x + vb.w).toBeGreaterThanOrEqual(LIENZO.ancho + 6);
+    const margen = -vb.y;
+    expect(vb.h).toBe(LIENZO.alto + 2 * margen + FRANJA_DE_LAS_HORAS);
+    // MUTACIÓN: sumar el hueco al `x` del viewBox pero no a su ancho → el borde derecho queda en `ancho − 42` y cae.
+  });
+
+  it("las horas van por DEBAJO de toda marca —incluida la anclada abajo— y dentro del viewBox por abajo", async () => {
+    for (const [nombre, lecturas] of Object.entries(CURVAS_QUE_APRIETAN)) {
+      const html = await pintar(lecturas);
+      const vb = viewBoxDe(html);
+      const caja = cajaDeLasMarcas(html);
+      const x = rotulos(html, "x");
+      expect(caja.n, nombre).toBe(2); // control: las dos lecturas se dibujan
+      expect(x, nombre).toHaveLength(2);
+      for (const r of x) {
+        const [arriba, abajo] = extensionEnY(r);
+        expect(arriba, `${nombre}: «${r.texto}» debe empezar por debajo de la marca más baja (${caja.maxY.toFixed(1)})`).toBeGreaterThan(caja.maxY);
+        expect(abajo, `${nombre}: «${r.texto}» debe terminar dentro del viewBox (${vb.y + vb.h})`).toBeLessThanOrEqual(vb.y + vb.h);
+      }
+    }
+    // Control: la curva anclada de verdad tiene un triángulo anclado (`punto-lejos`), o «anclada» sería «normal».
+    expect(await pintar(CURVAS_QUE_APRIETAN["una lectura TAN abajo que se ancla en el borde (0 contra 3,8–4,5)"])).toContain("nn-curva-punto-lejos");
+    // MUTACIÓN: horas a `y = alto + 2000` → fuera del viewBox por abajo y cae.
+    // MUTACIÓN: horas a media altura (`alto / 2`), encima de los puntos → cae por la marca más baja.
+  });
+
+  it("las horas no se salen del viewBox por los lados: el rótulo de la derecha va anclado a la derecha", async () => {
+    // 120 h → «120 h»: tres dígitos, el rótulo más ancho que puede salir de una fase de fermentación larga.
+    const largas = [{ occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.3 }, { occurredAt: new Date("2026-03-15T08:00:00Z"), value: 4.4 }];
+    for (const lecturas of [LECTURAS_8H, largas]) {
+      const html = await pintarCurva(curvaDeLote({ lecturas, objetivo: BANDA, ...LIENZO }));
+      const vb = viewBoxDe(html);
+      const x = rotulos(html, "x");
+      expect(x).toHaveLength(2);
+      for (const r of x) {
+        const [izq, der] = extensionEnX(r);
+        expect(izq, `«${r.texto}» por la izquierda`).toBeGreaterThanOrEqual(vb.x);
+        expect(der, `«${r.texto}» por la derecha (viewBox hasta ${vb.x + vb.w})`).toBeLessThanOrEqual(vb.x + vb.w);
+      }
+    }
+    // Control: lo de arriba se mide con un rótulo de verdad ancho.
+    expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: largas, objetivo: BANDA, ...LIENZO })), "x").map((r) => r.texto)).toEqual(["0 h", "120 h"]);
+    // MUTACIÓN: `textAnchor="middle"` fijo → «120 h» a `x = ancho` se sale ~24 por la derecha (el relleno es 10) y cae.
+  });
+
+  it("el rótulo de las horas NO PISA ninguna marca — la última lectura apenas bajo el mínimo de la banda es la sobrefermentación", async () => {
+    for (const [nombre, lecturas] of Object.entries(CURVAS_QUE_APRIETAN)) {
+      const html = await pintar(lecturas);
+      const marcasDelDibujo = marcas(html);
+      for (const r of rotulos(html, "x")) {
+        const [rx0, rx1] = extensionEnX(r);
+        const [ry0, ry1] = extensionEnY(r);
+        for (const m of marcasDelDibujo) {
+          const xs = m.vertices.map((p) => p[0]);
+          const ys = m.vertices.map((p) => p[1]);
+          const pisa = seSolapan([rx0, rx1], [Math.min(...xs), Math.max(...xs)]) && seSolapan([ry0, ry1], [Math.min(...ys), Math.max(...ys)]);
+          expect(pisa, `${nombre}: «${r.texto}» pisa una marca`).toBe(false);
+        }
+      }
+    }
+    // CONTROL POSITIVO, y es la mitad que importa: con las horas donde estaban (línea de base en `alto + 22`) esa MISMA
+    // lectura SÍ las pisaba. Sin esto, «no se pisan» podría ser «las marcas nunca caen por esa zona».
+    const html = await pintar(CURVAS_QUE_APRIETAN["la ÚLTIMA lectura apenas bajo el mínimo (3,72 contra 3,8–4,5)"]);
+    const ultima = marcas(html)[1]!;
+    const antiguo = rotulos(html, "x")[1]!;
+    const dondeEstaban: Rotulo = { ...antiguo, y: LIENZO.alto + 22 };
+    expect(
+      seSolapan(extensionEnX(dondeEstaban), [Math.min(...ultima.vertices.map((p) => p[0])), Math.max(...ultima.vertices.map((p) => p[0]))]) &&
+        seSolapan(extensionEnY(dondeEstaban), [Math.min(...ultima.vertices.map((p) => p[1])), Math.max(...ultima.vertices.map((p) => p[1]))]),
+      "con las horas a alto + 22 la última lectura cae sobre la «h»",
+    ).toBe(true);
+    // MUTACIÓN: horas con la línea de base en `alto + 22` (sin la franja) → el rótulo «8 h» queda bajo el punto de 3,72 y cae.
+  });
+
+  it("los ejes se pintan ANTES que la curva y los puntos: si un rótulo y un punto coinciden, manda el dato", async () => {
+    const html = soloElSvg(await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO })));
+    const ultimoEje = Math.max(html.lastIndexOf('class="nn-curva-eje'), html.lastIndexOf('class="nn-curva-marca"'));
+    const primerDato = Math.min(html.indexOf('class="nn-curva-linea"'), html.indexOf('class="nn-curva-punto'));
+    expect(ultimoEje, "hay ejes").toBeGreaterThan(0);
+    expect(primerDato, "hay polilínea y puntos").toBeGreaterThan(0);
+    expect(ultimoEje).toBeLessThan(primerDato);
+    // MUTACIÓN: mover el bloque de los ejes después del `.map` de los puntos → los rótulos tapan al dato y cae.
+  });
+
+  it("en un teléfono de 375 px el rótulo de los ejes mide al menos 10 px de pantalla", async () => {
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const vb = viewBoxDe(html);
+    // El `<svg>` ocupa el ancho del contenedor y el cuerpo se escala con él: unidades del viewBox × (ancho de pantalla / ancho del viewBox).
+    const enPantalla = (CUERPO_DE_LOS_EJES * ANCHO_DE_UN_TELEFONO) / vb.w;
+    expect(enPantalla, `${CUERPO_DE_LOS_EJES} unidades × ${ANCHO_DE_UN_TELEFONO} / ${vb.w} = ${enPantalla.toFixed(1)} px`).toBeGreaterThanOrEqual(10);
+    // MUTACIÓN: `.nn-curva-eje { font-size: 10px }` → 10 × 343 / 552 = 6,2 px y cae. Hoy son 11,2 px.
+    // El 10 es una decisión, no una norma: «no bajar de 10 px efectivos en el teléfono». Subirlo ensancha el hueco que hace falta (ver «10.25»).
   });
 });
 
@@ -508,14 +693,75 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     // (Con `{ value: 0 }` NO cae, medido: 0 es «fuera de [2.50, 8.00]», la fila del electrodo, que no se pinta.)
   });
 
-  it("ninguna frase ORDENA: «el dato sugiere», nunca «lave ahora»", async () => {
-    for (const f of FILAS.filter((x) => x.pinta)) {
-      const texto = aTexto(bloqueDeRiesgo(await conUnPh(f.valor))!);
-      expect(texto, `pH ${f.valor}`).not.toMatch(/\b(lave|lavar|lávelo|detenga|detén|pare|corte|actúe|haga|debe)\b/i);
-    }
-    // Control del patrón: sí casa con la frase que se quiere impedir.
-    expect("Lave ahora este lote").toMatch(/\b(lave|lavar|lávelo|detenga|detén|pare|corte|actúe|haga|debe)\b/i);
-    // MUTACIÓN: cambiar la envoltura a «Lave ahora: …» → cae.
+  describe("«ninguna frase ordena»: el vocabulario de lo que el bloque dice es CERRADO, no una lista de prohibidas", () => {
+    // Una lista de palabras prohibidas la derrota una reescritura: «…, retire el lote ya; el dato sugiere:» pasaba las 86.
+    // Aquí al revés: las seis claves del bloque sólo pueden decirse con las palabras de abajo. **Una palabra nueva obliga a
+    // venir aquí y añadirla A PROPÓSITO**, que es lo que cuesta cambiar lo que la pantalla le dice a quien lleva un lote
+    // (el mismo precio que `DEUDA_CONOCIDA` en `claves-de-traduccion-existen.test.ts`). Eso marca también una reescritura
+    // honesta con otra palabra; es el precio, y es una línea. **Lo que NO garantiza:** una orden armada sólo con estas
+    // palabras («lleva el lote…»); por eso las dos frases de entrada además deben TERMINAR en «el dato sugiere:».
+    const VOCABULARIO = {
+      es: new Set([
+        "criterio", "de", "néctar", "nómada", "con", "tu", "última", "lectura", "ph", "el", "dato", "sugiere", "si", "se", "estanca",
+        "donde", "está", "hoy", "dónde", "sale", "banda", "la", "matriz", "es", "un", "no", "una", "orden", "decisión", "quien",
+        "lleva", "lote", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como", "escrita",
+      ]),
+      en: new Set([
+        "néctar", "nómada", "criterion", "with", "your", "latest", "reading", "ph", "the", "data", "suggests", "if", "stalls", "where",
+        "it", "is", "today", "this", "comes", "from", "band", "of", "matrix", "in", "a", "not", "an", "order", "decision", "up", "to",
+        "whoever", "runs", "lot", "quoted", "phrase", "literal", "quote", "that", "document", "which", "written", "spanish", "and",
+        "left", "untranslated",
+      ]),
+    } as const;
+    /** Las palabras de `texto` que no están en el vocabulario (sin los `{marcadores}` ICU, ni números, ni signos). */
+    const fueraDelVocabulario = (texto: string, idioma: "es" | "en") =>
+      [...new Set((texto.replace(/\{[^}]*\}/g, " ").toLocaleLowerCase(idioma).match(/\p{L}+/gu) ?? []))].filter((p) => !VOCABULARIO[idioma].has(p));
+    const leerMensajes = (f: string) => JSON.parse(readFileSync(new URL(`../../messages/${f}.json`, import.meta.url), "utf8")).SeccionBeneficio as Record<string, string>;
+    /** Las claves `curvaRiesgo*` que el componente pide, DESCUBIERTAS en su fuente: una clave nueva entra sola al guardia. */
+    const clavesDelBloque = () => {
+      const src = readFileSync(new URL("../../app/components/beneficio/CurvaDeLote.tsx", import.meta.url), "utf8");
+      return [...new Set([...src.matchAll(/\bt\(\s*"(curvaRiesgo\w*)"/g)].map((m) => m[1]!))].sort();
+    };
+
+    it("el guardia ve lo que debe: marca la reescritura que derrotaba a la lista, y deja pasar el texto de hoy (control del detector)", () => {
+      expect(fueraDelVocabulario("con tu última lectura (pH {ph}), retire el lote ya; el dato sugiere:", "es")).toEqual(["retire", "ya"]);
+      expect(fueraDelVocabulario("Lave ahora este lote", "es")).toEqual(["lave", "ahora", "este"]);
+      expect(fueraDelVocabulario("with your latest reading (pH {ph}), remove the lot now; the data suggests:", "en")).toEqual(["remove", "now"]);
+      // Y el texto de hoy no marca nada: si el detector marcara lo bueno, el guardia enseñaría a ignorarlo.
+      expect(fueraDelVocabulario(leerMensajes("es").curvaRiesgoDice!, "es")).toEqual([]);
+    });
+
+    it("TODAS las claves del bloque, en los dos idiomas, sólo usan el vocabulario cerrado y cada frase de entrada termina en «el dato sugiere:»", () => {
+      const claves = clavesDelBloque();
+      // Control: se descubrieron las seis. Un patrón que dejara de casar daría `[]` y «ninguna fuera del vocabulario» se leería como «todo bien».
+      expect(claves).toEqual(["curvaRiesgoCitaLiteral", "curvaRiesgoDeDondeSale", "curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca", "curvaRiesgoFuente", "curvaRiesgoMarca"]);
+      for (const idioma of ["es", "en"] as const) {
+        const m = leerMensajes(idioma);
+        // Y ninguna `curvaRiesgo*` de los mensajes queda sin vigilar porque el componente no la pida con `t("…")` literal.
+        expect(Object.keys(m).filter((k) => k.startsWith("curvaRiesgo")).sort(), `${idioma}: claves de mensajes contra claves del componente`).toEqual(claves);
+        for (const k of claves) expect(fueraDelVocabulario(m[k]!, idioma), `${idioma}.${k}: «${m[k]}»`).toEqual([]);
+        const cierre = idioma === "es" ? /, el dato sugiere:$/ : /, the data suggests:$/;
+        expect(m.curvaRiesgoDice, `${idioma}.curvaRiesgoDice`).toMatch(cierre);
+        expect(m.curvaRiesgoDiceSiSeEstanca, `${idioma}.curvaRiesgoDiceSiSeEstanca`).toMatch(cierre);
+        expect(m.curvaRiesgoFuente, `${idioma}.curvaRiesgoFuente`).toContain(idioma === "es" ? "no una orden" : "not an order");
+      }
+      // MUTACIÓN: `curvaRiesgoDice` = «con tu última lectura (pH {ph}), retire el lote ya; el dato sugiere:» → «retire», «ya» → cae.
+      // MUTACIÓN: la misma clave en en.json con «remove the lot now» → cae. MUTACIÓN: «… {ph}) el dato sugiere, lave:» → no termina en la frase → cae.
+    });
+
+    it("y lo que se PINTA —incluido cualquier texto escrito a mano en el componente— también cae en el vocabulario: sólo la cita queda fuera", async () => {
+      for (const f of FILAS.filter((x) => x.pinta)) {
+        const bloque = bloqueDeRiesgo(await conUnPh(f.valor))!;
+        // Sin la cita (que es del documento y va literal), sin el nombre del documento y sin la banda ni los números.
+        const sinCita = bloque.replace(/<span lang="es" class="nn-curva-riesgo-cita">[\s\S]*?<\/span>/, "");
+        // `aTexto` no decodifica entidades: el `<` de la banda «< 3.30» sale como `&lt;`, que no es una palabra del bloque.
+        const texto = aTexto(sinCita).replace("docs/beneficio/10_ph_fermentation.md", " ").replace(/&[a-z]+;/g, " ");
+        expect(fueraDelVocabulario(texto, "es"), `pH ${f.valor}: «${texto}»`).toEqual([]);
+        // Control: la cita SÍ se quitó (si no, «Daño consumado» daría palabras fuera y el test no distinguiría nada).
+        expect(texto, `pH ${f.valor}`).not.toContain(f.cita!.split(" ")[0]!);
+      }
+      // MUTACIÓN: añadir `<p>Retire el lote ya</p>` en el bloque, fuera de `t(…)` → cae.
+    });
   });
 
   it("la fuente va detrás de un toque: el documento y la banda están dentro de un <details>, no a la vista", async () => {
