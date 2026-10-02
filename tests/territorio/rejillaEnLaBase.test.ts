@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 import { RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
@@ -49,6 +49,41 @@ afterEach(async () => {
   await prisma.location.update({
     where: { id: parcela.id },
     data: { gridOrigin: null, rowCount: null, plantsPerRow: null, rowSpacingMeters: null },
+  });
+});
+
+/**
+ * **Lo que la corrida crea, la corrida lo borra — menos el ámbito compartido.**
+ *
+ * Medido el 2026-10-01 con la ventana de la base quieta (dos lecturas iguales sin
+ * correr nada en medio, porque otras sesiones escriben ahí): una corrida de este
+ * archivo dejaba **6 filas** detrás —persona, cuenta, asignación, organización y
+ * dos ubicaciones— con las pruebas en verde. La base compartida ya acumulaba 23
+ * personas y 42 ubicaciones `TEST`, que es la misma forma que los 284 `Scope`
+ * huérfanos que documenta `CLAUDE.md`. Lo encontró una revisión independiente.
+ *
+ * **El `Scope` de plataforma NO se borra**, y eso no es descuido: `crearUsuarioConAcceso`
+ * devuelve el COMPARTIDO, y quitarlo se lo quita a los archivos que corren en
+ * paralelo. Lo que sí es nuestro es todo lo demás.
+ *
+ * **El orden lo manda las claves ajenas**, y una que se queje tira el resto del
+ * `afterAll`: los eventos y las ubicaciones antes de la cuenta —las dos la
+ * referencian—, la asignación antes de la cuenta, y la organización al final.
+ */
+afterAll(async () => {
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: usuario.userAccountId }),
+  });
+  await prisma.location.deleteMany({
+    where: assertDefinedWhere({ id: { in: [parcela.id, parcela.parentLocationId ?? parcela.id] } }),
+  });
+  await prisma.assignment.deleteMany({
+    where: assertDefinedWhere({ userAccountId: usuario.userAccountId }),
+  });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: usuario.userAccountId }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: usuario.personId }) });
+  await prisma.organization.deleteMany({
+    where: assertDefinedWhere({ id: parcela.organizationId ?? "" }),
   });
 });
 
@@ -536,6 +571,14 @@ describe("updateLocationAttributes y la rejilla (D3)", () => {
       [-2.5, "rejilla_separacion_no_positiva"],
       [Number.NaN, "rejilla_separacion_no_positiva"],
       [1000, "rejilla_separacion_fuera_de_rango"],
+      // **Los bordes del REDONDEO**, que la primera versión dejaba pasar porque
+      // comparaba el valor que llega y no el que se guarda. Medidos con una sonda:
+      // `0.001` y `0.004` redondean a `0.00`, el CHECK los rechaza y salía un
+      // `P2039` CRUDO —un 500 en una acción—; `999.999` redondea a `1000.00` y
+      // desbordaba con `P2020`. Los encontró una revisión independiente.
+      [0.001, "rejilla_separacion_no_positiva"],
+      [0.004, "rejilla_separacion_no_positiva"],
+      [999.999, "rejilla_separacion_fuera_de_rango"],
     ] as const) {
       await falla(
         updateLocationAttributes(usuario.userAccountId, {
@@ -548,6 +591,29 @@ describe("updateLocationAttributes y la rejilla (D3)", () => {
     }
     const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
     expect(l.rowSpacingMeters).toBeNull();
+  });
+
+  /**
+   * **El control de que no rechaza de más, y es el que decide si la cota es la
+   * correcta.** `0.005` redondea a `0.01` y `999.99` cabe justo: los dos tienen
+   * que ENTRAR. Sin esta mitad, una cota escrita de más —rechazar todo lo menor
+   * que 0.01, digamos— pasaría la prueba de arriba sin que nadie note que se está
+   * negando un dato legítimo.
+   */
+  it("lo que sí cabe tras redondear entra: 0.005 y 999.99", async () => {
+    for (const bueno of [0.005, 999.99]) {
+      await updateLocationAttributes(usuario.userAccountId, {
+        locationId: parcela.id,
+        ...REJILLA,
+        rowSpacingMeters: bueno,
+      });
+      const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+      expect(Number(l.rowSpacingMeters)).toBe(Math.round(bueno * 100) / 100);
+      await prisma.location.update({
+        where: { id: parcela.id },
+        data: { gridOrigin: null, rowCount: null, plantsPerRow: null, rowSpacingMeters: null },
+      });
+    }
   });
 
   /** Y la base lo garantiza aunque nadie pase por el servicio. */

@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createMicrolot, RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
@@ -78,6 +78,41 @@ afterEach(async () => {
   await prisma.location.update({ where: { id: parcela.id }, data: { ...REJILLA, ...ATRIBUTOS } });
 });
 
+/**
+ * **Lo que la corrida crea, la corrida lo borra — menos el ámbito compartido.**
+ *
+ * Medido el 2026-10-01 con la ventana de la base quieta (dos lecturas iguales sin
+ * correr nada en medio, porque otras sesiones escriben ahí): una corrida de este
+ * archivo dejaba **6 filas** detrás —persona, cuenta, asignación, organización y
+ * dos ubicaciones— con las pruebas en verde. La base compartida ya acumulaba 23
+ * personas y 42 ubicaciones `TEST`, que es la misma forma que los 284 `Scope`
+ * huérfanos que documenta `CLAUDE.md`. Lo encontró una revisión independiente.
+ *
+ * **El `Scope` de plataforma NO se borra**, y eso no es descuido: `crearUsuarioConAcceso`
+ * devuelve el COMPARTIDO, y quitarlo se lo quita a los archivos que corren en
+ * paralelo. Lo que sí es nuestro es todo lo demás.
+ *
+ * **El orden lo manda las claves ajenas**, y una que se queje tira el resto del
+ * `afterAll`: los eventos y las ubicaciones antes de la cuenta —las dos la
+ * referencian—, la asignación antes de la cuenta, y la organización al final.
+ */
+afterAll(async () => {
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: usuario.userAccountId }),
+  });
+  await prisma.location.deleteMany({
+    where: assertDefinedWhere({ id: { in: [parcela.id, parcela.parentLocationId ?? parcela.id] } }),
+  });
+  await prisma.assignment.deleteMany({
+    where: assertDefinedWhere({ userAccountId: usuario.userAccountId }),
+  });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: usuario.userAccountId }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: usuario.personId }) });
+  await prisma.organization.deleteMany({
+    where: assertDefinedWhere({ id: parcela.organizationId ?? "" }),
+  });
+});
+
 const microlote = (name: string, extra: Record<string, unknown> = {}) =>
   createMicrolot(usuario.userAccountId, {
     parentLocationId: parcela.id,
@@ -117,6 +152,13 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
    * flip-test del plan exige que quitar el evento y quitar la copia tumben
    * pruebas DISTINTAS. Si cayera la misma en los dos casos, las aserciones no
    * discriminarían.
+   *
+   * **Lo que esta prueba NO demuestra, dicho aquí para que nadie lo cuente dos
+   * veces: que el evento vaya en la misma transacción.** Quitarle el `tx` la deja
+   * en verde, porque ninguna prueba de aquí provoca un fallo de auditoría. Quien
+   * lo vigila es `tests/arquitectura/audit-atomico.test.ts`, que lee la fuente — y
+   * está comprobado por flip-test, no por su docstring: quitando ese `tx` cae
+   * nombrando `lib/traceability/locations.ts:646`.
    */
   it("deja el acto de copiar en el libro de auditoría, con los valores dentro", async () => {
     const m = await microlote("Centro");
@@ -125,11 +167,21 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
       where: assertDefinedWhere({ entityId: m.id, operation: "location.copy_attributes_from_parent" }),
     });
     expect(ev, "sin el AuditEvent nadie distingue un valor copiado de uno medido").not.toBeNull();
-    // Y que diga DE DÓNDE y QUÉ. Un evento vacío registra que algo pasó sin
-    // registrar qué, que para una auditoría es casi lo mismo que nada.
+    // Y que diga DE DÓNDE y QUÉ — **los nueve, no una muestra**. Una revisión
+    // independiente midió que comprobar sólo `soilType` dejaba sobrevivir la
+    // mutación de quitar los otros ocho del `after`: el evento registraba que algo
+    // se copió sin registrar qué, que para una auditoría es casi lo mismo que nada.
     const despues = ev?.after as Record<string, unknown> | null;
+    expect(despues?.copiadoDe).toBe(parcela.id);
+    expect(despues?.altitudeMinM).toBe(1400);
+    expect(despues?.altitudeMaxM).toBe(1500);
     expect(despues?.soilType).toBe("franco");
-    expect(despues?.parentLocationId ?? despues?.copiadoDe).toBe(parcela.id);
+    expect(despues?.slopeDescription).toBe("ladera suave al norte");
+    expect(despues?.sunExposure).toBe("morning");
+    expect(despues?.shadePercentage).toBe("pct_50");
+    expect(despues?.aspect).toBe("north");
+    expect(Number(despues?.plantSpacingMeters)).toBe(1.5);
+    expect(Number(despues?.areaHectares)).toBe(0.8);
   });
 
   /** Y el evento de crear sigue estando: son dos actos, no uno. */

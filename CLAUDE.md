@@ -2385,6 +2385,21 @@ cuesta un rato descubrir si no están escritas:
   cambio que se revisó** —hoy el de `auth:grant-admin`—, así que reusarlo tal cual
   le da al revisor el marco equivocado: se escribe uno propio y no se pisa ése.
 
+**Y una cuarta, medida el 2026-10-01 y que costó 40 minutos de nada:
+`codex exec "<prompt>"` se cuelga esperando stdin** cuando se lanza de fondo. Su
+ayuda lo dice —«if stdin is piped and a prompt is also provided, stdin is appended
+as a `<stdin>` block»— y de fondo stdin es una tubería que nunca cierra. Imprime
+«Reading additional input from stdin...», 39 bytes, y ahí se queda. **Cerrar stdin:**
+
+```bash
+/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec \
+  --cd <ruta> --sandbox read-only "<prompt>" < /dev/null > salida.txt 2>&1
+```
+
+Control que lo discrimina: el mismo prompt trivial sin `/dev/null` da **39 bytes y
+0 aciertos** del marcador; con él, **385 y 3**. Existe además
+`codex exec review`, pensado para esto, sin usar todavía.
+
 Ahí quedó `codex-cli 0.159.2`, con sesión. El paquete de revisión lo arma
 `tools/pack-for-review.sh`, mecánicamente.
 

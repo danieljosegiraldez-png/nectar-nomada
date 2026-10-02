@@ -37,8 +37,15 @@ function codigosDelServicio(): string[] {
   // y por tanto NO encontraba los cuatro códigos del mapa `CODIGO_DEL_RANGO`, que
   // se lanzan por índice. Habrían quedado sin frase con el guardia en verde — el
   // agujero que este archivo existe para tapar, dentro del propio archivo.
-  const literales = [...fuente.matchAll(/"(rejilla_[a-z_]+)"/g)].map((m) => m[1] ?? "");
-  const conValor = [...fuente.matchAll(/`(rejilla_[a-z_]+):\$\{/g)].map((m) => m[1] ?? "");
+  // **Sin comentarios, y las tres formas de comilla.** Una revisión independiente
+  // midió los dos errores del extractor anterior: contaba de MÁS —un
+  // `// ejemplo: "rejilla_lo_que_sea"` en un comentario exigía traducción de algo
+  // que nunca se lanza— y de MENOS —comilla simple, acento grave o un dígito en el
+  // nombre se le escapaban, y el mínimo lo seguían satisfaciendo los demás, así que
+  // un código nuevo sin frase pasaba con el guardia en verde.
+  const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const literales = [...sinComentarios.matchAll(/["'`](rejilla_[a-z0-9_]+)["'`]/g)].map((m) => m[1] ?? "");
+  const conValor = [...sinComentarios.matchAll(/`(rejilla_[a-z0-9_]+):\$\{/g)].map((m) => m[1] ?? "");
   return [...new Set([...literales, ...conValor])].sort();
 }
 

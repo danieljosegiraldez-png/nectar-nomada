@@ -428,9 +428,19 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   // salian como `P2020`/`P2039` crudos, o sea 500.
   if (input.rowSpacingMeters != null) {
     const s = input.rowSpacingMeters;
-    if (!Number.isFinite(s) || s <= 0) throw new RejillaInvalida("rejilla_separacion_no_positiva");
-    // `numeric(5, 2)` no guarda 1000: tres enteros como mucho.
-    if (s >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
+    if (!Number.isFinite(s)) throw new RejillaInvalida("rejilla_separacion_no_positiva");
+    // **Se valida el valor REDONDEADO, no el que llega.** `numeric(5, 2)` redondea
+    // antes de guardar, asi que comparar el original deja pasar dos bordes que la
+    // base rechaza con un error CRUDO — o sea un 500. Medido con una sonda el
+    // 2026-10-01, y lo encontro una revision independiente:
+    //
+    //   0.001 y 0.004 -> redondean a 0.00 -> el CHECK los rechaza -> P2039
+    //   999.999       -> redondea a 1000.00 -> desborda la columna -> P2020
+    //
+    // Con sus controles al lado: 0.005 -> 0.01 entra, y 999.99 cabe justo.
+    const redondeada = Math.round(s * 100) / 100;
+    if (redondeada <= 0) throw new RejillaInvalida("rejilla_separacion_no_positiva");
+    if (redondeada >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
   }
 
   const before = existing;
