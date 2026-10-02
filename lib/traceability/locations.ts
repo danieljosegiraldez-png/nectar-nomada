@@ -109,15 +109,32 @@ function mensajeDeDisparador(error: unknown): string | null {
 }
 
 /**
- * La frase del disparador de D4, para sacarle de dentro QUE estorba.
+ * Las TRES formas del culpable que el disparador de D4 puede nombrar, cada una
+ * con su codigo propio.
  *
- * Acopla este archivo a la redaccion del `RAISE` de
- * `20261001224423_rejilla_y_rangos`, y por eso hay una prueba que lo ejerce
- * contra el disparador de verdad —«encoger con algo fuera sale como
- * RejillaInvalida y NOMBRA lo que estorba»—: si la redaccion cambia, esa prueba
- * cae en vez de que el acople se pudra en silencio.
+ * **Y son tres y no una por una razon medida, no estetica.** La primera version
+ * metia la frase del `RAISE` entera dentro de `{value}`, asi que la pantalla en
+ * INGLES decia «The grid can't shrink: una planta en la hilera 9, planta 3 would
+ * be left outside». Lo encontro una revision independiente, y es exactamente lo
+ * que el RULING de la tarea 3 de las bandejas ya habia resuelto en
+ * `app/actions/traceability.ts`: el `detail` es el mensaje TRADUCIDO, no el texto
+ * crudo, porque el texto crudo se lee en espanol en la pantalla en ingles. En
+ * espanol tampoco concordaba: «Muevelo o borralo» detras de «una planta».
+ *
+ * `[\s\S]` y no `.` porque `.` no casa saltos de linea, y el nombre de un
+ * bloque puede llevarlos: sin eso la frase no casaria y volveria a salir el
+ * error crudo, o sea un 500.
+ *
+ * Acoplan este archivo a la redaccion del `RAISE` de
+ * `20261001224423_rejilla_y_rangos`, y por eso hay UNA PRUEBA POR FORMA que las
+ * ejerce contra el disparador de verdad: si la redaccion cambia, caen en vez de
+ * que el acople se pudra en silencio.
  */
-const HUERFANO = /^No se puede encoger la rejilla: (.+) queda fuera$/;
+const CULPABLES: ReadonlyArray<readonly [RegExp, (m: RegExpMatchArray) => string]> = [
+  [/^No se puede encoger la rejilla: la microparcela ([\s\S]+) queda fuera$/, (m) => `rejilla_con_microparcela_fuera:${m[1]}`],
+  [/^No se puede encoger la rejilla: el bloque ([\s\S]+) queda fuera$/, (m) => `rejilla_con_bloque_fuera:${m[1]}`],
+  [/^No se puede encoger la rejilla: una planta en la hilera (\d+), planta (\d+) queda fuera$/, (m) => `rejilla_con_planta_fuera:${m[1]},${m[2]}`],
+];
 
 /**
  * `Location` carries no `projectId` of its own (a farm's plots aren't
@@ -376,7 +393,25 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   // «entero y desde 1», y el codigo lo dice entera: la misma correccion que se le
   // hizo a `no_es_celda` en `lib/territorio/rejilla.ts`.
   for (const v of [rejilla.rowCount, rejilla.plantsPerRow]) {
-    if (v != null && (!Number.isInteger(v) || v < 1)) throw new RejillaInvalida("rejilla_no_entera_positiva");
+    // El techo es el de la columna `int4`, no un numero inventado: por encima de
+    // el, Prisma devuelve un `P2020` crudo —medido— que en una accion es un 500.
+    if (v != null && (!Number.isInteger(v) || v < 1 || v > 2147483647)) {
+      throw new RejillaInvalida("rejilla_no_entera_positiva");
+    }
+  }
+  // La separacion entre hileras. Mismo nombre y misma forma que
+  // `non_positive_spacing` de `plantingCohorts.ts` para ESTA MISMA magnitud, y
+  // con su `CHECK` en `20261002013000_separacion_de_hileras_positiva`.
+  //
+  // Medido con una sonda el 2026-10-01, y lo encontro una revision
+  // independiente: antes de esto, `rowSpacingMeters: 0` y `-2.5` SE GUARDABAN
+  // —el `CHECK` de la tarea 2 solo cubria las dos cuentas— y `1000` y `NaN`
+  // salian como `P2020`/`P2039` crudos, o sea 500.
+  if (input.rowSpacingMeters != null) {
+    const s = input.rowSpacingMeters;
+    if (!Number.isFinite(s) || s <= 0) throw new RejillaInvalida("rejilla_separacion_no_positiva");
+    // `numeric(5, 2)` no guarda 1000: tres enteros como mucho.
+    if (s >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
   }
 
   const before = existing;
@@ -429,8 +464,12 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
     after = await escritura;
   } catch (error) {
     const raise = mensajeDeDisparador(error);
-    const culpable = raise?.match(HUERFANO);
-    if (culpable) throw new RejillaInvalida(`rejilla_con_huerfanos:${culpable[1]}`);
+    if (raise) {
+      for (const [forma, codigo] of CULPABLES) {
+        const m = raise.match(forma);
+        if (m) throw new RejillaInvalida(codigo(m));
+      }
+    }
     throw error;
   }
 

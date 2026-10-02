@@ -1779,7 +1779,11 @@
     "okCorreccion": "Corrección registrada.",
     "error_rejilla_a_medias": "La rejilla se declara entera: esquina de origen, número de hileras, plantas por hilera y separación entre hileras. O las cuatro, o ninguna.",
     "error_rejilla_no_entera_positiva": "Las hileras y las plantas por hilera se cuentan en números enteros desde 1.",
-    "error_rejilla_con_huerfanos": "No se puede encoger la rejilla: {value} se queda fuera. Muévelo o bórralo primero."
+    "error_rejilla_separacion_no_positiva": "La separación entre hileras tiene que ser mayor que cero.",
+    "error_rejilla_separacion_fuera_de_rango": "La separación entre hileras se guarda con tres enteros como máximo: revisa el valor.",
+    "error_rejilla_con_microparcela_fuera": "No se puede encoger la rejilla: la microparcela «{value}» se queda fuera. Muévela o bórrala primero.",
+    "error_rejilla_con_bloque_fuera": "No se puede encoger la rejilla: el bloque «{value}» se queda fuera. Muévelo o bórralo primero.",
+    "error_rejilla_con_planta_fuera": "No se puede encoger la rejilla: la planta de la hilera {hilera}, posición {planta} se queda fuera. Muévela o retírala primero."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

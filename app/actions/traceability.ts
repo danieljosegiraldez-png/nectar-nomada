@@ -188,7 +188,18 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   // `tests/arquitectura/acciones-traducen-sus-errores.test.ts` ya vigila solo.
   if (error instanceof RejillaInvalida) {
     const [clave, ...resto] = error.message.split(":");
-    return t(`error_${clave}` as "error_rejilla_a_medias", { value: resto.join(":").trim() });
+    const valor = resto.join(":").trim();
+    // La planta trae DOS numeros, y van como parametros numericos. Lo que NO
+    // puede pasar es que la frase del disparador entre entera en `{value}`: eso
+    // hacia que la pantalla en INGLES dijera «una planta en la hilera 9, planta
+    // 3», que es el RULING que las bandejas ya habian resuelto mas abajo.
+    if (clave === "rejilla_con_planta_fuera") {
+      // `noUncheckedIndexedAccess`: el destructurado puede dar `undefined`, y un
+      // mensaje con un hueco vacio es peor que uno que no se imprime.
+      const [hilera = "?", planta = "?"] = valor.split(",");
+      return t("error_rejilla_con_planta_fuera", { hilera, planta });
+    }
+    return t(`error_${clave}` as "error_rejilla_a_medias", { value: valor });
   }
   if (error instanceof PlantingEventValidationError) return t("error_production", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });

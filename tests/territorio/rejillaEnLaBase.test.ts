@@ -55,6 +55,27 @@ afterEach(async () => {
 const conRejilla = () =>
   prisma.location.update({ where: { id: parcela.id }, data: REJILLA });
 
+/**
+ * Fija **la clase Y el codigo exacto**, y las dos mitades hacen falta.
+ *
+ * Una revision independiente las midio como mutaciones que sobrevivian a
+ * `rejects.toThrow(/regexp/)`: cambiar `throw new RejillaInvalida(...)` por
+ * `throw new Error(...)` dejaba la prueba en verde —y `friendlyError` relanzando,
+ * o sea un 500—, y capturar `culpable[0]` en vez de `culpable[1]` tambien, porque
+ * `.*` casaba con la frase entera duplicada. `toBe` del codigo completo mata las
+ * dos.
+ */
+async function falla(promesa: Promise<unknown>, codigo: string) {
+  let caido: unknown = null;
+  try {
+    await promesa;
+  } catch (e) {
+    caido = e;
+  }
+  expect(caido).toBeInstanceOf(RejillaInvalida);
+  expect((caido as Error).message).toBe(codigo);
+}
+
 const bloque = (name: string, blockType: "trampa" | "experimental" | null) =>
   prisma.plotBlock.create({
     data: { locationId: parcela.id, name, blockType, createdBy: usuario.userAccountId },
@@ -384,14 +405,17 @@ describe("updateLocationAttributes y la rejilla (D3)", () => {
   });
 
   /**
-   * Las dos mitades: que lo rechace **con su clase** y que **no haya llegado a la
-   * base**. Sin la segunda, la prueba no distingue «el servicio lo paró» de «lo
-   * paró el CHECK y el error subió envuelto», que es justo lo que hay que medir.
+   * **Corregido tras la revisión: el comentario anterior tenía la lógica al
+   * revés.** La mitad que distingue «lo paró el servicio» de «lo paró el CHECK y
+   * el error subió envuelto» es la CLASE, no el `rowCount` nulo — ese pasa igual
+   * si lo paró la base. La segunda aserción sigue, pero por lo que de verdad
+   * dice: que nada se escribió.
    */
   it("media rejilla la rechaza el SERVICIO, antes de llegar a la base", async () => {
-    await expect(
+    await falla(
       updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, rowCount: 10 }),
-    ).rejects.toThrow(RejillaInvalida);
+      "rejilla_a_medias",
+    );
     const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
     expect(l.rowCount).toBeNull();
   });
@@ -403,32 +427,134 @@ describe("updateLocationAttributes y la rejilla (D3)", () => {
    * se le hizo a `no_es_celda` en la tarea 1.
    */
   it("una cuenta que no sea un entero desde 1 la rechaza el servicio", async () => {
-    for (const malo of [{ rowCount: 0 }, { rowCount: -3 }, { rowCount: 10.5 }, { plantsPerRow: 0 }, { plantsPerRow: 18.5 }]) {
-      await expect(
+    for (const malo of [
+      { rowCount: 0 },
+      { rowCount: -3 },
+      { rowCount: 10.5 },
+      { plantsPerRow: 0 },
+      { plantsPerRow: 18.5 },
+      // El techo de `int4`. Medido: sin esta cota, Prisma devolvia un `P2020`
+      // crudo, que en una accion es un 500.
+      { rowCount: 3e9 },
+    ]) {
+      await falla(
         updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, ...malo }),
-      ).rejects.toThrow(/rejilla_no_entera_positiva/);
+        "rejilla_no_entera_positiva",
+      );
     }
     const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
     expect(l.rowCount).toBeNull();
   });
 
   /**
-   * **Lo que la base rechaza tiene que salir del servicio como `RejillaInvalida`.**
-   * El disparador de D4 habla con un `RAISE EXCEPTION`, y nadie en el repositorio
-   * traduce un `P0001` — medido: 0 archivos, con el control de que el mismo
-   * `grep` encuentra `PrismaClientKnownRequestError` en 19. Sin esta traducción,
-   * un operario que encoge la rejilla de su parcela se come un 500, que es
-   * exactamente la clase de defecto del PR #433 y del #514.
+   * **Lo que la base rechaza sale del servicio como `RejillaInvalida`, y hay UNA
+   * PRUEBA POR FORMA DE CULPABLE.** Son tres porque el disparador de D4 nombra
+   * tres cosas distintas —microparcela, bloque y planta— con tres redacciones
+   * distintas, y una sola prueba dejaba dos expresiones regulares sin ejercer.
+   * Lo señaló una revisión independiente: de los tres `RAISE`, sólo el del bloque
+   * pasaba por el servicio, y el de la planta es el de forma más irregular
+   * porque concatena enteros.
+   *
+   * Nadie en el repositorio traducía un `P0001` — medido: 0 archivos, con el
+   * control de que el mismo `grep` encuentra `PrismaClientKnownRequestError` en
+   * 19. Sin esto, encoger la rejilla de una parcela es un 500: la clase de
+   * defecto del PR #433 y del #514.
    */
-  it("encoger con algo fuera sale como RejillaInvalida y NOMBRA lo que estorba", async () => {
+  it("encoger con un BLOQUE fuera sale como RejillaInvalida con su código", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
     const b = await bloque("Ensayo A", "experimental");
     await prisma.plotBlockRange.create({
       data: { rowFrom: 8, rowTo: 9, plantFrom: 1, plantTo: 5, plotBlockId: b.id, createdBy: usuario.userAccountId },
     });
-    await expect(
+    await falla(
       updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, rowCount: 5 }),
-    ).rejects.toThrow(/rejilla_con_huerfanos.*Ensayo A/);
+      "rejilla_con_bloque_fuera:Ensayo A",
+    );
+  });
+
+  it("encoger con una MICROPARCELA fuera sale como RejillaInvalida con su código", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const m = await prisma.location.create({
+      data: {
+        name: "Microparcela Alta",
+        locationType: "plot" as const,
+        parentLocationId: parcela.id,
+        organizationId: parcela.organizationId,
+        status: "approved",
+        rangeRowFrom: 8,
+        rangeRowTo: 9,
+        rangePlantFrom: 1,
+        rangePlantTo: 5,
+      },
+    });
+    microIds.push(m.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, rowCount: 5 }),
+      "rejilla_con_microparcela_fuera:Microparcela Alta",
+    );
+  });
+
+  /**
+   * La forma más irregular de las tres: concatena dos enteros, y por eso su
+   * código los lleva separados por una coma y `friendlyError` los pasa como dos
+   * parámetros. Si entraran en un `{value}` suelto, la pantalla en inglés diría
+   * «una planta en la hilera 9, planta 3» — que es justo lo que esta tanda
+   * corrige.
+   */
+  it("encoger con una PLANTA fuera sale como RejillaInvalida con sus dos números", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const s = await prisma.specimen.create({
+      data: {
+        locationId: parcela.id,
+        specimenType: "plant",
+        commonName: "Cafeto de la hilera 9",
+        gridRow: 9,
+        gridPosition: 3,
+        createdBy: usuario.userAccountId,
+        provenanceClass: "original_record",
+      },
+    });
+    especimenIds.push(s.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA, rowCount: 5 }),
+      "rejilla_con_planta_fuera:9,3",
+    );
+  });
+
+  /**
+   * **La separación entre hileras, que no la guardaba nadie.** Medido con una
+   * sonda el 2026-10-01 y encontrado por una revisión independiente, no por la
+   * suite: `0` y `-2.5` SE GUARDABAN —el `CHECK` de la tarea 2 sólo cubre las dos
+   * cuentas— y `1000` y `NaN` salían como `P2020`/`P2039` crudos, o sea un 500.
+   * El `CHECK` que lo garantiza está en
+   * `20261002013000_separacion_de_hileras_positiva`, con la redacción de
+   * `PlantingCohort` para la misma magnitud.
+   */
+  it("una separación de hileras que no sea positiva y quepa la rechaza el servicio", async () => {
+    for (const [malo, codigo] of [
+      [0, "rejilla_separacion_no_positiva"],
+      [-2.5, "rejilla_separacion_no_positiva"],
+      [Number.NaN, "rejilla_separacion_no_positiva"],
+      [1000, "rejilla_separacion_fuera_de_rango"],
+    ] as const) {
+      await falla(
+        updateLocationAttributes(usuario.userAccountId, {
+          locationId: parcela.id,
+          ...REJILLA,
+          rowSpacingMeters: malo,
+        }),
+        codigo,
+      );
+    }
+    const l = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(l.rowSpacingMeters).toBeNull();
+  });
+
+  /** Y la base lo garantiza aunque nadie pase por el servicio. */
+  it("y el CHECK lo rechaza también por SQL directo, sin pasar por el servicio", async () => {
+    await expect(
+      prisma.location.update({ where: { id: parcela.id }, data: { ...REJILLA, rowSpacingMeters: -2.5 } }),
+    ).rejects.toThrow(/location_separacion_de_hileras_positiva/);
   });
 
   /**
