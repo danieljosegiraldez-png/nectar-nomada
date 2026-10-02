@@ -26,9 +26,7 @@ Los intervalos son **semiabiertos `[inferior, superior)`**. Ningún valor perten
 > es peor que una que dice qué sugiere el dato y devuelve la decisión al productor». **El día que Daniel
 > rellene una celda,** `tests/arquitectura/guia-no-inventada.test.ts` falla hasta que `riesgoDeEsperar`
 > (`lib/beneficio/riesgoDeEsperar.ts`) la exponga en `queHaceElOperario`, palabra por palabra: la guía
-> llega al código en vez de quedarse muerta en este `.md`. Una fila queda fuera de ese guardia: la de
-> `[6.50, 8.00]`, que la nota de ADR-181 retira y `riesgoDeEsperar` no devuelve, así que lo que se escriba
-> en su celda la pantalla no lo puede decir.
+> llega al código en vez de quedarse muerta en este `.md`.
 
 | Banda | Estado | Riesgo / vector | Acción del software | Qué hace el operario |
 | :--- | :--- | :--- | :--- | :--- |

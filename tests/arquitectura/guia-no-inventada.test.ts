@@ -14,9 +14,12 @@
  * - módulo → documento: `queHaceElOperario` sólo puede decir lo que la celda dice. Si no, alguien
  *   escribió guía en el código que Daniel no ha dicho: justo lo que la rúbrica prohíbe.
  *
- * **ALCANCE: siete filas de las ocho. La de `[6.50, 8.00]` queda fuera**: ADR-181 la retira y
- * `riesgoDeEsperar` devuelve `null` en todo su rango, así que su celda no se puede exponer nunca y
- * esta prueba no la mira. Una prueba lo comprueba: lo fuera de alcance es esa fila y sólo esa.
+ * **Siete filas se pueden exponer; la de `[6.50, 8.00]` NO, y por eso su celda rellena TAMBIÉN hace
+ * caer el guardia**: ADR-181 la retira y `riesgoDeEsperar` devuelve `null` en todo su rango, así que
+ * su celda no se puede exponer nunca. Una celda rellena ahí es guía muerta en el `.md`, justo lo que
+ * este guardia impide, y callar sería el punto ciego. El mensaje dice que es un caso distinto: no
+ * falta cablear el campo, falta una decisión —revisar la retirada— antes de escribir guía en esa fila.
+ * Una prueba comprueba que lo inalcanzable es esa fila y sólo esa.
  *
  * **Mientras las ocho celdas estén vacías, el guardia pasa POR CONSTRUCCIÓN**: con el documento de
  * hoy no hay nada que pueda fallar. Por eso `revisar` es una función que recibe el documento, y los
@@ -106,13 +109,20 @@ function revisar(documento: string, consultar: (ph: number) => Riesgo | null) {
     const textos = expuesto.get(banda);
     if (!textos) {
       fueraDeAlcance.push(banda);
+      // Ninguna lectura de pH llega a esta fila: no hay dónde exponer su celda. Rellena, es guía
+      // muerta, y arreglarlo no es cablear el campo.
+      if ((fila[cGuia] ?? "") !== "") {
+        problemas.push(
+          `«${banda}»: la celda de «${COLUMNA}» está rellena y esta fila es INALCANZABLE: la retira ADR-181 (\`retiradaPor\` en lib/beneficio/riesgoDeEsperar.ts) y riesgoDeEsperar devuelve null en todo su rango, así que ninguna pantalla puede decir lo que escribas aquí. No es un olvido de código sino una decisión pendiente: escribir guía en esta fila exige revisar antes la retirada, y no basta con cablear queHaceElOperario`,
+        );
+      }
       continue;
     }
     alcanzadas.push(banda);
     const guia = fila[cGuia] ?? "";
     if (guia !== "" && !textos.has(guia)) {
       problemas.push(
-        `«${banda}»: la celda de «${COLUMNA}» está rellena y riesgoDeEsperar no la expone en queHaceElOperario (ponla, literal, en su fila de lib/beneficio/riesgoDeEsperar.ts y devuélvela)`,
+        `«${banda}»: la celda de «${COLUMNA}» está rellena y riesgoDeEsperar no la expone en queHaceElOperario. Hay que tocar DOS sitios de lib/beneficio/riesgoDeEsperar.ts: (1) poner el texto, literal, en su fila de FILAS_DE_PH, y (2) cambiar el return de riesgoDeEsperar para que lo propague (hoy sólo devuelve banda y riesgo)`,
       );
     }
     const ajenos = [...textos].filter((t) => t !== guia);
@@ -243,12 +253,24 @@ describe("la guía «Qué hace el operario» de 10_ph_fermentation.md §1", () =
       expect(problemas[0]).toContain(`«${banda}»`);
     });
 
-    it("la fila retirada, rellena: NO cae, y es el límite que el comentario declara", () => {
+    it("la fila retirada, rellena: cae, y el mensaje dice que es una decisión pendiente y no un olvido", () => {
       const doc = conGuia(vacio, RETIRADA, MARCA);
       expect(doc).not.toBe(vacio);
       const r = revisar(doc, sinGuia);
-      expect(r.problemas).toEqual([]);
       expect(r.fueraDeAlcance).toEqual([RETIRADA]);
+      expect(r.problemas).toHaveLength(1);
+      expect(r.problemas[0]).toContain(`«${RETIRADA}»`);
+      expect(r.problemas[0]).toContain("ADR-181");
+      expect(r.problemas[0]).toContain("devuelve null en todo su rango");
+      expect(r.problemas[0]).toContain("decisión pendiente");
+      expect(r.problemas[0]).toContain("revisar antes la retirada");
+    });
+
+    it("el mensaje de una celda alcanzable sin exponer nombra los DOS sitios que hay que cambiar", () => {
+      const { problemas } = revisar(conGuia(vacio, "[4.50, 5.20)", MARCA), sinGuia);
+      expect(problemas).toHaveLength(1);
+      expect(problemas[0]).toContain("FILAS_DE_PH");
+      expect(problemas[0]).toContain("return de riesgoDeEsperar");
     });
 
     it("celda rellena Y expuesta, literal: NO cae (es el camino bueno)", () => {
@@ -257,11 +279,19 @@ describe("la guía «Qué hace el operario» de 10_ph_fermentation.md §1", () =
       expect(revisar(doc, exponiendo({ "[4.50, 5.20)": MARCA })).problemas).toEqual([]);
     });
 
-    it("las ocho celdas rellenas y las siete alcanzables expuestas, literal: NO cae", () => {
+    it("las siete celdas alcanzables rellenas y expuestas, literal: NO cae", () => {
       const textos = Object.fromEntries(real.alcanzadas.map((b) => [b, `${MARCA} / ${b}`]));
-      const doc = [...real.alcanzadas, RETIRADA].reduce((d, b) => conGuia(d, b, `${MARCA} / ${b}`), vacio);
+      const doc = real.alcanzadas.reduce((d, b) => conGuia(d, b, `${MARCA} / ${b}`), vacio);
       expect(doc).not.toBe(vacio);
       expect(revisar(doc, exponiendo(textos)).problemas).toEqual([]);
+    });
+
+    it("las ocho rellenas y las siete alcanzables expuestas: cae sólo por la retirada", () => {
+      const textos = Object.fromEntries(real.alcanzadas.map((b) => [b, `${MARCA} / ${b}`]));
+      const doc = [...real.alcanzadas, RETIRADA].reduce((d, b) => conGuia(d, b, `${MARCA} / ${b}`), vacio);
+      const { problemas } = revisar(doc, exponiendo(textos));
+      expect(problemas).toHaveLength(1);
+      expect(problemas[0]).toContain(`«${RETIRADA}»`);
     });
 
     it("el módulo expone guía y la celda está vacía: cae", () => {
