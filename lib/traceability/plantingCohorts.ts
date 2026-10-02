@@ -19,6 +19,7 @@ import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
 import { resolveFarmSiteId } from "./fincas";
 import { celdasDelRango, type Rango } from "../territorio/rejilla";
+import { celdasDeLaForma, tableroDe } from "./formaDeLaParcela";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -454,6 +455,15 @@ export interface RejillaDeclarada {
    * parcela entera. Sin rango declarado no hay con qué comparar.
    */
   readonly propia: boolean;
+  /**
+   * Los trozos que declaran **qué celdas del tablero están plantadas** (D9,
+   * 2026-10-02). Vacío significa **forma sin declarar**, no lote vacío (ADR-080).
+   *
+   * **No es opcional a propósito.** Con un `?`, los sitios de llamada existentes
+   * seguirían compilando con la conducta vieja —capacidad = filas × plantas— en
+   * silencio, que es justo la afirmación que este cambio viene a quitar.
+   */
+  readonly forma: readonly Rango[];
 }
 
 /**
@@ -494,6 +504,14 @@ export type ComparacionDeLaRejilla =
       cohortesSinConteo: number;
       cohortesTotales: number;
     }
+  /**
+   * **Hay tablero pero no forma declarada, así que no se afirma capacidad.**
+   *
+   * Lleva sólo el tamaño del tablero, y ningún conteo: un `contadas: 0` sobre un lote
+   * donde quizá nadie registró las siembras leería «hay 0 plantas» como un hecho
+   * medido (ADR-080), y el conteo ya está en la lista de siembras de esa pantalla.
+   */
+  | { status: "sin_forma"; filas: number; columnas: number }
   | { status: "ok"; capacidad: number; contadas: number; diferencia: number };
 
 export function compararConLaRejilla(
@@ -523,9 +541,18 @@ export function compararConLaRejilla(
   // La numeración es una sola, la de la parcela, así que una microparcela de la
   // hilera 1 a la 4 cabe 4 × 20, no las 200 de su madre. Compararla contra las
   // 200 diría que le faltan plantas por un suelo que no es suyo.
-  const capacidad = rejilla.rango
-    ? celdasDelRango(rejilla.rango)
-    : rejilla.rowCount * rejilla.plantsPerRow;
+  // **Sin forma declarada no se afirma capacidad** (D8, 2026-10-02). Antes esto caía
+  // en `ok` con `filas × plantas`, que en un lote irregular es falso: con una esquina
+  // cortada decía «caben 200 y hay 150: una diferencia de 50» donde la diferencia real
+  // es 20. Va ANTES de `sin_cohortes` porque ése también afirma una capacidad.
+  const ambito = rejilla.rango ?? tableroDe(rejilla);
+  if (rejilla.forma.length === 0) {
+    return { status: "sin_forma", filas: rejilla.rowCount, columnas: rejilla.plantsPerRow };
+  }
+
+  // **D3: la capacidad de una microparcela es su RANGO**, acotado además a lo que la
+  // forma dice que está plantado. La numeración es una sola, la de la parcela.
+  const capacidad = celdasDeLaForma(rejilla.forma, ambito);
 
   // Una siembra retirada no está en pie, así que no cuenta. Es la misma lectura
   // que hace `computePlotDensity` del lado de la densidad.
@@ -568,6 +595,7 @@ export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
     | "rejillaSinRango"
     | "rejillaSinSiembras"
     | "rejillaConteoIncompleto"
+    | "rejillaSinForma"
     | "rejillaComparada";
   params: Record<string, number>;
 } {
@@ -578,6 +606,10 @@ export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
       // Sin ningún número a propósito: pasar la capacidad de la madre es
       // exactamente el error que este estado existe para no cometer.
       return { clave: "rejillaSinRango", params: {} };
+    case "sin_forma":
+      // Sólo el tamaño del tablero. Ningún conteo y ninguna capacidad: es el estado
+      // que existe justo para no afirmarla.
+      return { clave: "rejillaSinForma", params: { filas: c.filas, columnas: c.columnas } };
     case "sin_cohortes":
       return { clave: "rejillaSinSiembras", params: { capacidad: c.capacidad } };
     case "conteo_incompleto":
@@ -646,6 +678,9 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       classification: true,
       organization: { select: { name: true } },
       parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
+      // La forma declarada de lo plantado (D9). Cuelga de quien pone la numeración, así
+      // que si esta Location no la tiene se lee la de la madre, unas líneas más abajo.
+      formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
     },
   });
   // `requireLocationAttributeAccess` already refuses a missing id, so reaching
@@ -864,14 +899,25 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       ? null
       : await prisma.location.findUnique({
           where: { id: location.parentLocation.id },
-          select: { rowCount: true, plantsPerRow: true },
+          select: {
+            rowCount: true,
+            plantsPerRow: true,
+            formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
+          },
         });
   const base =
     propia ??
     (madre?.rowCount != null && madre.plantsPerRow != null
       ? { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow }
       : null);
-  const rejillaDeclarada: RejillaDeclarada | null = base ? { ...base, rango, propia: propia !== null } : null;
+  // **La forma es de quien pone la numeración**, igual que la rejilla: si esta
+  // Location la tiene, la suya; si la hereda, la de la madre. Vacía significa forma
+  // sin declarar, y entonces `compararConLaRejilla` devuelve `sin_forma` en vez de
+  // afirmar una capacidad (D8).
+  const forma = propia ? location.formaDeclarada : (madre?.formaDeclarada ?? []);
+  const rejillaDeclarada: RejillaDeclarada | null = base
+    ? { ...base, rango, propia: propia !== null, forma }
+    : null;
 
   return {
     location,

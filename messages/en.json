@@ -1811,6 +1811,7 @@
     "rejillaQuitarRangoBoton": "Remove",
     "rejillaSolapeAviso": "Saved. It shares {celdas} cells with “{bloque}”.",
     "rejillaSinDeclarar": "This plot isn't numbered yet.",
+    "rejillaSinForma": "Grid of {filas} × {columnas}. Declare the plot's shape — which cells are planted — to be able to compare it with what is sown.",
     "rejillaSinSiembras": "It fits {capacidad} plants. No planting has been recorded yet.",
     "rejillaConteoIncompleto": "It fits {capacidad} and {contadas} are counted, but {sinContar} planting(s) are uncounted: it can't be compared yet.",
     "rejillaComparada": "It fits {capacidad} and {contadas} are counted: a difference of {diferencia}.",
