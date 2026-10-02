@@ -26,6 +26,7 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
+import { antesDeTransformar, dividirProcesoEnTx, type TipoConReglaDeProceso } from "./procesoDelLinaje";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
@@ -291,6 +292,9 @@ export function loteDeReferencia<T extends { id: string }>(
   return elegido;
 }
 
+/** Parte 1, R6: las transformaciones que tienen reglas cuando un proceso abierto cubre la entrada. */
+const TIPOS_CON_REGLA_DE_PROCESO = new Set<string>(["split", "selection", "merge", "blend"]);
+
 export async function recordTransformation(userAccountId: string, input: RecordTransformationInput) {
   if (input.inputs.length === 0) {
     throw new TraceabilityAccessError("inputs_required");
@@ -324,8 +328,20 @@ export async function recordTransformation(userAccountId: string, input: RecordT
   }
 
   const provenanceClass = input.provenanceClass;
+  // Parte 1, R6 (2026-10-01). La miel no tiene procesos —y divide en parcial a propósito
+  // (`dividirMiel` deja el remanente en el origen)—, así que queda fuera.
+  const tocaProceso =
+    TIPOS_CON_REGLA_DE_PROCESO.has(input.transformationType) && !inputLots.every((l) => l.lotType === "honey");
 
   const result = await prisma.$transaction(async (tx) => {
+    // Parte 1, R6: lo PRIMERO de la transacción, porque bloquea el linaje de las entradas y ese bloqueo tiene
+    // que ir antes que cualquier otra fila que se toque aquí (orden global por id, R2).
+    const division = tocaProceso
+      ? await antesDeTransformar(tx, {
+          tipo: input.transformationType as TipoConReglaDeProceso,
+          inputLotIds: input.inputs.map((i) => i.lotId),
+        })
+      : null;
     const transformation = await tx.lotTransformation.create({
       data: {
         transformationType: input.transformationType,
@@ -462,6 +478,20 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       declaredLossReason: input.declaredLossReason ?? null,
       acceptUnexplained: input.acceptUnexplained ?? null,
     });
+
+    // Parte 1, R6: con las partes creadas y la masa ya descontada, cierra el proceso como dividido y da a cada
+    // parte su copia. Después del balance, porque el remanente que mira es el saldo que queda tras descontar.
+    if (division) {
+      await dividirProcesoEnTx(tx, userAccountId, {
+        procesoId: division.procesoId,
+        transformationId: transformation.id,
+        occurredAt: input.occurredAt,
+        loteDividido: input.inputs[0]!.lotId,
+        cantidadDeEntrada: input.inputs[0]!.quantity ?? null,
+        partes: outputLots.map((l) => l.id),
+        organizationId: sourceLot.organizationId,
+      });
+    }
 
     // C1 §3: evidentiary write (LotTransformation carries provenanceClass).
     //

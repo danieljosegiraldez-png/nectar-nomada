@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**604 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
+**605 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1
 (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
@@ -30,7 +30,18 @@ rama de las lecturas de la clasificación de verde por malla):
 | **91** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cuatro que entraron después, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, que recibe el principal sólo para firmar |
+| **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **Dividir bajo un proceso abierto (2026-10-01): 604→605, 166 archivos y «recibía principal sin guardia
+> visible» 22→23.** Parte 1, R6. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:
+> `dividirProcesoEnTx`, que **sí recibe el principal, pero sólo para firmar** el cierre `divided` y la
+> apertura de cada parte; entra en `operaciones_sin_patron`, porque su único llamador,
+> `recordTransformation`, pide `manage` sobre las entradas antes de abrir la transacción y bloquea sus
+> linajes al empezarla. La otra pieza de la división, `antesDeTransformar`, **no es operación** para el
+> script: sólo delega en otras exportadas (`bloquearLinajes`, `loteDividido`, `procesoQueCubre`,
+> `exigeSinCorridasAbiertas`), igual que `bloquearLinaje`, y fijarla haría caer «no quedan fijadas
+> operaciones que ya no dependen del llamador». `recordTransformation`, `recordMeasurement` y
+> `createSampleFromLot` siguen siendo las mismas operaciones, con guardia directo.
 
 > **No se cierra un proceso con corridas abiertas (2026-10-01): 603→604, 166 archivos y «depende del
 > llamador» 90→91.** Parte 1, R5. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:

@@ -31,6 +31,7 @@ import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { loteDividido } from "./procesoDelLinaje";
 import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
 import {
@@ -309,6 +310,9 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
       return { ...resto, inspeccionId: sample?.samplingEventId ?? null };
     },
     crear: async (tx) => {
+  // Parte 1, R6.6 (2026-10-01): un lote dividido bajo un proceso queda cerrado: «todo registro posterior
+  // pertenece a un hijo» (`20_modelo_ciclo_completo.md` §1.1).
+  if (input.lotId && (await loteDividido(tx, input.lotId))) throw new MeasurementValidationError("lote_dividido");
   const lot = input.lotId ? await tx.lot.findUniqueOrThrow({ where: { id: input.lotId } }) : null;
   const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
   if (input.instrumentModeId && (!modo || modo.equipmentId !== input.instrumentId || modo.retiredAt)) {

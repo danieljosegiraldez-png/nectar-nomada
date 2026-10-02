@@ -15,8 +15,9 @@
  * que recibe**, nunca con el cliente global: quien llama pasa el de su transacción, o el global si
  * sólo lee. Nada de aquí autoriza: quien llama ya autorizó.
  */
-import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
+import { Prisma, type ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
+import { computeLotBalance, resolveTolerancePct } from "./balance";
 import { LotProcessError } from "./errorDeProceso";
 import { ordenDeBloqueo } from "./ordenDeBloqueo";
 
@@ -457,4 +458,138 @@ export async function exigeSinCorridasAbiertas(
   const fermentaciones = await tx.fermentationRun.count({ where: donde });
   const secados = await tx.dryingRun.count({ where: donde });
   if (fermentaciones + secados > 0) throw new LotProcessError("corridas_abiertas");
+}
+
+/** Parte 1, R6: las transformaciones que tienen reglas cuando un proceso abierto cubre a su entrada. */
+export type TipoConReglaDeProceso = "split" | "selection" | "merge" | "blend";
+
+/**
+ * R6 (Parte 1, 2026-10-01), ANTES de escribir la transformación. Bloquea los linajes de las entradas y decide:
+ * - un lote dividido no se vuelve a dividir, seleccionar ni fusionar (R6.6);
+ * - bajo un proceso abierto no se selecciona (R6.7: «primero se selecciona, después el proceso») ni se
+ *   fusiona (R6.8), y una «división» con varias entradas también junta cafés;
+ * - un `split` bajo un proceso abierto devuelve ese proceso, que `dividirProcesoEnTx` cerrará y copiará
+ *   DESPUÉS de crear las partes. Antes rechaza si hay una corrida en curso (R6.2).
+ *
+ * Es lo PRIMERO de la transacción de `recordTransformation`: el bloqueo va antes que cualquier otra fila
+ * que la transacción toque, para no romper el orden global por id (R2). Todo lo que decide lo lee después
+ * del bloqueo: una corrida que empiece a la vez sobre el mismo café espera, o se ve aquí.
+ */
+export async function antesDeTransformar(
+  tx: Prisma.TransactionClient,
+  args: { tipo: TipoConReglaDeProceso; inputLotIds: readonly string[] },
+): Promise<{ procesoId: string } | null> {
+  await bloquearLinajes(tx, args.inputLotIds);
+  for (const lotId of args.inputLotIds) {
+    if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
+  }
+  const abiertos: ProcesoEnCadena[] = [];
+  for (const lotId of args.inputLotIds) {
+    const c = await procesoQueCubre(tx, lotId);
+    if (c.estado === "abierto") abiertos.push(c.vigente);
+  }
+  if (abiertos.length === 0) return null;
+  if (args.tipo === "selection") throw new LotProcessError("seleccion_bajo_proceso_abierto");
+  if (args.tipo === "merge" || args.tipo === "blend" || args.inputLotIds.length > 1) {
+    throw new LotProcessError("fusion_bajo_proceso_abierto");
+  }
+  const vigente = abiertos[0]!;
+  await exigeSinCorridasAbiertas(tx, { id: vigente.id, lotId: vigente.lotId });
+  return { procesoId: vigente.id };
+}
+
+/** Lo que `recordTransformation` sabe de la división cuando ya creó las partes y descontó la masa. */
+export interface ArgumentosDeDivision {
+  procesoId: string;
+  transformationId: string;
+  occurredAt: Date;
+  /** La entrada de la división: el lote que queda cerrado (R6.6). */
+  loteDividido: string;
+  /** Lo que el operario declaró que entró; sobre ello se calcula la tolerancia (R6.1). */
+  cantidadDeEntrada: number | null;
+  partes: readonly string[];
+  organizationId: string;
+}
+
+/**
+ * R6 (Parte 1, 2026-10-01), DESPUÉS de crear las partes y de descontar la masa: comprueba que no quede café
+ * fuera de las partes, cierra el proceso como `divided` y da a cada parte su copia, unida a él. Corre en la
+ * transacción de `recordTransformation`, con el linaje ya bloqueado por `antesDeTransformar`.
+ *
+ * Recibe el principal sólo para firmar el cierre y las aperturas: no autoriza. `recordTransformation` ya pidió
+ * `manage` sobre el lote que se divide.
+ *
+ * La firma va en UNA línea y con el tipo nombrado: `audit-atomico` reconoce así una función que audita con el
+ * `tx` que recibe (una firma partida en varias líneas, o con un tipo literal `{ … }`, no la ve).
+ */
+export async function dividirProcesoEnTx(tx: Prisma.TransactionClient, userAccountId: string, args: ArgumentosDeDivision) {
+  const proceso = await tx.lotProcess.findUniqueOrThrow({ where: { id: args.procesoId } });
+  // R6.3: el cierre es el instante de la división, y no puede ser anterior al inicio.
+  if (args.occurredAt < proceso.startedAt) throw new LotProcessError("ends_before_it_started");
+
+  // R6.1: se divide el lote ENTERO. Lo que quede, dentro de la tolerancia de masa de la organización —la misma
+  // con la que el libro reconcilia la división—, no es remanente. Sin libro de masa el remanente no se puede
+  // saber: la división se acepta y el cierre lo dice en su auditoría.
+  const organizacion = await tx.organization.findUnique({ where: { id: args.organizationId }, select: { massBalanceTolerancePct: true } });
+  const pct = resolveTolerancePct(organizacion);
+  const saldo = await computeLotBalance(tx, args.loteDividido);
+  const sinLibroDeMasa = !saldo.recorded;
+  if (saldo.recorded) {
+    const entrada = new Prisma.Decimal(args.cantidadDeEntrada ?? 0);
+    const tolerancia = entrada.mul(pct).div(100).abs();
+    if (saldo.quantity.greaterThan(tolerancia)) throw new LotProcessError("division_deja_remanente");
+  }
+  // Y ningún OTRO lote cubierto por el proceso puede conservar saldo: quedaría bajo un proceso dividido sin
+  // haber sido dividido (`20_modelo_ciclo_completo.md` §1.1). Las muestras no cuentan.
+  const cubiertos = [proceso.lotId, ...(await idsDeDescendencia(tx, proceso.lotId))].filter(
+    (id) => id !== args.loteDividido && !args.partes.includes(id),
+  );
+  for (const id of cubiertos) {
+    const lote = await tx.lot.findUniqueOrThrow({ where: { id }, select: { lotType: true } });
+    if (lote.lotType === "sample") continue;
+    const s = await computeLotBalance(tx, id);
+    if (s.recorded && s.quantity.greaterThan(0)) throw new LotProcessError("division_deja_remanente");
+  }
+
+  // R6.3: cerrado como `divided`, sin medición y con la división que lo cerró (los CHECK de la migración exigen
+  // las dos cosas).
+  const cerrado = await tx.lotProcess.update({
+    where: { id: proceso.id },
+    data: { endedAt: args.occurredAt, closureKind: "divided", dividedByTransformationId: args.transformationId },
+  });
+  await recordAuditEvent(
+    {
+      actorUserAccountId: userAccountId,
+      operation: "lot_process.close",
+      entityType: "lot_process",
+      entityId: cerrado.id,
+      before: { endedAt: null },
+      after: { endedAt: cerrado.endedAt, closureKind: "divided", dividedByTransformationId: args.transformationId, sinLibroDeMasa },
+      sourceInterface: "traceability.lotProcess",
+    },
+    tx,
+  );
+
+  // R6.4: cada parte nace con su propio proceso, copiado, que empieza en el INSTANTE de la división —no
+  // «ahora»: el import cerrará con humedades de fechas históricas, y el CHECK de fechas lo rechazaría—. La
+  // historia anterior no se copia: se hereda por la cadena de R1 (R6.5).
+  const copias = [];
+  for (const parte of args.partes) {
+    copias.push(
+      await abrirProcesoEnTx(tx, userAccountId, {
+        lotId: parte,
+        processRecipeVersionId: proceso.processRecipeVersionId,
+        intent: proceso.intent,
+        processGradeValueId: proceso.processGradeValueId,
+        cherryStateValueId: proceso.cherryStateValueId,
+        targetMoisturePct: proceso.targetMoisturePct,
+        startedAt: args.occurredAt,
+        notes: proceso.notes,
+        provenanceClass: proceso.provenanceClass,
+        sourceReference: proceso.sourceReference,
+        derivedFromLotProcessId: proceso.id,
+      }),
+    );
+  }
+  return { cerrado, copias };
 }

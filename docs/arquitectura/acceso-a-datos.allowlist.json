@@ -788,7 +788,7 @@
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
-      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje; desde R2 (2026-10-01), también el núcleo con `tx` que abre un proceso. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
+      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje; desde R2 (2026-10-01), también el núcleo con `tx` que abre un proceso, y desde R6 (2026-10-01) los dos de la división (`antesDeTransformar` y `dividirProcesoEnTx`), que corren en la transacción de `recordTransformation`. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -900,7 +900,13 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "abrirProcesoEnTx",
-      "razon": "Núcleo con `tx` que abre un proceso y escribe su auditoría en la misma transacción (R2): primero `exigeSinOtroProcesoAbierto`, luego el `sequenceOrder` siguiente y el `create`. Recibe el principal sólo para firmar `createdBy` y el evento, no para decidir nada: no autoriza. Hoy sólo lo llama `abrirProceso`, después de `loteGestionable` (`requireLotAccess(\"manage\")` sobre el lote) y con el linaje ya bloqueado por `bloquearLinaje`. Quien lo llame debe haber hecho las dos cosas antes de abrir su transacción.",
+      "razon": "Núcleo con `tx` que abre un proceso y escribe su auditoría en la misma transacción (R2): primero `exigeSinOtroProcesoAbierto`, luego el `sequenceOrder` siguiente y el `create`. Recibe el principal sólo para firmar `createdBy` y el evento, no para decidir nada: no autoriza. Lo llaman `abrirProceso`, después de `loteGestionable` (`requireLotAccess(\"manage\")` sobre el lote) y con el linaje ya bloqueado por `bloquearLinaje`; y desde R6 (2026-10-01) `dividirProcesoEnTx`, una vez por parte, dentro de la transacción de `recordTransformation`, que pidió `manage` sobre el lote que se divide y bloqueó su linaje en `antesDeTransformar`. Las partes son lotes que esa misma transacción acaba de crear. Quien lo llame debe haber hecho las dos cosas antes.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "dividirProcesoEnTx",
+      "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
       "verificado": "2026-10-01"
     }
   ],
@@ -1436,7 +1442,7 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "exigeSinOtroProcesoAbierto",
-      "razon": "Comprueba, sin escribir, que un lote puede recibir un proceso nuevo (R2): que no sea de miel, ni dividido, ni mezcla, que ni él ni sus ancestros ni sus descendientes tengan otro proceso abierto, y que no esté en bodega. Lanza `LotProcessError` con el motivo. No recibe principal ni devuelve datos del lote. Hoy sólo la llama `abrirProcesoEnTx`, dentro de la transacción de `abrirProceso`, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; quien la llame debe haber hecho lo mismo.",
+      "razon": "Comprueba, sin escribir, que un lote puede recibir un proceso nuevo (R2): que no sea de miel, ni dividido, ni mezcla, que ni él ni sus ancestros ni sus descendientes tengan otro proceso abierto, y que no esté en bodega. Lanza `LotProcessError` con el motivo. No recibe principal ni devuelve datos del lote. Hoy sólo la llama `abrirProcesoEnTx`, dentro de la transacción de `abrirProceso` o de la de `recordTransformation` al dividir (R6), que ya autorizaron el lote y bloquearon el linaje; quien la llame debe haber hecho lo mismo.",
       "verificado": "2026-10-01"
     },
     {
@@ -1448,7 +1454,7 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "exigeSinCorridasAbiertas",
-      "razon": "Comprueba, sin escribir, que ninguna fermentación ni secado abierto cuelgue del linaje que cubre un proceso (R5): las unidas por `lotProcessId` y las que empezaron sobre el lote del proceso o un descendiente sin quedar unidas. Lanza `LotProcessError` con `corridas_abiertas`. No recibe principal ni devuelve datos de las corridas. Hoy sólo la llama `cerrarProceso`, dentro de su transacción, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; quien la llame debe haber hecho lo mismo.",
+      "razon": "Comprueba, sin escribir, que ninguna fermentación ni secado abierto cuelgue del linaje que cubre un proceso (R5): las unidas por `lotProcessId` y las que empezaron sobre el lote del proceso o un descendiente sin quedar unidas. Lanza `LotProcessError` con `corridas_abiertas`. No recibe principal ni devuelve datos de las corridas. La llaman `cerrarProceso`, dentro de su transacción, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; y desde R6 (2026-10-01) `antesDeTransformar`, para no dividir con una corrida en curso, dentro de la transacción de `recordTransformation` (que pidió `manage` sobre las entradas) y después de bloquear sus linajes. Quien la llame debe haber hecho lo mismo.",
       "verificado": "2026-10-01"
     }
   ]
