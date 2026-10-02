@@ -62,33 +62,35 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-10-01 · El ambiente del secado: visto en un navegador, y la corrección cableada (PR #579, #583)
+### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
 
-**Lo que encontró el recorrido, y no habría encontrado una lectura del código.** La pantalla
-funciona: la rejilla pone cada lectura en su nivel y deja «sin lectura de este nivel» en el que no la
-tiene (1 de 3, el control), y la lectura sin estante sale como «General de la instalación». De paso
-quedó verificado en vivo el fallo del `tzOffsetMinutes` (#531): **tres lecturas seguidas sin recargar,
-3 de 3**. Lo que no funcionaba era corregir: **el motor estaba completo y probado desde el 2026-09-21
-y ninguna pantalla lo llamaba**, y los disparadores no dejan otra vía —el UPDATE sólo admite el sello
-de supersedida, **sin puerta de pruebas**—, así que un 310 °C tecleado en vez de 31 era permanente.
-Ninguna prueba del servicio podía ver ese hueco, porque el servicio estaba bien.
+**Lo que §4.5 pedía y faltaba:** los ejes con horas y valores, y la guía de la rúbrica 22 bajo la
+curva. Los ejes están, medidos en un navegador: 18 px de cuerpo → 13,8 efectivos → **11,2 en un
+teléfono de 375**, ningún rótulo fuera del lienzo y sin scroll horizontal. Y la curva ya dice qué
+sugiere el dato si se sigue esperando, **citado literal** de las ocho filas de
+`10_ph_fermentation.md` §1 — ocho, no las «seis» que el plan contaba.
 
-**Tu decisión: la reemplazada se queda a la vista, rotulada.** De las dos listas, `vigentes` sigue
-filtrando —no es la condición actual de ningún punto— y `recientes` deja de filtrar, porque es el
-registro. El motivo se guarda en la fila **nueva**, así que se consulta desde su reemplazo en vez de
-buscarlo entre las 20: un motivo ausente se leería como «no se dio ninguno» cuando el servicio lo
-exige.
+**Lo que NO se escribió, y es la mitad de un renglón de §4.5: «qué hacer».** No existe en ninguna
+fuente del proyecto; la cuarta columna de esa matriz dice lo que hace el *software*, no el operario.
+Así que se abre la columna **vacía**, con una nota que dice que la rellenas tú, y un guardia que
+falla si alguien la rellena sin que el código la recoja **hasta la pantalla**. Consecuencia que hay
+que decir en voz alta: **la rúbrica 22 §1 queda incumplida a propósito** —pide que todo punto que
+emite una alerta diga qué hacer— y eso es una decisión tuya, no una omisión.
 
-**Y dos cosas que el flip-test tumbó antes de salir.** Una afirmación —que un array de dependencias
-estable deja el campo de la hora vacío— se probó en vivo en los dos caminos del formulario y **la hora
-sobrevivió igual**, así que se corrigió el comentario y **no se abrió** el pendiente que iba contra
-`MeasurementCorrectionForm` e `IntervencionForm`. Y una frase de la entrega anterior era falsa: ese
-componente **no es genérico**, está atado a `correctMeasurementFormAction` y a `lotId`; lo reusable era
-el patrón, no el componente.
+**Lo que las revisiones encontraron, y vale más que el diff.** Dos Críticos de la revisión de rama:
+la cita se prestaba a **cualquier** lote cuando la matriz es del perfil `WASHED_STANDARD` —30 valores
+dentro de la ventana óptima de `NATURAL` recibían una cita de cinética de lavado, y tu ficha del lote
+ya se niega a prestarlos—; y «tu última lectura» no estaba determinada con varias lecturas en el
+mismo instante, que son **7 de 10 lotes** reales. Y Codex, que **no aprobó la primera vez**, construyó
+una entrada donde la pantalla se contradecía sola: «no tiene rango declarado en la receta» y debajo
+«Degradación ácida». Hoy el bloque sólo habla con grado `Washed`, **fermentación** abierta **y receta
+presente**; si falta cualquiera de las tres, calla.
 
-**`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
-diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
-`paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.
+**Qué queda tuyo**, todo en §1 o aquí: leer los `ProcessTarget` de la receta en vez de la plantilla;
+«Daño consumado» contra la literatura que el propio documento cita; que el bloque hable en la hora 0
+de todo lote sano y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto de
+los dos lados); y `PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada
+puede sostener una afirmación.
 
 ## 3. Bloqueado, y en qué
 
@@ -103,12 +105,14 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 
 **Lo que SIGUE abierto, medido el 2026-10-01:**
 
-- **El plan del #577, `2026-10-01-ejes-y-rubrica-de-la-curva.md`: escrito y sin ejecutar.** Sus
-  cuatro archivos no existen (`ejesDeLaCurva.ts`, `riesgoDeEsperar.ts` y sus dos pruebas), con
-  control positivo sobre dos que el plan cita como ya presentes.
 - **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS/014`–`019`**, los seis de la auditoría de Codex al #573.
+- **`PENDING_IMPLEMENTATIONS/014`–`021`.**
+- **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
+  en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
+  incumplida a propósito**. El detalle está en la entrada «Los ejes de la curva, y una cita que sólo
+  se hace cuando se sostiene», que vive aquí hasta que se archive y después en
+  `docs/SESSION_STATE_ARCHIVE.md`.
 
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque

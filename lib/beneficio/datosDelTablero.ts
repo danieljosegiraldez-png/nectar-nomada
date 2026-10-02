@@ -11,8 +11,9 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
-import { veredictoDelLote } from "./desdeElLote";
+import { perfilDeLaFaseAbierta, veredictoDelLote } from "./desdeElLote";
 import { curvaDeLote, type Curva } from "./curvaDeLote";
+import type { ClaveDePerfil } from "./perfiles";
 import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
 import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
 import {
@@ -25,6 +26,20 @@ import {
 } from "./tablero";
 import type { MetaConRitmo } from "../traceability/ritmo";
 import type { Prisma } from "../../generated/prisma/client";
+
+/**
+ * La curva de un lote **más el perfil que rige a ese lote**: `curvaDeLote` es pura y no sabe de grados
+ * ni de fases, y quien cita umbrales sobre ella (`riesgoDeEsperar`) necesita saberlo.
+ *
+ * **`perfilDelLote` es `null` cuando no se puede decir, y `null` NO es «el de siempre»:** el lote no tiene
+ * ninguna fase abierta (sin fase no hay umbrales que aplicar, como `SIN_PROCESO_ABIERTO` en
+ * `veredictoDelLote`), la que tiene abierta no es de fermentación (la matriz de pH que se cita lo es; con
+ * secado no hay ninguna), su proceso no tiene receta (sin receta el motor no opina, ADR-181), no declara
+ * grado, o su grado no tiene perfil escrito (`Honey` y los dos `Semi Wash`). Quien pinta calla con `null`.
+ */
+export interface CurvaDelTablero extends Curva {
+  readonly perfilDelLote: ClaveDePerfil | null;
+}
 
 export interface DatosDelTablero {
   readonly lotes: readonly EntradaDeLoteParaTablero[];
@@ -58,7 +73,7 @@ export interface DatosDelTablero {
    * visible para quien mira** — las dos cosas callan igual a propósito: decir «ese lote existe
    * pero no lo ves» enseñaría que existe.
    */
-  readonly curva: Curva | null;
+  readonly curva: CurvaDelTablero | null;
   readonly medidoEn: Date;
 }
 
@@ -414,6 +429,8 @@ export async function datosDelTablero(
  *   `initial`, y nunca un objetivo sin fase: no dice de qué fase habla (esquema de `ProcessTarget`),
  *   y pintarlo sería una banda que nadie declaró. Sin objetivo, `curvaDeLote` dice
  *   `sin_objetivo_declarado` y pinta los puntos igual.
+ * - **El perfil que rige el lote** (`perfilDelLote`) sale del grado del proceso de LA FASE ABIERTA, por el
+ *   mismo mapeo que su veredicto; sin fase abierta, o con una que no es de fermentación, es `null`.
  */
 async function curvaDeUnLote(
   lotWhere: Prisma.LotWhereInput,
@@ -421,6 +438,7 @@ async function curvaDeUnLote(
     readonly fase: "fermentation" | "drying";
     readonly startedAt: Date;
     readonly lotProcess: {
+      readonly processGradeValue: { readonly value: string } | null;
       readonly processRecipeVersion: {
         readonly targets: readonly {
           readonly variable: string;
@@ -435,7 +453,7 @@ async function curvaDeUnLote(
     readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
   }[],
   pedida: NonNullable<OpcionesDelTablero["curva"]>,
-): Promise<Curva | null> {
+): Promise<CurvaDelTablero | null> {
   const { lotId, variable, ancho, alto } = pedida;
   const visible = await prisma.lot.findFirst({ where: { AND: [lotWhere, { id: lotId }] }, select: { id: true } });
   if (!visible) return null;
@@ -452,7 +470,13 @@ async function curvaDeUnLote(
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
   const meta = delaFase.find((t) => t.moment === "during") ?? delaFase.find((t) => t.moment === "final");
 
-  return curvaDeLote({
+  // **El perfil que rige el lote, de la misma fuente que su veredicto** (`PERFIL_POR_GRADO` en
+  // `desdeElLote.ts`): el grado del proceso de LA FASE ABIERTA. Sin fase abierta (`abierta` indefinida)
+  // sale `null` y el bloque de «qué sugiere el dato si se espera» calla: sobre un lote que no espera
+  // nada no se escribe qué pasa si espera. Y con una fase de secado también: la matriz es de fermentación.
+  const perfilDelLote = perfilDeLaFaseAbierta(abierta);
+
+  const curva = curvaDeLote({
     lecturas: mediciones
       .filter((m) => !corregidas.has(m.id))
       .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
@@ -466,4 +490,5 @@ async function curvaDeUnLote(
     ancho,
     alto,
   });
+  return { ...curva, perfilDelLote };
 }

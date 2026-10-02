@@ -63,6 +63,60 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
   Natural: "NATURAL",
 };
 
+/**
+ * El perfil que rige un lote **por la fase que tiene abierta**, o `null` si no se puede decir — para quien
+ * necesita saber a qué protocolo pertenece un umbral antes de citárselo (la cita de «qué sugiere el dato si
+ * se espera», que es de la matriz `WASHED_STANDARD`).
+ *
+ * Sigue el MISMO orden que `veredictoDelLote` y devuelve `null` donde éste devuelve una razón
+ * (`SIN_PROCESO_ABIERTO`, `SIN_GRADO_DECLARADO`, `GRADO_SIN_PERFIL`): **sin fase abierta no hay perfil que
+ * aplicar, sin proceso o sin grado tampoco, y un grado que no casa no se completa con el del lavado.** `null`
+ * es «no se sabe», nunca «el de siempre».
+ *
+ * **Y sólo si la fase abierta es de FERMENTACIÓN.** La matriz que se cita es de un protocolo **y de una
+ * fase**: `10_ph_fermentation.md` §1 es la matriz de pH de la fermentación, y `13_drying_moisture.md` no tiene
+ * ninguna. Un lote `Washed` con una corrida de SECADO abierta tiene perfil `WASHED_STANDARD` pero su pH, si lo
+ * hubiera, cae dentro de una ventana de secado: citarle la cinética de la fermentación sería afirmar algo que
+ * no se sostiene. Con secado —o con cualquier fase que no sea fermentación— devuelve `null`; no se inventa una
+ * matriz de secado.
+ *
+ * **Y sólo si el proceso de esa corrida TIENE RECETA** (`processRecipeVersion`). Que el grado sea `Washed` no
+ * demuestra que la receta use los umbrales de la matriz: `00_conventions.md` §8 (ADR-181) dice que los perfiles
+ * son **plantillas** para crear recetas, que los umbrales salen de la receta y que **sin receta el motor no
+ * opina**. Sin receta, `curvaDeUnLote` ni siquiera tiene banda que pintar —la pantalla dice «esta variable no
+ * tiene rango declarado en la receta»— y citar a la vez «Degradación ácida» sería contradecirse en la misma
+ * pantalla. La ausencia de receta cierra la puerta igual que la cierran la fase y el grado. **Qué dice la
+ * receta —leer sus `ProcessTarget` y compararlos con la matriz— NO se hace aquí:** basta con que exista.
+ *
+ * `abierta` es la corrida abierta del lote (fermentación o secado) tal como la trae `datosDelTablero`;
+ * `undefined` = el lote no tiene ninguna. El grado sale del proceso de ESA corrida, no de otro lugar: es lo
+ * que hace que sin fase abierta no haya perfil.
+ *
+ * `Object.hasOwn` y no `PERFIL_POR_GRADO[grado]` a secas: el grado viene de un catálogo de texto libre y un
+ * valor como `constructor` encontraría la función heredada del objeto en vez de ningún perfil.
+ */
+export function perfilDeLaFaseAbierta(
+  abierta:
+    | {
+        readonly fase: "fermentation" | "drying";
+        readonly lotProcess: {
+          readonly processGradeValue: { readonly value: string } | null;
+          /** La versión de receta del proceso, o `null` si no tiene. Sólo importa que exista. */
+          readonly processRecipeVersion: object | null;
+        } | null;
+      }
+    | undefined,
+): ClaveDePerfil | null {
+  if (!abierta) return null;
+  // La matriz de pH es de la fermentación: con cualquier otra fase no hay umbral citable (ver arriba).
+  if (abierta.fase !== "fermentation") return null;
+  // Sin receta el motor no opina (ADR-181): el grado sólo sugiere una plantilla, no demuestra que la receta la use.
+  if (!abierta.lotProcess?.processRecipeVersion) return null;
+  const grado = abierta.lotProcess.processGradeValue?.value;
+  if (!grado || !Object.hasOwn(PERFIL_POR_GRADO, grado)) return null;
+  return PERFIL_POR_GRADO[grado] ?? null;
+}
+
 /** Lo mínimo que este módulo necesita de una medición nuestra. */
 export interface MedicionDelLote {
   readonly materialState?: "CHERRY" | "MUCILAGE_HONEY" | "PARCHMENT" | "GREEN" | null;

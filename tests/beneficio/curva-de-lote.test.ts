@@ -9,7 +9,7 @@
  * Hermética: sin base, así que NO va a `scripts/pruebas-por-compuerta.txt`.
  */
 import { describe, expect, it } from "vitest";
-import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
+import { curvaDeLote, ultimaLectura } from "../../lib/beneficio/curvaDeLote";
 
 const t = (h: number) => new Date(`2026-03-10T${String(h).padStart(2, "0")}:00:00.000Z`);
 const BANDA = { minValue: 4.0, maxValue: 5.0, targetValue: 4.5 };
@@ -273,5 +273,91 @@ describe("curvaDeLote", () => {
       lecturas, objetivo: { minValue: 4.0, maxValue: 5.0, targetValue: 4.5 }, ancho: 480, alto: 200,
     });
     expect(bien.banda.tipo).toBe("banda");
+  });
+});
+
+describe("curvaDeLote — lo que devuelve para quien rotula (los ejes y el riesgo de esperar)", () => {
+  // La pantalla recibe una `Curva` y NADA más: los puntos son coordenadas, y la banda son las
+  // coordenadas `0` y `alto` de siempre. De ahí no se recupera a qué pH está la banda ni cuál fue
+  // la última lectura, que es lo que piden los ejes (`ejesDeLaCurva`) y el riesgo (`riesgoDeEsperar`).
+  // Por eso la curva trae también, tal cual, lo que ya tenía en la mano.
+
+  it("trae las lecturas por hora —aunque lleguen desordenadas—, con su valor", () => {
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(14), value: 4.2 }, { occurredAt: t(10), value: 4.8 }, { occurredAt: t(12), value: 4.5 }],
+      objetivo: BANDA, ancho: 300, alto: 120,
+    });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.8, 4.5, 4.2]);
+    expect(c.lecturas.map((l) => l.occurredAt.getTime())).toEqual([t(10).getTime(), t(12).getTime(), t(14).getTime()]);
+    // Control: son las MISMAS lecturas de las que salieron los puntos (tantas como puntos).
+    expect(c.lecturas).toHaveLength(c.puntos.length);
+  });
+
+  it("trae el rango que declaró la receta, tal cual; `null` si falta un extremo", () => {
+    const lecturas = [{ occurredAt: t(10), value: 4.8 }];
+    expect(curvaDeLote({ lecturas, objetivo: BANDA, ancho: 300, alto: 120 }).rango).toEqual({ min: 4.0, max: 5.0 });
+    // Sin objetivo, o con un extremo vacío, no hay rango: ni se inventa uno ni se completa con el otro extremo.
+    expect(curvaDeLote({ lecturas, objetivo: null, ancho: 300, alto: 120 }).rango).toBeNull();
+    expect(
+      curvaDeLote({ lecturas, objetivo: { minValue: 4.0, maxValue: null, targetValue: 4.5 }, ancho: 300, alto: 120 }).rango,
+    ).toBeNull();
+    expect(
+      curvaDeLote({ lecturas, objetivo: { minValue: null, maxValue: 5.0, targetValue: 4.5 }, ancho: 300, alto: 120 }).rango,
+    ).toBeNull();
+  });
+
+  it("el rango al revés o de ancho cero se devuelve IGUAL: quien rotula decide, no esta función", () => {
+    // `banda` ya dice «no se dibuja»; `rango` es el dato declarado. Esconderlo aquí obligaría a quien
+    // rotula a adivinar si «sin rango» significa «la receta no lo declara» o «la receta lo declaró mal».
+    const lecturas = [{ occurredAt: t(10), value: 4.8 }];
+    const alReves = curvaDeLote({ lecturas, objetivo: { minValue: 5.0, maxValue: 4.0, targetValue: 4.5 }, ancho: 300, alto: 120 });
+    expect(alReves.banda).toEqual({ tipo: "banda_al_reves" });
+    expect(alReves.rango).toEqual({ min: 5.0, max: 4.0 });
+    const ceroAncho = curvaDeLote({ lecturas, objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 300, alto: 120 });
+    expect(ceroAncho.banda).toEqual({ tipo: "banda_de_ancho_cero" });
+    expect(ceroAncho.rango).toEqual({ min: 4.5, max: 4.5 });
+  });
+
+  it("sin lecturas no hay lecturas, y el rango se conserva", () => {
+    const c = curvaDeLote({ lecturas: [], objetivo: BANDA, ancho: 300, alto: 120 });
+    expect(c.lecturas).toEqual([]);
+    expect(c.rango).toEqual({ min: 4.0, max: 5.0 });
+  });
+});
+
+describe("ultimaLectura — con varias en el instante máximo NO hay «última»", () => {
+  // El orden entre lecturas del mismo instante es el que devolvió la base: arbitrario y no estable. Elegir una sería
+  // presentar una lectura cualquiera como «tu última». Sin desempate inventado: ni por valor, ni por id, ni por nota.
+  it("una sola en el instante máximo es la última, venga en el orden que venga", () => {
+    const a = { occurredAt: t(8), value: 6.0 };
+    const b = { occurredAt: t(12), value: 4.8 };
+    expect(ultimaLectura([a, b])).toBe(b);
+    expect(ultimaLectura([b, a])).toBe(b);
+  });
+
+  it("dos en el mismo instante máximo, en cualquier orden y con cualquier valor: null", () => {
+    const x = { occurredAt: t(10), value: 3.0 };
+    const y = { occurredAt: t(10), value: 4.8 };
+    expect(ultimaLectura([x, y])).toBeNull();
+    expect(ultimaLectura([y, x])).toBeNull();
+    // Ni siquiera con el mismo valor: tampoco hay UNA, y no se inventa un desempate.
+    expect(ultimaLectura([{ occurredAt: t(10), value: 4.8 }, { occurredAt: t(10), value: 4.8 }])).toBeNull();
+    // Todas las lecturas de un lote en el mismo instante (7 de 10 lotes de la base local): null, no la primera ni la de recepción.
+    expect(ultimaLectura([6.0, 5.4, 5.0, 4.6].map((value) => ({ occurredAt: t(9), value })))).toBeNull();
+  });
+
+  it("un empate que no es el del máximo no cuenta; y con el máximo una hora después, sí hay última", () => {
+    const tardia = { occurredAt: t(12), value: 4.8 };
+    expect(ultimaLectura([{ occurredAt: t(8), value: 3.0 }, { occurredAt: t(8), value: 3.2 }, tardia])).toBe(tardia);
+    // Control de la pareja de arriba: las MISMAS dos lecturas con una hora de diferencia sí tienen última, y es la posterior.
+    const posterior = { occurredAt: t(11), value: 4.8 };
+    expect(ultimaLectura([{ occurredAt: t(10), value: 3.0 }, posterior])).toBe(posterior);
+  });
+
+  it("sin lecturas no hay última; y un instante que no es un número tampoco la tiene", () => {
+    expect(ultimaLectura([])).toBeNull();
+    // `NaN` compara falso con todo: sin una decisión explícita «la última» saldría por casualidad.
+    expect(ultimaLectura([{ occurredAt: new Date("no es una fecha"), value: 4.8 }])).toBeNull();
+    expect(ultimaLectura([{ occurredAt: t(8), value: 3.0 }, { occurredAt: new Date("no es una fecha"), value: 4.8 }])).toBeNull();
   });
 });

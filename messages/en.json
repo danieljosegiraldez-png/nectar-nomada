@@ -3309,11 +3309,17 @@
     "curvaFueraDeBanda": "{n, plural, one {# reading outside the recipe's range} other {# readings outside the recipe's range}}",
     "curvaFueraDeEscala": "{n, plural, one {# reading falls beyond what fits in the drawing and is marked with a triangle at the edge.} other {# readings fall beyond what fits in the drawing and are marked with a triangle at the edge.}}",
     "curvaLecturas": "{n, plural, one {# reading} other {# readings}}",
-    "curvaEjes": "Right is most recent; up is the highest value.",
+    "curvaEjes": "Right is most recent; up is the highest value. Hours count from the first reading.",
     "curvaBandaAnchoCero": "The recipe declares a zero-width range (minimum equal to maximum): the scale cannot tell values apart, so nothing is claimed about which readings are inside or outside. Compare the readings with that value by hand.",
     "curvaBandaAnchoCeroCorto": "zero-width range in the recipe: readings are not judged",
     "curvaBandaAlReves": "The recipe declares its range backwards (minimum greater than maximum): the band is not drawn and nothing is claimed about which readings are inside or outside, because the curve would come out mirrored. The readings are drawn anyway, from the lowest to the highest. Tell whoever manages the recipe so it can be fixed.",
-    "curvaBandaAlRevesCorto": "range declared backwards in the recipe: readings are not judged"
+    "curvaBandaAlRevesCorto": "range declared backwards in the recipe: readings are not judged",
+    "curvaRiesgoMarca": "Néctar Nómada criterion",
+    "curvaRiesgoDice": "with your latest reading (pH {ph}), the data suggests:",
+    "curvaRiesgoDiceSiSeEstanca": "if the pH stalls where it is today (your latest reading: {ph}), the data suggests:",
+    "curvaRiesgoDeDondeSale": "Where this comes from",
+    "curvaRiesgoFuente": "Band {banda} of the pH matrix of the {perfil} profile in {documento}, §1. It is a Néctar Nómada criterion, not an order: the decision is up to whoever runs the lot.",
+    "curvaRiesgoCitaLiteral": "The quoted phrase is a literal quote from that document, which is written in Spanish, and is left untranslated."
   },
   "Bandejas": {
     "nuevoTipoAyuda": "Define the dimensions of a reusable tray type.",
