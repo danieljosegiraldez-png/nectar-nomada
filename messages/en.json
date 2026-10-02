@@ -1788,7 +1788,8 @@
     "error_rejilla_rango_a_medias": "A location inside the plot is declared whole: from row, to row, from plant, and to plant. All four, or none.",
     "error_rejilla_rango_al_reves": "The range is backwards: the starting row and plant can't be higher than the ending ones.",
     "error_rejilla_rango_no_es_celda": "Rows and plants are counted in whole numbers starting at 1.",
-    "error_rejilla_rango_fuera_de_rejilla": "That range doesn't fit the plot's grid. Check the plot's grid, or the range."
+    "error_rejilla_rango_fuera_de_rejilla": "That range doesn't fit the plot's grid. Check the plot's grid, or the range.",
+    "error_rejilla_trampas_se_solapan": "Two trap blocks can't cover the same cells. Move one of them, or remove the range that clashes."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

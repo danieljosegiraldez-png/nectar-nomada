@@ -99,7 +99,7 @@ export class RejillaInvalida extends Error {}
  * la FUENTE: generarlos con una plantilla los dejaria sin frase **y al guardia en
  * verde**, que es justo el agujero para el que ese guardia existe.
  */
-const CODIGO_DEL_RANGO: Record<RangoInvalido, string> = {
+export const CODIGO_DEL_RANGO: Record<RangoInvalido, string> = {
   a_medias: "rejilla_rango_a_medias",
   al_reves: "rejilla_rango_al_reves",
   no_es_celda: "rejilla_rango_no_es_celda",
