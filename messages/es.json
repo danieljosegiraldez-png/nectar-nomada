@@ -1788,7 +1788,8 @@
     "error_rejilla_rango_a_medias": "El sitio dentro de la parcela se declara entero: desde la hilera, hasta la hilera, desde la planta y hasta la planta. O los cuatro, o ninguno.",
     "error_rejilla_rango_al_reves": "El rango está al revés: la hilera y la planta de inicio no pueden ser mayores que las de final.",
     "error_rejilla_rango_no_es_celda": "Las hileras y las plantas se cuentan en números enteros desde 1.",
-    "error_rejilla_rango_fuera_de_rejilla": "Ese rango no cabe en la rejilla de la parcela. Revisa la rejilla de la parcela, o el rango."
+    "error_rejilla_rango_fuera_de_rejilla": "Ese rango no cabe en la rejilla de la parcela. Revisa la rejilla de la parcela, o el rango.",
+    "error_rejilla_trampas_se_solapan": "Dos bloques de trampa no pueden cubrir las mismas celdas. Mueve uno de los dos, o quita el rango que choca."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
