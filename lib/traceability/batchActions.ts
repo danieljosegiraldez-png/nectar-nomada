@@ -108,3 +108,15 @@ export function nextActionFor(lotType: LotType, hasActiveRun: boolean, alreadySe
       return null;
   }
 }
+
+/**
+ * La sugerencia, sólo si la ficha OFRECE esa acción en este momento — o ninguna (tarea 9, ronda de arreglo 1, 2026-10-02).
+ *
+ * `nextActionFor` responde por el tipo del lote y no sabe del proceso: desde la Parte 1, «Empezar fermentación» y «Empezar
+ * secado» sólo se ofrecen con un proceso abierto que cubra al lote, y «Selección» no se ofrece bajo uno ni en un lote dividido.
+ * La ficha decía «Siguiente paso sugerido» sobre un botón que no estaba. Sugerir no restringe, pero sugerir lo que no se ofrece
+ * es una pista falsa.
+ */
+export function sugerenciaOfrecida(sugerida: BatchAction | null, ofrecidas: readonly BatchAction[]): BatchAction | null {
+  return sugerida !== null && ofrecidas.includes(sugerida) ? sugerida : null;
+}

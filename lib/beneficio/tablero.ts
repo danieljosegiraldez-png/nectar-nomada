@@ -47,12 +47,18 @@ export interface VeredictoParaCola {
   readonly secado: DictamenParaCola | null;
 }
 
+/**
+ * Tarea 9, ronda de arreglo 1 (2026-10-02): el lote cuyo linaje pasa del tope de R1 (64 generaciones). No se sabe qué proceso
+ * lo cubre, así que no hay veredicto; la fila lo dice —en «sin veredicto», como toda razón— en vez de tumbar el tablero entero.
+ */
+export const LINAJE_DEMASIADO_HONDO = "LINAJE_DEMASIADO_HONDO";
+
 /** Lo que el tablero necesita de un lote. Lo llena `datosDelTablero`. */
 export interface EntradaDeLoteParaTablero {
   readonly lotId: string;
   readonly lotCode: string;
   /** El veredicto ya resuelto, o la razón por la que no lo hay. */
-  readonly veredicto: VeredictoParaCola | SinVeredicto;
+  readonly veredicto: VeredictoParaCola | SinVeredicto | typeof LINAJE_DEMASIADO_HONDO;
   /** Cuándo empezó la fase abierta. `null` = no hay fase, y el lote no entra en la cola. */
   readonly faseIniciada: Date | null;
   /** De la versión de receta de su `LotProcess`. `null` = la receta no lo declara. */

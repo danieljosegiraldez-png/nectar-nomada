@@ -597,3 +597,64 @@ describe("R6 — el reporte y la división", () => {
     expect(grupo?.filas).toBe(r.filas.filter((f) => f.etiqueta === "Sin receta" && f.divididoEn === null).length);
   });
 });
+
+/**
+ * Tarea 9, ronda de arreglo 1 (2026-10-02). La prueba de arriba sólo mira el recuento de `porProceso`; el encargo pide que TODO
+ * cálculo de grupo vaya sobre `filasQueCuentan`, y el recuento de `porGrado` y los puntajes que junta `agrupar` no tenían quién
+ * los vigilara. El lote que se divide lleva un puntaje de taza: es lo único que podría arrastrar la fila dividida a un promedio.
+ */
+describe("R6 — el reporte agrupa sólo las filas que cuentan", () => {
+  let protocoloId: string | undefined, versionId: string | undefined, sesionId: string | undefined;
+
+  afterAll(async () => {
+    // La cata, ANTES que la muestra a la que apunta su mapeo (la muestra la borra el `afterAll` del archivo, con su lote).
+    if (sesionId) {
+      await prisma.assessment.deleteMany({ where: assertDefinedWhere({ blindSample: { flight: { sessionId: sesionId } } }) });
+      await prisma.sensoryBlindMapping.deleteMany({ where: assertDefinedWhere({ blindSample: { flight: { sessionId: sesionId } } }) });
+      await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: sesionId }) });
+    }
+    if (versionId) await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: versionId }) });
+    if (protocoloId) await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: protocoloId }) });
+  }, 60000);
+
+  it("el recuento por grado y los puntajes de cada grupo no cuentan la fila dividida", async () => {
+    const l = await lote("D11");
+    await conSaldo(l, 100);
+    const p = await abrirProcesoDePrueba(gestor, l);
+    // muestra → cata ciega → puntaje, sobre el lote que se va a dividir (misma forma que `reporteDeProceso.test.ts`).
+    protocoloId = (await prisma.sensoryProtocol.create({ data: {
+      domain: "coffee", name: `TEST protocolo ${RUN}`, status: "active", standardLicenseStatus: "adapted_original",
+    } })).id;
+    versionId = (await prisma.sensoryProtocolVersion.create({ data: { protocolId: protocoloId, version: 1, scoreMin: 0, scoreMax: 100, status: "active" } })).id;
+    sesionId = (await prisma.sensorySession.create({ data: {
+      name: `TEST cata ${RUN}`, protocolVersionId: versionId, status: "completed", classification: "internal", createdBy: gestor,
+    } })).id;
+    const vuelo = await prisma.sensoryFlight.create({ data: { sessionId: sesionId, name: "V1", sequenceOrder: 0 } });
+    const muestra = await prisma.sample.create({ data: {
+      sampleCode: `D11-M-${RUN}`, sampleType: "green", organizationId: orgId, locationId: plotId, sourceLotId: l,
+      status: "approved", classification: "internal", createdBy: gestor,
+    } });
+    const ciega = await prisma.sensoryBlindSample.create({ data: { flightId: vuelo.id, blindCode: "A" } });
+    await prisma.sensoryBlindMapping.create({ data: { blindSampleId: ciega.id, sampleId: muestra.id } });
+    await prisma.assessment.create({ data: { blindSampleId: ciega.id, evaluatorUserAccountId: gestor, overallScore: 85, status: "submitted" } });
+
+    await dividir(l, 100, [50, 50]);
+    const r = await reporteDeProceso(gestor);
+    const fila = r.filas.find((f) => f.lotProcessId === p.id);
+    expect(fila?.divididoEn).toHaveLength(2);
+    expect(fila?.puntajes, "control: la fila dividida lleva el puntaje; sin él, los promedios no distinguirían nada").toEqual([85]);
+
+    const cuentan = r.filas.filter((f) => f.divididoEn === null);
+    const promedioDe = (xs: number[]) => (xs.length === 0 ? null : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) / 100);
+    const grado = r.porGrado.find((g) => g.grado === "Washed");
+    expect(grado, "el grupo Washed no salió").toBeDefined();
+    expect(grado!.filas, "el recuento por grado cuenta la fila dividida").toBe(cuentan.filter((f) => f.gradoDeProceso === "Washed").length);
+    expect(grado!.puntajePromedio, "el promedio por grado junta el puntaje de la fila dividida").toBe(
+      promedioDe(cuentan.filter((f) => f.gradoDeProceso === "Washed").flatMap((f) => f.puntajes)),
+    );
+    const etiqueta = r.porProceso.find((g) => g.etiqueta === "Sin receta");
+    expect(etiqueta?.puntajePromedio, "el promedio por receta junta el puntaje de la fila dividida").toBe(
+      promedioDe(cuentan.filter((f) => f.etiqueta === "Sin receta").flatMap((f) => f.puntajes)),
+    );
+  });
+});

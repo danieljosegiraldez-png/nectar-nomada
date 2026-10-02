@@ -20,6 +20,7 @@ import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor } from "../traceability/lots";
 import { gradoDelProcesoQueCubre } from "../traceability/procesoDelLinaje";
+import { LotProcessError } from "../traceability/errorDeProceso";
 import { codigoCiego } from "./muestraEnCata";
 import type { ClassificationLevel, Prisma, SensoryPurpose, SensorySubject } from "../../generated/prisma/client";
 
@@ -159,8 +160,23 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
   const hayMas = visibles.length > limite;
   // Parte 1, R7 (tarea 9, 2026-10-02): el grado del proceso que CUBRE al lote de origen. La muestra sale del verde, y su
   // proceso vive en la cereza: mirar sólo el último proceso del propio lote daba «sin grado».
+  //
+  // Ronda de arreglo 1 (2026-10-02). Diseño R1: «las pantallas atrapan lineage_too_deep y lo dicen». Se atrapa AQUÍ, muestra
+  // a muestra: un solo lote de origen con más de 64 generaciones tumbaba la lista entera —«nueva cata», la búsqueda y el
+  // informe externo— para todos. Esa muestra sale sin grado y con `linajeDemasiadoHondo`, que la etiqueta dice en el sitio
+  // del grado; cualquier otro error se relanza.
   const muestras = [];
   for (const { id, sampleCode, sampleType, description, sourceLot, roastSessions } of visibles.slice(0, limite)) {
+    let processGrade: string | null = null;
+    let linajeDemasiadoHondo = false;
+    if (sourceLot) {
+      try {
+        processGrade = await gradoDelProcesoQueCubre(prisma, sourceLot.id);
+      } catch (error) {
+        if (!(error instanceof LotProcessError && error.message === "lineage_too_deep")) throw error;
+        linajeDemasiadoHondo = true;
+      }
+    }
     muestras.push({
       id,
       sampleCode,
@@ -171,7 +187,8 @@ async function muestrasVisibles(userAccountId: string, where: Prisma.SampleWhere
       // eso es un hecho distinto de «no lo sé».
       lotCode: sourceLot?.lotCode ?? null,
       organizationName: sourceLot?.organization?.name ?? null,
-      processGrade: sourceLot ? await gradoDelProcesoQueCubre(prisma, sourceLot.id) : null,
+      processGrade,
+      linajeDemasiadoHondo,
       roastSessions,
     });
   }

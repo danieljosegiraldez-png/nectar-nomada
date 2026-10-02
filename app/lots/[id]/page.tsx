@@ -20,7 +20,7 @@ import {
 } from "../../../lib/traceability/lots";
 import { puedeGestionarAtributosDeUbicacion } from "../../../lib/traceability/locations";
 import { computeCurrentQuantity } from "../../../lib/traceability/quantity";
-import { nextActionFor, type BatchAction } from "../../../lib/traceability/batchActions";
+import { nextActionFor, sugerenciaOfrecida, type BatchAction } from "../../../lib/traceability/batchActions";
 import { veredictoDelLote } from "../../../lib/beneficio/desdeElLote";
 import { entradaDelLote } from "../../../lib/beneficio/entradaDelLote";
 import { faseDelLote } from "../../../lib/beneficio/reposo";
@@ -374,7 +374,12 @@ export default async function LotDetailPage({
   // has already been selected is a *different* lot (the accepted output), so
   // this does not need to ask whether sorting already happened.
   // Parte 1, R6.7: no se selecciona bajo un proceso abierto («primero se selecciona, después el proceso»).
-  const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying && !procesoAbierto;
+  // Y R6.6 (tarea 9, ronda de arreglo 1, 2026-10-02): tampoco un lote dividido, que el servicio rechaza con `lote_dividido`. La
+  // ficha lo sabe por `puedeAbrir`, que corre la MISMA comprobación (`loteDividido`, dentro de `exigeSinOtroProcesoAbierto`) y,
+  // en un lote de cereza, antes que ninguna otra. Sin `puedeAbrir` —quien no gestiona el lote— la selección no se ofrece igual.
+  const loteDivididoBajoProceso = puedeAbrir?.puede === false && puedeAbrir.motivo === "lote_dividido";
+  const canSelect =
+    lot.lotType === "cherry" && !activeFermentation && !activeDrying && !procesoAbierto && !loteDivididoBajoProceso;
   // ADR-161 — un lote de MIEL no fermenta, no se seca ni tiene proceso de café: se procesa y se
   // envasa. Ofrecerle los botones del café era invitar a registrar algo que no existe.
   const esMiel = lot.lotType === "honey";
@@ -479,9 +484,12 @@ export default async function LotDetailPage({
     ? availableActions
     : availableActions.filter((a) => a.action === "report");
 
+  // Tarea 9, ronda de arreglo 1 (2026-10-02): se sugiere sólo una acción que la ficha OFRECE ahora. `nextActionFor` mira el
+  // tipo del lote, y desde la Parte 1 fermentar, secar y seleccionar dependen del proceso: sugería botones que no estaban.
+  const sugerida = sugerenciaOfrecida(suggestedAction, accionesVisibles.map((a) => a.action));
   const batchActions = [
-    ...accionesVisibles.filter((a) => a.action === suggestedAction),
-    ...accionesVisibles.filter((a) => a.action !== suggestedAction),
+    ...accionesVisibles.filter((a) => a.action === sugerida),
+    ...accionesVisibles.filter((a) => a.action !== sugerida),
   ];
 
   // T12.5: signed GET URLs computed once here (server-side, already gated
@@ -900,7 +908,7 @@ export default async function LotDetailPage({
         sequence the platform cannot actually verify.
       */}
       <div style={{ marginTop: "1rem" }}>
-        {suggestedAction ? (
+        {sugerida ? (
           <p className="nn-muted" style={{ margin: "0 0 0.5rem" }}>{t("suggestedNextLabel")}</p>
         ) : null}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -908,7 +916,7 @@ export default async function LotDetailPage({
             <Link
               key={action}
               href={href}
-              className={action === suggestedAction ? "nn-button" : "nn-button-quiet"}
+              className={action === sugerida ? "nn-button" : "nn-button-quiet"}
               style={{ textDecoration: "none" }}
             >
               {label}

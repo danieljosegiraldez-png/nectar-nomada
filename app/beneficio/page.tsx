@@ -8,6 +8,7 @@ import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import {
   colaDeAtencion,
   instrumentosQuePidenAtencion,
+  LINAJE_DEMASIADO_HONDO,
   ocupacionDelSitio,
   type FilaDeAtencion,
   type GrupoDeAtencion,
@@ -135,7 +136,11 @@ export default async function BeneficioPage({
                       <Link href={`/lots/${f.lotId}`}><strong>{f.lotCode}</strong></Link>
                       {/* TODOS los motivos, no el que ganó el grupo: un lote crítico Y listo
                           para decidir tiene dos hechos, y esconder uno es esconder trabajo. */}
-                      <span className="nn-board-motivos">{f.motivos.join(" · ")}</span>
+                      {/* Tarea 9, ronda de arreglo 1: un linaje demasiado hondo se dice con su frase —hay que revisarlo a mano—,
+                          no con el código. */}
+                      <span className="nn-board-motivos">
+                        {f.motivos.map((m) => (m === LINAJE_DEMASIADO_HONDO ? t("motivoLinajeDemasiadoHondo") : m)).join(" · ")}
+                      </span>
                       <span className="nn-board-ritmo">{textoDeRitmo(f).join(" · ")}</span>
                       {f.ultimaLectura === null ? (
                         <span className="nn-board-sinlectura">{t("sinLectura")}</span>

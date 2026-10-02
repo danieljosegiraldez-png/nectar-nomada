@@ -305,8 +305,14 @@ export async function loteDividido(tx: Prisma.TransactionClient, lotId: string):
 export async function procesosParaEntrada(
   tx: Prisma.TransactionClient,
   lotId: string,
+  /**
+   * La cobertura de ESTE lote, si quien llama ya la resolvió (tarea 9, ronda de arreglo 1, 2026-10-02). El tablero la
+   * necesita además para las fases y las metas, y subir por el linaje dos veces por lote eran el doble de consultas para la
+   * misma respuesta. Sin ella, se resuelve aquí. Tiene que ser la de `lotId`: no se comprueba.
+   */
+  yaResuelta?: Cobertura,
 ): Promise<{ endedAt: Date | null; gradoDeProceso: string | null }[]> {
-  const cobertura = await procesoQueCubre(tx, lotId);
+  const cobertura = yaResuelta ?? (await procesoQueCubre(tx, lotId));
   if (!cobertura.vigente) return [];
   const p = await tx.lotProcess.findUniqueOrThrow({
     where: { id: cobertura.vigente.id },

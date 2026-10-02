@@ -7,13 +7,14 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
-import { cerrarProceso } from "../../lib/traceability/lotProcess";
+import { cambiarIntencion, cerrarProceso, puedeGestionarProceso } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
-import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { puedeGestionarLote, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { procesoQueCubre, idsDeAscendencia, bloquearLinajes } from "../../lib/traceability/procesoDelLinaje";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import { colaDeAtencion, LINAJE_DEMASIADO_HONDO } from "../../lib/beneficio/tablero";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `corrida-${Date.now()}`;
@@ -784,6 +785,12 @@ describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no est�
     const { recipeId } = await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: recetaVersionId }, select: { recipeId: true } });
     const conFase = await prisma.processRecipeVersion.create({ data: {
       recipeId, version: 3, status: "approved", createdBy: gestor, fases: { create: [{ phase: "fermentation", expectedHours: 36 }] },
+      // Tarea 9, ronda de arreglo 1: y una meta con ritmo de la fase de fermentación, que el tablero tiene que leer del MISMO
+      // proceso. La de secado es el control: es de otra fase y no puede salir en una fermentación.
+      targets: { create: [
+        { variable: "ph", moment: "during", phase: "fermentation", unit: "pH", everyHours: 6 },
+        { variable: "moisture", moment: "during", phase: "drying", unit: "%", everyHours: 12 },
+      ] },
     } });
     await abrirProcesoDePrueba(gestor, padre, { processRecipeVersionId: conFase.id });
     // Una corrida de ANTES de la Parte 1: cruda, sin `lotProcessId` (R9 no la rellena). La limpia el `afterAll`, que encuentra
@@ -799,5 +806,73 @@ describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no est�
     expect(entrada, "el hijo con fermentación abierta tiene que estar en el tablero").toBeDefined();
     expect(entrada!.veredicto).not.toBe("SIN_GRADO_DECLARADO");
     expect(entrada!.expectedHours, "el tablero no leyó las horas de la fase del proceso que cubre al lote").toBe(36);
+    expect(entrada!.metas, "el tablero no leyó las metas de la fase del proceso que cubre al lote").toEqual([
+      { variable: "ph", everyHours: 6, ultimaLectura: null },
+    ]);
+  });
+
+  /**
+   * Tarea 9, ronda de arreglo 1 (2026-10-02). Diseño R1: «las pantallas atrapan lineage_too_deep y lo dicen». El tablero recorre
+   * el resolvedor lote por lote, y un solo lote con más de 64 generaciones tumbaba el tablero ENTERO para todos (un 500). Ahora
+   * esa fila sale marcada y las demás salen. 66 lotes, cada uno hijo del anterior y ninguno con proceso: desde el último, el
+   * resolvedor sube 65 generaciones y lanza.
+   */
+  it("un lote con más de 64 generaciones no tumba el tablero: su fila sale marcada y las demás salen", async () => {
+    // La fila normal: un hijo cuyo proceso vive en el padre, con su fermentación abierta.
+    const padre = await lote("TAB-HONDO-P");
+    const hijo = await lote("TAB-HONDO-H");
+    await enlazar([padre], [hijo]);
+    await abrirProcesoDePrueba(gestor, padre);
+    const fermentarCrudo = async (lotId: string) => {
+      const corrida = await prisma.fermentationRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+      const t = await prisma.lotTransformation.create({ data: {
+        transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+        fermentationRunId: corrida.id, inputs: { create: [{ lotId }] },
+      } });
+      transformaciones.push(t.id);
+    };
+    await fermentarCrudo(hijo);
+    // La fila honda.
+    const ids: string[] = [];
+    for (let i = 0; i < 66; i++) ids.push(await lote(`TAB-HONDO${i}`));
+    for (let i = 1; i < ids.length; i++) await enlazar([ids[i - 1]!], [ids[i]!]);
+    const hondo = ids[ids.length - 1]!;
+    await fermentarCrudo(hondo);
+
+    const d = await datosDelTablero(gestor);
+    const deHondo = d.lotes.find((l) => l.lotId === hondo);
+    expect(deHondo, "el lote hondo desapareció del tablero").toBeDefined();
+    expect(deHondo!.veredicto).toBe(LINAJE_DEMASIADO_HONDO);
+    const deHijo = d.lotes.find((l) => l.lotId === hijo);
+    expect(deHijo, "la fila normal no salió junto a la honda").toBeDefined();
+    expect(deHijo!.veredicto, "la fila normal no puede heredar la marca").not.toBe(LINAJE_DEMASIADO_HONDO);
+    // Y la cola de atención la pone en «sin veredicto», con su motivo y sin tumbar a las demás.
+    const cola = colaDeAtencion({ lotes: d.lotes, desviacionesAbiertasPorLote: d.desviacionesAbiertasPorLote, ahora: d.medidoEn });
+    const fila = cola.find((f) => f.lotId === hondo);
+    expect(fila?.grupo).toBe("sin_veredicto");
+    expect(fila?.motivos).toEqual([LINAJE_DEMASIADO_HONDO]);
+    expect(cola.some((f) => f.lotId === hijo)).toBe(true);
+  }, 120000);
+});
+
+/**
+ * Tarea 9, ronda de arreglo 1 (2026-10-02). La página del proceso enseña el proceso que CUBRE al lote, que puede vivir en un
+ * ANCESTRO. Sus formularios —manejo, cierre, intención, objetivo— llaman a servicios que piden `manage` sobre el lote DONDE VIVE
+ * el proceso (`loteGestionable(proceso.lotId)`), y la página los ofrecía con el permiso del lote que se mira: a quien gestiona
+ * sólo el hijo le ofrecía lo que el servicio le rechaza. `puedeGestionarProceso` pregunta lo mismo que esos servicios.
+ */
+describe("R7 — los formularios del proceso se ofrecen según el lote donde vive el proceso", () => {
+  it("quien gestiona el hijo y NO el lote del proceso no los ve, y el servicio se lo rechaza; quien gestiona el del proceso, sí", async () => {
+    const padre = await lote("FORM-P");
+    const hijo = await lote("FORM-H", plotB);
+    await enlazar([padre], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, padre);
+    // Control: `soloB` SÍ gestiona el lote que mira. Con el permiso de ese lote, la página le ofrecía los formularios.
+    expect(await puedeGestionarLote(soloB, await prisma.lot.findUniqueOrThrow({ where: { id: hijo } }))).toBe(true);
+    expect(await puedeGestionarProceso(soloB, p.id), "se le ofrecería un formulario que el servicio rechaza").toBe(false);
+    await expect(cambiarIntencion(soloB, p.id, `TEST otra intención ${RUN}`)).rejects.toThrow(TraceabilityAccessError);
+    // Quien gestiona el lote del proceso: el predicado y el servicio dicen que sí.
+    expect(await puedeGestionarProceso(gestor, p.id)).toBe(true);
+    await expect(cambiarIntencion(gestor, p.id, `TEST otra intención ${RUN}`)).resolves.toBeDefined();
   });
 });

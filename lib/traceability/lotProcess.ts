@@ -17,7 +17,7 @@
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { requireLotAccess } from "./lots";
+import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import {
   abrirProcesoEnTx,
   bloquearLinaje,
@@ -834,6 +834,44 @@ export async function puedeAbrirProceso(
     return { puede: true };
   } catch (error) {
     if (error instanceof LotProcessError && esMotivoParaNoAbrir(error.message)) return { puede: false, motivo: error.message };
+    throw error;
+  }
+}
+
+/**
+ * Las frases con que la pantalla dice por qué no se abre un proceso: una por motivo, y una más para `lote_en_bodega` cuando el
+ * lote SÍ se puede devolver a secado (tarea 9, ronda de arreglo 1). Cada una con su clave `processCannotOpen_<frase>`, en es y
+ * en en; lo vigila `bodegaConProceso.test.ts`.
+ */
+export const FRASES_DE_NO_ABRIR = [...MOTIVOS_PARA_NO_ABRIR, "lote_en_bodega_se_puede_devolver"] as const;
+export type FraseDeNoAbrir = (typeof FRASES_DE_NO_ABRIR)[number];
+
+/**
+ * Qué frase dice por qué no se abre un proceso (tarea 9, ronda de arreglo 1, 2026-10-02). En bodega, la frase sólo manda a
+ * «Devolver a secado» si `puedeDevolverASecado` dijo que sí. En un lote guardado antes de la Parte 1 (R9, sin proceso) la
+ * devolución no existe, y la página del proceso se contradecía: la frase de no abrir mandaba a devolver y la sección de
+ * devolver decía que no había proceso que continuar. Quien no lo preguntó (`null`: la ficha, el formulario de fermentación)
+ * recibe la frase que no promete ese camino.
+ */
+export function fraseDeNoAbrir(motivo: MotivoParaNoAbrir, puedeDevolver: { puede: boolean } | null): FraseDeNoAbrir {
+  return motivo === "lote_en_bodega" && puedeDevolver?.puede === true ? "lote_en_bodega_se_puede_devolver" : motivo;
+}
+
+/**
+ * Si quien mira puede usar los formularios del proceso —manejo, cierre, intención y objetivo— (tarea 9, ronda de arreglo 1,
+ * 2026-10-02). Sus servicios (`registrarIntervencion`, `cerrarProceso`, `cambiarIntencion`, `cambiarObjetivoDeHumedad`) piden
+ * `manage` sobre el lote DONDE VIVE el proceso (`loteGestionable` con `proceso.lotId`), y desde R1 ése puede ser un ancestro del
+ * lote que se mira. La página los ofrecía con el permiso del lote que se mira: a quien gestiona sólo el hijo le ofrecía lo que
+ * el servicio le rechaza. Pregunta lo MISMO que esos servicios, con la misma función. No escribe; ocultar no es autorizar.
+ */
+export async function puedeGestionarProceso(userAccountId: string, lotProcessId: string): Promise<boolean> {
+  const proceso = await prisma.lotProcess.findUnique({ where: { id: lotProcessId }, select: { lotId: true } });
+  if (!proceso) return false;
+  try {
+    await loteGestionable(userAccountId, proceso.lotId);
+    return true;
+  } catch (error) {
+    if (error instanceof TraceabilityAccessError) return false;
     throw error;
   }
 }

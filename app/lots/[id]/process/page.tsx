@@ -28,9 +28,11 @@ import { getCurrentUser } from "../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError, puedeGestionarLote } from "../../../../lib/traceability/lots";
 import {
   coberturaDelLote,
+  fraseDeNoAbrir,
   opcionesParaProceso,
   puedeAbrirProceso,
   puedeDevolverASecado,
+  puedeGestionarProceso,
   LotProcessError,
 } from "../../../../lib/traceability/lotProcess";
 import { listRecipeVersionsForLot } from "../../../../lib/traceability/processTargets";
@@ -76,6 +78,10 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
       // Sólo hace falta preguntar si hay algo que ofrecer: con un proceso abierto que lo cubre, la página trata de ese.
       puede: !abiertoAhora && puedeGestionar ? await puedeAbrirProceso(user.userAccountId, id) : null,
       puedeDevolver: puedeGestionar ? await puedeDevolverASecado(user.userAccountId, id) : null,
+      // Ronda de arreglo 1 (2026-10-02): los formularios del proceso abierto piden `manage` sobre el lote DONDE VIVE el proceso,
+      // que puede ser un ancestro; `puedeGestionar` es el de ESTE lote, y con él se ofrecía lo que el servicio rechaza.
+      puedeGestionarElAbierto:
+        abiertoAhora && cobertura.vigente ? await puedeGestionarProceso(user.userAccountId, cobertura.vigente.id) : false,
     };
   } catch (error) {
     if (error instanceof LotProcessError) {
@@ -93,7 +99,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
     }
     throw error;
   }
-  const { cobertura, puede, puedeDevolver } = cargado;
+  const { cobertura, puede, puedeDevolver, puedeGestionarElAbierto } = cargado;
   const { intervenciones, mediciones, grados, estadosDeCereza, motivosDeDevolucion } = cargado.opciones;
   // La misma etiqueta que ya usa la página del lote, para que una receta se
   // llame igual en las dos pantallas.
@@ -188,7 +194,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         </section>
       ))}
 
-      {abierto !== null && puedeGestionar ? (
+      {/* Ronda de arreglo 1: con el permiso del lote DONDE VIVE el proceso, que es lo que piden sus servicios. */}
+      {abierto !== null && puedeGestionarElAbierto ? (
         <>
           <section className="nn-section">
             <h2>{t("recordProcessInterventionButton")}</h2>
@@ -235,7 +242,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
               <AbrirProcesoForm lotId={id} recetas={recetas} grados={grados} estadosDeCereza={estadosDeCereza} />
             </>
           ) : (
-            <p className="nn-muted">{t(`processCannotOpen_${puede.motivo}`)}</p>
+            // Ronda de arreglo 1: en bodega sólo se manda a «Devolver a secado» si esta misma página lo ofrece.
+            <p className="nn-muted">{t(`processCannotOpen_${fraseDeNoAbrir(puede.motivo, puedeDevolver)}`)}</p>
           )}
         </section>
       ) : null}

@@ -15,7 +15,9 @@ import {
   devolverASecado,
   puedeAbrirProceso,
   puedeDevolverASecado,
+  fraseDeNoAbrir,
   CATALOGO_MOTIVO_DEVOLUCION,
+  FRASES_DE_NO_ABRIR,
   MOTIVOS_PARA_NO_ABRIR,
   MOTIVOS_PARA_NO_DEVOLVER,
 } from "../../lib/traceability/lotProcess";
@@ -782,6 +784,64 @@ describe("R7 — la muestra verde con proceso exige el proceso cerrado por humed
     // G1 queda a 8 generaciones de G9: el tope viejo de 6 no llegaba y decía «no».
     await expect(createSampleFromLot(gestor, muestraVerde(ids[9]!, "G9"))).resolves.toBeDefined();
   }, 60000);
+
+  /**
+   * Tarea 9, ronda de arreglo 1 (2026-10-02): la rama de MEZCLA, que no tenía prueba. Una mezcla no tiene vigente: la compuerta
+   * decide sobre TODOS los procesos a los que llegan sus ramas, y basta uno sin cerrar por humedad para rechazar. El lote de la
+   * muestra sale de un secado terminado con objetivo alcanzado —está en reposo—, así que la compuerta VIEJA deja pasar: sólo la
+   * nueva puede rechazar.
+   */
+  it("en una mezcla, todo proceso al que llegan sus ramas tiene que estar cerrado por humedad", async () => {
+    const cerradoPorHumedad = async (codigo: string) => {
+      const l = await lote(codigo);
+      const p = await abrirProcesoDePrueba(gestor, l);
+      await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: await humedad(l, 11) });
+      return l;
+    };
+    /** Un lote que junta a `padres` en un secado crudo, terminado con el objetivo alcanzado: su fase es «reposo». */
+    const mezclaEnReposo = async (codigo: string, padres: string[]) => {
+      const m = await lote(codigo);
+      const secado = await prisma.dryingRun.create({ data: {
+        startedAt: new Date("2026-05-02T12:00:00Z"), endedAt: new Date("2026-05-09T12:00:00Z"), endedOutcome: "target_reached", createdBy: gestor,
+      } });
+      secados.push(secado.id);
+      const t = await prisma.lotTransformation.create({ data: {
+        transformationType: "stage_change", occurredAt: new Date("2026-05-09T12:00:00Z"), provenanceClass: "original_record", createdBy: gestor,
+        dryingRunId: secado.id, inputs: { create: padres.map((lotId) => ({ lotId })) }, outputs: { create: [{ lotId: m }] },
+      } });
+      transformaciones.push(t.id);
+      return m;
+    };
+
+    // Control: las dos ramas cerradas por humedad, y entra. Sin esto, el rechazo de abajo podría ser de la compuerta vieja.
+    const buena = await mezclaEnReposo("MV-MEZ-OK", [await cerradoPorHumedad("MV-MEZ-OK-A"), await cerradoPorHumedad("MV-MEZ-OK-B")]);
+    expect((await procesoQueCubre(prisma, buena)).estado, "la prueba no armó una mezcla").toBe("mezcla");
+    await expect(createSampleFromLot(gestor, muestraVerde(buena, "MV-MEZ-OK"))).resolves.toBeDefined();
+
+    // Una rama con su proceso todavía abierto: no entra, aunque la otra esté cerrada y el secado haya terminado.
+    const abierta = await lote("MV-MEZ-NO-B");
+    await abrirProcesoDePrueba(gestor, abierta);
+    const mala = await mezclaEnReposo("MV-MEZ-NO", [await cerradoPorHumedad("MV-MEZ-NO-A"), abierta]);
+    expect((await procesoQueCubre(prisma, mala)).estado, "la prueba no armó una mezcla").toBe("mezcla");
+    await expect(createSampleFromLot(gestor, muestraVerde(mala, "MV-MEZ-NO"))).rejects.toThrow(/green_sample_before_reposo/);
+  });
+
+  /**
+   * Tarea 9, ronda de arreglo 1 (2026-10-02). `tieneSecadoTerminadoArriba` recorre la ascendencia —y lanza `lineage_too_deep`
+   * con más de 64 generaciones—, y su respuesta sólo la usa la muestra VERDE. Se llamaba para toda muestra de un lote verde, así
+   * que una muestra de otro estado, de un lote muy hondo, se rechazaba por un recorrido que no necesitaba.
+   */
+  it("una muestra que no es verde, de un lote verde con más de 64 generaciones, entra: no recorre la ascendencia", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 66; i++) ids.push(await lote(`NV${i}`));
+    for (let i = 1; i < ids.length; i++) await enlazar([ids[i - 1]!], [ids[i]!]);
+    const hondo = ids[ids.length - 1]!;
+    await prisma.lot.update({ where: { id: hondo }, data: { lotType: "green" } });
+    // Control: la muestra VERDE sí recorre el linaje, y con 66 generaciones lanza. Sin él, que la otra entre no probaría que
+    // la cadena es lo bastante honda para tropezar.
+    await expect(createSampleFromLot(gestor, muestraVerde(hondo, "NV-VERDE"))).rejects.toThrow(new LotProcessError("lineage_too_deep"));
+    await expect(createSampleFromLot(gestor, { ...muestraVerde(hondo, "NV-OTRA"), materialState: null })).resolves.toBeDefined();
+  }, 120000);
 });
 
 /**
@@ -898,6 +958,50 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
     expect(await abrirDiceLoMismo(await dividido("PA-DIV"))).toEqual({ puede: false, motivo: "lote_dividido" });
   });
 
+  // Tarea 9, ronda de arreglo 1 (2026-10-02): el motivo de la miel no tenía caso, ni contrastado con el servicio.
+  it("abrir un proceso: un lote de miel no lo ofrece, y el servicio lo rechaza con el mismo código", async () => {
+    const miel = await lote("PA-MIEL");
+    await prisma.lot.update({ where: { id: miel }, data: { lotType: "honey" } });
+    expect(await abrirDiceLoMismo(miel)).toEqual({ puede: false, motivo: "proceso_no_aplica_a_miel" });
+  });
+
+  /**
+   * Tarea 9, ronda de arreglo 1 (2026-10-02). En un lote guardado antes de la Parte 1 (R9, sin proceso), la página del proceso se
+   * contradecía: el motivo de no poder abrir (`lote_en_bodega`) mandaba a «Devolver a secado», y la sección de devolver decía que
+   * no hay proceso que continuar. La frase sólo manda a devolver donde `puedeDevolverASecado` dice que sí; sin saberlo —la ficha
+   * y el formulario de fermentación no lo preguntan—, no inventa ese camino.
+   */
+  it("en bodega, la frase de no abrir sólo manda a «Devolver a secado» donde el servicio lo aceptaría", async () => {
+    const es = JSON.parse(readFileSync("messages/es.json", "utf8")) as Record<string, Record<string, string>>;
+    const en = JSON.parse(readFileSync("messages/en.json", "utf8")) as Record<string, Record<string, string>>;
+
+    // Guardado sin proceso: ni se abre (en bodega) ni se devuelve (no hay proceso que continuar).
+    const sin = await lote("PF-SIN");
+    await moveLotToStorage(gestor, { lotId: sin, locationId: plotId, startedAt: ahora() });
+    expect(await abrirDiceLoMismo(sin)).toEqual({ puede: false, motivo: "lote_en_bodega" });
+    const devolverSin = await puedeDevolverASecado(gestor, sin);
+    expect(devolverSin).toEqual({ puede: false, motivo: "process_not_found" });
+    expect(fraseDeNoAbrir("lote_en_bodega", devolverSin), "manda a devolver un lote sin proceso que devolver").toBe("lote_en_bodega");
+
+    // Cerrado por humedad y en bodega: se puede devolver, y la frase lo dice.
+    const con = await cerrado("PF-CON");
+    await moveLotToStorage(gestor, { lotId: con, locationId: plotId, startedAt: new Date("2026-05-02T12:00:00Z") });
+    expect(await puedeAbrirProceso(gestor, con)).toEqual({ puede: false, motivo: "lote_en_bodega" });
+    const devolverCon = await puedeDevolverASecado(gestor, con);
+    expect(devolverCon).toEqual({ puede: true });
+    expect(fraseDeNoAbrir("lote_en_bodega", devolverCon)).toBe("lote_en_bodega_se_puede_devolver");
+
+    // Sin saber si se puede devolver, la frase que no promete nada; y los demás motivos no cambian.
+    expect(fraseDeNoAbrir("lote_en_bodega", null)).toBe("lote_en_bodega");
+    expect(fraseDeNoAbrir("lote_dividido", devolverCon)).toBe("lote_dividido");
+
+    // Y los textos: la frase de siempre no nombra «Devolver a secado»; la que se usa cuando sí se puede, sí.
+    expect(es.Traceability?.processCannotOpen_lote_en_bodega).not.toContain(es.Traceability?.processBackToDryingButton);
+    expect(en.Traceability?.processCannotOpen_lote_en_bodega).not.toContain(en.Traceability?.processBackToDryingButton);
+    expect(es.Traceability?.processCannotOpen_lote_en_bodega_se_puede_devolver).toContain(es.Traceability?.processBackToDryingButton);
+    expect(en.Traceability?.processCannotOpen_lote_en_bodega_se_puede_devolver).toContain(en.Traceability?.processBackToDryingButton);
+  });
+
   it("cada motivo posible de los dos predicados tiene su frase en es.json y en en.json, y las páginas la piden con ese prefijo", () => {
     // Las claves son de PLANTILLA (`processCannotOpen_${motivo}`): `claves-de-traduccion-existen` no las ve, y `t()` acepta cualquier
     // cadena. Lo que las vigila es esto: la lista de motivos es la que los predicados pueden devolver (fuera de ella, relanzan).
@@ -912,7 +1016,9 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
     expect(MOTIVOS_PARA_NO_ABRIR.length, "la lista de motivos de abrir salió vacía").toBeGreaterThanOrEqual(7);
     expect(MOTIVOS_PARA_NO_DEVOLVER.length, "la lista de motivos de devolver salió vacía").toBeGreaterThanOrEqual(7);
     const faltan: string[] = [];
-    for (const [prefijo, motivos] of [["processCannotOpen_", MOTIVOS_PARA_NO_ABRIR], ["processCannotReturn_", MOTIVOS_PARA_NO_DEVOLVER]] as const) {
+    // Las de abrir son las frases (`FRASES_DE_NO_ABRIR`: cada motivo y la variante de bodega que sí se puede devolver).
+    expect(FRASES_DE_NO_ABRIR.length, "las frases de abrir no cubren todos los motivos").toBeGreaterThan(MOTIVOS_PARA_NO_ABRIR.length);
+    for (const [prefijo, motivos] of [["processCannotOpen_", FRASES_DE_NO_ABRIR], ["processCannotReturn_", MOTIVOS_PARA_NO_DEVOLVER]] as const) {
       for (const m of motivos) {
         if (!es.Traceability?.[`${prefijo}${m}`]?.trim()) faltan.push(`es: Traceability.${prefijo}${m}`);
         if (!en.Traceability?.[`${prefijo}${m}`]?.trim()) faltan.push(`en: Traceability.${prefijo}${m}`);

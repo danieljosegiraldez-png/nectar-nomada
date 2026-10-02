@@ -24,7 +24,8 @@
 import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadoDeRitmo, puntajeDeUrgencia, type EstadoDeRitmo, type MetaConRitmo } from "../traceability/ritmo";
-import { procesoQueCubre } from "../traceability/procesoDelLinaje";
+import { procesoQueCubre, type Cobertura } from "../traceability/procesoDelLinaje";
+import { LotProcessError } from "../traceability/errorDeProceso";
 
 /** Lo que la receta declara para el secado de este lote, o nada si no se declaró. */
 export interface RitmoDeclarado {
@@ -69,7 +70,10 @@ export interface UnidadEnCola {
     | "cerca del objetivo"
     | "listo"
     | "sin receta declarada"
-    | "receta sin ritmo de secado";
+    | "receta sin ritmo de secado"
+    // Tarea 9, ronda de arreglo 1 (2026-10-02): el linaje del lote pasa del tope de R1 (64 generaciones) y no se sabe qué
+    // proceso lo cubre. No es «sin receta»: eso sería afirmar algo que nadie pudo mirar.
+    | "linaje demasiado hondo";
   readonly urgencia: number;
   readonly ritmoDelLote: EstadoDeRitmo;
 }
@@ -262,8 +266,18 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
 
     // Parte 1, R7 (tarea 9, 2026-10-02): el proceso del lote, buscado hacia arriba; no la FK de la corrida, que en toda
     // corrida vieja es nula y que, con R3, apunta a un proceso que vive en la cereza y no en el lote que se seca.
-    const cobertura = await procesoQueCubre(prisma, lot.id);
-    const proceso = cobertura.vigente
+    //
+    // Ronda de arreglo 1 (2026-10-02). Diseño R1: «las pantallas atrapan lineage_too_deep y lo dicen». Se atrapa AQUÍ, fila a
+    // fila: un solo lote con más de 64 generaciones tumbaba la cola entera —y la ficha de cada unidad, que la lee— para todos.
+    // Esa fila sale con su estado y sin proceso; cualquier otro error se relanza.
+    let cobertura: Cobertura | null = null;
+    try {
+      cobertura = await procesoQueCubre(prisma, lot.id);
+    } catch (error) {
+      if (!(error instanceof LotProcessError && error.message === "lineage_too_deep")) throw error;
+    }
+    const linajeDemasiadoHondo = cobertura === null;
+    const proceso = cobertura?.vigente
       ? await prisma.lotProcess.findUnique({
           where: { id: cobertura.vigente.id },
           select: {
@@ -319,14 +333,16 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
       horasSinVoltear,
       humedadPct,
       humedadMedidaEl: ultimaHumedad?.occurredAt ?? null,
-      estado: estadoDeUnidad({
-        ritmo,
-        horasSinVoltear,
-        demora: ritmoDelLote.demora,
-        debidas: ritmoDelLote.debidas.length,
-        humedadPct,
-        tieneReceta: proceso?.processRecipeVersion != null,
-      }),
+      estado: linajeDemasiadoHondo
+        ? ("linaje demasiado hondo" as const)
+        : estadoDeUnidad({
+            ritmo,
+            horasSinVoltear,
+            demora: ritmoDelLote.demora,
+            debidas: ritmoDelLote.debidas.length,
+            humedadPct,
+            tieneReceta: proceso?.processRecipeVersion != null,
+          }),
       urgencia: urgenciaDeUnidad({ base: puntajeDeUrgencia(ritmoDelLote), ritmo, horasSinVoltear, humedadPct }),
       ritmoDelLote,
     };

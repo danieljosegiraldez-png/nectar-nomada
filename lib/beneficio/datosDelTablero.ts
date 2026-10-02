@@ -11,14 +11,16 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
-import { procesoQueCubre, procesosParaEntrada } from "../traceability/procesoDelLinaje";
+import { procesoQueCubre, procesosParaEntrada, type Cobertura } from "../traceability/procesoDelLinaje";
+import { LotProcessError } from "../traceability/errorDeProceso";
 import { veredictoDelLote } from "./desdeElLote";
-import type {
-  CorridaAbierta,
-  EntradaDeLoteParaTablero,
-  EquipoParaTablero,
-  UnidadDelSitio,
-  VeredictoParaCola,
+import {
+  LINAJE_DEMASIADO_HONDO,
+  type CorridaAbierta,
+  type EntradaDeLoteParaTablero,
+  type EquipoParaTablero,
+  type UnidadDelSitio,
+  type VeredictoParaCola,
 } from "./tablero";
 import type { MetaConRitmo } from "../traceability/ritmo";
 
@@ -150,9 +152,19 @@ export async function datosDelTablero(
 
     // Parte 1, R7 (tarea 9, 2026-10-02): el proceso del lote se busca HACIA ARRIBA, por la misma función que la ficha.
     // Antes salía de la FK de la corrida, que en toda corrida vieja es nula (R9 no la rellena).
-    const procesos = await procesosParaEntrada(prisma, lot.id);
-    const cobertura = await procesoQueCubre(prisma, lot.id);
-    const proceso = cobertura.vigente
+    //
+    // Ronda de arreglo 1 (2026-10-02). UNA subida por lote: `procesosParaEntrada` reutiliza la cobertura en vez de volver a
+    // resolverla. Y `lineage_too_deep` se atrapa AQUÍ, fila a fila (diseño R1: «las pantallas atrapan lineage_too_deep y lo
+    // dicen»): un solo lote con más de 64 generaciones tumbaba el tablero entero para todos. Esa fila sale marcada y sin
+    // proceso; cualquier otro error se relanza.
+    let cobertura: Cobertura | null = null;
+    try {
+      cobertura = await procesoQueCubre(prisma, lot.id);
+    } catch (error) {
+      if (!(error instanceof LotProcessError && error.message === "lineage_too_deep")) throw error;
+    }
+    const procesos = cobertura ? await procesosParaEntrada(prisma, lot.id, cobertura) : [];
+    const proceso = cobertura?.vigente
       ? await prisma.lotProcess.findUnique({ where: { id: cobertura.vigente.id }, select: procesoSelect })
       : null;
 
@@ -192,7 +204,7 @@ export async function datosDelTablero(
     // fuera incoherente, el lote se salta en vez de inventarle una fase.
     if (!entrada) continue;
 
-    const veredicto = veredictoDelLote(entrada);
+    const veredicto = cobertura === null ? LINAJE_DEMASIADO_HONDO : veredictoDelLote(entrada);
     const fases = proceso?.processRecipeVersion?.fases ?? [];
     const targets = proceso?.processRecipeVersion?.targets ?? [];
 

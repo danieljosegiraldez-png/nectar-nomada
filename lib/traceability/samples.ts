@@ -167,7 +167,10 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
       throw new SampleValidationError("green_sample_before_reposo");
     }
   }
-  const secadoEnLaAscendencia = sourceLot.lotType === "green" ? await tieneSecadoTerminadoArriba(sourceLot.id) : false;
+  // Sólo para la muestra VERDE, que es la única que usa la respuesta (tarea 9, ronda de arreglo 1, 2026-10-02): el recorrido
+  // sube por toda la ascendencia y lanza `lineage_too_deep` pasado el tope, y se hacía para cualquier muestra de un lote verde.
+  const secadoEnLaAscendencia =
+    input.materialState === "GREEN" && sourceLot.lotType === "green" ? await tieneSecadoTerminadoArriba(sourceLot.id) : false;
   if (input.materialState === "GREEN" && !secadoEnLaAscendencia) {
     const fase = await faseActualDeLote(input.sourceLotId);
     if (fase?.tipo !== "reposo") {
