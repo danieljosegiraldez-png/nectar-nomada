@@ -75,7 +75,13 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
-import { createPlotBlock, setPlotBlockType, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import {
+  anadirRangoAlBloque,
+  createPlotBlock,
+  quitarRangoDelBloque,
+  setPlotBlockType,
+  PlotBlockValidationError,
+} from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -146,6 +152,16 @@ export interface TraceabilityActionState {
    * umbral inventado es como llegó el marcador de 24 h a la pantalla del lote.
    */
   inspeccionId?: string;
+  /**
+   * Avisos que NO son errores: el acto se guardó y hay algo que decir.
+   *
+   * Lo pide D7 de la rejilla: un bloque experimental que se solapa con una
+   * trampa **se guarda**, porque es una decisión del agrónomo y no un error de
+   * captura — «señalarlo, no corregirlo en silencio». Van aparte de `error` a
+   * propósito: pintarlos con `role="alert"` y clase de error diría que algo falló
+   * cuando lo que pasó es que todo se guardó.
+   */
+  avisos?: string[];
 }
 
 // Matched by class, not by exact message string — UnitValidationError's
@@ -2804,5 +2820,96 @@ export async function vitalesEnSitioAction(
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
+/**
+ * La rejilla de una parcela (tarea 7 del plan de la rejilla).
+ *
+ * Misma forma que `updatePlotAttributesAction`, que es la vecina: `useActionState`
+ * y un `error` traducido de vuelta, **sin `redirect`**. No hay `?ok=` porque esta
+ * familia de formularios no redirige — y `confirmacion-que-se-lee` sólo vigila a
+ * las que sí, así que queda fuera por diseño y no por olvido.
+ */
+export async function guardarRejillaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateLocationAttributes(user.userAccountId, {
+      locationId,
+      gridOrigin: emptyToNull(formData.get("gridOrigin")) as never,
+      rowCount: emptyToNullNumber(formData.get("rowCount")),
+      plantsPerRow: emptyToNullNumber(formData.get("plantsPerRow")),
+      rowSpacingMeters: emptyToNullNumber(formData.get("rowSpacingMeters")),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
+ * Añadir un rango a un bloque, con los solapes que D7 permite **como aviso**.
+ *
+ * El servicio devuelve con quién se solapa y cuántas celdas comparte; aquí se
+ * traducen y vuelven en `avisos`, no en `error`: el rango se guardó.
+ */
+export async function anadirRangoAlBloqueAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  let solapes: Array<{ bloque: string; celdas: number }> = [];
+  try {
+    const r = await anadirRangoAlBloque(user.userAccountId, {
+      plotBlockId: String(formData.get("plotBlockId") ?? ""),
+      rowFrom: Number(formData.get("rowFrom") ?? Number.NaN),
+      rowTo: Number(formData.get("rowTo") ?? Number.NaN),
+      plantFrom: Number(formData.get("plantFrom") ?? Number.NaN),
+      plantTo: Number(formData.get("plantTo") ?? Number.NaN),
+    });
+    solapes = [...r.solapesAvisados];
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return solapes.length
+    ? { avisos: solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })) }
+    : {};
+}
+
+/** Quitar un rango. Es un acto y el servicio lo registra. */
+export async function quitarRangoDelBloqueAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await quitarRangoDelBloque(user.userAccountId, String(formData.get("rangoId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   return {};
 }

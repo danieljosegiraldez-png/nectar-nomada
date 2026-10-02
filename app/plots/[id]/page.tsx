@@ -4,7 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getPlotDetail } from "../../../lib/traceability/plantingCohorts";
+import { claveDeLaComparacion, getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
@@ -77,7 +77,8 @@ export default async function PlotDetailPage({
     throw error;
   }
 
-  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas } = detail;
+  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas, rejilla } =
+    detail;
   const rendimiento = detail.yield;
   const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
     listFieldSessions(user.userAccountId, id),
@@ -309,6 +310,18 @@ export default async function PlotDetailPage({
                 ))}
               </ul>
             )}
+          </article>
+
+          {/* La rejilla, junto a la densidad: son las dos mitades de «qué hay en
+              este suelo». La frase la elige `claveDeLaComparacion`, que pasa
+              SÓLO los números que su estado puede afirmar — `sin_cohortes` no
+              lleva conteo, porque un 0 ahí se leería como «0 de 200», que es lo
+              que ADR-080 prohíbe. */}
+          <article className="nn-card">
+            <h3>{t("rejillaHeading")}</h3>
+            <p className={rejilla.status === "ok" ? undefined : "nn-muted"}>
+              {t(claveDeLaComparacion(rejilla).clave, claveDeLaComparacion(rejilla).params)}
+            </p>
           </article>
 
           <article className="nn-card">

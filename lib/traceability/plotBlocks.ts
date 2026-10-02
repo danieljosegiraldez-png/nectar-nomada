@@ -105,7 +105,14 @@ export async function setPlotBlockType(userAccountId: string, input: SetPlotBloc
 
 export async function listPlotBlocks(userAccountId: string, locationId: string) {
   await requireLocationAttributeAccess(userAccountId, locationId);
-  return prisma.plotBlock.findMany({ where: { locationId }, orderBy: { name: "asc" } });
+  // Los rangos vienen con el bloque: la pantalla de ajustes los lista y deja
+  // quitarlos, y pedirlos aparte serían N consultas más para lo mismo. Ordenados
+  // por hilera para que la lista se lea como se recorre el terreno.
+  return prisma.plotBlock.findMany({
+    where: { locationId },
+    orderBy: { name: "asc" },
+    include: { rangos: { orderBy: [{ rowFrom: "asc" }, { plantFrom: "asc" }] } },
+  });
 }
 
 /**

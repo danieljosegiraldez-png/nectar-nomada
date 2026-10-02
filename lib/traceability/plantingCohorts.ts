@@ -522,6 +522,43 @@ export function compararConLaRejilla(
 }
 
 /**
+ * La frase que pinta la ficha para cada estado, y los números que lleva dentro.
+ *
+ * **Devuelve la clave y los parámetros; no renderiza nada.** Es el mismo patrón
+ * que `claveDeTituloDeBloque` en `plotBlocks.ts`, y existe por el mismo motivo:
+ * así se puede probar sin montar un navegador — este repositorio no tiene
+ * infraestructura para renderizar componentes y sus cuatro guardias de pantalla
+ * leen la fuente.
+ *
+ * **Cada estado pasa sólo los números que su frase puede afirmar.** `sin_cohortes`
+ * no lleva `contadas`, porque un `0` ahí se leería como «0 de 200» — la
+ * afirmación que ADR-080 prohíbe. Y `conteo_incompleto` no lleva `diferencia`,
+ * porque la resta sobre un total incompleto es un número que parece cierto: si
+ * llegara a la plantilla, un descuido de redacción lo pintaría.
+ */
+export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
+  clave: "rejillaSinDeclarar" | "rejillaSinSiembras" | "rejillaConteoIncompleto" | "rejillaComparada";
+  params: Record<string, number>;
+} {
+  switch (c.status) {
+    case "sin_rejilla":
+      return { clave: "rejillaSinDeclarar", params: {} };
+    case "sin_cohortes":
+      return { clave: "rejillaSinSiembras", params: { capacidad: c.capacidad } };
+    case "conteo_incompleto":
+      return {
+        clave: "rejillaConteoIncompleto",
+        params: { capacidad: c.capacidad, contadas: c.contadas, sinContar: c.cohortesSinConteo },
+      };
+    case "ok":
+      return {
+        clave: "rejillaComparada",
+        params: { capacidad: c.capacidad, contadas: c.contadas, diferencia: c.diferencia },
+      };
+  }
+}
+
+/**
  * Everything the plot page shows, behind **one** gate.
  *
  * Deliberately not assembled in the page from two different reads:
