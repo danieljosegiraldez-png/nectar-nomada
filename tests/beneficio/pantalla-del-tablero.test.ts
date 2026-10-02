@@ -25,6 +25,7 @@ import { LIENZO_DE_CURVA } from "../../lib/beneficio/curvaEnPantalla";
 import { perfilDeLaFaseAbierta } from "../../lib/beneficio/desdeElLote";
 import { ejesDeLaCurva } from "../../lib/beneficio/ejesDeLaCurva";
 import type { ClaveDePerfil } from "../../lib/beneficio/perfiles";
+import type { CeldaDelMapa } from "../../lib/beneficio/tablero";
 import { riesgoDeEsperar } from "../../lib/beneficio/riesgoDeEsperar";
 import { lineaDeEtapas } from "../../lib/beneficio/lineaDeEtapas";
 
@@ -45,6 +46,7 @@ const { ANCHO_DE_LA_MARCA, CurvaDeLote, ESPACIO_DE_LOS_VALORES, FRANJA_DE_LAS_HO
 );
 const { LineaDeEtapas } = await import("../../app/components/beneficio/LineaDeEtapas");
 const { LiberacionDeUnidad } = await import("../../app/components/beneficio/LiberacionDeUnidad");
+const { MapaDeUnidades } = await import("../../app/components/beneficio/MapaDeUnidades");
 
 const ID = "3f2b6c1e-8a44-4d0e-9b57-0c1d2e3f4a5b";
 const t = (h: number) => new Date(`2026-03-10T${String(h).padStart(2, "0")}:00:00.000Z`);
@@ -1302,5 +1304,52 @@ describe("la curva en pantalla — un objetivo de un instante no se pinta como b
     expect(html).not.toContain("nn-curva-banda");
     expect(aTexto(html)).toContain("declara dos objetivos para esta variable en esta fase");
     expect(aTexto(html)).not.toContain("no tiene rango declarado en la receta");
+  });
+});
+
+/**
+ * **El mapa de unidades no tenía NINGUNA prueba de render**, y `loteNoVisible` habría sido un campo
+ * que la API expone y el operario no lee nunca. Es el defecto que Codex encontró el 2026-10-01 en la
+ * curva —«la promesa llegaba hasta la API y no hasta el productor»— y la forma de no repetirlo es
+ * que el guardia **renderice** y exija el texto en el HTML.
+ */
+describe("el mapa de unidades — una unidad ocupada por un lote que no ves lo dice en palabras", () => {
+  const celda = (over: Partial<CeldaDelMapa> = {}): CeldaDelMapa => ({
+    id: "u1",
+    nombre: "Tanque 1",
+    libreYSano: false,
+    motivos: ["EN_USO"],
+    loteNoVisible: false,
+    ...over,
+  });
+  const pintar = async (celdas: readonly CeldaDelMapa[]) =>
+    aTexto(renderToStaticMarkup(await MapaDeUnidades({ tanques: celdas, camas: [] })));
+
+  it("lo dice, además del motivo y no en su lugar", async () => {
+    const texto = await pintar([celda({ loteNoVisible: true })]);
+    expect(texto).toContain("ocupada por un lote que no ves");
+    // `EN_USO` sigue estando: es verdad y es el motivo. Lo otro explica por qué no lo encontrará.
+    expect(texto).toContain("en uso");
+  });
+
+  it("CONTROL: la MISMA celda sin la bandera no lo dice, y sigue diciendo el motivo", async () => {
+    const texto = await pintar([celda({ loteNoVisible: false })]);
+    expect(texto).not.toContain("ocupada por un lote que no ves");
+    expect(texto).toContain("en uso");
+  });
+
+  it("una unidad libre y sana no lo dice tampoco", async () => {
+    const texto = await pintar([celda({ libreYSano: true, motivos: [], loteNoVisible: false })]);
+    expect(texto).toContain("libre y sana");
+    expect(texto).not.toContain("ocupada por un lote que no ves");
+  });
+
+  it("y con dos unidades sólo lo lleva la que toca", async () => {
+    const texto = await pintar([
+      celda({ id: "a", nombre: "Tanque A", loteNoVisible: true }),
+      celda({ id: "b", nombre: "Tanque B", loteNoVisible: false }),
+    ]);
+    // Una sola aparición: si el componente lo pintara en todas, saldrían dos.
+    expect(texto.match(/ocupada por un lote que no ves/g) ?? []).toHaveLength(1);
   });
 });

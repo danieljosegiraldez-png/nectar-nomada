@@ -3331,6 +3331,7 @@
     "capacidadSinCamas": "Ninguna cama a la vista para los lotes que ves: no se puede decir cuántas están libres.",
     "unidadSinNombre": "unidad sin nombre",
     "unidadLibre": "libre y sana",
+    "unidadLoteNoVisible": "ocupada por un lote que no ves: no aparecerá en tu lista",
     "unidadMotivo_EN_USO": "en uso",
     "unidadMotivo_RETIRADO": "fuera de servicio",
     "unidadMotivo_CONDICION": "requiere intervención",

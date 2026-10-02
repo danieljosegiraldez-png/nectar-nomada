@@ -15,6 +15,7 @@ import {
   instrumentosQuePidenAtencion,
   pidenDecisionPorEtapa,
   type EntradaDeLoteParaTablero,
+  type UnidadDelSitio,
 } from "../../lib/beneficio/tablero";
 
 const HORA = 3_600_000;
@@ -244,12 +245,36 @@ describe("ocupacionDelSitio", () => {
   });
 
   /**
+   * **Las pruebas de abajo describen un mundo donde el filtro de lotes no oculta nada**: la cuenta
+   * sin filtrar se deriva de las corridas visibles. Es lo que miden —cómo se clasifica lo que se
+   * ve— y lo que valía antes de `PENDING_IMPLEMENTATIONS/015`.
+   *
+   * Que la cuenta sin filtrar pueda DIFERIR de lo visible, que es el defecto, lo prueba el
+   * `describe` de más abajo llamando a `ocupacionDelSitio` directamente.
+   */
+  const ocupacion = (input: {
+    tanques: readonly UnidadDelSitio[];
+    camas: readonly UnidadDelSitio[];
+    corridas: readonly ReturnType<typeof corrida>[];
+  }) => {
+    const cuenta = new Map<string, number>();
+    for (const c of input.corridas) {
+      const id = c.equipmentId ?? c.bedLocationId;
+      if (id !== null) cuenta.set(id, (cuenta.get(id) ?? 0) + 1);
+    }
+    return ocupacionDelSitio({
+      ...input,
+      corridasPorUnidad: [...cuenta].map(([unidadId, corridas]) => ({ unidadId, corridas })),
+    });
+  };
+
+  /**
    * **El error caro.** Asignar una corrida por el texto libre de `vesselNote` haría parecer
    * libre un tanque que no lo está, y alguien le echaría cereza encima. Así que no se asigna a
    * ninguna unidad y se cuenta aparte, en voz alta.
    */
   it("una corrida con el tanque sólo en texto libre no ocupa ningún tanque", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [unidad("t1"), unidad("t2")],
       camas: [],
       corridas: [corrida({ vesselNote: "el de la esquina" })],
@@ -260,7 +285,7 @@ describe("ocupacionDelSitio", () => {
   });
 
   it("un tanque libre pero averiado no cuenta como libre y sano", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [unidad("sano"), unidad("averiado", { condicion: "faulty" })],
       camas: [],
       corridas: [],
@@ -272,7 +297,7 @@ describe("ocupacionDelSitio", () => {
   });
 
   it("dos corridas abiertas en la misma unidad son un conflicto de datos", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [unidad("t1")],
       camas: [],
       corridas: [corrida({ equipmentId: "t1" }), corrida({ equipmentId: "t1" })],
@@ -283,7 +308,7 @@ describe("ocupacionDelSitio", () => {
   });
 
   it("una sola corrida en una unidad NO es conflicto", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [unidad("t1")],
       camas: [],
       corridas: [corrida({ equipmentId: "t1" })],
@@ -299,7 +324,7 @@ describe("ocupacionDelSitio", () => {
    * que nunca puede salir «requiere intervención» por ese motivo.
    */
   it("las camas usan el mismo clasificador, y una con secado abierto está en uso", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [],
       camas: [unidad("c1"), unidad("c2"), unidad("c3")],
       corridas: [corrida({ bedLocationId: "c1" })],
@@ -313,7 +338,7 @@ describe("ocupacionDelSitio", () => {
    * discrepar, y que una unidad ocupada Y averiada lleva sus dos motivos.
    */
   it("el mapa trae cada unidad con su nombre y sus motivos, y casa con el resumen", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [
         { ...unidad("libre"), nombre: "Tanque 1" },
         { ...unidad("ocupado"), nombre: "Tanque 2" },
@@ -326,14 +351,18 @@ describe("ocupacionDelSitio", () => {
     expect(o.mapa.tanques.map((c) => c.id)).toEqual(["libre", "ocupado", "ambos", "sinNombre"]);
     expect(o.mapa.tanques.map((c) => c.nombre)).toEqual(["Tanque 1", "Tanque 2", "Tanque 3", null]);
     expect(o.mapa.tanques.map((c) => c.motivos)).toEqual([[], ["EN_USO"], ["EN_USO", "CONDICION"], []]);
-    expect(o.mapa.camas).toEqual([{ id: "c1", nombre: "Cama 1", libreYSano: false, motivos: ["EN_USO"] }]);
+    // `loteNoVisible` es `false` porque aquí el envoltorio deriva el recuento de las corridas
+    // visibles: el lote de esa cama SÍ se ve. El caso contrario lo prueba el `describe` de 015.
+    expect(o.mapa.camas).toEqual([
+      { id: "c1", nombre: "Cama 1", libreYSano: false, motivos: ["EN_USO"], loteNoVisible: false },
+    ]);
     // Casa con el resumen, que es lo que impide dos cuentas distintas.
     expect(o.mapa.tanques.filter((c) => c.libreYSano)).toHaveLength(o.tanques.libresYSanos);
     expect(o.mapa.camas.filter((c) => c.libreYSano)).toHaveLength(o.camas.libresYSanos);
   });
 
   it("una corrida que nombra una unidad que no es del sitio no ocupa nada y no se pierde", () => {
-    const o = ocupacionDelSitio({
+    const o = ocupacion({
       tanques: [unidad("t1")],
       camas: [],
       corridas: [corrida({ equipmentId: "de-otro-sitio" })],
@@ -435,5 +464,122 @@ describe("pidenDecisionPorEtapa", () => {
     expect(
       pidenDecisionPorEtapa({ fermentacion: [], secado: [], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA }),
     ).toEqual({ proceso: 0, secado: 0 });
+  });
+});
+
+/**
+ * **El defecto de `PENDING_IMPLEMENTATIONS/015`: «no me llegó ninguna corrida» se presentaba como
+ * «la unidad está libre».**
+ *
+ * Las corridas se consultan filtradas por lote visible —`datosDelTablero.ts`, el
+ * `inputs.some.lot: lotWhere` de las dos consultas de fases abiertas—, así que una corrida sobre un
+ * lote que quien mira no ve **no llega** a esta función. Con `enUso` derivado sólo de esas, un
+ * tanque ocupado por un lote invisible salía «libre y sano», y la capacidad visible se leía como
+ * capacidad disponible. El error caro es el mismo que el de `vesselNote`: alguien le echa cereza
+ * encima.
+ *
+ * El arreglo: un recuento de corridas abiertas **por unidad y sin filtrar por lote**, acotado a las
+ * unidades visibles. Cuenta filas; no devuelve nada del lote, así que no filtra información de
+ * nadie — sólo deja de mentir sobre la capacidad.
+ *
+ * **La ficha llamaba al tercer estado «ocupación desconocida». Con el recuento ya no es
+ * desconocida:** se sabe que está ocupada, y lo único que falta es de qué lote. Llamarlo
+ * «desconocida» diría menos de lo que se sabe, así que se nombra por lo que el dato sostiene.
+ */
+describe("ocupacionDelSitio — una corrida sobre un lote que no ves TAMBIÉN ocupa", () => {
+  const u = (id: string) => ({ id, lifecycleStatus: "active" as const, condicion: null });
+
+  it("un tanque sin corridas VISIBLES pero con una en el recuento está EN USO, no libre", () => {
+    const o = ocupacionDelSitio({
+      tanques: [u("t1")],
+      camas: [],
+      corridas: [], // el filtro de lotes la ocultó
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 1 }],
+    });
+    expect(o.tanques.enUso).toBe(1);
+    expect(o.tanques.libresYSanos).toBe(0);
+    // Y se dice qué clase de ocupación es, porque el operario no va a poder abrir ese lote.
+    expect(o.mapa.tanques[0]!.loteNoVisible).toBe(true);
+    expect(o.ocupadasSinLoteVisible).toEqual(["t1"]);
+  });
+
+  it("CONTROL: el MISMO tanque con el recuento en cero sí está libre y sano", () => {
+    const o = ocupacionDelSitio({
+      tanques: [u("t1")],
+      camas: [],
+      corridas: [],
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 0 }],
+    });
+    expect(o.tanques.enUso).toBe(0);
+    expect(o.tanques.libresYSanos).toBe(1);
+    expect(o.mapa.tanques[0]!.loteNoVisible).toBe(false);
+    expect(o.ocupadasSinLoteVisible).toEqual([]);
+  });
+
+  it("una unidad que no aparece en el recuento cuenta como cero, no como desconocida", () => {
+    const o = ocupacionDelSitio({ tanques: [u("t1")], camas: [], corridas: [], corridasPorUnidad: [] });
+    expect(o.tanques.libresYSanos).toBe(1);
+    expect(o.mapa.tanques[0]!.loteNoVisible).toBe(false);
+  });
+
+  it("con la corrida VISIBLE, está en uso y NO se rotula «lote no visible»", () => {
+    const o = ocupacionDelSitio({
+      tanques: [u("t1")],
+      camas: [],
+      corridas: [{ equipmentId: "t1", bedLocationId: null, vesselNote: null }],
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 1 }],
+    });
+    expect(o.tanques.enUso).toBe(1);
+    expect(o.mapa.tanques[0]!.loteNoVisible).toBe(false);
+    expect(o.ocupadasSinLoteVisible).toEqual([]);
+  });
+
+  it("el conflicto de datos sale del recuento SIN filtrar, no de lo visible", () => {
+    // Dos corridas en el mismo tanque son un conflicto aunque ninguno de sus dos lotes se vea.
+    // Contándolo sobre lo visible, un conflicto real quedaba invisible junto con sus lotes.
+    const o = ocupacionDelSitio({
+      tanques: [u("t1")],
+      camas: [],
+      corridas: [],
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 2 }],
+    });
+    expect(o.conflictos).toEqual(["t1"]);
+    expect(o.tanques.enUso).toBe(1); // sigue siendo UNA unidad
+  });
+
+  it("CONTROL: una sola corrida en el recuento no es conflicto", () => {
+    const o = ocupacionDelSitio({
+      tanques: [u("t1")],
+      camas: [],
+      corridas: [],
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 1 }],
+    });
+    expect(o.conflictos).toEqual([]);
+  });
+
+  it("las camas van por el mismo camino: una cama ocupada por un lote invisible no sale libre", () => {
+    const o = ocupacionDelSitio({
+      tanques: [],
+      camas: [u("c1"), u("c2")],
+      corridas: [],
+      corridasPorUnidad: [{ unidadId: "c1", corridas: 1 }],
+    });
+    expect(o.camas.enUso).toBe(1);
+    expect(o.camas.libresYSanos).toBe(1);
+    expect(o.mapa.camas.map((c) => c.loteNoVisible)).toEqual([true, false]);
+  });
+
+  it("una unidad ocupada por un lote invisible Y averiada dice las dos cosas", () => {
+    const o = ocupacionDelSitio({
+      tanques: [{ id: "t1", lifecycleStatus: "active", condicion: "faulty" }],
+      camas: [],
+      corridas: [],
+      corridasPorUnidad: [{ unidadId: "t1", corridas: 1 }],
+    });
+    // `motivos` trae TODOS los que aplican, igual que `clasificar`: uno se resuelve solo y el otro no.
+    expect(o.mapa.tanques[0]!.motivos).toEqual(["EN_USO", "CONDICION"]);
+    expect(o.mapa.tanques[0]!.loteNoVisible).toBe(true);
+    expect(o.tanques.enUso).toBe(1);
+    expect(o.tanques.requierenIntervencion).toBe(1);
   });
 });

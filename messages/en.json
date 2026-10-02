@@ -3331,6 +3331,7 @@
     "capacidadSinCamas": "No bed in view for the lots you can see: how many are free cannot be said.",
     "unidadSinNombre": "unnamed unit",
     "unidadLibre": "free and sound",
+    "unidadLoteNoVisible": "busy with a lot you cannot see: it will not appear in your list",
     "unidadMotivo_EN_USO": "in use",
     "unidadMotivo_RETIRADO": "out of service",
     "unidadMotivo_CONDICION": "needs attention",

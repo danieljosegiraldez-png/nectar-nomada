@@ -17,6 +17,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import { ocupacionDelSitio } from "../../lib/beneficio/tablero";
+import { proximaLiberacion } from "../../lib/beneficio/liberacionDeUnidad";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -650,7 +652,7 @@ describe("«pide decisión» llega a la etapa de su fase", () => {
 });
 
 describe("cuándo se libera la próxima unidad", () => {
-  let cama: string, camaAjena: string, versionCon48h: string, versionFermenta20h: string, tanque: string;
+  let cama: string, camaDos: string, camaAjena: string, versionCon48h: string, versionFermenta20h: string, tanque: string;
 
   beforeAll(async () => {
     const receta = await prisma.processRecipe.create({
@@ -676,6 +678,13 @@ describe("cuándo se libera la próxima unidad", () => {
       return l.id;
     };
     cama = await nuevaCama("cama mía", miOrgId);
+    // **Una SEGUNDA cama mía, y la razón es un hallazgo.** La corrida con duración vivía en la misma
+    // cama que la corrida muda, y la prueba esperaba la hora de la que habla: una hora a la que esa
+    // cama NO iba a estar libre, porque no se libera hasta que acaben las dos. Era el defecto de
+    // `PENDING_IMPLEMENTATIONS/015` dentro del fixture que lo daba por bueno. Separarlas deja que la
+    // propiedad que esa prueba quiere medir —una duración declarada gana al silencio— siga medida,
+    // que es cierta ENTRE unidades; dentro de una unidad no lo es.
+    camaDos = await nuevaCama("cama mía, la segunda", miOrgId);
     camaAjena = await nuevaCama("cama ajena", otraOrgId);
 
     // Una receta que declara SÓLO la fermentación (20 h) y ninguna duración de secado: así leer la
@@ -725,10 +734,12 @@ describe("cuándo se libera la próxima unidad", () => {
     expect((await datosDelTablero(operario, ahora)).liberacion).toEqual({ tipo: "sin_duracion_declarada" });
 
     // Con una corrida cuya receta dice 48 h, gana la que habla: inicio + 48 h, y no una hora inventada.
+    // **En OTRA cama**, y es lo que el hallazgo de 015 obligó a separar: en la misma, la cama no se
+    // libera hasta que acabe también la muda, así que no hay hora que prometer. Ver el `beforeAll`.
     const inicio = haceHoras(10);
     const conDuracion = await loteSimple("L-CON-DURACION", miSitio, miOrgId);
     const proceso = await procesoDe(conDuracion, { versionId: versionCon48h });
-    await secadoDe(conDuracion, { camaId: cama, lotProcessId: proceso, inicio });
+    await secadoDe(conDuracion, { camaId: camaDos, lotProcessId: proceso, inicio });
     const esperada = new Date(inicio.getTime() + 48 * HORA);
     expect((await datosDelTablero(operario, ahora)).liberacion).toEqual({ tipo: "a_las", cuando: esperada });
 
@@ -744,7 +755,8 @@ describe("cuándo se libera la próxima unidad", () => {
   // **Corre DESPUÉS de la de arriba a propósito**: aquélla exige `null` al empezar, y esta deja una
   // fermentación en un tanque declarado.
   it("un TANQUE se libera igual que una cama: lee la duración de la FERMENTACIÓN y llega como unidad declarada", async () => {
-    // La cama de la prueba anterior sigue ocupada y se libera dentro de 38 h. El tanque, que empezó
+    // La segunda cama de la prueba anterior sigue ocupada y se libera dentro de 38 h (la primera no
+    // tiene hora conocida: su corrida no declara duración). El tanque, que empezó
     // hace 10 h y dura 20, se libera dentro de 10: gana, y `cuando` es **su** inicio + 20 h.
     const lote = await loteSimple("T-TANQUE", miSitio, miOrgId);
     const proceso = await procesoDe(lote, { versionId: versionFermenta20h });
@@ -1013,5 +1025,115 @@ describe("la curva de un lote", () => {
 
   it("sin pedir curva, no hay curva", async () => {
     expect((await datosDelTablero(operario, ahora)).curva).toBeNull();
+  });
+});
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/015`, y sólo él puede verlo.**
+ *
+ * El defecto no estaba en cómo se clasifica una unidad: estaba en QUÉ llega a clasificarse. Las dos
+ * consultas de fases abiertas llevan `inputs.some.lot: lotWhere`, así que una corrida sobre un lote
+ * que quien mira no ve no llegaba, y la unidad salía «libre y sano». Ninguna prueba de la función
+ * pura podía verlo —`ocupacionDelSitio` clasificaba correctamente lo que recibía— y por eso este
+ * caso vive aquí, donde se ejerce la consulta de verdad.
+ *
+ * El montaje es el de la ficha: una cama **visible** —de mi organización, porque las camas se acotan
+ * por las organizaciones de los lotes visibles— con un secado ABIERTO de `loteAjeno`, que es de otra
+ * organización y otro sitio y por tanto invisible para el operario.
+ */
+describe("la ocupación cuenta las corridas sin filtrar por lote (015)", () => {
+  let camaVisible: string, camaLibre: string, camaDosCorridas: string;
+
+  beforeAll(async () => {
+    const cama = async (etiqueta: string) => {
+      const l = await prisma.location.create({
+        data: {
+          name: nombre(etiqueta),
+          locationType: "drying_bed",
+          classification: "internal",
+          status: "approved",
+          organizationId: miOrgId,
+        },
+      });
+      locationIds.push(l.id);
+      return l.id;
+    };
+    camaVisible = await cama("cama ocupada por un lote invisible");
+    camaLibre = await cama("cama de control, sin nada dentro");
+    camaDosCorridas = await cama("cama con dos secados declarados");
+    await secadoDe(loteAjeno, { camaId: camaVisible });
+
+    // **El otro caso que la ficha pide comprobar con base**: dos corridas abiertas en la MISMA
+    // unidad. Sin receta a propósito: lo que esta mitad ejerce es el RECUENTO y el conflicto, que no
+    // dependen de la duración. La regla del fin mayor se afirma abajo llamando a la función pura con
+    // horas hechas a mano, que es donde se puede escribir el caso exacto.
+    const temprano = await loteSimple("L-DOS-TEMPRANO", miSitio, miOrgId);
+    const tarde = await loteSimple("L-DOS-TARDE", miSitio, miOrgId);
+    await secadoDe(temprano, { camaId: camaDosCorridas, inicio: haceHoras(5) });
+    await secadoDe(tarde, { camaId: camaDosCorridas, inicio: haceHoras(1) });
+  });
+
+  it("dos corridas en la MISMA cama: la liberación de esa cama es la POSTERIOR, y es un conflicto declarado", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const o = ocupacionDelSitio({
+      tanques: d.tanques, camas: d.camas, corridas: d.corridas, corridasPorUnidad: d.corridasPorUnidad,
+    });
+    // El recuento sin filtrar ve las dos, así que el conflicto se declara.
+    expect(d.corridasPorUnidad).toContainEqual({ unidadId: camaDosCorridas, corridas: 2 });
+    expect(o.conflictos).toContain(camaDosCorridas);
+    // Y sigue contando como UNA unidad en uso, no dos.
+    expect(o.mapa.camas.filter((c) => c.id === camaDosCorridas)).toHaveLength(1);
+
+    // La cama se libera cuando acabe la ÚLTIMA: la que empezó hace 1 h, no la de hace 5.
+    // `proximaLiberacion` mira TODAS las unidades, así que se le pregunta sólo por ésta para que la
+    // aserción hable de esta cama y no de la que gane en el archivo.
+    const suyas = [
+      { equipmentId: null, bedLocationId: camaDosCorridas, iniciadaEn: haceHoras(5), expectedHours: 48 },
+      { equipmentId: null, bedLocationId: camaDosCorridas, iniciadaEn: haceHoras(1), expectedHours: 48 },
+    ];
+    const unaSola = d.camas.filter((c) => c.id === camaDosCorridas);
+    expect(unaSola, "la cama es visible para quien mira").toHaveLength(1);
+    expect(proximaLiberacion({ corridas: suyas, unidades: unaSola, ahora })).toEqual({
+      tipo: "a_las",
+      cuando: new Date(haceHoras(1).getTime() + 48 * HORA),
+    });
+    // **Control: el mínimo sin agrupar daría la de hace 5 h**, que es la respuesta vieja. Si las dos
+    // horas fueran iguales, esta prueba no distinguiría nada.
+    expect(new Date(haceHoras(5).getTime() + 48 * HORA)).not.toEqual(
+      new Date(haceHoras(1).getTime() + 48 * HORA),
+    );
+  });
+
+  it("la cama con un secado de un lote invisible aparece en el recuento SIN filtrar, y no entre las corridas", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    // Las dos mitades, y la primera es el control de la segunda: si la corrida LLEGARA, el recuento
+    // no probaría nada porque `enUso` ya habría salido bien por el camino viejo.
+    expect(d.corridas.map((c) => c.bedLocationId)).not.toContain(camaVisible);
+    expect(d.corridasPorUnidad).toContainEqual({ unidadId: camaVisible, corridas: 1 });
+    // Y la cama de control no aparece en el recuento: ausente = cero, no «desconocida».
+    expect(d.corridasPorUnidad.map((o) => o.unidadId)).not.toContain(camaLibre);
+  });
+
+  it("clasificada con ese recuento, la cama NO sale libre y sano, y se rotula que su lote no es visible", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const o = ocupacionDelSitio({
+      tanques: d.tanques,
+      camas: d.camas,
+      corridas: d.corridas,
+      corridasPorUnidad: d.corridasPorUnidad,
+    });
+    const ocupada = o.mapa.camas.find((c) => c.id === camaVisible);
+    const libre = o.mapa.camas.find((c) => c.id === camaLibre);
+    expect(ocupada, "la cama ocupada está en el mapa").toBeDefined();
+    expect(libre, "la cama de control está en el mapa").toBeDefined();
+    expect(ocupada!.libreYSano).toBe(false);
+    expect(ocupada!.motivos).toContain("EN_USO");
+    expect(ocupada!.loteNoVisible).toBe(true);
+    expect(o.ocupadasSinLoteVisible).toContain(camaVisible);
+    // **El control que exige la ficha**, y sin él esta prueba no mide: la MISMA llamada, el MISMO
+    // mapa, y la cama sin nada dentro sí sale libre y sano.
+    expect(libre!.libreYSano).toBe(true);
+    expect(libre!.motivos).toEqual([]);
+    expect(libre!.loteNoVisible).toBe(false);
   });
 });

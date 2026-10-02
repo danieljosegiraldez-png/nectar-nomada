@@ -63,6 +63,7 @@ function datos(o: Partial<DatosDelTablero> = {}): DatosDelTablero {
     tanques: [],
     camas: [],
     corridas: [],
+    corridasPorUnidad: [],
     instrumentos: [],
     desviacionesAbiertasPorLote: new Map(),
     sinAmbito: false,

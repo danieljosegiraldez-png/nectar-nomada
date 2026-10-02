@@ -240,6 +240,32 @@ export interface CeldaDelMapa {
   readonly nombre: string | null;
   readonly libreYSano: boolean;
   readonly motivos: readonly MotivoNoDisponible[];
+  /**
+   * **Está ocupada y su lote no es visible para quien mira.** No es un motivo más —el motivo es
+   * `EN_USO`, y es verdad— sino lo que el operario necesita saber para no buscar un lote que no va
+   * a encontrar.
+   *
+   * La ficha de `PENDING_IMPLEMENTATIONS/015` lo llamaba «ocupación desconocida». Con el recuento
+   * sin filtrar **no es desconocida**: se sabe que está ocupada, y lo único que falta es de qué
+   * lote. Se nombra por lo que el dato sostiene.
+   */
+  readonly loteNoVisible: boolean;
+}
+
+/**
+ * Cuántas corridas abiertas tiene UNA unidad, **contadas sin filtrar por lote**.
+ *
+ * **Por qué existe, medido:** las corridas del tablero se consultan con
+ * `inputs.some.lot: lotWhere` —filtradas por lote visible—, así que una corrida sobre un lote que
+ * quien mira no ve nunca llegaba aquí, y `enUso` salía `false`. «No me llegó ninguna corrida» se
+ * presentaba como «la unidad está libre», y la capacidad visible se leía como capacidad disponible.
+ *
+ * **Es un recuento y nada más.** No trae el lote, ni su código, ni su fase: dice cuántas filas hay.
+ * Así se deja de mentir sobre la capacidad sin enseñar nada que la visibilidad oculte.
+ */
+export interface OcupacionDeUnidad {
+  readonly unidadId: string;
+  readonly corridas: number;
 }
 
 /** Una corrida abierta, con lo que declara de su unidad. */
@@ -260,8 +286,19 @@ export interface Ocupacion {
    * alguien le echaría cereza encima. Es el error caro, así que salen contadas y en voz alta.
    */
   readonly sinUnidadDeclarada: number;
-  /** Unidades con más de una corrida abierta: conflicto de datos, no doble ocupación. */
+  /**
+   * Unidades con más de una corrida abierta: conflicto de datos, no doble ocupación.
+   *
+   * **Sale del recuento sin filtrar por lote**, no de lo visible: dos corridas en un tanque son un
+   * conflicto aunque ninguno de sus dos lotes se vea, y contándolo sobre lo visible el conflicto
+   * desaparecía junto con sus lotes.
+   */
   readonly conflictos: readonly string[];
+  /**
+   * Unidades ocupadas **cuyo lote no es visible** para quien mira, ordenadas. Es el tercer estado
+   * de `PENDING_IMPLEMENTATIONS/015`: ni «libre comprobada» ni «ocupada por algo que puedes abrir».
+   */
+  readonly ocupadasSinLoteVisible: readonly string[];
   /**
    * Corridas que nombran una unidad que no es de este sitio. No ocupan nada aquí y **no se
    * silencian**: contarlas como «sin unidad» mezclaría un dato incompleto con un filtro.
@@ -277,12 +314,23 @@ export interface Ocupacion {
 export function ocupacionDelSitio(input: {
   readonly tanques: readonly UnidadDelSitio[];
   readonly camas: readonly UnidadDelSitio[];
+  /**
+   * Corridas abiertas sobre lotes **visibles** para quien mira: las únicas de las que se sabe el
+   * lote. Siguen diciendo qué está sin unidad declarada y qué nombra una unidad ajena.
+   */
   readonly corridas: readonly CorridaAbierta[];
+  /**
+   * **Cuántas corridas abiertas hay por unidad, SIN filtrar por lote**, sobre las unidades
+   * visibles. De aquí sale `enUso` y de aquí salen los conflictos. Ver `OcupacionDeUnidad`.
+   */
+  readonly corridasPorUnidad: readonly OcupacionDeUnidad[];
 }): Ocupacion {
   const idsDeTanque = new Set(input.tanques.map((t) => t.id));
   const idsDeCama = new Set(input.camas.map((c) => c.id));
 
-  const cuenta = new Map<string, number>();
+  // Lo visible, que es lo que tiene lote: sólo sirve para distinguir «ocupada» de «ocupada por un
+  // lote que no ves», y para contar lo que no ocupa nada aquí.
+  const conLoteVisible = new Map<string, number>();
   let sinUnidadDeclarada = 0;
   let ajenas = 0;
 
@@ -296,16 +344,28 @@ export function ocupacionDelSitio(input: {
       ajenas += 1;
       continue;
     }
-    cuenta.set(declarada, (cuenta.get(declarada) ?? 0) + 1);
+    conLoteVisible.set(declarada, (conLoteVisible.get(declarada) ?? 0) + 1);
   }
+
+  // **La ocupación sale de aquí, no de las corridas visibles.** Una unidad que no aparece cuenta
+  // como cero: el recuento cubre TODAS las unidades visibles, así que ausente es «ninguna corrida».
+  const sinFiltro = new Map(input.corridasPorUnidad.map((o) => [o.unidadId, o.corridas] as const));
+  const ocupada = (id: string) => (sinFiltro.get(id) ?? 0) > 0;
 
   // El mismo `clasificar` para las dos, no una regla paralela: así el tablero y `app/equipos`
   // dicen lo mismo del mismo tanque. Una unidad con dos corridas cuenta como UNA en uso — es una
   // unidad, con un problema de datos —, y el conflicto se dice aparte.
   const clasificarTodas = (us: readonly UnidadDelSitio[]): Clasificacion[] =>
-    us.map((u) => clasificar({ ...u, enUso: (cuenta.get(u.id) ?? 0) > 0 }));
+    us.map((u) => clasificar({ ...u, enUso: ocupada(u.id) }));
   const celdas = (us: readonly UnidadDelSitio[], cs: readonly Clasificacion[]): CeldaDelMapa[] =>
-    cs.map((c, i) => ({ id: c.id, nombre: us[i]?.nombre ?? null, libreYSano: c.libreYSano, motivos: c.motivos }));
+    cs.map((c, i) => ({
+      id: c.id,
+      nombre: us[i]?.nombre ?? null,
+      libreYSano: c.libreYSano,
+      motivos: c.motivos,
+      // Ocupada, y su lote no está entre los que esta cuenta puede ver.
+      loteNoVisible: ocupada(c.id) && (conLoteVisible.get(c.id) ?? 0) === 0,
+    }));
   const clasifTanques = clasificarTodas(input.tanques);
   const clasifCamas = clasificarTodas(input.camas);
 
@@ -314,8 +374,12 @@ export function ocupacionDelSitio(input: {
     camas: resumir(clasifCamas),
     mapa: { tanques: celdas(input.tanques, clasifTanques), camas: celdas(input.camas, clasifCamas) },
     sinUnidadDeclarada,
-    conflictos: [...cuenta].filter(([, n]) => n > 1).map(([id]) => id).sort(),
+    conflictos: [...sinFiltro].filter(([, n]) => n > 1).map(([id]) => id).sort(),
     ajenas,
+    ocupadasSinLoteVisible: [...clasifTanques, ...clasifCamas]
+      .map((c) => c.id)
+      .filter((id) => ocupada(id) && (conLoteVisible.get(id) ?? 0) === 0)
+      .sort(),
   };
 }
 
