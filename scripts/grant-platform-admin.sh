@@ -39,5 +39,8 @@ echo "Granting Platform Admin to $EMAIL ..."
 } 2>&1 | redact_secrets
 
 echo
-echo "Done. Set a password next if this account does not have one:"
-echo "  npm run auth:set-password -- $EMAIL"
+# ADR-083 («An invitation that can be accepted») sustituyó las contraseñas: basta
+# la dirección, se entra con Google y la cuenta se activa al aceptar. Esta línea
+# decía «set a password next» y mandaba a `auth:set-password`, que DECISIONS.md
+# declara obsoleto en su línea 6139 — una instrucción vieja es peor que ninguna.
+echo "Done. La persona entra con Google usando $EMAIL; no hay contraseña que fijar."
