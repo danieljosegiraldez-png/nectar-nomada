@@ -7,8 +7,10 @@ import {
   listarIntervenciones,
   productosFitosanitarios,
   bloquesDeLaParcela,
+
   contextoDeManejo,
 } from "../../../../../lib/traceability/intervenciones";
+import { floracionesDeLaParcela } from "../../../../../lib/traceability/floracion";
 import { carenciaDeIntervencion, reentradaDeIntervencion } from "../../../../../lib/traceability/carenciaDeIntervencion";
 import { lecturaDeTrampaQueMotivo, listPlantSpecimens, type LecturaDeTrampa } from "../../../../../lib/traceability/specimens";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
@@ -64,7 +66,7 @@ export default async function ManejoDetailPage({
   if (!intervencion) notFound();
   const correccion = lista.find((i) => i.correctsId === interventionId) ?? null;
 
-  const [productos, { people, selfPersonId }, plantas, trampa, bloques] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, trampa, bloques, floraciones] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listPlantSpecimens(user.userAccountId, id),
@@ -78,6 +80,10 @@ export default async function ManejoDetailPage({
     // el bloque en silencio: no había forma de listarlo NI de conservarlo.
     // Ver el docstring de `bloquesDeLaParcela`.
     bloquesDeLaParcela(user.userAccountId, id),
+    // Las ventanas de floración de la parcela, para el aviso de polinizadores. No autoriza: esta
+    // página ya pasó `contextoDeManejo` (`lot:view`) sobre `id` arriba. Van enteras y la decisión
+    // se toma en el navegador, donde está la fecha que el operario puede corregir.
+    floracionesDeLaParcela(id),
   ]);
 
   const ahora = new Date();
@@ -246,6 +252,7 @@ export default async function ManejoDetailPage({
             selfPersonId={selfPersonId}
             specimens={plantas}
             bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}
+            ventanasDeFloracion={floraciones}
             claveDeEnvio={crypto.randomUUID()}
             valores={
               {

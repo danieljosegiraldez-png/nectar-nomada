@@ -6,9 +6,11 @@ import { TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import {
   productosFitosanitarios,
   bloquesDeLaParcela,
+
   motivoValidoParaParcela,
   contextoDeManejo,
 } from "../../../../../lib/traceability/intervenciones";
+import { floracionesDeLaParcela } from "../../../../../lib/traceability/floracion";
 import { getObserverCandidates } from "../../../../../lib/traceability/lots";
 import { listPlantSpecimens } from "../../../../../lib/traceability/specimens";
 import { idValidoEnLista } from "../../../../../lib/traceability/precargaDeIntervencion";
@@ -57,7 +59,7 @@ export default async function NuevoManejoPage({
     throw error;
   }
 
-  const [productos, { people, selfPersonId }, plantas, bloques, motivoValido] = await Promise.all([
+  const [productos, { people, selfPersonId }, plantas, bloques, motivoValido, floraciones] = await Promise.all([
     productosFitosanitarios(user.userAccountId, id),
     getObserverCandidates(user.userAccountId, [{ locationId: id }]),
     listPlantSpecimens(user.userAccountId, id),
@@ -67,6 +69,10 @@ export default async function NuevoManejoPage({
     // `bloquesDeLaParcela`.
     bloquesDeLaParcela(user.userAccountId, id),
     motivoValidoParaParcela(motivo, id),
+    // Las ventanas de floración de la parcela, para el aviso de polinizadores. No autoriza: esta
+    // página ya pasó `contextoDeManejo` (`lot:view`) sobre `id` arriba. Van enteras y la decisión
+    // se toma en el navegador, donde está la fecha que el operario puede corregir.
+    floracionesDeLaParcela(id),
   ]);
 
   const bloqueValido = idValidoEnLista(bloque, bloques);
@@ -123,6 +129,7 @@ export default async function NuevoManejoPage({
         selfPersonId={selfPersonId}
         specimens={plantas}
         bloques={bloques.map((b) => ({ id: b.id, name: b.name }))}
+        ventanasDeFloracion={floraciones}
         claveDeEnvio={crypto.randomUUID()}
         valores={valores}
       />
