@@ -559,6 +559,31 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     await expect(devolverASecado(gestor, { lotId: mezcla, motivoValueId: m, ocurrioEn: ahora() })).rejects.toThrow(new LotProcessError("lote_mezclado"));
   });
 
+  it("si abrir la continuación falla, la asignación de bodega no queda terminada: todo o nada", async () => {
+    // R7: «si cualquier paso falla, se deshace todo». El fallo tiene que llegar DESPUÉS de terminar la bodega, o no prueba nada: R2 rechaza
+    // la continuación porque un DESCENDIENTE del lote devuelto tiene un proceso abierto —un reproceso, que R2 permite sobre un lote
+    // cubierto por uno cerrado—, y eso `abrirProcesoEnTx` lo mira ya con la asignación terminada.
+    const cereza = await lote("V10-C");
+    const a = await lote("V10-A");
+    const hijo = await lote("V10-H");
+    await enlazar([cereza], [a]);
+    await enlazar([a], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
+    await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
+    await abrirProcesoDePrueba(gestor, hijo);
+    // Controles del estado: `a` está en bodega, su vigente es el cerrado de la cereza, y un descendiente suyo tiene un proceso abierto.
+    expect(await asignaciones(a)).toEqual({ todas: 1, abiertas: 1 });
+    expect((await procesoQueCubre(prisma, a)).vigente?.id).toBe(p.id);
+    expect(await prisma.lotProcess.count({ where: { lotId: hijo, endedAt: null } })).toBe(1);
+
+    await expect(devolverASecado(gestor, { lotId: a, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: ahora() }))
+      .rejects.toThrow(new LotProcessError("process_already_open"));
+    expect(await asignaciones(a), "el rechazo dejó terminada la asignación de bodega").toEqual({ todas: 1, abiertas: 1 });
+    expect(await devolucionesDe(p.id), "el rechazo dejó una devolución escrita").toBe(0);
+    expect(await prisma.lotProcess.count({ where: { lotId: a } }), "el rechazo dejó una continuación escrita").toBe(0);
+  });
+
   it("devolver a secado decide DESPUÉS de tener el linaje: si mientras esperaba el lote se reubicó, termina la asignación NUEVA", async () => {
     // R2: `devolverASecado` es la operación que `moveLotToStorage` espera en su orden de bloqueo (tarea 7, ronda de arreglo 1). Aquí una
     // transacción ajena hace lo que haría una reubicación —retiene la fila del lote, termina la asignación vieja y abre otra— y no
