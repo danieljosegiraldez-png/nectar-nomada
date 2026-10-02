@@ -128,8 +128,53 @@ describe("el tablero limita dónde se sitúa un plantón", () => {
     ).rejects.toThrow(/no existe en la rejilla/);
   });
 
-  it("una parcela sin rejilla no admite coordenadas: no hay tablero donde situarlas", async () => {
-    await expect(plantar(1, 1, parcelaSinRejillaId)).rejects.toThrow(/no tiene rejilla/);
+  /**
+   * **Una parcela sin rejilla SÍ admite coordenadas, y esto lo fija.**
+   *
+   * La primera versión de este guardia lo rechazaba, y **rompió una prueba anterior y
+   * deliberada**: el §3 de F1 dice que un plantón «puede tener uno, el otro, los dos, o
+   * ninguno» de los dos mecanismos de sitio, y `tests/traceability/f1.test.ts` crea uno
+   * en la hilera 3, posición 12 de una parcela sin numerar. Lo cazó el CI de este PR;
+   * en local sólo se habían corrido los dos archivos nuevos del grupo con base, no los
+   * veinte.
+   *
+   * Sin tablero, `gridRow` es una nota de campo libre — para lo que F1 la creó. Lo que
+   * el guardia garantiza es lo que importa: **una coordenada que contradice un tablero
+   * DECLARADO no entra.**
+   *
+   * **Exigir el tablero siempre es una decisión de Daniel**, no de este cambio: tocaría
+   * el §3 de F1 y las filas que ya existen. Está señalada, sin hacer.
+   */
+  it("una parcela sin rejilla SÍ admite coordenadas: son una nota libre (§3 de F1)", async () => {
+    const s = await plantar(3, 12, parcelaSinRejillaId);
+    expect(s.gridRow).toBe(3);
+    expect(s.gridPosition).toBe(12);
+  });
+
+  /**
+   * **Y el caso que mis pruebas NO cubrían, que es el que el CI encontró.** La de
+   * arriba usa una parcela con finca madre, así que `raiz_de_la_numeracion` devuelve
+   * la finca y se cae en la rama «la parcela no tiene rejilla». Un plantón colgado de
+   * una ubicación de PRIMER NIVEL —sin padre— cae en la otra rama, `raiz IS NULL`, y
+   * esa seguía lanzando. Las dos ramas son la misma regla y ahora salen por el mismo
+   * sitio; esta prueba lo fija para que no se arregle sólo una.
+   */
+  it("un plantón en una ubicación de primer nivel, sin padre, también admite coordenadas", async () => {
+    const suelta = await crearFinca();
+    const s = await prisma.specimen.create({
+      data: {
+        locationId: suelta.id,
+        specimenType: "plant",
+        commonName: "TEST cafeto suelto",
+        provenanceClass: "direct_observation",
+        gridRow: 3,
+        gridPosition: 12,
+      },
+    });
+    expect(s.gridRow).toBe(3);
+    await prisma.specimen.deleteMany({ where: { id: s.id } });
+    await prisma.location.deleteMany({ where: { id: suelta.id } });
+    await prisma.organization.deleteMany({ where: { id: suelta.organizationId! } });
   });
 
   /**
@@ -160,10 +205,10 @@ describe("el tablero limita dónde se sitúa un plantón", () => {
       expect(caido.message).toBe("celda_fuera_de_la_rejilla");
     });
 
-    it("una parcela sin rejilla vuelve con su propio codigo", async () => {
-      const caido = await porElServicio(1, 1, parcelaSinRejillaId).catch((e) => e);
-      expect(caido).toBeInstanceOf(SpecimenValidationError);
-      expect(caido.message).toBe("celda_sin_rejilla");
+    /** El servicio hace lo mismo que la base: sin tablero, no valida. */
+    it("una parcela sin rejilla entra por el servicio, sin error", async () => {
+      const s = await porElServicio(3, 12, parcelaSinRejillaId);
+      expect(s.gridRow).toBe(3);
     });
   });
 });

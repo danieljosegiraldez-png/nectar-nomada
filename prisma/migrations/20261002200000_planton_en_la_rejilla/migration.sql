@@ -34,14 +34,26 @@ BEGIN
   -- disparadores: un plantón cuelga de la parcela o de una microparcela suya, y la
   -- rejilla vive en la parcela (D3).
   raiz := "core"."raiz_de_la_numeracion"(NEW."location_id");
-  IF raiz IS NULL THEN
-    RAISE EXCEPTION 'El plantón no cuelga de ninguna parcela: no hay rejilla donde situarlo';
-  END IF;
+  -- **Sin parcela que numere tampoco se comprueba nada.** Una ubicación de primer
+  -- nivel —sin padre y sin rejilla— no tiene tablero, igual que una parcela sin
+  -- numerar. La primera versión de esto lanzaba aquí, y el CI lo cazó: en
+  -- `tests/traceability/f1.test.ts` el plantón cuelga justo de una ubicación así.
+  -- Es la MISMA regla que la de abajo, y por eso las dos salen por el mismo sitio:
+  -- se valida cuando hay tablero, y sólo entonces.
+  IF raiz IS NULL THEN RETURN NEW; END IF;
 
   SELECT "row_count", "plants_per_row" INTO p FROM "core"."location" WHERE "id" = raiz;
-  IF p."row_count" IS NULL THEN
-    RAISE EXCEPTION 'La parcela no tiene rejilla: sin rejilla no se puede situar un plantón en una celda';
-  END IF;
+  -- **Sin tablero declarado no se comprueba nada, y NO es una concesión.** El §3 de F1
+  -- dice que un plantón «puede tener uno, el otro, los dos, o ninguno» de los dos
+  -- mecanismos de sitio, y `tests/traceability/f1.test.ts` crea a propósito uno en la
+  -- hilera 3, posición 12 de una parcela sin rejilla. Lo cazó el CI de este PR, no una
+  -- lectura: la primera versión de este disparador lo rechazaba y rompía esa prueba.
+  --
+  -- Lo que el guardia garantiza es lo que de verdad importa: **una coordenada que
+  -- contradice un tablero DECLARADO no entra.** Sin tablero, `grid_row` es una nota de
+  -- campo libre, que es para lo que F1 la creó. Exigir el tablero siempre es una
+  -- decisión de Daniel, no de este cambio: toca el §3 de F1 y las filas que ya existen.
+  IF p."row_count" IS NULL THEN RETURN NEW; END IF;
 
   IF (NEW."grid_row" IS NOT NULL AND (NEW."grid_row" < 1 OR NEW."grid_row" > p."row_count"))
      OR (NEW."grid_position" IS NOT NULL
