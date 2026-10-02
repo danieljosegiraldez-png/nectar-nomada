@@ -4715,3 +4715,62 @@ el patrón, no el componente.
 **`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
 diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
 `paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.
+
+<!-- Las dos entradas de abajo llegaron de los PR #574 y #591, que quedaron en conflicto cuando otra
+     sesión archivó el 2026-09-30 y escribió el 2026-10-02. Su contenido no estaba en ninguna parte y
+     en §2 ya no cabía —el presupuesto estaba al 90 %—, así que aterrizan aquí, que es el sitio de una
+     narrativa de un día ya superado. Los hechos VIVOS de esos dos PR se rescataron a §3 midiéndolos
+     primero contra el árbol: dos de ellos habían dejado de ser ciertos esa misma mañana. -->
+
+### 2026-10-01 · Las etiquetas llegaron y ninguna registra café (PR #572)
+
+**Daniel entregó los cuatro PDF que §1 pedía, y leerlos cambió el bloqueo en vez de cerrarlo.**
+Regent (maíz, papa), Abamectin 18 EC y ABAMECTAN 1.8 EC (frutales y hortalizas): **cero** menciones
+de café, cafeto, broca ni *Hypothenemus*. Lo literal de cada una, con su procedencia, en
+`docs/dominio/fitosanitarios-etiquetas.md`.
+
+**Ese cero vale porque el control funciona:** «aplicación» sale 8 y 17 veces en los mismos textos y
+«ó» 52 y 101, así que los acentos se leen. Sin esa comprobación, un cero sobre una palabra acentuada
+no habría probado nada — y el extractor de PDF **sí** devuelve el texto con un espacio entre cada
+letra, que es justo lo que hace fallar un `grep` por palabras.
+
+**Y lo que NO se escribió es la mitad del trabajo.** De Bralic sólo se pudo rendir la página 1: esta
+máquina no tiene ninguna herramienta de PDF, y los otros tres caminos devolvieron nada **y su control
+también**. Queda como «sin leer», no como «no tiene café» — la primera frase pide una foto, la
+segunda habría dirigido una aplicación real en una finca. La ausencia de herramientas y qué funciona
+en su lugar quedó en `~/.claude/CLAUDE.md`.
+
+**P-J, y es de la otra sesión la idea.** Los dos documentos de abamectina no son el mismo producto y
+sus reingresos difieren —**24 h y 48 h**—, que es el tiempo que un lote queda prohibido para las
+personas. Eso no puede vivir sólo en prosa de §1: pasó a `open-decisions.sh`, que sale en el primer
+mensaje de cada sesión. **Es la única decisión abierta hoy** (`abiertas=1, rotas=0`).
+
+**El guardia del recuento de decisiones hizo su trabajo sin que yo supiera que existía:**
+`tests/decisiones-discriminan.test.ts` cuenta las pruebas del guion y cayó al añadir la décima sin su
+pareja de mundos, diciendo exactamente qué faltaba.
+
+### 2026-10-01 · El aviso de floración, y cinco defectos que ninguna lectura mía vio (PR #576, #578, #581, #587, #588)
+
+**Ya hay dónde anotar la floración y un aviso que la usa.** `PlotBloom` toma la forma de una
+intervención —parcela o microparcela, con bloque opcional— así que no entra ninguna familia nueva.
+El aviso lo dispara el **producto** (`harmfulToPollinators`), no la floración: decisión de Daniel,
+«eso no debe afectar las abejas, no es quimico». Con el campo en nulo no avisa, y **no bloquea nada**
+(§32: proponer, nunca afirmar).
+
+**De los cinco defectos reales, cuatro los encontró una revisión adversaria de seis lentes y uno un
+flip-test. Ninguno, releer el código.** (1) El último día de floración **callaba**: campos de DÍA
+comparados contra un instante. (2) La floración de la parcela madre **no llegaba** a su microparcela,
+ni al revés — se reusa `ubicacionesEmparentadas`, con su regla de la carencia §3.3: madre e hija sí,
+hermano no. (3) El texto **afirmaba** una recomendación de terceros cuyo archivo no está en `main`.
+(4) Las ventanas llevaban `notes` y `observerPersonId` al navegador. (5) Tres guardias míos pasaban
+sobre mutaciones que mataban el aviso.
+
+**El arreglo del día de cierre costó dos intentos equivocados** —redefinir el campo contra mi propio
+esquema, y aplicar un idioma de la casa que es para un filtro de Postgres—: el relato entero y su
+medición están en el docstring de `hayFloracion`. Lo bueno es comparar **días de calendario**, y da
+**6/6 en seis zonas** de UTC+14 a UTC−11.
+
+**Y dos guardias que mentían, corregidos.** El `#581` escribe en `CLAUDE.md` la trampa del **nombre**
+de la base desechable — ahí está medida, no se repite aquí. El `#588` arregla `grant-platform-admin`,
+que comparaba el recuento de permisos contra un **89 congelado** y abortó una concesión legítima con
+«permission grants changed: 144»; ahora toma una foto antes de escribir y exige «sin cambio».
