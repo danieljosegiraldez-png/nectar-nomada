@@ -43,6 +43,22 @@ decisión de Daniel del 2026-10-02 lo corrige, y ese texto lo actualiza la coord
 
 **Lo que compara lo real con lo declarado** (D2) **es de la Parte 5**: la 2a guarda los dos lados.
 
+**2c — equipos y condiciones, después de la 2a** (decisiones de Daniel, 2026-10-02, pregunta por
+pregunta). Una receta no se puede aplicar si el beneficio no tiene con qué:
+
+| # | Decisión |
+|---|---|
+| E1 | Si **no existe** ningún equipo o instalación capaz de un paso, **no se abre el proceso**. Si existe pero está **ocupado o en reparación**, se abre con **aviso de esperar**, porque puede liberarse antes de llegar a ese paso. |
+| E2 | El paso declara **capacidades**, no un equipo concreto («recipiente sellable con válvula», «control de temperatura»). Sirve cualquier equipo que las tenga, y las plantillas comunes funcionan en cualquier beneficio. |
+| E3 | Al abrir, el sistema **ofrece los equipos disponibles con lo que les cabe**. Si el lote no entra completo, se asigna lo que quepa y **el resto se divide en otro lote** (R6: un proceso por parte), que se procesa donde se pueda. |
+| E4 | El equipo guarda **litros útiles** (dato físico) y **kg máximos** (los define el beneficio); el lote se compara en kg, y los litros sirven después para el espacio libre del anaeróbico. Hoy `Equipment` no guarda ninguna capacidad. |
+| E5 | Las condiciones que no son un equipo —cuarto oscuro, cámara fría, secador techado, agua— son **capacidades de la instalación**, con la misma regla de E1. |
+
+La 2c lleva su propio diseño: capacidades de equipos e instalaciones, litros y kg, la comprobación al
+abrir, la elección de equipo y la **pantalla de dividir** el sobrante (hoy dividir sólo existe por
+servicio). **Lo único que la 2a deja para ella** es el campo `capacidadesRequeridas` en el paso
+(§3), que la 2a guarda y no comprueba.
+
 ---
 
 ## 1. Lo que hay hoy, medido en `85eab6da`
@@ -97,6 +113,7 @@ Tabla nueva `ProcessRecipeStep`, hija de `ProcessRecipeVersion`:
 | Ejes — **catálogos existentes** | A `estadoFruto` → `estado_cereza`, y `mucilagoRetenidoPct`; B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; `recipiente` → `recipiente` |
 | Ejes — catálogos nuevos | F `fisico` (agitación, ultrasonido…), G `modoSecado` (cama africana, patio, marquesina…) |
 | Adiciones (E) | filas hijas: sustancia (→ `sustrato_anadido`), cantidad, unidad, `momento: pre_verde | post_verde` |
+| Requisitos (para la 2c) | `capacidadesRequeridas`: lista de valores del catálogo nuevo `capacidad` (sellable, válvula, control de temperatura, oscuridad…). La 2a lo guarda; la comprobación es de la 2c |
 | Valores por defecto | `horasMin`, `horasSugeridas`, `horasMax`; sólo secado: `volteoCadaHoras`, `humedadMinPct`, `humedadMaxPct` |
 | Fin (D2) | `finPorTiempo` (sí/no: el paso termina al cumplir `horasSugeridas` desde su inicio) + filas de fin: variable, operador, valor, unidad; `reglaDeFin: primero | todas`. Con tiempo y varias filas, «primero» = la primera condición que se cumple; «todas» = todas, incluido el tiempo |
 | Plan de medición | **`ProcessTarget` reutilizado** con su `everyHours`, más `recipeStepId` (§3.2) |
@@ -287,7 +304,7 @@ al verde queda fuera.
 **Se amplían los catálogos que ya existen; no se crean paralelos.**
 
 - **Nuevos, porque no existe nada parecido:** `tipo_paso` (los 23 + `prefermentacion`), `fisico`,
-  `modo_secado`.
+  `modo_secado`, `capacidad` (para la 2c).
 - **Valores nuevos en catálogos existentes:**
   - `recipiente`: cama africana, sacos de cosecha (fiebre), bolsa anaeróbica.
   - `fuente_microbiana`: mosto propio, bioprotección, atomizado. «Mosto de otro fermento» **no** es
