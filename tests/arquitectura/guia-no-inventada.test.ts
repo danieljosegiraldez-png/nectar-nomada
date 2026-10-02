@@ -24,6 +24,11 @@
  * que falta— y exigen que caiga. Sin ellos, este archivo sería un verde que no demuestra nada.
  * El texto con que se rellenan es una marca, no guía: aquí no se escribe ninguna.
  *
+ * **Los controles parten del documento VACIADO y del módulo SIN guía, nunca de los reales.** Si
+ * partieran de los reales, el día que Daniel rellene una celda y el módulo la recoja —el camino que
+ * este archivo existe para dejar pasar— los controles dejarían de decir lo que dicen y el archivo
+ * caería por el camino bueno. Medido con una celda rellena y expuesta: de 16 pruebas, 4 caían.
+ *
  * Una celda cuenta como rellena si tiene cualquier cosa que no sea espacio, un guion incluido: lo
  * que Daniel escriba es respuesta suya y el módulo lo devuelve tal cual.
  *
@@ -125,35 +130,61 @@ function revisar(documento: string, consultar: (ph: number) => Riesgo | null) {
   return { problemas, alcanzadas, fueraDeAlcance };
 }
 
-/** Una copia en memoria del documento con la celda de `banda` rellena. Aborta si no tocó UNA fila. */
-function rellenar(documento: string, banda: string, texto: string): string {
+/**
+ * Una copia en memoria del documento con la fila de `banda` reescrita por `f` sobre sus partes
+ * (las de `split("|")`; la celda de la columna es `partes[iGuia]`). Aborta si no toca UNA fila.
+ */
+function editarFila(documento: string, banda: string, f: (partes: string[], iGuia: number) => void): string {
   const lineas = documento.split("\n");
   const i = lineas.findIndex(esCabecera);
   const cabecera = celdas(lineas[i] ?? "");
   const cBanda = cabecera.indexOf("Banda");
   const cGuia = cabecera.indexOf(COLUMNA);
+  if (i < 0 || cBanda < 0 || cGuia < 0) throw new Error(`editarFila: el documento no tiene la tabla o la columna «${COLUMNA}»`);
   let tocadas = 0;
   for (let j = i + 2; j < lineas.length && (lineas[j] ?? "").startsWith("|"); j++) {
     const partes = (lineas[j] ?? "").split("|");
     if (sinTicks((partes[cBanda + 1] ?? "").trim()) === banda) {
-      partes[cGuia + 1] = ` ${texto} `;
+      f(partes, cGuia + 1);
       lineas[j] = partes.join("|");
       tocadas++;
     }
   }
-  if (tocadas !== 1) throw new Error(`rellenar tocó ${tocadas} filas de «${banda}», no 1`);
-  const nuevo = lineas.join("\n");
-  if (nuevo === documento) throw new Error(`rellenar no cambió el documento para «${banda}»`);
-  return nuevo;
+  if (tocadas !== 1) throw new Error(`editarFila tocó ${tocadas} filas de «${banda}», no 1`);
+  return lineas.join("\n");
+}
+
+const conGuia = (documento: string, banda: string, texto: string) =>
+  editarFila(documento, banda, (p, i) => {
+    p[i] = texto === "" ? " " : ` ${texto} `;
+  });
+
+/** Quita la última celda de la fila: queda más corta que la cabecera. */
+const sinUltimaCelda = (documento: string, banda: string) =>
+  editarFila(documento, banda, (p) => {
+    p.splice(p.length - 2, 1);
+  });
+
+/** El documento real con TODAS las celdas de la columna vacías: la base de los controles. */
+function vaciada(documento: string): string {
+  const { cabecera, filas } = matriz(documento);
+  const cBanda = cabecera.indexOf("Banda");
+  return filas.reduce((doc, f) => conGuia(doc, sinTicks(f[cBanda] ?? ""), ""), documento);
 }
 
 const consultarReal = (ph: number) => riesgoDeEsperar("ph", ph);
 
-/** El módulo real, con `queHaceElOperario` añadido a las bandas que se digan. */
+/** El módulo real SIN `queHaceElOperario`, pase lo que pase en el real: la base de los controles. */
+const sinGuia = (ph: number): Riesgo | null => {
+  const r = riesgoDeEsperar("ph", ph);
+  return r && { banda: r.banda, riesgo: r.riesgo };
+};
+
+/** `sinGuia` con `queHaceElOperario` añadido a las bandas que se digan. */
 const exponiendo =
   (textos: Record<string, string | null>) =>
   (ph: number): Riesgo | null => {
-    const r = riesgoDeEsperar("ph", ph);
+    const r = sinGuia(ph);
     return r && r.banda in textos ? { ...r, queHaceElOperario: textos[r.banda] } : r;
   };
 
@@ -183,51 +214,76 @@ describe("la guía «Qué hace el operario» de 10_ph_fermentation.md §1", () =
   });
 
   describe("controles: con el documento alterado en memoria, el guardia SÍ cae", () => {
+    // **Parten del documento VACIADO y del módulo SIN guía, no del real.** Si partieran del real,
+    // el día que Daniel rellene una celda y el módulo la recoja —que es justo el camino que este
+    // archivo quiere dejar pasar— los controles dejarían de ser lo que dicen y el archivo caería
+    // por el camino bueno. Lo que pase en el documento y en el módulo reales sólo lo mide la
+    // prueba de arriba.
+    const vacio = vaciada(DOCUMENTO);
+
+    it("la base de los controles: documento vaciado y módulo sin guía pasan, con siete filas alcanzadas", () => {
+      const r = revisar(vacio, sinGuia);
+      expect(r.problemas).toEqual([]);
+      expect(r.alcanzadas).toHaveLength(7);
+      expect(r.fueraDeAlcance).toEqual([RETIRADA]);
+      expect(matriz(vacio).filas.every((f) => f[matriz(vacio).cabecera.indexOf(COLUMNA)] === "")).toBe(true);
+    });
+
     it.each(real.alcanzadas)("celda rellena y no expuesta, fila «%s»: cae y dice cuál", (banda) => {
-      const doc = rellenar(DOCUMENTO, banda, MARCA);
-      const { problemas } = revisar(doc, consultarReal);
+      const doc = conGuia(vacio, banda, MARCA);
+      expect(doc).not.toBe(vacio);
+      const { problemas } = revisar(doc, sinGuia);
       expect(problemas).toHaveLength(1);
       expect(problemas[0]).toContain(`«${banda}»`);
     });
 
     it("la fila retirada, rellena: NO cae, y es el límite que el comentario declara", () => {
-      const doc = rellenar(DOCUMENTO, RETIRADA, MARCA);
-      const r = revisar(doc, consultarReal);
+      const doc = conGuia(vacio, RETIRADA, MARCA);
+      expect(doc).not.toBe(vacio);
+      const r = revisar(doc, sinGuia);
       expect(r.problemas).toEqual([]);
       expect(r.fueraDeAlcance).toEqual([RETIRADA]);
     });
 
     it("celda rellena Y expuesta, literal: NO cae (es el camino bueno)", () => {
-      const doc = rellenar(DOCUMENTO, "[4.50, 5.20)", MARCA);
+      const doc = conGuia(vacio, "[4.50, 5.20)", MARCA);
+      expect(doc).not.toBe(vacio);
       expect(revisar(doc, exponiendo({ "[4.50, 5.20)": MARCA })).problemas).toEqual([]);
     });
 
+    it("las ocho celdas rellenas y las siete alcanzables expuestas, literal: NO cae", () => {
+      const textos = Object.fromEntries(real.alcanzadas.map((b) => [b, `${MARCA} / ${b}`]));
+      const doc = [...real.alcanzadas, RETIRADA].reduce((d, b) => conGuia(d, b, `${MARCA} / ${b}`), vacio);
+      expect(doc).not.toBe(vacio);
+      expect(revisar(doc, exponiendo(textos)).problemas).toEqual([]);
+    });
+
     it("el módulo expone guía y la celda está vacía: cae", () => {
-      const { problemas } = revisar(DOCUMENTO, exponiendo({ "[4.50, 5.20)": MARCA }));
+      const { problemas } = revisar(vacio, exponiendo({ "[4.50, 5.20)": MARCA }));
       expect(problemas).toHaveLength(1);
       expect(problemas[0]).toContain("[4.50, 5.20)");
       expect(problemas[0]).toContain("que Daniel no ha dicho");
     });
 
     it("el módulo expone otra cosa que la celda: cae", () => {
-      const doc = rellenar(DOCUMENTO, "[4.50, 5.20)", MARCA);
+      const doc = conGuia(vacio, "[4.50, 5.20)", MARCA);
       const { problemas } = revisar(doc, exponiendo({ "[4.50, 5.20)": `${MARCA} (y algo más)` }));
       // Dos problemas, y los dos reales: la celda no está expuesta, y lo expuesto no es la celda.
       expect(problemas).toHaveLength(2);
     });
 
     it("una fila con menos celdas que la cabecera cae, no se lee como celda vacía", () => {
-      const doc = DOCUMENTO.replace("`CRITICAL` **disparo inmediato** | |", "`CRITICAL` **disparo inmediato** |");
-      expect(doc).not.toBe(DOCUMENTO);
-      const { problemas } = revisar(doc, consultarReal);
+      const doc = sinUltimaCelda(vacio, "< 3.30");
+      expect(doc).not.toBe(vacio);
+      const { problemas } = revisar(doc, sinGuia);
       expect(problemas).toHaveLength(1);
       expect(problemas[0]).toContain("< 3.30");
     });
 
     it("sin la columna cae, no pasa vacío", () => {
-      const doc = DOCUMENTO.replace(`| ${COLUMNA} |`, "| Otra cosa |");
-      expect(doc).not.toBe(DOCUMENTO);
-      const { problemas } = revisar(doc, consultarReal);
+      const doc = vacio.replace(`| ${COLUMNA} |`, "| Otra cosa |");
+      expect(doc).not.toBe(vacio);
+      const { problemas } = revisar(doc, sinGuia);
       expect(problemas).toHaveLength(1);
       expect(problemas[0]).toContain(COLUMNA);
     });
