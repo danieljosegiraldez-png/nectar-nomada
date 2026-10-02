@@ -2364,14 +2364,19 @@ vercel inspect --logs <url-de-produccion> --scope <scope>
 ## Revisión independiente
 
 `docs/CODEX_REVIEW.md`. El CLI de Codex funciona y está autenticado; **no está
-en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex`. El paquete de
+en el PATH**, y **la ruta cambió el 2026-09-30**:
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`. La vieja era
+la misma sin `codex-cli/bin`, y ya no existe: devuelve 127, que dentro de una
+línea compuesta acabada en `echo` sale **0** con la salida vacía — o sea, con la
+forma de una revisión que no encontró nada. El paquete de
 revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
 
 ## Salud del repositorio — comprobado el 2026-08-28
 
 - Remoto `https://github.com/danieljosegiraldez-png/nectar-nomada.git`, rama `main`, árbol limpio.
 - `vercel` autenticado; vive en `~/.nvm/versions/node/v24.19.0/bin`.
-- Codex `0.150.0-alpha.12.2`, `login status` → «Logged in using ChatGPT».
+- Codex **`0.159.2`** (medido el 2026-10-01; decía `0.150.0-alpha.12.2`),
+  `login status` → «Logged in using ChatGPT».
 - Backups: `NN_BACKUP_DIR` está en `~/.zshrc` y apunta a Google Drive; el
   destino existe; `com.nectarnomada.backup` está cargado en launchd con último
   estado de salida 0; el log vive en `~/Library/Logs/nectar-nomada-backup.log`.
