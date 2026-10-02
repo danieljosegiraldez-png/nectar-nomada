@@ -14,6 +14,7 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
+import { validarRango, type RangoInvalido } from "../territorio/rejilla";
 import type { ScopeTarget } from "../rbac/types";
 import type { Aspect, GridOrigin, LocationType, Prisma, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
 
@@ -86,6 +87,24 @@ export class LocationValidationError extends Error {}
  * lo exige por su cuenta.
  */
 export class RejillaInvalida extends Error {}
+
+/**
+ * De los cuatro estados de `validarRango` al codigo que la pantalla traduce.
+ *
+ * **`Record` total y codigos LITERALES, y las dos cosas por un motivo medido.**
+ * Total, para que el compilador obligue a declarar el codigo del dia que
+ * `RangoInvalido` gane un estado — un tipo que no compila es mejor guardia que un
+ * test que hay que acordarse de mirar. Y literales, porque
+ * `tests/arquitectura/codigos-de-rejilla-tienen-frase.test.ts` saca los codigos de
+ * la FUENTE: generarlos con una plantilla los dejaria sin frase **y al guardia en
+ * verde**, que es justo el agujero para el que ese guardia existe.
+ */
+const CODIGO_DEL_RANGO: Record<RangoInvalido, string> = {
+  a_medias: "rejilla_rango_a_medias",
+  al_reves: "rejilla_rango_al_reves",
+  no_es_celda: "rejilla_rango_no_es_celda",
+  fuera_de_rejilla: "rejilla_rango_fuera_de_rejilla",
+};
 
 /**
  * El `RAISE EXCEPTION` de un disparador, tal como llega a traves de Prisma.
@@ -409,9 +428,19 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   // salian como `P2020`/`P2039` crudos, o sea 500.
   if (input.rowSpacingMeters != null) {
     const s = input.rowSpacingMeters;
-    if (!Number.isFinite(s) || s <= 0) throw new RejillaInvalida("rejilla_separacion_no_positiva");
-    // `numeric(5, 2)` no guarda 1000: tres enteros como mucho.
-    if (s >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
+    if (!Number.isFinite(s)) throw new RejillaInvalida("rejilla_separacion_no_positiva");
+    // **Se valida el valor REDONDEADO, no el que llega.** `numeric(5, 2)` redondea
+    // antes de guardar, asi que comparar el original deja pasar dos bordes que la
+    // base rechaza con un error CRUDO — o sea un 500. Medido con una sonda el
+    // 2026-10-01, y lo encontro una revision independiente:
+    //
+    //   0.001 y 0.004 -> redondean a 0.00 -> el CHECK los rechaza -> P2039
+    //   999.999       -> redondea a 1000.00 -> desborda la columna -> P2020
+    //
+    // Con sus controles al lado: 0.005 -> 0.01 entra, y 999.99 cabe justo.
+    const redondeada = Math.round(s * 100) / 100;
+    if (redondeada <= 0) throw new RejillaInvalida("rejilla_separacion_no_positiva");
+    if (redondeada >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
   }
 
   const before = existing;
@@ -493,6 +522,13 @@ export interface CreateMicrolotInput {
   slug?: string | null;
   subdivisionReason: SubdivisionReason;
   subdivisionReasonNote?: string | null;
+  // Donde esta la microparcela DENTRO de la rejilla de su parcela (D3). Los
+  // cuatro juntos o ninguno; es opcional, porque una microparcela puede
+  // declararse antes de que nadie mida sus hileras.
+  rangeRowFrom?: number | null;
+  rangeRowTo?: number | null;
+  rangePlantFrom?: number | null;
+  rangePlantTo?: number | null;
 }
 
 /**
@@ -528,6 +564,26 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
   }
   if (parent.locationType === "storage_facility") throw new LocationValidationError("bodega_no_se_subdivide");
 
+  // El rango se valida contra la rejilla de la MADRE, que es la unica numeracion
+  // que existe (D3). `validarRango` es el modulo puro de `lib/territorio/rejilla.ts`,
+  // que ya prueba los cuatro estados sin base; aqui se convierten en un error con
+  // nombre para que la pantalla pueda decir con cual se topo.
+  //
+  // El disparador `core.exigir_rango_en_la_rejilla` sigue siendo la garantia: un
+  // importador o un SQL directo solo se topan con el. Esto es el mensaje.
+  const malo = validarRango(
+    {
+      rowFrom: input.rangeRowFrom ?? undefined,
+      rowTo: input.rangeRowTo ?? undefined,
+      plantFrom: input.rangePlantFrom ?? undefined,
+      plantTo: input.rangePlantTo ?? undefined,
+    },
+    parent.rowCount != null && parent.plantsPerRow != null
+      ? { rowCount: parent.rowCount, plantsPerRow: parent.plantsPerRow }
+      : null,
+  );
+  if (malo) throw new RejillaInvalida(CODIGO_DEL_RANGO[malo]);
+
   const microlot = await prisma.$transaction(async (tx) => {
     // Spec fincas y parcelas §3.3: un nombre no se repite dentro del mismo padre.
     if (!(await nombreLibreBajo(tx, parent.id, input.name))) throw new LocationValidationError("nombre_repetido");
@@ -541,6 +597,29 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
         subdivisionReason: input.subdivisionReason,
         subdivisionReasonNote: input.subdivisionReasonNote ?? null,
         createdBy: userAccountId,
+        // **D2: se copia al crear, y desde ahi es suyo.** Decision de Daniel,
+        // 2026-10-01. No se hereda en vivo: una microparcela que leyera del padre
+        // cambiaria de altitud el dia que alguien corrija la parcela, y entonces
+        // un dato registrado el mes pasado dejaria de querer decir lo que decia.
+        //
+        // **La rejilla NO esta en esta lista, y es a proposito (D3):** la
+        // numeracion es UNA, la de la parcela. Copiarla daria dos numeraciones
+        // para el mismo suelo y un «hilera 7» dejaria de querer decir una sola
+        // cosa.
+        altitudeMinM: parent.altitudeMinM,
+        altitudeMaxM: parent.altitudeMaxM,
+        shadePercentage: parent.shadePercentage,
+        slopeDescription: parent.slopeDescription,
+        soilType: parent.soilType,
+        sunExposure: parent.sunExposure,
+        aspect: parent.aspect,
+        plantSpacingMeters: parent.plantSpacingMeters,
+        areaHectares: parent.areaHectares,
+        // Y donde esta, que viene del input y no del padre.
+        rangeRowFrom: input.rangeRowFrom ?? null,
+        rangeRowTo: input.rangeRowTo ?? null,
+        rangePlantFrom: input.rangePlantFrom ?? null,
+        rangePlantTo: input.rangePlantTo ?? null,
       },
     });
 
@@ -551,6 +630,37 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
         entityType: "location",
         entityId: microlot.id,
         after: microlot,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    // **D6: el acto de copiar queda escrito, y por su cuenta.** Sin este evento
+    // nadie distingue un valor COPIADO de uno MEDIDO en la microparcela, y esa
+    // distincion es el principio del proyecto: la jerarquia de fuentes del §3
+    // separa «measured fact» de todo lo demas, y un valor heredado no es un valor
+    // observado.
+    //
+    // Va en la MISMA transaccion que el `create`, como el de arriba: sin `tx`, una
+    // escritura confirmada podia quedarse sin su evento.
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "location.copy_attributes_from_parent",
+        entityType: "location",
+        entityId: microlot.id,
+        after: {
+          copiadoDe: parent.id,
+          altitudeMinM: microlot.altitudeMinM,
+          altitudeMaxM: microlot.altitudeMaxM,
+          shadePercentage: microlot.shadePercentage,
+          slopeDescription: microlot.slopeDescription,
+          soilType: microlot.soilType,
+          sunExposure: microlot.sunExposure,
+          aspect: microlot.aspect,
+          plantSpacingMeters: microlot.plantSpacingMeters,
+          areaHectares: microlot.areaHectares,
+        },
         sourceInterface: "traceability.service",
       },
       tx,
