@@ -3528,6 +3528,59 @@ escotilla de limpieza y produce cuatro fallos que no son del código. El comenta
 de `scripts/ci-con-base.sh` dice «o cualquier base vacía», y es lo único de esa
 línea que no es cierto.
 
+### Postgres pliega el nombre de la base, y el arnés de flip mide NADA
+
+**2026-10-02.** El arnés de flip de la tarea 8 creaba su base desechable así:
+
+```sql
+CREATE DATABASE nn_flip_t8A TEMPLATE nectar_ci_t8;
+```
+
+y después se conectaba a `postgresql://…/nn_flip_t8A`. **Postgres pliega a
+minúsculas todo identificador sin comillas**, así que creó `nn_flip_t8a`; una URL
+de conexión, en cambio, **sí distingue mayúsculas**. Reproducido ese día con sus
+tres mitades:
+
+| lo que se pide | lo que existe | conectarse al nombre pedido |
+|---|---|---|
+| `CREATE DATABASE nn_flip_pruebaX` | `nn_flip_pruebax` | `FATAL: database "nn_flip_pruebaX" does not exist` |
+| `CREATE DATABASE "nn_flip_PruebaY"` | `nn_flip_PruebaY` | funciona |
+
+**Lo peligroso no es el fallo: es la forma que toma.** Sin base, `vitest` no puede
+conectar y la salida dice
+
+```
+ Test Files  1 failed (1)
+      Tests  18 skipped (18)
+```
+
+o sea **cero líneas `×`**. Y un arnés de flip que lista los fallos por `×`
+imprime «NINGUNA cayó — la mutación no la ve ninguna prueba», que es
+**exactamente el veredicto que se estaba buscando**: «este guardia no cubre la
+mutación». Es la familia de siempre —el instrumento devolviendo un valor
+plausible de algo que no midió— con una cara nueva, y del lado que halaga.
+
+**Lo que lo destapó fueron dos líneas de control, no releer el veredicto:** el
+`psql` del paso anterior imprimía su `FATAL`, y la línea «existe en `pg_proc`:»
+salía **vacía** donde debía decir 1. Las dos contradecían al resultado.
+
+**Dos reglas, y la segunda vale para cualquier arnés:**
+
+- **Entre comillas el identificador al crear la base, o el nombre en minúsculas.**
+  `CREATE DATABASE "<nombre>"` respeta lo que se escribe; sin comillas, no.
+- **Un arnés de mutación ABORTA si su base no existe**, en vez de dejar que las
+  pruebas se salten. «No pude medir» y «ninguna cayó» son la misma cadena de
+  caracteres si nadie lo comprueba:
+
+  ```bash
+  EXISTE=$(psql "$B/postgres" -At -c "select count(*) from pg_database where datname='$DB';")
+  [ "$EXISTE" = "1" ] || { echo "ABORTA: la base $DB no existe"; exit 1; }
+  ```
+
+Es la misma exigencia que ya está escrita arriba para el flip-test —imprimir el
+sha antes y después, que el archivo compile, y qué prueba cae por su nombre— con
+un cuarto requisito que faltaba: **que el mundo contra el que se mide exista**.
+
 ## Al cerrar la sesión
 
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
