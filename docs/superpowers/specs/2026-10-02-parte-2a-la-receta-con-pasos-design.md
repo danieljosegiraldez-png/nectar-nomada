@@ -28,8 +28,12 @@ la ventana de la prefermentación, el aviso de humedad, los dos reposos y los mo
   prefermentación y su aviso, humedad que sube sin intención declarada, los dos reposos (muestra y
   venta, con la venta bloqueada), y que los motores juzguen por la receta (ADR-181).
 
-Dos decisiones del mismo día **no son de la Parte 2** y van a la Parte 1 por la coordinadora: exigir
-receta al abrir un proceso, y el desenlace de secado «salida a tratamiento» (`DryingOutcome`).
+**La receta obligatoria entra aquí, en la 2a** (decisión de Daniel, 2026-10-02, a pregunta de la
+coordinadora): la Parte 1 sale como está aprobada, con la receta opcional, y la exigencia llega junto
+con la receta libre, que necesita los pasos para armar su borrador. Ver §5.
+
+El desenlace de secado «salida a tratamiento» (`DryingOutcome`) **no es de la Parte 2**: va a la
+Parte 1 por la coordinadora.
 
 ---
 
@@ -127,8 +131,11 @@ catálogo y se puede escribir en una receta, pero ningún registro lo cumple tod
 
 ---
 
-## 5. La receta libre (D3)
+## 5. La receta libre (D3) y la receta obligatoria
 
+- **Abrir un proceso exige receta.** `abrirProceso` rechaza sin `recipeVersionId` con
+  `sin_receta`. Para experimentar está la receta libre. Los procesos abiertos antes sin receta no se
+  rellenan (R9): el reimport los rehace.
 - Cada organización tiene una receta **«Libre»** sin pasos, creada al primer uso.
 - Bajo ella, cada registro lleva sólo `stepType`; no hay desviación posible.
 - Al cerrar el proceso, el servicio arma un **borrador de receta**: un paso por registro, en orden de
@@ -184,6 +191,7 @@ Catálogos nuevos en `lib/research/catalogs.ts`: `tipo_paso`, `estado_fruto`, `o
 | §3 v2 copia | pasos, adiciones, fines y metas llegan iguales a la v2 | quitar la copia de una de las cuatro → cae |
 | §3 fases derivadas | publicar con pasos escribe las fases que leen la cola y los motores | idem |
 | §5 receta libre | el borrador reproduce lo ejecutado en orden, con horas reales | invertir el orden → cae |
+| §5 receta obligatoria | abrir sin receta se rechaza con `sin_receta`; con «Libre» pasa | quitar la comprobación → cae |
 | 4.5 recepción | Brix 26 con receta 18–24 → aviso; Brix 20 → sin aviso | las dos ramas, para que no pase vacía |
 
 Si una tarea toca TypeScript, su plan manda `npm run build`, no sólo el runner de pruebas.
