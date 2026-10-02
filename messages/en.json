@@ -1815,7 +1815,11 @@
     "rejillaConteoIncompleto": "It fits {capacidad} and {contadas} are counted, but {sinContar} planting(s) are uncounted: it can't be compared yet.",
     "rejillaComparada": "It fits {capacidad} and {contadas} are counted: a difference of {diferencia}.",
     "rejillaHeading": "Plot grid",
-    "rejillaRangosDeBloqueTitulo": "Where this block is"
+    "rejillaRangosDeBloqueTitulo": "Where this block is",
+    "rejillaSinRango": "This microplot doesn't say which part of the grid it covers yet, so it can't be compared with what's planted.",
+    "error_rango_no_encontrado": "That part is gone: someone removed it. Reload the page to see the current state.",
+    "error_bloque_no_encontrado": "That block is gone. Reload the page to see the current state.",
+    "error_bloque_sin_sitio": "That block has no plot attached, so it can't be given a part of the grid."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

@@ -1815,7 +1815,11 @@
     "rejillaConteoIncompleto": "Caben {capacidad} y hay {contadas} contadas, pero {sinContar} siembra(s) están sin contar: no se puede comparar todavía.",
     "rejillaComparada": "Caben {capacidad} y hay {contadas} contadas: una diferencia de {diferencia}.",
     "rejillaHeading": "Rejilla de la parcela",
-    "rejillaRangosDeBloqueTitulo": "Dónde está este bloque"
+    "rejillaRangosDeBloqueTitulo": "Dónde está este bloque",
+    "rejillaSinRango": "Esta microparcela todavía no dice qué trozo de la rejilla ocupa, así que no se puede comparar con lo sembrado.",
+    "error_rango_no_encontrado": "Ese trozo ya no está: alguien lo quitó. Recarga la página para ver cómo está ahora.",
+    "error_bloque_no_encontrado": "Ese bloque ya no está. Recarga la página para ver cómo está ahora.",
+    "error_bloque_sin_sitio": "Ese bloque no tiene una parcela asociada, así que no se le puede asignar un trozo de la rejilla."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

@@ -193,6 +193,36 @@ describe("anadirRangoAlBloque", () => {
     expect(solapesAvisados).toEqual([]);
   });
 
+  /**
+   * **El aviso cuenta la UNIÓN de celdas, no la suma de intersecciones.**
+   * Encontrado por una revisión independiente el 2026-10-02: con un vecino cuyos
+   * dos rangos se pisan entre sí, el servicio informaba **70 celdas donde hay
+   * 50**. Un número inflado en un aviso es peor que ningún aviso: el agrónomo
+   * decide sobre él.
+   *
+   * No se vio porque **con un vecino de un solo rango suma y unión coinciden**, y
+   * eso es lo que tenían todas las pruebas de arriba. Nada impide hoy que los
+   * rangos de un mismo bloque se solapen entre sí, así que el caso es alcanzable.
+   */
+  it("el aviso cuenta la unión: un vecino con dos rangos que se pisan no infla la cifra", async () => {
+    const ex = await bloque("Ensayo A", "experimental");
+    await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: ex.id, ...RANGO });
+    await anadirRangoAlBloque(usuario.userAccountId, {
+      plotBlockId: ex.id,
+      rowFrom: 4,
+      rowTo: 8,
+      plantFrom: 1,
+      plantTo: 10,
+    });
+    const otro = await bloque("Ensayo B", "experimental");
+    const { solapesAvisados } = await anadirRangoAlBloque(usuario.userAccountId, {
+      plotBlockId: otro.id,
+      ...RANGO,
+    });
+    expect(solapesAvisados).toHaveLength(1);
+    expect(solapesAvisados[0]?.celdas, "la suma daría 70; la unión es 50").toBe(50);
+  });
+
   /** **D7: dos trampas sobre el mismo sitio NO entran**, y sale con su código. */
   it("dos trampas en la misma parcela se rechazan", async () => {
     const t1 = await bloque("Trampas Alto", "trampa");

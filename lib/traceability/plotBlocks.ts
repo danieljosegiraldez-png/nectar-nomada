@@ -2,7 +2,7 @@ import { Prisma, type PlotBlockRange, type PlotBlockType } from "../../generated
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { CODIGO_DEL_RANGO, RejillaInvalida, requireLocationAttributeAccess } from "./locations";
-import { celdasEnComun, seSolapan, validarRango } from "../territorio/rejilla";
+import { celdasEnComunConVarios, seSolapan, validarRango } from "../territorio/rejilla";
 import { TIPOS_DE_BLOQUE } from "./tiposDeBloque";
 
 export class PlotBlockValidationError extends Error {}
@@ -223,7 +223,10 @@ export async function anadirRangoAlBloque(
 
   const solapesAvisados: SolapeAvisado[] = [];
   for (const v of vecinos) {
-    const celdas = v.rangos.reduce((suma, r) => suma + celdasEnComun(r, input), 0);
+    // La UNIÓN de las celdas, no la suma de las intersecciones: dos rangos del
+    // mismo vecino que se pisen entre sí contarían dos veces lo compartido.
+    // Medido: 70 donde hay 50.
+    const celdas = celdasEnComunConVarios(v.rangos, input);
     if (celdas > 0) solapesAvisados.push({ bloque: v.name, celdas });
   }
 

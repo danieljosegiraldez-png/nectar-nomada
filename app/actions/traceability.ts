@@ -250,6 +250,19 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof TrapAccessError) return t("error_access", { detail: error.message });
   // «Revisa la lectura y la fecha» no es verdad de un bloque: el caso real es
   // un nombre repetido, y ése se dice.
+  // **Los tres códigos que NO son «no se pudo crear el bloque».** `error_block`
+  // dice literalmente eso, y quitar un rango que otro ya quitó —una página vieja—
+  // salía como «No se pudo crear el bloque: range_not_found», con el código crudo
+  // y en inglés. Lo encontró una revisión independiente el 2026-10-02.
+  if (error instanceof PlotBlockValidationError && error.message === "range_not_found") {
+    return t("error_rango_no_encontrado");
+  }
+  if (error instanceof PlotBlockValidationError && error.message === "block_not_found") {
+    return t("error_bloque_no_encontrado");
+  }
+  if (error instanceof PlotBlockValidationError && error.message === "block_location_not_found") {
+    return t("error_bloque_sin_sitio");
+  }
   if (error instanceof PlotBlockValidationError) return t("error_block", { detail: error.message });
   // Cada código de la regla tiene su frase: dice qué campo corregir.
   if (error instanceof TrapRuleValidationError) {

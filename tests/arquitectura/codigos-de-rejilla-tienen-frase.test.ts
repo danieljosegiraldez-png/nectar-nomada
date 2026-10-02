@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { sinComentarios } from "../helpers/sinComentarios";
 
 /**
  * Cada código que lanza `RejillaInvalida` tiene su frase en los DOS idiomas, con
@@ -65,9 +66,9 @@ function codigosDelServicio(): string[] {
   // que nunca se lanza— y de MENOS —comilla simple, acento grave o un dígito en el
   // nombre se le escapaban, y el mínimo lo seguían satisfaciendo los demás, así que
   // un código nuevo sin frase pasaba con el guardia en verde.
-  const sinComentarios = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  const literales = [...sinComentarios.matchAll(/["'`](rejilla_[a-z0-9_]+)["'`]/g)].map((m) => m[1] ?? "");
-  const conValor = [...sinComentarios.matchAll(/`(rejilla_[a-z0-9_]+):\$\{/g)].map((m) => m[1] ?? "");
+  const limpia = sinComentarios(fuente);
+  const literales = [...limpia.matchAll(/["'`](rejilla_[a-z0-9_]+)["'`]/g)].map((m) => m[1] ?? "");
+  const conValor = [...limpia.matchAll(/`(rejilla_[a-z0-9_]+):\$\{/g)].map((m) => m[1] ?? "");
   return [...new Set([...literales, ...conValor])].sort();
 }
 
@@ -130,7 +131,9 @@ describe("los códigos de RejillaInvalida tienen frase en los dos idiomas", () =
     const fuente = fuentesDeLib(join(RAIZ, "lib"))
     .map((f) => readFileSync(f, "utf8"))
     .join("\n");
-    const conValor = [...fuente.matchAll(/`(rejilla_[a-z_]+):\$\{/g)].map((m) => m[1] ?? "");
+    const conValor = [...sinComentarios(fuente).matchAll(/`(rejilla_[a-z0-9_]+):\$\{/g)].map(
+      (m) => m[1] ?? "",
+    );
     expect(conValor.length).toBeGreaterThanOrEqual(3);
     const es = JSON.parse(readFileSync(join(RAIZ, "messages", "es.json"), "utf8")).Traceability;
     for (const c of conValor) {

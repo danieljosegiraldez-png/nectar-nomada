@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { celdasDelRango, celdasEnComun, seSolapan, validarRango, type Rango } from "../../lib/territorio/rejilla";
+import {
+  celdasDelRango,
+  celdasEnComun,
+  celdasEnComunConVarios,
+  seSolapan,
+  validarRango,
+  type Rango,
+} from "../../lib/territorio/rejilla";
 
 /**
  * La aritmética de la rejilla, probada sin base ni navegador.
@@ -95,6 +102,51 @@ describe("seSolapan y celdasEnComun", () => {
     const b = R(4, 8, 4, 8);
     expect(seSolapan(a, b)).toBe(seSolapan(b, a));
     expect(celdasEnComun(a, b)).toBe(celdasEnComun(b, a));
+  });
+
+  /**
+   * **La UNIÓN, no la suma de intersecciones.** Lo encontró una revisión
+   * independiente el 2026-10-02 en `anadirRangoAlBloque`, que sumaba
+   * `celdasEnComun` sobre los rangos del vecino: con `1–5` y `4–8` de las mismas
+   * plantas contra un rango nuevo `1–5`, informaba **70 celdas donde hay 50**.
+   *
+   * Un número inflado en un aviso es peor que ningún aviso: el agrónomo decide
+   * sobre él.
+   *
+   * Y el control dice por qué no se vio: **con un vecino de un solo rango, la
+   * suma y la unión coinciden**, que es lo que tenían todas las pruebas.
+   */
+  it("con VARIOS rangos cuenta la unión, no la suma", () => {
+    const nuevo = R(1, 5, 1, 10);
+    const vecinoQueSePisa = [R(1, 5, 1, 10), R(4, 8, 1, 10)];
+    const suma = vecinoQueSePisa.reduce((s, r) => s + celdasEnComun(r, nuevo), 0);
+    expect(suma, "la suma de intersecciones es el defecto").toBe(70);
+    expect(celdasEnComunConVarios(vecinoQueSePisa, nuevo), "la unión es la verdad").toBe(50);
+  });
+
+  it("el control: con UN solo rango, suma y unión coinciden", () => {
+    const nuevo = R(1, 5, 1, 10);
+    const uno = [R(1, 5, 1, 10)];
+    expect(celdasEnComunConVarios(uno, nuevo)).toBe(celdasEnComun(uno[0]!, nuevo));
+    expect(celdasEnComunConVarios(uno, nuevo)).toBe(50);
+  });
+
+  it("y con rangos DISJUNTOS la unión sí es la suma", () => {
+    const nuevo = R(1, 10, 1, 10);
+    const disjuntos = [R(1, 3, 1, 10), R(7, 9, 1, 10)];
+    expect(celdasEnComunConVarios(disjuntos, nuevo)).toBe(3 * 10 + 3 * 10);
+  });
+
+  it("ninguno que toque da 0", () => {
+    expect(celdasEnComunConVarios([R(6, 9, 1, 5)], R(1, 5, 1, 5))).toBe(0);
+    expect(celdasEnComunConVarios([], R(1, 5, 1, 5))).toBe(0);
+  });
+
+  /** Solape parcial en las dos dimensiones, que es donde una banda mal partida falla. */
+  it("solape parcial en las dos dimensiones", () => {
+    // 2–4 × 3–6 y 3–6 × 5–8, contra 1–10 × 1–10:
+    //   bandas 2, 3–4, 5–6 → 1×4 + 2×6 + 2×4 = 4 + 12 + 8 = 24
+    expect(celdasEnComunConVarios([R(2, 4, 3, 6), R(3, 6, 5, 8)], R(1, 10, 1, 10))).toBe(24);
   });
 
   it("cuenta las celdas comunes, y 0 cuando no se tocan", () => {

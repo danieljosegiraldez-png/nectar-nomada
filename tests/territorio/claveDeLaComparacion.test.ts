@@ -22,6 +22,7 @@ describe("claveDeLaComparacion", () => {
   it("cada estado tiene SU clave, y las cuatro son distintas", () => {
     const claves = [
       claveDeLaComparacion({ status: "sin_rejilla" }).clave,
+      claveDeLaComparacion({ status: "sin_rango" }).clave,
       claveDeLaComparacion({ status: "sin_cohortes", capacidad: 200 }).clave,
       claveDeLaComparacion({
         status: "conteo_incompleto",
@@ -32,7 +33,7 @@ describe("claveDeLaComparacion", () => {
       }).clave,
       claveDeLaComparacion({ status: "ok", capacidad: 200, contadas: 140, diferencia: 60 }).clave,
     ];
-    expect(new Set(claves).size, "dos estados con la misma frase son un estado perdido").toBe(4);
+    expect(new Set(claves).size, "dos estados con la misma frase son un estado perdido").toBe(5);
   });
 
   /**
@@ -45,6 +46,15 @@ describe("claveDeLaComparacion", () => {
     expect(r.params).toEqual({ capacidad: 200 });
     expect(r.params).not.toHaveProperty("contadas");
     expect(r.params).not.toHaveProperty("diferencia");
+  });
+
+  /**
+   * **`sin_rango` no pasa NINGÚN número, y eso es el arreglo.** Pasar la capacidad
+   * de la madre a la frase de una microparcela sin rango es exactamente el defecto
+   * que ese estado existe para no cometer.
+   */
+  it("sin_rango no pasa ningún número", () => {
+    expect(claveDeLaComparacion({ status: "sin_rango" }).params).toEqual({});
   });
 
   /** Sin rejilla no hay ningún número que pasar. */

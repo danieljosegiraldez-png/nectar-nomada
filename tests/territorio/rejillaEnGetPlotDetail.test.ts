@@ -143,11 +143,20 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
   });
 
   /**
-   * Y el control que lo hace discriminar: la misma microparcela SIN rango cae en
-   * la rejilla de la madre entera, 200. Si las dos dieran lo mismo, el rango no se
-   * estaría leyendo y la prueba de arriba no mediría nada.
+   * **ESTA PRUEBA CERTIFICABA UN DEFECTO, y es la corrección más importante de la
+   * revisión del 2026-10-02.** Decía que una microparcela sin rango «toma la
+   * capacidad de la madre», y lo daba por bueno. No lo es: su suelo es el trozo
+   * que ocupa, así que compararla contra las 200 de la madre pinta «una diferencia
+   * de 130» sobre un suelo que no es suyo.
+   *
+   * Y le pasaría a todas: medido el mismo día, **cero** archivos de `app/` pueden
+   * declarar ese rango. Una prueba que certifica un defecto hace más daño que la
+   * ausencia de prueba: convierte el defecto en la conducta esperada.
+   *
+   * Ahora afirma lo correcto — `sin_rango`, sin ningún número — y sigue sirviendo
+   * de control de la de arriba: con rango compara, sin rango no.
    */
-  it("el control: la misma microparcela SIN rango toma la capacidad de la madre", async () => {
+  it("una microparcela SIN rango no se compara: dice sin_rango, sin números", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
     const m = await prisma.location.create({
       data: {
@@ -161,6 +170,8 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
     microIds.push(m.id);
     await siembra(m.id, 70);
     const d = await getPlotDetail(usuario.userAccountId, m.id);
-    expect(d.rejilla).toMatchObject({ status: "ok", capacidad: 200, contadas: 70 });
+    expect(d.rejilla.status).toBe("sin_rango");
+    expect(d.rejilla, "la capacidad de la madre no es la suya").not.toHaveProperty("capacidad");
+    expect(d.rejilla).not.toHaveProperty("diferencia");
   });
 });

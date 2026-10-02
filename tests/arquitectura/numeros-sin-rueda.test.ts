@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { soltarFocoConLaRueda } from "../../app/components/CampoNumerico";
+import { sinComentarios } from "../helpers/sinComentarios";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
 const PIEZA = "app/components/CampoNumerico.tsx";
@@ -75,10 +76,6 @@ function etiquetasInput(src: string): string[] {
  * `codigos-de-rejilla-tienen-frase`, que contaba un código escrito en un
  * comentario.
  */
-function sinComentarios(fuente: string): string {
-  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-}
-
 function sinProteccion(etiqueta: string): boolean {
   const numerico = /\stype=(["']number["']|\{)/.test(etiqueta);
   const protegido = /\sonWheel=\{[^}]*(soltarFocoConLaRueda|\.blur\(\))/.test(etiqueta);

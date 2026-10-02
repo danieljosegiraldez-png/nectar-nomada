@@ -16,7 +16,7 @@ import { compararConLaRejilla, type RejillaDeclarada } from "../../lib/traceabil
  * seguir siendo distinguibles.
  */
 
-const REJILLA: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null };
+const REJILLA: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true };
 
 /** Lo que `computePlotDensity` recibe: sólo el conteo y el estado. */
 const siembra = (plantCount: number | null, status = "active" as const) => ({ plantCount, status });
@@ -41,6 +41,43 @@ describe("compararConLaRejilla", () => {
     expect(r).toMatchObject({ capacidad: 200 });
     expect(r).not.toHaveProperty("contadas");
     expect(r).not.toHaveProperty("diferencia");
+  });
+
+  /**
+   * **El defecto que una revisión independiente encontró el 2026-10-02, y el peor
+   * de la tanda.** Una microparcela usa la numeración de su parcela (D3), pero su
+   * suelo es **el trozo que ocupa**. Sin rango declarado, comparar sus siembras
+   * contra la capacidad de la madre dice «Caben 200 y hay 70 contadas: una
+   * diferencia de 130» sobre un suelo que no es suyo.
+   *
+   * Y le pasaría a TODAS: medido, cero archivos de `app/` pueden declarar ese
+   * rango todavía. Peor aún, la primera versión de la prueba de cableado fijaba
+   * esa conducta **como correcta** — una prueba que certifica un defecto hace más
+   * daño que la ausencia de prueba.
+   */
+  it("rejilla HEREDADA y sin rango: no compara, dice sin_rango", () => {
+    const heredada: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: false };
+    const r = compararConLaRejilla(heredada, [siembra(70)]);
+    expect(r.status).toBe("sin_rango");
+    expect(r, "pasar la capacidad de la madre es el error que este estado evita").not.toHaveProperty(
+      "capacidad",
+    );
+    expect(r).not.toHaveProperty("diferencia");
+  });
+
+  /**
+   * Y el control que lo hace discriminar: la MISMA rejilla, declarada como propia,
+   * sí compara. Si las dos dieran lo mismo, el campo `propia` no estaría haciendo
+   * nada y la prueba de arriba no mediría.
+   */
+  it("el control: la misma rejilla, PROPIA, sí compara", () => {
+    const propia: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true };
+    expect(compararConLaRejilla(propia, [siembra(70)])).toMatchObject({
+      status: "ok",
+      capacidad: 200,
+      contadas: 70,
+      diferencia: 130,
+    });
   });
 
   /** Una siembra retirada no está en pie, así que no cuenta — ni como cohorte. */
@@ -97,6 +134,7 @@ describe("compararConLaRejilla", () => {
       rowCount: 10,
       plantsPerRow: 20,
       rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 },
+      propia: false,
     };
     const r = compararConLaRejilla(conRango, [siembra(70)]);
     expect(r).toMatchObject({ status: "ok", capacidad: 80, contadas: 70, diferencia: 10 });
@@ -110,7 +148,7 @@ describe("compararConLaRejilla", () => {
   it("el control: la misma siembra contra la rejilla entera y contra el rango no dan lo mismo", () => {
     const entera = compararConLaRejilla(REJILLA, [siembra(70)]);
     const conRango = compararConLaRejilla(
-      { rowCount: 10, plantsPerRow: 20, rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 } },
+      { rowCount: 10, plantsPerRow: 20, rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 }, propia: false },
       [siembra(70)],
     );
     expect(entera).toMatchObject({ capacidad: 200 });
