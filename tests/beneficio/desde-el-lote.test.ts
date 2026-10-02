@@ -33,9 +33,17 @@ const lectura = (v: number, hora: number, extra: Partial<MedicionDelLote> = {}):
 
 describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta, o null — nunca «el de siempre»", () => {
   /** Una corrida abierta cuyo proceso declara `grado` (`null` = proceso sin grado; `"sin-proceso"` = corrida sin proceso). */
-  const abiertaCon = (grado: string | null | "sin-proceso", fase: "fermentation" | "drying" = "fermentation") => ({
+  const abiertaCon = (
+    grado: string | null | "sin-proceso",
+    fase: "fermentation" | "drying" = "fermentation",
+    /** `false` = el proceso no tiene versión de receta. */
+    conReceta = true,
+  ) => ({
     fase,
-    lotProcess: grado === "sin-proceso" ? null : { processGradeValue: grado === null ? null : { value: grado } },
+    lotProcess:
+      grado === "sin-proceso"
+        ? null
+        : { processGradeValue: grado === null ? null : { value: grado }, processRecipeVersion: conReceta ? { id: "receta" } : null },
   });
 
   it("Washed y Natural, con una fase abierta, tienen su perfil", () => {
@@ -69,6 +77,16 @@ describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta,
     // Una fase que no es ninguna de las dos que existen hoy tampoco la tiene (la guarda es «es fermentación», no «no es secado»).
     const rara = { fase: "reposo", lotProcess: { processGradeValue: { value: "Washed" } } } as unknown as Parameters<typeof perfilDeLaFaseAbierta>[0];
     expect(perfilDeLaFaseAbierta(rara)).toBeNull();
+  });
+
+  it("sin RECETA no hay perfil que citar: el grado Washed sólo sugiere una plantilla (ADR-181: sin receta el motor no opina)", () => {
+    // `00_conventions.md` §8: los perfiles son plantillas para crear recetas y los umbrales salen de la receta.
+    for (const grado of ["Washed", "Natural"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado, "fermentation", false)), `${grado} sin receta`).toBeNull();
+    }
+    // Control: los MISMOS grados y la MISMA fase con receta sí tienen perfil, así que el null de arriba es de la receta y no del grado ni de la fase.
+    expect(perfilDeLaFaseAbierta(abiertaCon("Washed", "fermentation", true))).toBe("WASHED_STANDARD");
+    expect(perfilDeLaFaseAbierta(abiertaCon("Natural", "fermentation", true))).toBe("NATURAL");
   });
 
   it("un grado que es una propiedad heredada del objeto no es un perfil", () => {

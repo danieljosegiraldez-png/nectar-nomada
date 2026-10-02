@@ -142,9 +142,14 @@ function textoDelValor(v: number): string {
  * - **Lo que se cita es la ÚLTIMA lectura** y se dice cuál, para no hacer adivinar de qué habla. **Si varias
  *   comparten el instante máximo no hay una «última» y no se cita ninguna** (`ultimaLectura`): el orden entre
  *   ellas es el que devolvió la base, y elegir una sería presentar una lectura cualquiera como «tu última».
+ * - **La guía de Daniel, cuando llegue.** La columna «Qué hace el operario» de §1 está vacía hoy; el día que Daniel
+ *   rellene una celda, `riesgoDeEsperar` la expone en `queHaceElOperario` y **esta pantalla la pinta, literal y en
+ *   su propio párrafo** (`nn-curva-riesgo-guia`), sin rótulo ni frase a mano. Un rótulo sería un texto nuevo y entra
+ *   por `messages/` y por el guardia de vocabulario, no a mano. Que lo expuesto llega hasta aquí lo exige el guardia
+ *   de `guia-no-inventada.test.ts`, no sólo que la API lo exponga.
  * - **Sólo con el perfil de la matriz.** La matriz de §1 es la del perfil `WASHED_STANDARD` y de la fase de
  *   fermentación; con el `perfilDelLote` de cualquier otro lote —`NATURAL`, o `null` (sin fase abierta, con una
- *   fase de secado, sin grado o un grado sin perfil: `Honey`, `Semi Wash`)— `riesgoDeEsperar` devuelve `null`
+ *   fase de secado, sin receta, sin grado o un grado sin perfil: `Honey`, `Semi Wash`)— `riesgoDeEsperar` devuelve `null`
  *   y **no se escribe nada**, ni una frase neutra: prestarle al lote los umbrales del lavado, o los de la
  *   fermentación sobre un pH de secado, sería decirle una cinética que no es la suya.
  *
@@ -225,6 +230,9 @@ export async function CurvaDeLote({
   const ultima = ultimaLectura(curva.lecturas);
   const riesgo = ultima ? riesgoDeEsperar(pedida.variable, ultima.value, perfilDelLote) : null;
   const envoltura = riesgo ? BANDAS_QUE_SE_PINTAN.get(riesgo.banda) : undefined;
+  // La guía de Daniel (columna «Qué hace el operario» de §1), **si ya la rellenó**: hoy ninguna celda lo está y esto es
+  // `undefined`. Vacía o sólo espacios es «no hay registro», nunca una frase.
+  const guia = riesgo?.queHaceElOperario?.trim();
   const puntos = colocarPuntos(curva, margen);
   const banda = curva.banda;
   // Qué se puede afirmar sobre las lecturas y la banda: lo decide UNA función (ver `JuicioDeBanda`).
@@ -361,6 +369,9 @@ export async function CurvaDeLote({
             {/* La cita es de un documento en castellano: va literal y marcada como tal. */}
             <span lang="es" className="nn-curva-riesgo-cita">«{conEnfasis(riesgo.riesgo)}»</span>.
           </p>
+          {/* La guía de Daniel, LITERAL y sin rótulo inventado: el módulo la expone y la pantalla es quien la lleva hasta el
+              productor. `tests/arquitectura/guia-no-inventada.test.ts` falla si deja de pintarla. */}
+          {guia ? <p lang="es" className="nn-curva-riesgo-guia">{conEnfasis(guia)}</p> : null}
           <details className="nn-inline-disclosure">
             <summary>{t("curvaRiesgoDeDondeSale")}</summary>
             <p className="nn-muted">{t("curvaRiesgoFuente", { banda: riesgo.banda, perfil: riesgo.perfil, documento: DOCUMENTO_DEL_RIESGO })}</p>

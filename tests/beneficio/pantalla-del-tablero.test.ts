@@ -289,6 +289,30 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
     // escalas sean la misma, no que cada una sea la que su suite escribió.
   });
 
+  it("un valor INTERMEDIO, que no es ninguna de las tres anclas, cae donde le toca entre las marcas: las dos escalas son LINEALES", () => {
+    // **El hueco de los TRES pares:** máximo, centro y mínimo son 0, mitad y `alto` en cualquier escala monótona que conserve
+    // los extremos y el centro. Una escala NO lineal —p. ej. la curva «smoothstep» `t²(3 − 2t)`, que da 0, ½ y 1 exactamente
+    // en esos tres puntos— pasa el test de arriba entero y desplaza los intermedios: un 4,2 se pintaría donde no está el 4,2
+    // de su eje. Se añaden valores que no son ancla (4,1; 4,15; 4,2; 4,45) y se comparan con la interpolación LINEAL entre
+    // las marcas que dice el eje (el mínimo y el máximo), y además con el número hecho a mano para 4,2.
+    const yDelPunto = (value: number) =>
+      curvaDeLote({ lecturas: [{ occurredAt: AL_10, value }], objetivo: OBJETIVO, ancho: 300, alto: 120 }).puntos[0]!.y;
+    const e = ejesDeLaCurva({ lecturas: [{ occurredAt: AL_10, value: 4.3 }], banda: BANDA_DEL_EJE, ancho: 300, alto: 120 });
+    const [yMax, yCentro, yMin] = [e.y[0]!.pos, e.y[1]!.pos, e.y[2]!.pos];
+    for (const v of [4.1, 4.15, 4.2, 4.45]) {
+      const esperado = yMin + ((v - 4.0) / (4.6 - 4.0)) * (yMax - yMin);
+      // Control: el valor NO es ninguna de las tres anclas, y cae ESTRICTAMENTE entre las marcas, así que no es un extremo disfrazado.
+      expect([yMax, yCentro, yMin]).not.toContain(esperado);
+      expect(Math.min(yMax, yMin)).toBeLessThan(esperado);
+      expect(Math.max(yMax, yMin)).toBeGreaterThan(esperado);
+      expect(yDelPunto(v), `el punto de ${v}`).toBeCloseTo(esperado, 9);
+    }
+    // El número a mano, que no sale de ningún módulo: 4,2 está a un tercio de la banda 4,0–4,6 → y = 120 − 40 = 80.
+    expect(yDelPunto(4.2)).toBeCloseTo(80, 9);
+    // MUTACIÓN: en `curvaDeLote.escalaY`, `((v - min) / (max - min)) * tamano` → smoothstep (`t * t * (3 - 2 * t)`): los tres pares de
+    // arriba PASAN (0, 60 y 120 no cambian) y cae SÓLO esta prueba (el 4,2 sale en 88,9 y no en 80).
+  });
+
   it("el eje X coincide con la X de la primera y la última lectura", () => {
     const lecturas = [
       { occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.3 },
@@ -640,6 +664,12 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   const conUnPh = (value: number, variable: "ph" | "brix" | "moisture" = "ph") =>
     pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value }], objetivo: BANDA, ...LIENZO }), variable);
   const bloqueDeRiesgo = (html: string) => /<div class="nn-curva-riesgo">[\s\S]*?<\/div>/.exec(html)?.[0] ?? null;
+  /**
+   * El bloque SIN el párrafo de la guía de Daniel (`nn-curva-riesgo-guia`). Hoy las ocho celdas de «Qué hace el operario» están
+   * vacías y no hay párrafo; el día que Daniel rellene una, la pantalla lo pinta (lo exige `guia-no-inventada.test.ts`) y las dos
+   * pruebas que miran «lo que escribe el código» —UNA frase a la vista, y «nada escrito a mano»— no deben caer por texto SUYO.
+   */
+  const sinLaGuiaDeDaniel = (bloque: string) => bloque.replace(/<p[^>]*nn-curva-riesgo-guia[^>]*>[\s\S]*?<\/p>/g, "");
 
   // Cada fila de `riesgoDeEsperar`, por su BANDA —el identificador estable del documento—, con el valor
   // con que se llega a ella. `riesgoDeEsperar` es la fuente de la columna `banda`: el primer `expect` de
@@ -765,9 +795,17 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
      * El perfil de un lote cuya fase abierta es `fase` (por omisión, fermentación) y tiene un proceso de grado `grado`;
      * con `fase = null`, el de un lote SIN fase abierta.
      */
-    const perfilDe = (grado: string | null, fase: "fermentation" | "drying" | null = "fermentation") =>
+    const perfilDe = (grado: string | null, fase: "fermentation" | "drying" | null = "fermentation", conReceta = true) =>
       perfilDeLaFaseAbierta(
-        fase === null ? undefined : { fase, lotProcess: { processGradeValue: grado === null ? null : { value: grado } } },
+        fase === null
+          ? undefined
+          : {
+              fase,
+              lotProcess: {
+                processGradeValue: grado === null ? null : { value: grado },
+                processRecipeVersion: conReceta ? { id: "receta" } : null,
+              },
+            },
       );
     /** 4,7 está DENTRO de la ventana óptima de NATURAL (3,9–4,8) y, en la matriz del lavado, es «proliferación butírica y mohos». */
     const PH = 4.7;
@@ -828,6 +866,29 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
       expect(aTexto(bloqueDeRiesgo(await pintarConPerfil(fermentando))!)).toContain("stinker");
       // MUTACIÓN: quitar `if (abierta.fase !== "fermentation") return null;` de `perfilDeLaFaseAbierta` → el secado cita «stinker» y cae.
       // MUTACIÓN: invertirlo (`=== "fermentation"`) → cae el control de la fermentación.
+    });
+
+    // **Y de una RECETA.** ADR-181: los perfiles son plantillas y sin receta el motor no opina. Codex construyó la entrada:
+    // fermentación abierta, grado Washed, SIN receta, última lectura pH 3,40 — y la pantalla decía a la vez «esta variable no
+    // tiene rango declarado en la receta» y «Degradación ácida, decoloración del pergamino».
+    it("un lote Washed en fermentación SIN receta no cita nada (y dice que no hay rango); el mismo CON receta sí cita", async () => {
+      const sinReceta = perfilDe("Washed", "fermentation", false);
+      expect(sinReceta, "sin receta no hay perfil que citar").toBeNull();
+      // Sin receta tampoco hay objetivo: `curvaDeUnLote` pasa `objetivo: null`, y es lo que la pantalla ya dice.
+      const htmlSin = await pintarCurva(
+        curvaDeLote({ lecturas: [{ occurredAt: t(10), value: 3.4 }], objetivo: null, ...LIENZO }),
+        "ph",
+        sinReceta,
+      );
+      expect(aTexto(htmlSin)).toContain("no tiene rango declarado en la receta"); // control: es la pantalla de Codex
+      expect(bloqueDeRiesgo(htmlSin)).toBeNull();
+      expect(aTexto(htmlSin)).not.toContain("Degradación ácida");
+      expect(aTexto(htmlSin)).not.toContain("Criterio de Néctar Nómada");
+      // Control positivo, con el MISMO grado, la MISMA fase y el MISMO pH: con receta, cita.
+      const conReceta = perfilDe("Washed", "fermentation", true);
+      expect(conReceta).toBe("WASHED_STANDARD");
+      expect(aTexto(bloqueDeRiesgo(await pintarConPerfil(conReceta, 3.4))!)).toContain("Degradación ácida");
+      // MUTACIÓN: quitar `if (!abierta.lotProcess?.processRecipeVersion) return null;` de `perfilDeLaFaseAbierta` → cita sin receta y cae.
     });
 
     it("la fuente NOMBRA el perfil de la matriz, detrás del toque, en los dos idiomas", async () => {
@@ -897,6 +958,9 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     //    (medido; con «lleva» en el léxico pasaba 99/99). **LÍMITE QUE QUEDA:** una orden armada sólo con las palabras que sí
     //    están (p. ej. «Cita la frase»: «cita» es nombre y verbo) pasa. Ninguna de ellas manda sobre el lote, pero es un
     //    límite de léxico, no de sentido: el sentido sólo lo cierra una cadena exacta, y por eso las frases de entrada lo son.
+    //    **El ejemplo literal más claro: «Es una orden. No una orden»** pasa el vocabulario cerrado de `curvaRiesgoFuente` porque cada
+    //    una de sus palabras («es», «una», «orden», «no») está permitida —son las de «no una orden»—, y dice lo contrario de lo que
+    //    esa clave quiere decir. Medido y aceptado: el guardia mira palabras, no sentido.
     // 3. **Lo que se pinta** (es) debe ser EXACTAMENTE la composición de los mensajes más la cita, sin espacios que cuenten: texto
     //    escrito a mano en el componente, dentro del mismo <p> o del <details>, rompe la igualdad (era la brecha de «lleva el
     //    lote» a mano en el JSX). **LÍMITE:** sólo mira el bloque de riesgo, no el resto del componente, y sólo en castellano
@@ -991,7 +1055,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
         const esperado =
           tr("curvaRiesgoMarca") + ":" + entrada + "«" + f.cita + "»." +
           tr("curvaRiesgoDeDondeSale") + tr("curvaRiesgoFuente", { banda: f.banda!, perfil: "WASHED_STANDARD", documento: "docs/beneficio/10_ph_fermentation.md" }) + tr("curvaRiesgoCitaLiteral");
-        const pintado = aTexto(bloqueDeRiesgo(await conUnPh(f.valor))!);
+        const pintado = aTexto(sinLaGuiaDeDaniel(bloqueDeRiesgo(await conUnPh(f.valor))!));
         expect(sinEspacios(pintado), `pH ${f.valor}`).toBe(sinEspacios(esperado));
       }
       // Control: el comparador SÍ ve una palabra de más (si ignorara el texto sobrante, «igual» no diría nada).
@@ -1026,7 +1090,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
 
   it("es UNA frase a la vista: un solo <p> fuera del <details>", async () => {
     const bloque = bloqueDeRiesgo(await conUnPh(4.8))!;
-    const aLaVista = bloque.replace(/<details[\s\S]*<\/details>/, "");
+    const aLaVista = sinLaGuiaDeDaniel(bloque).replace(/<details[\s\S]*<\/details>/, "");
     expect([...aLaVista.matchAll(/<p\b/g)]).toHaveLength(1);
     // MUTACIÓN: añadir un segundo párrafo explicativo fuera del <details> → cae (antipatrón 3).
   });

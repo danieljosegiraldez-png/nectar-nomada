@@ -34,8 +34,8 @@ import type { Prisma } from "../../generated/prisma/client";
  * **`perfilDelLote` es `null` cuando no se puede decir, y `null` NO es «el de siempre»:** el lote no tiene
  * ninguna fase abierta (sin fase no hay umbrales que aplicar, como `SIN_PROCESO_ABIERTO` en
  * `veredictoDelLote`), la que tiene abierta no es de fermentación (la matriz de pH que se cita lo es; con
- * secado no hay ninguna), no declara grado, o su grado no tiene perfil escrito (`Honey` y los dos
- * `Semi Wash`). Quien pinta calla con `null`.
+ * secado no hay ninguna), su proceso no tiene receta (sin receta el motor no opina, ADR-181), no declara
+ * grado, o su grado no tiene perfil escrito (`Honey` y los dos `Semi Wash`). Quien pinta calla con `null`.
  */
 export interface CurvaDelTablero extends Curva {
   readonly perfilDelLote: ClaveDePerfil | null;

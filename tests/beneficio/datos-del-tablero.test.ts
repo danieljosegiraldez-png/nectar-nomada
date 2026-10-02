@@ -947,29 +947,41 @@ describe("la curva de un lote", () => {
   //
   // **Y sólo si esa fase es de FERMENTACIÓN**: la matriz de pH que se cita es la de `10_ph_fermentation.md` §1, y
   // `13_drying_moisture.md` no tiene ninguna. Un lote Washed con una corrida de SECADO abierta no tiene perfil que citar.
-  it("`perfilDelLote` sale del grado del proceso de la fase abierta, y sólo si es de fermentación: Washed + fermentación → WASHED_STANDARD; el mismo con secado → null", async () => {
+  //
+  // **Y sólo si el proceso TIENE RECETA** (`processRecipeVersion`): ADR-181, sin receta el motor no opina; el grado Washed
+  // sólo sugiere una plantilla. Por eso los casos con perfil esperado llevan `versionId: versionConBanda` —una receta
+  // cualquiera: aquí sólo importa que exista—, y el último es el mismo Washed + fermentación SIN receta.
+  it("`perfilDelLote` sale del grado del proceso de la fase abierta, y sólo si es de fermentación y con receta: Washed + fermentación + receta → WASHED_STANDARD; con secado o sin receta → null", async () => {
     const perfilDe = async (lotId: string) =>
       (await datosDelTablero(operario, ahora, { curva: { lotId, variable: "ph", ...LIENZO } })).curva!.perfilDelLote;
     // `lotK` seca, con un proceso cuyo grado es `TEST Natural (RUN)`: no es «Natural» ni «Washed», y no tiene perfil.
     expect(await perfilDe(lotK)).toBeNull();
     // Control positivo: un grado que SÍ tiene perfil y la fase de fermentación abierta (el valor real «Washed»).
     const lavadoFermentando = await loteSimple("K-PERFIL-WASHED-FERMENTA", miSitio, miOrgId);
-    await fermentacionDe(lavadoFermentando, { lotProcessId: await procesoDe(lavadoFermentando, { washed: true }) });
+    await fermentacionDe(lavadoFermentando, {
+      lotProcessId: await procesoDe(lavadoFermentando, { washed: true, versionId: versionConBanda }),
+    });
     expect(await perfilDe(lavadoFermentando)).toBe("WASHED_STANDARD");
     // El MISMO grado con un SECADO abierto: no hay perfil. Es la fase, no el grado (el control de arriba es el mismo grado).
     const lavadoSecando = await loteSimple("K-PERFIL-WASHED-SECA", miSitio, miOrgId);
-    await secadoDe(lavadoSecando, { lotProcessId: await procesoDe(lavadoSecando, { washed: true }) });
+    await secadoDe(lavadoSecando, { lotProcessId: await procesoDe(lavadoSecando, { washed: true, versionId: versionConBanda }) });
     expect(await perfilDe(lavadoSecando)).toBeNull();
     // Y «Natural»: con fermentación tiene su perfil, con secado no.
     const naturalFermentando = await loteSimple("K-PERFIL-NATURAL-FERMENTA", miSitio, miOrgId);
-    await fermentacionDe(naturalFermentando, { lotProcessId: await procesoDe(naturalFermentando, { natural: true }) });
+    await fermentacionDe(naturalFermentando, {
+      lotProcessId: await procesoDe(naturalFermentando, { natural: true, versionId: versionConBanda }),
+    });
     expect(await perfilDe(naturalFermentando)).toBe("NATURAL");
     const naturalSecando = await loteSimple("K-PERFIL-NATURAL-SECA", miSitio, miOrgId);
-    await secadoDe(naturalSecando, { lotProcessId: await procesoDe(naturalSecando, { natural: true }) });
+    await secadoDe(naturalSecando, { lotProcessId: await procesoDe(naturalSecando, { natural: true, versionId: versionConBanda }) });
     expect(await perfilDe(naturalSecando)).toBeNull();
+    // Y el MISMO Washed + fermentación, SIN receta (`versionId` ausente → `processRecipeVersion: null`): no hay perfil que citar.
+    const lavadoSinReceta = await loteSimple("K-PERFIL-WASHED-SIN-RECETA", miSitio, miOrgId);
+    await fermentacionDe(lavadoSinReceta, { lotProcessId: await procesoDe(lavadoSinReceta, { washed: true }) });
+    expect(await perfilDe(lavadoSinReceta)).toBeNull();
     // Y el mismo grado SIN fase abierta (el proceso existe y está abierto, pero ninguna corrida): no hay perfil.
     const sinFase = await loteSimple("K-PERFIL-SIN-FASE", miSitio, miOrgId);
-    await procesoDe(sinFase, { washed: true });
+    await procesoDe(sinFase, { washed: true, versionId: versionConBanda });
     expect(await perfilDe(sinFase)).toBeNull();
   });
 

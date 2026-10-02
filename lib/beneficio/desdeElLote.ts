@@ -80,6 +80,14 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
  * no se sostiene. Con secado —o con cualquier fase que no sea fermentación— devuelve `null`; no se inventa una
  * matriz de secado.
  *
+ * **Y sólo si el proceso de esa corrida TIENE RECETA** (`processRecipeVersion`). Que el grado sea `Washed` no
+ * demuestra que la receta use los umbrales de la matriz: `00_conventions.md` §8 (ADR-181) dice que los perfiles
+ * son **plantillas** para crear recetas, que los umbrales salen de la receta y que **sin receta el motor no
+ * opina**. Sin receta, `curvaDeUnLote` ni siquiera tiene banda que pintar —la pantalla dice «esta variable no
+ * tiene rango declarado en la receta»— y citar a la vez «Degradación ácida» sería contradecirse en la misma
+ * pantalla. La ausencia de receta cierra la puerta igual que la cierran la fase y el grado. **Qué dice la
+ * receta —leer sus `ProcessTarget` y compararlos con la matriz— NO se hace aquí:** basta con que exista.
+ *
  * `abierta` es la corrida abierta del lote (fermentación o secado) tal como la trae `datosDelTablero`;
  * `undefined` = el lote no tiene ninguna. El grado sale del proceso de ESA corrida, no de otro lugar: es lo
  * que hace que sin fase abierta no haya perfil.
@@ -91,14 +99,20 @@ export function perfilDeLaFaseAbierta(
   abierta:
     | {
         readonly fase: "fermentation" | "drying";
-        readonly lotProcess: { readonly processGradeValue: { readonly value: string } | null } | null;
+        readonly lotProcess: {
+          readonly processGradeValue: { readonly value: string } | null;
+          /** La versión de receta del proceso, o `null` si no tiene. Sólo importa que exista. */
+          readonly processRecipeVersion: object | null;
+        } | null;
       }
     | undefined,
 ): ClaveDePerfil | null {
   if (!abierta) return null;
   // La matriz de pH es de la fermentación: con cualquier otra fase no hay umbral citable (ver arriba).
   if (abierta.fase !== "fermentation") return null;
-  const grado = abierta.lotProcess?.processGradeValue?.value;
+  // Sin receta el motor no opina (ADR-181): el grado sólo sugiere una plantilla, no demuestra que la receta la use.
+  if (!abierta.lotProcess?.processRecipeVersion) return null;
+  const grado = abierta.lotProcess.processGradeValue?.value;
   if (!grado || !Object.hasOwn(PERFIL_POR_GRADO, grado)) return null;
   return PERFIL_POR_GRADO[grado] ?? null;
 }

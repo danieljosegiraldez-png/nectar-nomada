@@ -22,7 +22,8 @@
  * secado abierta, citarle esta matriz sería decirle cinética de fermentación sobre un pH de secado. Esa guarda
  * no vive aquí —esta función sólo recibe el perfil— sino en quien lo calcula (`perfilDeLaFaseAbierta`, que
  * devuelve `null` con una fase que no sea de fermentación), y `13_drying_moisture.md` no tiene ninguna matriz
- * de pH con la que sustituirla.
+ * de pH con la que sustituirla. **Ni basta el grado:** sin receta el motor no opina (ADR-181), y
+ * `perfilDeLaFaseAbierta` tampoco devuelve perfil a un lote cuyo proceso no tiene `processRecipeVersion`.
  *
  * **Sin base de datos ni imports a propósito**, igual que `curvaDeLote.ts` y `ejesDeLaCurva.ts`.
  *
