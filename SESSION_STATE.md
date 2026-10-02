@@ -62,33 +62,31 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-10-01 · El ambiente del secado: visto en un navegador, y la corrección cableada (PR #579, #583)
+### 2026-10-01 · El aviso de floración, y cinco defectos que ninguna lectura mía vio (PR #576, #578, #581, #587, #588)
 
-**Lo que encontró el recorrido, y no habría encontrado una lectura del código.** La pantalla
-funciona: la rejilla pone cada lectura en su nivel y deja «sin lectura de este nivel» en el que no la
-tiene (1 de 3, el control), y la lectura sin estante sale como «General de la instalación». De paso
-quedó verificado en vivo el fallo del `tzOffsetMinutes` (#531): **tres lecturas seguidas sin recargar,
-3 de 3**. Lo que no funcionaba era corregir: **el motor estaba completo y probado desde el 2026-09-21
-y ninguna pantalla lo llamaba**, y los disparadores no dejan otra vía —el UPDATE sólo admite el sello
-de supersedida, **sin puerta de pruebas**—, así que un 310 °C tecleado en vez de 31 era permanente.
-Ninguna prueba del servicio podía ver ese hueco, porque el servicio estaba bien.
+**Ya hay dónde anotar la floración y un aviso que la usa.** `PlotBloom` toma la forma de una
+intervención —parcela o microparcela, con bloque opcional— así que no entra ninguna familia nueva.
+El aviso lo dispara el **producto** (`harmfulToPollinators`), no la floración: decisión de Daniel,
+«eso no debe afectar las abejas, no es quimico». Con el campo en nulo no avisa, y **no bloquea nada**
+(§32: proponer, nunca afirmar).
 
-**Tu decisión: la reemplazada se queda a la vista, rotulada.** De las dos listas, `vigentes` sigue
-filtrando —no es la condición actual de ningún punto— y `recientes` deja de filtrar, porque es el
-registro. El motivo se guarda en la fila **nueva**, así que se consulta desde su reemplazo en vez de
-buscarlo entre las 20: un motivo ausente se leería como «no se dio ninguno» cuando el servicio lo
-exige.
+**De los cinco defectos reales, cuatro los encontró una revisión adversaria de seis lentes y uno un
+flip-test. Ninguno, releer el código.** (1) El último día de floración **callaba**: campos de DÍA
+comparados contra un instante. (2) La floración de la parcela madre **no llegaba** a su microparcela,
+ni al revés — se reusa `ubicacionesEmparentadas`, con su regla de la carencia §3.3: madre e hija sí,
+hermano no. (3) El texto **afirmaba** una recomendación de terceros cuyo archivo no está en `main`.
+(4) Las ventanas llevaban `notes` y `observerPersonId` al navegador. (5) Tres guardias míos pasaban
+sobre mutaciones que mataban el aviso.
 
-**Y dos cosas que el flip-test tumbó antes de salir.** Una afirmación —que un array de dependencias
-estable deja el campo de la hora vacío— se probó en vivo en los dos caminos del formulario y **la hora
-sobrevivió igual**, así que se corrigió el comentario y **no se abrió** el pendiente que iba contra
-`MeasurementCorrectionForm` e `IntervencionForm`. Y una frase de la entrega anterior era falsa: ese
-componente **no es genérico**, está atado a `correctMeasurementFormAction` y a `lotId`; lo reusable era
-el patrón, no el componente.
+**El arreglo del día de cierre costó dos intentos equivocados** —redefinir el campo contra mi propio
+esquema, y aplicar un idioma de la casa que es para un filtro de Postgres—: el relato entero y su
+medición están en el docstring de `hayFloracion`. Lo bueno es comparar **días de calendario**, y da
+**6/6 en seis zonas** de UTC+14 a UTC−11.
 
-**`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
-diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
-`paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.
+**Y dos guardias que mentían, corregidos.** El `#581` escribe en `CLAUDE.md` la trampa del **nombre**
+de la base desechable — ahí está medida, no se repite aquí. El `#588` arregla `grant-platform-admin`,
+que comparaba el recuento de permisos contra un **89 congelado** y abortó una concesión legítima con
+«permission grants changed: 144»; ahora toma una foto antes de escribir y exige «sin cambio».
 
 ## 3. Bloqueado, y en qué
 
@@ -182,6 +180,49 @@ de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**
 **Y lo que esto no prueba.** Fue un ratón sobre una pantalla de 375 px: ni
 guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
 faltando que una persona registre un dato real en el campo.
+
+#### El aviso de floración existe y todavía no puede aparecer (PR #587)
+
+**Nada registra una floración.** El aviso está construido y probado, y `floracionesDeLaParcela`
+devuelve `[]` en toda parcela porque **ninguna pantalla crea un `PlotBloom`**. Medido con control
+positivo: `plotIntervention.create` sí tiene escritor; `plotBloom` sólo aparece en
+`lib/traceability/floracion.ts` y en su migración. Daniel dijo que va a registrar la floración él, así
+que la pantalla es trabajo pendiente, no un olvido.
+
+**Y una limitación señalada a propósito:** una intervención dirigida sólo a PLANTAS deja
+`bloquesElegidos` vacío, que la contención lee como «la parcela entera», así que puede avisar por la
+floración de un bloque que esas plantas no tocan. Arreglarlo bien exige resolver a qué bloque
+pertenece cada planta; el error va en la dirección segura —avisa de más, nunca de menos, y no
+bloquea— y está escrito en el docstring de `hayFloracion`.
+
+#### `grant-platform-admin` no tiene ningún test automático (PR #588)
+
+Medido: **0 archivos en `tests/`** lo mencionan. Su flip-test del 2026-10-01 fue **manual** —fila
+patrón sobre una base sembrada de cero, y una mutación que altera `role_profile_permission` para
+verlo abortar— así que nada protege de una regresión futura. Un guardia necesita base sembrada y una
+cuenta de credenciales; cabe en el grupo `base-sembrada`.
+
+#### La rejilla y los rangos van por otra sesión, y §3 no debe reclamarla
+
+**En `main`: las tareas 1 y 2** (#584, #586) — `lib/territorio/rejilla.ts` y la migración
+`20261001224423_rejilla_y_rangos` con sus tres disparadores y cinco CHECK. **Fuera de `main`:** el
+#589 abierto esperando el sí de Daniel (tarea 3), y la tarea 4 empujada sin PR en `rejilla-tarea-4`.
+Así que **hoy no se puede definir un bloque por rango de hileras y plantas desde una pantalla**, que
+es lo que Daniel preguntó. Y queda **una decisión suya abierta**, planteada hoy y sin contestar: si
+`description` —la nota libre del terreno— debe copiarse a la microparcela. Hoy no se copia, y hay
+argumento de dominio para dejarlo así: «sector junto al pozo» puede ser falso de una microparcela que
+no lo está.
+
+#### Que la intervención de finca sirva para cualquier producto (de Daniel, 2026-10-01)
+
+Lo pidió hoy: bioestimulante, fertilizante, insecticida, fungicida — no sólo fitosanitario. **No es
+quitar un filtro.** Medido: el acto ya admite `aplicacion`/`liberacion`/`manejo_cultural`, pero el
+catálogo se filtra por `isPlantProtection` y un material sólo tiene esa bandera y
+`isVeterinaryMedicine`; y el objetivo es una lista cerrada de **13 plagas y enfermedades**, sin ningún
+valor de «nutrición», así que una aplicación de fertilizante no tendría cómo decir para qué se hizo.
+Son dos vocabularios nuevos y **los nombres salen de `docs/beneficio/03_public_api.md`**, no de una
+sesión. La pregunta de fondo es si un fertilizante es otra clase de producto con su propio objetivo,
+o si «objetivo» pasa a ser «propósito» y las plagas son un caso suyo.
 
 #### Pendientes sueltos, sin sección propia
 
