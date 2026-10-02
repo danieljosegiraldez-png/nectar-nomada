@@ -21,6 +21,21 @@ export interface VentanaDeFloracion {
 }
 
 /**
+ * El día de calendario de un **campo de día**: su medianoche UTC es el día que nombra, así que se
+ * lee en UTC. Convertirlo a la zona del dispositivo lo movería un día atrás al oeste de Greenwich —
+ * es la trampa que CLAUDE.md describe en «Precargar un `datetime-local` con `toISOString()`».
+ */
+const diaDelCampo = (d: Date): string | null =>
+  Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+
+/**
+ * El día de calendario de un **instante**, en la zona de quien ejecuta. Esto corre en el navegador,
+ * así que es la zona del dispositivo: el día que el operario quiere decir cuando escribe la fecha.
+ */
+const diaLocal = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
  * ¿Hay floración que aplique a `cuando`, dados los bloques elegidos?
  *
  * Dos reglas, y las dos importan:
@@ -60,21 +75,6 @@ export interface VentanaDeFloracion {
  * registro que mandara el fin del día. Era redefinir el campo para que encajara con la comparación,
  * en vez de arreglar la comparación — y contradecía el esquema del mismo cambio.
  */
-/**
- * El día de calendario de un **campo de día**: su medianoche UTC es el día que nombra, así que se
- * lee en UTC. Convertirlo a la zona del dispositivo lo movería un día atrás al oeste de Greenwich —
- * es la trampa que CLAUDE.md describe en «Precargar un `datetime-local` con `toISOString()`».
- */
-const diaDelCampo = (d: Date): string | null =>
-  Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-
-/**
- * El día de calendario de un **instante**, en la zona de quien ejecuta. Esto corre en el navegador,
- * así que es la zona del dispositivo: el día que el operario quiere decir cuando escribe la fecha.
- */
-const diaLocal = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
 export function hayFloracion(
   ventanas: readonly VentanaDeFloracion[],
   cuando: Date,
