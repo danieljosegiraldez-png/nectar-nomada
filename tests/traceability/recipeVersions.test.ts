@@ -97,13 +97,21 @@ afterAll(async () => {
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
   }
-  if (created.versionIds.length) {
-    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.versionIds } }) });
+  // Por el prefijo de RUN además de por id, como la receta más abajo: una prueba que deje de rechazar
+  // y cree una versión no llega a anotar su id, y su auditoría —que cuelga del id de la VERSIÓN— no la
+  // limpiaría nada.
+  const porNombre = await prisma.processRecipeVersion.findMany({
+    where: assertDefinedWhere({ recipe: { name: { contains: RUN } } }),
+    select: { id: true },
+  });
+  const versionIds = [...new Set([...created.versionIds, ...porNombre.map((v) => v.id)])];
+  if (versionIds.length) {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: versionIds } }) });
     // En orden de FK, aunque las tres claves sean CASCADE: fases y metas antes que las versiones, y las
     // versiones antes que las recetas (que se borran más abajo, por el prefijo de RUN).
-    await prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: created.versionIds } }) });
-    await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: created.versionIds } }) });
-    await prisma.processRecipeVersion.deleteMany({ where: w(created.versionIds) });
+    await prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
+    await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
+    await prisma.processRecipeVersion.deleteMany({ where: w(versionIds) });
   }
   // By RUN prefix rather than tracked id alone — see ADR-104 and the same
   // change in recipeAuthoring.test.ts. A refusal case never captures an id,
@@ -116,7 +124,7 @@ afterAll(async () => {
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
 
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
-  expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: created.versionIds } }) })).toBe(0);
+  expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: versionIds } }) })).toBe(0);
 });
 
 describe("a name may be edited; targets may not", () => {
@@ -292,5 +300,17 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
     const v4 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.3), null, null, []);
     created.versionIds.push(v4.id);
     expect(v4.fases).toEqual([]);
+  });
+
+  it("las fases que recibe se validan como las de una receta nueva, y no crea versión si fallan", async () => {
+    const versiones = () => prisma.processRecipeVersion.count({ where: { recipeId: recetaId } });
+    const antes = await versiones();
+    // Un rango de humedad invertido: la base no lo impide, es una regla del servicio (`validateFases`).
+    await expect(
+      createRecipeVersion(admin, recetaId, OBJETIVOS(4.4), null, null, [
+        { phase: "drying", targetMoistureMinPct: 12, targetMoistureMaxPct: 11 },
+      ]),
+    ).rejects.toBeInstanceOf(ProcessTargetError);
+    expect(await versiones()).toBe(antes);
   });
 });
