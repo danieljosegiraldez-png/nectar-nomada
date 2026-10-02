@@ -2,7 +2,7 @@ import { Prisma, type PlotBlockRange, type PlotBlockType } from "../../generated
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { CODIGO_DEL_RANGO, RejillaInvalida, requireLocationAttributeAccess } from "./locations";
-import { celdasEnComunConVarios, seSolapan, validarRango } from "../territorio/rejilla";
+import { celdasEnComunConVarios, seSolapan, validarRango, type Rango } from "../territorio/rejilla";
 import { TIPOS_DE_BLOQUE } from "./tiposDeBloque";
 
 export class PlotBlockValidationError extends Error {}
@@ -78,6 +78,33 @@ export async function setPlotBlockType(userAccountId: string, input: SetPlotBloc
   const existing = await prisma.plotBlock.findUnique({ where: { id: input.plotBlockId } });
   if (!existing) throw new PlotBlockValidationError("block_not_found");
   await requireLocationAttributeAccess(userAccountId, existing.locationId);
+
+  // **Pasar un bloque a «trampa» cuando sus celdas ya se solapan con una trampa.**
+  // El disparador de solapes vive en `plot_block_range`, asi que cambiar el TIPO
+  // despues no volvia a comprobar nada: un bloque sin tipo con el mismo rango que
+  // una trampa se guardaba con aviso —D7 dice que sin tipo no bloquea— y esta
+  // misma funcion lo pasaba a trampa sin rechazo. Lo encontro una revision
+  // independiente el 2026-10-02.
+  //
+  // La base lo garantiza desde `20261002040000_las_tres_reglas_que_faltaban`; esto
+  // es el mensaje, y solo mira la TRANSICION: si ya era trampa, sus rangos ya
+  // pasaron por el disparador.
+  if (input.blockType === "trampa" && existing.blockType !== "trampa") {
+    const { raiz } = await rejillaDelBloque(existing.locationId);
+    const mios = await prisma.plotBlockRange.findMany({ where: { plotBlockId: existing.id } });
+    if (mios.length > 0) {
+      const trampas = await prisma.plotBlock.findMany({
+        where: {
+          id: { not: existing.id },
+          blockType: "trampa",
+          OR: [{ locationId: raiz }, { location: { parentLocationId: raiz } }],
+        },
+        select: { name: true, rangos: true },
+      });
+      const choca = trampas.find((t2) => t2.rangos.some((r) => mios.some((m) => seSolapan(r, m))));
+      if (choca) throw new RejillaInvalida(`rejilla_trampas_se_solapan_al_marcar:${choca.name}`);
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     const actualizado = await tx.plotBlock.update({
@@ -165,21 +192,47 @@ export interface SolapeAvisado {
 async function rejillaDelBloque(locationId: string) {
   const sitio = await prisma.location.findUnique({
     where: { id: locationId },
-    select: { id: true, rowCount: true, plantsPerRow: true, parentLocationId: true },
+    select: {
+      id: true,
+      name: true,
+      rowCount: true,
+      plantsPerRow: true,
+      parentLocationId: true,
+      rangeRowFrom: true,
+      rangeRowTo: true,
+      rangePlantFrom: true,
+      rangePlantTo: true,
+    },
   });
   if (!sitio) throw new PlotBlockValidationError("block_location_not_found");
+  // El rango PROPIO del sitio del bloque: si es una microparcela que dice dónde
+  // está, el bloque no puede salirse de ahí. Sin rango no hay límite que exigir
+  // —el rango de la microparcela es opcional (D3)— y eso es deliberado.
+  const suyo: Rango | null =
+    sitio.rangeRowFrom != null &&
+    sitio.rangeRowTo != null &&
+    sitio.rangePlantFrom != null &&
+    sitio.rangePlantTo != null
+      ? {
+          rowFrom: sitio.rangeRowFrom,
+          rowTo: sitio.rangeRowTo,
+          plantFrom: sitio.rangePlantFrom,
+          plantTo: sitio.rangePlantTo,
+        }
+      : null;
+  const comun = { suyo, nombreDelSitio: sitio.name };
   if (sitio.rowCount != null && sitio.plantsPerRow != null) {
-    return { raiz: sitio.id, rejilla: { rowCount: sitio.rowCount, plantsPerRow: sitio.plantsPerRow } };
+    return { ...comun, raiz: sitio.id, rejilla: { rowCount: sitio.rowCount, plantsPerRow: sitio.plantsPerRow } };
   }
-  if (!sitio.parentLocationId) return { raiz: sitio.id, rejilla: null };
+  if (!sitio.parentLocationId) return { ...comun, raiz: sitio.id, rejilla: null };
   const madre = await prisma.location.findUnique({
     where: { id: sitio.parentLocationId },
     select: { id: true, rowCount: true, plantsPerRow: true },
   });
   if (madre?.rowCount != null && madre.plantsPerRow != null) {
-    return { raiz: madre.id, rejilla: { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow } };
+    return { ...comun, raiz: madre.id, rejilla: { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow } };
   }
-  return { raiz: sitio.parentLocationId, rejilla: null };
+  return { ...comun, raiz: sitio.parentLocationId, rejilla: null };
 }
 
 /**
@@ -207,9 +260,24 @@ export async function anadirRangoAlBloque(
   if (!bloque) throw new PlotBlockValidationError("block_not_found");
   await requireLocationAttributeAccess(userAccountId, bloque.locationId);
 
-  const { raiz, rejilla } = await rejillaDelBloque(bloque.locationId);
+  const { raiz, rejilla, suyo, nombreDelSitio } = await rejillaDelBloque(bloque.locationId);
   const malo = validarRango(input, rejilla);
   if (malo) throw new RejillaInvalida(CODIGO_DEL_RANGO[malo]);
+
+  // **Y dentro de su microparcela, si la microparcela dice dónde está.** Un bloque
+  // que pertenece administrativamente a un suelo y ocupa otro no lo impedía nada
+  // —ni la base ni el servicio— hasta
+  // `20261002040000_las_tres_reglas_que_faltaban`. Lo encontró una revisión
+  // independiente; el §5.1 del diseño lo pedía desde el principio.
+  if (
+    suyo &&
+    (input.rowFrom < suyo.rowFrom ||
+      input.rowTo > suyo.rowTo ||
+      input.plantFrom < suyo.plantFrom ||
+      input.plantTo > suyo.plantTo)
+  ) {
+    throw new RejillaInvalida(`rejilla_fuera_de_la_microparcela:${nombreDelSitio}`);
+  }
 
   // Todos los bloques que comparten esta numeración: los de la parcela y los de
   // sus microparcelas. El rango propio no cuenta como solape consigo mismo.
@@ -232,12 +300,22 @@ export async function anadirRangoAlBloque(
 
   // D7, con el alcance del disparador y no uno mayor: trampa contra trampa EN EL
   // MISMO SITIO. Esto es el mensaje; el disparador es la garantía.
+  // **D7 con el alcance que D7 dice: la NUMERACIÓN, no el sitio.**
+  //
+  // La versión anterior comparaba `v.locationId === bloque.locationId`, copiando
+  // el alcance del disparador. Y el disparador estaba mal: su variable se llamaba
+  // `mi_parcela` pero guardaba el `location_id` del BLOQUE, que para un bloque en
+  // microparcela es la microparcela. El nombre delataba la intención. D7 no lleva
+  // calificativo de sitio, y D3 dice que la numeración es UNA.
+  //
+  // Lo corrigió `20261002040000_las_tres_reglas_que_faltaban` en la base, y aquí
+  // se iguala: `vecinos` ya son los de la raíz entera, así que basta con dejar de
+  // filtrar por sitio. Mi argumento anterior —«más estricto que la base es el
+  // lado peligroso»— era correcto como regla y falso como aplicación: el hueco
+  // estaba en el disparador, no en el servicio.
   if (bloque.blockType === "trampa") {
     const choca = vecinos.some(
-      (v) =>
-        v.blockType === "trampa" &&
-        v.locationId === bloque.locationId &&
-        v.rangos.some((r) => seSolapan(r, input)),
+      (v) => v.blockType === "trampa" && v.rangos.some((r) => seSolapan(r, input)),
     );
     if (choca) throw new RejillaInvalida("rejilla_trampas_se_solapan");
   }

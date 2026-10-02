@@ -1819,7 +1819,9 @@
     "rejillaSinRango": "This microplot doesn't say which part of the grid it covers yet, so it can't be compared with what's planted.",
     "error_rango_no_encontrado": "That part is gone: someone removed it. Reload the page to see the current state.",
     "error_bloque_no_encontrado": "That block is gone. Reload the page to see the current state.",
-    "error_bloque_sin_sitio": "That block has no plot attached, so it can't be given a part of the grid."
+    "error_bloque_sin_sitio": "That block has no plot attached, so it can't be given a part of the grid.",
+    "error_rejilla_fuera_de_la_microparcela": "That part falls outside the microplot “{value}”. A block can't cover ground that isn't its microplot's.",
+    "error_rejilla_trampas_se_solapan_al_marcar": "It can't be marked as a trap: its cells overlap the trap “{value}”. Move one of the two first."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

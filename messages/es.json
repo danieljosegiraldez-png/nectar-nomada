@@ -1819,7 +1819,9 @@
     "rejillaSinRango": "Esta microparcela todavía no dice qué trozo de la rejilla ocupa, así que no se puede comparar con lo sembrado.",
     "error_rango_no_encontrado": "Ese trozo ya no está: alguien lo quitó. Recarga la página para ver cómo está ahora.",
     "error_bloque_no_encontrado": "Ese bloque ya no está. Recarga la página para ver cómo está ahora.",
-    "error_bloque_sin_sitio": "Ese bloque no tiene una parcela asociada, así que no se le puede asignar un trozo de la rejilla."
+    "error_bloque_sin_sitio": "Ese bloque no tiene una parcela asociada, así que no se le puede asignar un trozo de la rejilla.",
+    "error_rejilla_fuera_de_la_microparcela": "Ese trozo se sale de la microparcela «{value}». Un bloque no puede ocupar suelo que no es de su microparcela.",
+    "error_rejilla_trampas_se_solapan_al_marcar": "No se puede marcar como trampa: sus celdas se solapan con la trampa «{value}». Mueve uno de los dos primero."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",
