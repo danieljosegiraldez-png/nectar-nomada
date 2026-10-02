@@ -94,6 +94,46 @@ puede sostener una afirmación.
 
 ## 3. Bloqueado, y en qué
 
+#### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
+
+El guion está arreglado y en `main` (#593, #594, #595) y **la consolidación no se ha aplicado**: la
+ficha del 13-08 tiene la membresía a Finca Rosina y la del 17-09 el correo y la cuenta activa con su
+Platform Admin. El ensayo contra producción confirma el plan: 2 asignaciones a mover, la duplicada
+referenciada sólo por su cuenta en 52 columnas. Falta que Daniel corra la misma línea con `--aplicar`
+y lea lo que el ensayo ahora imprime: el desglose «N propias + 2 movidas» y **las referencias a la
+cuenta que va a borrar**. Si esa cuenta tiene historia el guion se niega a propósito — borrarla
+pondría a NULL el actor de su auditoría (`ON DELETE SET NULL`), que es lo que §35 prohíbe. Lo que no
+tiene es prueba de conducta: los guardias leen la fuente y lo dicen en su cabecera.
+
+#### El aviso de floración está construido y no se puede alcanzar (PR #587, #590)
+
+`floracionesDeLaParcela` devuelve `[]` en toda parcela porque **nada registra una floración**. Medido
+con control positivo (`plotIntervention.create` sí tiene escritor): el único escritor de `plotBloom` es
+`lib/traceability/floracion.ts`, **0 pantallas** llaman a `registrarFloracion` y **0 acciones de
+servidor lo exponen**. Daniel dijo que la registraría él. Limitación a propósito: una intervención
+dirigida sólo a PLANTAS deja `bloquesElegidos` vacío, que la contención lee como «la parcela entera»,
+así que puede avisar por un bloque que esas plantas no tocan — de más, nunca de menos, y sin bloquear.
+
+#### La rejilla: tareas 1 a 3 en `main`, 4 a 8 empujadas, y las pantallas son la 7
+
+Diseño y plan del 2026-10-01 en `docs/superpowers/`, siete tareas. Medido por contenido: **en `main`**
+`lib/territorio/rejilla.ts`, la tabla `PlotBlockRange` con sus disparadores, y la rejilla en
+`updateLocationAttributes` (#589). **Fuera:** `rejilla-tarea-4` a `-8`, apiladas y sin PR; la 5 escribe
+los rangos —hoy **0 archivos de código** tocan `PlotBlockRange`— y la **7 son las pantallas**. Hoy se
+crea una microparcela y un bloque con nombre y tipo, pero **no se dice qué celdas cubre**. Decisión de
+Daniel abierta: si `description` se copia a la microparcela. Hoy no, y hay argumento para dejarlo así.
+
+#### Que la intervención de finca sirva para cualquier producto (de Daniel, 2026-10-01)
+
+Bioestimulante, fertilizante, insecticida, fungicida — no sólo fitosanitario. **No es quitar un
+filtro.** Medido: el acto ya admite `aplicacion`/`liberacion`/`manejo_cultural` y el encierro son dos
+líneas de `lib/traceability/intervenciones.ts` (834 filtra por `isPlantProtection`, 199 rechaza); pero
+el objetivo es una lista cerrada de **13 plagas y enfermedades** sin ningún valor de nutrición, así que
+un fertilizante no tendría cómo decir para qué se aplicó. **Y los nombres NO los fija el contrato:**
+`docs/beneficio/03_public_api.md` no menciona ninguno de los ocho términos —control positivo, «enum»
+sale 15 veces— y gobierna el beneficio, no la finca. La pregunta es si un fertilizante es otra clase
+con su propio objetivo, o si «objetivo» pasa a ser «propósito» y las plagas son un caso suyo.
+
 #### El tablero del beneficio: el paso 1 y las tres piezas de §4.5 están en `main`
 
 **Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
