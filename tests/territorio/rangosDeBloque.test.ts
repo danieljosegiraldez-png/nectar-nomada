@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import { RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
+import {
+  LocationAccessError,
+  RejillaInvalida,
+  updateLocationAttributes,
+} from "../../lib/traceability/locations";
 import {
   anadirRangoAlBloque,
   createPlotBlock,
@@ -256,9 +260,17 @@ describe("anadirRangoAlBloque", () => {
    */
   it("un usuario sin acceso a ESTA parcela no puede añadir un rango", async () => {
     const b = await bloque("Ensayo A", "experimental");
-    await expect(
-      anadirRangoAlBloque(ajeno.userAccountId, { plotBlockId: b.id, ...RANGO }),
-    ).rejects.toThrow(/access|not_authorized|classification/i);
+    // **Fija la CLASE, no una expresión regular.** Lo señaló una revisión
+    // independiente: con `toThrow(/access/i)`, sustituir el guardia por un
+    // `throw new Error("access")` dejaba la prueba en verde — y un guardia de
+    // autorización sin su prueba negativa no es un guardia.
+    let caido: unknown = null;
+    try {
+      await anadirRangoAlBloque(ajeno.userAccountId, { plotBlockId: b.id, ...RANGO });
+    } catch (e) {
+      caido = e;
+    }
+    expect(caido, "tiene que ser la clase de acceso del dominio").toBeInstanceOf(LocationAccessError);
     const n = await prisma.plotBlockRange.count({ where: assertDefinedWhere({ plotBlockId: b.id }) });
     expect(n, "no debe haber escrito nada").toBe(0);
   });
@@ -292,9 +304,13 @@ describe("quitarRangoDelBloque", () => {
   it("un usuario sin acceso a ESTA parcela no puede quitarlo", async () => {
     const b = await bloque("Ensayo A", "experimental");
     const { rango } = await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: b.id, ...RANGO });
-    await expect(quitarRangoDelBloque(ajeno.userAccountId, rango.id)).rejects.toThrow(
-      /access|not_authorized|classification/i,
-    );
+    let caido: unknown = null;
+    try {
+      await quitarRangoDelBloque(ajeno.userAccountId, rango.id);
+    } catch (e) {
+      caido = e;
+    }
+    expect(caido).toBeInstanceOf(LocationAccessError);
     const n = await prisma.plotBlockRange.count({ where: assertDefinedWhere({ plotBlockId: b.id }) });
     expect(n, "no debe haber borrado nada").toBe(1);
   });
