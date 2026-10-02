@@ -18,6 +18,8 @@ export interface ProductoOption {
   doseMax: number | null;
   doseUnit: string | null;
   plantProtectionTargets: readonly string[];
+  /** **Nulo es «nadie lo declaró»**, no «no daña». El aviso sólo salta con `true`. */
+  harmfulToPollinators: boolean | null;
   lotes: readonly { id: string; batchLabel: string; expiresAt: Date | null }[];
 }
 
@@ -47,12 +49,18 @@ export function LineaDeIntervencion({
   valores,
   productos,
   target,
+  enFloracion,
 }: {
   indice: number;
   valores: ValoresDeLinea;
   productos: readonly ProductoOption[];
   /** El objetivo elegido arriba. Llega para poder avisar si el producto no declara cubrirlo. */
   target?: string;
+  /**
+   * ¿Hay floración anotada que aplique a la fecha y los bloques elegidos arriba? Lo decide
+   * `hayFloracion` en el formulario, porque la fecha vive ahí y el operario puede corregirla.
+   */
+  enFloracion?: boolean;
 }) {
   const t = useTranslations("Traceability");
   const [materialId, setMaterialId] = useState(valores.materialId);
@@ -104,6 +112,16 @@ export function LineaDeIntervencion({
     producto.plantProtectionTargets.length > 0 &&
     !producto.plantProtectionTargets.includes(target);
 
+  /**
+   * **El aviso: este producto daña polinizadores y hay floración.** Hermano del de arriba y con la
+   * misma disciplina del nulo — sólo salta con `true`, porque `null` es «nadie lo declaró» y avisar
+   * ahí pondría el aviso en todos los productos hasta que alguien rellene el catálogo.
+   *
+   * **No bloquea**: §32 deja que un umbral PROPONGA, nunca que AFIRME. Quien está delante de la
+   * parcela puede tener una razón, y el registro queda tal como lo escriba.
+   */
+  const dañaEnFloracion = producto?.harmfulToPollinators === true && enFloracion === true;
+
   const rotuloDeOrigen = (origen: ReturnType<typeof origenDeLaCarencia> | null) => {
     if (origen === "del_producto") return t("manejoOriginFromProduct");
     if (origen === "indicada_al_registrar") return t("manejoOriginDeclaredAtEntry");
@@ -152,6 +170,9 @@ export function LineaDeIntervencion({
       ) : null}
       {noDeclaraElObjetivo ? (
         <p className="nn-alerta nn-alerta-aviso">{t("manejoTargetNoDeclarado", { producto: producto!.name })}</p>
+      ) : null}
+      {dañaEnFloracion ? (
+        <p className="nn-alerta nn-alerta-aviso">{t("manejoAvisoFloracion", { producto: producto!.name })}</p>
       ) : null}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

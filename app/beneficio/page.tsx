@@ -244,6 +244,7 @@ export default async function BeneficioPage({
               pedida={pedida}
               curva={datos.curva}
               codigoDelLote={datos.lotes.find((l) => l.lotId === pedida?.lotId)?.lotCode ?? null}
+              perfilDelLote={datos.curva?.perfilDelLote ?? null}
             />
           </>
         )}

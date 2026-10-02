@@ -36,6 +36,7 @@
     "data:lote-7": "tsx scripts/p1-lote-7.ts",
     "data:remove-demo-places": "bash scripts/remove-demo-places.sh",
     "data:remove-orphan-roasts": "bash scripts/remove-orphan-roasts.sh",
+    "people:consolidar": "tsx scripts/consolidar-persona-duplicada.ts",
     "people:set-email": "tsx scripts/set-person-email.ts",
     "data:bob-farm-manager": "tsx scripts/p1-bob-farm-manager.ts",
     "data:kenis-apicultor": "tsx scripts/p1-kenis-apicultor.ts",

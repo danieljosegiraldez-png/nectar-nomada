@@ -1,11 +1,18 @@
 /**
  * La floración de una parcela — decisión de Daniel, 2026-10-01: «parcela, microparcela o bloque».
  *
- * **Para qué existe.** Las fuentes de la región dicen que no se asperja durante la floración «con
- * el fin de proteger la fauna benéfica, especialmente las abejas nativas y otros polinizadores»
- * (`docs/dominio/broca-manejo-recomendaciones.md`). En una operación que además tiene apiarios y
- * meliponarios, eso no es un riesgo ambiental genérico: es un daño a su propia producción de miel.
- * Sin un sitio donde anotar la floración no hay forma de decirlo.
+ * **Para qué existe.** Esta operación tiene apiarios y meliponarios propios, así que una aplicación
+ * que caiga en floración no es un riesgo ambiental genérico: toca su propia producción de miel.
+ * Antes no había dónde anotar la floración, así que no había forma de decirlo.
+ *
+ * **Lo que el aviso NO dice, y es deliberado:** no cita ninguna recomendación agronómica. Las que
+ * hay —`docs/dominio/broca-manejo-recomendaciones.md`, en el PR #575— están marcadas en su propia
+ * cabecera como «referencia externa» y lo sustancial salió del resumen de un buscador. El aviso
+ * junta **dos hechos que el sistema tiene** —el producto declara que daña polinizadores y hay
+ * floración anotada— y deja el juicio en quien está delante de la parcela. Afirmarle al operario lo
+ * que «piden las fuentes de la región» sería emitir una afirmación que no se puede sostener, que es
+ * justo lo que `docs/beneficio/21_rubrica_veracidad.md` prohíbe. Lo señaló una revisión
+ * independiente, midiendo que el documento citado no está ni en `main`.
  *
  * **Lo que este módulo NO hace, y es deliberado.** No bloquea una aplicación ni la rechaza. La
  * especificación §32 exige `sugerencia → evidencia → revisión humana → acción → registro`, y
@@ -19,6 +26,8 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
+import type { VentanaDeFloracion } from "./floracionVigente";
+import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 
 export class FloracionValidationError extends Error {}
 
@@ -27,7 +36,15 @@ export interface RegistrarFloracionInput {
   /** El bloque, cuando se anota más fino que la parcela. Nulo = la parcela entera. */
   readonly plotBlockId?: string | null;
   readonly startsAt: Date;
-  /** Nulo = **todavía abierta**, que es el estado real mientras la floración dura. */
+  /**
+   * Nulo = **todavía abierta**, que es el estado real mientras la floración dura.
+   *
+   * **Y cuando se da, es un INSTANTE: el fin del día, no la medianoche del día.** Medido el
+   * 2026-10-01: con `2026-03-20T00:00:00Z` —la forma en que esta casa guarda un campo de día— el
+   * aviso de polinizadores **calla el 20**, que es el último día de la ventana. La pantalla que
+   * registre esto manda el fin del día con `parseLocalDateTime`, no un `type="date"`. Está dicho
+   * también en el docstring de `hayFloracion`, que es quien lo compara.
+   */
   readonly endsAt?: Date | null;
   readonly observerPersonId?: string | null;
   readonly notes?: string | null;
@@ -123,6 +140,50 @@ export async function enFloracion(
       startsAt: { lte: cuando },
       OR: [{ endsAt: null }, { endsAt: { gte: cuando } }],
     },
+    orderBy: { startsAt: "desc" },
+  });
+}
+
+/**
+ * Las ventanas de floración de una parcela, para que el navegador decida el aviso.
+ *
+ * **Y no de UNA ubicación: de ella, sus ascendientes y sus descendientes.** Lo encontró una
+ * revisión independiente, y era un fallo real: una floración anotada en la parcela madre no llegaba
+ * a una intervención sobre su microparcela, ni al revés. La contención de §D1 del diseño de la
+ * rejilla dice que tratar la parcela entra todo lo de dentro, y físicamente una microparcela de una
+ * parcela en floración está en floración. Se reusa `ubicacionesEmparentadas`, que existe para
+ * exactamente esta forma en la carencia fitosanitaria (§3.3) y lleva la regla escrita en su
+ * cabecera: la madre y la hija sí, **un hermano no**.
+ *
+ * **Por qué todas y no las de un instante.** `enFloracion` responde por un instante, y el instante
+ * que importa es el que el operario escribe en el formulario — que puede corregir. Mandar la
+ * respuesta de «ahora» dejaría el aviso equivocado en cuanto cambiara la fecha. Mandar las ventanas
+ * deja la decisión en `hayFloracion`, donde está la fecha elegida.
+ *
+ * **Y no lleva recorte, a propósito.** Una parcela florece una o dos veces al año, así que cualquier
+ * «últimos N días» sería un número inventado para acotar algo que no crece. El día que una parcela
+ * tenga tantas ventanas que esto pese, será un problema medido y se acotará entonces.
+ *
+ * **No autoriza**: quien la llama ya pasó su compuerta sobre la parcela.
+ */
+export async function floracionesDeLaParcela(
+  locationId: string,
+  opciones?: { db?: Prisma.TransactionClient },
+): Promise<VentanaDeFloracion[]> {
+  // **Se llama `client`, no `db`, y eso lo decide el inventario de acceso.** Su detector acepta
+  // `prisma`, `aiPrisma`, `tx`, `client` y un `)`; con `db` la consulta de abajo se vuelve invisible
+  // y el archivo sale con una operación menos. Caí en ello en este mismo cambio: al meter el recorrido
+  // del árbol pasé del paréntesis a un `const db`, y el inventario bajó de 599 a 598 sin que nada
+  // más lo dijera. Es la trampa que este archivo ya documenta para `enFloracion`.
+  const client = opciones?.db ?? prisma;
+  const emparentadas = await ubicacionesEmparentadas(locationId, client);
+  // **Las TRES columnas que el aviso necesita, no la fila entera.** Esto cruza al navegador como
+  // prop de un componente cliente, así que sin `select` viajaban también `notes` —texto libre de la
+  // observación— y `observerPersonId`, que nombra a una persona. Lo señaló una revisión: el tipo
+  // `VentanaDeFloracion` declaraba tres campos y el payload llevaba siete.
+  return client.plotBloom.findMany({
+    where: { locationId: { in: emparentadas } },
+    select: { startsAt: true, endsAt: true, plotBlockId: true },
     orderBy: { startsAt: "desc" },
   });
 }

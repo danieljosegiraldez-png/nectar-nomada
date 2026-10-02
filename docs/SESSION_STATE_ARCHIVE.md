@@ -4687,3 +4687,31 @@ y dos costaron trabajo real —escribí media prueba de clasificación antes de 
 desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
 archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
 conflicto.
+
+### 2026-10-01 · El ambiente del secado: visto en un navegador, y la corrección cableada (PR #579, #583)
+
+**Lo que encontró el recorrido, y no habría encontrado una lectura del código.** La pantalla
+funciona: la rejilla pone cada lectura en su nivel y deja «sin lectura de este nivel» en el que no la
+tiene (1 de 3, el control), y la lectura sin estante sale como «General de la instalación». De paso
+quedó verificado en vivo el fallo del `tzOffsetMinutes` (#531): **tres lecturas seguidas sin recargar,
+3 de 3**. Lo que no funcionaba era corregir: **el motor estaba completo y probado desde el 2026-09-21
+y ninguna pantalla lo llamaba**, y los disparadores no dejan otra vía —el UPDATE sólo admite el sello
+de supersedida, **sin puerta de pruebas**—, así que un 310 °C tecleado en vez de 31 era permanente.
+Ninguna prueba del servicio podía ver ese hueco, porque el servicio estaba bien.
+
+**Tu decisión: la reemplazada se queda a la vista, rotulada.** De las dos listas, `vigentes` sigue
+filtrando —no es la condición actual de ningún punto— y `recientes` deja de filtrar, porque es el
+registro. El motivo se guarda en la fila **nueva**, así que se consulta desde su reemplazo en vez de
+buscarlo entre las 20: un motivo ausente se leería como «no se dio ninguno» cuando el servicio lo
+exige.
+
+**Y dos cosas que el flip-test tumbó antes de salir.** Una afirmación —que un array de dependencias
+estable deja el campo de la hora vacío— se probó en vivo en los dos caminos del formulario y **la hora
+sobrevivió igual**, así que se corrigió el comentario y **no se abrió** el pendiente que iba contra
+`MeasurementCorrectionForm` e `IntervencionForm`. Y una frase de la entrega anterior era falsa: ese
+componente **no es genérico**, está atado a `correctMeasurementFormAction` y a `lotId`; lo reusable era
+el patrón, no el componente.
+
+**`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
+diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
+`paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.

@@ -45,6 +45,11 @@
  *
  * Las lecturas se ordenan por hora: el orden en que lleguen no debe cambiar la curva.
  *
+ * **Devuelve también las lecturas sin escalar y el rango declarado** (`lecturas`, `rango`): los
+ * puntos son coordenadas y de ellas no se recupera qué se midió. Los necesitan los ejes
+ * (`ejesDeLaCurva`) y la cita de qué sugiere el último valor (`riesgoDeEsperar`); no cambian
+ * ninguna coordenada.
+ *
  * Diseño: `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
  */
 
@@ -70,11 +75,56 @@ export type Banda =
   /** `minValue === maxValue`: no hay rango contra el que escalar. Ver el encabezado. */
   | { readonly tipo: "banda_de_ancho_cero" };
 
+/** Una lectura tal como llegó: instante y valor, sin escalar. */
+export interface LecturaDeCurva {
+  readonly occurredAt: Date;
+  readonly value: number;
+}
+
 export interface Curva {
   readonly puntos: readonly PuntoDeCurva[];
   readonly banda: Banda;
   readonly ancho: number;
   readonly alto: number;
+  /**
+   * Las lecturas de las que salieron `puntos`, **por hora ascendente y sin escalar**. Los puntos son
+   * coordenadas del lienzo y de ahí no se recupera qué se midió; quien rotula los ejes
+   * (`ejesDeLaCurva`) o cita qué sugiere el último valor (`riesgoDeEsperar`) las necesita tal cual.
+   * **«La última» no es `lecturas[lecturas.length - 1]`:** con varias en el mismo instante el orden entre
+   * ellas es arbitrario, y quien necesite la última pregunta a `ultimaLectura`, que dice `null` cuando
+   * no la hay.
+   */
+  readonly lecturas: readonly LecturaDeCurva[];
+  /**
+   * El rango que declaró la receta, **tal cual** (`minValue`, `maxValue`), o `null` si falta
+   * alguno de los dos extremos. A diferencia de `banda`, **no descarta** el rango al revés ni el de
+   * ancho cero: esos dos NO se dibujan (`banda` lo dice) pero siguen siendo lo que la receta
+   * declaró, y quien rotula decide qué hacer con ellos en vez de adivinar por qué falta.
+   */
+  readonly rango: { readonly min: number; readonly max: number } | null;
+}
+
+/**
+ * La lectura más reciente, **o `null` si no hay UNA última**: sin lecturas, o con varias que comparten
+ * el instante máximo.
+ *
+ * **Un empate de instante no tiene «última».** `curvaDeLote` ordena por `getTime()`, y un empate devuelve
+ * `0`: el orden entre lecturas del mismo instante es el que devolvió la base —arbitrario y no estable—,
+ * así que «la de más al final» cambia de una consulta a otra. Medido en la base local: 7 de 10 lotes
+ * tienen TODAS sus lecturas en el mismo instante, y en un lote se llegó a presentar la de **recepción**
+ * (la primera de la corrida) como «tu última lectura». **No se inventa un desempate** —ni por valor, ni
+ * por id, ni por nota—: cuando no se puede decir cuál es la última, no se afirma. Es el «nunca un cero
+ * donde falta un registro» aplicado a la identidad de la lectura.
+ *
+ * No depende de que `lecturas` venga ordenada: busca el instante máximo y cuenta las que caen en él.
+ * Un instante que no es un número (`Invalid Date`) tampoco tiene última: `null`.
+ */
+export function ultimaLectura(lecturas: readonly LecturaDeCurva[]): LecturaDeCurva | null {
+  if (lecturas.length === 0) return null;
+  const instantes = lecturas.map((l) => l.occurredAt.getTime());
+  const ultimo = Math.max(...instantes);
+  const enElUltimo = lecturas.filter((_, i) => instantes[i] === ultimo);
+  return enElUltimo.length === 1 ? enElUltimo[0]! : null;
 }
 
 /** Posición de `v` entre `min` y `max` en un eje de `tamano`, con el máximo en 0. Rango cero: mitad. */
@@ -84,7 +134,7 @@ function escalaY(v: number, min: number, max: number, tamano: number): number {
 }
 
 export function curvaDeLote(input: {
-  readonly lecturas: readonly { readonly occurredAt: Date; readonly value: number }[];
+  readonly lecturas: readonly LecturaDeCurva[];
   /** De `ProcessTarget`. Los tres son anulables en el esquema. */
   readonly objetivo: {
     readonly minValue: number | null;
@@ -110,7 +160,8 @@ export function curvaDeLote(input: {
     : anchoCero
       ? { tipo: "banda_de_ancho_cero" }
       : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
-  if (lecturas.length === 0) return { puntos: [], banda, ancho, alto };
+  const rango = minValue !== null && maxValue !== null ? { min: minValue, max: maxValue } : null;
+  if (lecturas.length === 0) return { puntos: [], banda, ancho, alto, lecturas, rango };
 
   const valores = lecturas.map((l) => l.value);
   const escalaMin = hayBanda ? minValue : Math.min(...valores);
@@ -124,7 +175,7 @@ export function curvaDeLote(input: {
     y: escalaY(l.value, escalaMin, escalaMax, alto),
   }));
 
-  return { puntos, banda, ancho, alto };
+  return { puntos, banda, ancho, alto, lecturas, rango };
 }
 
 function bandaDe(

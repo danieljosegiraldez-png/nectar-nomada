@@ -16,6 +16,21 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
+-- La foto de lo que el rol SIGNIFICA, tomada antes de escribir nada. La
+-- post-condicion de abajo compara contra esto, no contra un numero escrito aqui:
+-- un numero se queda viejo cada vez que el catalogo gana un permiso, y entonces
+-- este guion deja de poder conceder nada. Paso el 2026-10-01: decia 89 --la suma
+-- de los trece perfiles acotados cuando se escribio-- y la base tenia 144, que es
+-- esos 89 mas los 55 que Platform Admin recibe por llevar el catalogo entero
+-- (ROLE_PROFILES en lib/rbac/catalog.ts lo define como PERMISSIONS.map(...)).
+-- El guardia aborto una concesion legitima, y su mensaje --«permission grants
+-- changed»-- se lee como si alguien hubiera tocado los permisos.
+--
+-- Antes/despues no envejece, y comprueba la propiedad que el comentario de abajo
+-- siempre quiso: que conceder un rol a una persona no altere el rol.
+CREATE TEMP TABLE permisos_antes ON COMMIT DROP AS
+  SELECT count(*) AS n FROM core.role_profile_permission;
+
 CREATE TEMP TABLE target ON COMMIT DROP AS
   SELECT ua.id AS account_id
   FROM core.user_account ua
@@ -69,19 +84,57 @@ SELECT gen_random_uuid(), NULL, 'create', 'assignment', inserted.id,
 FROM inserted;
 
 DO $$
-DECLARE n int;
+DECLARE n int; antes int; otros int;
 BEGIN
+  -- **En el ÁMBITO DE PLATAFORMA, no en todos.** Esta comprobación contaba las
+  -- asignaciones activas de Platform Admin de la cuenta SIN mirar su ámbito, y
+  -- exigía exactamente una. Eso codifica una suposición —«ésta es la primera y
+  -- única»— en vez de la propiedad que al guion le importa: que haya concedido
+  -- una, aquí, en plataforma.
+  --
+  -- Lo destapó una concesión legítima el 2026-10-02: `INSERT 0 1` —o sea que NO
+  -- existía asignación en el ámbito de plataforma, porque el `NOT EXISTS` de
+  -- arriba casa justo esas tres columnas— y acto seguido «expected exactly 1
+  -- active Platform Admin assignment, found 4». Las otras tres estaban acotadas a
+  -- otros ámbitos, que es una situación normal: `scopeContains` resuelve el ámbito
+  -- de plataforma por TIPO, y un Platform Admin acotado a una ubicación concede su
+  -- juego de permisos sólo ahí. Tener las dos cosas no es un error, y el guion no
+  -- tenía por qué negarse.
+  --
+  -- Es la misma forma que el 89 congelado de más abajo: una post-condición que
+  -- mide algo distinto de lo que afirma. Allí abortaba por el crecimiento legítimo
+  -- del catálogo; aquí, por el historial legítimo de la persona.
   SELECT count(*) INTO n
   FROM core.assignment a
   JOIN core.role_profile rp ON rp.id = a.role_profile_id
   WHERE a.user_account_id = (SELECT account_id FROM target)
+    AND a.scope_id = (SELECT id FROM pscope)
     AND rp.name = 'Platform Admin' AND a.status = 'active';
-  IF n <> 1 THEN RAISE EXCEPTION 'expected exactly 1 active Platform Admin assignment, found %', n; END IF;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'esperaba exactamente 1 asignación activa de Platform Admin en el ámbito de PLATAFORMA, hay %', n;
+  END IF;
+
+  -- Y las de otros ámbitos se DICEN, no bloquean: quien corre esto merece saber
+  -- que existen, porque explican de dónde salía el recuento viejo.
+  SELECT count(*) INTO otros
+  FROM core.assignment a
+  JOIN core.role_profile rp ON rp.id = a.role_profile_id
+  WHERE a.user_account_id = (SELECT account_id FROM target)
+    AND a.scope_id <> (SELECT id FROM pscope)
+    AND rp.name = 'Platform Admin' AND a.status = 'active';
+  IF otros > 0 THEN
+    RAISE NOTICE 'nota: esta cuenta tiene además % asignación(es) activa(s) de Platform Admin en otros ámbitos', otros;
+  END IF;
 
   -- Role definitions are seed-managed (ADR-064). This grants a role to a
-  -- person; it must never alter what the role itself means.
+  -- person; it must never alter what the role itself means. Se compara contra la
+  -- foto del principio de la transaccion, no contra una constante: ver el
+  -- comentario de permisos_antes.
   SELECT count(*) INTO n FROM core.role_profile_permission;
-  IF n <> 89 THEN RAISE EXCEPTION 'permission grants changed: % (expected 89)', n; END IF;
+  SELECT pa.n INTO antes FROM permisos_antes pa;
+  IF n <> antes THEN
+    RAISE EXCEPTION 'este guion altero lo que el rol SIGNIFICA: core.role_profile_permission paso de % a %', antes, n;
+  END IF;
 
   RAISE NOTICE 'OK — Platform Admin granted at platform scope; role definitions unchanged';
 END $$;

@@ -958,6 +958,7 @@
     "manejoUse_preventivo": "preventivo",
     "manejoUse_control": "de control",
     "manejoTargetNoDeclarado": "{producto} no declara cubrir el objetivo elegido. Puede ser deliberado; queda anotado tal como se registre.",
+    "manejoAvisoFloracion": "{producto} declara que daña polinizadores, y hay floración anotada en esta parcela para la fecha elegida. Queda anotado tal como se registre.",
     "manejoUnitLabel": "Unidad",
     "manejoLotLabel": "Frasco",
     "manejoLotNone": "— sin frasco —",
@@ -3315,11 +3316,17 @@
     "curvaFueraDeBanda": "{n, plural, one {# lectura fuera del rango de la receta} other {# lecturas fuera del rango de la receta}}",
     "curvaFueraDeEscala": "{n, plural, one {# lectura queda más allá de lo que cabe en el dibujo y se marca con un triángulo en el borde.} other {# lecturas quedan más allá de lo que cabe en el dibujo y se marcan con un triángulo en el borde.}}",
     "curvaLecturas": "{n, plural, one {# lectura} other {# lecturas}}",
-    "curvaEjes": "A la derecha, lo más reciente; hacia arriba, el valor más alto.",
+    "curvaEjes": "A la derecha, lo más reciente; hacia arriba, el valor más alto. Las horas cuentan desde la primera lectura.",
     "curvaBandaAnchoCero": "La receta declara un rango de ancho cero (mínimo igual a máximo): la escala no distingue valores, así que no se afirma qué lecturas quedan dentro o fuera. Compara las lecturas con ese valor a mano.",
     "curvaBandaAnchoCeroCorto": "rango de ancho cero en la receta: no se juzgan las lecturas",
     "curvaBandaAlReves": "La receta declara el rango al revés (mínimo mayor que máximo): no se dibuja la banda ni se afirma qué lecturas quedan dentro o fuera, porque la curva saldría espejada. Las lecturas se dibujan igual, de la menor a la mayor. Avisa a quien gestiona la receta para que la corrija.",
-    "curvaBandaAlRevesCorto": "rango al revés en la receta: no se juzgan las lecturas"
+    "curvaBandaAlRevesCorto": "rango al revés en la receta: no se juzgan las lecturas",
+    "curvaRiesgoMarca": "Criterio de Néctar Nómada",
+    "curvaRiesgoDice": "con tu última lectura (pH {ph}), el dato sugiere:",
+    "curvaRiesgoDiceSiSeEstanca": "si el pH se estanca donde está hoy (tu última lectura: {ph}), el dato sugiere:",
+    "curvaRiesgoDeDondeSale": "De dónde sale",
+    "curvaRiesgoFuente": "Banda {banda} de la matriz de pH del perfil {perfil} de {documento}, §1. Es un criterio de Néctar Nómada, no una orden: la decisión es de quien lleva el lote.",
+    "curvaRiesgoCitaLiteral": "La frase entre comillas es cita literal del documento, tal como está escrita."
   },
   "Bandejas": {
     "nuevoTipoAyuda": "Define las medidas de un tipo de bandeja reutilizable.",
