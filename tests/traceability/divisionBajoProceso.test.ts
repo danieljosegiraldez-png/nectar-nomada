@@ -125,7 +125,10 @@ afterAll(async () => {
   }));
   // Antes que las transformaciones: `divided_by_transformation_id` es RESTRICT.
   await borrarProcesosDeLotesDonde({ id: { in: todos } });
-  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: mediciones } }) });
+  // También las de cualquier lote de la corrida: si la regla de R6.6 faltara, la medición sobre el lote dividido se
+  // guardaría, y `measurement.lot_id` es SET NULL —borrar el lote la dejaría huérfana, sin lote—. Medido con el flip
+  // que quita esa regla: dejó una.
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ OR: [{ id: { in: mediciones } }, { lotId: { in: todos } }] }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: todos } }) });
   await prisma.deviation.deleteMany({ where: assertDefinedWhere({ lotTransformationId: { in: ts.map((t) => t.id) } }) });
   await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: ts.map((t) => t.id) } }) });
