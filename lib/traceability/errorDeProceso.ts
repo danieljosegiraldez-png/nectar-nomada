@@ -28,6 +28,7 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   "lineage_too_deep",
   "motivo_otro_requiere_nota",
   "process_already_open",
+  "devolucion_antes_del_cierre",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

@@ -3,8 +3,9 @@
  *
  * **Una ruta y no cinco.** Esto se usa en el campo, con el teléfono en una mano
  * y café en la otra: abrir el proceso, apuntar un manejo, cerrarlo con la
- * humedad y —si se pasó del objetivo— devolverlo a secado son cosas que ocurren
- * en la misma visita a la cama de secado. Cinco rutas serían cinco navegaciones.
+ * humedad y —si se pasó del objetivo, o si el lote ya está en bodega—
+ * devolverlo a secado son cosas que ocurren en la misma visita a la cama de
+ * secado. Cinco rutas serían cinco navegaciones.
  *
  * **La pantalla no decide nada.** Todo lo que se ve aquí lo decide el servicio:
  * si hay un proceso abierto, si se puede cerrar, si el lote pasó el objetivo.
@@ -64,8 +65,9 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
 
   const abierto = procesos.find((p) => p.endedAt === null) ?? null;
   const ultimo = procesos[procesos.length - 1] ?? null;
-  // Cerrado y por encima del objetivo: es el estado que bloquea bodega, y el
-  // único desde el que `devolverASecado` tiene sentido.
+  // Cerrado y por encima del objetivo: es el estado que bloquea la ENTRADA a
+  // bodega. Es una de las dos condiciones con que se ofrece `devolverASecado`; la
+  // otra, `enBodega`, está justo debajo. Ya no es la única (Parte 1, R7).
   const bloqueado =
     ultimo !== null && ultimo.endedAt !== null && (ultimo.diferenciaContraObjetivo ?? 0) > 0;
   // Parte 1, R7: «devolver a secado» se ofrece en todo lote en bodega o bloqueado al entrar. Antes

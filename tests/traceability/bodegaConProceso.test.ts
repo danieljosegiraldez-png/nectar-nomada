@@ -442,10 +442,15 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     expect(devolucion.endedStorageAssignmentId).not.toBeNull();
     expect(await prisma.storageAssignment.count({ where: { lotId: a, endedAt: null } })).toBe(0);
     // El hermano sigue bajo el proceso CERRADO y en bodega.
+    // Ronda de arreglo 1 (2026-10-02): cada aserción de los hermanos lleva su mensaje, porque son las que caen cuando la
+    // devolución toca a `b` con la continuación de `a` bien hecha (ver el informe: flips S1 y S2).
     const cobB = await procesoQueCubre(prisma, b);
-    expect(cobB.vigente?.id).toBe(p.id);
-    expect(cobB.estado).toBe("cerrado");
-    expect(await prisma.storageAssignment.count({ where: { lotId: b, endedAt: null } })).toBe(1);
+    expect(cobB.vigente?.id, "HERMANO b: devolver `a` cambió el proceso que cubre a `b`").toBe(p.id);
+    expect(cobB.estado, "HERMANO b: devolver `a` reabrió el proceso cerrado que también cubre a `b`").toBe("cerrado");
+    expect(
+      await prisma.storageAssignment.count({ where: { lotId: b, endedAt: null } }),
+      "HERMANO b: devolver `a` terminó la asignación de bodega de `b`",
+    ).toBe(1);
   });
 
   it("«otro» exige nota", async () => {
@@ -509,11 +514,15 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     expect(await prisma.lotProcess.count({ where: { lotId: z } }), "el rechazo dejó un proceso escrito en Z").toBe(0);
   });
 
-  /** Un lote cuyo proceso (en el propio lote) ya cerró por humedad en el objetivo, y cuántas devoluciones tiene ese proceso. */
+  /**
+   * Un lote cuyo proceso (en el propio lote) ya cerró por humedad en el objetivo, y cuántas devoluciones tiene ese proceso.
+   * El cierre es del 2026-05-01 y no «ahora»: la fecha de una devolución tiene que ser POSTERIOR al cierre (ronda de arreglo 1,
+   * 2026-10-02), y una prueba que da su propia fecha al hecho necesita un cierre al que poder ser posterior.
+   */
   async function loteCerrado(codigo: string) {
     const l = await lote(codigo);
     const p = await abrirProcesoDePrueba(gestor, l);
-    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(l, 11) });
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: await humedad(l, 11) });
     return { l, p };
   }
   const devolucionesDe = (procesoId: string) => prisma.lotProcessReturn.count({ where: { closedLotProcessId: procesoId } });
@@ -559,6 +568,61 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     await expect(devolverASecado(gestor, { lotId: mezcla, motivoValueId: m, ocurrioEn: ahora() })).rejects.toThrow(new LotProcessError("lote_mezclado"));
   });
 
+  /**
+   * Cronología (ronda de arreglo 1, 2026-10-02). `ocurrioEn` es a la vez el fin de la asignación de bodega, el inicio de la
+   * continuación y la fecha de la devolución, y antes no se comparaba con nada: aceptaba una devolución anterior al cierre del
+   * proceso que continúa, y dejaba una asignación con `ended_at < started_at` (la base no tiene `CHECK` para eso).
+   *
+   * Un lote CON proceso cerrado y en bodega, con las tres fechas que se pasan explícitas: el cierre (`cierre`), la entrada a bodega
+   * (`entrada`) y, en cada prueba, la de la devolución. **Cada prueba deja que SOLO una comprobación pueda rechazarla**: si la
+   * devolución fuera anterior al cierre Y a la entrada, quitar una de las dos comprobaciones no se vería.
+   */
+  async function enBodegaTrasCerrar(codigo: string, cierre: Date, entrada: Date) {
+    const l = await lote(codigo);
+    const p = await abrirProcesoDePrueba(gestor, l);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: cierre, closingMoistureMeasurementId: await humedad(l, 11) });
+    await moveLotToStorage(gestor, { lotId: l, locationId: plotId, startedAt: entrada });
+    // Controles del estado de partida: el lote está en bodega, con su proceso cerrado y sin continuación ni devolución.
+    expect(await asignaciones(l)).toEqual({ todas: 1, abiertas: 1 });
+    expect(await devolucionesDe(p.id)).toBe(0);
+    return { l, p };
+  }
+  /** Lo que un rechazo no pudo dejar escrito: ninguna continuación ni devolución, y la bodega como estaba. */
+  async function sinHuellaDelRechazo(l: string, procesoId: string) {
+    expect(await devolucionesDe(procesoId), "el rechazo dejó una devolución escrita").toBe(0);
+    expect(await prisma.lotProcess.count({ where: { lotId: l } }), "el rechazo dejó una continuación escrita").toBe(1);
+    expect(await asignaciones(l), "el rechazo terminó la asignación de bodega").toEqual({ todas: 1, abiertas: 1 });
+  }
+
+  it("una devolución anterior al cierre del proceso se rechaza y no escribe nada: devolucion_antes_del_cierre", async () => {
+    // La entrada a bodega (03-01) es ANTERIOR al cierre registrado (03-10) a propósito: así la devolución (03-05) no es anterior a la
+    // entrada y la única comprobación que puede rechazarla es la del cierre. Con la entrada posterior, las dos la rechazarían.
+    const { l, p } = await enBodegaTrasCerrar("V11", new Date("2026-03-10T12:00:00Z"), new Date("2026-03-01T12:00:00Z"));
+    await expect(devolverASecado(gestor, { lotId: l, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: new Date("2026-03-05T12:00:00Z") }))
+      .rejects.toThrow(new LotProcessError("devolucion_antes_del_cierre"));
+    await sinHuellaDelRechazo(l, p.id);
+  });
+
+  it("una devolución anterior a la entrada en bodega se rechaza y no escribe nada: devolucion_antes_del_cierre", async () => {
+    // Aquí la devolución (03-15) es POSTERIOR al cierre (03-10) y anterior a la entrada (03-20): sólo la comprobación de la
+    // asignación puede rechazarla, y sin ella terminaría una asignación antes de que empezara.
+    const { l, p } = await enBodegaTrasCerrar("V12", new Date("2026-03-10T12:00:00Z"), new Date("2026-03-20T12:00:00Z"));
+    await expect(devolverASecado(gestor, { lotId: l, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: new Date("2026-03-15T12:00:00Z") }))
+      .rejects.toThrow(new LotProcessError("devolucion_antes_del_cierre"));
+    await sinHuellaDelRechazo(l, p.id);
+  });
+
+  it("la frontera es estricta: una devolución en el MISMO instante del cierre y de la entrada se acepta", async () => {
+    // Control del reverso: el guardia no puede rechazar lo que es posible. Una devolución inmediata al cierre, a la hora exacta de
+    // la entrada, es un hecho que puede ocurrir; con `<=` en lugar de `<` esta prueba cae.
+    const instante = new Date("2026-03-10T12:00:00Z");
+    const { l } = await enBodegaTrasCerrar("V13", instante, instante);
+    const { continuacion, devolucion } = await devolverASecado(gestor, { lotId: l, motivoValueId: await motivo("error_de_medicion"), ocurrioEn: instante });
+    expect(continuacion.startedAt).toEqual(instante);
+    expect(devolucion.endedStorageAssignmentId).not.toBeNull();
+    expect(await asignaciones(l)).toEqual({ todas: 1, abiertas: 0 });
+  });
+
   it("si abrir la continuación falla, la asignación de bodega no queda terminada: todo o nada", async () => {
     // R7: «si cualquier paso falla, se deshace todo». El fallo tiene que llegar DESPUÉS de terminar la bodega, o no prueba nada: R2 rechaza
     // la continuación porque un DESCENDIENTE del lote devuelto tiene un proceso abierto —un reproceso, que R2 permite sobre un lote
@@ -597,7 +661,6 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
     const vieja = await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
     const motivoId = await motivo("error_de_medicion");
-    const cuando = ahora();
 
     let nuevaId: string | undefined;
     const reubica = retener(async (tx) => {
@@ -608,6 +671,9 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     let devolucion: Promise<Resultado<Awaited<ReturnType<typeof devolverASecado>>>> | undefined;
     try {
       const pid = await reubica.pid;
+      // La fecha del hecho se toma AHORA, cuando la otra transacción ya creó la asignación nueva con su `startedAt`: tomada antes
+      // quedaba anterior a ella, y una devolución no puede terminar una asignación antes de que empezara (ronda de arreglo 1).
+      const cuando = ahora();
       // Sin COMMIT todavía: quien lea ahora la asignación del lote ve la VIEJA abierta.
       devolucion = resultadoDe(devolverASecado(gestor, { lotId: a, motivoValueId: motivoId, ocurrioEn: cuando }));
       await esperarQueAlguienEspere(pid, "la devolución no quedó esperando a la otra transacción");

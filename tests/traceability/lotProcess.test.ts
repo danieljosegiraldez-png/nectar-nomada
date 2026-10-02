@@ -38,6 +38,8 @@ let loteA: string, loteB: string, loteC: string, loteD: string, loteE: string;
 // Para el cierre con la humedad de un descendiente (2026-09-27): loteF tiene el proceso, loteG sale
 // de él por una transformación, y loteH es de otra rama.
 let loteF: string, loteG: string, loteH: string, transformacionId: string;
+// Para devolver a secado con un proceso de receta REAL y valores distinguibles (R7, ronda de arreglo 1, 2026-10-02).
+let loteI: string;
 let recetaVersionId: string, recetaId: string;
 let valorManejo: string, valorDeOtroCatalogo: string;
 let valorGrado: string, valorCereza: string;
@@ -170,6 +172,7 @@ beforeAll(async () => {
   loteF = await lote("LOTE-F");
   loteG = await lote("LOTE-G");
   loteH = await lote("LOTE-H");
+  loteI = await lote("LOTE-I");
   // loteG desciende de loteF. Es lo que hace la fermentación de verdad: un lote nuevo como salida,
   // con el de cereza como entrada.
   transformacionId = (
@@ -187,7 +190,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH];
+  const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH, loteI];
   // Parte 1 (2026-10-01): los procesos van ANTES que la transformación, porque `divided_by_transformation_id`
   // es RESTRICT: un proceso cerrado por esa división impediría borrarla.
   await prisma.lotProcessIntervention.deleteMany({
@@ -526,11 +529,13 @@ describe("un lote no sale de secado antes de su objetivo", () => {
     const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
       where: { value: "humedad_alta_por_error_de_manejo", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
     });
-    await expect(devolverASecado(gestor, { lotId: loteA, motivoValueId: "", ocurrioEn: new Date("2026-03-22T12:00:00Z") }))
+    // La devolución es POSTERIOR al cierre (2026-04-05) y anterior al siguiente cierre (2026-04-12): R7, ronda de arreglo 1.
+    const devuelto = new Date("2026-04-06T12:00:00Z");
+    await expect(devolverASecado(gestor, { lotId: loteA, motivoValueId: "", ocurrioEn: devuelto }))
       .rejects.toThrow(new LotProcessError("motivo_required"));
     const cerradoAntes = (await listarProcesosDeLote(gestor, loteA)).at(-1)!;
     const { continuacion, devolucion } = await devolverASecado(gestor, {
-      lotId: loteA, motivoValueId: motivo.id, nota: "11,2 % sobre 10,5 %: vuelve a cama", ocurrioEn: new Date("2026-03-22T12:00:00Z"),
+      lotId: loteA, motivoValueId: motivo.id, nota: "11,2 % sobre 10,5 %: vuelve a cama", ocurrioEn: devuelto,
     });
     expect(continuacion.endedAt).toBeNull();
     expect(continuacion.derivedFromLotProcessId).toBe(cerradoAntes.id);
@@ -538,7 +543,14 @@ describe("un lote no sale de secado antes de su objetivo", () => {
     expect(cerrado.endedAt).not.toBeNull();
     expect(cerrado.closingMoistureMeasurementId).toBe(cerradoAntes.closingMoistureMeasurementId);
     expect(devolucion.reasonValueId).toBe(motivo.id);
-    const evento = await prisma.auditEvent.findFirst({ where: assertDefinedWhere({ entityId: devolucion.id, operation: "lot_process.return_to_drying" }) });
+    // El «quién» que pide el diseño: la columna admite null, así que sin esta aserción una devolución anónima pasaría.
+    expect(devolucion.createdBy, "la devolución no dice quién la hizo").toBe(gestor);
+    // El evento cuelga de la DEVOLUCIÓN, no del proceso: de su `entityType` depende que el ayudante de limpieza lo encuentre
+    // (`borrarProcesosDeLotesDonde`). Se busca CON él, para que otro tipo deje de encontrarlo y la prueba caiga por su nombre.
+    const evento = await prisma.auditEvent.findFirst({
+      where: assertDefinedWhere({ entityType: "lot_process_return", entityId: devolucion.id, operation: "lot_process.return_to_drying" }),
+    });
+    expect(evento, "el evento de auditoría de la devolución no es de la entidad `lot_process_return`").not.toBeNull();
     expect(JSON.stringify(evento!.after)).toContain("vuelve a cama");
   });
 
@@ -575,6 +587,72 @@ describe("un lote no sale de secado antes de su objetivo", () => {
       startedAt: new Date("2026-04-13T12:00:00Z"),
     });
     expect(asignacion.lotId).toBe(loteA);
+  });
+});
+
+
+describe("devolver a secado: la continuación hereda lo que el proceso cerrado declaró (R7)", () => {
+  it("copia receta, intención, objetivo, grado, estado de la cereza, notas, procedencia y referencia", async () => {
+    // Ronda de arreglo 1 (2026-10-02). En los demás datos de prueba el proceso cerrado no tiene receta, así que
+    // `processRecipeVersionId: null` en la continuación era un mutante EQUIVALENTE: nada lo distinguía. Aquí el cerrado
+    // declara un valor distinguible en cada atributo que la continuación copia (una receta REAL, y una procedencia que
+    // no es la de los demás procesos de prueba), y cada uno se afirma por separado, con un mensaje que lo nombra.
+    const declarado = {
+      processRecipeVersionId: recetaVersionId,
+      intent: "TEST: 40 kg pergamino honey 48 h, secado en cama africana",
+      targetMoisturePct: 10.8,
+      processGradeValueId: valorGrado,
+      cherryStateValueId: valorCereza,
+      notes: "TEST: lleva lona los primeros dos días",
+      provenanceClass: "direct_observation" as const,
+      sourceReference: "TEST cuaderno de campo p. 14",
+    };
+    const abierto = await abrirProceso(gestor, abrir(loteI, { ...declarado, startedAt: new Date("2026-03-01T12:00:00Z") }));
+    await cerrarProceso(gestor, {
+      lotProcessId: abierto.id,
+      endedAt: new Date("2026-03-25T12:00:00Z"),
+      closingMoistureMeasurementId: await medicion(loteI, "moisture", 10.2),
+    });
+    // Controles de que el cerrado tiene lo que se quiere probar: receta real, y valores que la devolución no pondría por su cuenta.
+    const cerrado = await prisma.lotProcess.findUniqueOrThrow({ where: { id: abierto.id } });
+    expect(cerrado.processRecipeVersionId).toBe(recetaVersionId);
+    expect(cerrado.provenanceClass).toBe("direct_observation");
+    expect(cerrado.processGradeValueId).not.toBe(cerrado.cherryStateValueId);
+
+    const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
+    });
+    const { continuacion } = await devolverASecado(gestor, {
+      lotId: loteI, motivoValueId: motivo.id, ocurrioEn: new Date("2026-03-26T12:00:00Z"),
+    });
+    expect(continuacion.processRecipeVersionId, "la continuación no lleva la receta del proceso cerrado").toBe(declarado.processRecipeVersionId);
+    expect(continuacion.intent, "la continuación no lleva la intención del proceso cerrado").toBe(declarado.intent);
+    expect(continuacion.targetMoisturePct.toNumber(), "la continuación no lleva el objetivo del proceso cerrado").toBe(declarado.targetMoisturePct);
+    expect(continuacion.processGradeValueId, "la continuación no lleva el grado del proceso cerrado").toBe(declarado.processGradeValueId);
+    expect(continuacion.cherryStateValueId, "la continuación no lleva el estado de la cereza del proceso cerrado").toBe(declarado.cherryStateValueId);
+    expect(continuacion.notes, "la continuación no lleva las notas del proceso cerrado").toBe(declarado.notes);
+    expect(continuacion.provenanceClass, "la continuación no lleva la procedencia del proceso cerrado").toBe(declarado.provenanceClass);
+    expect(continuacion.sourceReference, "la continuación no lleva la referencia del proceso cerrado").toBe(declarado.sourceReference);
+    // Y lo que sí es suyo: es otro proceso, del mismo lote, abierto, que empieza el día de la devolución.
+    expect(continuacion.id).not.toBe(abierto.id);
+    expect(continuacion.lotId).toBe(loteI);
+    expect(continuacion.endedAt).toBeNull();
+    expect(continuacion.startedAt).toEqual(new Date("2026-03-26T12:00:00Z"));
+  });
+});
+
+describe("opcionesParaProceso: los motivos de devolver a secado salen del catálogo (R7)", () => {
+  it("ofrece exactamente los tres motivos del catálogo, cada uno con su id", async () => {
+    // Ronda de arreglo 1 (2026-10-02): es la ÚNICA fuente del `<select>` del formulario, y ninguna prueba la leía.
+    const delCatalogo = await prisma.variableCatalogValue.findMany({ where: { catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } });
+    // Control: el catálogo sembrado trae los tres de la Parte 1, ni más ni menos; si no, la comparación de abajo no mide lo que dice.
+    expect(delCatalogo.map((v) => v.value).sort()).toEqual(["error_de_medicion", "humedad_alta_por_error_de_manejo", "otro"]);
+
+    const { motivosDeDevolucion } = await opcionesParaProceso(gestor, loteA);
+    expect(motivosDeDevolucion, "el formulario no ofrecería los tres motivos").toHaveLength(3);
+    expect(Object.fromEntries(motivosDeDevolucion.map((m) => [m.label, m.id]))).toEqual(
+      Object.fromEntries(delCatalogo.map((v) => [v.value, v.id])),
+    );
   });
 });
 

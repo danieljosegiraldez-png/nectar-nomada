@@ -511,6 +511,10 @@ export interface DevolverASecadoInput {
  * **Sólo por un defecto de humedad**: el motivo sale de una lista y se guarda en su propia fila
  * (`LotProcessReturn`), para poder contar cuántas veces pasa y por qué. «otro» exige nota.
  *
+ * **La fecha del hecho (`ocurrioEn`) no puede ser anterior al cierre del proceso ni a la entrada en bodega**
+ * (`devolucion_antes_del_cierre`, ronda de arreglo 1, 2026-10-02): es el inicio de la continuación y el fin de la
+ * asignación de bodega, y ninguna de las dos puede quedar al revés.
+ *
  * Todo en una transacción y con el linaje bloqueado PRIMERO —antes de leer o terminar la asignación de
  * bodega, el mismo orden que `moveLotToStorage`—: si un paso falla, no queda nada a medias.
  */
@@ -536,9 +540,19 @@ export async function devolverASecado(userAccountId: string, input: DevolverASec
     const cerrado = await tx.lotProcess.findUniqueOrThrow({ where: { id: cobertura.vigente.id } });
     if (cerrado.closureKind !== "moisture") throw new LotProcessError("lote_dividido");
 
+    const bodega = await tx.storageAssignment.findFirst({ where: { lotId: input.lotId, endedAt: null } });
+
+    // Cronología (R7, ronda de arreglo 1, 2026-10-02). `ocurrioEn` es a la vez el fin de la asignación de bodega, el
+    // inicio de la continuación y la fecha de la devolución, y la base no tiene ningún `CHECK` que la compare con nada:
+    // una anterior al cierre dejaba una continuación que empieza antes de que el proceso que continúa terminara, y una
+    // anterior a la entrada en bodega dejaba una asignación con `ended_at < started_at`. Se rechaza ANTES de escribir.
+    // Estricta: la misma fecha del cierre o de la entrada vale. (`endedAt` de un proceso cerrado nunca es nulo; la
+    // comparación con `null` sólo está para que el tipo lo sepa.)
+    if (cerrado.endedAt !== null && input.ocurrioEn < cerrado.endedAt) throw new LotProcessError("devolucion_antes_del_cierre");
+    if (bodega && input.ocurrioEn < bodega.startedAt) throw new LotProcessError("devolucion_antes_del_cierre");
+
     // Primero sale de bodega, DESPUÉS se comprueba R2 dentro de `abrirProcesoEnTx`: si fuera al revés, R2 lo
     // rechazaría por estar en bodega, que es justo de donde se le está sacando.
-    const bodega = await tx.storageAssignment.findFirst({ where: { lotId: input.lotId, endedAt: null } });
     if (bodega) await tx.storageAssignment.update({ where: { id: bodega.id }, data: { endedAt: input.ocurrioEn } });
 
     // La continuación se abre sobre el lote DEVUELTO, no sobre el lote donde vive el proceso cerrado: los
