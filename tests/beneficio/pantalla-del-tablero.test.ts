@@ -753,8 +753,11 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     //    prohibidas de antes la derrotaba «retire el lote ya»). Medido que cae con la cadena exacta.
     // 2. **Las otras cuatro claves** (`Marca`, `DeDondeSale`, `Fuente`, `CitaLiteral`) sólo tienen un VOCABULARIO cerrado: una
     //    palabra nueva obliga a venir aquí y añadirla A PROPÓSITO (el precio de `DEUDA_CONOCIDA` en
-    //    `claves-de-traduccion-existen.test.ts`). **LÍMITE: una orden armada sólo con esas palabras PASA** — medido: añadir
-    //    «Lleva el lote.» al final de `curvaRiesgoFuente` deja las 99 en verde. «lleva» está ahí por «quien lleva el lote».
+    //    `claves-de-traduccion-existen.test.ts`). «lleva» sólo vale DENTRO de la frase fija «quien lleva el lote» (`FRASES_FIJAS`,
+    //    que se quita antes de mirar palabras) y no está en el léxico: añadir «Lleva el lote.» a `curvaRiesgoFuente` cae
+    //    (medido; con «lleva» en el léxico pasaba 99/99). **LÍMITE QUE QUEDA:** una orden armada sólo con las palabras que sí
+    //    están (p. ej. «Cita la frase»: «cita» es nombre y verbo) pasa. Ninguna de ellas manda sobre el lote, pero es un
+    //    límite de léxico, no de sentido: el sentido sólo lo cierra una cadena exacta, y por eso las frases de entrada lo son.
     // 3. **Lo que se pinta** (es) debe ser EXACTAMENTE la composición de los mensajes más la cita, sin espacios que cuenten: texto
     //    escrito a mano en el componente, dentro del mismo <p> o del <details>, rompe la igualdad (era la brecha de «lleva el
     //    lote» a mano en el JSX). **LÍMITE:** sólo mira el bloque de riesgo, no el resto del componente, y sólo en castellano
@@ -770,23 +773,26 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
       },
     } as const;
     // El vocabulario de las OTRAS cuatro claves (las palabras de las frases de entrada ya no están: no hace falta que «sugiere» ni
-    // «estanca» —que en castellano sirven de imperativo— valgan en ninguna otra parte).
+    // «estanca» —que en castellano sirven de imperativo— valgan en ninguna otra parte; ni «lleva», que sólo vale en su frase fija).
     const VOCABULARIO = {
       es: new Set([
         "criterio", "de", "néctar", "nómada", "dónde", "sale", "banda", "la", "matriz", "ph", "es", "un", "no", "una", "orden",
-        "decisión", "quien", "lleva", "el", "lote", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como",
-        "está", "escrita",
+        "decisión", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como", "está", "escrita",
       ]),
       en: new Set([
         "néctar", "nómada", "criterion", "where", "this", "comes", "from", "band", "of", "the", "ph", "matrix", "in", "it", "is", "a",
-        "not", "an", "order", "decision", "up", "to", "whoever", "runs", "lot", "quoted", "phrase", "literal", "quote", "that",
-        "document", "which", "written", "spanish", "and", "left", "untranslated",
+        "not", "an", "order", "decision", "up", "to", "quoted", "phrase", "literal", "quote", "that", "document", "which", "written",
+        "spanish", "and", "left", "untranslated",
       ]),
     } as const;
+    /** Frases enteras permitidas, que se quitan ANTES de mirar palabras: su verbo no vale suelto en ninguna otra parte. */
+    const FRASES_FIJAS = { es: ["quien lleva el lote"], en: ["whoever runs the lot"] } as const;
     const CLAVES_DE_ENTRADA = ["curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca"] as const;
     /** Las palabras de `texto` que no están en el vocabulario (sin los `{marcadores}` ICU, ni números, ni signos). */
-    const fueraDelVocabulario = (texto: string, idioma: "es" | "en") =>
-      [...new Set((texto.replace(/\{[^}]*\}/g, " ").toLocaleLowerCase(idioma).match(/\p{L}+/gu) ?? []))].filter((p) => !VOCABULARIO[idioma].has(p));
+    const fueraDelVocabulario = (texto: string, idioma: "es" | "en") => {
+      const sinFrasesFijas = FRASES_FIJAS[idioma].reduce((t, frase) => t.split(frase).join(" "), texto.replace(/\{[^}]*\}/g, " ").toLocaleLowerCase(idioma));
+      return [...new Set(sinFrasesFijas.match(/\p{L}+/gu) ?? [])].filter((p) => !VOCABULARIO[idioma].has(p));
+    };
     const leerMensajes = (f: string) => JSON.parse(readFileSync(new URL(`../../messages/${f}.json`, import.meta.url), "utf8")).SeccionBeneficio as Record<string, string>;
     /** Las claves `curvaRiesgo*` que el componente pide, DESCUBIERTAS en su fuente: una clave nueva entra sola al guardia. */
     const clavesDelBloque = () => {
@@ -795,12 +801,13 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     };
 
     it("el detector de vocabulario marca lo que debe y deja pasar el texto de hoy (control)", () => {
-      expect(fueraDelVocabulario("Lave ahora este lote", "es")).toEqual(["lave", "ahora", "este"]);
-      expect(fueraDelVocabulario("remove the lot now", "en")).toEqual(["remove", "now"]);
+      expect(fueraDelVocabulario("Lave ahora este lote", "es")).toEqual(["lave", "ahora", "este", "lote"]);
+      expect(fueraDelVocabulario("remove the lot now", "en")).toEqual(["remove", "lot", "now"]);
       // Y el texto de hoy de las otras cuatro claves no marca nada: si el detector marcara lo bueno, el guardia enseñaría a ignorarlo.
       expect(fueraDelVocabulario(leerMensajes("es").curvaRiesgoFuente!, "es")).toEqual([]);
-      // Control del LÍMITE que el comentario de arriba declara: el vocabulario NO ve «Lleva el lote.» (por eso las frases de entrada son exactas).
-      expect(fueraDelVocabulario(`${leerMensajes("es").curvaRiesgoFuente!} Lleva el lote.`, "es")).toEqual([]);
+      // Y la frase fija es lo único que deja pasar a «lleva»: la misma palabra suelta, en una orden, SÍ se marca.
+      expect(fueraDelVocabulario(`${leerMensajes("es").curvaRiesgoFuente!} Lleva el lote.`, "es")).toEqual(["lleva", "el", "lote"]);
+      expect(fueraDelVocabulario(`${leerMensajes("en").curvaRiesgoFuente!} Run the lot.`, "en")).toEqual(["run", "lot"]);
     });
 
     it("las cuatro frases de entrada son EXACTAMENTE las que el plan define: «el dato sugiere», en los dos idiomas", () => {
