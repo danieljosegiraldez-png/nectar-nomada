@@ -6,7 +6,7 @@ import { getCurrentUser } from "../../lib/auth/session";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { COOKIE_FINCA, FincaError, TODAS, crearFinca, crearParcela } from "../../lib/traceability/fincas";
-import { LocationAccessError, LocationValidationError, createMicrolot } from "../../lib/traceability/locations";
+import { LocationAccessError, RejillaInvalida, LocationValidationError, createMicrolot } from "../../lib/traceability/locations";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { JornadaError } from "../../lib/traceability/jornadasDeCosecha";
 import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
@@ -53,6 +53,20 @@ async function traducir(error: unknown): Promise<FincasActionState> {
   // `TraceabilityAccessError` es lo que lanza `requireLotAccess`, y SIN esta rama subía y daba
   // una pantalla de error 500 en vez de «no tienes permiso» — el fallo del PR #433.
   if (error instanceof LocationAccessError || error instanceof TraceabilityAccessError) return { error: t("error_sin_permiso") };
+  // **`RejillaInvalida` la lanza `createMicrolot` desde la tarea 4 de la rejilla**, y
+  // sin esta rama subía al `throw` de abajo: la pantalla de error 500 en vez de un
+  // mensaje — el fallo del PR #433 otra vez. Hoy es inalcanzable porque
+  // `crearMicroparcelaAction` todavía no manda el rango, y por eso lo encontró una
+  // revisión independiente y no un operario: es un 500 esperando la pantalla.
+  //
+  // Sus frases viven en `Traceability`, no aquí, así que se piden de ese espacio —
+  // mismo patrón que `BandejaError` en `app/actions/traceability.ts`. Duplicar las
+  // siete frases en `Fincas` las dejaría derivando.
+  if (error instanceof RejillaInvalida) {
+    const tr = await getTranslations("Traceability");
+    const [clave, ...resto] = error.message.split(":");
+    return { error: tr(`error_${clave}` as "error_rejilla_a_medias", { value: resto.join(":").trim() }) };
+  }
   throw error;
 }
 
