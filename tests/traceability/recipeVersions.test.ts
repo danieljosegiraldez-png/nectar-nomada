@@ -31,6 +31,9 @@ let runOnV1: string;
 const created = {
   recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[],
   runIds: [] as string[], transformationIds: [] as string[], measurementIds: [] as string[],
+  // Las versiones que crean las pruebas de R8 (Parte 1): su auditoría cuelga del id de la VERSIÓN, no
+  // del de la receta, y por eso `recipeIds` no la alcanza.
+  versionIds: [] as string[],
 };
 
 beforeAll(async () => {
@@ -94,6 +97,14 @@ afterAll(async () => {
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
   }
+  if (created.versionIds.length) {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.versionIds } }) });
+    // En orden de FK, aunque las tres claves sean CASCADE: fases y metas antes que las versiones, y las
+    // versiones antes que las recetas (que se borran más abajo, por el prefijo de RUN).
+    await prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: created.versionIds } }) });
+    await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: created.versionIds } }) });
+    await prisma.processRecipeVersion.deleteMany({ where: w(created.versionIds) });
+  }
   // By RUN prefix rather than tracked id alone — see ADR-104 and the same
   // change in recipeAuthoring.test.ts. A refusal case never captures an id,
   // so a mutation run that turns the refusal into a success leaves a row
@@ -105,6 +116,7 @@ afterAll(async () => {
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
 
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
+  expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: created.versionIds } }) })).toBe(0);
 });
 
 describe("a name may be edited; targets may not", () => {
@@ -206,5 +218,79 @@ describe("a new version is validated like a first one", () => {
   it("created no version when it refused", async () => {
     const recipe = await getRecipeForEditor(admin, recipeId);
     expect(recipe.versions.map((v) => v.version).sort()).toEqual([1, 2]);
+  });
+});
+
+describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior", () => {
+  // Otra receta, no la del fixture: ésa ya tiene v1 y v2, y las pruebas de arriba cuentan sus versiones.
+  // Dos fases, no una: con una sola, una copia que se quedara con la primera fila pasaría igual, y la
+  // de fermentación deja en `null` los tres campos de secado, que la copia tiene que dejar en `null`.
+  const FASES_V1 = [
+    { phase: "fermentation" as const, expectedHours: 72 },
+    { phase: "drying" as const, expectedHours: 192, turnEveryHours: 1, targetMoistureMinPct: 11, targetMoistureMaxPct: 12 },
+  ];
+  const OBJETIVOS = (ph: number) => [
+    { variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: ph },
+  ];
+  /** Una fase como la ve quien la lee: números, no `Decimal`, y en orden de fase. */
+  const comoSeLee = (fases: { phase: string; expectedHours: number | null; turnEveryHours: number | null; targetMoistureMinPct: { toNumber(): number } | null; targetMoistureMaxPct: { toNumber(): number } | null }[]) =>
+    fases
+      .map((f) => ({
+        phase: f.phase,
+        expectedHours: f.expectedHours,
+        turnEveryHours: f.turnEveryHours,
+        targetMoistureMinPct: f.targetMoistureMinPct?.toNumber() ?? null,
+        targetMoistureMaxPct: f.targetMoistureMaxPct?.toNumber() ?? null,
+      }))
+      .sort((a, b) => a.phase.localeCompare(b.phase));
+
+  let recetaId: string;
+  let v1Fases: Awaited<ReturnType<typeof createRecipeWithVersion>>["versions"][number]["fases"];
+
+  beforeAll(async () => {
+    const r = await createRecipeWithVersion(admin, {
+      name: `RVER Natural fases ${RUN}`,
+      organizationId,
+      targets: OBJETIVOS(4),
+      fases: FASES_V1,
+    });
+    recetaId = r.id;
+    // Para que el `afterAll` borre también su auditoría, que limpia por `created.recipeIds`.
+    created.recipeIds.push(r.id);
+    created.versionIds.push(r.versions[0]!.id);
+    v1Fases = r.versions[0]!.fases;
+  });
+
+  it("publicar una v2 sin fases copia las de la v1", async () => {
+    const v2 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.1));
+    created.versionIds.push(v2.id);
+
+    const secado = v2.fases.find((f) => f.phase === "drying");
+    expect(secado?.turnEveryHours).toBe(1);
+    expect(secado?.targetMoistureMinPct?.toNumber()).toBe(11);
+    expect(secado?.targetMoistureMaxPct?.toNumber()).toBe(12);
+    expect(secado?.expectedHours).toBe(192);
+
+    // Cada campo de cada fase, y la fermentación con sus `null`: no sólo cuántas hay.
+    expect(v1Fases.length).toBe(2);
+    expect(comoSeLee(v2.fases)).toEqual(comoSeLee(v1Fases));
+    // Son filas nuevas de la v2, no las de la v1 reasignadas: la v1 es inmutable.
+    expect(v2.fases.map((f) => f.id).filter((id) => v1Fases.some((o) => o.id === id))).toEqual([]);
+    const v1Despues = await prisma.processRecipePhase.count({ where: { recipeVersionId: v1Fases[0]!.recipeVersionId } });
+    expect(v1Despues).toBe(2);
+  });
+
+  it("si recibe fases, reemplazan a las anteriores; un arreglo vacío significa «sin fases»", async () => {
+    const v3 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.2), null, null, [
+      { phase: "drying", expectedHours: 240, turnEveryHours: 2 },
+    ]);
+    created.versionIds.push(v3.id);
+    expect(comoSeLee(v3.fases)).toEqual([
+      { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: null, targetMoistureMaxPct: null },
+    ]);
+
+    const v4 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.3), null, null, []);
+    created.versionIds.push(v4.id);
+    expect(v4.fases).toEqual([]);
   });
 });

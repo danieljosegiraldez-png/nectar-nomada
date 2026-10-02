@@ -70,6 +70,33 @@ function bloqueDeCreacion(nombreFuncion: string): string {
   return src.slice(j, src.indexOf("displayOrder", j) + 40);
 }
 
+/** Los campos que `CreateRecipeInput` declara dentro de `fases` (R8, Parte 1, 2026-09-30). */
+function camposDeFase(): string[] {
+  const src = leer(SERVICIO);
+  const i = src.indexOf("export interface CreateRecipeInput");
+  if (i < 0) throw new Error(`No encuentro CreateRecipeInput en ${SERVICIO}`);
+  const desde = src.slice(src.indexOf("fases?: ReadonlyArray<{", i));
+  const cuerpo = desde.slice(0, desde.indexOf("}>;"));
+  return [...cuerpo.matchAll(/^\s{4}([a-zA-Z][a-zA-Z0-9]*)\??:/gm)].map((m) => m[1]!);
+}
+
+/**
+ * El bloque `fases:` que escribe filas de fase en cada función (R8, Parte 1). Se ancla en la función
+ * y corta en el `include:` que sigue: el `include` de `createRecipeWithVersion` contiene `fases: true`,
+ * y cortar más tarde haría que el bloque contuviera siempre «fases:».
+ *
+ * Añadir `fases` a la lista de `bloqueDeCreacion` no habría bastado: esa función recorta el bloque en
+ * `displayOrder`, que va ANTES de `fases:`, así que nunca vería las filas de fase.
+ */
+function bloqueDeFases(nombreFuncion: string): string {
+  const src = leer(SERVICIO);
+  const i = src.indexOf(`export async function ${nombreFuncion}`);
+  if (i < 0) throw new Error(`No encuentro ${nombreFuncion} en ${SERVICIO}`);
+  const j = src.indexOf("fases:", src.indexOf("targets: {", i));
+  if (j < 0) return "";
+  return src.slice(j, src.indexOf("include:", j));
+}
+
 describe("un campo de receta llega por todas las puertas que lo escriben", () => {
   /**
    * **El control positivo del propio análisis.** Si el parseo se rompe, esta
@@ -124,5 +151,20 @@ describe("un campo de receta llega por todas las puertas que lo escriben", () =>
     ];
     const faltan = sitios.filter(([ruta]) => !leer(ruta).includes("expectedHours")).map(([, q]) => q);
     expect(faltan, `expectedHours no llega a: ${faltan.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("R8 — las fases llegan por las dos puertas", () => {
+  it("el parseo encuentra los cinco campos de fase (control positivo)", () => {
+    expect(camposDeFase()).toEqual(["phase", "expectedHours", "turnEveryHours", "targetMoistureMinPct", "targetMoistureMaxPct"]);
+  });
+
+  it("LOS DOS servicios escriben todas las columnas de fase", () => {
+    for (const fn of ["createRecipeWithVersion", "createRecipeVersion"]) {
+      const bloque = bloqueDeFases(fn);
+      expect(bloque.length, `${fn} no tiene bloque fases:`).toBeGreaterThan(0);
+      const faltan = camposDeFase().filter((c) => !new RegExp(`\\b${c}:`).test(bloque));
+      expect(faltan, `${fn} no escribe: ${faltan.join(", ")}`).toEqual([]);
+    }
   });
 });
