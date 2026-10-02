@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import type { Curva } from "../../../lib/beneficio/curvaDeLote";
+import { ultimaLectura, type Curva } from "../../../lib/beneficio/curvaDeLote";
 import { ejesDeLaCurva } from "../../../lib/beneficio/ejesDeLaCurva";
+import type { ClaveDePerfil } from "../../../lib/beneficio/perfiles";
 import { riesgoDeEsperar } from "../../../lib/beneficio/riesgoDeEsperar";
 import {
   VARIABLES_DE_CURVA,
@@ -138,7 +139,13 @@ function textoDelValor(v: number): string {
  * - **Ninguna frase ordena.** «El dato sugiere», nunca «lave ahora».
  * - **Se marca de quién es:** «criterio de Néctar Nómada». La cita va LITERAL, sin traducir (es de un
  *   documento en castellano), y se le entrega al lector dentro de esa envoltura.
- * - **Lo que se cita es la ÚLTIMA lectura** y se dice cuál, para no hacer adivinar de qué habla.
+ * - **Lo que se cita es la ÚLTIMA lectura** y se dice cuál, para no hacer adivinar de qué habla. **Si varias
+ *   comparten el instante máximo no hay una «última» y no se cita ninguna** (`ultimaLectura`): el orden entre
+ *   ellas es el que devolvió la base, y elegir una sería presentar una lectura cualquiera como «tu última».
+ * - **Sólo con el perfil de la matriz.** La matriz de §1 es la del perfil `WASHED_STANDARD`; con el
+ *   `perfilDelLote` de cualquier otro lote —`NATURAL`, o `null` (sin fase abierta, sin grado o un grado sin
+ *   perfil: `Honey`, `Semi Wash`)— `riesgoDeEsperar` devuelve `null` y **no se escribe nada**, ni una frase
+ *   neutra: prestarle al lote los umbrales del lavado sería decirle una cinética que no es la suya.
  *
  * **Qué filas de `riesgoDeEsperar` se pintan lo decide la BANDA** (`BANDAS_QUE_SE_PINTAN`), el
  * identificador estable del documento, nunca buscar palabras dentro del texto del riesgo. Una banda
@@ -154,6 +161,7 @@ export async function CurvaDeLote({
   pedida,
   curva,
   codigoDelLote,
+  perfilDelLote,
 }: {
   /** Lo que pidió la URL. `null` = nadie tocó un lote. */
   pedida: { readonly lotId: string; readonly variable: VariableDeCurva } | null;
@@ -161,6 +169,12 @@ export async function CurvaDeLote({
   curva: Curva | null;
   /** El código del lote si se conoce; si no, se dice «el lote elegido». */
   codigoDelLote: string | null;
+  /**
+   * El perfil que rige el lote (`CurvaDelTablero.perfilDelLote`), o `null` si no se sabe. **Obligatorio y
+   * sin valor por defecto, a propósito:** una pantalla que olvide pasarlo no compila, y un `null` calla. El
+   * bloque de riesgo sólo se pinta con `WASHED_STANDARD`.
+   */
+  perfilDelLote: ClaveDePerfil | null;
 }) {
   const t = await getTranslations("SeccionBeneficio");
 
@@ -205,9 +219,10 @@ export async function CurvaDeLote({
 
   const margen = margenVertical(curva.alto);
   const ejes = ejesDeLaCurva({ lecturas: curva.lecturas, banda: curva.rango, ancho: curva.ancho, alto: curva.alto });
-  // Qué sugiere la ÚLTIMA lectura si se espera. `curvaDeLote` las ordena por hora: la última es la más reciente.
-  const ultima = curva.lecturas[curva.lecturas.length - 1];
-  const riesgo = ultima ? riesgoDeEsperar(pedida.variable, ultima.value) : null;
+  // Qué sugiere la ÚLTIMA lectura si se espera, y sólo si hay UNA última (`ultimaLectura`: con varias en el
+  // mismo instante no la hay) y la matriz es la del perfil de este lote (`riesgoDeEsperar`).
+  const ultima = ultimaLectura(curva.lecturas);
+  const riesgo = ultima ? riesgoDeEsperar(pedida.variable, ultima.value, perfilDelLote) : null;
   const envoltura = riesgo ? BANDAS_QUE_SE_PINTAN.get(riesgo.banda) : undefined;
   const puntos = colocarPuntos(curva, margen);
   const banda = curva.banda;
@@ -347,7 +362,7 @@ export async function CurvaDeLote({
           </p>
           <details className="nn-inline-disclosure">
             <summary>{t("curvaRiesgoDeDondeSale")}</summary>
-            <p className="nn-muted">{t("curvaRiesgoFuente", { banda: riesgo.banda, documento: DOCUMENTO_DEL_RIESGO })}</p>
+            <p className="nn-muted">{t("curvaRiesgoFuente", { banda: riesgo.banda, perfil: riesgo.perfil, documento: DOCUMENTO_DEL_RIESGO })}</p>
             <p className="nn-muted">{t("curvaRiesgoCitaLiteral")}</p>
           </details>
         </div>

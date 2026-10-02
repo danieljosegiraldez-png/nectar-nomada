@@ -63,6 +63,34 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
   Natural: "NATURAL",
 };
 
+/**
+ * El perfil que rige un lote **por la fase que tiene abierta**, o `null` si no se puede decir — para quien
+ * necesita saber a qué protocolo pertenece un umbral antes de citárselo (la cita de «qué sugiere el dato si
+ * se espera», que es de la matriz `WASHED_STANDARD`).
+ *
+ * Sigue el MISMO orden que `veredictoDelLote` y devuelve `null` donde éste devuelve una razón
+ * (`SIN_PROCESO_ABIERTO`, `SIN_GRADO_DECLARADO`, `GRADO_SIN_PERFIL`): **sin fase abierta no hay perfil que
+ * aplicar, sin proceso o sin grado tampoco, y un grado que no casa no se completa con el del lavado.** `null`
+ * es «no se sabe», nunca «el de siempre».
+ *
+ * `abierta` es la corrida abierta del lote (fermentación o secado) tal como la trae `datosDelTablero`;
+ * `undefined` = el lote no tiene ninguna. El grado sale del proceso de ESA corrida, no de otro lugar: es lo
+ * que hace que sin fase abierta no haya perfil.
+ *
+ * `Object.hasOwn` y no `PERFIL_POR_GRADO[grado]` a secas: el grado viene de un catálogo de texto libre y un
+ * valor como `constructor` encontraría la función heredada del objeto en vez de ningún perfil.
+ */
+export function perfilDeLaFaseAbierta(
+  abierta:
+    | { readonly lotProcess: { readonly processGradeValue: { readonly value: string } | null } | null }
+    | undefined,
+): ClaveDePerfil | null {
+  if (!abierta) return null;
+  const grado = abierta.lotProcess?.processGradeValue?.value;
+  if (!grado || !Object.hasOwn(PERFIL_POR_GRADO, grado)) return null;
+  return PERFIL_POR_GRADO[grado] ?? null;
+}
+
 /** Lo mínimo que este módulo necesita de una medición nuestra. */
 export interface MedicionDelLote {
   readonly materialState?: "CHERRY" | "MUCILAGE_HONEY" | "PARCHMENT" | "GREEN" | null;

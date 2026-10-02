@@ -3318,7 +3318,7 @@
     "curvaRiesgoDice": "con tu última lectura (pH {ph}), el dato sugiere:",
     "curvaRiesgoDiceSiSeEstanca": "si el pH se estanca donde está hoy (tu última lectura: {ph}), el dato sugiere:",
     "curvaRiesgoDeDondeSale": "De dónde sale",
-    "curvaRiesgoFuente": "Banda {banda} de la matriz de pH de {documento}, §1. Es un criterio de Néctar Nómada, no una orden: la decisión es de quien lleva el lote.",
+    "curvaRiesgoFuente": "Banda {banda} de la matriz de pH del perfil {perfil} de {documento}, §1. Es un criterio de Néctar Nómada, no una orden: la decisión es de quien lleva el lote.",
     "curvaRiesgoCitaLiteral": "La frase entre comillas es cita literal del documento, tal como está escrita."
   },
   "Bandejas": {

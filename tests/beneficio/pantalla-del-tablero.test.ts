@@ -21,7 +21,10 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
+import { LIENZO_DE_CURVA } from "../../lib/beneficio/curvaEnPantalla";
+import { perfilDeLaFaseAbierta } from "../../lib/beneficio/desdeElLote";
 import { ejesDeLaCurva } from "../../lib/beneficio/ejesDeLaCurva";
+import type { ClaveDePerfil } from "../../lib/beneficio/perfiles";
 import { riesgoDeEsperar } from "../../lib/beneficio/riesgoDeEsperar";
 import { lineaDeEtapas } from "../../lib/beneficio/lineaDeEtapas";
 
@@ -43,14 +46,25 @@ const { LiberacionDeUnidad } = await import("../../app/components/beneficio/Libe
 
 const ID = "3f2b6c1e-8a44-4d0e-9b57-0c1d2e3f4a5b";
 const t = (h: number) => new Date(`2026-03-10T${String(h).padStart(2, "0")}:00:00.000Z`);
-const LIENZO = { ancho: 480, alto: 200 };
+// **El lienzo REAL, no una copia:** esta constante fue `{ ancho: 480, alto: 200 }` escrita a mano, y subir
+// `LIENZO_DE_CURVA.ancho` a 720 dejaba verdes los guardias de legibilidad de abajo —medían un lienzo que la pantalla ya no usa—.
+const LIENZO = LIENZO_DE_CURVA;
 const BANDA = { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 };
 
 const aTexto = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
-async function pintarCurva(curva: ReturnType<typeof curvaDeLote> | null, variable: "ph" | "brix" | "moisture" = "ph") {
+/**
+ * `perfil` es el que rige el lote (`CurvaDelTablero.perfilDelLote`). **Por omisión, el de la matriz**: casi todas
+ * las pruebas de este archivo hablan de otra cosa (los ejes, la banda, el recorte) y pintan un lote que sí tiene
+ * matriz; las que hablan del perfil lo pasan EXPLÍCITO.
+ */
+async function pintarCurva(
+  curva: ReturnType<typeof curvaDeLote> | null,
+  variable: "ph" | "brix" | "moisture" = "ph",
+  perfil: ClaveDePerfil | null = "WASHED_STANDARD",
+) {
   return renderToStaticMarkup(
-    await CurvaDeLote({ pedida: { lotId: ID, variable }, curva, codigoDelLote: "P5-X" }),
+    await CurvaDeLote({ pedida: { lotId: ID, variable }, curva, codigoDelLote: "P5-X", perfilDelLote: perfil }),
   );
 }
 
@@ -616,8 +630,8 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
     expect(enPantalla, `${CUERPO_DE_LOS_EJES} unidades × ${ANCHO_DE_UN_TELEFONO} / ${vb.w} = ${enPantalla.toFixed(1)} px`).toBeGreaterThanOrEqual(10);
     // MUTACIÓN: `.nn-curva-eje { font-size: 10px }` → 10 × 343 / 552 = 6,2 px y cae. Hoy son 11,2 px.
     // El 10 es una decisión, no una norma: «no bajar de 10 px efectivos en el teléfono». Subirlo ensancha el hueco que hace falta (ver «10.25»).
-    // LÍMITE 1: el cuerpo se lee de la PRIMERA regla `.nn-curva-eje {` del texto del CSS; un `font-size` posterior o en línea pasa sin que esta prueba lo vea.
-    // LÍMITE 2: `LIENZO = { 480, 200 }` de este archivo DUPLICA el `LIENZO_DE_CURVA` real; subir el de verdad (p. ej. a 720) daría ~7,8 px y nada caería.
+    // LÍMITE: el cuerpo se lee de la PRIMERA regla `.nn-curva-eje {` del texto del CSS; un `font-size` posterior o en línea pasa sin que esta prueba lo vea.
+    // MUTACIÓN: `LIENZO_DE_CURVA.ancho` a 720 → `LIENZO` (que ES ese objeto) da un viewBox más ancho y el cuerpo en pantalla baja de 10 px: cae esta prueba.
   });
 });
 
@@ -645,12 +659,12 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   ];
 
   it("la tabla de filas de esta prueba coincide con lo que `riesgoDeEsperar` devuelve (control de la tabla)", () => {
-    for (const f of FILAS) expect(riesgoDeEsperar("ph", f.valor)?.banda ?? null, `pH ${f.valor}`).toBe(f.banda);
+    for (const f of FILAS) expect(riesgoDeEsperar("ph", f.valor, "WASHED_STANDARD")?.banda ?? null, `pH ${f.valor}`).toBe(f.banda);
     // Y no hay una banda que la tabla no conozca: barriendo −2…16 de a 0,01 se ven SIETE bandas (las
     // ocho filas menos la retirada). Una banda nueva en el módulo obliga a decidir aquí si se pinta.
     const vistas = new Set<string>();
     for (let v = -200; v <= 1600; v += 1) {
-      const r = riesgoDeEsperar("ph", v / 100);
+      const r = riesgoDeEsperar("ph", v / 100, "WASHED_STANDARD");
       if (r) vistas.add(r.banda);
     }
     expect([...vistas].sort()).toEqual(FILAS.flatMap((f) => (f.banda ? [f.banda] : [])).sort());
@@ -743,6 +757,106 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     // (Con `{ value: 0 }` NO cae, medido: 0 es «fuera de [2.50, 8.00]», la fila del electrodo, que no se pinta.)
   });
 
+  // **C1: la matriz es la del perfil `WASHED_STANDARD`, no la de cualquier lote.** Se parte del GRADO de proceso —lo que el
+  // lote declara— y se pasa por la misma función que decide su perfil (`perfilDeLaFaseAbierta`), no de una clave escrita a mano:
+  // así la prueba cae tanto si la pantalla ignora el perfil como si el mapeo grado→perfil presta el del lavado a otro grado.
+  describe("sólo con el perfil de la matriz: un lote que no es lavado NO recibe la cita del lavado", () => {
+    /** El perfil de un lote cuya fase abierta tiene un proceso de grado `grado`; con `faseAbierta = false`, de uno sin fase abierta. */
+    const perfilDe = (grado: string | null, faseAbierta = true) =>
+      perfilDeLaFaseAbierta(faseAbierta ? { lotProcess: { processGradeValue: grado === null ? null : { value: grado } } } : undefined);
+    /** 4,7 está DENTRO de la ventana óptima de NATURAL (3,9–4,8) y, en la matriz del lavado, es «proliferación butírica y mohos». */
+    const PH = 4.7;
+    const pintarConPerfil = (perfil: ClaveDePerfil | null, valor = PH) =>
+      pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value: valor }], objetivo: BANDA, ...LIENZO }), "ph", perfil);
+
+    it("un lote Washed SÍ pinta el bloque, con la cita del lavado (control de las pruebas de abajo)", async () => {
+      expect(perfilDe("Washed")).toBe("WASHED_STANDARD");
+      const html = await pintarConPerfil(perfilDe("Washed"));
+      expect(bloqueDeRiesgo(html), "con perfil Washed debe haber bloque").not.toBeNull();
+      expect(aTexto(bloqueDeRiesgo(html)!)).toContain("stinker");
+    });
+
+    it("Natural, Honey, los dos Semi Wash, un grado desconocido y un lote sin grado NO pintan NADA: ni el bloque ni una frase neutra", async () => {
+      const casos: [string, string | null][] = [
+        ["Natural", "Natural"], ["Honey", "Honey"], ["Semi Wash 50%", "Semi Wash 50%"], ["Semi Wash 75%", "Semi Wash 75%"],
+        ["un grado que ningún perfil conoce", "Anaeróbico"], ["sin grado declarado", null],
+      ];
+      for (const [nombre, grado] of casos) {
+        const html = await pintarConPerfil(perfilDe(grado));
+        const texto = aTexto(html);
+        expect(bloqueDeRiesgo(html), `${nombre}: no debe haber bloque`).toBeNull();
+        expect(texto, nombre).not.toContain("Criterio de Néctar Nómada");
+        expect(texto, nombre).not.toContain("sugiere");
+        expect(texto, nombre).not.toContain("stinker");
+        expect(texto, nombre).not.toMatch(/todo bien|sin riesgo|ninguno/i);
+      }
+      // Control: el MISMO pH y la MISMA curva con el perfil del lavado sí pintan, así que el vacío de arriba es del perfil y no del dato.
+      expect(bloqueDeRiesgo(await pintarConPerfil(perfilDe("Washed")))).not.toBeNull();
+      // MUTACIÓN: llamar `riesgoDeEsperar(pedida.variable, ultima.value, "WASHED_STANDARD")` (ignorar `perfilDelLote`) → Natural cita «stinker» y cae.
+      // MUTACIÓN: añadir `Honey: "WASHED_STANDARD"` a `PERFIL_POR_GRADO` → Honey pinta el bloque y cae.
+    });
+
+    it("un lote Washed SIN fase abierta no pinta: sin fase no hay qué esperar (I1)", async () => {
+      const sinFase = perfilDe("Washed", false);
+      expect(sinFase).toBeNull();
+      expect(bloqueDeRiesgo(await pintarConPerfil(sinFase))).toBeNull();
+      // Control: con fase abierta, el mismo grado sí pinta.
+      expect(bloqueDeRiesgo(await pintarConPerfil(perfilDe("Washed", true)))).not.toBeNull();
+      // MUTACIÓN: quitar `if (!abierta) return null;` de `perfilDeLaFaseAbierta` → revienta con `undefined` y cae.
+    });
+
+    it("la fuente NOMBRA el perfil de la matriz, detrás del toque, en los dos idiomas", async () => {
+      const bloque = bloqueDeRiesgo(await pintarConPerfil("WASHED_STANDARD"))!;
+      const detalle = /<details[^>]*>[\s\S]*?<\/details>/.exec(bloque)![0];
+      expect(aTexto(detalle)).toContain("WASHED_STANDARD");
+      // Y a la vista, sin tocar nada, no: es UNA frase (la prueba de «una frase a la vista» lo exige también).
+      expect(aTexto(bloque.replace(detalle, ""))).not.toContain("WASHED_STANDARD");
+      const leer = (f: string) => JSON.parse(readFileSync(new URL(`../../messages/${f}.json`, import.meta.url), "utf8")).SeccionBeneficio as Record<string, string>;
+      expect(leer("es").curvaRiesgoFuente).toContain("{perfil}");
+      expect(leer("en").curvaRiesgoFuente).toContain("{perfil}");
+      // MUTACIÓN: quitar `perfil: riesgo.perfil` del `t("curvaRiesgoFuente", …)` → el texto pinta «{perfil}» o revienta, y cae.
+    });
+  });
+
+  // **C2: con varias lecturas en el instante máximo NO hay «última».**
+  describe("«tu última lectura»: con varias en el mismo instante no se cita ninguna", () => {
+    const conLecturas = (lecturas: { occurredAt: Date; value: number }[]) =>
+      pintarCurva(curvaDeLote({ lecturas, objetivo: BANDA, ...LIENZO }));
+
+    it("dos lecturas al MISMO instante, en cualquier orden: no se escribe nada (y la misma pareja con una hora de diferencia SÍ)", async () => {
+      // Tres textos distintos según cuál llegara última: la de 3,0 («Daño consumado») o la de 4,8 («stinker»).
+      for (const lecturas of [
+        [{ occurredAt: t(10), value: 3.0 }, { occurredAt: t(10), value: 4.8 }],
+        [{ occurredAt: t(10), value: 4.8 }, { occurredAt: t(10), value: 3.0 }],
+      ]) {
+        const html = await conLecturas(lecturas);
+        expect(bloqueDeRiesgo(html), `${lecturas.map((l) => l.value).join(" y ")} al mismo instante`).toBeNull();
+        expect(aTexto(html)).not.toContain("tu última lectura");
+        expect(aTexto(html)).not.toContain("stinker");
+        expect(aTexto(html)).not.toContain("Daño consumado");
+      }
+      // Control, con las MISMAS dos lecturas separadas una hora: sí se escribe, y cita la POSTERIOR.
+      const despues4_8 = aTexto(bloqueDeRiesgo(await conLecturas([{ occurredAt: t(10), value: 3.0 }, { occurredAt: t(11), value: 4.8 }]))!);
+      expect(despues4_8).toContain("stinker");
+      expect(despues4_8).not.toContain("Daño consumado");
+      const despues3_0 = aTexto(bloqueDeRiesgo(await conLecturas([{ occurredAt: t(10), value: 4.8 }, { occurredAt: t(11), value: 3.0 }]))!);
+      expect(despues3_0).toContain("Daño consumado");
+      expect(despues3_0).not.toContain("stinker");
+      // MUTACIÓN: `const ultima = curva.lecturas[curva.lecturas.length - 1]` (sin `ultimaLectura`) → cita la que quede al final y cae.
+    });
+
+    it("un empate que NO es el del instante máximo no impide citar: la última sigue siendo única", async () => {
+      const html = await conLecturas([
+        { occurredAt: t(8), value: 3.0 }, { occurredAt: t(8), value: 3.2 }, // empate entre las primeras
+        { occurredAt: t(12), value: 4.8 },
+      ]);
+      const texto = aTexto(bloqueDeRiesgo(html)!);
+      expect(texto).toContain("stinker");
+      expect(texto).toContain("4.8");
+      // MUTACIÓN: devolver `null` ante CUALQUIER empate de instante (no sólo el del máximo) → no pinta y cae.
+    });
+  });
+
   describe("«ninguna frase ordena»: las frases de entrada son TEXTOS FIJOS, el resto del bloque un vocabulario cerrado, y lo pintado no lleva nada a mano", () => {
     // Tres capas, y el LÍMITE que queda escrito aquí porque un guardia cuyo alcance no está escrito se cuenta dos veces:
     //
@@ -778,11 +892,15 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
       es: new Set([
         "criterio", "de", "néctar", "nómada", "dónde", "sale", "banda", "la", "matriz", "ph", "es", "un", "no", "una", "orden",
         "decisión", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como", "está", "escrita",
+        // «perfil»: `curvaRiesgoFuente` nombra el perfil de la matriz («…de la matriz de pH del perfil {perfil} de {documento}»). Es un nombre.
+        "perfil",
       ]),
       en: new Set([
         "néctar", "nómada", "criterion", "where", "this", "comes", "from", "band", "of", "the", "ph", "matrix", "in", "it", "is", "a",
         "not", "an", "order", "decision", "up", "to", "quoted", "phrase", "literal", "quote", "that", "document", "which", "written",
         "spanish", "and", "left", "untranslated",
+        // «profile»: `curvaRiesgoFuente` nombra el perfil de la matriz («…of the {perfil} profile in {documento}»). Es un nombre.
+        "profile",
       ]),
     } as const;
     /** Frases enteras permitidas, que se quitan ANTES de mirar palabras: su verbo no vale suelto en ninguna otra parte. */
@@ -847,7 +965,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
         const entrada = f.siSeEstanca ? tr("curvaRiesgoDiceSiSeEstanca", { ph }) : tr("curvaRiesgoDice", { ph });
         const esperado =
           tr("curvaRiesgoMarca") + ":" + entrada + "«" + f.cita + "»." +
-          tr("curvaRiesgoDeDondeSale") + tr("curvaRiesgoFuente", { banda: f.banda!, documento: "docs/beneficio/10_ph_fermentation.md" }) + tr("curvaRiesgoCitaLiteral");
+          tr("curvaRiesgoDeDondeSale") + tr("curvaRiesgoFuente", { banda: f.banda!, perfil: "WASHED_STANDARD", documento: "docs/beneficio/10_ph_fermentation.md" }) + tr("curvaRiesgoCitaLiteral");
         const pintado = aTexto(bloqueDeRiesgo(await conUnPh(f.valor))!);
         expect(sinEspacios(pintado), `pH ${f.valor}`).toBe(sinEspacios(esperado));
       }
@@ -869,7 +987,16 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     const aLaVista = aTexto(bloque.replace(detalle!, ""));
     expect(aLaVista).not.toContain("10_ph_fermentation.md");
     expect(aLaVista).not.toContain("[4.50, 5.20)");
+    // **Y cerrado**: «la profundidad va detrás de un toque» es el paso 3 del plan y el antipatrón 3 de la rúbrica 22. Un
+    // `<details open>` pasa todo lo de arriba —la fuente SIGUE dentro del `<details>`— y la deja a la vista sin tocar nada.
+    const abierto = /<details[^>]*\bopen\b/;
+    expect(bloque, "el <details> del bloque no lleva `open`").not.toMatch(abierto);
+    // Control de la expresión: casa con lo que React escribe para `open` (`open=""`) y con la forma a secas, y NO con la clase de hoy.
+    expect('<details class="nn-inline-disclosure" open="">').toMatch(abierto);
+    expect("<details open>").toMatch(abierto);
+    expect(detalle!).not.toMatch(abierto);
     // MUTACIÓN: sacar la fuente del <details> → «tres párrafos» a la vista, y cae.
+    // MUTACIÓN: `<details className="nn-inline-disclosure" open>` → la fuente queda a la vista sin tocar nada, y cae.
   });
 
   it("es UNA frase a la vista: un solo <p> fuera del <details>", async () => {

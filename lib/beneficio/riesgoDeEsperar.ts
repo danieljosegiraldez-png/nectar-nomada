@@ -6,6 +6,18 @@
  * que para ellos esta función devuelve `null`, y `null` quiere decir **«no hay registro»**: no una
  * frase neutra y no «sin riesgo». Quien la llame no pinta nada con un `null`.
  *
+ * **Y sólo para el perfil `WASHED_STANDARD`.** Esa sección se titula «Matriz de umbrales — perfil
+ * `WASHED_STANDARD`», y la nota de ADR-181 que la abre dice que **el pH objetivo y los umbrales son de
+ * la receta, por fase** (`00_conventions.md` §8: los cinco perfiles son «plantillas»; «el motor no los
+ * usa directamente»). Citarla a un lote que no corre ese protocolo es decirle una cinética que no es la
+ * suya: medido, treinta pH dentro de la ventana óptima de `NATURAL` (3,9–4,8) recibían la cita de
+ * `[4.50, 5.20)` («proliferación butírica y mohos»). El repositorio ya decidió lo contrario en tres
+ * sitios: `ph.ts` («ningún umbral vive aquí»), `desdeElLote.ts` (`PERFIL_POR_GRADO` sólo mapea `Washed` y
+ * `Natural`, porque suponerles los del lavado «sería inventar una cinética») y el texto de
+ * `GRADO_SIN_PERFIL` en `messages/es.json`. **Por eso la firma pide el perfil del lote y devuelve `null`
+ * con cualquiera que no sea el de la matriz —también con `null`, «no se sabe cuál»—:** no hay un umbral
+ * escrito para ningún otro y escribirlo no es de este módulo.
+ *
  * **Sin base de datos ni imports a propósito**, igual que `curvaDeLote.ts` y `ejesDeLaCurva.ts`.
  *
  * **Las ocho filas de abajo están TRANSCRITAS**, columna «Banda» y columna «Riesgo / vector» de
@@ -40,6 +52,12 @@
  */
 
 export interface Riesgo {
+  /**
+   * El perfil de protocolo al que pertenece la matriz de donde sale la cita (`WASHED_STANDARD`):
+   * quien la pinta lo dice, para que no haya que llegar al documento para descubrir que la matriz es
+   * de un protocolo concreto.
+   */
+  readonly perfil: string;
   /** La banda de `10_ph_fermentation.md` §1 en la que cae el valor. */
   readonly banda: string;
   /** La columna «Riesgo / vector», literal del documento. */
@@ -56,7 +74,7 @@ export interface Riesgo {
   readonly queHaceElOperario?: string | null;
 }
 
-interface FilaDePh extends Riesgo {
+interface FilaDePh extends Omit<Riesgo, "perfil"> {
   readonly cae: (valor: number) => boolean;
   /**
    * Si está, el documento ya no sostiene esta fila (la retira la nota que abre §1) y
@@ -66,6 +84,12 @@ interface FilaDePh extends Riesgo {
    */
   readonly retiradaPor?: string;
 }
+
+/**
+ * El único perfil para el que existe esta matriz: el del título de `10_ph_fermentation.md` §1. Que sigue
+ * siendo el del documento lo prueba `tests/beneficio/riesgo-de-esperar.test.ts`, que lee el título.
+ */
+export const PERFIL_DE_LA_MATRIZ = "WASHED_STANDARD";
 
 /**
  * `docs/beneficio/10_ph_fermentation.md` §1, en el orden en que se COMPRUEBAN (no el de la tabla:
@@ -118,12 +142,16 @@ const FILAS_DE_PH: readonly FilaDePh[] = [
 ];
 
 /**
- * El riesgo que `10_ph_fermentation.md` §1 cita para `valor` de `variable`, o `null` si no hay uno
- * CITABLE: variable sin matriz (todo lo que no sea `"ph"`), un valor que no es un número, o una
+ * El riesgo que `10_ph_fermentation.md` §1 cita para `valor` de `variable` **en un lote de perfil
+ * `perfil`**, o `null` si no hay uno CITABLE: variable sin matriz (todo lo que no sea `"ph"`), un perfil
+ * que no es el de la matriz (`null` incluido: «no se sabe cuál»), un valor que no es un número, o una
  * banda que ADR-181 retiró (`[6.50, 8.00]`). Nunca una frase inventada.
  */
-export function riesgoDeEsperar(variable: string, valor: number): Riesgo | null {
+export function riesgoDeEsperar(variable: string, valor: number, perfil: string | null): Riesgo | null {
   if (variable !== "ph") return null;
+  // La matriz es de UN perfil. Con otro, o sin saberlo, no hay umbral escrito y NO se presta el del
+  // lavado: sería de otra cinética (ver la cabecera).
+  if (perfil !== PERFIL_DE_LA_MATRIZ) return null;
   // `NaN` compara falso con todo: sin esta guarda caería por todas las filas y devolvería `null`
   // por casualidad, no por decisión. Se dice aquí.
   if (Number.isNaN(valor)) return null;
@@ -131,5 +159,5 @@ export function riesgoDeEsperar(variable: string, valor: number): Riesgo | null 
   // La fila retirada SE ENCUENTRA y se descarta aquí, a propósito: saltarla en el `find` dejaría el
   // rango a merced de lo que alguna fila posterior casara por omisión.
   if (!fila || fila.retiradaPor) return null;
-  return { banda: fila.banda, riesgo: fila.riesgo };
+  return { perfil: PERFIL_DE_LA_MATRIZ, banda: fila.banda, riesgo: fila.riesgo };
 }

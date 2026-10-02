@@ -182,12 +182,13 @@ function vaciada(documento: string): string {
   return filas.reduce((doc, f) => conGuia(doc, sinTicks(f[cBanda] ?? ""), ""), documento);
 }
 
-const consultarReal = (ph: number) => riesgoDeEsperar("ph", ph);
+// La matriz es la del perfil `WASHED_STANDARD` (el título de §1): con otro perfil `riesgoDeEsperar` calla y este guardia no vería ninguna fila.
+const consultarReal = (ph: number) => riesgoDeEsperar("ph", ph, "WASHED_STANDARD");
 
 /** El módulo real SIN `queHaceElOperario`, pase lo que pase en el real: la base de los controles. */
 const sinGuia = (ph: number): Riesgo | null => {
-  const r = riesgoDeEsperar("ph", ph);
-  return r && { banda: r.banda, riesgo: r.riesgo };
+  const r = consultarReal(ph);
+  return r && { perfil: r.perfil, banda: r.banda, riesgo: r.riesgo };
 };
 
 /** `sinGuia` con `queHaceElOperario` añadido a las bandas que se digan. */

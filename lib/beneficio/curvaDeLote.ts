@@ -87,10 +87,12 @@ export interface Curva {
   readonly ancho: number;
   readonly alto: number;
   /**
-   * Las lecturas de las que salieron `puntos`, **por hora ascendente y sin escalar**: la última es
-   * la más reciente. Los puntos son coordenadas del lienzo y de ahí no se recupera qué se midió;
-   * quien rotula los ejes (`ejesDeLaCurva`) o cita qué sugiere el último valor (`riesgoDeEsperar`)
-   * las necesita tal cual.
+   * Las lecturas de las que salieron `puntos`, **por hora ascendente y sin escalar**. Los puntos son
+   * coordenadas del lienzo y de ahí no se recupera qué se midió; quien rotula los ejes
+   * (`ejesDeLaCurva`) o cita qué sugiere el último valor (`riesgoDeEsperar`) las necesita tal cual.
+   * **«La última» no es `lecturas[lecturas.length - 1]`:** con varias en el mismo instante el orden entre
+   * ellas es arbitrario, y quien necesite la última pregunta a `ultimaLectura`, que dice `null` cuando
+   * no la hay.
    */
   readonly lecturas: readonly LecturaDeCurva[];
   /**
@@ -100,6 +102,29 @@ export interface Curva {
    * declaró, y quien rotula decide qué hacer con ellos en vez de adivinar por qué falta.
    */
   readonly rango: { readonly min: number; readonly max: number } | null;
+}
+
+/**
+ * La lectura más reciente, **o `null` si no hay UNA última**: sin lecturas, o con varias que comparten
+ * el instante máximo.
+ *
+ * **Un empate de instante no tiene «última».** `curvaDeLote` ordena por `getTime()`, y un empate devuelve
+ * `0`: el orden entre lecturas del mismo instante es el que devolvió la base —arbitrario y no estable—,
+ * así que «la de más al final» cambia de una consulta a otra. Medido en la base local: 7 de 10 lotes
+ * tienen TODAS sus lecturas en el mismo instante, y en un lote se llegó a presentar la de **recepción**
+ * (la primera de la corrida) como «tu última lectura». **No se inventa un desempate** —ni por valor, ni
+ * por id, ni por nota—: cuando no se puede decir cuál es la última, no se afirma. Es el «nunca un cero
+ * donde falta un registro» aplicado a la identidad de la lectura.
+ *
+ * No depende de que `lecturas` venga ordenada: busca el instante máximo y cuenta las que caen en él.
+ * Un instante que no es un número (`Invalid Date`) tampoco tiene última: `null`.
+ */
+export function ultimaLectura(lecturas: readonly LecturaDeCurva[]): LecturaDeCurva | null {
+  if (lecturas.length === 0) return null;
+  const instantes = lecturas.map((l) => l.occurredAt.getTime());
+  const ultimo = Math.max(...instantes);
+  const enElUltimo = lecturas.filter((_, i) => instantes[i] === ultimo);
+  return enElUltimo.length === 1 ? enElUltimo[0]! : null;
 }
 
 /** Posición de `v` entre `min` y `max` en un eje de `tamano`, con el máximo en 0. Rango cero: mitad. */

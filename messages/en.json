@@ -3318,7 +3318,7 @@
     "curvaRiesgoDice": "with your latest reading (pH {ph}), the data suggests:",
     "curvaRiesgoDiceSiSeEstanca": "if the pH stalls where it is today (your latest reading: {ph}), the data suggests:",
     "curvaRiesgoDeDondeSale": "Where this comes from",
-    "curvaRiesgoFuente": "Band {banda} of the pH matrix in {documento}, §1. It is a Néctar Nómada criterion, not an order: the decision is up to whoever runs the lot.",
+    "curvaRiesgoFuente": "Band {banda} of the pH matrix of the {perfil} profile in {documento}, §1. It is a Néctar Nómada criterion, not an order: the decision is up to whoever runs the lot.",
     "curvaRiesgoCitaLiteral": "The quoted phrase is a literal quote from that document, which is written in Spanish, and is left untranslated."
   },
   "Bandejas": {

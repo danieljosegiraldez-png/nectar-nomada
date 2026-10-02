@@ -929,6 +929,25 @@ describe("la curva de un lote", () => {
     expect(await bandaDe("wash_medium_ph")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
   });
 
+  // **El perfil que rige el lote** (`perfilDelLote`) sale del grado del proceso de LA FASE ABIERTA, por la misma
+  // tabla que el veredicto (`PERFIL_POR_GRADO`). Con él decide la pantalla si pinta «qué sugiere el dato si se
+  // espera»: la matriz es la del lavado y a un lote que no lo es no se le cita. La lógica del mapeo la prueban
+  // `desde-el-lote.test.ts` y la pantalla, sin base; esto prueba el CABLEADO real: que la consulta trae el grado.
+  it("`perfilDelLote` sale del grado del proceso de la fase abierta: Natural → NATURAL; grado sin perfil → null; sin fase abierta → null", async () => {
+    const perfilDe = async (lotId: string) =>
+      (await datosDelTablero(operario, ahora, { curva: { lotId, variable: "ph", ...LIENZO } })).curva!.perfilDelLote;
+    // `lotK` seca, con un proceso cuyo grado es `TEST Natural (RUN)`: no es «Natural» ni «Washed», y no tiene perfil.
+    expect(await perfilDe(lotK)).toBeNull();
+    // Control: el mismo recorrido con un grado que SÍ tiene perfil (el valor real «Natural»).
+    const natural = await loteSimple("K-PERFIL-NATURAL", miSitio, miOrgId);
+    await fermentacionDe(natural, { lotProcessId: await procesoDe(natural, { natural: true }) });
+    expect(await perfilDe(natural)).toBe("NATURAL");
+    // Y el mismo grado SIN fase abierta (el proceso existe y está abierto, pero ninguna corrida): no hay perfil.
+    const sinFase = await loteSimple("K-PERFIL-SIN-FASE", miSitio, miOrgId);
+    await procesoDe(sinFase, { natural: true });
+    expect(await perfilDe(sinFase)).toBeNull();
+  });
+
   it("sin pedir curva, no hay curva", async () => {
     expect((await datosDelTablero(operario, ahora)).curva).toBeNull();
   });

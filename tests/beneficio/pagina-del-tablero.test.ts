@@ -22,7 +22,8 @@
  */
 import { renderToReadableStream } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DatosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
+import type { CurvaDelTablero, DatosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { lineaDeEtapas } from "../../lib/beneficio/lineaDeEtapas";
 import type { EntradaDeLoteParaTablero } from "../../lib/beneficio/tablero";
 
@@ -79,6 +80,15 @@ const SIN_AMBITO = datos({ sinAmbito: true, etapas: [] });
 async function pintar(d: DatosDelTablero): Promise<string> {
   datosActuales = d;
   const jsx = await BeneficioPage({ searchParams: Promise.resolve({}) });
+  const flujo = await renderToReadableStream(jsx);
+  await flujo.allReady;
+  return await new Response(flujo).text();
+}
+
+/** La página con un lote tocado (`?lote=…`): pinta la curva de `d.curva`. */
+async function pintarConLote(d: DatosDelTablero, lote: string): Promise<string> {
+  datosActuales = d;
+  const jsx = await BeneficioPage({ searchParams: Promise.resolve({ lote, variable: "ph" }) });
   const flujo = await renderToReadableStream(jsx);
   await flujo.allReady;
   return await new Response(flujo).text();
@@ -171,5 +181,32 @@ describe("la página — «0 de 0» no es «no hay ninguno»", () => {
     expect(con).not.toContain("Ninguna cama a la vista");
     // MUTACIÓN: quitar el `total === 0 ? …` de las cuentas (volver a pintar `libresYSanos` y
     // `total` siempre) → cae por «de 0».
+  });
+});
+
+describe("la página — le pasa a la curva el perfil que rige el lote", () => {
+  const LOTE = "3f2b6c1e-8a44-4d0e-9b57-0c1d2e3f4a5b";
+  // 4,7 con la matriz del lavado es «proliferación butírica y mohos»; con la de NATURAL está dentro de la ventana óptima.
+  const curvaCon = (perfilDelLote: CurvaDelTablero["perfilDelLote"]): CurvaDelTablero => ({
+    ...curvaDeLote({
+      lecturas: [{ occurredAt: haceHoras(5), value: 5.0 }, { occurredAt: haceHoras(1), value: 4.7 }],
+      objetivo: { minValue: 3.8, maxValue: 4.5, targetValue: 4.15 },
+      ancho: 480, alto: 200,
+    }),
+    perfilDelLote,
+  });
+
+  it("un lote WASHED_STANDARD pinta el bloque de qué sugiere el dato; el MISMO dato con otro perfil o sin perfil, no", async () => {
+    const lavado = aTexto(await pintarConLote(datos({ curva: curvaCon("WASHED_STANDARD") }), LOTE));
+    // Control: es la sección de la curva y el bloque está.
+    expect(lavado).toContain("Criterio de Néctar Nómada");
+    expect(lavado).toContain("stinker");
+    for (const perfil of ["NATURAL", null] as const) {
+      const texto = aTexto(await pintarConLote(datos({ curva: curvaCon(perfil) }), LOTE));
+      expect(texto, `perfil ${perfil}`).not.toContain("Criterio de Néctar Nómada");
+      expect(texto, `perfil ${perfil}`).not.toContain("stinker");
+    }
+    // MUTACIÓN: quitar `perfilDelLote={datos.curva?.perfilDelLote ?? null}` de la página → el lote lavado no pinta y cae por «Criterio de Néctar Nómada».
+    // MUTACIÓN: `perfilDelLote="WASHED_STANDARD"` fijo en la página → NATURAL cita «stinker» y cae.
   });
 });

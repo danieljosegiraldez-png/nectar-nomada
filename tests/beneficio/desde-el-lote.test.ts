@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { confianzaDe, veredictoDelLote, type MedicionDelLote } from "../../lib/beneficio/desdeElLote";
+import { confianzaDe, perfilDeLaFaseAbierta, veredictoDelLote, type MedicionDelLote } from "../../lib/beneficio/desdeElLote";
 
 /**
  * El puente entre nuestros registros y los motores.
@@ -29,6 +29,50 @@ const lectura = (v: number, hora: number, extra: Partial<MedicionDelLote> = {}):
   provenanceClass: "measured_fact",
   fueCorregida: false,
   ...extra,
+});
+
+describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta, o null — nunca «el de siempre»", () => {
+  /** Una corrida abierta cuyo proceso declara `grado` (`null` = proceso sin grado; `"sin-proceso"` = corrida sin proceso). */
+  const abiertaCon = (grado: string | null | "sin-proceso") => ({
+    lotProcess: grado === "sin-proceso" ? null : { processGradeValue: grado === null ? null : { value: grado } },
+  });
+
+  it("Washed y Natural, con una fase abierta, tienen su perfil", () => {
+    expect(perfilDeLaFaseAbierta(abiertaCon("Washed"))).toBe("WASHED_STANDARD");
+    expect(perfilDeLaFaseAbierta(abiertaCon("Natural"))).toBe("NATURAL");
+  });
+
+  it("Honey y los dos Semi Wash no tienen perfil: no se les presta el del lavado", () => {
+    for (const grado of ["Honey", "Semi Wash 50%", "Semi Wash 75%"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado)), grado).toBeNull();
+    }
+  });
+
+  it("SIN fase abierta no hay perfil; y con una corrida sin proceso o sin grado, tampoco", () => {
+    expect(perfilDeLaFaseAbierta(undefined)).toBeNull();
+    expect(perfilDeLaFaseAbierta(abiertaCon("sin-proceso"))).toBeNull();
+    expect(perfilDeLaFaseAbierta(abiertaCon(null))).toBeNull();
+    expect(perfilDeLaFaseAbierta(abiertaCon(""))).toBeNull();
+    // Control: la misma llamada con una corrida que sí tiene grado con perfil lo devuelve, así que los `null` de arriba no son «siempre null».
+    expect(perfilDeLaFaseAbierta(abiertaCon("Washed"))).not.toBeNull();
+  });
+
+  it("un grado que es una propiedad heredada del objeto no es un perfil", () => {
+    // `PERFIL_POR_GRADO["constructor"]` encuentra `Object` si no se pregunta por las propiedades PROPIAS.
+    for (const grado of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado)), grado).toBeNull();
+    }
+  });
+
+  it("coincide con el que usa el veredicto: lo que tiene perfil aquí tiene veredicto allí, y viceversa", () => {
+    const hayVeredicto = (grado: string) =>
+      typeof veredictoDelLote({
+        fase: { tipo: "fermentacion", iniciadaEn: INICIO }, gradoDeProceso: grado, mediciones: [lectura(4.2, 6)], ahora: h(6),
+      }) === "object";
+    for (const grado of ["Washed", "Natural", "Honey", "Semi Wash 50%", "Semi Wash 75%"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado)) !== null, grado).toBe(hayVeredicto(grado));
+    }
+  });
 });
 
 describe("el puente no inventa lo que no puede traducir", () => {

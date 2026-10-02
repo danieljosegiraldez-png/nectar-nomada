@@ -6,6 +6,12 @@
  * documento del proyecto, y para ellos la función devuelve `null`: ninguna frase neutra, ningún
  * «sin riesgo». Un `null` es «no hay registro», que no es lo mismo que «no hay riesgo».
  *
+ * **Y sólo para el perfil `WASHED_STANDARD`**, que es el título de la sección que se cita. Con cualquier otro
+ * perfil —los otros cuatro, `null` («no se sabe cuál») o un texto que no es ninguno— la función devuelve
+ * `null`: no hay umbral escrito para ellos y no se les presta el del lavado. Todas las pruebas de abajo
+ * que no hablan del perfil consultan con el de la matriz (`riesgoDeEsperar`, local); las que sí hablan de
+ * él llaman a la función real (`riesgoDeEsperarReal`) con otro.
+ *
  * **La fila `[6.50, 8.00]` está RETIRADA por ADR-181** (la nota que abre §1 del documento): se
  * transcribe en el módulo, pero la función devuelve `null` en ese rango. Las pruebas de abajo lo
  * fijan, y el guardia de la transcripción la sigue comparando con el documento.
@@ -18,7 +24,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { riesgoDeEsperar } from "../../lib/beneficio/riesgoDeEsperar";
+import { CLAVES_DE_PERFIL } from "../../lib/beneficio/perfiles";
+import {
+  PERFIL_DE_LA_MATRIZ,
+  riesgoDeEsperar as riesgoDeEsperarReal,
+} from "../../lib/beneficio/riesgoDeEsperar";
+
+/** El de la matriz: el perfil con el que se pregunta cuando la prueba no habla del perfil. */
+const PERFIL = "WASHED_STANDARD";
+const riesgoDeEsperar = (variable: string, valor: number) => riesgoDeEsperarReal(variable, valor, PERFIL);
 
 describe("riesgoDeEsperar", () => {
   it("brix y humedad no tienen matriz de umbrales: devuelven null, no una frase neutra", () => {
@@ -82,6 +96,35 @@ describe("riesgoDeEsperar", () => {
     expect(riesgoDeEsperar("ph", 4.8)?.banda).toBe("[4.50, 5.20)");
     expect(riesgoDeEsperar("ph", 6.49)?.banda).toBe("[5.20, 6.50)");
     expect(riesgoDeEsperar("ph", 8.01)?.banda).toBe("fuera de [2.50, 8.00]");
+  });
+
+  it("con cualquier perfil que no sea el de la matriz no hay riesgo citable: ni el de otro perfil, ni null, ni un texto cualquiera", () => {
+    // Treinta pH dentro de la ventana óptima de NATURAL (3,9–4,8) recibían «proliferación butírica y mohos».
+    // Se barre −2…16 en centésimas (enteros, para que no derive el coma flotante) con cada perfil que NO es el de la matriz.
+    const otros: (string | null)[] = [...CLAVES_DE_PERFIL.filter((c) => c !== PERFIL), null, "", "washed_standard", "constructor"];
+    for (const perfil of otros) {
+      const citan: number[] = [];
+      for (let i = -200; i <= 1600; i++) {
+        if (riesgoDeEsperarReal("ph", i / 100, perfil) !== null) citan.push(i / 100);
+      }
+      expect(citan.length, `perfil ${JSON.stringify(perfil)}: ${citan.length} pH todavía citan algo (el primero: ${citan[0]})`).toBe(0);
+    }
+    // El control es la MISMA barrida con el perfil de la matriz: cita en siete bandas. Sin él, «cero citas» pasaría con una función que nunca cita.
+    expect(otros.length, "se probaron los otros cuatro perfiles y los tres que no son un perfil").toBe(4 + 4);
+    const bandas = new Set<string>();
+    for (let i = -200; i <= 1600; i++) {
+      const r = riesgoDeEsperarReal("ph", i / 100, PERFIL);
+      if (r) bandas.add(r.banda);
+    }
+    expect(bandas.size).toBe(7);
+    // Y el caso concreto: 4,7 está DENTRO de la ventana óptima de NATURAL y es «stinker» en la matriz del lavado.
+    expect(riesgoDeEsperarReal("ph", 4.7, "NATURAL")).toBeNull();
+    expect(riesgoDeEsperarReal("ph", 4.7, PERFIL)?.riesgo).toContain("stinker");
+  });
+
+  it("el riesgo dice de QUÉ perfil es la matriz de donde sale", () => {
+    expect(riesgoDeEsperar("ph", 4.8)?.perfil).toBe("WASHED_STANDARD");
+    expect(PERFIL_DE_LA_MATRIZ).toBe(PERFIL);
   });
 
   it("un valor que no es un número no tiene riesgo citable", () => {
@@ -160,6 +203,16 @@ describe("riesgoDeEsperar cita la tabla de 10_ph_fermentation.md §1", () => {
     // no pase por «leí la tabla».
     expect(filas[0]?.banda).toBe("[6.50, 8.00]");
     expect(DOCUMENTO).toContain("stinker");
+  });
+
+  it("el título de §1 declara el perfil de la matriz: el mismo que el módulo cita", () => {
+    // Si el documento retitula la matriz a otro perfil, `PERFIL_DE_LA_MATRIZ` sigue diciendo el de antes y el módulo
+    // la citaría a lotes de un protocolo que ya no es el suyo. Se lee el título; no se supone.
+    const titulo = /^## 1\.[^\n]*perfil `([A-Z_]+)`/m.exec(DOCUMENTO);
+    expect(titulo, "no se encontró el título de §1 con «perfil `…`»").not.toBeNull();
+    expect(titulo![1]).toBe(PERFIL_DE_LA_MATRIZ);
+    // Control: la expresión es la que casa con el título de hoy, no una que casara con cualquier cosa.
+    expect(titulo![0]).toContain("Matriz de umbrales");
   });
 
   it("el documento tiene exactamente las filas que esta prueba conoce", () => {
