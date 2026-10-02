@@ -411,10 +411,21 @@ function extensionEnX(r: Rotulo): [number, number] {
 }
 /** De dónde a dónde se extiende un rótulo del eje X en Y: de la altura de las mayúsculas sobre la línea de base a un poco por debajo. */
 const extensionEnY = (r: Rotulo): [number, number] => [r.y - 0.8 * CUERPO_DE_LOS_EJES, r.y + 0.2 * CUERPO_DE_LOS_EJES];
-/** Los vértices de TODAS las marcas, con el vértice de un triángulo anclado incluido. */
+/**
+ * La caja de UNA marca. `marcas()` da un círculo como UN solo vértice (su centro): sin inflarlo con su radio (4,5) la caja
+ * mide cero y «se solapan» da falso con el rótulo encima del punto — lo vio la mutación de las horas a media altura, que
+ * el primer intento de esta prueba dejaba pasar.
+ */
+function cajaDeUnaMarca(m: { vertices: [number, number][] }): { x: [number, number]; y: [number, number] } {
+  const xs = m.vertices.map((p) => p[0]);
+  const ys = m.vertices.map((p) => p[1]);
+  const r = m.vertices.length === 1 ? 4.5 : 0;
+  return { x: [Math.min(...xs) - r, Math.max(...xs) + r], y: [Math.min(...ys) - r, Math.max(...ys) + r] };
+}
+/** El punto más bajo de TODAS las marcas (con el vértice de un triángulo anclado y el radio de un círculo) y cuántas hay. */
 function cajaDeLasMarcas(html: string) {
-  const v = marcas(html).flatMap((m) => m.vertices);
-  return { minX: Math.min(...v.map((p) => p[0])), maxX: Math.max(...v.map((p) => p[0])), minY: Math.min(...v.map((p) => p[1])), maxY: Math.max(...v.map((p) => p[1])), n: marcas(html).length };
+  const cajas = marcas(html).map(cajaDeUnaMarca);
+  return { maxY: Math.max(...cajas.map((c) => c.y[1])), n: cajas.length };
 }
 const seSolapan = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
 /** Ancho del contenido de un teléfono de 375 px con 16 px de margen por lado (supuesto: el paso 7 lee el ancho real del <svg>). */
@@ -529,9 +540,8 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
         const [rx0, rx1] = extensionEnX(r);
         const [ry0, ry1] = extensionEnY(r);
         for (const m of marcasDelDibujo) {
-          const xs = m.vertices.map((p) => p[0]);
-          const ys = m.vertices.map((p) => p[1]);
-          const pisa = seSolapan([rx0, rx1], [Math.min(...xs), Math.max(...xs)]) && seSolapan([ry0, ry1], [Math.min(...ys), Math.max(...ys)]);
+          const c = cajaDeUnaMarca(m);
+          const pisa = seSolapan([rx0, rx1], c.x) && seSolapan([ry0, ry1], c.y);
           expect(pisa, `${nombre}: «${r.texto}» pisa una marca`).toBe(false);
         }
       }
@@ -542,9 +552,9 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
     const ultima = marcas(html)[1]!;
     const antiguo = rotulos(html, "x")[1]!;
     const dondeEstaban: Rotulo = { ...antiguo, y: LIENZO.alto + 22 };
+    const cajaDeLaUltima = cajaDeUnaMarca(ultima);
     expect(
-      seSolapan(extensionEnX(dondeEstaban), [Math.min(...ultima.vertices.map((p) => p[0])), Math.max(...ultima.vertices.map((p) => p[0]))]) &&
-        seSolapan(extensionEnY(dondeEstaban), [Math.min(...ultima.vertices.map((p) => p[1])), Math.max(...ultima.vertices.map((p) => p[1]))]),
+      seSolapan(extensionEnX(dondeEstaban), cajaDeLaUltima.x) && seSolapan(extensionEnY(dondeEstaban), cajaDeLaUltima.y),
       "con las horas a alto + 22 la última lectura cae sobre la «h»",
     ).toBe(true);
     // MUTACIÓN: horas con la línea de base en `alto + 22` (sin la franja) → el rótulo «8 h» queda bajo el punto de 3,72 y cae.
