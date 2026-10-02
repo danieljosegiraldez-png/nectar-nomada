@@ -24,7 +24,8 @@
  *
  * **La guarda que de verdad protege** no es ninguna de esas: es comprobar, EN EL
  * MOMENTO Y GENERADO DEL ESQUEMA, que la ficha duplicada no esté referenciada en
- * ninguna otra parte. Son 51 columnas apuntando a `core.person` y una lista
+ * ninguna otra parte. Son las columnas que el ESQUEMA diga que apuntan a `core.person` —al escribir
+ * esto la prosa decía 51 y la base midió 52, que es justo por lo que no se escribe el número— y una lista
  * escrita a mano envejecería en el primer modelo nuevo — que es exactamente cómo
  * el guardia de `grant-platform-admin` acabó comparando contra un 89 congelado.
  * Si algo la referencia, esto ABORTA y dice qué tabla.
@@ -132,7 +133,19 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
 
   const campos = {
     id: true, displayName: true, email: true, status: true,
-    userAccount: { select: { id: true, status: true, authProvider: true, passwordHash: true } },
+    userAccount: {
+      select: {
+        id: true,
+        status: true,
+        authProvider: true,
+        passwordHash: true,
+        // **`authProvider` NO dice cómo entra esta persona.** Una cuenta `credentials` puede estar
+        // enlazada con Google por una fila de `core.external_identity` —una por proveedor— y entonces
+        // entra con Google aunque su `authProvider` diga otra cosa. La línea final del guion afirmaba
+        // Google leyendo sólo esa columna, que es una frase creíble sin respaldo (§21).
+        externalIdentities: { select: { provider: true } },
+      },
+    },
     _count: { select: { organizationMemberships: true } },
   } as const;
   const canonica = await prisma.person.findUnique({ where: { id: canonicaId }, select: campos });
@@ -188,6 +201,7 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   }
 
   if (!duplicada.userAccount) fail("la duplicada no tiene cuenta: no hay nada que mover, bórrala a mano si procede");
+  // (la simetría de este aviso para la CUENTA que se borra va más abajo, donde ya se conoce su id)
   if (canonica._count.organizationMemberships === 0) {
     console.log("\n  AVISO: la canónica no tiene ninguna membresía. ¿Seguro que es la canónica?");
   }
@@ -215,6 +229,16 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
     console.log(`\n  Referencias a la cuenta que se borra (${cuentaQueSeVa}), medidas en ${columnasDeCuenta.length} columnas:`);
     if (refsCuenta.length === 0) console.log("    (ninguna)");
     for (const r of refsCuenta) console.log(`    ${r.donde}: ${r.n}`);
+    // **La misma ceguera sin FK, del lado de la cuenta.** Arriba se cuenta la auditoría que seguirá
+    // apuntando a la PERSONA por `entity_id`, y aquí faltaba su simétrica: `entity_type =
+    // 'user_account'` se usa en el código, así que hay filas que apuntan a ESTA cuenta por un uuid
+    // sin clave ajena. Tampoco abortan —§35— pero callarlas era asimétrico sin ninguna razón.
+    const auditoriaDeLaCuenta = await prisma.auditEvent.count({
+      where: { entityType: "user_account", entityId: cuentaQueSeVa },
+    });
+    if (auditoriaDeLaCuenta > 0) {
+      console.log(`    (y ${auditoriaDeLaCuenta} fila(s) de core.audit_event la nombran por entity_id, sin FK: se quedan, §35)`);
+    }
     if (fueraDeCuenta.length > 0) {
       fail(
         "la cuenta que se iba a borrar TIENE historia — borrarla la perdería en silencio:",
@@ -233,11 +257,23 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   // post-condición que compara totales lo bendice, porque mover no crea ni destruye filas: 50 antes,
   // 50 después. Dos filas idénticas no rompen `scopeContains`, pero sí hacen que revocar una deje la
   // otra concediendo en silencio, que es la clase de cosa que §10 existe para que no pase.
+  // **Y sólo las que están EN VIGOR.** `AssignmentStatus` tiene `revoked` y `expired`, y esas filas se
+  // quedan en la tabla: son historia, no permisos. Sin filtrar, la guarda aborta una consolidación
+  // correcta porque alguien tuvo el mismo rol y se le retiró — y abortar sobre código correcto es, en
+  // esta casa, peor que no tener guarda. El filtro es el que ya usa `grant-platform-admin.sql`
+  // (`a.status = 'active'`), más la ventana de vigencia.
+  //
+  // El «por qué» vive aquí y no dentro de la consulta por una razón mecánica que acaba de costar una
+  // corrida: un backtick dentro de un template literal lo CIERRA, y este párrafo tiene cinco. Dentro
+  // de la plantilla rompió el archivo en siete errores de sintaxis que no mencionaban backticks.
   const colisiones = cuentaQueSeVa
     ? await prisma.$queryRaw<{ role_profile_id: string; scope_id: string | null; cuantas: bigint }[]>`
         select a.role_profile_id, a.scope_id, count(*)::bigint as cuantas
         from core.assignment a
         where a.user_account_id in (${cuentaQueSeVa}::uuid, ${cuentaQueSeQueda}::uuid)
+          -- solo las que estan EN VIGOR; el por que esta en el comentario de arriba
+          and a.status = 'active'
+          and (a.valid_to is null or a.valid_to > now())
         group by a.role_profile_id, a.scope_id
         having count(distinct a.user_account_id) > 1`
     : [];
@@ -265,7 +301,6 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   // lo que afirma.
   const asignacionesPropias = await prisma.assignment.count({ where: { userAccountId: cuentaQueSeQueda } });
   const asignacionesEsperadas = asignacionesQueSeMueven + asignacionesPropias;
-  const totalAsignaciones = await prisma.assignment.count();
   const totalAuditoria = await prisma.auditEvent.count();
 
   console.log("\n  Plan");
@@ -280,7 +315,7 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
     `    · esa cuenta tiene ${asignacionesEsperadas} asignación(es): ${asignacionesPropias} propia(s) + ${asignacionesQueSeMueven} movida(s)`,
   );
   console.log(`    · la duplicada ya no existe`);
-  console.log(`    · core.assignment sigue en ${totalAsignaciones} filas (no se crea ni se pierde ninguna)`);
+  console.log(`    · las asignaciones movidas cuelgan de ${cuentaQueSeQueda}, y en la vieja no queda ninguna`);
   console.log(
     `    · la fila de core.audit_event de esto se puede volver a leer, y el total (${totalAuditoria}) no decrece`,
   );
@@ -295,6 +330,23 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   // La transacción devuelve el id de SU fila de auditoría: la post-condición la busca por ese id
   // en vez de deducirla de un recuento global. Ver el comentario de abajo.
   const idDeAuditoria = await prisma.$transaction(async (tx) => {
+    // **Lo primero: bloquear las dos filas que se van a borrar.**
+    // Las dos guardas de arriba se miden FUERA de esta transacción, así que entre la medición y el
+    // borrado cabe una escritura ajena — y eso importa porque la mayoría de las claves ajenas a
+    // `core.user_account` y a `core.person` son `ON DELETE SET NULL`: una referencia nacida en esa
+    // ventana **no hace fallar el borrado**, lo acepta y pone NULL en silencio.
+    // `FOR UPDATE` lo cierra casi entero sin coste: PostgreSQL exige un bloqueo sobre la fila padre
+    // para insertar un hijo con clave ajena, así que mientras esta transacción lo tenga, nadie puede
+    // crear una referencia nueva a estas dos filas.
+    // **Lo que NO cierra, dicho en vez de disimulado:** la ventana entre la medición y este bloqueo.
+    // Volver a medir las ~176 columnas aquí dentro la cerraría del todo, y cambiaría una carrera
+    // estrecha por un bloqueo largo sobre dos filas de identidad. Si algún día esto se corre sobre una
+    // cuenta en uso, ése es el cambio que toca — y la guarda de la cuenta ya aborta en ese caso,
+    // porque una cuenta que ha actuado tiene filas que la referencian.
+    await tx.$executeRaw`select id from core.person where id = ${duplicadaId}::uuid for update`;
+    if (cuentaQueSeVa) {
+      await tx.$executeRaw`select id from core.user_account where id = ${cuentaQueSeVa}::uuid for update`;
+    }
     // Los ids se leen ANTES de mover: después ya no se distinguen de las que la cuenta
     // superviviente tenía. §35 pide saber QUÉ se movió, no cuántas cosas.
     if (cuentaQueSeVa) {
@@ -343,8 +395,18 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   const despues = await prisma.person.findUnique({ where: { id: canonicaId }, select: campos });
   const siguePresente = await prisma.person.findUnique({ where: { id: duplicadaId }, select: { id: true } });
   const asignacionesDespues = await prisma.assignment.count({ where: { userAccountId: cuentaQueSeQueda } });
-  const totalAsignacionesDespues = await prisma.assignment.count();
   const totalAuditoriaDespues = await prisma.auditEvent.count();
+  // **IDENTIDAD, no cardinalidad: se tienen los ids en la mano.** La post-condición de abajo
+  // comparaba cuántas asignaciones tiene la cuenta superviviente contra una suma de dos recuentos
+  // previos. Eso responde «¿cuántas hay?» cuando la pregunta es «¿están ESTAS?» — y los dos términos
+  // de la suma se leyeron antes de la transacción, así que una concesión ajena en medio los invalida.
+  // Con `idsMovidos` se puede afirmar lo que de verdad importa.
+  const movidasAhora = idsMovidos.length
+    ? await prisma.assignment.count({ where: { id: { in: idsMovidos }, userAccountId: cuentaQueSeQueda } })
+    : 0;
+  const quedanEnLaVieja = cuentaQueSeVa
+    ? await prisma.assignment.count({ where: { userAccountId: cuentaQueSeVa } })
+    : 0;
   // **SU fila se busca por id; el total sólo se usa para la regla de §35.**
   // Esta comprobación exigía `totalAuditoria + 1`, y `core.audit_event` es la tabla más escrita de
   // la aplicación: cada operación deja fila, un inicio de sesión incluido. Si alguien usa la
@@ -352,20 +414,49 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   // justo a la persona que se consolida— el total crece de más, la consolidación es CORRECTA y la
   // post-condición grita. Es la misma forma que la de las asignaciones: una invariante global que
   // esta operación no posee. Lo que sí posee es su propia fila.
-  const filaDeAuditoria = await prisma.auditEvent.findUnique({ where: { id: idDeAuditoria }, select: { id: true } });
+  // **Y la fila se comprueba por su CONTENIDO, no por existir.** Buscar por un id que acaba de
+  // devolver una transacción confirmada no puede fallar nunca: era un control que no discrimina.
+  // Lo que sí discrimina es que la fila diga lo que esta operación hizo.
+  const filaDeAuditoria = await prisma.auditEvent.findUnique({
+    where: { id: idDeAuditoria },
+    select: { id: true, entityId: true, reason: true, after: true },
+  });
 
   const problemas: string[] = [];
   if (correo && despues?.email !== correo) problemas.push(`la canónica no tiene el correo: ${despues?.email ?? "(ninguno)"}`);
   if (!despues?.userAccount) problemas.push("la canónica quedó sin cuenta");
   if (despues?.userAccount && despues.userAccount.id !== cuentaQueSeQueda) problemas.push("la cuenta de la canónica no es la que debía quedarse");
   if (siguePresente) problemas.push("la ficha duplicada sigue existiendo");
+  // Las DOS afirmaciones que esta operación posee de verdad: las filas que movió están donde debían,
+  // y en la cuenta borrada no quedó ninguna.
+  if (movidasAhora !== idsMovidos.length) {
+    problemas.push(`de las ${idsMovidos.length} asignaciones movidas, sólo ${movidasAhora} cuelgan de ${cuentaQueSeQueda}`);
+  }
+  if (quedanEnLaVieja !== 0) problemas.push(`quedan ${quedanEnLaVieja} asignaciones en la cuenta borrada ${cuentaQueSeVa}`);
+  // **El recuento total de `core.assignment` ya NO es una post-condición**, y quitarlo es el arreglo,
+  // no un descuido. Sólo podía fallar por la escritura de otra persona: esta operación no crea ni
+  // destruye filas de `assignment` —`updateMany` cambia de dueño— y la pérdida que decía vigilar es
+  // imposible, porque `core.assignment.user_account_id` es `ON DELETE RESTRICT`: si el movimiento se
+  // dejara una fila, el borrado de la cuenta fallaría a gritos dentro de la transacción. Era un
+  // generador de falsos positivos con la misma forma que el `+1` de `audit_event` que este archivo ya
+  // relajó — y se quedó aquí porque relajé una y no miré su gemela. Lo que sigue midiéndose es el
+  // recuento de la cuenta superviviente, abajo, que sí es suyo.
   if (asignacionesDespues !== asignacionesEsperadas) {
     problemas.push(
       `asignaciones en ${cuentaQueSeQueda}: esperaba ${asignacionesEsperadas} (${asignacionesPropias} propias + ${asignacionesQueSeMueven} movidas), hay ${asignacionesDespues}`,
     );
   }
-  if (totalAsignacionesDespues !== totalAsignaciones) problemas.push(`core.assignment pasó de ${totalAsignaciones} a ${totalAsignacionesDespues}`);
-  if (!filaDeAuditoria) problemas.push(`la fila de core.audit_event ${idDeAuditoria} no se puede volver a leer: la transacción no confirmó`);
+  if (!filaDeAuditoria) {
+    problemas.push(`la fila de core.audit_event ${idDeAuditoria} no se puede volver a leer: la transacción no confirmó`);
+  } else {
+    if (filaDeAuditoria.entityId !== canonicaId) problemas.push(`la fila de auditoría apunta a ${filaDeAuditoria.entityId}, no a la canónica`);
+    if (!filaDeAuditoria.reason?.includes("consolidación")) problemas.push("la fila de auditoría no dice que esto fue una consolidación");
+    const after = filaDeAuditoria.after as unknown as { asignacionesMovidas?: unknown } | null;
+    const guardadas = Array.isArray(after?.asignacionesMovidas) ? (after!.asignacionesMovidas as unknown[]).length : -1;
+    if (guardadas !== idsMovidos.length) {
+      problemas.push(`la fila de auditoría guarda ${guardadas} asignaciones movidas, se movieron ${idsMovidos.length}`);
+    }
+  }
   if (totalAuditoriaDespues < totalAuditoria + 1) {
     problemas.push(
       `core.audit_event pasó de ${totalAuditoria} a ${totalAuditoriaDespues}: no creció, y §35 dice que es de sólo-añadir`,
@@ -383,13 +474,18 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   const cuenta = despues!.userAccount;
   const proveedor = cuenta?.authProvider ?? "(sin cuenta)";
   const tieneClave = Boolean(cuenta?.passwordHash);
-  console.log(`  Cuenta ${cuentaQueSeQueda}: proveedor ${proveedor}, contraseña ${tieneClave ? "puesta" : "sin poner"}.`);
-  if (proveedor === "google") {
+  const enlaces = (cuenta?.externalIdentities ?? []).map((e) => e.provider);
+  console.log(
+    `  Cuenta ${cuentaQueSeQueda}: authProvider ${proveedor}, contraseña ${tieneClave ? "puesta" : "sin poner"}, enlaces [${enlaces.join(", ") || "ninguno"}].`,
+  );
+  if (enlaces.includes("google")) {
     console.log(`  Entra con Google usando ${despues!.email ?? "su correo"} (ADR-083).\n`);
   } else if (tieneClave) {
     console.log(`  Entra con ${despues!.email ?? "su correo"} y su contraseña.\n`);
+  } else if (despues!.email) {
+    console.log(`  Sin enlace de Google y sin contraseña: al entrar la primera vez con ${despues!.email} se crea el enlace (ADR-083).\n`);
   } else {
-    console.log(`  Cuenta '${proveedor}' sin contraseña: comprobar cómo entra antes de decirle que ya puede.\n`);
+    console.log("  Sin enlace, sin contraseña y sin correo: esta cuenta no puede entrar. Ponerle correo primero.\n");
   }
 }
 

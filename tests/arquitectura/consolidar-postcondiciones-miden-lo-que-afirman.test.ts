@@ -150,12 +150,18 @@ describe("la post-condición de auditoría busca SU fila, no un recuento global"
     expect(src, "no devuelve su id").toMatch(/return fila\.id;/);
   });
 
-  it("la post-condición vuelve a leer esa fila por su id", () => {
+  it("la post-condición vuelve a leer esa fila por su id, y mira su CONTENIDO", () => {
     const src = fuente();
-    expect(src, "no vuelve a leer la fila por id").toMatch(
-      /prisma\.auditEvent\.findUnique\(\{ where: \{ id: idDeAuditoria \}/,
-    );
+    expect(src, "no vuelve a leer la fila por id").toMatch(/where: \{ id: idDeAuditoria \}/);
     expect(src, "no comprueba que la fila exista").toMatch(/if \(!filaDeAuditoria\)/);
+    // **Y no se queda en que exista.** Buscar por un id que acaba de devolver una transacción
+    // confirmada no puede fallar nunca: es un control que no discrimina, y una revisión adversaria lo
+    // marcó como tal. Lo que discrimina es que la fila diga lo que esta operación hizo.
+    expect(src, "no comprueba a quién apunta la fila").toMatch(/filaDeAuditoria\.entityId !== canonicaId/);
+    expect(src, "no comprueba que la fila diga qué fue").toMatch(/filaDeAuditoria\.reason\?\.includes\("consolidación"\)/);
+    expect(src, "no compara las asignaciones que la fila guarda con las que se movieron").toMatch(
+      /guardadas !== idsMovidos\.length/,
+    );
   });
 
   /**
@@ -295,14 +301,84 @@ describe("los silencios del guion, dichos", () => {
     expect(src, "el registro no guarda el correo anterior de la canónica").toMatch(/correoAnteriorDeLaCanonica: canonica\.email/);
   });
 
-  it("la línea final lee el proveedor de la cuenta en vez de afirmar Google", () => {
+  it("la línea final decide por el ENLACE externo, no por authProvider", () => {
     const src = fuente();
-    expect(src, "no lee el proveedor").toMatch(/cuenta\?\.authProvider/);
     expect(src, "no mira si hay contraseña").toMatch(/Boolean\(cuenta\?\.passwordHash\)/);
+    // **`authProvider` no dice cómo entra esta persona.** Una cuenta `credentials` puede estar
+    // enlazada con Google por una fila de `core.external_identity`, y entonces entra con Google. La
+    // versión anterior de esta prueba exigía `proveedor === "google"`, o sea bendecía el defecto: una
+    // revisión adversaria lo marcó, y la prueba se corrige con el código.
+    expect(src, "no consulta los enlaces externos").toMatch(/externalIdentities: \{ select: \{ provider: true \} \}/);
     const i = src.indexOf("Entra con Google usando");
     expect(i, "ya no hay mensaje de Google").toBeGreaterThan(-1);
-    // La afirmación de Google tiene que estar DENTRO de la rama que comprobó el proveedor.
     const antes = src.slice(Math.max(0, i - 300), i);
-    expect(antes, "afirma Google sin haber comprobado el proveedor").toMatch(/proveedor === "google"/);
+    expect(antes, "afirma Google sin comprobar el enlace externo").toMatch(/enlaces\.includes\("google"\)/);
+    expect(antes, "sigue decidiendo por authProvider").not.toMatch(/proveedor === "google"/);
+  });
+});
+
+/**
+ * **Cuatro de la tercera vuelta, y las cuatro dicen algo sobre los arreglos de las dos primeras.**
+ *
+ * Una revisión adversaria de cuatro lentes sobre el archivo YA CORREGIDO devolvió 21 hallazgos que
+ * sobrevivieron a dos de tres escépticos. Agrupados, cuatro tocaban mis propios arreglos:
+ *
+ * 1. **La guarda de colisiones abortaba sobre código correcto.** `AssignmentStatus` tiene `revoked` y
+ *    `expired`, y esas filas se quedan en la tabla. Sin filtrar, una asignación retirada hace años con
+ *    el mismo (rol, ámbito) abortaba una consolidación buena — y abortar sobre código correcto es, en
+ *    esta casa, peor que no tener guarda.
+ * 2. **Relajé una post-condición global y dejé su gemela.** Quité el `audit_event` + 1 exacto y dejé
+ *    `core.assignment` comparando totales globales por igualdad, que sólo puede fallar por la escritura
+ *    de otra persona: la pérdida que decía vigilar es imposible, porque esa FK es `RESTRICT`. Tres
+ *    lentes distintas lo vieron por separado. Ahora se afirma IDENTIDAD —que las filas movidas cuelgan
+ *    de la cuenta superviviente y que en la vieja no queda ninguna— teniendo los ids en la mano.
+ * 3. **La simetría a medias.** Añadí el aviso de la auditoría sin FK para la PERSONA y no para la
+ *    CUENTA, cuando `entity_type = 'user_account'` se usa en el código.
+ * 4. **Las guardas se miden fuera de la transacción.** La mayoría de las FK a cuenta y a persona son
+ *    `ON DELETE SET NULL`, así que una referencia nacida entre la medición y el borrado no hace fallar
+ *    nada: la acepta y pone NULL. Un `FOR UPDATE` sobre las dos filas padre al abrir la transacción lo
+ *    cierra casi entero, porque PostgreSQL exige un bloqueo en la fila padre para insertar un hijo con
+ *    clave ajena. Lo que queda abierto está dicho en el comentario del código en vez de disimulado.
+ */
+describe("los arreglos de las vueltas anteriores, corregidos", () => {
+  it("la guarda de colisiones sólo cuenta asignaciones EN VIGOR", () => {
+    const src = fuente();
+    const i = src.indexOf("having count(distinct a.user_account_id) > 1");
+    expect(i, "ya no mide tríos compartidos").toBeGreaterThan(-1);
+    const consulta = src.slice(src.lastIndexOf("select a.role_profile_id", i), i);
+    expect(consulta, "cuenta también las revocadas y expiradas, y abortaría sobre código correcto").toMatch(
+      /and a\.status = 'active'/,
+    );
+    expect(consulta, "no mira la ventana de vigencia").toMatch(/a\.valid_to is null or a\.valid_to > now\(\)/);
+  });
+
+  it("las post-condiciones de asignaciones afirman IDENTIDAD, no cardinalidad global", () => {
+    const src = fuente();
+    expect(src, "no comprueba que las movidas cuelguen de la cuenta superviviente").toMatch(
+      /id: \{ in: idsMovidos \}, userAccountId: cuentaQueSeQueda/,
+    );
+    expect(src, "no comprueba que en la cuenta borrada no quede ninguna").toMatch(/quedanEnLaVieja !== 0/);
+    // **La que se quitó, y su ausencia es el arreglo.** El total global de `core.assignment` sólo podía
+    // fallar por la escritura de otra persona. Si alguien lo repone, esto cae.
+    expect(src, "vuelve a usar el total global de core.assignment como veredicto").not.toMatch(
+      /totalAsignacionesDespues !== totalAsignaciones/,
+    );
+  });
+
+  it("el aviso de auditoría sin FK es simétrico: persona Y cuenta", () => {
+    const src = fuente();
+    expect(src, "no cuenta la de la persona").toMatch(/entityType: "person", entityId: duplicadaId/);
+    expect(src, "no cuenta la de la cuenta que borra").toMatch(/entityType: "user_account", entityId: cuentaQueSeVa/);
+  });
+
+  it("la transacción bloquea las dos filas padre antes de tocar nada", () => {
+    const src = fuente();
+    const i = src.indexOf("prisma.$transaction(async (tx)");
+    expect(i, "ya no hay transacción").toBeGreaterThan(-1);
+    const primerasLineas = src.slice(i, src.indexOf("tx.assignment", i));
+    expect(primerasLineas, "no bloquea la ficha duplicada").toMatch(/core\.person where id = \$\{duplicadaId\}::uuid for update/);
+    expect(primerasLineas, "no bloquea la cuenta que borra").toMatch(
+      /core\.user_account where id = \$\{cuentaQueSeVa\}::uuid for update/,
+    );
   });
 });
