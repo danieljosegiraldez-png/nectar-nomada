@@ -481,6 +481,44 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
     // MUTACIÓN: `ESPACIO_DE_LOS_VALORES = 0` → cae por la primera aserción. `CUERPO` a 30 px en el CSS → cae (no cabe).
   });
 
+  it("los rótulos del eje Y NO PISAN ninguna marca: una marca sobresale 4,5 por la izquierda de x = 0 si es un círculo y 6 si es un rombo", async () => {
+    // El primer guardia del eje Y sólo medía «a la izquierda del lienzo» (`der < 0`): con los rótulos en `x = -1` pasaban las 99 y el
+    // rótulo «4.3» quedaba SOBRE el primer punto. La propiedad que importa es que no tapen el dato, contando el radio o el semiancho de la marca.
+    const caso = (lecturas: { occurredAt: Date; value: number }[]) => pintar(lecturas, BANDA);
+    const CASOS = {
+      "un círculo a la altura del rótulo «4.3»": { lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(16), value: 4.4 }], sobresale: 4.5 },
+      "un círculo a la altura del rótulo «4.6» (el máximo)": { lecturas: [{ occurredAt: t(8), value: 4.6 }, { occurredAt: t(16), value: 4.3 }], sobresale: 4.5 },
+      "un círculo a la altura del rótulo «4.0» (el mínimo)": { lecturas: [{ occurredAt: t(8), value: 4.0 }, { occurredAt: t(16), value: 4.3 }], sobresale: 4.5 },
+      "un ROMBO apenas por encima del máximo (4,62), que sobresale 6": { lecturas: [{ occurredAt: t(8), value: 4.62 }, { occurredAt: t(16), value: 4.3 }], sobresale: 6 },
+    } as const;
+    for (const [nombre, { lecturas, sobresale }] of Object.entries(CASOS)) {
+      const html = await caso([...lecturas]);
+      const dibujo = marcas(html);
+      const rotulosY = rotulos(html, "y");
+      expect(rotulosY, nombre).toHaveLength(3); // control: los tres rótulos están
+      // CONTROL POSITIVO, parte 1: la marca de la izquierda sí sobresale lo que el comentario dice (si no, «no pisan» no probaría nada).
+      // (`marcas()` devuelve primero todos los círculos y luego los polígonos: la de más a la izquierda no es la `[0]`.)
+      expect(Math.min(...dibujo.map((m) => cajaDeUnaMarca(m).x[0])), `${nombre}: cuánto sobresale la marca de más a la izquierda`).toBe(-sobresale);
+      for (const r of rotulosY) {
+        const [rx0, rx1] = extensionEnX(r);
+        // Un rótulo del eje Y va centrado en su `y` (`dy="0.35em"`): la línea de base cae 0,35 em por debajo.
+        const ry: [number, number] = [r.y + 0.35 * CUERPO_DE_LOS_EJES - 0.8 * CUERPO_DE_LOS_EJES, r.y + 0.35 * CUERPO_DE_LOS_EJES + 0.2 * CUERPO_DE_LOS_EJES];
+        for (const m of dibujo) {
+          const c = cajaDeUnaMarca(m);
+          expect(seSolapan([rx0, rx1], c.x) && seSolapan(ry, c.y), `${nombre}: «${r.texto}» pisa una marca`).toBe(false);
+        }
+      }
+    }
+    // CONTROL POSITIVO, parte 2: con los rótulos en `x = -1` el «4.3» SÍ pisaba el primer punto. Sin esto, el bucle de arriba podía pasar por no mirar donde el rótulo cae.
+    const htmlCentro = await caso([...CASOS["un círculo a la altura del rótulo «4.3»"].lecturas]);
+    const r43 = rotulos(htmlCentro, "y").find((r) => r.texto === "4.3")!;
+    const aMenosUno: Rotulo = { ...r43, x: -1 };
+    const primero = cajaDeUnaMarca(marcas(htmlCentro).reduce((a, m) => (cajaDeUnaMarca(m).x[0] < cajaDeUnaMarca(a).x[0] ? m : a)));
+    const ryCentro: [number, number] = [r43.y - 0.45 * CUERPO_DE_LOS_EJES, r43.y + 0.55 * CUERPO_DE_LOS_EJES];
+    expect(seSolapan(extensionEnX(aMenosUno), primero.x) && seSolapan(ryCentro, primero.y), "con x = -1 el rótulo «4.3» cae sobre el primer punto").toBe(true);
+    // MUTACIÓN: rótulos Y a `x={-1}` → «4.3» pisa el círculo y cae. A `x={-5}` → pisa el rombo (sobresale 6) y cae. A `x={-7}` NO cae: deja 1 unidad de holgura, y es correcto.
+  });
+
   it("el viewBox mide exactamente lo que dice, leído del ATRIBUTO: ancho + relleno + hueco, y la franja de las horas debajo", async () => {
     const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
     const vb = viewBoxDe(html);
@@ -578,6 +616,8 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
     expect(enPantalla, `${CUERPO_DE_LOS_EJES} unidades × ${ANCHO_DE_UN_TELEFONO} / ${vb.w} = ${enPantalla.toFixed(1)} px`).toBeGreaterThanOrEqual(10);
     // MUTACIÓN: `.nn-curva-eje { font-size: 10px }` → 10 × 343 / 552 = 6,2 px y cae. Hoy son 11,2 px.
     // El 10 es una decisión, no una norma: «no bajar de 10 px efectivos en el teléfono». Subirlo ensancha el hueco que hace falta (ver «10.25»).
+    // LÍMITE 1: el cuerpo se lee de la PRIMERA regla `.nn-curva-eje {` del texto del CSS; un `font-size` posterior o en línea pasa sin que esta prueba lo vea.
+    // LÍMITE 2: `LIENZO = { 480, 200 }` de este archivo DUPLICA el `LIENZO_DE_CURVA` real; subir el de verdad (p. ej. a 720) daría ~7,8 px y nada caería.
   });
 });
 
@@ -703,26 +743,47 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     // (Con `{ value: 0 }` NO cae, medido: 0 es «fuera de [2.50, 8.00]», la fila del electrodo, que no se pinta.)
   });
 
-  describe("«ninguna frase ordena»: el vocabulario de lo que el bloque dice es CERRADO, no una lista de prohibidas", () => {
-    // Una lista de palabras prohibidas la derrota una reescritura: «…, retire el lote ya; el dato sugiere:» pasaba las 86.
-    // Aquí al revés: las seis claves del bloque sólo pueden decirse con las palabras de abajo. **Una palabra nueva obliga a
-    // venir aquí y añadirla A PROPÓSITO**, que es lo que cuesta cambiar lo que la pantalla le dice a quien lleva un lote
-    // (el mismo precio que `DEUDA_CONOCIDA` en `claves-de-traduccion-existen.test.ts`). Eso marca también una reescritura
-    // honesta con otra palabra; es el precio, y es una línea. **Lo que NO garantiza:** una orden armada sólo con estas
-    // palabras («lleva el lote…»); por eso las dos frases de entrada además deben TERMINAR en «el dato sugiere:».
+  describe("«ninguna frase ordena»: las frases de entrada son TEXTOS FIJOS, el resto del bloque un vocabulario cerrado, y lo pintado no lleva nada a mano", () => {
+    // Tres capas, y el LÍMITE que queda escrito aquí porque un guardia cuyo alcance no está escrito se cuenta dos veces:
+    //
+    // 1. **Las cuatro frases de entrada** (`curvaRiesgoDice` y `curvaRiesgoDiceSiSeEstanca`, en es y en en) se comparan con su
+    //    CADENA EXACTA. Son los dos textos que el plan define («el dato sugiere», nunca «lave ahora»), y cambiarlos tiene que ser
+    //    deliberado: se edita `ENTRADAS`. Un vocabulario no basta ahí: «lleva» está en el léxico por «quien lleva el lote» y
+    //    también es imperativo, así que «…, lleva el lote, el dato sugiere:» pasaba 99/99 (medido; la lista de palabras
+    //    prohibidas de antes la derrotaba «retire el lote ya»). Medido que cae con la cadena exacta.
+    // 2. **Las otras cuatro claves** (`Marca`, `DeDondeSale`, `Fuente`, `CitaLiteral`) sólo tienen un VOCABULARIO cerrado: una
+    //    palabra nueva obliga a venir aquí y añadirla A PROPÓSITO (el precio de `DEUDA_CONOCIDA` en
+    //    `claves-de-traduccion-existen.test.ts`). **LÍMITE: una orden armada sólo con esas palabras PASA** — medido: añadir
+    //    «Lleva el lote.» al final de `curvaRiesgoFuente` deja las 99 en verde. «lleva» está ahí por «quien lleva el lote».
+    // 3. **Lo que se pinta** (es) debe ser EXACTAMENTE la composición de los mensajes más la cita, sin espacios que cuenten: texto
+    //    escrito a mano en el componente, dentro del mismo <p> o del <details>, rompe la igualdad (era la brecha de «lleva el
+    //    lote» a mano en el JSX). **LÍMITE:** sólo mira el bloque de riesgo, no el resto del componente, y sólo en castellano
+    //    (el simulacro de `next-intl` de este archivo es el de `es.json`).
+    const ENTRADAS = {
+      es: {
+        curvaRiesgoDice: "con tu última lectura (pH {ph}), el dato sugiere:",
+        curvaRiesgoDiceSiSeEstanca: "si el pH se estanca donde está hoy (tu última lectura: {ph}), el dato sugiere:",
+      },
+      en: {
+        curvaRiesgoDice: "with your latest reading (pH {ph}), the data suggests:",
+        curvaRiesgoDiceSiSeEstanca: "if the pH stalls where it is today (your latest reading: {ph}), the data suggests:",
+      },
+    } as const;
+    // El vocabulario de las OTRAS cuatro claves (las palabras de las frases de entrada ya no están: no hace falta que «sugiere» ni
+    // «estanca» —que en castellano sirven de imperativo— valgan en ninguna otra parte).
     const VOCABULARIO = {
       es: new Set([
-        "criterio", "de", "néctar", "nómada", "con", "tu", "última", "lectura", "ph", "el", "dato", "sugiere", "si", "se", "estanca",
-        "donde", "está", "hoy", "dónde", "sale", "banda", "la", "matriz", "es", "un", "no", "una", "orden", "decisión", "quien",
-        "lleva", "lote", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como", "escrita",
+        "criterio", "de", "néctar", "nómada", "dónde", "sale", "banda", "la", "matriz", "ph", "es", "un", "no", "una", "orden",
+        "decisión", "quien", "lleva", "el", "lote", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como",
+        "está", "escrita",
       ]),
       en: new Set([
-        "néctar", "nómada", "criterion", "with", "your", "latest", "reading", "ph", "the", "data", "suggests", "if", "stalls", "where",
-        "it", "is", "today", "this", "comes", "from", "band", "of", "matrix", "in", "a", "not", "an", "order", "decision", "up", "to",
-        "whoever", "runs", "lot", "quoted", "phrase", "literal", "quote", "that", "document", "which", "written", "spanish", "and",
-        "left", "untranslated",
+        "néctar", "nómada", "criterion", "where", "this", "comes", "from", "band", "of", "the", "ph", "matrix", "in", "it", "is", "a",
+        "not", "an", "order", "decision", "up", "to", "whoever", "runs", "lot", "quoted", "phrase", "literal", "quote", "that",
+        "document", "which", "written", "spanish", "and", "left", "untranslated",
       ]),
     } as const;
+    const CLAVES_DE_ENTRADA = ["curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca"] as const;
     /** Las palabras de `texto` que no están en el vocabulario (sin los `{marcadores}` ICU, ni números, ni signos). */
     const fueraDelVocabulario = (texto: string, idioma: "es" | "en") =>
       [...new Set((texto.replace(/\{[^}]*\}/g, " ").toLocaleLowerCase(idioma).match(/\p{L}+/gu) ?? []))].filter((p) => !VOCABULARIO[idioma].has(p));
@@ -733,15 +794,28 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
       return [...new Set([...src.matchAll(/\bt\(\s*"(curvaRiesgo\w*)"/g)].map((m) => m[1]!))].sort();
     };
 
-    it("el guardia ve lo que debe: marca la reescritura que derrotaba a la lista, y deja pasar el texto de hoy (control del detector)", () => {
-      expect(fueraDelVocabulario("con tu última lectura (pH {ph}), retire el lote ya; el dato sugiere:", "es")).toEqual(["retire", "ya"]);
+    it("el detector de vocabulario marca lo que debe y deja pasar el texto de hoy (control)", () => {
       expect(fueraDelVocabulario("Lave ahora este lote", "es")).toEqual(["lave", "ahora", "este"]);
-      expect(fueraDelVocabulario("with your latest reading (pH {ph}), remove the lot now; the data suggests:", "en")).toEqual(["remove", "now"]);
-      // Y el texto de hoy no marca nada: si el detector marcara lo bueno, el guardia enseñaría a ignorarlo.
-      expect(fueraDelVocabulario(leerMensajes("es").curvaRiesgoDice!, "es")).toEqual([]);
+      expect(fueraDelVocabulario("remove the lot now", "en")).toEqual(["remove", "now"]);
+      // Y el texto de hoy de las otras cuatro claves no marca nada: si el detector marcara lo bueno, el guardia enseñaría a ignorarlo.
+      expect(fueraDelVocabulario(leerMensajes("es").curvaRiesgoFuente!, "es")).toEqual([]);
+      // Control del LÍMITE que el comentario de arriba declara: el vocabulario NO ve «Lleva el lote.» (por eso las frases de entrada son exactas).
+      expect(fueraDelVocabulario(`${leerMensajes("es").curvaRiesgoFuente!} Lleva el lote.`, "es")).toEqual([]);
     });
 
-    it("TODAS las claves del bloque, en los dos idiomas, sólo usan el vocabulario cerrado y cada frase de entrada termina en «el dato sugiere:»", () => {
+    it("las cuatro frases de entrada son EXACTAMENTE las que el plan define: «el dato sugiere», en los dos idiomas", () => {
+      for (const idioma of ["es", "en"] as const) {
+        const m = leerMensajes(idioma);
+        for (const k of CLAVES_DE_ENTRADA) {
+          expect(m[k], `${idioma}.${k}: cambiar esta frase es una decisión; se edita ENTRADAS a propósito`).toBe(ENTRADAS[idioma][k]);
+        }
+      }
+      // MUTACIÓN: `curvaRiesgoDice` = «con tu última lectura (pH {ph}), el dato sugiere, lleva el lote:» (palabras del vocabulario) → cae.
+      // MUTACIÓN: «… (pH {ph}), retire el lote ya; el dato sugiere:» → cae. En en.json, «…, remove the lot now; the data suggests:» → cae.
+      // MUTACIÓN: la misma frase de entrada reordenada con las mismas palabras («el dato sugiere: con tu última lectura (pH {ph}),») → cae.
+    });
+
+    it("las otras cuatro claves, en los dos idiomas, sólo usan su vocabulario cerrado; y ninguna clave curvaRiesgo* queda sin vigilar", () => {
       const claves = clavesDelBloque();
       // Control: se descubrieron las seis. Un patrón que dejara de casar daría `[]` y «ninguna fuera del vocabulario» se leería como «todo bien».
       expect(claves).toEqual(["curvaRiesgoCitaLiteral", "curvaRiesgoDeDondeSale", "curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca", "curvaRiesgoFuente", "curvaRiesgoMarca"]);
@@ -749,28 +823,31 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
         const m = leerMensajes(idioma);
         // Y ninguna `curvaRiesgo*` de los mensajes queda sin vigilar porque el componente no la pida con `t("…")` literal.
         expect(Object.keys(m).filter((k) => k.startsWith("curvaRiesgo")).sort(), `${idioma}: claves de mensajes contra claves del componente`).toEqual(claves);
-        for (const k of claves) expect(fueraDelVocabulario(m[k]!, idioma), `${idioma}.${k}: «${m[k]}»`).toEqual([]);
-        const cierre = idioma === "es" ? /, el dato sugiere:$/ : /, the data suggests:$/;
-        expect(m.curvaRiesgoDice, `${idioma}.curvaRiesgoDice`).toMatch(cierre);
-        expect(m.curvaRiesgoDiceSiSeEstanca, `${idioma}.curvaRiesgoDiceSiSeEstanca`).toMatch(cierre);
+        for (const k of claves.filter((c) => !(CLAVES_DE_ENTRADA as readonly string[]).includes(c))) {
+          expect(fueraDelVocabulario(m[k]!, idioma), `${idioma}.${k}: «${m[k]}»`).toEqual([]);
+        }
         expect(m.curvaRiesgoFuente, `${idioma}.curvaRiesgoFuente`).toContain(idioma === "es" ? "no una orden" : "not an order");
       }
-      // MUTACIÓN: `curvaRiesgoDice` = «con tu última lectura (pH {ph}), retire el lote ya; el dato sugiere:» → «retire», «ya» → cae.
-      // MUTACIÓN: la misma clave en en.json con «remove the lot now» → cae. MUTACIÓN: «… {ph}) el dato sugiere, lave:» → no termina en la frase → cae.
+      // MUTACIÓN: añadir una palabra fuera del vocabulario a `curvaRiesgoFuente` («… retire el lote») → cae. Una clave `curvaRiesgoAviso` nueva en es.json → cae.
     });
 
-    it("y lo que se PINTA —incluido cualquier texto escrito a mano en el componente— también cae en el vocabulario: sólo la cita queda fuera", async () => {
+    it("lo que se PINTA es exactamente la composición de los mensajes y la cita: nada escrito a mano dentro del bloque", async () => {
+      const { getTranslations } = await import("next-intl/server");
+      const tr = await getTranslations("SeccionBeneficio");
+      const sinEspacios = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, "");
       for (const f of FILAS.filter((x) => x.pinta)) {
-        const bloque = bloqueDeRiesgo(await conUnPh(f.valor))!;
-        // Sin la cita (que es del documento y va literal), sin el nombre del documento y sin la banda ni los números.
-        const sinCita = bloque.replace(/<span lang="es" class="nn-curva-riesgo-cita">[\s\S]*?<\/span>/, "");
-        // `aTexto` no decodifica entidades: el `<` de la banda «< 3.30» sale como `&lt;`, que no es una palabra del bloque.
-        const texto = aTexto(sinCita).replace("docs/beneficio/10_ph_fermentation.md", " ").replace(/&[a-z]+;/g, " ");
-        expect(fueraDelVocabulario(texto, "es"), `pH ${f.valor}: «${texto}»`).toEqual([]);
-        // Control: la cita SÍ se quitó (si no, «Daño consumado» daría palabras fuera y el test no distinguiría nada).
-        expect(texto, `pH ${f.valor}`).not.toContain(f.cita!.split(" ")[0]!);
+        const ph = f.valor.toFixed(1);
+        const entrada = f.siSeEstanca ? tr("curvaRiesgoDiceSiSeEstanca", { ph }) : tr("curvaRiesgoDice", { ph });
+        const esperado =
+          tr("curvaRiesgoMarca") + ":" + entrada + "«" + f.cita + "»." +
+          tr("curvaRiesgoDeDondeSale") + tr("curvaRiesgoFuente", { banda: f.banda!, documento: "docs/beneficio/10_ph_fermentation.md" }) + tr("curvaRiesgoCitaLiteral");
+        const pintado = aTexto(bloqueDeRiesgo(await conUnPh(f.valor))!);
+        expect(sinEspacios(pintado), `pH ${f.valor}`).toBe(sinEspacios(esperado));
       }
-      // MUTACIÓN: añadir `<p>Retire el lote ya</p>` en el bloque, fuera de `t(…)` → cae.
+      // Control: el comparador SÍ ve una palabra de más (si ignorara el texto sobrante, «igual» no diría nada).
+      expect(sinEspacios("Criterio: con tu lectura lleva el lote")).not.toBe(sinEspacios("Criterio: con tu lectura"));
+      // MUTACIÓN: « lleva el lote» a mano dentro del mismo <p> (fuera de `t(…)`) → cae. Un `<p>Retire el lote ya</p>` dentro del bloque → cae.
+      // MUTACIÓN: texto a mano dentro del <details> → cae.
     });
   });
 
