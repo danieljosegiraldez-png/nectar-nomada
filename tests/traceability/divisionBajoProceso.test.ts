@@ -294,6 +294,25 @@ describe("R6 — dividir bajo un proceso abierto", () => {
     expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p.id } })).endedAt).toBeNull();
   });
 
+  it("una muestra con saldo bajo el proceso no impide dividir: las muestras no cuentan", async () => {
+    // R6.1: «ningún otro lote cubierto puede conservar saldo», salvo las muestras, que salen del café a propósito
+    // y no vuelven. Sin esta prueba, quitar la excepción no haría caer nada (flip de la tarea 6).
+    const c = await lote("D15-C");
+    await conSaldo(c, 100);
+    const p = await abrirProcesoDePrueba(gestor, c);
+    const muestra = (await prisma.lot.create({ data: {
+      lotCode: `D15-S-${RUN}`, lotType: "sample", organizationId: orgId, locationId: plotId, status: "approved", classification: "internal", createdBy: gestor,
+    } })).id;
+    lotes.push(muestra);
+    await prisma.lotTransformation.create({ data: {
+      transformationType: "sample_extraction", occurredAt: T, provenanceClass: "original_record",
+      inputs: { create: [{ lotId: c }] }, outputs: { create: [{ lotId: muestra }] },
+    } });
+    await conSaldo(muestra, 1);
+    await expect(dividir(c, 100, [100])).resolves.toBeDefined();
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p.id } })).closureKind).toBe("divided");
+  });
+
   it("seleccionar bajo un proceso abierto se rechaza, también por recordTransformation directo", async () => {
     const l = await lote("D7");
     await conSaldo(l, 100);
@@ -318,6 +337,14 @@ describe("R6 — dividir bajo un proceso abierto", () => {
       transformationType: "split", occurredAt: T, provenanceClass: "original_record",
       inputs: [{ lotId: a }, { lotId: b }], outputs: [{ lotCode: `D8-S-${RUN}`, lotType: "processing" }],
     })).rejects.toThrow(new LotProcessError("fusion_bajo_proceso_abierto"));
+    // Y con UNA sola entrada: una fusión o una mezcla no pasa a ser una división por traer una sola. Sin estos dos
+    // casos, la condición «más de una entrada» taparía que se quitara el tipo `merge` o el `blend` (flip de la tarea 6).
+    for (const tipo of ["merge", "blend"] as const) {
+      await expect(recordTransformation(gestor, {
+        transformationType: tipo, occurredAt: T, provenanceClass: "original_record",
+        inputs: [{ lotId: a }], outputs: [{ lotCode: `D8-${tipo}-1-${RUN}`, lotType: "processing" }],
+      })).rejects.toThrow(new LotProcessError("fusion_bajo_proceso_abierto"));
+    }
   });
 
   it("dividir decide DESPUÉS de tener el linaje: un secado que otra transacción empezó se ve al soltarla", async () => {
