@@ -50,6 +50,11 @@ describe("ejesDeLaCurva", () => {
     expect(e.x).toHaveLength(1);
     expect(Number.isNaN(e.x[0]!.pos)).toBe(false);
     for (const m of e.y) expect(Number.isNaN(m.pos)).toBe(false);
+    // Y los VALORES, no sólo que no sean NaN: `0` tampoco es NaN, y sin esto una marca en 0, o tres
+    // marcas iguales, pasaban. La marca cae donde `curvaDeLote` pone ese punto: a media anchura y a
+    // media altura (300 / 2 y 120 / 2), una sola por eje.
+    expect(e.x).toEqual([{ pos: 150, texto: "0 h" }]);
+    expect(e.y).toEqual([{ pos: 60, texto: "4.3" }]);
   });
 
   // Las cuatro de abajo no vienen del encargo: guardan decisiones que el módulo toma por su
