@@ -21,10 +21,17 @@
  * decidir cuáles de las ocho son «del lote» y cuáles «del dato» no es de este módulo: lo decide la
  * pantalla, con el texto delante.
  *
- * **Dos filas piden esa decisión a quien las pinte, y este módulo no la toma:**
- * - «fuera de `[2.50, 8.00]`» (`SENSOR_FAULT`) habla del electrodo, no de esperar.
- * - `[6.50, 8.00]` (`SUSPECT_DILUTION`) está en la tabla, pero la nota de ADR-181 que abre §1 dice
- *   que ese aviso «se retira». La tabla no se ha editado, y aquí se cita la tabla.
+ * **Una fila está RETIRADA y el módulo no la devuelve; otra la decide la pantalla:**
+ * - `[6.50, 8.00]` (`SUSPECT_DILUTION`) está en la tabla, pero la nota de ADR-181 que abre §1 —que
+ *   dice de sí misma «manda sobre este documento»— la retira («`SUSPECT_DILUTION` a 6,50 fijo se
+ *   retira») y añade «nunca se avisa sobre una lectura de agua»: el mosto se compara contra el pH
+ *   del agua de ese lote, que mide 6,5–6,9 y a veces 7–8. Citar esa fila a pH 7,0 sería apoyarse en
+ *   un umbral que el dueño retiró. **Se queda TRANSCRITA** (el guardia de la transcripción sigue
+ *   cubriendo las ocho, y la tabla del documento no se edita desde aquí) **pero marcada
+ *   `retiradaPor: "ADR-181"`, y `riesgoDeEsperar` devuelve `null` en `[6.50, 8.00]`.** Ahí `null`
+ *   es exacto: «no hay riesgo citable» es el estado en que ADR-181 dejó ese rango.
+ * - «fuera de `[2.50, 8.00]`» (`SENSOR_FAULT`) habla del electrodo, no de esperar. Esa NO se retira
+ *   aquí: se devuelve literal y es la pantalla quien decide si la enseña.
  *
  * **El orden de comprobación importa:** «fuera de `[2.50, 8.00]`» se mira ANTES que las bandas,
  * porque se solapa con `[6.50, 8.00]` (que incluye el 8.00) y con `< 3.30` (que, sin el rango
@@ -41,6 +48,13 @@ export interface Riesgo {
 
 interface FilaDePh extends Riesgo {
   readonly cae: (valor: number) => boolean;
+  /**
+   * Si está, el documento ya no sostiene esta fila (la retira la nota que abre §1) y
+   * `riesgoDeEsperar` devuelve `null` para su rango en vez de citarla. La fila sigue aquí,
+   * transcrita, para que el guardia compare las ocho y para que el rango quede cubierto y no caiga
+   * en otra fila por omisión.
+   */
+  readonly retiradaPor?: string;
 }
 
 /**
@@ -59,6 +73,7 @@ const FILAS_DE_PH: readonly FilaDePh[] = [
     riesgo:
       "El mucílago fresco no supera pH ~6.0. Un valor mayor sugiere agua de enjuague, electrodo fuera del líquido o descalibración",
     cae: (v) => v >= 6.5 && v <= 8,
+    retiradaPor: "ADR-181",
   },
   {
     banda: "[5.20, 6.50)",
@@ -94,8 +109,8 @@ const FILAS_DE_PH: readonly FilaDePh[] = [
 
 /**
  * El riesgo que `10_ph_fermentation.md` §1 cita para `valor` de `variable`, o `null` si no hay uno
- * CITABLE: variable sin matriz (todo lo que no sea `"ph"`) o un valor que no es un número.
- * Nunca una frase inventada.
+ * CITABLE: variable sin matriz (todo lo que no sea `"ph"`), un valor que no es un número, o una
+ * banda que ADR-181 retiró (`[6.50, 8.00]`). Nunca una frase inventada.
  */
 export function riesgoDeEsperar(variable: string, valor: number): Riesgo | null {
   if (variable !== "ph") return null;
@@ -103,5 +118,8 @@ export function riesgoDeEsperar(variable: string, valor: number): Riesgo | null 
   // por casualidad, no por decisión. Se dice aquí.
   if (Number.isNaN(valor)) return null;
   const fila = FILAS_DE_PH.find((f) => f.cae(valor));
-  return fila ? { banda: fila.banda, riesgo: fila.riesgo } : null;
+  // La fila retirada SE ENCUENTRA y se descarta aquí, a propósito: saltarla en el `find` dejaría el
+  // rango a merced de lo que alguna fila posterior casara por omisión.
+  if (!fila || fila.retiradaPor) return null;
+  return { banda: fila.banda, riesgo: fila.riesgo };
 }
