@@ -1,5 +1,51 @@
 # 017 · Un objetivo `final` se usa como banda de toda la trayectoria: una evolución normal se lee como desviación continua
 
+**Estado: hecho**, el 2026-10-02. Encontrado el 2026-10-01 por el CLI de Codex auditando el diff del
+PR #573, y **no estaba reproducido en el navegador**: era propagación leída en el código. Se reprodujo
+al arreglarlo, con el render del servidor, y la cifra que la ficha predecía salió exacta —«2 lecturas
+fuera del rango de la receta» sobre un descenso de pH que cumple su meta final—.
+
+**La ficha daba dos opciones y Daniel eligió la primera**, con un matiz de dominio que cambió el
+diseño a mejor: no son dos casos sino **tres momentos**, porque en lavado y natural el Brix o el pH se
+miden **una vez** —en la cereza o el mosto, antes de la cama— y después sólo se sigue la humedad. Un
+objetivo `initial` era el caso más común de los tres y el código **lo tiraba**: medido, `initial` no
+aparecía ni una vez en todo el camino de la curva (control: `during` y `final`, una cada uno).
+
+**Lo que se hizo**, en `lib/beneficio/curvaDeLote.ts` y sus dos consumidores:
+
+- El momento viaja con el objetivo (`ObjetivoDeCurva.momento`) y decide el **alcance** de la banda:
+  `during` cubre la trayectoria y juzga todas las lecturas; `initial` y `final` son eventos de un
+  instante, se marcan en su extremo del eje y juzgan **una**.
+- `elegirObjetivo` recibe **todos** los objetivos declarados y dice cuál rige. Antes la capa de base
+  hacía `find("during") ?? find("final")` y **elegía en silencio**: con un `initial` y un `final`
+  declarados, hoy no elige ninguno y la pantalla lo dice.
+- `juicioDeBanda.total` pasó a ser **cuántas lecturas se juzgaron**, no cuántas hay.
+- Un empate de instante no se desempata (`extremo_ambiguo`), igual que `ultimaLectura` desde el #596.
+
+**Tres cosas que esto enseñó y no están en el diff:**
+
+1. **`readingsForMoment` no se podía reusar**, aunque parezca la misma regla: para `initial`/`final`
+   toma `ordered[0]` y `ordered[last]` **sin comprobar el empate**, que es exactamente el defecto que
+   el #596 cerró al medir que 7 de 10 lotes reales tienen todas sus lecturas en el mismo instante.
+   Unificarlas lo habría reintroducido. Queda dicho en el comentario de `indiceDeLaUnicaEnElExtremo`
+   para que la próxima sesión no «limpie» esa duplicación aparente.
+2. **La elección viaja DENTRO de la curva, y eso fue una corrección a mitad de camino.** Primero fue
+   una prop aparte del componente; con esa forma, una pantalla podía recibir una banda dibujada y una
+   elección que la contradijera, y nada lo cazaba. Con el array de objetivos como entrada, esa
+   contradicción deja de ser representable.
+3. **El guardia de pantalla encontró dos defectos en el arreglo mismo**, los dos invisibles a las
+   pruebas de la función pura: la descripción accesible del SVG seguía diciendo «0 lecturas fuera del
+   rango» con una sola lectura juzgada de tres, y el mensaje de «dos objetivos declarados» **no se
+   pintaba nunca** porque la rama de `sin_banda` cortaba la cadena antes de llegar a él.
+
+**La prueba del carril con base era la documentación de la regla vieja.** `datos-del-tablero.test.ts`
+tenía un caso llamado «nunca un objetivo `initial`: si es el único, no hay banda» y otro «sin
+`during`, la banda es la `final`» — las dos mitades del defecto, en verde. Reescritos.
+
+Lo que sigue abajo es el hallazgo tal como se midió el 2026-10-01.
+
+---
+
 **Estado: abierto.** Encontrado el 2026-10-01 por el CLI de Codex, auditando el diff del PR #573
 (el tablero del beneficio) antes de la fusión. **No está reproducido en el navegador**: es propagación
 leída en el código.
