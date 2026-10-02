@@ -3275,6 +3275,65 @@ conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
 **Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
 que estén **las que deben estar**. Una comprobación ausente no tiene color.
 
+### Un recuento de filas no puede ver un `UPDATE`, y `SET NULL` borra sin fallar
+
+**2026-10-02, en `scripts/consolidar-persona-duplicada.ts`.** El guion borra una
+`core.user_account`, y su post-condición vigilaba que `core.audit_event` creciera
+exactamente en 1. Las dos mitades estaban mal, y la segunda es la que importa:
+
+- `audit_event_actor_user_account_id_fkey` es **`ON DELETE SET NULL`** —en el SQL de
+  `20260809221638_init_identity`—, así que borrar una cuenta que haya actuado **no
+  falla**: pone a NULL el actor de cada fila que escribió. En silencio, y es
+  exactamente lo que §35 prohíbe.
+- Y **un `count(*)` no puede ver un `UPDATE`.** Con los actores en blanco o intactos
+  devuelve el mismo número, así que esa post-condición habría devuelto lo mismo con la
+  respuesta contraria: no era un control.
+
+**Y el esquema de Prisma no lo dice.** Una relación opcional sin `onDelete` explícito
+emite `SET NULL`, así que leer `schema.prisma` no distingue «protegido» de «se borra
+callado». Lo dice el SQL de la migración. Medido ese día: de ~136 claves ajenas a
+`core.user_account(id)`, **unas 115 son `SET NULL` y 21 `RESTRICT`**, con control
+positivo —el mismo recuento sobre `core.person` da 53 sentencias contra las 52 columnas
+que la base midió en vivo, así que el patrón mide donde debe—.
+
+**Las dos reglas, y valen para cualquier borrado:**
+
+1. **Antes de borrar una fila, medir qué la referencia — generado del esquema, no de una
+   lista escrita a mano.** Y medir las referencias de **todo** lo que desaparece: ese
+   guion hacía desaparecer una persona *y* una cuenta, y durante un día midió sólo la
+   primera. Una guarda asimétrica no falla en rojo: deja pasar justo el caso que no mira.
+2. **Un `FOR UPDATE` sobre la fila padre al abrir la transacción cierra la carrera por
+   casi nada.** PostgreSQL exige un bloqueo en el padre para insertar un hijo con clave
+   ajena, así que mientras se tenga, nadie crea una referencia nueva. Sin él, una
+   escritura entre la medición y el borrado se traga el `SET NULL` sin avisar.
+
+### Arreglar una instancia de una clase y dejar su gemela al lado
+
+**El mismo día, y lo encontraron tres revisiones independientes, no una lectura.** En el
+mismo bloque de post-condiciones había **dos** invariantes globales con la misma forma:
+`core.audit_event` creciendo en 1, y `core.assignment` manteniendo su total exacto.
+Relajé la primera —escribiendo un comentario que explicaba por qué una invariante global
+no es de esta operación— y **dejé la segunda intacta, seis líneas más abajo**.
+
+La segunda era peor: sólo podía fallar por la escritura de otra persona, porque la
+pérdida que decía vigilar es **imposible** —`core.assignment.user_account_id` es
+`RESTRICT`, así que una fila sin mover haría fallar el borrado a gritos—. O sea, un
+generador de falsos positivos puro, al lado del comentario que explicaba la trampa.
+
+**La regla: al arreglar un defecto de clase, enumerar sus hermanos EN EL MISMO ÁMBITO
+antes de dar el arreglo por hecho.** Un `grep` de la forma —aquí, `!==` contra un
+`count()` global— cuesta una línea. Escribir el comentario que nombra la clase no
+protege de la instancia siguiente: la prosa se lee y se razona alrededor, incluso la
+propia, incluso recién escrita.
+
+**Y el corolario del mismo día: un guardia nuevo puede abortar trabajo correcto.** La
+guarda que escribí para los tríos `(cuenta, rol, ámbito)` duplicados no filtraba por
+`status`, y `AssignmentStatus` tiene `revoked` y `expired` —esas filas se quedan en la
+tabla, son historia, no permisos—. Una asignación retirada hace meses habría abortado una
+consolidación correcta. Abortar sobre código correcto es peor que no tener guarda: enseña
+a ignorar una línea roja. El filtro bueno ya estaba escrito al lado, en
+`grant-platform-admin.sql` (`a.status = 'active'`).
+
 ### Un guardia puede vigilar UN ARCHIVO creyendo vigilar una clase
 
 **2026-09-30.** `tests/arquitectura/desfase-horario-sobrevive-al-render.test.ts` existía para una
