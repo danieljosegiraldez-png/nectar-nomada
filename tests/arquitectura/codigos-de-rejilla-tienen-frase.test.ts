@@ -32,9 +32,14 @@ const RAIZ = join(__dirname, "..", "..");
 /** Los códigos, sacados de la FUENTE y no copiados a mano, para que no deriven. */
 function codigosDelServicio(): string[] {
   const fuente = readFileSync(join(RAIZ, "lib", "traceability", "locations.ts"), "utf8");
-  const directos = [...fuente.matchAll(/new RejillaInvalida\("([a-z_]+)"\)/g)].map((m) => m[1] ?? "");
+  // **Toda cadena literal que empiece por `rejilla_`, no sólo las que están dentro
+  // de un `new RejillaInvalida(...)`.** La primera versión buscaba exactamente eso
+  // y por tanto NO encontraba los cuatro códigos del mapa `CODIGO_DEL_RANGO`, que
+  // se lanzan por índice. Habrían quedado sin frase con el guardia en verde — el
+  // agujero que este archivo existe para tapar, dentro del propio archivo.
+  const literales = [...fuente.matchAll(/"(rejilla_[a-z_]+)"/g)].map((m) => m[1] ?? "");
   const conValor = [...fuente.matchAll(/`(rejilla_[a-z_]+):\$\{/g)].map((m) => m[1] ?? "");
-  return [...new Set([...directos, ...conValor])].sort();
+  return [...new Set([...literales, ...conValor])].sort();
 }
 
 const parametros = (frase: string) => [...frase.matchAll(/\{(\w+)\}/g)].map((m) => m[1] ?? "").sort();
@@ -47,9 +52,12 @@ describe("los códigos de RejillaInvalida tienen frase en los dos idiomas", () =
    */
   it("el extractor encuentra los códigos — el control positivo", () => {
     const codigos = codigosDelServicio();
-    expect(codigos.length).toBeGreaterThanOrEqual(6);
+    // Diez hoy: seis de la rejilla y cuatro del rango. El número se sube a
+    // propósito al añadir uno, que es lo que obliga a mirar si tiene frase.
+    expect(codigos.length).toBeGreaterThanOrEqual(10);
     expect(codigos).toContain("rejilla_a_medias");
     expect(codigos).toContain("rejilla_con_planta_fuera");
+    expect(codigos).toContain("rejilla_rango_no_es_celda");
   });
 
   it("cada código tiene su frase en es y en en", () => {
