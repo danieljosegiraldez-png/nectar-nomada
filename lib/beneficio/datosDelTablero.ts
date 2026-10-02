@@ -18,6 +18,7 @@ import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
 import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
 import {
   pidenDecisionPorEtapa,
+  unaEntradaPorLote,
   type CorridaAbierta,
   type EntradaDeLoteParaTablero,
   type EquipoParaTablero,
@@ -175,6 +176,7 @@ export async function datosDelTablero(
     prisma.fermentationRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
+        id: true,
         startedAt: true,
         vesselNote: true,
         vesselEquipmentId: true,
@@ -189,6 +191,7 @@ export async function datosDelTablero(
     prisma.dryingRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
+        id: true,
         startedAt: true,
         dryingBedLocationId: true,
         lotProcess: { select: procesoSelect },
@@ -223,27 +226,17 @@ export async function datosDelTablero(
     ...secados.map((s) => ({ ...s, fase: "drying" as const })),
   ];
 
-  // **Una entrada por LOTE, no por corrida.** Este bucle recorre corridas, y un lote puede tener
-  // varias abiertas (dos secados, o una fermentación y un secado): sin esto el mismo lote saldría dos
-  // veces en `lotes` y la cola lo listaría dos veces con la misma clave de React; y, peor,
-  // `pidenDecision` contaría corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes, y una misma
-  // celda diría «1 lote · 2 piden decisión». Si el lote ya está, se queda la corrida que EMPEZÓ
-  // antes: es la que lleva más tiempo abierta, y esconder la más vieja es esconder la más atrasada.
-  const anotar = (destino: EntradaDeLoteParaTablero[], nueva: EntradaDeLoteParaTablero) => {
-    const i = destino.findIndex((e) => e.lotId === nueva.lotId);
-    if (i === -1) {
-      destino.push(nueva);
-    } else if (
-      nueva.faseIniciada !== null &&
-      (destino[i]!.faseIniciada === null || nueva.faseIniciada < destino[i]!.faseIniciada!)
-    ) {
-      destino[i] = nueva;
-    }
-  };
-  const lotes: EntradaDeLoteParaTablero[] = [];
+  // **Una entrada por CORRIDA aquí, y una por LOTE más abajo.** El tablero ensaña una fila por lote
+  // —si no, el mismo lote saldría dos veces con la misma clave de React, y `pidenDecision` contaría
+  // corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes: una celda diría «1 lote · 2 piden
+  // decisión»—. Pero **cuál** se queda no se puede decidir en este bucle: todavía no se han evaluado
+  // las demás corridas del lote. Lo decide `unaEntradaPorLote` cuando ya están todas y se conocen las
+  // desviaciones abiertas, con la regla que Daniel eligió el 2026-10-02: la de veredicto más grave y,
+  // a igualdad, la que empezó antes. Ver `PENDING_IMPLEMENTATIONS/016`.
+  const porCorrida: EntradaDeLoteParaTablero[] = [];
   // Las mismas entradas, separadas por fase: la cola se calcula por fase para que «pide decisión»
   // llegue a la etapa correcta aunque un lote tuviera las dos fases abiertas a la vez.
-  const entradasPorFase = {
+  const porCorridaYFase = {
     fermentation: [] as EntradaDeLoteParaTablero[],
     drying: [] as EntradaDeLoteParaTablero[],
   };
@@ -331,10 +324,15 @@ export async function datosDelTablero(
       faseIniciada: c.startedAt,
       expectedHours: fases.find((f) => f.phase === c.fase)?.expectedHours ?? null,
       metas: metasDeFase(targets, c.fase, ultimaPorVariable),
+      corridaId: c.id,
       ultimaLectura: mediciones[0]?.occurredAt ?? null,
     };
-    anotar(lotes, entradaDeTablero);
-    anotar(entradasPorFase[c.fase], entradaDeTablero);
+    // **UNA entrada por CORRIDA aquí; la de por lote se elige después** (`PENDING_IMPLEMENTATIONS/016`).
+    // Deduplicar en este punto era el defecto: todavía no se sabe el veredicto de las demás corridas
+    // del lote, así que elegir ahora es elegir a ciegas. Lo hace `unaEntradaPorLote`, cuando ya están
+    // evaluadas todas y se conocen las desviaciones abiertas que el grupo necesita.
+    porCorrida.push(entradaDeTablero);
+    porCorridaYFase[c.fase].push(entradaDeTablero);
   }
 
   // Los equipos salen de `listarEquipos`, que YA filtra por `can(view, equipment)`: una sola
@@ -355,11 +353,17 @@ export async function datosDelTablero(
     : [];
 
   // Una desviación está ABIERTA mientras no tenga ninguna `CorrectiveAction` (Daniel, 2026-09-16).
-  const desviaciones = lotes.length
+  //
+  // **Se consulta sobre las entradas POR CORRIDA, antes de deduplicar**, y tiene que ser así: el
+  // grupo de cada candidata depende de si su lote tiene desviaciones abiertas, así que el dato hace
+  // falta ANTES de elegir cuál se queda. Los ids se repiten cuando un lote tiene varias corridas, y
+  // a un `in` eso le da igual.
+  const idsParaDesviaciones = [...new Set(porCorrida.map((l) => l.lotId))];
+  const desviaciones = idsParaDesviaciones.length
     ? await prisma.deviation.findMany({
         where: {
           correctiveActions: { none: {} },
-          lotTransformation: { inputs: { some: { lotId: { in: lotes.map((l) => l.lotId) } } } },
+          lotTransformation: { inputs: { some: { lotId: { in: idsParaDesviaciones } } } },
         },
         select: { lotTransformation: { select: { inputs: { select: { lotId: true } } } } },
       })
@@ -370,6 +374,19 @@ export async function datosDelTablero(
       porLote.set(i.lotId, (porLote.get(i.lotId) ?? 0) + 1);
     }
   }
+
+  // **Y aquí sí: una entrada por lote, elegida con todas las corridas ya evaluadas.** La regla vive
+  // en `unaEntradaPorLote` (`tablero.ts`), junto al orden de gravedad que usa la cola, para que no
+  // haya dos definiciones de «más grave».
+  const lotes = unaEntradaPorLote({ entradas: porCorrida, desviacionesAbiertasPorLote: porLote, ahora });
+  const entradasPorFase = {
+    fermentation: unaEntradaPorLote({
+      entradas: porCorridaYFase.fermentation,
+      desviacionesAbiertasPorLote: porLote,
+      ahora,
+    }),
+    drying: unaEntradaPorLote({ entradas: porCorridaYFase.drying, desviacionesAbiertasPorLote: porLote, ahora }),
+  };
 
   const etapas = lineaDeEtapas({
     proceso: enProceso,
@@ -478,7 +495,17 @@ export async function datosDelTablero(
     ahora,
   });
 
-  const curva = opciones.curva ? await curvaDeUnLote(lotWhere, crudas, opciones.curva) : null;
+  // **La curva abre la MISMA corrida que el aviso** (`PENDING_IMPLEMENTATIONS/016`, segunda mitad).
+  // Antes la elegía con un `find` propio sobre `crudas`, que lleva las fermentaciones primero y sin
+  // ordenar: podía abrir una corrida distinta de la que explica la fila del tablero, o sea dos reglas
+  // de selección para la misma pregunta. `null` = el lote pedido no tiene entrada, y entonces la
+  // curva no tiene corrida que abrir.
+  const corridaDeLaCurva = opciones.curva
+    ? (lotes.find((l) => l.lotId === opciones.curva!.lotId)?.corridaId ?? null)
+    : null;
+  const curva = opciones.curva
+    ? await curvaDeUnLote(lotWhere, crudas, opciones.curva, corridaDeLaCurva)
+    : null;
 
   return {
     lotes,
@@ -513,6 +540,8 @@ export async function datosDelTablero(
 async function curvaDeUnLote(
   lotWhere: Prisma.LotWhereInput,
   crudas: readonly {
+    /** El id de la corrida: con él se elige, en vez de buscar por lote. Ver `corridaElegida`. */
+    readonly id: string;
     readonly fase: "fermentation" | "drying";
     readonly startedAt: Date;
     readonly lotProcess: {
@@ -537,12 +566,21 @@ async function curvaDeUnLote(
     readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
   }[],
   pedida: NonNullable<OpcionesDelTablero["curva"]>,
+  /**
+   * **La corrida que el tablero eligió para este lote**, o `null` si el lote no tiene entrada.
+   *
+   * Entra en vez de buscarse aquí (`PENDING_IMPLEMENTATIONS/016`): el `find` que había no ordenaba y
+   * `crudas` lleva las fermentaciones primero, así que con dos corridas abiertas la curva podía abrir
+   * una y el aviso explicar otra. Una sola pregunta —«¿qué corrida es la de este lote?»— con una sola
+   * respuesta.
+   */
+  corridaElegida: string | null,
 ): Promise<CurvaDelTablero | null> {
   const { lotId, variable, ancho, alto } = pedida;
   const visible = await prisma.lot.findFirst({ where: { AND: [lotWhere, { id: lotId }] }, select: { id: true } });
   if (!visible) return null;
 
-  const abierta = crudas.find((c) => c.transformations.some((t) => t.inputs.some((i) => i.lot.id === lotId)));
+  const abierta = corridaElegida === null ? undefined : crudas.find((c) => c.id === corridaElegida);
   // **Dos consultas, y el orden importa** (`PENDING_IMPLEMENTATIONS/018`). La vigencia de una
   // medición —«¿alguien la corrigió?»— es una propiedad de la **cadena de correcciones**, no de la
   // ventana de la pantalla: se resuelve ANTES de aplicar la ventana, o el filtro de tiempo decide

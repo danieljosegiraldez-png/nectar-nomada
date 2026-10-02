@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   colaDeAtencion,
   ocupacionDelSitio,
+  unaEntradaPorLote,
   instrumentosQuePidenAtencion,
   pidenDecisionPorEtapa,
   type EntradaDeLoteParaTablero,
@@ -31,6 +32,7 @@ function lote(over: Partial<EntradaDeLoteParaTablero> = {}): EntradaDeLoteParaTa
   return {
     lotId: "l-base",
     lotCode: "LOTE-BASE",
+    corridaId: "c-base",
     veredicto: { ph: dictamen("LAG_PHASE", "INFO"), brix: null, secado: null },
     faseIniciada: haceHoras(10),
     expectedHours: 24,
@@ -420,6 +422,8 @@ describe("pidenDecisionPorEtapa", () => {
   const entrada = (lotId: string, ph: ReturnType<typeof dictamen>): EntradaDeLoteParaTablero => ({
     lotId,
     lotCode: lotId,
+    // Una corrida por lote en estas pruebas: hablan de la cola, no de elegir entre varias.
+    corridaId: `c-${lotId}`,
     veredicto: { ph, brix: null, secado: null },
     faseIniciada: haceHoras(10),
     expectedHours: null,
@@ -581,5 +585,96 @@ describe("ocupacionDelSitio — una corrida sobre un lote que no ves TAMBIÉN oc
     expect(o.mapa.tanques[0]!.loteNoVisible).toBe(true);
     expect(o.tanques.enUso).toBe(1);
     expect(o.tanques.requierenIntervencion).toBe(1);
+  });
+});
+
+/**
+ * **La regla de `PENDING_IMPLEMENTATIONS/016`: una entrada por lote, elegida DESPUÉS de evaluar.**
+ *
+ * Se deduplicaba **antes** de evaluar, quedándose con la corrida que empezó antes. Una posterior con
+ * una lectura debida, otro veredicto o una duración más corta desaparecía **sin que nada la mirara**.
+ * Medido el 2026-10-02 con la mutación `<`→`>` puesta: **188 de 188 archivos y 2460 pruebas en
+ * verde**, con la fila de control del propio carril delante — la regla no tenía guardia en ninguna
+ * parte. Y el fixture del caso existía en el carril con base: afirmaba **cuántas** entradas salen y
+ * nunca **cuál**.
+ *
+ * La regla, de Daniel el 2026-10-02: **el veredicto más grave; si empatan, la que empezó antes.**
+ */
+describe("unaEntradaPorLote", () => {
+  const critico = { ph: dictamen("OVER_FERMENTED_CRITICAL", "CRITICAL"), brix: null, secado: null };
+  const enCurso = { ph: dictamen("OPTIMAL_ACTIVE", "INFO"), brix: null, secado: null };
+
+  it("se queda la de veredicto MÁS GRAVE, aunque haya empezado después", () => {
+    const vieja = lote({ corridaId: "c-vieja", faseIniciada: haceHoras(40), veredicto: enCurso });
+    const nueva = lote({ corridaId: "c-nueva", faseIniciada: haceHoras(6), veredicto: critico });
+    const r = unaEntradaPorLote({ entradas: [vieja, nueva], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA });
+    expect(r).toHaveLength(1);
+    expect(r[0]!.corridaId).toBe("c-nueva");
+  });
+
+  it("y el orden de llegada no decide: las mismas dos al revés dan lo mismo", () => {
+    // Sin esta fila, quedarse con «la última que llegó» pasaría la prueba de arriba.
+    const vieja = lote({ corridaId: "c-vieja", faseIniciada: haceHoras(40), veredicto: enCurso });
+    const nueva = lote({ corridaId: "c-nueva", faseIniciada: haceHoras(6), veredicto: critico });
+    const r = unaEntradaPorLote({ entradas: [nueva, vieja], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA });
+    expect(r[0]!.corridaId).toBe("c-nueva");
+  });
+
+  it("CONTROL: a IGUAL gravedad se queda la que empezó antes — la regla vieja, que sigue valiendo", () => {
+    const vieja = lote({ corridaId: "c-vieja", faseIniciada: haceHoras(40), veredicto: critico });
+    const nueva = lote({ corridaId: "c-nueva", faseIniciada: haceHoras(6), veredicto: critico });
+    expect(
+      unaEntradaPorLote({ entradas: [nueva, vieja], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })[0]!
+        .corridaId,
+    ).toBe("c-vieja");
+    // Y el control del control: con gravedades distintas NO gana la antigua, o esta prueba y la
+    // primera dirían lo mismo y una de las dos no mediría nada.
+    const viejaSana = lote({ corridaId: "c-vieja", faseIniciada: haceHoras(40), veredicto: enCurso });
+    expect(
+      unaEntradaPorLote({ entradas: [nueva, viejaSana], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })[0]!
+        .corridaId,
+    ).toBe("c-nueva");
+  });
+
+  it("a igual gravedad Y igual instante decide el `corridaId`, para que no decida la consulta", () => {
+    const mismo = haceHoras(10);
+    const a = lote({ corridaId: "c-aaa", faseIniciada: mismo, veredicto: critico });
+    const b = lote({ corridaId: "c-bbb", faseIniciada: mismo, veredicto: critico });
+    expect(unaEntradaPorLote({ entradas: [b, a], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })[0]!.corridaId).toBe("c-aaa");
+    expect(unaEntradaPorLote({ entradas: [a, b], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })[0]!.corridaId).toBe("c-aaa");
+  });
+
+  it("una desviación abierta sube el grupo, y eso puede cambiar cuál gana", () => {
+    // `aviso` es más grave que `en_curso`: una desviación abierta la hace ganar. Es lo que prueba que
+    // la gravedad se calcula con las desviaciones delante, no sólo con el dictamen.
+    const vieja = lote({ lotId: "l-1", corridaId: "c-vieja", faseIniciada: haceHoras(40), veredicto: enCurso });
+    const nueva = lote({ lotId: "l-1", corridaId: "c-nueva", faseIniciada: haceHoras(6), veredicto: enCurso });
+    const conDesviacion = new Map([["l-1", 1]]);
+    // Las dos suben a `aviso` —la desviación es del LOTE— así que a igualdad gana la antigua.
+    expect(unaEntradaPorLote({ entradas: [vieja, nueva], desviacionesAbiertasPorLote: conDesviacion, ahora: AHORA })[0]!.corridaId).toBe("c-vieja");
+    // Control: el mapa se lee de verdad. Sin desviaciones las dos son `en_curso` y gana la antigua
+    // igual, así que la señal está en que la de arriba no reviente y en el caso mixto de abajo.
+    const nuevaCritica = lote({ lotId: "l-1", corridaId: "c-nueva", faseIniciada: haceHoras(6), veredicto: critico });
+    expect(unaEntradaPorLote({ entradas: [vieja, nuevaCritica], desviacionesAbiertasPorLote: conDesviacion, ahora: AHORA })[0]!.corridaId).toBe("c-nueva");
+  });
+
+  it("lotes distintos no se mezclan, y cada uno conserva su elegida", () => {
+    const a1 = lote({ lotId: "A", corridaId: "a-1", faseIniciada: haceHoras(40), veredicto: enCurso });
+    const a2 = lote({ lotId: "A", corridaId: "a-2", faseIniciada: haceHoras(6), veredicto: critico });
+    const b1 = lote({ lotId: "B", corridaId: "b-1", faseIniciada: haceHoras(20), veredicto: enCurso });
+    const r = unaEntradaPorLote({ entradas: [a1, b1, a2], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA });
+    expect(r.map((e) => e.lotId)).toEqual(["A", "B"]);
+    expect(r.map((e) => e.corridaId)).toEqual(["a-2", "b-1"]);
+  });
+
+  it("una entrada SIN fase abierta no le gana a una que la tiene", () => {
+    // La cola salta las entradas sin fase, así que elegirla escondería la única que sí se vigila.
+    const sinFase = lote({ corridaId: "c-sin", faseIniciada: null, veredicto: critico });
+    const conFase = lote({ corridaId: "c-con", faseIniciada: haceHoras(10), veredicto: enCurso });
+    expect(unaEntradaPorLote({ entradas: [sinFase, conFase], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })[0]!.corridaId).toBe("c-con");
+  });
+
+  it("sin entradas devuelve una lista vacía, no un error", () => {
+    expect(unaEntradaPorLote({ entradas: [], desviacionesAbiertasPorLote: SIN_DESVIACIONES, ahora: AHORA })).toEqual([]);
   });
 });
