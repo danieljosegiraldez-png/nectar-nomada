@@ -62,35 +62,29 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
+### 2026-10-02 · Las dos pantallas que mentían: la banda de la curva y la capacidad del sitio (#603, #605)
 
-**Lo que §4.5 pedía y faltaba:** los ejes con horas y valores, y la guía de la rúbrica 22 bajo la
-curva. Los ejes están, medidos en un navegador: 18 px de cuerpo → 13,8 efectivos → **11,2 en un
-teléfono de 375**, ningún rótulo fuera del lienzo y sin scroll horizontal. Y la curva ya dice qué
-sugiere el dato si se sigue esperando, **citado literal** de las ocho filas de
-`10_ph_fermentation.md` §1 — ocho, no las «seis» que el plan contaba.
+**017 — una meta `final` se usaba como banda de TODA la trayectoria**, así que un pH bajando de 6,5 a
+4,3 —el diseño de una fermentación— salía como «2 lecturas fuera del rango». Hoy el **momento** del
+objetivo decide a qué lecturas alcanza: `during` cubre el recorrido, `initial` y `final` se marcan en
+su extremo y juzgan **una**. Tu matiz era el caso que el código tiraba —en lavado y natural el Brix o
+el pH se miden **una vez**, antes de la cama— y medido, `initial` no aparecía **ni una vez** en el
+camino de la curva. Y la capa de base ya no elige en silencio entre dos objetivos declarados.
 
-**Lo que NO se escribió, y es la mitad de un renglón de §4.5: «qué hacer».** No existe en ninguna
-fuente del proyecto; la cuarta columna de esa matriz dice lo que hace el *software*, no el operario.
-Así que se abre la columna **vacía**, con una nota que dice que la rellenas tú, y un guardia que
-falla si alguien la rellena sin que el código la recoja **hasta la pantalla**. Consecuencia que hay
-que decir en voz alta: **la rúbrica 22 §1 queda incumplida a propósito** —pide que todo punto que
-emite una alerta diga qué hacer— y eso es una decisión tuya, no una omisión.
+**015 — una unidad ocupada por un lote que no ves salía «libre y sana»**: las corridas se consultan
+filtradas por lote visible y `enUso` salía de ellas. Hoy sale de un recuento por unidad **sin
+filtrar** —cuenta filas, no devuelve nada del lote—, de ahí salen también los conflictos, y la
+liberación **agrupa por unidad** tomando el fin mayor, sin las retiradas ni las averiadas.
 
-**Lo que las revisiones encontraron, y vale más que el diff.** Dos Críticos de la revisión de rama:
-la cita se prestaba a **cualquier** lote cuando la matriz es del perfil `WASHED_STANDARD` —30 valores
-dentro de la ventana óptima de `NATURAL` recibían una cita de cinética de lavado, y tu ficha del lote
-ya se niega a prestarlos—; y «tu última lectura» no estaba determinada con varias lecturas en el
-mismo instante, que son **7 de 10 lotes** reales. Y Codex, que **no aprobó la primera vez**, construyó
-una entrada donde la pantalla se contradecía sola: «no tiene rango declarado en la receta» y debajo
-«Degradación ácida». Hoy el bloque sólo habla con grado `Washed`, **fermentación** abierta **y receta
-presente**; si falta cualquiera de las tres, calla.
+**Lo que enseñaron.** `readingsForMoment` no se podía reusar: no comprueba el empate de instante, el
+defecto que el #596 cerró con sus 7 de 10 lotes. El del 015 estaba **vivo dentro de un fixture, en
+verde** —dos secados en la misma cama—. `MapaDeUnidades` no tenía **ninguna** prueba de render, así
+que el campo nuevo habría muerto en la API. Y el arnés dio «exit 0» dos veces con código real **1**,
+porque un `echo` final convierte el fallo en éxito.
 
-**Qué queda tuyo**, todo en §1 o aquí: leer los `ProcessTarget` de la receta en vez de la plantilla;
-«Daño consumado» contra la literatura que el propio documento cita; que el bloque hable en la hora 0
-de todo lote sano y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto de
-los dos lados); y `PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada
-puede sostener una afirmación.
+**Qué queda tuyo:** si dos corridas abiertas en una **cama** son un conflicto de datos (para un
+tanque sí; con varias bandejas quizá sea lo normal), y si una receta de fermentación debe **obligar**
+a medir pH.
 
 ## 3. Bloqueado, y en qué
 
@@ -147,7 +141,12 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 
 - **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS/014`–`021`.**
+- **`PENDING_IMPLEMENTATIONS` 014, 016, 018, 019 y 021.** El 015 y el 017 se cerraron el 2026-10-02
+  (#605, #603) y el 020 el 2026-10-01; los cinco que quedan siguen sin tocar.
+- **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
+  la receta en vez de la plantilla del perfil; «Daño consumado» contra la literatura que el propio
+  documento cita; y que el bloque de riesgo hable en la hora 0 de todo lote sano y **calle en la
+  ventana óptima** —antipatrón 8, un solo asunto visto de los dos lados—.
 - **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
   en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
   incumplida a propósito**. El detalle está en la entrada «Los ejes de la curva, y una cita que sólo

@@ -4774,3 +4774,33 @@ medición están en el docstring de `hayFloracion`. Lo bueno es comparar **días
 de la base desechable — ahí está medida, no se repite aquí. El `#588` arregla `grant-platform-admin`,
 que comparaba el recuento de permisos contra un **89 congelado** y abortó una concesión legítima con
 «permission grants changed: 144»; ahora toma una foto antes de escribir y exige «sin cambio».
+
+### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
+
+**Lo que §4.5 pedía y faltaba:** los ejes con horas y valores, y la guía de la rúbrica 22 bajo la
+curva. Los ejes están, medidos en un navegador: 18 px de cuerpo → 13,8 efectivos → **11,2 en un
+teléfono de 375**, ningún rótulo fuera del lienzo y sin scroll horizontal. Y la curva ya dice qué
+sugiere el dato si se sigue esperando, **citado literal** de las ocho filas de
+`10_ph_fermentation.md` §1 — ocho, no las «seis» que el plan contaba.
+
+**Lo que NO se escribió, y es la mitad de un renglón de §4.5: «qué hacer».** No existe en ninguna
+fuente del proyecto; la cuarta columna de esa matriz dice lo que hace el *software*, no el operario.
+Así que se abre la columna **vacía**, con una nota que dice que la rellenas tú, y un guardia que
+falla si alguien la rellena sin que el código la recoja **hasta la pantalla**. Consecuencia que hay
+que decir en voz alta: **la rúbrica 22 §1 queda incumplida a propósito** —pide que todo punto que
+emite una alerta diga qué hacer— y eso es una decisión tuya, no una omisión.
+
+**Lo que las revisiones encontraron, y vale más que el diff.** Dos Críticos de la revisión de rama:
+la cita se prestaba a **cualquier** lote cuando la matriz es del perfil `WASHED_STANDARD` —30 valores
+dentro de la ventana óptima de `NATURAL` recibían una cita de cinética de lavado, y tu ficha del lote
+ya se niega a prestarlos—; y «tu última lectura» no estaba determinada con varias lecturas en el
+mismo instante, que son **7 de 10 lotes** reales. Y Codex, que **no aprobó la primera vez**, construyó
+una entrada donde la pantalla se contradecía sola: «no tiene rango declarado en la receta» y debajo
+«Degradación ácida». Hoy el bloque sólo habla con grado `Washed`, **fermentación** abierta **y receta
+presente**; si falta cualquiera de las tres, calla.
+
+**Qué queda tuyo:** leer los `ProcessTarget` de la receta en vez de la plantilla; «Daño consumado»
+contra la literatura que el propio documento cita; que el bloque hable en la hora 0 de todo lote sano
+y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto de los dos lados); y
+`PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada puede sostener una
+afirmación.
