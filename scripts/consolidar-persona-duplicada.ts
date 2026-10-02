@@ -132,7 +132,7 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
 
   const campos = {
     id: true, displayName: true, email: true, status: true,
-    userAccount: { select: { id: true, status: true } },
+    userAccount: { select: { id: true, status: true, authProvider: true, passwordHash: true } },
     _count: { select: { organizationMemberships: true } },
   } as const;
   const canonica = await prisma.person.findUnique({ where: { id: canonicaId }, select: campos });
@@ -161,6 +161,32 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
       "Repuntar esas filas es otra decisión y no la toma este guion.",
     );
   }
+  // **Si las DOS fichas tienen correo, el paso 4 sobrescribiría el de la canónica.** Y la
+  // post-condición no puede verlo: compara el correo final contra el de la DUPLICADA, así que
+  // bendice la pérdida. Un correo es identidad; cuál sobrevive no lo decide un guion.
+  if (canonica.email && duplicada.email && canonica.email !== duplicada.email) {
+    fail(
+      "las dos fichas tienen correo y son distintos — el paso 4 sobrescribiría el de la canónica:",
+      `  canónica:  ${canonica.email}`,
+      `  duplicada: ${duplicada.email}`,
+      "Cuál de los dos sobrevive es una decisión de identidad y no la toma este guion.",
+    );
+  }
+
+  // **Lo que la guarda NO puede ver, dicho en vez de callado.** Esa guarda pregunta al esquema por
+  // CLAVES AJENAS, y `core.audit_event.entity_id` es un uuid sin clave ajena — a propósito, porque
+  // apunta a cualquier entidad. Así que la historia DE la persona duplicada es invisible para ella.
+  // No debe abortar: §35 es de sólo-añadir y esas filas se quedan donde están. Pero tras el borrado
+  // apuntan a una persona que ya no existe, y eso se dice.
+  const auditoriaDeLaDuplicada = await prisma.auditEvent.count({
+    where: { entityType: "person", entityId: duplicadaId },
+  });
+  if (auditoriaDeLaDuplicada > 0) {
+    console.log(`\n  AVISO: ${auditoriaDeLaDuplicada} fila(s) de core.audit_event apuntan a la duplicada por entity_id, que no tiene FK.`);
+    console.log("  Se quedan donde están (§35, sólo-añadir). Tras el borrado apuntan a una persona que ya no existe;");
+    console.log("  el `before` de la fila de esta consolidación guarda su id para poder seguirlas.");
+  }
+
   if (!duplicada.userAccount) fail("la duplicada no tiene cuenta: no hay nada que mover, bórrala a mano si procede");
   if (canonica._count.organizationMemberships === 0) {
     console.log("\n  AVISO: la canónica no tiene ninguna membresía. ¿Seguro que es la canónica?");
@@ -197,6 +223,30 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
         "Qué hacer con esas filas es otra decisión y no la toma este guion.",
       );
     }
+  }
+
+  // **Un trío (cuenta, rol, ámbito) duplicado, que ninguna restricción impide.**
+  // `core.assignment` NO tiene índice único sobre (user_account_id, role_profile_id, scope_id):
+  // comprobado en las migraciones, y la señal de que es a propósito es que
+  // `grant-platform-admin.sql` lo sortea con un `WHERE NOT EXISTS` en vez de un `ON CONFLICT`. Así
+  // que mover las asignaciones de la cuenta vieja puede dejar DOS filas idénticas — y la
+  // post-condición que compara totales lo bendice, porque mover no crea ni destruye filas: 50 antes,
+  // 50 después. Dos filas idénticas no rompen `scopeContains`, pero sí hacen que revocar una deje la
+  // otra concediendo en silencio, que es la clase de cosa que §10 existe para que no pase.
+  const colisiones = cuentaQueSeVa
+    ? await prisma.$queryRaw<{ role_profile_id: string; scope_id: string | null; cuantas: bigint }[]>`
+        select a.role_profile_id, a.scope_id, count(*)::bigint as cuantas
+        from core.assignment a
+        where a.user_account_id in (${cuentaQueSeVa}::uuid, ${cuentaQueSeQueda}::uuid)
+        group by a.role_profile_id, a.scope_id
+        having count(distinct a.user_account_id) > 1`
+    : [];
+  if (colisiones.length > 0) {
+    fail(
+      "las dos cuentas comparten el mismo (rol, ámbito): moverlas dejaría filas duplicadas y nada lo impide:",
+      ...colisiones.map((c) => `  rol ${c.role_profile_id} · ámbito ${c.scope_id ?? "(ninguno)"} · ${c.cuantas} filas entre las dos`),
+      "Cuál se queda y cuál se retira es una decisión de permisos y no la toma este guion.",
+    );
   }
 
   const asignacionesQueSeMueven = cuentaQueSeVa
@@ -241,10 +291,15 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
   }
 
   const correo = duplicada.email;
+  let idsMovidos: string[] = [];
   // La transacción devuelve el id de SU fila de auditoría: la post-condición la busca por ese id
   // en vez de deducirla de un recuento global. Ver el comentario de abajo.
   const idDeAuditoria = await prisma.$transaction(async (tx) => {
+    // Los ids se leen ANTES de mover: después ya no se distinguen de las que la cuenta
+    // superviviente tenía. §35 pide saber QUÉ se movió, no cuántas cosas.
     if (cuentaQueSeVa) {
+      const aMover = await tx.assignment.findMany({ where: { userAccountId: cuentaQueSeVa }, select: { id: true } });
+      idsMovidos = aMover.map((a) => a.id);
       await tx.assignment.updateMany({ where: { userAccountId: cuentaQueSeVa }, data: { userAccountId: cuentaQueSeQueda } });
       await tx.userAccount.delete({ where: { id: cuentaQueSeVa } });
     }
@@ -272,8 +327,10 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
           displayName: canonica.displayName,
           email: correo,
           cuenta: cuentaQueSeQueda,
-          asignacionesMovidas: asignacionesQueSeMueven,
+          asignacionesMovidas: idsMovidos,
           asignacionesPropias,
+          correoAnteriorDeLaCanonica: canonica.email,
+          auditoriaQueSigueApuntandoALaDuplicada: auditoriaDeLaDuplicada,
         },
         reason: "consolidación de dos fichas de la misma persona (§2: no se duplican personas canónicas)",
         sourceInterface: "cli",
@@ -319,7 +376,21 @@ async function consolidar(canonicaId: string, duplicadaId: string, aplicar: bool
     fail("la consolidación se escribió pero las post-condiciones NO cuadran:", ...problemas.map((p) => `  ${p}`));
   }
   console.log(`\n  Hecho. ${despues!.displayName} · ${despues!.email ?? "(sin correo)"} · cuenta ${cuentaQueSeQueda} con ${asignacionesDespues} asignación(es).`);
-  console.log(`  Entra con Google usando ${despues!.email ?? "su correo"}; no hay contraseña que fijar (ADR-083).\n`);
+  // **No afirmar Google a ciegas.** Esta línea decía «Entra con Google… no hay contraseña que fijar»
+  // sin mirar la cuenta. Una cuenta `credentials` sin contraseña no entra con Google por decreto, y
+  // decirle a quien corre esto que ya está resuelto es exactamente la clase de afirmación que §21
+  // (rúbrica de veracidad) prohíbe: una frase creíble que no se sostiene.
+  const cuenta = despues!.userAccount;
+  const proveedor = cuenta?.authProvider ?? "(sin cuenta)";
+  const tieneClave = Boolean(cuenta?.passwordHash);
+  console.log(`  Cuenta ${cuentaQueSeQueda}: proveedor ${proveedor}, contraseña ${tieneClave ? "puesta" : "sin poner"}.`);
+  if (proveedor === "google") {
+    console.log(`  Entra con Google usando ${despues!.email ?? "su correo"} (ADR-083).\n`);
+  } else if (tieneClave) {
+    console.log(`  Entra con ${despues!.email ?? "su correo"} y su contraseña.\n`);
+  } else {
+    console.log(`  Cuenta '${proveedor}' sin contraseña: comprobar cómo entra antes de decirle que ya puede.\n`);
+  }
 }
 
 async function main(): Promise<void> {

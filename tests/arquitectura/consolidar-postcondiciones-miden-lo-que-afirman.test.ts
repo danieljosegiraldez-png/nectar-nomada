@@ -39,6 +39,30 @@ import { describe, expect, it } from "vitest";
 const GUION = new URL("../../scripts/consolidar-persona-duplicada.ts", import.meta.url).pathname;
 const fuente = () => readFileSync(GUION, "utf8");
 
+/**
+ * El cuerpo del `if` que empieza en `marca`, cerrado CONTANDO LLAVES.
+ *
+ * La primera versión de la prueba de abajo cortaba a 600 caracteres y se comía el `fail(` del
+ * chequeo SIGUIENTE, así que marcaba como incumplidor un bloque correcto. Un recorte por número de
+ * caracteres no sabe dónde acaba un bloque, y por la indentación tampoco: esta casa ya pagó ese
+ * error una vez, en el guardia que cerraba un `$transaction` por el `});` de su primer `create`.
+ */
+function cuerpoDelIf(src: string, marca: string): string {
+  const i = src.indexOf(marca);
+  expect(i, `no existe el bloque ${marca}`).toBeGreaterThan(-1);
+  const abre = src.indexOf("{", i);
+  expect(abre, `el bloque ${marca} no abre`).toBeGreaterThan(-1);
+  let nivel = 0;
+  for (let k = abre; k < src.length; k += 1) {
+    if (src[k] === "{") nivel += 1;
+    else if (src[k] === "}") {
+      nivel -= 1;
+      if (nivel === 0) return src.slice(abre, k + 1);
+    }
+  }
+  throw new Error(`el bloque ${marca} no cierra`);
+}
+
 describe("consolidar suma las asignaciones propias de la cuenta superviviente", () => {
   it("sigue siendo el guion que mueve asignaciones y comprueba después", () => {
     const src = fuente();
@@ -197,5 +221,88 @@ describe("la guarda mide también la cuenta que se borra, no sólo la persona", 
     const bloque = src.slice(i, i + 600);
     expect(bloque, "avisa en vez de abortar").toMatch(/fail\(/);
     expect(bloque, "el aborto no nombra lo que encontró").toMatch(/fueraDeCuenta\.map/);
+  });
+});
+
+/**
+ * **Cuatro más, de la segunda vuelta: lo que el guion hacía sin decirlo.**
+ *
+ * Los tres de arriba salieron del ensayo contra producción. Estos cuatro salieron de una revisión
+ * adversaria de seis lentes sobre el mismo archivo, y los cuatro son silencios: cosas que pasaban sin
+ * error y sin registro.
+ *
+ * 1. **El trío duplicado.** `core.assignment` no tiene índice único sobre
+ *    (user_account_id, role_profile_id, scope_id) — medido en las migraciones, y la señal de que es a
+ *    propósito es que `grant-platform-admin.sql` lo sortea con `WHERE NOT EXISTS` y no con
+ *    `ON CONFLICT`. Mover las asignaciones podía dejar dos filas idénticas, y la post-condición que
+ *    compara totales lo bendecía: mover no crea ni destruye filas.
+ * 2. **El correo de la canónica.** Si las dos fichas tienen correo, el paso 4 sobrescribía el de la
+ *    canónica, y la post-condición no podía verlo porque compara el correo final contra el de la
+ *    DUPLICADA — un control que devuelve lo mismo con la respuesta contraria.
+ * 3. **La historia que la guarda no puede ver.** La guarda pregunta al esquema por CLAVES AJENAS, y
+ *    `core.audit_event.entity_id` no tiene ninguna. No debe abortar —§35, esas filas se quedan— pero
+ *    callarlo deja filas apuntando a una persona que ya no existe sin que nadie lo sepa.
+ * 4. **«Entra con Google».** La línea final lo afirmaba sin mirar el `authProvider` de la cuenta. Una
+ *    frase creíble que no se sostiene es lo que `21_rubrica_veracidad.md` prohíbe.
+ */
+describe("los silencios del guion, dichos", () => {
+  it("mide si las dos cuentas comparten (rol, ámbito) y ABORTA", () => {
+    const src = fuente();
+    expect(src, "no mide tríos compartidos entre las dos cuentas").toMatch(/count\(distinct a\.user_account_id\) > 1/);
+    const i = src.indexOf("colisiones.length > 0");
+    expect(i, "no hay rama para las colisiones").toBeGreaterThan(-1);
+    const bloque = src.slice(i, i + 500);
+    expect(bloque, "avisa en vez de abortar").toMatch(/fail\(/);
+    expect(bloque, "el aborto no nombra lo que encontró").toMatch(/colisiones\.map/);
+  });
+
+  it("aborta si las dos fichas tienen correo y son distintos, en vez de sobrescribir", () => {
+    const src = fuente();
+    const i = src.indexOf("canonica.email && duplicada.email && canonica.email !== duplicada.email");
+    expect(i, "no compara los dos correos").toBeGreaterThan(-1);
+    const bloque = src.slice(i, i + 500);
+    expect(bloque, "no aborta: sobrescribiría el de la canónica").toMatch(/fail\(/);
+  });
+
+  /**
+   * Y éste al revés que los otros: tiene que CONTAR y **no** abortar. Un guardia que exigiera
+   * `fail(` aquí convertiría §35 en un bloqueo, que es lo contrario de lo que §35 dice.
+   */
+  it("cuenta la auditoría que seguirá apuntando a la duplicada, y NO aborta por ella", () => {
+    const src = fuente();
+    const i = src.indexOf("const auditoriaDeLaDuplicada");
+    expect(i, "no cuenta las filas sin FK").toBeGreaterThan(-1);
+    expect(src.slice(i, i + 220), "no las busca por entityId de la duplicada").toMatch(/entityId: duplicadaId/);
+    const bloque = cuerpoDelIf(src, "auditoriaDeLaDuplicada > 0");
+    expect(bloque, "aborta por filas de auditoría, contra §35").not.toMatch(/fail\(/);
+    expect(bloque, "no lo dice").toMatch(/console\.log/);
+    // Control del AYUDANTE, no del código: el mismo recorte sobre un bloque que SÍ aborta tiene que
+    // encontrar su `fail(`. Sin esto, un ayudante que devolviera cadena vacía dejaría pasar la
+    // aserción de arriba y «no aborta» se leería igual que «no miré».
+    expect(cuerpoDelIf(src, "colisiones.length > 0"), "el ayudante no ve un fail que SÍ está").toMatch(/fail\(/);
+  });
+
+  it("el registro guarda QUÉ asignaciones se movieron, no cuántas", () => {
+    const src = fuente();
+    expect(src, "no lee los ids antes de mover").toMatch(/idsMovidos = aMover\.map\(\(a\) => a\.id\)/);
+    // **Anclado con la coma final, y lo encontró el flip-test.** Sin ella, el regex casa también con
+    // `asignacionesMovidas: idsMovidos.length` — volver a guardar un número dejaba el guardia en
+    // verde. Es la lección del `?ok=` otra vez: nombrar el dato no es usarlo, y un prefijo no es el
+    // valor.
+    expect(src, "el registro sigue guardando un número en vez de los ids").toMatch(
+      /asignacionesMovidas: idsMovidos,/,
+    );
+    expect(src, "el registro no guarda el correo anterior de la canónica").toMatch(/correoAnteriorDeLaCanonica: canonica\.email/);
+  });
+
+  it("la línea final lee el proveedor de la cuenta en vez de afirmar Google", () => {
+    const src = fuente();
+    expect(src, "no lee el proveedor").toMatch(/cuenta\?\.authProvider/);
+    expect(src, "no mira si hay contraseña").toMatch(/Boolean\(cuenta\?\.passwordHash\)/);
+    const i = src.indexOf("Entra con Google usando");
+    expect(i, "ya no hay mensaje de Google").toBeGreaterThan(-1);
+    // La afirmación de Google tiene que estar DENTRO de la rama que comprobó el proveedor.
+    const antes = src.slice(Math.max(0, i - 300), i);
+    expect(antes, "afirma Google sin haber comprobado el proveedor").toMatch(/proveedor === "google"/);
   });
 });

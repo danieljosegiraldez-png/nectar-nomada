@@ -34,8 +34,19 @@ describe("consolidar-persona-duplicada no enumera las referencias", () => {
   it("la lista de columnas sale de information_schema, no del archivo", () => {
     const src = fuente();
     expect(src, "no consulta el esquema").toMatch(/information_schema\.table_constraints/);
-    expect(src, "no acota la consulta a las claves que apuntan a core.person").toMatch(
-      /ccu\.table_name\s*=\s*'person'/,
+    // **La consulta se acota a UNA tabla destino, y desde el 2026-10-02 esa tabla es un PARÁMETRO.**
+    // El guion hace desaparecer dos cosas —una ficha de `core.person` y una `core.user_account`— y
+    // durante un día midió sólo la primera, así que la consulta se parametrizó. Esta aserción exigía
+    // el literal `'person'` y por eso cayó sobre código mejor; se corrige en vez de quitarse, porque
+    // lo que sigue importando es que la consulta NO devuelva todas las claves ajenas de la base: sin
+    // acotar, «hay referencias» sería cierto siempre y la guarda no mediría nada.
+    expect(src, "no acota la consulta a una tabla destino").toMatch(
+      /ccu\.table_name\s*=\s*(\$\{tablaDestino\}|'person')/,
+    );
+    // Y la compensación: que el parámetro no haya dejado a `person` sin nadie que la pase. Sin esto,
+    // parametrizar y no llamar nunca con `person` pasaría la aserción de arriba.
+    expect(src, "ya nadie mide las referencias a core.person").toMatch(
+      /columnasQueApuntanA\("person", "id"\)/,
     );
   });
 
