@@ -11,6 +11,7 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
+import { procesoQueCubre, procesosParaEntrada } from "../traceability/procesoDelLinaje";
 import { veredictoDelLote } from "./desdeElLote";
 import type {
   CorridaAbierta,
@@ -100,7 +101,6 @@ export async function datosDelTablero(
         startedAt: true,
         vesselNote: true,
         vesselEquipmentId: true,
-        lotProcess: { select: procesoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -113,7 +113,6 @@ export async function datosDelTablero(
       select: {
         startedAt: true,
         dryingBedLocationId: true,
-        lotProcess: { select: procesoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -149,6 +148,14 @@ export async function datosDelTablero(
     if (!lot) continue;
     if (lot.organizationId) organizaciones.add(lot.organizationId);
 
+    // Parte 1, R7 (tarea 9, 2026-10-02): el proceso del lote se busca HACIA ARRIBA, por la misma función que la ficha.
+    // Antes salía de la FK de la corrida, que en toda corrida vieja es nula (R9 no la rellena).
+    const procesos = await procesosParaEntrada(prisma, lot.id);
+    const cobertura = await procesoQueCubre(prisma, lot.id);
+    const proceso = cobertura.vigente
+      ? await prisma.lotProcess.findUnique({ where: { id: cobertura.vigente.id }, select: procesoSelect })
+      : null;
+
     // Sólo las lecturas de ESTA fase: una humedad de la fermentación anterior no dice nada del
     // secado de ahora, y contarla apagaría una lectura debida que sí lo está.
     const mediciones = await prisma.measurement.findMany({
@@ -168,9 +175,7 @@ export async function datosDelTablero(
       fermentacionAbierta: c.fase === "fermentation" ? { startedAt: c.startedAt } : null,
       secadoAbierto: c.fase === "drying" ? { startedAt: c.startedAt } : null,
       ultimoSecadoTerminado: null,
-      procesos: c.lotProcess
-        ? [{ endedAt: c.lotProcess.endedAt, gradoDeProceso: c.lotProcess.processGradeValue?.value ?? null }]
-        : [],
+      procesos,
       mediciones: mediciones.map((m) => ({
         id: m.id,
         variable: m.variable,
@@ -188,8 +193,8 @@ export async function datosDelTablero(
     if (!entrada) continue;
 
     const veredicto = veredictoDelLote(entrada);
-    const fases = c.lotProcess?.processRecipeVersion?.fases ?? [];
-    const targets = c.lotProcess?.processRecipeVersion?.targets ?? [];
+    const fases = proceso?.processRecipeVersion?.fases ?? [];
+    const targets = proceso?.processRecipeVersion?.targets ?? [];
 
     lotes.push({
       lotId: lot.id,

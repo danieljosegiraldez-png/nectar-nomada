@@ -26,7 +26,7 @@ import { entradaDelLote } from "../../../lib/beneficio/entradaDelLote";
 import { faseDelLote } from "../../../lib/beneficio/reposo";
 import { estadosDeInstrumentoPorMedicion } from "../../../lib/equipos/equipos";
 import type { EstadoDeVerificacion } from "../../../lib/equipos/verificacion";
-import { listarProcesosDeLote } from "../../../lib/traceability/lotProcess";
+import { coberturaDelLote, puedeAbrirProceso, LotProcessError, type CoberturaDelLote, type MotivoParaNoAbrir } from "../../../lib/traceability/lotProcess";
 import { VeredictoDeBeneficio } from "../../components/traceability/VeredictoDeBeneficio";
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
 import { TargetComparisonTable } from "../../components/traceability/TargetComparisonTable";
@@ -315,7 +315,27 @@ export default async function LotDetailPage({
     secadoAbierto: activeDrying,
     ultimoSecadoTerminado: secadosTerminados[0] ?? null,
   });
-  const procesos = faseAbierta ? await listarProcesosDeLote(user.userAccountId, lot.id) : [];
+  // Parte 1, R3/R7 (tarea 9, 2026-10-02): el proceso que CUBRE al lote —buscado hacia arriba, porque el pergamino no
+  // tiene proceso: lo tiene la cereza de la que salió— decide qué se ofrece y qué grado ve el veredicto. Se lee siempre,
+  // no sólo con una fase abierta: sin proceso abierto es justo cuando la ficha tiene que decir por qué no se puede empezar.
+  //
+  // Un `LotProcessError` al cargar —un linaje de más de 64 generaciones— se DICE en la ficha: hasta esta tarea la ficha
+  // no atrapaba ninguno, y habría sido un 500.
+  let cobertura: CoberturaDelLote | null = null;
+  let errorDeCobertura: string | null = null;
+  /** Si no hay proceso abierto que lo cubra, si se podría abrir uno (R2) — o el motivo por el que no. */
+  let puedeAbrir: { puede: true } | { puede: false; motivo: MotivoParaNoAbrir } | null = null;
+  try {
+    cobertura = await coberturaDelLote(user.userAccountId, lot.id);
+    if (cobertura.estado !== "abierto" && lot.lotType !== "honey" && !activeFermentation && !activeDrying && puedeRegistrar) {
+      puedeAbrir = await puedeAbrirProceso(user.userAccountId, lot.id);
+    }
+  } catch (error) {
+    if (!(error instanceof LotProcessError)) throw error;
+    errorDeCobertura = error.message;
+  }
+  const linajeDemasiadoHondo = errorDeCobertura === "lineage_too_deep";
+  const procesoAbierto = cobertura?.estado === "abierto";
   // Cómo estaba el instrumento **en el instante de cada lectura**. Se resuelve por
   // lotes: un permiso por instrumento, no uno por medición. Hoy devuelve un mapa
   // vacío porque ninguna medición declara instrumento todavía, y el veredicto lo
@@ -333,10 +353,8 @@ export default async function LotDetailPage({
     fermentacionAbierta: activeFermentation,
     secadoAbierto: activeDrying,
     ultimoSecadoTerminado: secadosTerminados[0] ?? null,
-    procesos: procesos.map((pr) => ({
-      endedAt: pr.endedAt,
-      gradoDeProceso: pr.processGradeValue?.value ?? null,
-    })),
+    // Parte 1, R7: lo MISMO que el tablero le pasa, por la misma función (`procesosParaEntrada`).
+    procesos: cobertura?.paraEntrada ?? [],
     mediciones: measurements.map((m) => ({
       id: m.id,
       variable: m.variable,
@@ -355,7 +373,8 @@ export default async function LotDetailPage({
   // run. A batch mid-fermentation is not waiting to be sorted, and a lot that
   // has already been selected is a *different* lot (the accepted output), so
   // this does not need to ask whether sorting already happened.
-  const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying;
+  // Parte 1, R6.7: no se selecciona bajo un proceso abierto («primero se selecciona, después el proceso»).
+  const canSelect = lot.lotType === "cherry" && !activeFermentation && !activeDrying && !procesoAbierto;
   // ADR-161 — un lote de MIEL no fermenta, no se seca ni tiene proceso de café: se procesa y se
   // envasa. Ofrecerle los botones del café era invitar a registrar algo que no existe.
   const esMiel = lot.lotType === "honey";
@@ -401,6 +420,8 @@ export default async function LotDetailPage({
   // ejemplo un lote que salió de una clasificación y después entró en otra (Codex, 2026-09-26).
   const cuajadoEsElMismoEvento = clasificacionVerde?.transformationId === selectionTransformation?.id;
 
+  const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;
+
   const availableActions: { action: BatchAction; href: string; label: string }[] = [
     // Only offered while a run is under way, because that is the only time it
     // is the *expected* step — the measurement form itself is always on the
@@ -421,7 +442,9 @@ export default async function LotDetailPage({
           { action: "split", href: "#dividir-miel", label: t("honeySplitButton") },
         ] as const)
       : []),
-    ...(!esMiel && !activeFermentation && !activeDrying
+    // Parte 1, R3 (tarea 9): empezar una corrida exige un proceso abierto que cubra al lote, y en bodega no se empieza
+    // nada. Sin eso el servicio rechaza: no se ofrece, y debajo de los botones va la frase de por qué.
+    ...(!esMiel && !activeFermentation && !activeDrying && procesoAbierto && !currentStorage
       ? ([
           { action: "fermentation", href: `/lots/${lot.id}/fermentation/new`, label: t("startFermentationButton") },
           { action: "drying", href: `/lots/${lot.id}/drying/new`, label: t("startDryingButton") },
@@ -460,7 +483,6 @@ export default async function LotDetailPage({
     ...accionesVisibles.filter((a) => a.action === suggestedAction),
     ...accionesVisibles.filter((a) => a.action !== suggestedAction),
   ];
-  const currentStorage = storageAssignments.find((s) => s.endedAt === null) ?? null;
 
   // T12.5: signed GET URLs computed once here (server-side, already gated
   // by getLotDetail's own requireLotAccess("view", ...) above) — same
@@ -893,6 +915,19 @@ export default async function LotDetailPage({
             </Link>
           ))}
         </div>
+        {/* Parte 1, R3 (tarea 9): sin proceso abierto no hay «Empezar fermentación» ni «Empezar secado», y se dice por qué.
+            Si R2 dejaría abrir uno, la frase lleva a «Proceso del lote»; si no, el motivo —una frase única mentiría en un lote
+            dividido o mezclado—. Sólo a quien gestiona el lote, como los botones (regla de Daniel del 2026-09-27: lo que no
+            puedes hacer no se explica, se omite). */}
+        {puedeAbrir ? (
+          <p className="nn-muted" style={{ margin: "0.5rem 0 0" }}>
+            {puedeAbrir.puede ? (
+              <Link href={`/lots/${lot.id}/process`}>{t("startRunNeedsOpenProcess")}</Link>
+            ) : (
+              t(`processCannotOpen_${puedeAbrir.motivo}`)
+            )}
+          </p>
+        ) : null}
       </div>
 
       {/* Below the actions, not above them: recording the batch's state comes
@@ -1037,6 +1072,33 @@ export default async function LotDetailPage({
 
       <section className="nn-section">
         <h2>{t("processingHeading")}</h2>
+        {/* Parte 1, R1/R7 (tarea 9): el proceso que cubre al lote, en qué lote vive y su receta con versión; la cadena si hay
+            más de uno (del más cercano al más lejano); la composición si es una mezcla, sin nombrar ningún proceso. */}
+        {cobertura?.vigente ? (
+          <p className="nn-muted">
+            {t("processCoveringShown", {
+              lotCode: cobertura.vigente.lot.lotCode,
+              label: cobertura.vigente.recetaConVersion ?? cobertura.vigente.etiqueta,
+              state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed"),
+            })}
+          </p>
+        ) : cobertura?.composicion ? (
+          <p className="nn-muted">
+            {t("processMixture", { partes: cobertura.composicion.procesos.map((p) => `${p.lot.lotCode} · ${p.etiqueta}`).join(" + ") })}
+          </p>
+        ) : null}
+        {cobertura && cobertura.cadena.length > 1 ? (
+          <p className="nn-muted">
+            {t("processChainShown", {
+              cadena: cobertura.cadena.map((p) => `${p.lot.lotCode} · ${p.recetaConVersion ?? p.etiqueta}`).join(" → "),
+            })}
+          </p>
+        ) : null}
+        {errorDeCobertura !== null ? (
+          <p className="nn-error">
+            {linajeDemasiadoHondo ? t("processLineageTooDeep") : t("processLoadFailed", { detail: errorDeCobertura })}
+          </p>
+        ) : null}
         {veredicto ? <VeredictoDeBeneficio veredicto={veredicto} /> : null}
         {activeFermentation ? (
           <div className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>

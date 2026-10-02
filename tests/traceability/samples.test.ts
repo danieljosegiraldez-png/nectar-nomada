@@ -10,6 +10,7 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { createSampleFromLot, retirarMuestra, SampleValidationError } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
+import { cerrarProceso } from "../../lib/traceability/lotProcess";
 import { registrarTrilla } from "../../lib/traceability/trilla";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -94,6 +95,8 @@ afterAll(async () => {
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: dryingRunIds } }) });
   // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
   await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
+  // Parte 1, R7 (tarea 9): las humedades de cierre, DESPUÉS de los procesos que las referencian (RESTRICT) y antes de los lotes.
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   if (beneficioLocationId) await prisma.location.deleteMany({ where: assertDefinedWhere({ id: beneficioLocationId }) });
 
@@ -300,7 +303,7 @@ describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-
       provenanceClass: "measured_fact", lotId: enSecado.id, eventType: "received",
       quantity: 100, unit: "kg", occurredAt: new Date("2026-04-01"),
     });
-    await abrirProcesoDePrueba(authorizedUserAccountId, enSecado.id);
+    const proceso = await abrirProcesoDePrueba(authorizedUserAccountId, enSecado.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: enSecado.id, startedAt: new Date("2026-04-02"), provenanceClass: "original_record",
     });
@@ -313,6 +316,12 @@ describe("createSampleFromLot — la muestra verde de un lote YA verde (2026-09-
       provenanceClass: "original_record",
     });
     const pergamino = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN_ID}-perg-real` } });
+    // Parte 1, R7: con proceso, la muestra verde exige el proceso cerrado por humedad.
+    const humedadDeCierre = await prisma.measurement.create({ data: {
+      variable: "moisture", value: 11, unit: "%", occurredAt: new Date("2026-04-09T12:00:00Z"),
+      lotId: pergamino.id, provenanceClass: "measured_fact",
+    } });
+    await cerrarProceso(authorizedUserAccountId, { lotProcessId: proceso.id, endedAt: new Date("2026-04-09T12:00:00Z"), closingMoistureMeasurementId: humedadDeCierre.id });
     const { loteVerde } = await registrarTrilla(authorizedUserAccountId, {
       lotePergaminoId: pergamino.id, masaEntradaKg: 80,
       loteVerde: { lotCode: `${RUN_ID}-verde-real`, masaKg: 64 },
@@ -557,20 +566,28 @@ describe("createSampleFromLot — la muestra verde exige almacenamiento (2026-09
       organizationId,
       projectId: projectAId,
     });
-    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
+    const proceso = await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(Date.now() - 86_400_000),
       provenanceClass: "original_record",
     });
-    await endDryingRun(authorizedUserAccountId, {
+    const finDelSecado = new Date();
+    const { outputLot } = await endDryingRun(authorizedUserAccountId, {
       dryingRunId: run.id,
-      endedAt: new Date(),
+      endedAt: finDelSecado,
       endedOutcome: "target_reached",
       outputLotCode: `${RUN_ID}-verde-reposo-salida`,
       outputLotType: "parchment",
       provenanceClass: "original_record",
     });
+    // Parte 1, R7: con proceso, la muestra verde exige el proceso cerrado por humedad.
+    const cierre = new Date(finDelSecado.getTime() + 60_000);
+    const humedadDeCierre = await prisma.measurement.create({ data: {
+      variable: "moisture", value: 11, unit: "%", occurredAt: cierre,
+      lotId: outputLot.id, provenanceClass: "measured_fact",
+    } });
+    await cerrarProceso(authorizedUserAccountId, { lotProcessId: proceso.id, endedAt: cierre, closingMoistureMeasurementId: humedadDeCierre.id });
 
     const { sample } = await createSampleFromLot(authorizedUserAccountId, {
       provenanceClass: "original_record",

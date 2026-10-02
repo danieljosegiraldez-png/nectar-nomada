@@ -13,6 +13,7 @@ import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { procesoQueCubre, idsDeAscendencia, bloquearLinajes } from "../../lib/traceability/procesoDelLinaje";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
+import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `corrida-${Date.now()}`;
@@ -770,5 +771,26 @@ describe("la limpieza de los procesos de prueba no deja huérfana su auditoría"
     // El filtro es por los procesos que borró: el de otro lote conserva su proceso y su evento.
     expect(await prisma.lotProcess.count({ where: { id: pOtro.id } })).toBe(1);
     expect(await eventosDe([pOtro.id])).toBe(1);
+  });
+});
+
+describe("R7 — el tablero ve el proceso del ancestro aunque la corrida no esté unida", () => {
+  it("una fermentación vieja (sin lotProcessId) en un hijo no sale «sin grado»", async () => {
+    const padre = await lote("TAB-P");
+    const hijo = await lote("TAB-H");
+    await enlazar([padre], [hijo]);
+    await abrirProcesoDePrueba(gestor, padre);
+    // Una corrida de ANTES de la Parte 1: cruda, sin `lotProcessId` (R9 no la rellena). La limpia el `afterAll`, que encuentra
+    // la corrida por la entrada de su transformación (`hijo` está en `lotes`): nada de borrarla debajo de las aserciones.
+    const corrida = await prisma.fermentationRun.create({ data: { startedAt: ahora(), createdBy: gestor } });
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      fermentationRunId: corrida.id, inputs: { create: [{ lotId: hijo }] },
+    } });
+    transformaciones.push(t.id);
+    const d = await datosDelTablero(gestor);
+    const entrada = d.lotes.find((l) => l.lotId === hijo);
+    expect(entrada, "el hijo con fermentación abierta tiene que estar en el tablero").toBeDefined();
+    expect(entrada!.veredicto).not.toBe("SIN_GRADO_DECLARADO");
   });
 });

@@ -20,7 +20,7 @@
  */
 import { Prisma } from "../../generated/prisma/client";
 import { computeLotBalance } from "./balance";
-import { loteDividido } from "./procesoDelLinaje";
+import { idsDeAscendencia, loteDividido, procesoQueCubre } from "./procesoDelLinaje";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
@@ -112,24 +112,17 @@ export interface CreateSampleFromLotInput {
 
 /**
  * ¿Algún antepasado de este lote terminó su secado? Sube por las transformaciones que lo produjeron
- * —trilla, clasificación, lo que sea— y pregunta la fase de cada entrada. Tope de profundidad: un
- * lote real no tiene diez generaciones, y un ciclo colgaría el bucle.
+ * —trilla, clasificación, lo que sea— y pregunta la fase de cada entrada.
+ *
+ * Parte 1, R7 (tarea 9, 2026-10-02). Antes subía con un tope de 6 y respondía «no» al llegar al tope —la
+ * ausencia leída como «no miré»—: un verde a 8 generaciones de su secado no podía dar muestra. Ahora sube por
+ * `idsDeAscendencia`, con el tope de 64 que LANZA al pasarlo, y el recorrido por niveles con vistos no se cuelga
+ * en un ciclo.
  */
-async function tieneSecadoTerminadoArriba(lotId: string, profundidad = 6): Promise<boolean> {
-  const vistos = new Set<string>([lotId]);
-  let frontera = [lotId];
-  for (let nivel = 0; nivel < profundidad && frontera.length > 0; nivel++) {
-    const transformaciones = await prisma.lotTransformation.findMany({
-      where: { outputs: { some: { lotId: { in: frontera } } } },
-      select: { inputs: { select: { lotId: true } } },
-    });
-    const padres = [...new Set(transformaciones.flatMap((t) => t.inputs.map((i) => i.lotId)))].filter((id) => !vistos.has(id));
-    for (const padre of padres) {
-      const fase = await faseActualDeLote(padre);
-      if (fase?.tipo === "reposo") return true;
-      vistos.add(padre);
-    }
-    frontera = padres;
+async function tieneSecadoTerminadoArriba(lotId: string): Promise<boolean> {
+  for (const padre of await idsDeAscendencia(prisma, lotId)) {
+    const fase = await faseActualDeLote(padre);
+    if (fase?.tipo === "reposo") return true;
   }
   return false;
 }
@@ -162,6 +155,18 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   // ninguna corrida de secado, se trillaba y la muestra verde entraba—. La trilla exige pergamino o
   // cereza seca, pero ese TIPO se puede escribir a mano; no es evidencia de nada. Lo que exime es el
   // secado terminado en la ASCENDENCIA del lote, que es lo que la decisión del 2026-09-18 pedía.
+  if (input.materialState === "GREEN") {
+    // Parte 1, R7 (tarea 9, 2026-10-02): CON proceso, además de lo de hoy, el proceso que cubre al lote tiene que estar
+    // cerrado por humedad (no dividido, no devuelto a secado con su continuación abierta). Es aditivo: no quita nada de
+    // lo de abajo. SIN proceso no hay nada que decidir aquí y sigue valiendo sólo lo de hoy (R9). En una mezcla, todos los
+    // procesos a los que llegan sus ramas.
+    const cobertura = await procesoQueCubre(prisma, sourceLot.id);
+    const procesosQueDecidir =
+      cobertura.estado === "mezcla" ? cobertura.composicion.procesos : cobertura.vigente ? [cobertura.vigente] : [];
+    if (procesosQueDecidir.some((p) => p.endedAt === null || p.closureKind !== "moisture")) {
+      throw new SampleValidationError("green_sample_before_reposo");
+    }
+  }
   const secadoEnLaAscendencia = sourceLot.lotType === "green" ? await tieneSecadoTerminadoArriba(sourceLot.id) : false;
   if (input.materialState === "GREEN" && !secadoEnLaAscendencia) {
     const fase = await faseActualDeLote(input.sourceLotId);

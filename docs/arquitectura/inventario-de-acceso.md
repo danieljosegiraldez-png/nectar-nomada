@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**605 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-01 con
+**608 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-02 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1
 (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
@@ -25,12 +25,20 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **457** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **460** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **91** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **Los lectores leen el proceso que cubre al lote (2026-10-02): 605→608, 166 archivos y «guardia directo»
+> 457→460.** Parte 1, R7 (tarea 9). Tres operaciones nuevas en `lib/traceability/lotProcess.ts`, las tres con
+> guardia directo (`requireLotAccess(view)` sobre el lote, antes de leer ningún proceso): `coberturaDelLote`, lo que la ficha y
+> la página del proceso enseñan; `puedeAbrirProceso` y `puedeDevolverASecado`, que deciden si la pantalla OFRECE
+> abrir un proceso o devolver a secado preguntando lo mismo que el servicio. Los lectores que pasan a buscar el
+> proceso hacia arriba —`datosDelTablero`, `colaDeSecado`, la lista de catas, la ocupación de tanques, el reporte y la
+> muestra verde— cambian su consulta, no su fila: siguen siendo las mismas operaciones con su mismo guardia.
 
 > **La bodega mira el proceso que cubre al lote (2026-10-01): 605→605, 166 archivos y ninguna cifra de la tabla
 > cambia.** Parte 1, R7. `exigeSecadoTerminado` deja de leer con el cliente global y fuera de la transacción de

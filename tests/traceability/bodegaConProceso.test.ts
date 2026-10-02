@@ -4,10 +4,22 @@
  * es el pergamino, y su proceso vive en la cereza. Sólo al ENTRAR: reubicar un lote que ya está dentro
  * no vuelve a juzgar el secado. Un lote sin proceso entra, como hoy (R9).
  */
+import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { moveLotToStorage } from "../../lib/traceability/storage";
-import { abrirProceso, cerrarProceso, devolverASecado, CATALOGO_MOTIVO_DEVOLUCION } from "../../lib/traceability/lotProcess";
+import {
+  abrirProceso,
+  cerrarProceso,
+  devolverASecado,
+  puedeAbrirProceso,
+  puedeDevolverASecado,
+  CATALOGO_MOTIVO_DEVOLUCION,
+  MOTIVOS_PARA_NO_ABRIR,
+  MOTIVOS_PARA_NO_DEVOLVER,
+} from "../../lib/traceability/lotProcess";
+import { createSampleFromLot } from "../../lib/traceability/samples";
+import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { recordTransformation } from "../../lib/traceability/lots";
 import { loteDividido, procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
@@ -24,6 +36,8 @@ const lotes: string[] = [];
 const transformaciones: string[] = [];
 /** Mediciones de cierre. Se borran DESPUÉS de los procesos que las referencian (`closing_moisture_measurement_id` es RESTRICT). */
 const mediciones: string[] = [];
+/** Secados insertados crudos (tarea 9): se borran DESPUÉS de las transformaciones que los nombran. */
+const secados: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN})`, locale: "es" } });
@@ -137,12 +151,25 @@ afterAll(async () => {
   // El orden es el de las FK. Las asignaciones de bodega, antes que los lotes y la ubicación que referencian; los
   // procesos, antes que sus mediciones de cierre y que las transformaciones que cerraron por división (las dos
   // RESTRICT) y antes que los lotes; las transformaciones, antes que los lotes que enlazan.
+  //
+  // Tarea 9: la muestra verde. Las muestras, PRIMERO: apuntan a su lote y a la transformación de extracción. Y las
+  // transformaciones que escriben los servicios (empezar y terminar un secado, sacar una muestra) no están en
+  // `transformaciones`: se buscan por sus lotes, con los secados que nombran, antes de borrar nada.
+  await prisma.sample.deleteMany({ where: assertDefinedWhere({ sourceLotId: { in: lotes } }) });
+  const deServicios = await prisma.lotTransformation.findMany({
+    where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: lotes } } } }, { outputs: { some: { lotId: { in: lotes } } } }] }),
+    select: { id: true, dryingRunId: true },
+  });
+  const todasLasTransformaciones = [...new Set([...transformaciones, ...deServicios.map((t) => t.id)])];
+  const todosLosSecados = [...new Set([...secados, ...deServicios.flatMap((t) => (t.dryingRunId ? [t.dryingRunId] : []))])];
   await borrarProcesosDeLotesDonde({ id: { in: lotes } });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: mediciones } }) });
-  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformaciones } }) });
-  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformaciones } }) });
-  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformaciones } }) });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: todasLasTransformaciones } }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: todasLasTransformaciones } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: todasLasTransformaciones } }) });
+  await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: todosLosSecados } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   // Los eventos de proceso (`lot_process.open`, `…close`) ya los borró el ayudante por el id de su proceso; esto recoge
   // lo que cualquier otra escritura de la cuenta haya dejado.
@@ -695,5 +722,198 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
       await reubica.hecho.catch(() => undefined);
       await devolucion;
     }
+  });
+});
+
+/**
+ * La entrada de una muestra verde que el servicio ACEPTA: los campos de la prueba de `tests/traceability/samples.test.ts` que
+ * acepta una muestra verde (la que no lleva `rejects`), cambiando sólo el lote y el código.
+ */
+function muestraVerde(sourceLotId: string, codigo: string): Parameters<typeof createSampleFromLot>[1] {
+  return {
+    provenanceClass: "original_record",
+    sampleCode: `${codigo}-${RUN}`,
+    sampleType: "green_coffee",
+    materialState: "GREEN",
+    sourceLotId,
+    occurredAt: ahora(),
+  };
+}
+
+describe("R7 — la muestra verde con proceso exige el proceso cerrado por humedad", () => {
+  // La prueba se arma para que la compuerta VIEJA pase: un pergamino salido de un secado terminado con `target_reached`. Así sólo
+  // la condición nueva puede rechazarla; con un lote sin secado, la vieja ya lanza el mismo error y la prueba no distinguiría nada.
+  it("con el proceso cerrado se saca; devuelto a secado (continuación abierta), ya no", async () => {
+    const cereza = await lote("MV-C");
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    const { run } = await startDryingRun(gestor, { lotId: cereza, startedAt: ahora(), provenanceClass: "original_record" });
+    const { outputLot: pergamino } = await endDryingRun(gestor, {
+      dryingRunId: run.id, endedAt: ahora(), outputLotCode: `MV-P-${RUN}`, outputLotType: "parchment",
+      provenanceClass: "original_record", endedOutcome: "target_reached",
+    });
+    lotes.push(pergamino.id);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino.id, 11) });
+    // Control positivo: con el proceso cerrado por humedad, las dos compuertas dejan pasar.
+    await expect(createSampleFromLot(gestor, muestraVerde(pergamino.id, "MV-1"))).resolves.toBeDefined();
+
+    const motivo = (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } })).id;
+    await devolverASecado(gestor, { lotId: pergamino.id, motivoValueId: motivo, ocurrioEn: ahora() });
+    // Ahora SÓLO la compuerta nueva rechaza: la vieja sigue viendo el secado terminado.
+    await expect(createSampleFromLot(gestor, muestraVerde(pergamino.id, "MV-2"))).rejects.toThrow(/green_sample_before_reposo/);
+  });
+
+  it("sin proceso, la muestra verde sigue entrando con un secado terminado a más de 6 generaciones", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) ids.push(await lote(`G${i}`));
+    // Un secado VIEJO, crudo y terminado con objetivo alcanzado, de G0 a G1.
+    const secado = await prisma.dryingRun.create({ data: { startedAt: new Date("2026-02-01T12:00:00Z"), endedAt: new Date("2026-02-10T12:00:00Z"), endedOutcome: "target_reached", createdBy: gestor } });
+    secados.push(secado.id);
+    const ts = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: new Date("2026-02-10T12:00:00Z"), provenanceClass: "original_record", createdBy: gestor,
+      dryingRunId: secado.id, inputs: { create: [{ lotId: ids[0]! }] }, outputs: { create: [{ lotId: ids[1]! }] },
+    } });
+    transformaciones.push(ts.id);
+    for (let i = 2; i < 10; i++) await enlazar([ids[i - 1]!], [ids[i]!]);
+    await prisma.lot.update({ where: { id: ids[9]! }, data: { lotType: "green" } });
+    // G1 queda a 8 generaciones de G9: el tope viejo de 6 no llegaba y decía «no».
+    await expect(createSampleFromLot(gestor, muestraVerde(ids[9]!, "G9"))).resolves.toBeDefined();
+  }, 60000);
+});
+
+/**
+ * Lo que la página OFRECE (tarea 9, 2026-10-02). La página del proceso y la ficha sólo pintan «Abrir proceso» y «Devolver a
+ * secado» cuando el servicio lo aceptaría; cuando no, una frase con el motivo. Ocultar no es autorizar —el servicio vuelve a
+ * comprobarlo—, pero ofrecer lo que va a fallar es enseñar a desconfiar de la pantalla.
+ *
+ * Cada caso pregunta al predicado y DESPUÉS al servicio, y exige que digan lo mismo: el motivo del predicado es el código
+ * con el que el servicio rechaza, y un «se puede» es una escritura que sale bien.
+ */
+describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => {
+  async function motivoDeDevolucion() {
+    return (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } })).id;
+  }
+  /** Un lote con su proceso cerrado por humedad en el objetivo (el cierre es del 2026-05-01, para poder devolver después). */
+  async function cerrado(codigo: string) {
+    const l = await lote(codigo);
+    const p = await abrirProcesoDePrueba(gestor, l);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: await humedad(l, 11) });
+    return l;
+  }
+  /** Un lote dividido bajo un proceso, armado crudo como en «un lote dividido no se devuelve a secado». */
+  async function dividido(codigo: string) {
+    const x = await lote(`${codigo}-X`);
+    const x1 = await lote(`${codigo}-X1`);
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "split", occurredAt: ahora(), provenanceClass: "original_record", createdBy: gestor,
+      inputs: { create: [{ lotId: x }] }, outputs: { create: [{ lotId: x1 }] },
+    } });
+    transformaciones.push(t.id);
+    await prisma.lotProcess.create({ data: {
+      lotId: x, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId,
+      endedAt: ahora(), closureKind: "divided", dividedByTransformationId: t.id,
+    } });
+    return x;
+  }
+
+  /** El predicado y el servicio de devolver, sobre el mismo lote: tienen que decir lo mismo. Devuelve el veredicto del predicado. */
+  async function devolverDiceLoMismo(lotId: string) {
+    const veredicto = await puedeDevolverASecado(gestor, lotId);
+    const servicio = devolverASecado(gestor, { lotId, motivoValueId: await motivoDeDevolucion(), ocurrioEn: ahora() });
+    if (veredicto.puede) await expect(servicio, "el predicado dijo «se puede» y el servicio lo rechazó").resolves.toBeDefined();
+    else await expect(servicio, `el predicado dijo «${veredicto.motivo}» y el servicio no rechazó con ese código`).rejects.toThrow(new LotProcessError(veredicto.motivo));
+    return veredicto;
+  }
+  /** Lo mismo para abrir. */
+  async function abrirDiceLoMismo(lotId: string) {
+    const veredicto = await puedeAbrirProceso(gestor, lotId);
+    const servicio = abrirDirecto(lotId);
+    if (veredicto.puede) await expect(servicio, "el predicado dijo «se puede» y el servicio lo rechazó").resolves.toBeDefined();
+    else await expect(servicio, `el predicado dijo «${veredicto.motivo}» y el servicio no rechazó con ese código`).rejects.toThrow(new LotProcessError(veredicto.motivo));
+    return veredicto;
+  }
+
+  it("devolver a secado: en bodega con el proceso cerrado por humedad se ofrece, y el servicio lo acepta", async () => {
+    const l = await cerrado("PD-OK");
+    await moveLotToStorage(gestor, { lotId: l, locationId: plotId, startedAt: new Date("2026-05-02T12:00:00Z") });
+    expect(await devolverDiceLoMismo(l)).toEqual({ puede: true });
+  });
+
+  it("devolver a secado: cada caso que el servicio rechaza tiene su motivo, y es el código del servicio", async () => {
+    // Sin proceso en el linaje y en bodega: un lote guardado antes de la Parte 1. La compuerta lo deja entrar (R9).
+    const sin = await lote("PD-SIN");
+    await moveLotToStorage(gestor, { lotId: sin, locationId: plotId, startedAt: ahora() });
+    expect(await devolverDiceLoMismo(sin)).toEqual({ puede: false, motivo: "process_not_found" });
+
+    // Con el proceso que lo cubre todavía abierto.
+    const abierto = await lote("PD-ABI");
+    await abrirProcesoDePrueba(gestor, abierto);
+    expect(await devolverDiceLoMismo(abierto)).toEqual({ puede: false, motivo: "process_already_open" });
+
+    // Una mezcla de dos ramas cerradas por humedad.
+    const mezcla = await lote("PD-MEZ");
+    await enlazar([await cerrado("PD-MEZ-A"), await cerrado("PD-MEZ-B")], [mezcla]);
+    expect(await devolverDiceLoMismo(mezcla)).toEqual({ puede: false, motivo: "lote_mezclado" });
+
+    // Un lote dividido bajo un proceso.
+    expect(await devolverDiceLoMismo(await dividido("PD-DIV"))).toEqual({ puede: false, motivo: "lote_dividido" });
+  });
+
+  it("devolver a secado: en bodega, con un DESCENDIENTE con su proceso abierto, no se ofrece — el servicio lo rechaza al abrir la continuación", async () => {
+    // El caso que las comprobaciones previas de `devolverASecado` no ven: lo rechaza R2 dentro de `abrirProcesoEnTx`, con la bodega ya
+    // terminada. Un predicado que sólo repitiera las comprobaciones previas diría «se puede» aquí, y la pantalla ofrecería un fallo.
+    const cereza = await lote("PD-DES-C");
+    const a = await lote("PD-DES-A");
+    const hijo = await lote("PD-DES-H");
+    await enlazar([cereza], [a]);
+    await enlazar([a], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(a, 11) });
+    await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
+    await abrirProcesoDePrueba(gestor, hijo);
+    expect(await devolverDiceLoMismo(a)).toEqual({ puede: false, motivo: "process_already_open" });
+  });
+
+  it("abrir un proceso: libre se ofrece; en bodega, bajo otro abierto, en una mezcla o dividido, no — cada uno con el código del servicio", async () => {
+    expect(await abrirDiceLoMismo(await lote("PA-OK"))).toEqual({ puede: true });
+
+    const enBodega = await lote("PA-BOD");
+    await moveLotToStorage(gestor, { lotId: enBodega, locationId: plotId, startedAt: ahora() });
+    expect(await abrirDiceLoMismo(enBodega)).toEqual({ puede: false, motivo: "lote_en_bodega" });
+
+    const padre = await lote("PA-ABI-P");
+    const hijo = await lote("PA-ABI-H");
+    await enlazar([padre], [hijo]);
+    await abrirProcesoDePrueba(gestor, padre);
+    expect(await abrirDiceLoMismo(hijo)).toEqual({ puede: false, motivo: "process_already_open" });
+
+    const mezcla = await lote("PA-MEZ");
+    await enlazar([await cerrado("PA-MEZ-A"), await cerrado("PA-MEZ-B")], [mezcla]);
+    expect(await abrirDiceLoMismo(mezcla)).toEqual({ puede: false, motivo: "lote_mezclado" });
+
+    expect(await abrirDiceLoMismo(await dividido("PA-DIV"))).toEqual({ puede: false, motivo: "lote_dividido" });
+  });
+
+  it("cada motivo posible de los dos predicados tiene su frase en es.json y en en.json, y las páginas la piden con ese prefijo", () => {
+    // Las claves son de PLANTILLA (`processCannotOpen_${motivo}`): `claves-de-traduccion-existen` no las ve, y `t()` acepta cualquier
+    // cadena. Lo que las vigila es esto: la lista de motivos es la que los predicados pueden devolver (fuera de ella, relanzan).
+    const es = JSON.parse(readFileSync("messages/es.json", "utf8")) as Record<string, Record<string, string>>;
+    const en = JSON.parse(readFileSync("messages/en.json", "utf8")) as Record<string, Record<string, string>>;
+    const paginaDelProceso = readFileSync("app/lots/[id]/process/page.tsx", "utf8");
+    const ficha = readFileSync("app/lots/[id]/page.tsx", "utf8");
+    // Control: las páginas arman la clave con estos prefijos. Si cambian de prefijo, esta prueba tiene que seguirlas.
+    expect(paginaDelProceso).toContain("processCannotOpen_${");
+    expect(paginaDelProceso).toContain("processCannotReturn_${");
+    expect(ficha).toContain("processCannotOpen_${");
+    expect(MOTIVOS_PARA_NO_ABRIR.length, "la lista de motivos de abrir salió vacía").toBeGreaterThanOrEqual(7);
+    expect(MOTIVOS_PARA_NO_DEVOLVER.length, "la lista de motivos de devolver salió vacía").toBeGreaterThanOrEqual(7);
+    const faltan: string[] = [];
+    for (const [prefijo, motivos] of [["processCannotOpen_", MOTIVOS_PARA_NO_ABRIR], ["processCannotReturn_", MOTIVOS_PARA_NO_DEVOLVER]] as const) {
+      for (const m of motivos) {
+        if (!es.Traceability?.[`${prefijo}${m}`]?.trim()) faltan.push(`es: Traceability.${prefijo}${m}`);
+        if (!en.Traceability?.[`${prefijo}${m}`]?.trim()) faltan.push(`en: Traceability.${prefijo}${m}`);
+      }
+    }
+    expect(faltan).toEqual([]);
   });
 });

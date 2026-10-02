@@ -13,6 +13,7 @@ import { registrarInspeccion, opcionesParaInspeccion } from "../../lib/traceabil
 import { abrirProceso, cerrarProceso } from "../../lib/traceability/lotProcess";
 import { computeLotBalance } from "../../lib/traceability/balance";
 import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
+import { reporteDeProceso } from "../../lib/traceability/reporteDeProceso";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -581,4 +582,18 @@ describe("R6 — dividir bajo un proceso abierto", () => {
     expect(ids).toContain(r.outputLots[0]!.id);
     expect(ids).not.toContain(l);
   }, 30000);
+});
+
+describe("R6 — el reporte y la división", () => {
+  it("el reporte no cuenta la fila del proceso dividido como un proceso más", async () => {
+    const l = await lote("D10");
+    await conSaldo(l, 100);
+    const p = await abrirProcesoDePrueba(gestor, l);
+    await dividir(l, 100, [50, 50]);
+    const r = await reporteDeProceso(gestor);
+    const fila = r.filas.find((f) => f.lotProcessId === p.id);
+    expect(fila?.divididoEn).toHaveLength(2);
+    const grupo = r.porProceso.find((g) => g.etiqueta === "Sin receta");
+    expect(grupo?.filas).toBe(r.filas.filter((f) => f.etiqueta === "Sin receta" && f.divididoEn === null).length);
+  });
 });

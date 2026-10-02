@@ -54,6 +54,9 @@ export interface FilaDeProceso {
   puntajes: number[];
   /** Media simple de los puntajes. Null sin ninguno — nunca 0. */
   puntajePromedio: number | null;
+  /** Parte 1, R6: si el proceso se cerró dividido, los códigos de las partes. Esa fila no cuenta como
+   *  proceso en los grupos: sus partes ya cuentan. */
+  divididoEn: string[] | null;
 }
 
 /**
@@ -121,6 +124,7 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
           cherryStateValue: true,
           closingMoistureMeasurement: true,
           interventions: { include: { catalogValue: true }, orderBy: { occurredAt: "asc" } },
+          derivations: { select: { lot: { select: { lotCode: true } } } },
         },
       },
       // El varietal: cosecha → fuentes → cohorte → cultivar. Cada salto está
@@ -199,13 +203,17 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         perfilesDeTueste,
         puntajes,
         puntajePromedio: promedio(puntajes),
+        divididoEn: p.closureKind === "divided" ? p.derivations.map((d) => d.lot.lotCode) : null,
       });
     }
   }
 
+  // Parte 1, R6 (tarea 9, 2026-10-02): una fila `divided` no cuenta como proceso en los grupos ni en lo que falta —sus
+  // partes, con su propio proceso, ya cuentan—. `filas` del reporte sigue devolviéndolas todas, con su marca.
+  const filasQueCuentan = filas.filter((f) => f.divididoEn === null);
   const agrupar = (clave: (f: FilaDeProceso) => string) => {
     const mapa = new Map<string, number[]>();
-    for (const f of filas) {
+    for (const f of filasQueCuentan) {
       const acc = mapa.get(clave(f)) ?? [];
       acc.push(...f.puntajes);
       mapa.set(clave(f), acc);
@@ -220,21 +228,21 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
     faltan: {
       lotesVisibles: lotes.length,
       lotesConProceso,
-      procesosCerrados: filas.filter((f) => f.humedadDeCierre !== null).length,
-      procesosConTueste: filas.filter((f) => f.perfilesDeTueste.length > 0).length,
-      procesosConPuntaje: filas.filter((f) => f.puntajes.length > 0).length,
+      procesosCerrados: filasQueCuentan.filter((f) => f.humedadDeCierre !== null).length,
+      procesosConTueste: filasQueCuentan.filter((f) => f.perfilesDeTueste.length > 0).length,
+      procesosConPuntaje: filasQueCuentan.filter((f) => f.puntajes.length > 0).length,
     },
     porProceso: [...porEtiqueta.entries()]
       .map(([etiqueta, puntajes]) => ({
         etiqueta,
-        filas: filas.filter((f) => f.etiqueta === etiqueta).length,
+        filas: filasQueCuentan.filter((f) => f.etiqueta === etiqueta).length,
         puntajePromedio: promedio(puntajes),
       }))
       .sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es")),
     porGrado: [...porGradoMapa.entries()]
       .map(([grado, puntajes]) => ({
         grado,
-        filas: filas.filter((f) => f.gradoDeProceso === grado).length,
+        filas: filasQueCuentan.filter((f) => f.gradoDeProceso === grado).length,
         puntajePromedio: promedio(puntajes),
       }))
       .sort((a, b) => a.grado.localeCompare(b.grado, "es")),

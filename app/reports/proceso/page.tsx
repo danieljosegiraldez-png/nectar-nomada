@@ -135,7 +135,10 @@ export default async function ReporteDeProcesoPage() {
                     </td>
                     <td>{f.gradoDeProceso}</td>
                     <td>{f.estadoDeCereza}</td>
-                    <td>{f.etiqueta}</td>
+                    <td>
+                      {f.etiqueta}
+                      {f.divididoEn ? <span className="nn-muted"> · {t("processDividedInto", { partes: f.divididoEn.join(", ") })}</span> : null}
+                    </td>
                     <td>{f.intent}</td>
                     <td className={(f.diferenciaContraObjetivo ?? 0) > 0 ? "nn-error" : undefined}>
                       {f.humedadDeCierre === null

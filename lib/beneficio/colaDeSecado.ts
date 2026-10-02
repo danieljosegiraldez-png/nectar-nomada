@@ -24,6 +24,7 @@
 import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadoDeRitmo, puntajeDeUrgencia, type EstadoDeRitmo, type MetaConRitmo } from "../traceability/ritmo";
+import { procesoQueCubre } from "../traceability/procesoDelLinaje";
 
 /** Lo que la receta declara para el secado de este lote, o nada si no se declaró. */
 export interface RitmoDeclarado {
@@ -67,7 +68,8 @@ export interface UnidadEnCola {
     | "va tarde"
     | "cerca del objetivo"
     | "listo"
-    | "sin receta declarada";
+    | "sin receta declarada"
+    | "receta sin ritmo de secado";
   readonly urgencia: number;
   readonly ritmoDelLote: EstadoDeRitmo;
 }
@@ -144,6 +146,8 @@ export function estadoDeUnidad(input: {
   demora: boolean | null;
   debidas: number;
   humedadPct: number | null;
+  /** Parte 1, R7: si el proceso que cubre al lote tiene receta. Separa «sin receta» de «receta sin ritmo de secado». */
+  tieneReceta: boolean;
 }): UnidadEnCola["estado"] {
   const { ritmo, horasSinVoltear, demora, debidas, humedadPct } = input;
   const dentroDelRango =
@@ -162,7 +166,11 @@ export function estadoDeUnidad(input: {
   const distancia = distanciaAlRango(humedadPct, ritmo.humedadMinPct, ritmo.humedadMaxPct);
   // Dos puntos de humedad o menos por encima del máximo: está a punto, y pasarse no se deshace.
   if (distancia != null && distancia > 0 && distancia <= 2) return "cerca del objetivo";
-  if (ritmo.expectedHours == null && ritmo.turnEveryHours == null) return "sin receta declarada";
+  // Parte 1, R7 (tarea 9, 2026-10-02): desde que las corridas llevan proceso, «sin receta» mentiría para una corrida cuyo
+  // proceso SÍ tiene receta pero no declara ritmo de secado. Son dos situaciones y dos etiquetas.
+  if (ritmo.expectedHours == null && ritmo.turnEveryHours == null) {
+    return input.tieneReceta ? "receta sin ritmo de secado" : "sin receta declarada";
+  }
   return "al dia";
 }
 
@@ -230,7 +238,6 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
       startedAt: true,
       locationId: true,
       dryingBedLocationId: true,
-      lotProcessId: true,
       location: { select: { id: true, name: true, locationType: true, parentLocationId: true } },
       dryingBedLocation: { select: { id: true, name: true, parentLocationId: true } },
       turningEvents: { select: { occurredAt: true }, orderBy: { occurredAt: "desc" } },
@@ -253,9 +260,12 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
     const lot = c.transformations[0]?.inputs[0]?.lot;
     if (!lot) continue;
 
-    const proceso = c.lotProcessId
+    // Parte 1, R7 (tarea 9, 2026-10-02): el proceso del lote, buscado hacia arriba; no la FK de la corrida, que en toda
+    // corrida vieja es nula y que, con R3, apunta a un proceso que vive en la cereza y no en el lote que se seca.
+    const cobertura = await procesoQueCubre(prisma, lot.id);
+    const proceso = cobertura.vigente
       ? await prisma.lotProcess.findUnique({
-          where: { id: c.lotProcessId },
+          where: { id: cobertura.vigente.id },
           select: {
             processGradeValue: { select: { value: true } },
             processRecipeVersion: {
@@ -315,6 +325,7 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
         demora: ritmoDelLote.demora,
         debidas: ritmoDelLote.debidas.length,
         humedadPct,
+        tieneReceta: proceso?.processRecipeVersion != null,
       }),
       urgencia: urgenciaDeUnidad({ base: puntajeDeUrgencia(ritmoDelLote), ritmo, horasSinVoltear, humedadPct }),
       ritmoDelLote,

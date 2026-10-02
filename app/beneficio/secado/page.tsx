@@ -32,6 +32,7 @@ const COLOR: Record<UnidadEnCola["estado"], string> = {
   "cerca del objetivo": "var(--nn-accent, #1d6f6a)",
   listo: "var(--nn-accent, #1d6f6a)",
   "sin receta declarada": "var(--nn-muted, #6f7780)",
+  "receta sin ritmo de secado": "var(--nn-muted, #6f7780)",
 };
 
 const horas = (h: number | null) => (h == null ? "—" : h < 1 ? "<1 h" : `${Math.round(h)} h`);

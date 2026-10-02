@@ -18,7 +18,17 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
-import { abrirProcesoEnTx, bloquearLinaje, exigeSinCorridasAbiertas, idsDeDescendencia, loteDividido, procesoQueCubre } from "./procesoDelLinaje";
+import {
+  abrirProcesoEnTx,
+  bloquearLinaje,
+  exigeSinCorridasAbiertas,
+  exigeSinOtroProcesoAbierto,
+  idsDeDescendencia,
+  loteDividido,
+  procesoQueCubre,
+  procesosParaEntrada,
+  type OrigenDelProceso,
+} from "./procesoDelLinaje";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -490,6 +500,27 @@ export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: 
   if (medida > objetivo) throw new LotProcessError("moisture_above_target");
 }
 
+/**
+ * El proceso cerrado que una devolución a secado continuaría, o el rechazo con nombre — Parte 1, R7. Son las comprobaciones
+ * que `devolverASecado` hace ANTES de escribir nada, sacadas aquí (tarea 9, 2026-10-02) para que `puedeDevolverASecado`, que
+ * decide si la pantalla ofrece el formulario, pregunte LO MISMO que el servicio y no una copia que pueda divergir.
+ *
+ * Las dos comprobaciones de dividido dan el rechazo antes de escribir nada. No son lo único que lo impediría: `abrirProcesoEnTx`
+ * rechaza `lote_dividido` igual, por R2. Aquí el error sale con su código antes de que la asignación de bodega se haya tocado.
+ *
+ * Dentro de la devolución corre con su `tx` y DESPUÉS de `bloquearLinaje`; el predicado la llama con el cliente global, sólo lee.
+ */
+async function procesoQueDevolver(tx: Prisma.TransactionClient, lotId: string) {
+  if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
+  const cobertura = await procesoQueCubre(tx, lotId);
+  if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
+  if (cobertura.estado === "sin_proceso") throw new LotProcessError("process_not_found");
+  if (cobertura.estado === "abierto") throw new LotProcessError("process_already_open");
+  const cerrado = await tx.lotProcess.findUniqueOrThrow({ where: { id: cobertura.vigente.id } });
+  if (cerrado.closureKind !== "moisture") throw new LotProcessError("lote_dividido");
+  return cerrado;
+}
+
 export interface DevolverASecadoInput {
   lotId: string;
   /** Del catálogo `motivo_devolucion_a_secado`. */
@@ -529,16 +560,7 @@ export async function devolverASecado(userAccountId: string, input: DevolverASec
 
   return prisma.$transaction(async (tx) => {
     await bloquearLinaje(tx, input.lotId);
-    // Las dos comprobaciones de dividido dan el rechazo ANTES de escribir nada. No son lo único que lo impediría:
-    // `abrirProcesoEnTx` rechaza `lote_dividido` igual, por R2. Aquí el error sale con su código antes de que la
-    // asignación de bodega se haya tocado.
-    if (await loteDividido(tx, input.lotId)) throw new LotProcessError("lote_dividido");
-    const cobertura = await procesoQueCubre(tx, input.lotId);
-    if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
-    if (cobertura.estado === "sin_proceso") throw new LotProcessError("process_not_found");
-    if (cobertura.estado === "abierto") throw new LotProcessError("process_already_open");
-    const cerrado = await tx.lotProcess.findUniqueOrThrow({ where: { id: cobertura.vigente.id } });
-    if (cerrado.closureKind !== "moisture") throw new LotProcessError("lote_dividido");
+    const cerrado = await procesoQueDevolver(tx, input.lotId);
 
     const bodega = await tx.storageAssignment.findFirst({ where: { lotId: input.lotId, endedAt: null } });
 
@@ -710,3 +732,158 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
 
 /** El tipo que devuelve `listarProcesosDeLote`, para quien lo pinte. */
 export type ProcesoDeLote = Awaited<ReturnType<typeof listarProcesosDeLote>>[number];
+
+const INCLUIR_PARA_PANTALLA = {
+  processRecipeVersion: { include: { recipe: true } },
+  processGradeValue: true,
+  cherryStateValue: true,
+  closingMoistureMeasurement: true,
+  interventions: { orderBy: { occurredAt: "asc" as const }, include: { catalogValue: true, operator: true } },
+  fermentationRuns: { orderBy: { startedAt: "asc" as const } },
+  dryingRuns: { orderBy: { startedAt: "asc" as const } },
+  lot: { select: { id: true, lotCode: true } },
+} as const;
+
+/**
+ * Parte 1, R7 (tarea 9, 2026-10-02): lo que la ficha y la página del proceso enseñan — el proceso que CUBRE al lote, en
+ * qué lote vive, su historia (`cadena`, del más cercano al más lejano) y, si es una mezcla, de qué está hecha. `paraEntrada`
+ * es lo que la ficha pasa a `entradaDelLote`, por la MISMA función que usa el tablero (`procesosParaEntrada`).
+ *
+ * `recetaConVersion` es «Lavado · v1», o null en un proceso «Sin receta»: la ficha enseña eso y el formulario de
+ * fermentación lo lee (R4). `etiqueta` sigue siendo el nombre a secas, que es por lo que agrupa el reporte.
+ *
+ * `listarProcesosDeLote` sigue existiendo: lista los procesos PROPIOS del lote, que es otra pregunta (y la usan las pruebas).
+ * Lanza `lineage_too_deep` como el resolvedor: quien pinta lo atrapa y lo dice.
+ */
+export async function coberturaDelLote(userAccountId: string, lotId: string) {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new LotProcessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [lot]);
+
+  const cobertura = await procesoQueCubre(prisma, lotId);
+  const ids =
+    cobertura.estado === "mezcla" ? cobertura.composicion.procesos.map((p) => p.id) : cobertura.cadena.map((p) => p.id);
+  const filas = await prisma.lotProcess.findMany({ where: { id: { in: ids } }, include: INCLUIR_PARA_PANTALLA });
+  const porId = new Map(
+    filas.map((p) => [
+      p.id,
+      {
+        ...p,
+        etiqueta: p.processRecipeVersion?.recipe.name ?? SIN_RECETA,
+        recetaConVersion: p.processRecipeVersion ? `${p.processRecipeVersion.recipe.name} · v${p.processRecipeVersion.version}` : null,
+        humedadDeCierre: p.closingMoistureMeasurement?.value.toNumber() ?? null,
+        /** Negativo = cerró por debajo del objetivo. Null hasta que se cierra por humedad. */
+        diferenciaContraObjetivo:
+          p.closingMoistureMeasurement === null ? null : p.closingMoistureMeasurement.value.toNumber() - p.targetMoisturePct.toNumber(),
+      },
+    ]),
+  );
+  const presentar = (p: { id: string; origen: OrigenDelProceso; profundidad: number }) => ({
+    ...porId.get(p.id)!,
+    origen: p.origen,
+    profundidad: p.profundidad,
+  });
+
+  return {
+    estado: cobertura.estado,
+    vigente: cobertura.vigente ? presentar(cobertura.vigente) : null,
+    cadena: cobertura.cadena.map(presentar),
+    composicion:
+      cobertura.estado === "mezcla"
+        ? { procesos: cobertura.composicion.procesos.map(presentar), ramaSinProceso: cobertura.composicion.ramaSinProceso }
+        : null,
+    paraEntrada: await procesosParaEntrada(prisma, lotId),
+  };
+}
+
+export type CoberturaDelLote = Awaited<ReturnType<typeof coberturaDelLote>>;
+/** Un proceso como lo pinta la pantalla: con su lote (`lot`), por qué existe (`origen`) y a cuántas generaciones vive. */
+export type ProcesoDeLoteConLugar = CoberturaDelLote["cadena"][number];
+
+/**
+ * Los motivos por los que R2 no deja abrir un proceso: los códigos con que `exigeSinOtroProcesoAbierto` rechaza. Cada uno
+ * tiene su frase (`processCannotOpen_<motivo>`, en es y en en), y lo vigila `bodegaConProceso.test.ts`: las claves son de
+ * plantilla y ningún otro guardia las ve. Un código que no esté aquí no es un motivo que la pantalla sepa decir: el
+ * predicado lo relanza, y la página lo trata como cualquier otro error del proceso.
+ */
+export const MOTIVOS_PARA_NO_ABRIR = [
+  "process_already_open",
+  "lote_dividido",
+  "lote_mezclado",
+  "lote_en_bodega",
+  "proceso_no_aplica_a_miel",
+  "lineage_too_deep",
+  "lot_not_found",
+] as const;
+export type MotivoParaNoAbrir = (typeof MOTIVOS_PARA_NO_ABRIR)[number];
+const esMotivoParaNoAbrir = (m: string): m is MotivoParaNoAbrir => (MOTIVOS_PARA_NO_ABRIR as readonly string[]).includes(m);
+
+/**
+ * Si R2 dejaría abrir un proceso en este lote, para no OFRECER lo que va a fallar. No escribe; el servidor vuelve a
+ * comprobarlo al abrir (ocultar un botón no es autorizar). Pregunta lo MISMO que el servicio: `exigeSinOtroProcesoAbierto`.
+ */
+export async function puedeAbrirProceso(
+  userAccountId: string,
+  lotId: string,
+): Promise<{ puede: true } | { puede: false; motivo: MotivoParaNoAbrir }> {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new LotProcessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [lot]);
+  try {
+    await exigeSinOtroProcesoAbierto(prisma, lotId);
+    return { puede: true };
+  } catch (error) {
+    if (error instanceof LotProcessError && esMotivoParaNoAbrir(error.message)) return { puede: false, motivo: error.message };
+    throw error;
+  }
+}
+
+/**
+ * Los motivos por los que `devolverASecado` rechaza un lote antes de mirar lo que trae el formulario (motivo, nota y fecha):
+ * los de `procesoQueDevolver` y los de R2 al abrir la continuación. Cada uno con su frase (`processCannotReturn_<motivo>`).
+ */
+export const MOTIVOS_PARA_NO_DEVOLVER = [
+  "process_not_found",
+  "process_already_open",
+  "lote_dividido",
+  "lote_mezclado",
+  "proceso_no_aplica_a_miel",
+  "lineage_too_deep",
+  "lot_not_found",
+] as const;
+export type MotivoParaNoDevolver = (typeof MOTIVOS_PARA_NO_DEVOLVER)[number];
+const esMotivoParaNoDevolver = (m: string): m is MotivoParaNoDevolver => (MOTIVOS_PARA_NO_DEVOLVER as readonly string[]).includes(m);
+
+/**
+ * Si `devolverASecado` aceptaría este lote, para que la página ofrezca el formulario SÓLO donde el servicio lo acepta
+ * (tarea 9, 2026-10-02). Antes se ofrecía en todo lote en bodega, también donde la devolución siempre falla: un lote guardado
+ * sin proceso (`process_not_found`), una mezcla, un dividido, uno cuyo proceso sigue abierto.
+ *
+ * Imita al servicio paso por paso, sin escribir:
+ * 1. `procesoQueDevolver`, la MISMA función que la devolución corre antes de escribir;
+ * 2. R2 tal como la aplica la devolución: con la bodega YA terminada. `exigeSinOtroProcesoAbierto` mira la bodega lo ÚLTIMO,
+ *    así que un `lote_en_bodega` dice que todo lo anterior pasó —y la devolución termina esa bodega antes de abrir—. Si algún
+ *    día esa comprobación se mueve antes, `bodegaConProceso.test.ts` («…con un DESCENDIENTE con su proceso abierto…») cae.
+ *
+ * No mira lo que trae el formulario —el motivo, la nota, la fecha—: eso lo rechaza el servicio con su frase al enviar.
+ */
+export async function puedeDevolverASecado(
+  userAccountId: string,
+  lotId: string,
+): Promise<{ puede: true } | { puede: false; motivo: MotivoParaNoDevolver }> {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new LotProcessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [lot]);
+  try {
+    await procesoQueDevolver(prisma, lotId);
+    try {
+      await exigeSinOtroProcesoAbierto(prisma, lotId);
+    } catch (error) {
+      if (!(error instanceof LotProcessError && error.message === "lote_en_bodega")) throw error;
+    }
+    return { puede: true };
+  } catch (error) {
+    if (error instanceof LotProcessError && esMotivoParaNoDevolver(error.message)) return { puede: false, motivo: error.message };
+    throw error;
+  }
+}

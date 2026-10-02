@@ -267,6 +267,51 @@ describe("la cola de secado", () => {
     expect(unidad!.ritmoDelLote.demora).toBeNull();
   });
 
+  /**
+   * Parte 1, R7 (tarea 9, 2026-10-02). La cola busca el proceso HACIA ARRIBA por el linaje, no por la FK de la corrida: una
+   * corrida de antes de la Parte 1 no está unida (`lotProcessId` nulo, R9), y el secado ocurre en un HIJO del lote donde vive
+   * el proceso. Y con un proceso CON receta que no declara fase de secado, la etiqueta no es «sin receta»: lo sería mentir.
+   */
+  it("ve el proceso del ancestro aunque la corrida no esté unida, y con receta sin fase de secado dice «receta sin ritmo de secado»", async () => {
+    const crear = (codigo: string, lotType: "cherry" | "parchment") =>
+      prisma.lot.create({ data: { lotCode: `${codigo}-${RUN}`, lotType, organizationId: orgIds[0]!, locationId: cuarto, status: "approved", classification: "internal" } });
+    const padre = await crear("LOTE-PADRE", "cherry");
+    const hijo = await crear("LOTE-HIJO", "parchment");
+    lotIds.push(padre.id, hijo.id);
+    const enlace = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: haceHoras(20), provenanceClass: "original_record",
+      inputs: { create: [{ lotId: padre.id }] }, outputs: { create: [{ lotId: hijo.id }] },
+    } });
+    transformationIds.push(enlace.id);
+    // Una receta con versión y SIN fase de secado: hay receta, no hay ritmo.
+    const receta = await prisma.processRecipe.create({
+      data: { name: `SIN-RITMO receta ${RUN}`, organizationId: orgIds[0]!, status: "approved", versions: { create: { version: 1, status: "approved" } } },
+      include: { versions: true },
+    });
+    recipeIds.push(receta.id);
+    const grado = await valorDeCatalogo("grado_proceso", "Natural");
+    const proceso = await prisma.lotProcess.create({ data: {
+      lotId: padre.id, sequenceOrder: 1, intent: `secado ${RUN}`, processGradeValueId: grado,
+      cherryStateValueId: await valorDeCatalogo("estado_cereza", "entera"), targetMoisturePct: 11, startedAt: haceHoras(30),
+      provenanceClass: "original_record", processRecipeVersionId: receta.versions[0]!.id,
+    } });
+    processIds.push(proceso.id);
+    // La corrida, sobre el HIJO y sin `lotProcessId`.
+    const corrida = await prisma.dryingRun.create({ data: { startedAt: haceHoras(5), locationId: cuarto } });
+    runIds.push(corrida.id);
+    const t = await prisma.lotTransformation.create({ data: {
+      transformationType: "stage_change", occurredAt: haceHoras(5), provenanceClass: "original_record",
+      dryingRunId: corrida.id, inputs: { create: [{ lotId: hijo.id, quantity: 20, unit: "kg" }] },
+    } });
+    transformationIds.push(t.id);
+
+    const cola = await colaDeSecado(operario, ahora);
+    const unidad = cola.areas.flatMap((a) => a.unidades).find((u) => u.lotId === hijo.id);
+    expect(unidad, "la corrida del hijo no aparece en la cola").toBeDefined();
+    expect(unidad!.proceso, "la cola no vio el proceso que vive en el padre").toBe(`Natural ${RUN}`);
+    expect(unidad!.estado).toBe("receta sin ritmo de secado");
+  });
+
   it("ordena lo más urgente arriba", async () => {
     const cola = await colaDeSecado(operario, ahora);
     const unidades = cola.areas.flatMap((a) => a.unidades);
@@ -339,17 +384,24 @@ describe("el criterio, en aislamiento", () => {
   const ritmo = { expectedHours: 192, turnEveryHours: 4, humedadMinPct: 9, humedadMaxPct: 12 };
 
   it("dentro del rango está «listo», aunque le toque volteo", () => {
-    expect(estadoDeUnidad({ ritmo, horasSinVoltear: 99, demora: true, debidas: 3, humedadPct: 10.5 })).toBe("listo");
+    expect(estadoDeUnidad({ ritmo, horasSinVoltear: 99, demora: true, debidas: 3, humedadPct: 10.5, tieneReceta: true })).toBe("listo");
   });
 
   it("a dos puntos del máximo está «cerca del objetivo»", () => {
-    expect(estadoDeUnidad({ ritmo, horasSinVoltear: 1, demora: false, debidas: 0, humedadPct: 13.5 })).toBe("cerca del objetivo");
+    expect(estadoDeUnidad({ ritmo, horasSinVoltear: 1, demora: false, debidas: 0, humedadPct: 13.5, tieneReceta: true })).toBe("cerca del objetivo");
   });
 
   it("pasarse de seco pesa más que cualquier volteo vencido", () => {
     const pasado = urgenciaDeUnidad({ base: 0, ritmo, horasSinVoltear: 0, humedadPct: 8 });
     const volteoVencido = urgenciaDeUnidad({ base: 0, ritmo, horasSinVoltear: 8, humedadPct: 20 });
     expect(pasado).toBeGreaterThan(volteoVencido);
+  });
+
+  it("con receta pero sin ritmo de secado, la cola lo dice así y no «sin receta»", () => {
+    const ritmo = { expectedHours: null, turnEveryHours: null, humedadMinPct: null, humedadMaxPct: null };
+    const base = { ritmo, horasSinVoltear: null, demora: null, debidas: 0, humedadPct: null };
+    expect(estadoDeUnidad({ ...base, tieneReceta: true })).toBe("receta sin ritmo de secado");
+    expect(estadoDeUnidad({ ...base, tieneReceta: false })).toBe("sin receta declarada");
   });
 
   it("tres volteos vencidos pesan más que uno", () => {
