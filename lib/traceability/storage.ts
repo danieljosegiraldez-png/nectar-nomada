@@ -13,6 +13,7 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { exigeSecadoTerminado } from "./lotProcess";
+import { bloquearLinaje } from "./procesoDelLinaje";
 
 export interface MoveLotToStorageInput {
   lotId: string;
@@ -30,10 +31,6 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
 
-  // «No debe salir de secado antes bajo ninguna circunstancia» (Daniel,
-  // 2026-09-07). Lanza en vez de avisar; para deshacerlo está `devolverASecado`.
-  await exigeSecadoTerminado(input.lotId);
-
   // El ayudante abre la transacción: cerrar la asignación anterior, abrir la
   // nueva y anotar la clave tienen que ir juntas o no ir.
   return unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
@@ -43,6 +40,16 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
     const openAssignment = await tx.storageAssignment.findFirst({
       where: { lotId: input.lotId, endedAt: null },
     });
+    // «No debe salir de secado antes bajo ninguna circunstancia» (Daniel, 2026-09-07), y desde la
+    // Parte 1 (R7) mirando el proceso que CUBRE al lote, dentro de esta transacción y con el linaje
+    // bloqueado. Sólo al ENTRAR a bodega: reubicar un lote que ya está dentro no vuelve a juzgar el
+    // secado. Un reenvío idempotente (`recuperarDeOtroEnvio`) no pasa por `crear`, así que tampoco
+    // por aquí: devuelve la fila que ya pasó la compuerta. Lanza en vez de avisar; para deshacerlo
+    // está `devolverASecado`.
+    if (!openAssignment) {
+      await bloquearLinaje(tx, input.lotId);
+      await exigeSecadoTerminado(tx, input.lotId);
+    }
     if (openAssignment) {
       await tx.storageAssignment.update({
         where: { id: openAssignment.id },

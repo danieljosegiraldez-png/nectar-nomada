@@ -32,6 +32,13 @@ rama de las lecturas de la clasificación de verde por malla):
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
 
+> **La bodega mira el proceso que cubre al lote (2026-10-01): 605→605, 166 archivos y ninguna cifra de la tabla
+> cambia.** Parte 1, R7. `exigeSecadoTerminado` deja de leer con el cliente global y fuera de la transacción de
+> `moveLotToStorage`: recibe el `tx` y corre dentro de ella, con el linaje bloqueado. Sigue siendo **«depende del
+> llamador»** —no recibe principal, y su único llamador ya pidió `manage` sobre ese lote—, así que cambia su razón y
+> su fecha, no su fila. Lo que sí cambia es que `lib/traceability/lotProcess.ts` entra en `reciben_transaccion`:
+> recibe el cliente del llamador en esa operación, aunque el archivo siga importando el cliente global para el resto.
+
 > **Dividir bajo un proceso abierto (2026-10-01): 604→605, 166 archivos y «recibía principal sin guardia
 > visible» 22→23.** Parte 1, R6. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:
 > `dividirProcesoEnTx`, que **sí recibe el principal, pero sólo para firmar** el cierre `divided` y la

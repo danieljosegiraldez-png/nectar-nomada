@@ -24,7 +24,8 @@ import { recordTransformation } from "../lib/traceability/lots";
 import { recordHarvestEvent } from "../lib/traceability/harvest";
 import { startFermentationRun, endFermentationRun } from "../lib/traceability/fermentation";
 import { startDryingRun, endDryingRun } from "../lib/traceability/drying";
-import { abrirProceso } from "../lib/traceability/lotProcess";
+import { abrirProceso, cerrarProceso } from "../lib/traceability/lotProcess";
+import { recordMeasurement } from "../lib/traceability/measurements";
 import { moveLotToStorage } from "../lib/traceability/storage";
 import { createSampleFromLot } from "../lib/traceability/samples";
 import { createHive, createColony } from "../lib/apiary/hives";
@@ -929,6 +930,15 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
       quantity: 320,
       unit: "kg",
       provenanceClass: "original_record",
+    });
+
+    // Parte 1, R7: a bodega sólo con el proceso cerrado por humedad en el objetivo. Valor DEMO.
+    const humedadDeCierre = await recordMeasurement(operatorId, {
+      variable: "moisture", value: 11, unit: "%", occurredAt: new Date("2027-02-04T11:30:00Z"),
+      lotId: greenLot.id, provenanceClass: "measured_fact", notes: "DEMO",
+    });
+    await cerrarProceso(operatorId, {
+      lotProcessId: proceso.id, endedAt: new Date("2027-02-04T11:45:00Z"), closingMoistureMeasurementId: humedadDeCierre.id,
     });
 
     // --- Storage ---

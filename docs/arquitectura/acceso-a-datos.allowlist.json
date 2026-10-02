@@ -789,6 +789,10 @@
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje; desde R2 (2026-10-01), también el núcleo con `tx` que abre un proceso, y desde R6 (2026-10-01) los dos de la división (`antesDeTransformar` y `dividirProcesoEnTx`), que corren en la transacción de `recordTransformation`. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
+    },
+    {
+      "archivo": "lib/traceability/lotProcess.ts",
+      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -1100,8 +1104,8 @@
     {
       "archivo": "lib/traceability/lotProcess.ts",
       "operacion": "exigeSecadoTerminado",
-      "razon": "No recibe principal porque no expone nada: lee el proceso más reciente de un lote y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de invocarla — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
-      "verificado": "2026-09-07"
+      "razon": "No recibe principal porque no expone nada: lee el proceso que cubre al lote (Parte 1, R7) y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de abrir su transacción, y la llama DENTRO de ella, con el linaje bloqueado y el `tx` que ésta le pasa — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
+      "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/apiary/vitalesDelSitio.ts",

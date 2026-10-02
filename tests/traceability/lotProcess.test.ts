@@ -515,7 +515,7 @@ describe("un lote no sale de secado antes de su objetivo", () => {
       closingMoistureMeasurementId: alta.id,
     });
 
-    await expect(exigeSecadoTerminado(loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
+    await expect(exigeSecadoTerminado(prisma, loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
   });
 
   it("`devolverASecado` reabre el proceso y exige un motivo", async () => {

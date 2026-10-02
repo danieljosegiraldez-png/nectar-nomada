@@ -15,7 +15,7 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
-import { abrirProcesoEnTx, bloquearLinaje, exigeSinCorridasAbiertas, idsDeDescendencia } from "./procesoDelLinaje";
+import { abrirProcesoEnTx, bloquearLinaje, exigeSinCorridasAbiertas, idsDeDescendencia, loteDividido, procesoQueCubre } from "./procesoDelLinaje";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -452,34 +452,32 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
 }
 
 /**
- * La compuerta de bodega: un lote **no sale de secado** antes de llegar a su
- * objetivo de humedad.
+ * La compuerta de bodega: un lote **no sale de secado** antes de llegar a su objetivo de humedad.
  *
- * **Regla del dueño (2026-09-07), literal:** «bloquear, alertar, acción para
- * regresar a secado; no debe salir de secado antes bajo ninguna circunstancia».
- * Por eso esto lanza en vez de avisar, y por eso existe `devolverASecado`.
+ * **Regla del dueño (2026-09-07), literal:** «bloquear, alertar, acción para regresar a secado; no
+ * debe salir de secado antes bajo ninguna circunstancia».
  *
- * **Sólo bloquea si el lote TIENE un proceso.** Medido el 2026-09-07: producción
- * tiene 45 lotes y **cero** procesos, porque `LotProcess` nació hoy. Bloquear
- * también los que no tienen ninguno dejaría los 45 inalmacenables de golpe por
- * un dato que nadie pudo declarar todavía. No es una puerta trasera: en cuanto
- * un lote abre su primer proceso, queda bajo la regla y ya no sale de ella.
+ * **Parte 1, R7 (2026-09-30).** Mira el proceso que CUBRE al lote —buscado hacia arriba—, no sólo el
+ * del propio lote: el que va a bodega es el pergamino, y su proceso vive en la cereza. Corre DENTRO
+ * de la transacción de bodega, después de `bloquearLinaje`: antes comprobaba fuera, y en el hueco
+ * otra petición podía reabrir o abrir un proceso.
  *
- * Se mira el proceso **más reciente**, no el abierto: un lote cuyo proceso se
- * cerró por encima del objetivo tampoco puede almacenarse, que es justo el caso
- * que la regla persigue.
+ * **Un lote sin proceso pasa, como hoy.** Medido el 2026-09-07: producción tenía 45 lotes y cero
+ * procesos; bloquearlos los dejaría inalmacenables por un dato que nadie pudo declarar. Hasta que
+ * la parte «Re-importar» rehaga el histórico (R9).
  */
-export async function exigeSecadoTerminado(lotId: string): Promise<void> {
-  const proceso = await prisma.lotProcess.findFirst({
-    where: { lotId },
-    orderBy: { sequenceOrder: "desc" },
+export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
+  if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
+  const cobertura = await procesoQueCubre(tx, lotId);
+  if (cobertura.estado === "sin_proceso") return;
+  if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
+  const proceso = await tx.lotProcess.findUniqueOrThrow({
+    where: { id: cobertura.vigente.id },
     include: { closingMoistureMeasurement: true },
   });
-  if (!proceso) return;
-
   if (proceso.endedAt === null) throw new LotProcessError("drying_not_finished");
+  if (proceso.closureKind === "divided") throw new LotProcessError("lote_dividido");
   if (proceso.closingMoistureMeasurement === null) throw new LotProcessError("no_closing_moisture");
-
   const medida = proceso.closingMoistureMeasurement.value.toNumber();
   const objetivo = proceso.targetMoisturePct.toNumber();
   if (medida > objetivo) throw new LotProcessError("moisture_above_target");

@@ -21,6 +21,7 @@ import { recordHarvestEvent } from "../../lib/traceability/harvest";
 import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
+import { cerrarProceso } from "../../lib/traceability/lotProcess";
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
@@ -106,7 +107,7 @@ beforeAll(async () => {
   cherryLotId = cherryLot.id;
 
   // --- 2. Fermentation: cherry lot (500 kg in) -> drying-stage lot (480 kg out) ---
-  await abrirProcesoDePrueba(operatorUserAccountId, cherryLotId);
+  const procesoE2e = await abrirProcesoDePrueba(operatorUserAccountId, cherryLotId);
   const { run: fermentationRun } = await startFermentationRun(operatorUserAccountId, {
     lotId: cherryLotId,
     startedAt: new Date("2027-01-15T10:00:00Z"),
@@ -148,6 +149,22 @@ beforeAll(async () => {
   });
   greenLotId = dryingOutputLot.id;
 
+  // --- 5. Measurement against the green lot --- (movida ANTES de «4. Storage»: Parte 1, R7. A bodega sólo entra
+  //     un lote cuyo proceso está cerrado por humedad en el objetivo, y esa medición es la que lo cierra.)
+  const humedadE2e = await recordMeasurement(operatorUserAccountId, {
+    variable: "moisture",
+    value: 11.2,
+    unit: "%",
+    occurredAt: new Date("2027-01-30T11:30:00Z"),
+    lotId: greenLotId,
+    provenanceClass: "measured_fact",
+  });
+
+  // Se cierra el proceso por humedad (Parte 1, R7). El objetivo del ayudante es 11,5 y la medición es 11,2: pasa.
+  await cerrarProceso(operatorUserAccountId, {
+    lotProcessId: procesoE2e.id, endedAt: new Date("2027-01-30T11:45:00Z"), closingMoistureMeasurementId: humedadE2e.id,
+  });
+
   // --- 4. Storage: green lot moved to the warehouse — the one stage
   //     T13's own E2E chain never exercised, so getLotReport's
   //     storageAssignments field has never actually been proven live.
@@ -158,16 +175,6 @@ beforeAll(async () => {
     startedAt: new Date("2027-01-30T12:00:00Z"),
   });
   storageAssignmentId = storageAssignment.id;
-
-  // --- 5. Measurement against the stored green lot ---
-  await recordMeasurement(operatorUserAccountId, {
-    variable: "moisture",
-    value: 11.2,
-    unit: "%",
-    occurredAt: new Date("2027-01-30T12:30:00Z"),
-    lotId: greenLotId,
-    provenanceClass: "measured_fact",
-  });
 
   // --- 6. Sample: 2 kg extracted from the green lot ---
   const sample = await createSampleFromLot(operatorUserAccountId, {
