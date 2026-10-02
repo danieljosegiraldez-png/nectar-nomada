@@ -95,7 +95,9 @@ Medido: el disparador `location_exigir_rejilla_sin_huerfanos` impide **encoger**
 
 El guardia existe en un solo sentido, y es la misma clase de defecto que la tarea 8 cerró para los rangos de bloque: una restricción que vive en TypeScript —o que sólo se comprueba al encoger— no existe para la base. Entra un disparador `BEFORE INSERT OR UPDATE` sobre `specimen` que rechace una coordenada que el tablero no tiene.
 
-**Esto vale más que el resto del documento**, porque es lo que hace fiable la respuesta a «¿se puede mapear las plantas?». Sí se puede — y hasta que exista ese guardia, se puede también mapearlas donde no existen.
+**CORREGIDO EL 2026-10-02, el mismo día:** la primera versión de este documento decía que esto «arregla algo que hoy ya puede ocurrir». **Es falso y lo dijo la medición.** Cero archivos de `app/` nombran `gridRow` —con el control de que 16 nombran `plotBlock`— y cero scripts o seeds tocan esas columnas. Así que hoy el agujero **sólo se alcanza por SQL directo**: ninguna pantalla escribe coordenadas de plantón.
+
+Lo que sí es, y es razón suficiente para ponerlo primero: **la precondición para construir el mapeo de plantas.** Las pantallas del §9 y cualquier importador futuro van a escribir esas coordenadas, y el guardia tiene que existir **antes** que ellos, no después. Un guardia añadido después hereda las filas malas que ya entraron.
 
 ### 7.4 Encoger la forma
 
@@ -131,7 +133,7 @@ No se reescribe; se corrige en su sitio y se dice aquí:
 
 ## 10.5 El orden, porque una parte no depende de las demás
 
-**§7.3 —el disparador del plantón— es independiente de todo lo demás y se puede entregar sola.** No necesita la tabla de la forma, ni el estado nuevo, ni las pantallas: es un disparador sobre `specimen` que compara contra `rowCount`/`plantsPerRow`, que ya existen en `main`. Y es la única parte de este documento que arregla algo que **hoy ya puede ocurrir**: un plantón mapeado en una celda que no existe.
+**§7.3 —el disparador del plantón— es independiente de todo lo demás y se puede entregar sola.** No necesita la tabla de la forma, ni el estado nuevo, ni las pantallas: es un disparador sobre `specimen` que compara contra `rowCount`/`plantsPerRow`, que ya existen en `main`. Va primera porque es la **precondición** de las pantallas que escriben esas coordenadas (§9), no porque arregle un fallo vivo — ver la corrección del §7.3.
 
 Va primero. El resto se encadena: la tabla de la forma (§6), la capacidad honesta (§7.1), la densidad (§8) —que necesita las celdas de la forma para derivar el área—, y las pantallas (§9) al final.
 
