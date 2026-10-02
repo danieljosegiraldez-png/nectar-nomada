@@ -172,7 +172,7 @@ describe("el proceso de un lote se lee por el resolvedor", () => {
     ["where que no es la primera clave del argumento", 'prisma.lotProcess.findFirst({ orderBy: { sequenceOrder: "desc" }, where: { lotId } })'],
     ["select antes del where", "prisma.lotProcess.findMany({ select: { id: true }, where: { lotId } })"],
     ["where multilínea", "prisma.lotProcess.findFirst({\n  where: {\n    endedAt: null,\n    lotId,\n  },\n})"],
-    ["filtro por la relación lot", "prisma.lotProcess.findMany({ where: { lot: { id: lotId } } })"],
+    ["filtro por la relación lot", "prisma.lotProcess.findMany({ where: { lot: { id: loteElegido } } })"],
     ["aggregate por lote", "prisma.lotProcess.aggregate({ where: { lotId }, _max: { sequenceOrder: true } })"],
     ["groupBy con where por lote", 'prisma.lotProcess.groupBy({ where: { lotId: { in: ids } }, by: ["closureKind"], _count: true })'],
     ["groupBy agrupando por lotId", 'prisma.lotProcess.groupBy({ by: ["lotId"], _count: true })'],
@@ -222,6 +222,9 @@ describe("el proceso de un lote se lee por el resolvedor", () => {
   ];
   it.each(DESPUES_DE_UNA_CADENA)("el quitacomentarios salta las cadenas: %s", (_nombre, fuente) => {
     expect(lecturasPorLote(fuente)).toHaveLength(1);
+  });
+  it("`://` fuera de una cadena (el texto de un JSX) no abre un comentario", () => {
+    expect(lecturasPorLote(`const a = <a>https://x.dev</a>; ${LECTURA}`)).toHaveLength(1);
   });
   it("y sigue quitando los comentarios de verdad, también tras una cadena con apóstrofo", () => {
     expect(lecturasPorLote(`/* lotProcesses: { take: 1 } */ const x = 1;`)).toHaveLength(0);
