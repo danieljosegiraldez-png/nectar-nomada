@@ -78,6 +78,18 @@ function datos(o: Partial<DatosDelTablero> = {}): DatosDelTablero {
 /** `sinAmbito`, tal como lo devuelve `datosDelTablero` (su `VACIO`): todo vacío y `sinAmbito: true`. */
 const SIN_AMBITO = datos({ sinAmbito: true, etapas: [] });
 
+/**
+ * **Un instrumento que esta cuenta VE y que no pide nada.** `instrumentosQuePidenAtencion`
+ * (`tablero.ts`) filtra por `kind === "instrument"` y por tres estados; `VERIFICADO` no es uno de
+ * ellos, así que este equipo cuenta como visible y no entra en la lista de trabajo.
+ *
+ * Hace falta desde `PENDING_IMPLEMENTATIONS/019`: antes, «ninguno pide atención» se comprobaba con
+ * la lista **vacía**, que es exactamente el caso que ahora dice otra cosa.
+ */
+const EQUIPO_VERIFICADO = {
+  id: "eq-1", name: "Potenciómetro A", kind: "instrument", verificacion: "VERIFICADO",
+} as const;
+
 async function pintar(d: DatosDelTablero): Promise<string> {
   datosActuales = d;
   const jsx = await BeneficioPage({ searchParams: Promise.resolve({}) });
@@ -154,9 +166,14 @@ describe("la página — `sinAmbito` no afirma nada que no midió", () => {
     // Hallazgo 5: `VACIO.instrumentos` es `[]` porque no se miró nada, no porque ninguno pida atención.
     expect(texto).not.toContain("Ningún instrumento pide atención");
     expect(texto).not.toContain("Instrumentos que piden atención");
-    // Control positivo: CON ámbito y sin instrumentos que pidan atención, SÍ lo dice. Sin esta fila,
-    // el `not.toContain` de arriba pasaría también si el bloque no existiera nunca.
-    const conAmbito = aTexto(await pintar(datos()));
+    // Control positivo: CON ámbito y con un instrumento VISIBLE que no pide atención, SÍ lo dice.
+    // Sin esta fila, el `not.toContain` de arriba pasaría también si el bloque no existiera nunca.
+    //
+    // **Este control pintaba `datos()` —con `instrumentos: []`— y afirmaba la frase equivocada**
+    // (`PENDING_IMPLEMENTATIONS/019`): una lista vacía CON ámbito significa «no ves ninguno», no
+    // «ninguno pide atención», y la prueba exigía la segunda. Ahora lleva un equipo visible, que es
+    // lo único que hace verdadera la frase que comprueba.
+    const conAmbito = aTexto(await pintar(datos({ instrumentos: [EQUIPO_VERIFICADO] })));
     expect(conAmbito).toContain("Ningún instrumento pide atención");
     expect(conAmbito).toContain("Dónde está el café");
     // MUTACIÓN: sacar el `<section className="nn-mill-instruments">` del `datos.sinAmbito ? null : …`
@@ -210,5 +227,74 @@ describe("la página — le pasa a la curva el perfil que rige el lote", () => {
     }
     // MUTACIÓN: quitar `perfilDelLote={datos.curva?.perfilDelLote ?? null}` de la página → el lote lavado no pinta y cae por «Criterio de Néctar Nómada».
     // MUTACIÓN: `perfilDelLote="WASHED_STANDARD"` fijo en la página → NATURAL cita «stinker» y cae.
+  });
+});
+
+/**
+ * **Una lista vacía de instrumentos tiene DOS motivos** (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * La sección se escondía sólo con `sinAmbito`. Con ámbito de lotes y cero equipos visibles
+ * —la cuenta ve lotes y no ve ningún equipo de medición— `instrumentos.length === 0` y la
+ * pantalla decía «Ningún instrumento pide atención», que se lee como «todos bien». Lo cierto es
+ * «no veo ninguno»: lo demostrado es que la consulta no recuperó nada.
+ *
+ * Las tres filas de abajo son los tres estados, y las dos primeras **tienen que salir distintas**:
+ * si dijeran lo mismo, el arreglo no mide nada.
+ *
+ * Flip-test: volver la condición a `instrumentos.length === 0 ? instrumentosNinguno : …` hace caer
+ * la primera prueba por «No ves ningún equipo de medición» y deja pasar las otras dos.
+ */
+describe("la página — «ninguno pide atención» no es «no ves ninguno» (019)", () => {
+  it("con ámbito y CERO equipos visibles dice que no ves ninguno, NO que ninguno pide atención", async () => {
+    const texto = aTexto(await pintar(datos({ instrumentos: [] })));
+    expect(texto).toContain("No ves ningún equipo de medición");
+    expect(texto).not.toContain("Ningún instrumento pide atención");
+    // Control de que SÍ estamos en la rama con ámbito: la línea de etapas se pinta.
+    expect(texto).toContain("Dónde está el café");
+  });
+
+  it("CONTROL: con un equipo visible que no pide nada, sí dice que ninguno pide atención", async () => {
+    const texto = aTexto(await pintar(datos({ instrumentos: [EQUIPO_VERIFICADO] })));
+    expect(texto).toContain("Ningún instrumento pide atención");
+    expect(texto).not.toContain("No ves ningún equipo de medición");
+  });
+
+  it("y con uno que sí pide atención lo nombra, sin ninguna de las dos frases vacías", async () => {
+    const texto = aTexto(await pintar(datos({
+      instrumentos: [{ id: "eq-2", name: "Refractómetro B", kind: "instrument", verificacion: "REVISION_VENCIDA" }],
+    })));
+    expect(texto).toContain("Refractómetro B");
+    expect(texto).not.toContain("Ningún instrumento pide atención");
+    expect(texto).not.toContain("No ves ningún equipo de medición");
+  });
+
+  /**
+   * **Esta prueba daba por bueno el defecto en su primera versión, y la escribí yo.** Afirmaba que
+   * una cuenta que ve un tanque y CERO instrumentos dijera «Ningún instrumento pide atención»,
+   * porque la condición contaba `datos.instrumentos` — una lista que lleva **todo** el equipo
+   * visible con su `kind` (`datosDelTablero.ts:516`). Eso es la misma mentira del 019 con otra
+   * cara: no hay ningún instrumento del que decir que no pide nada. La cuenta buena es
+   * `instrumentosVisibles`, que filtra por `kind`.
+   */
+  it("un tanque visible NO vuelve verdadera la frase: sin instrumentos, no ves ninguno", async () => {
+    const texto = aTexto(await pintar(datos({
+      instrumentos: [{ id: "eq-3", name: "Tanque viejo", kind: "tank", verificacion: "VERIFICADO" }],
+    })));
+    expect(texto).toContain("No ves ningún equipo de medición");
+    expect(texto).not.toContain("Ningún instrumento pide atención");
+    // Control de que el tanque SÍ estaba en los datos: si la lista hubiera llegado vacía, la
+    // aserción de arriba pasaría sin medir el caso que esta prueba existe para medir.
+    expect(texto).toContain("Dónde está el café");
+  });
+
+  it("y un instrumento visible junto a un tanque sí deja la frase en «ninguno pide atención»", async () => {
+    const texto = aTexto(await pintar(datos({
+      instrumentos: [
+        { id: "eq-3", name: "Tanque viejo", kind: "tank", verificacion: "VERIFICADO" },
+        EQUIPO_VERIFICADO,
+      ],
+    })));
+    expect(texto).toContain("Ningún instrumento pide atención");
+    expect(texto).not.toContain("No ves ningún equipo de medición");
   });
 });

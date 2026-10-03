@@ -1353,3 +1353,56 @@ describe("el mapa de unidades — una unidad ocupada por un lote que no ves lo d
     expect(texto.match(/ocupada por un lote que no ves/g) ?? []).toHaveLength(1);
   });
 });
+
+/**
+ * **«No se pudo resolver la receta» tiene que PINTARSE, y no es «no declara rango»**
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * Este guardia existe por lo que pasó con el mensaje de «varios objetivos» del 017: estaba
+ * escrito, era correcto, y **no se pintaba nunca** porque `sin_banda` cortaba la cadena de
+ * ternarios antes de llegar a él. Lo cazó una prueba de pantalla, no una lectura del código.
+ * El caso nuevo entra por la misma puerta —`juicio.tipo === "sin_banda"`— así que corre el
+ * mismo riesgo y necesita el mismo guardia.
+ *
+ * El flip-test que le toca: mover la rama de `receta_no_resuelta` DEBAJO de `sin_banda` en
+ * `CurvaDeLote.tsx` tiene que hacer caer la primera prueba de aquí.
+ */
+describe("la curva en pantalla — sin receta resuelta no se afirma nada SOBRE la receta (019)", () => {
+  const SIN_RECETA = curvaDeLote({
+    lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }],
+    objetivos: [], recetaResuelta: false, ...LIENZO,
+  });
+  const RECETA_SIN_RANGO = curvaDeLote({
+    lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }],
+    objetivos: [], recetaResuelta: true, ...LIENZO,
+  });
+
+  it("dice que no se pudo resolver, y NO dice que la receta no declara rango", async () => {
+    const texto = aTexto(await pintarCurva(SIN_RECETA));
+    expect(texto).toContain("No se pudo saber qué receta aplica");
+    expect(texto).not.toContain("no tiene rango declarado en la receta");
+  });
+
+  // **El control que TIENE que salir distinto.** Las dos curvas llevan la MISMA lista vacía de
+  // objetivos y las mismas lecturas: lo único que cambia es si la receta se resolvió. Si las dos
+  // pintaran lo mismo, la prueba de arriba pasaría con el defecto puesto.
+  it("CONTROL: la MISMA lista vacía con la receta resuelta sí dice que no declara rango", async () => {
+    const texto = aTexto(await pintarCurva(RECETA_SIN_RANGO));
+    expect(texto).toContain("no tiene rango declarado en la receta");
+    expect(texto).not.toContain("No se pudo saber qué receta aplica");
+  });
+
+  it("los puntos se siguen dibujando: «sin banda» no es «no dibujé nada»", async () => {
+    const html = await pintarCurva(SIN_RECETA);
+    expect(marcas(html)).toHaveLength(2);
+  });
+
+  // El rótulo accesible del `<desc>` también tiene que decirlo: un lector de pantalla no ve el
+  // párrafo de abajo si el `<desc>` ya afirmó otra cosa.
+  it("el rótulo accesible lo dice igual, y con la frase corta que le toca", async () => {
+    // El `<desc>` lleva `id`, así que el patrón no puede ser `<desc>` a secas.
+    const desc = /<desc[^>]*>([\s\S]*?)<\/desc>/.exec(await pintarCurva(SIN_RECETA))![1]!;
+    expect(desc).toContain("no se pudo resolver qué receta aplica");
+    expect(desc).not.toContain("sin rango declarado en la receta");
+  });
+});

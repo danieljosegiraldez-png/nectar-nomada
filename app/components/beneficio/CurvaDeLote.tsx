@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ultimaLectura, type AlcanceDeLaBanda, type Curva } from "../../../lib/beneficio/curvaDeLote";
+import {
+  ultimaLectura,
+  type AlcanceDeLaBanda,
+  type Curva,
+  type EleccionDeObjetivo,
+} from "../../../lib/beneficio/curvaDeLote";
 import { ejesDeLaCurva } from "../../../lib/beneficio/ejesDeLaCurva";
 import type { ClaveDePerfil } from "../../../lib/beneficio/perfiles";
 import { riesgoDeEsperar } from "../../../lib/beneficio/riesgoDeEsperar";
@@ -71,6 +76,23 @@ const claveDelInstante = (alcance: "al_inicio" | "al_final", fuera: boolean) =>
     : fuera
       ? "curvaFinalFuera"
       : "curvaFinalCumple";
+
+/**
+ * **Por qué no hay banda, en tres frases que no dicen lo mismo** (`PENDING_IMPLEMENTATIONS/019`).
+ * Las tres llegan aquí como `juicio.tipo === "sin_banda"`, y antes las tres salían como «no tiene
+ * rango declarado en la receta» — una afirmación sobre la receta. Sólo UNA de las tres la ha
+ * mirado:
+ *
+ * - `receta_no_resuelta`: no se supo qué receta aplicaba. No se afirma nada de ella.
+ * - `varios_sin_trayectoria`: declara dos objetivos de instantes distintos y no se elige.
+ * - `sin_objetivo_declarado`: se consultó y no declara rango. Aquí sí es verdad.
+ */
+const claveCortaSinBanda = (tipo: EleccionDeObjetivo["tipo"]) =>
+  tipo === "receta_no_resuelta"
+    ? "curvaRecetaNoResueltaCorto"
+    : tipo === "varios_sin_trayectoria"
+      ? "curvaVariosObjetivosCorto"
+      : "curvaSinBandaCorto";
 
 const DOCUMENTO_DEL_RIESGO = "docs/beneficio/10_ph_fermentation.md";
 
@@ -316,10 +338,9 @@ export async function CurvaDeLote({
               ` · ${t(juicio.alcance === "al_inicio" ? "curvaSoloInicialCorto" : "curvaSoloFinalCorto")}`
             : null}
           {juicio.tipo === "extremo_ambiguo" ? ` · ${t("curvaExtremoAmbiguoCorto")}` : null}
-          {/* Con dos objetivos declarados, «sin rango declarado» sería falso: declara dos. */}
-          {juicio.tipo === "sin_banda"
-            ? ` · ${t(curva.eleccion.tipo === "varios_sin_trayectoria" ? "curvaVariosObjetivosCorto" : "curvaSinBandaCorto")}`
-            : null}
+          {/* Con dos objetivos declarados, «sin rango declarado» sería falso: declara dos. Y sin
+              receta resuelta también lo sería: nadie la consultó (019). */}
+          {juicio.tipo === "sin_banda" ? ` · ${t(claveCortaSinBanda(curva.eleccion.tipo))}` : null}
           {juicio.tipo === "banda_de_ancho_cero" ? ` · ${t("curvaBandaAnchoCeroCorto")}` : null}
           {juicio.tipo === "banda_al_reves" ? ` · ${t("curvaBandaAlRevesCorto")}` : null}
         </desc>
@@ -400,7 +421,16 @@ export async function CurvaDeLote({
         rango declarado» —eso sería falso—. Con el mensaje puesto más abajo, en la rama larga, no se
         pintaba nunca; lo cazó el guardia de pantalla de este cambio.
       */}
-      {curva.eleccion.tipo === "varios_sin_trayectoria" ? (
+      {/*
+        **También va ANTES de `sin_banda`, por lo mismo que el de arriba** (019). Sin corrida
+        abierta nadie consultó la receta, así que «no tiene rango declarado» sería una afirmación
+        sobre algo que no se miró. Si este caso cayera en la rama larga no se pintaría nunca:
+        `sin_banda` corta la cadena, y eso es exactamente lo que le pasó al mensaje de «varios
+        objetivos» hasta que lo cazó su guardia de pantalla.
+      */}
+      {curva.eleccion.tipo === "receta_no_resuelta" ? (
+        <p className="nn-warn nn-curva-receta-no-resuelta">{t("curvaRecetaNoResuelta")}</p>
+      ) : curva.eleccion.tipo === "varios_sin_trayectoria" ? (
         <p className="nn-warn nn-curva-varios-objetivos">{t("curvaVariosObjetivos")}</p>
       ) : juicio.tipo === "sin_banda" ? (
         <p className="nn-warn nn-curva-sin-banda">{t("curvaSinBanda")}</p>
