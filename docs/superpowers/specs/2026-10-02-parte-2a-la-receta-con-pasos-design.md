@@ -2,7 +2,8 @@
 
 **Fecha:** 2026-10-02 · **Estado:** diseño aprobado por Daniel en conversación, sección por sección;
 **corregido tras dos revisiones adversarias** (Codex y un revisor Claude, §11); pendiente de su
-lectura del spec escrito. **Base:** escrito sobre `origin/main` `85eab6da`. Depende de la Parte 1,
+lectura del spec escrito. **Base:** escrito sobre `origin/main` `85eab6da`; **vuelto a medir el
+2026-10-03 sobre la Parte 1 ya construida** (§12), con tres decisiones nuevas de Daniel. Depende de la Parte 1,
 que vive en la rama `recetas-base` (sin fusionar al escribir esto), y de su diseño general, en la
 misma rama:
 
@@ -35,9 +36,10 @@ coordinadora): la Parte 1 sale como está aprobada, con la receta opcional, y la
 con la receta libre, que necesita los pasos para armar su borrador. Ver §5.
 
 El desenlace de secado «salida a tratamiento» (`DryingOutcome`) **no es de la Parte 2**: va a la
-Parte 1 por la coordinadora. **La 2a no depende de él para unir registros a pasos**: hoy un secado
-que se corta para un tratamiento se termina con `abandoned` o `interrupted`, y su corrida sigue
-unida a su paso. Lo que ese desenlace arregla es que la etiqueta diga la verdad. Nota: el diseño de
+Parte 1 por la coordinadora. **La 2a no depende de él para unir registros a pasos**: la corrida
+sigue unida a su paso se termine como se termine. (Corregido el 2026-10-03: este párrafo decía que
+hoy un secado cortado se termina con `abandoned` o `interrupted`; el servicio lo admite, pero
+**ninguna pantalla escribe el desenlace**.) Lo que ese desenlace arregla es que la etiqueta diga la verdad. Nota: el diseño de
 la Parte 1 (R7) dice que salir de secado a un tratamiento «no necesita ninguna acción nueva»; la
 decisión de Daniel del 2026-10-02 lo corrige, y ese texto lo actualiza la coordinadora.
 
@@ -110,10 +112,10 @@ Tabla nueva `ProcessRecipeStep`, hija de `ProcessRecipeVersion`:
 | Grupo | Campos |
 |---|---|
 | Identidad | `seq` (único por versión), `stepType` (catálogo nuevo `tipo_paso`), `intencion` (texto corto), `opcional` |
-| Ejes — **catálogos existentes** | A `estadoFruto` → `estado_cereza`, y `mucilagoRetenidoPct`; B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; `recipiente` → `recipiente` |
-| Ejes — catálogos nuevos | F `fisico` (agitación, ultrasonido…), G `modoSecado` (cama africana, patio, marquesina…) |
-| Adiciones (E) | filas hijas: sustancia (→ `sustrato_anadido`), cantidad, unidad, `momento: pre_verde | post_verde` |
-| Requisitos (para la 2c) | `capacidadesRequeridas`: lista de valores del catálogo nuevo `capacidad` (sellable, válvula, control de temperatura, oscuridad…). La 2a lo guarda; la comprobación es de la 2c |
+| Ejes — **vocabulario existente** | A `estadoFruto` → `estado_cereza`, y `mucilagoQuitadoPct` (**% quitado**, la base de la casa: ADR-181 #12; lavado = 100, honey = 0); B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; G `modoSecado` → el enum **`DryingEnvironment`** que ya usan las instalaciones (corregido el 2026-10-03: no es un catálogo nuevo) |
+| Ejes — catálogo nuevo | F `fisico`, **sólo** con lo que no existe en otro sitio: ninguno, agitación, presión, ultrasonido, ozono/UV. El frío va por `manejo_temperatura`; congelar y las inmersiones son tipos de paso |
+| Adiciones (E) | filas hijas con la **categoría** (`sustrato_anadido`; en una inoculación, la cepa de `levadura_cultivo`), cantidad, unidad y `momento: pre_verde | post_verde`. **El material concreto se anota al ejecutar**, como consumo de la corrida (`MaterialConsumptionEntry`, que ya existe): un material es de una organización y una plantilla sirve en cualquiera (decisión de Daniel, 2026-10-03) |
+| Requisitos (para la 2c) | `capacidadesRequeridas`: lista de valores del catálogo nuevo `capacidad` (sellable, válvula, control de temperatura, oscuridad…). La 2a lo guarda; la comprobación es de la 2c. **El paso no nombra ningún equipo ni recipiente** (decisión de Daniel, 2026-10-03): el catálogo `recipiente` son equipos concretos (Tanque I, Cooler I…), y el equipo se elige al ejecutar, como hoy |
 | Valores por defecto | `horasMin`, `horasSugeridas`, `horasMax`; sólo secado: `volteoCadaHoras`, `humedadMinPct`, `humedadMaxPct` |
 | Fin (D2) | `finPorTiempo` (sí/no: el paso termina al cumplir `horasSugeridas` desde su inicio) + filas de fin: variable, operador, valor, unidad; `reglaDeFin: primero | todas`. Con tiempo y varias filas, «primero» = la primera condición que se cumple; «todas» = todas, incluido el tiempo |
 | Plan de medición | **`ProcessTarget` reutilizado** con su `everyHours`, más `recipeStepId` (§3.2) |
@@ -187,8 +189,11 @@ Ninguna de las dos escribe en la base.
 (anulable). **Los `stage_change` no se tocan**: los crea la corrida al empezar y terminar, y el paso
 lo cumple la corrida, no su transformación técnica.
 
-Para que el despulpado y el lavado se puedan registrar, sus valores entran en el catálogo de
-intervenciones (§7).
+**El acto es el tipo de paso** (decisión de Daniel, 2026-10-03). Hoy el despulpado y el lavado no se
+pueden registrar: `LotProcessIntervention` exige un valor de catálogo, y sus catálogos son ejes
+(oxígeno, medio, cereza flotada…), no actos. Con `stepType`, el valor de catálogo pasa a ser
+**opcional** y sigue diciendo el «cómo» (con qué medio se lavó). No nace ninguna lista paralela de
+actos: era el `intervencion_de_proceso` que Daniel descartó el 2026-09-07.
 
 ### 4.2 Guardián de coherencia — bloquea
 
@@ -312,17 +317,21 @@ Daniel: «puedo escoger un proceso o inventar un proceso, pero debo mantenerlo d
 
 **Se amplían los catálogos que ya existen; no se crean paralelos.**
 
-- **Nuevos, porque no existe nada parecido:** `tipo_paso` (los 23 + `prefermentacion`), `fisico`,
-  `modo_secado`, `capacidad` (para la 2c).
+- **Nuevos, porque no existe nada parecido:** `tipo_paso` (los 23 + `prefermentacion`), `fisico`
+  (sólo lo que no está en otro sitio, §3) y `capacidad` (para la 2c). **`modo_secado` no:** ya
+  existe como el enum `DryingEnvironment` (corregido el 2026-10-03).
 - **Valores nuevos en catálogos existentes:**
-  - `recipiente`: cama africana, sacos de cosecha (fiebre), bolsa anaeróbica.
-  - `fuente_microbiana`: mosto propio, bioprotección, atomizado. «Mosto de otro fermento» **no** es
-    valor nuevo: es `mosto_de_otro_lote` de `medio_lavado`, y se pone como alias.
-  - `estado_cereza`: los estados de mucílago que aún falten (en mucílago, lavado).
-  - El catálogo de intervenciones gana los valores de despulpado, desmucilaginado y lavado, para que
-    `LotProcessIntervention` los registre (4.1).
-- **Sinónimos del paquete como alias** (`aliasOf`): mosto = mossto = lixiviado = «previous-batch
-  starter» → `doble_mosto` / `mosto_de_otro_lote` según el caso.
+  - `fuente_microbiana`: bioprotección y atomizado, si el plan los mide ausentes. «Mosto propio» ya
+    es `mosto_propio` de `medio_lavado`, y «mosto de otro fermento» es `mosto_de_otro_lote` del mismo
+    catálogo: **un alias no cruza catálogos** (la semilla y el servicio lo rechazan), así que esos
+    sinónimos van al archivo de referencias del paquete, sólo para mostrar.
+  - `estado_cereza`: los estados del eje A que falten (en mucílago, lavado…). El formulario de abrir
+    proceso los ofrecerá también: son estados válidos al abrir.
+  - `recipiente` **no gana valores** (decisión de Daniel, 2026-10-03): son equipos concretos, y el
+    paso declara capacidades (§3).
+  - El catálogo de intervenciones **no gana actos**: el acto es el tipo de paso (§4.1).
+- **Sinónimos del paquete como alias** (`aliasOf`), **sólo dentro del mismo catálogo**: mosto =
+  mossto = lixiviado = «previous-batch starter» → `doble_mosto` en `sustrato_anadido`.
 - **Definiciones de la casa** en `definition`:
   - **Lavado:** a la cama de secado sin nada de mucílago; si llega con mucílago es semi-lavado.
   - **Honey:** 100 % del mucílago retenido; con menos, semi-lavado.
@@ -398,3 +407,36 @@ antes de corregir; ninguno tocaba una decisión de Daniel.
 | Trilla y tuestes caían como desviación | §4.4 |
 | Varias recepciones por lote | §4.5 |
 | Pruebas que pasaban vacías | §8: cada una con su control |
+
+## 12. Vuelto a medir sobre la Parte 1 (2026-10-03)
+
+Antes del plan, seis lentes independientes midieron de nuevo el §1 y el código que la 2a toca, sobre la
+Parte 1 ya construida (rama `recetas-base`, PR #626). Las afirmaciones del §1 siguen siendo ciertas en
+lo esencial; sus números de línea se movieron y el plan cita los de hoy. Lo que cambió el diseño:
+
+| Hallazgo medido | Qué cambia | Quién decide |
+|---|---|---|
+| El despulpado y el lavado no se pueden registrar: la intervención exige un valor de catálogo y sus catálogos son ejes, no actos | §4.1: el acto es el tipo de paso; el valor de catálogo pasa a opcional | **Daniel** |
+| Un material consumible es de una organización; una plantilla sirve en todas | §3: la adición guarda la categoría; el material se anota al ejecutar | **Daniel** |
+| El catálogo `recipiente` son equipos concretos | §3: el paso declara capacidades, no un equipo | **Daniel** |
+| `modo_secado` ya existe como enum `DryingEnvironment` | §3 y §7: se usa ése | controlador |
+| El eje F se solapa con `manejo_temperatura` y con tipos de paso | §3: `fisico` sólo con lo que no existe en otro sitio | controlador |
+| La casa mide el mucílago **quitado** (ADR-181 #12); el paquete, el retenido | §3: `mucilagoQuitadoPct` | controlador |
+| Un alias no cruza catálogos | §7: esos sinónimos van al archivo de referencias | controlador |
+| La receta obligatoria rompe ~160 aperturas de prueba y la demo de la semilla | el plan da a las pruebas una receta de fixture y abre la demo con receta | controlador |
+| Un reproceso con la misma receta heredaría lo ejecutado arriba si el avance sólo mira la versión | §4.3: el avance sigue `derivedFromLotProcessId` mientras el origen no sea `original` | controlador |
+| `compareRunToTargets` es un tercer lector de metas que el §3.2 no nombraba | lee las metas del paso de la corrida | controlador |
+| `registrarIntervencion` y `recordFermentationIntervention` deciden fuera de una transacción | pasan a decidir dentro, con el linaje bloqueado; la segunda gana auditoría | controlador |
+| Una corrida termina por **tres** puertas (las dos `end…` y bajar la última bandeja) | las lecturas de cierre entran por las tres | controlador |
+
+Las demás decisiones técnicas del plan (nombres de la Libre, filtro de Libres en los selectores, permiso
+para publicar y convertir, plantillas, orden de bloqueos, textos de los errores de receta, referencias
+con todas sus autoridades) están escritas con su porqué en el plan.
+
+**Nombres nuevos para que Daniel los revise:** `ProcessRecipeStep`, `stepType`, `recipeStepId`,
+`motivoDesviacion`, `esLibre`, `motivoDeLibre`, `origenDeRecetaVersionId`, `lecturasDeCierre`,
+`derivadaDeVersionId`, `capacidadesRequeridas`, `mucilagoQuitadoPct`, los catálogos `tipo_paso`,
+`fisico` y `capacidad`, y los códigos `sin_receta`, `paso_de_otra_receta`, `paso_no_corresponde`,
+`desviacion_sin_motivo` y `paso_de_otra_version`. Ninguno está en `03_public_api.md`, que no cubre las
+recetas; siguen el estilo de la Parte 1, que nombró en español con el visto bueno de Daniel
+(`00_reglas_del_modulo.md` §4 pide inglés).
