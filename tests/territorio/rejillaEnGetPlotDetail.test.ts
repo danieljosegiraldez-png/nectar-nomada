@@ -43,7 +43,16 @@ afterEach(async () => {
   formaIds = [];
   await prisma.location.update({
     where: { id: parcela.id },
-    data: { gridOrigin: null, rowCount: null, plantsPerRow: null, rowSpacingMeters: null },
+    // `plantSpacingMeters` y `areaHectares` también: las pruebas de la densidad los
+    // ponen, y dejarlos puestos cambiaría el resultado de las que corren después.
+    data: {
+      gridOrigin: null,
+      rowCount: null,
+      plantsPerRow: null,
+      rowSpacingMeters: null,
+      plantSpacingMeters: null,
+      areaHectares: null,
+    },
   });
 });
 
@@ -183,6 +192,60 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
     await siembra(m.id, 70);
     const d = await getPlotDetail(usuario.userAccountId, m.id);
     expect(d.rejilla).toMatchObject({ status: "ok", capacidad: 80, contadas: 70, diferencia: 10 });
+  });
+
+  /**
+   * **La densidad por marco, cableada** (D10, 2026-10-02). El cableado puede escribirse
+   * mal de dos maneras: pasar `areaHectares` en vez de las celdas de la forma —y entonces
+   * la densidad real sale baja en un lote irregular, por la roca y el camino—, o no pasar
+   * los dos metros y dejar `sin_marco` siempre.
+   *
+   * El fixture declara `rowSpacingMeters` pero **no** `plantSpacingMeters`, así que este
+   * primer caso es el de «falta un metro» — y es además el control del siguiente.
+   */
+  it("con la rejilla y la forma pero sin el metro entre plantas dice sin_marco", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad.status).toBe("sin_marco");
+  });
+
+  /**
+   * Con los dos metros, el marco de la Pink Bourbon —1,8 × 2,5— da **2.222 plantas/ha de
+   * diseño**, y el área sale de las 200 celdas del tablero lleno: 200 × 4,5 m² = 900 m² =
+   * 0,09 ha. Con 150 contadas, la real son 1.667.
+   */
+  it("con los dos metros da la diseñada, el área DERIVADA de la rejilla y la real", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({ where: { id: parcela.id }, data: { plantSpacingMeters: 1.8 } });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad).toMatchObject({ status: "ok", disenada: 2222, celdas: 200 });
+    if (d.densidad.status !== "ok") throw new Error("el status cambió: lo de abajo no mediría");
+    expect(d.densidad.areaHectareas).toBeCloseTo(0.09, 4);
+    expect(d.densidad.real).toBeCloseTo(1667, 0);
+  });
+
+  /**
+   * **El control de que el área NO sale de `areaHectares`.** `crearParcela` no le pone
+   * área, así que si el cableado la usara este caso daría `sin_area` o un número distinto;
+   * con las celdas de la forma da 0,09 ha pase lo que pase con la columna del polígono.
+   */
+  it("el control: el área derivada no depende de areaHectares", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({
+      where: { id: parcela.id },
+      // Un área de polígono ABSURDA a propósito: si el cableado la usara, la real se iría.
+      data: { plantSpacingMeters: 1.8, areaHectares: 99 },
+    });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    if (d.densidad.status !== "ok") throw new Error("el status cambió: lo de abajo no mediría");
+    expect(d.densidad.areaHectareas, "0,09 ha de la rejilla, no 99 del poligono").toBeCloseTo(0.09, 4);
+    expect(d.densidad.real).toBeCloseTo(1667, 0);
   });
 
   /**
