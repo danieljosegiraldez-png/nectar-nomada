@@ -60,6 +60,11 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   // El MISMO predicado que la ficha de la parcela y que `createMicrolot`: antes bastaba con que el
   // lugar fuera una parcela, así que el botón aparecía también a quien el servidor iba a negar.
   const puedeSubdividir = await puedeSubdividirParcela(user.userAccountId, location.id);
+  // Una microparcela es un `plot` cuyo padre es OTRO `plot` (spec fincas y
+  // parcelas §3.3) — el mismo predicado que usa `fincaTrampas.ts`. Se mira el
+  // TIPO del padre, no si hay padre: una parcela de primer nivel también lo
+  // tiene, y es el sitio.
+  const esMicroparcela = location.parentLocation?.locationType === "plot";
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
@@ -197,17 +202,29 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
           cuelgan los rangos de los bloques de más abajo. */}
       <section className="nn-section" id="rejilla">
         <h2>{t("rejillaHeading")}</h2>
-        <RejillaForm
-          locationId={location.id}
-          rejilla={{
-            gridOrigin: location.gridOrigin,
-            rowCount: location.rowCount,
-            plantsPerRow: location.plantsPerRow,
-            // Decimal como cadena, igual que el área: `Number()` sobre un
-            // Decimal(5,2) puede redondear.
-            rowSpacingMeters: location.rowSpacingMeters?.toString() ?? null,
-          }}
-        />
+        {/* **D3: una sola numeración, la de la parcela.** A una microparcela —un
+            `plot` cuyo padre es otro `plot`— no se le ofrece declarar rejilla: lo
+            que le toca es su RANGO dentro de la de su madre (diseño §4.2). Hasta
+            el 2026-10-03 el formulario se montaba aquí sin condición y guardaba,
+            y entonces `core.raiz_de_la_numeracion` coronaba a la microparcela
+            como raíz propia: dos numeraciones en una parcela. El servicio lo
+            rechaza desde el mismo cambio (`rejilla_en_microparcela`); esto es
+            para no ofrecer lo que el servidor va a negar. */}
+        {esMicroparcela ? (
+          <p className="nn-muted">{t("rejillaDeLaMadre", { value: location.parentLocation?.name ?? "" })}</p>
+        ) : (
+          <RejillaForm
+            locationId={location.id}
+            rejilla={{
+              gridOrigin: location.gridOrigin,
+              rowCount: location.rowCount,
+              plantsPerRow: location.plantsPerRow,
+              // Decimal como cadena, igual que el área: `Number()` sobre un
+              // Decimal(5,2) puede redondear.
+              rowSpacingMeters: location.rowSpacingMeters?.toString() ?? null,
+            }}
+          />
+        )}
       </section>
 
       <section className="nn-section" id="calicatas">

@@ -231,6 +231,108 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
   });
 });
 
+/**
+ * **Una microparcela no puede declarar rejilla propia (D3).**
+ *
+ * No basta con que `createMicrolot` no la copie —eso es lo de arriba—: hasta el
+ * 2026-10-03 nada impedía ponérsela DESPUÉS, y la pantalla de ajustes ofrecía el
+ * formulario. Medido en vivo ese día contra `nectar_ci_area`, como operaria de
+ * finca: se guardó `sureste`, 3×5, 1,20 m en una microparcela, y a partir de ahí
+ * `core.raiz_de_la_numeracion` devolvía **la microparcela misma** —esa función
+ * corona raíz a cualquier sitio con `row_count` propio— en vez de su madre. Dos
+ * numeraciones dentro de una parcela es exactamente lo que D3 prohíbe.
+ *
+ * El guardia es el que llama al SERVICIO con la entrada hostil, no la pantalla:
+ * la frontera es el servicio (SECURITY.md §2), y una pantalla condicionada se
+ * salta con una petición.
+ */
+describe("una microparcela no puede declarar rejilla propia (D3)", () => {
+  it("el servicio rechaza ponerle las cuatro, con su código propio", async () => {
+    const m = await microlote("Rejilla prohibida");
+    locationIds.push(m.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA }),
+      "rejilla_en_microparcela",
+    );
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.rowCount).toBeNull();
+  });
+
+  /**
+   * **El control positivo, y discrimina.** Si el guardia estuviera rechazando
+   * cualquier rejilla, este caso caería: es la MISMA llamada, con los mismos
+   * cuatro campos, sobre una parcela de primer nivel. Y se comprueba un valor
+   * DISTINTO del que `beforeAll` dejó puesto, para que «no cambió nada» no pueda
+   * leerse como «se guardó».
+   */
+  it("la misma llamada sobre la parcela madre SÍ guarda", async () => {
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: parcela.id,
+      gridOrigin: "sureste",
+      rowCount: 7,
+      plantsPerRow: 11,
+      rowSpacingMeters: 1.2,
+    });
+    const despues = await prisma.location.findUnique({ where: { id: parcela.id } });
+    expect(despues?.gridOrigin).toBe("sureste");
+    expect(despues?.rowCount).toBe(7);
+    expect(despues?.plantsPerRow).toBe(11);
+  });
+
+  /**
+   * **Vaciarla sí se puede, y hace falta.** Nada lo impedía hasta hoy, así que
+   * puede haber microparcelas con rejilla puesta; si el guardia bloqueara también
+   * el camino de vuelta, quedarían atrapadas. Se le pone por SQL directo —el
+   * servicio ya no deja— y se comprueba que el servicio la deja quitar.
+   */
+  it("una microparcela que YA tiene rejilla puede quedarse sin ella", async () => {
+    const m = await microlote("Rejilla heredada de antes");
+    locationIds.push(m.id);
+    await prisma.location.update({
+      where: { id: m.id },
+      data: { gridOrigin: "noreste", rowCount: 2, plantsPerRow: 3, rowSpacingMeters: 1.1 },
+    });
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: m.id,
+      gridOrigin: null,
+      rowCount: null,
+      plantsPerRow: null,
+      rowSpacingMeters: null,
+    });
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.gridOrigin).toBeNull();
+    expect(despues?.rowCount).toBeNull();
+  });
+
+  /**
+   * **La consecuencia, preguntada a la función que la decide.** Lo que importa no
+   * es que la columna quede nula sino que la numeración siga siendo una: con el
+   * guardia puesto, la raíz de una microparcela es su madre. Y el control está
+   * dentro del mismo caso — la raíz de la madre es ella misma —, porque una
+   * función que devolviera siempre lo mismo pasaría la primera mitad sola.
+   */
+  it("la raíz de la numeración de una microparcela es su madre", async () => {
+    const m = await microlote("Raíz de la numeración");
+    locationIds.push(m.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA }),
+      "rejilla_en_microparcela",
+    );
+    const filas = await prisma.$queryRaw<{ raiz: string | null }[]>`
+      select core.raiz_de_la_numeracion(${m.id}::uuid) as raiz`;
+    const filasDeLaMadre = await prisma.$queryRaw<{ raiz: string | null }[]>`
+      select core.raiz_de_la_numeracion(${parcela.id}::uuid) as raiz`;
+    // Que la consulta devolviera UNA fila se afirma antes de leerla: con cero
+    // filas, `filas[0]?.raiz` sería `undefined` y `expect(undefined).not.toBe(m.id)`
+    // pasaría — un verde sobre nada medido.
+    expect(filas).toHaveLength(1);
+    expect(filasDeLaMadre).toHaveLength(1);
+    expect(filas[0]?.raiz).toBe(parcela.id);
+    expect(filasDeLaMadre[0]?.raiz).toBe(parcela.id);
+    expect(filas[0]?.raiz).not.toBe(m.id);
+  });
+});
+
 describe("el rango de la microparcela, al crearla (D3)", () => {
   it("acepta un rango que cabe — el control positivo", async () => {
     const m = await microlote("Con rango", {

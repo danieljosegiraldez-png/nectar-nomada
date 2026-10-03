@@ -645,7 +645,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       // (`specimen:view` sobre esta Location), no para mostrarla.
       classification: true,
       organization: { select: { name: true } },
-      parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
+      // `locationType` del PADRE: es lo único que distingue una microparcela —un
+      // `plot` hijo de otro `plot`— de una parcela de primer nivel, y la pantalla
+      // lo necesita para no ofrecerle la rejilla a quien D3 no se la da.
+      parentLocation: { select: { id: true, name: true, locationType: true, organization: { select: { name: true } } } },
     },
   });
   // `requireLocationAttributeAccess` already refuses a missing id, so reaching
