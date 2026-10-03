@@ -628,7 +628,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
       // La forma declarada de lo plantado (D9). Cuelga de quien pone la numeración, así
       // que si esta Location no la tiene se lee la de la madre, unas líneas más abajo.
-      formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
+      formaDeclarada: { select: { id: true, rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
     },
   });
   // `requireLocationAttributeAccess` already refuses a missing id, so reaching
@@ -850,7 +850,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
           select: {
             rowCount: true,
             plantsPerRow: true,
-            formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
+            formaDeclarada: { select: { id: true, rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
           },
         });
   const base =
