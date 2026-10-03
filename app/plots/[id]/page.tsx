@@ -109,7 +109,6 @@ export default async function PlotDetailPage({
   const pendiente = pendienteDeLaParcela({
     hoy,
     zona: location.timezone,
-    areaHectares: location.areaHectares == null ? null : Number(location.areaHectares),
     cohortesActivas: activas,
     estados,
     jornadas,
@@ -147,10 +146,6 @@ export default async function PlotDetailPage({
       }
       case "muestras_sin_resultado":
         return t("plotDashboardAlertAwaitingResults", { suelo: aviso.suelo, foliar: aviso.foliar });
-      case "sin_area":
-        return t("plotDashboardAlertNoArea");
-      case "area_no_valida":
-        return t("plotDashboardAlertBadArea");
       case "siembras_sin_conteo":
         return t("plotDashboardAlertNoCount", { n: aviso.n });
       case "siembras_sin_marcar":
