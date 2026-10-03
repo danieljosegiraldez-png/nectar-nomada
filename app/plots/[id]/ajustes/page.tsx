@@ -14,6 +14,7 @@ import { PlotAttributesForm } from "../../../components/traceability/PlotAttribu
 import { RejillaForm } from "../../../components/traceability/RejillaForm";
 import { RangosDeBloqueForm } from "../../../components/traceability/RangosDeBloqueForm";
 import { FormaDelLoteForm } from "../../../components/traceability/FormaDelLoteForm";
+import { RangoDeMicroparcelaForm } from "../../../components/traceability/RangoDeMicroparcelaForm";
 import { celdasDeLaForma, tableroDe } from "../../../../lib/traceability/formaDeLaParcela";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
@@ -228,7 +229,33 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
                 location.formaDeclarada,
                 tableroDe({ rowCount: location.rowCount, plantsPerRow: location.plantsPerRow }),
               )}
-              celdasDelTablero={location.rowCount * location.plantsPerRow}
+                celdasDelTablero={location.rowCount * location.plantsPerRow}
+            />
+          </>
+        ) : null}
+
+        {/* **El rango de una microparcela: el §6 del diseño del 2026-10-01**, que lo pedía
+            y nunca se construyó. Aparece cuando esta ubicación NO tiene rejilla propia y
+            su madre SÍ — o sea, cuando es una microparcela de una parcela numerada. Sin
+            esto, la comparación devolvía `sin_rango` y ese estado no tenía salida: el
+            sistema pedía un dato que ninguna pantalla podía dar. */}
+        {location.rowCount == null &&
+        location.parentLocation?.rowCount != null &&
+        location.parentLocation.plantsPerRow != null ? (
+          <>
+            <h3>{t("rangoMicroSubtitulo")}</h3>
+            <RangoDeMicroparcelaForm
+              locationId={location.id}
+              rango={{
+                rangeRowFrom: location.rangeRowFrom,
+                rangeRowTo: location.rangeRowTo,
+                rangePlantFrom: location.rangePlantFrom,
+                rangePlantTo: location.rangePlantTo,
+              }}
+              rejillaDeLaMadre={{
+                rowCount: location.parentLocation.rowCount,
+                plantsPerRow: location.parentLocation.plantsPerRow,
+              }}
             />
           </>
         ) : null}

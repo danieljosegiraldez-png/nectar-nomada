@@ -625,7 +625,18 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       // (`specimen:view` sobre esta Location), no para mostrarla.
       classification: true,
       organization: { select: { name: true } },
-      parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
+      parentLocation: {
+        select: {
+          id: true,
+          name: true,
+          organization: { select: { name: true } },
+          // **La rejilla de la madre**, para que la pantalla de ajustes pueda ofrecer el
+          // rango de una microparcela y decir contra qué tablero se cuenta, sin que el
+          // operario tenga que irse a buscarlo (§6 del diseño del 2026-10-01).
+          rowCount: true,
+          plantsPerRow: true,
+        },
+      },
       // La forma declarada de lo plantado (D9). Cuelga de quien pone la numeración, así
       // que si esta Location no la tiene se lee la de la madre, unas líneas más abajo.
       formaDeclarada: { select: { id: true, rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },

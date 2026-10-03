@@ -2872,6 +2872,45 @@ export async function guardarRejillaAction(
 }
 
 /**
+ * El rango de una microparcela: **dónde está dentro de la numeración de su parcela** (D3).
+ *
+ * §6 del diseño del 2026-10-01, que lo pedía y nunca se construyó. Hasta hoy una
+ * microparcela no podía decir qué trozo ocupa desde la aplicación —medido el 2026-10-02:
+ * cero archivos de `app/` escribían `rangeRowFrom`— así que el estado `sin_rango` de la
+ * comparación **no tenía salida**: el sistema decía «declara el rango» y no había dónde.
+ *
+ * Misma familia que `guardarRejillaAction` y el mismo servicio: `undefined` no toca la
+ * columna, así que el formulario de la rejilla no borra este rango ni éste aquélla.
+ */
+export async function guardarRangoDeMicroparcelaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateLocationAttributes(user.userAccountId, {
+      locationId,
+      // Vacío es «sin rango», nunca cero: `Number("")` es 0, y una microparcela de la
+      // hilera 0 a la 0 no existe (ADR-080).
+      rangeRowFrom: emptyToNullNumber(formData.get("rangeRowFrom")),
+      rangeRowTo: emptyToNullNumber(formData.get("rangeRowTo")),
+      rangePlantFrom: emptyToNullNumber(formData.get("rangePlantFrom")),
+      rangePlantTo: emptyToNullNumber(formData.get("rangePlantTo")),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
  * Añadir un rango a un bloque, con los solapes que D7 permite **como aviso**.
  *
  * El servicio devuelve con quién se solapa y cuántas celdas comparte; aquí se
