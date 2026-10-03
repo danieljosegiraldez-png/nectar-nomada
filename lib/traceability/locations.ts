@@ -366,6 +366,18 @@ export interface UpdateLocationAttributesInput {
   rowCount?: number | null;
   plantsPerRow?: number | null;
   rowSpacingMeters?: number | null;
+  /**
+   * El rango de la microparcela: **dónde está dentro de la numeración de su parcela**
+   * (D3). Opcional a propósito — sin rango sólo se pierde una comprobación — y los
+   * cuatro juntos o ninguno, que es lo que el `CHECK` `location_rango_completo` exige.
+   *
+   * `undefined` NO toca la columna, igual que el resto de este input: así `RejillaForm`,
+   * que manda sólo los campos de la rejilla, **no borra el rango** al guardarla.
+   */
+  rangeRowFrom?: number | null;
+  rangeRowTo?: number | null;
+  rangePlantFrom?: number | null;
+  rangePlantTo?: number | null;
   // P1 §3 — declared block area. Not derived from a boundary polygon: none
   // exists, and a producer knows their hectares before anyone walks the
   // perimeter. When polygons arrive this becomes the value to reconcile the
@@ -479,6 +491,52 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
     if (redondeada >= 1000) throw new RejillaInvalida("rejilla_separacion_fuera_de_rango");
   }
 
+  // El rango de la microparcela: dónde está dentro de la numeración (D3).
+  //
+  // **Se valida la FILA RESULTANTE**, por lo mismo que la rejilla y la altitud de arriba:
+  // cambiar sólo «hasta la hilera» manda UN campo, y contar el input llamaría «medio
+  // rango» a la edición más normal que existe. El `CHECK` de la base es
+  // `num_nonnulls(...) IN (0, 4)` sobre la fila, así que contar otra cosa haría que el
+  // servicio y la base no dijeran lo mismo.
+  const rango = {
+    rowFrom: input.rangeRowFrom !== undefined ? input.rangeRowFrom : existing.rangeRowFrom,
+    rowTo: input.rangeRowTo !== undefined ? input.rangeRowTo : existing.rangeRowTo,
+    plantFrom: input.rangePlantFrom !== undefined ? input.rangePlantFrom : existing.rangePlantFrom,
+    plantTo: input.rangePlantTo !== undefined ? input.rangePlantTo : existing.rangePlantTo,
+  };
+  if (Object.values(rango).some((v) => v != null)) {
+    // **La numeración es la propia si la tiene, y si no la de la madre** (D3: una sola).
+    // Es la misma regla que `core.raiz_de_la_numeracion` en la base y que
+    // `rejillaDelBloque` en `plotBlocks.ts`; aquí se resuelve a mano porque ese módulo
+    // importa de éste y traerlo cerraría un ciclo. **Las tres deberían converger en una**
+    // — queda dicho aquí, que es donde se lee al tocarlo.
+    let numera: { rowCount: number; plantsPerRow: number } | null = null;
+    if (rejilla.rowCount != null && rejilla.plantsPerRow != null) {
+      numera = { rowCount: rejilla.rowCount, plantsPerRow: rejilla.plantsPerRow };
+    } else if (existing.parentLocationId) {
+      const madre = await prisma.location.findUnique({
+        where: { id: existing.parentLocationId },
+        select: { rowCount: true, plantsPerRow: true },
+      });
+      if (madre?.rowCount != null && madre.plantsPerRow != null) {
+        numera = { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow };
+      }
+    }
+    // El disparador `core.exigir_rango_en_la_rejilla` sigue siendo la garantía; esto es
+    // el mensaje. Sin él, un rango que no cabe sale como `P0001` crudo — un 500, el
+    // fallo del PR #433 — porque `CULPABLES` sólo cubre los tres de encoger.
+    const malo = validarRango(
+      {
+        rowFrom: rango.rowFrom ?? undefined,
+        rowTo: rango.rowTo ?? undefined,
+        plantFrom: rango.plantFrom ?? undefined,
+        plantTo: rango.plantTo ?? undefined,
+      },
+      numera,
+    );
+    if (malo) throw new RejillaInvalida(CODIGO_DEL_RANGO[malo]);
+  }
+
   const before = existing;
   const escritura = prisma.$transaction(async (tx) => {
     const after = await tx.location.update({
@@ -496,6 +554,10 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
         ...(input.rowCount !== undefined ? { rowCount: input.rowCount } : {}),
         ...(input.plantsPerRow !== undefined ? { plantsPerRow: input.plantsPerRow } : {}),
         ...(input.rowSpacingMeters !== undefined ? { rowSpacingMeters: input.rowSpacingMeters } : {}),
+        ...(input.rangeRowFrom !== undefined ? { rangeRowFrom: input.rangeRowFrom } : {}),
+        ...(input.rangeRowTo !== undefined ? { rangeRowTo: input.rangeRowTo } : {}),
+        ...(input.rangePlantFrom !== undefined ? { rangePlantFrom: input.rangePlantFrom } : {}),
+        ...(input.rangePlantTo !== undefined ? { rangePlantTo: input.rangePlantTo } : {}),
         ...(input.areaHectares !== undefined ? { areaHectares: input.areaHectares } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
       },

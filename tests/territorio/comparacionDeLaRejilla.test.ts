@@ -6,7 +6,7 @@ import { compararConLaRejilla, type RejillaDeclarada } from "../../lib/traceabil
  *
  * Diseño §6 de `docs/superpowers/specs/2026-10-01-rejilla-y-bloques-design.md`.
  * Hermética: es una función pura y no toca la base, por lo mismo que
- * `computePlotDensity` a su lado — un cociente guardado de dos entradas que se
+ * la densidad a su lado — un cociente guardado de dos entradas que se
  * mueven se queda viejo en silencio cada vez que alguien corrige una de las dos.
  *
  * **Devuelve un MOTIVO y no un número cuando no puede comparar**, porque las
@@ -16,9 +16,18 @@ import { compararConLaRejilla, type RejillaDeclarada } from "../../lib/traceabil
  * seguir siendo distinguibles.
  */
 
-const REJILLA: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true };
+/**
+ * **Forma que cubre el tablero entero.** Desde D8 (2026-10-02) la capacidad sale de la
+ * forma declarada, no de `filas × plantas`: sin forma el estado es `sin_forma` y no se
+ * afirma ninguna capacidad. Las pruebas de abajo siguen midiendo lo que medían —
+ * `propia` contra heredada, rango contra parcela entera— y para eso necesitan una
+ * forma; la del tablero lleno es la que deja esas cifras intactas.
+ */
+const LLENO = [{ rowFrom: 1, rowTo: 10, plantFrom: 1, plantTo: 20 }] as const;
 
-/** Lo que `computePlotDensity` recibe: sólo el conteo y el estado. */
+const REJILLA: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true, forma: LLENO };
+
+/** Lo que la comparación recibe de cada siembra: sólo el conteo y el estado. */
 const siembra = (plantCount: number | null, status = "active" as const) => ({ plantCount, status });
 
 describe("compararConLaRejilla", () => {
@@ -56,7 +65,7 @@ describe("compararConLaRejilla", () => {
    * daño que la ausencia de prueba.
    */
   it("rejilla HEREDADA y sin rango: no compara, dice sin_rango", () => {
-    const heredada: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: false };
+    const heredada: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: false, forma: LLENO };
     const r = compararConLaRejilla(heredada, [siembra(70)]);
     expect(r.status).toBe("sin_rango");
     expect(r, "pasar la capacidad de la madre es el error que este estado evita").not.toHaveProperty(
@@ -71,7 +80,7 @@ describe("compararConLaRejilla", () => {
    * nada y la prueba de arriba no mediría.
    */
   it("el control: la misma rejilla, PROPIA, sí compara", () => {
-    const propia: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true };
+    const propia: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true, forma: LLENO };
     expect(compararConLaRejilla(propia, [siembra(70)])).toMatchObject({
       status: "ok",
       capacidad: 200,
@@ -135,6 +144,7 @@ describe("compararConLaRejilla", () => {
       plantsPerRow: 20,
       rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 },
       propia: false,
+      forma: LLENO,
     };
     const r = compararConLaRejilla(conRango, [siembra(70)]);
     expect(r).toMatchObject({ status: "ok", capacidad: 80, contadas: 70, diferencia: 10 });
@@ -148,11 +158,83 @@ describe("compararConLaRejilla", () => {
   it("el control: la misma siembra contra la rejilla entera y contra el rango no dan lo mismo", () => {
     const entera = compararConLaRejilla(REJILLA, [siembra(70)]);
     const conRango = compararConLaRejilla(
-      { rowCount: 10, plantsPerRow: 20, rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 }, propia: false },
+      { rowCount: 10, plantsPerRow: 20, rango: { rowFrom: 1, rowTo: 4, plantFrom: 1, plantTo: 20 }, propia: false, forma: LLENO },
       [siembra(70)],
     );
     expect(entera).toMatchObject({ capacidad: 200 });
     expect(conRango).toMatchObject({ capacidad: 80 });
     expect(entera).not.toEqual(conRango);
+  });
+
+  /**
+   * **Sin forma declarada no se afirma una capacidad** (D8, 2026-10-02).
+   *
+   * Antes de este cambio este caso caía en `ok` con `capacidad: 200` y
+   * `diferencia: 50` — y en un lote al que le falta una esquina eso es falso: la
+   * diferencia real es 20. Daniel corrigió la premisa el mismo día en que el diseño
+   * que la daba por supuesta acabó de fusionarse.
+   */
+  it("con tablero y SIN forma dice sin_forma, y ningún número de diferencia", () => {
+    const sinForma: RejillaDeclarada = {
+      rowCount: 10,
+      plantsPerRow: 20,
+      rango: null,
+      propia: true,
+      forma: [],
+    };
+    const r = compararConLaRejilla(sinForma, [siembra(150)]);
+    expect(r.status).toBe("sin_forma");
+    expect(r).toMatchObject({ filas: 10, columnas: 20 });
+    expect(r, "afirmar una capacidad es lo que este estado evita").not.toHaveProperty("capacidad");
+    expect(r).not.toHaveProperty("diferencia");
+    expect(r, "tampoco el conteo: ya está en la lista de siembras").not.toHaveProperty("contadas");
+  });
+
+  /** Con la esquina cortada la capacidad es 176, y la diferencia la de verdad. */
+  it("con forma declarada vuelve a comparar, y la capacidad es la de la FORMA", () => {
+    const conForma: RejillaDeclarada = {
+      rowCount: 10,
+      plantsPerRow: 20,
+      rango: null,
+      propia: true,
+      forma: [
+        { rowFrom: 1, rowTo: 7, plantFrom: 1, plantTo: 20 },
+        { rowFrom: 8, rowTo: 10, plantFrom: 1, plantTo: 12 },
+      ],
+    };
+    const r = compararConLaRejilla(conForma, [siembra(150)]);
+    expect(r).toMatchObject({ status: "ok", capacidad: 176, contadas: 150, diferencia: 26 });
+  });
+
+  /**
+   * **El control que hace que la de arriba mida.** 200 era la respuesta vieja; si la
+   * forma no se estuviera usando, la capacidad seguiría siendo 200 y la prueba
+   * anterior pasaría igual.
+   */
+  it("el control: la capacidad con forma NO es la del tablero entero", () => {
+    const forma = [
+      { rowFrom: 1, rowTo: 7, plantFrom: 1, plantTo: 20 },
+      { rowFrom: 8, rowTo: 10, plantFrom: 1, plantTo: 12 },
+    ];
+    const r = compararConLaRejilla(
+      { rowCount: 10, plantsPerRow: 20, rango: null, propia: true, forma },
+      [siembra(1)],
+    );
+    expect(r).toMatchObject({ capacidad: 176 });
+    expect(r).not.toMatchObject({ capacidad: 200 });
+  });
+
+  /**
+   * **`sin_forma` va ANTES de `sin_cohortes`, y el orden importa:** `sin_cohortes`
+   * dice «caben {capacidad} plantas», que es justo la afirmación que sin forma no se
+   * puede sostener.
+   */
+  it("sin forma y sin siembras dice sin_forma, no sin_cohortes", () => {
+    const r = compararConLaRejilla(
+      { rowCount: 10, plantsPerRow: 20, rango: null, propia: true, forma: [] },
+      [],
+    );
+    expect(r.status).toBe("sin_forma");
+    expect(r).not.toHaveProperty("capacidad");
   });
 });

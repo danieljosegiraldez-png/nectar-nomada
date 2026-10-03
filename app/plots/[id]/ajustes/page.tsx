@@ -13,6 +13,9 @@ import { PlantingCohortForm } from "../../../components/traceability/PlantingCoh
 import { PlotAttributesForm } from "../../../components/traceability/PlotAttributesForm";
 import { RejillaForm } from "../../../components/traceability/RejillaForm";
 import { RangosDeBloqueForm } from "../../../components/traceability/RangosDeBloqueForm";
+import { FormaDelLoteForm } from "../../../components/traceability/FormaDelLoteForm";
+import { RangoDeMicroparcelaForm } from "../../../components/traceability/RangoDeMicroparcelaForm";
+import { celdasDeLaForma, tableroDe } from "../../../../lib/traceability/formaDeLaParcela";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
@@ -204,12 +207,13 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         <h2>{t("rejillaHeading")}</h2>
         {/* **D3: una sola numeración, la de la parcela.** A una microparcela —un
             `plot` cuyo padre es otro `plot`— no se le ofrece declarar rejilla: lo
-            que le toca es su RANGO dentro de la de su madre (diseño §4.2). Hasta
-            el 2026-10-03 el formulario se montaba aquí sin condición y guardaba,
-            y entonces `core.raiz_de_la_numeracion` coronaba a la microparcela
-            como raíz propia: dos numeraciones en una parcela. El servicio lo
-            rechaza desde el mismo cambio (`rejilla_en_microparcela`); esto es
-            para no ofrecer lo que el servidor va a negar. */}
+            que le toca es su RANGO dentro de la de su madre (diseño §4.2), que es
+            justo el formulario que aparece más abajo. Hasta el 2026-10-03 el
+            formulario de rejilla se montaba aquí sin condición y guardaba, y
+            entonces `core.raiz_de_la_numeracion` coronaba a la microparcela como
+            raíz propia: dos numeraciones en una parcela. El servicio lo rechaza
+            desde el mismo cambio (`rejilla_en_microparcela`); esto es para no
+            ofrecer lo que el servidor va a negar. */}
         {esMicroparcela ? (
           /* **Y si la microparcela YA tiene una, se dice, en vez de decir que la
              numeración es la de su madre.** Nada lo impedía hasta este cambio, así
@@ -241,6 +245,54 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
             }}
           />
         )}
+
+        {/* **La forma va junto al tablero y sólo cuando HAY tablero.** Sin rejilla el
+            disparador rechaza cualquier trozo, así que ofrecer el formulario sería
+            ofrecer algo que no puede funcionar. Y son las dos mitades de «qué hay en este
+            suelo»: el tablero dice cómo se numera, la forma qué celdas tienen planta
+            (D8/D9). */}
+        {location.rowCount != null && location.plantsPerRow != null ? (
+          <>
+            <h3>{t("formaSubtitulo")}</h3>
+            <FormaDelLoteForm
+              locationId={location.id}
+              trozos={location.formaDeclarada}
+              // La UNIÓN, calculada en el servidor: dos trozos que se pisan no cuentan
+              // dos veces, y el cliente no tiene por qué saber hacer esa cuenta.
+              celdasPlantadas={celdasDeLaForma(
+                location.formaDeclarada,
+                tableroDe({ rowCount: location.rowCount, plantsPerRow: location.plantsPerRow }),
+              )}
+                celdasDelTablero={location.rowCount * location.plantsPerRow}
+            />
+          </>
+        ) : null}
+
+        {/* **El rango de una microparcela: el §6 del diseño del 2026-10-01**, que lo pedía
+            y nunca se construyó. Aparece cuando esta ubicación NO tiene rejilla propia y
+            su madre SÍ — o sea, cuando es una microparcela de una parcela numerada. Sin
+            esto, la comparación devolvía `sin_rango` y ese estado no tenía salida: el
+            sistema pedía un dato que ninguna pantalla podía dar. */}
+        {location.rowCount == null &&
+        location.parentLocation?.rowCount != null &&
+        location.parentLocation.plantsPerRow != null ? (
+          <>
+            <h3>{t("rangoMicroSubtitulo")}</h3>
+            <RangoDeMicroparcelaForm
+              locationId={location.id}
+              rango={{
+                rangeRowFrom: location.rangeRowFrom,
+                rangeRowTo: location.rangeRowTo,
+                rangePlantFrom: location.rangePlantFrom,
+                rangePlantTo: location.rangePlantTo,
+              }}
+              rejillaDeLaMadre={{
+                rowCount: location.parentLocation.rowCount,
+                plantsPerRow: location.parentLocation.plantsPerRow,
+              }}
+            />
+          </>
+        ) : null}
       </section>
 
       <section className="nn-section" id="calicatas">

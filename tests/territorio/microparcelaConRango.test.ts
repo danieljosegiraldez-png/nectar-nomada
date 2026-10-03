@@ -439,3 +439,142 @@ describe("el rango de la microparcela, al crearla (D3)", () => {
     ).rejects.toThrow(/no cabe en la rejilla de la parcela/);
   });
 });
+
+/**
+ * **Cambiar el rango de una microparcela que YA existe** — el §6 del diseño del
+ * 2026-10-01, que lo pedía y nunca se construyó. Hasta hoy el rango sólo se podía dar al
+ * crearla: medido el 2026-10-02, cero archivos de `app/` escribían `rangeRowFrom`, así que
+ * el estado `sin_rango` de la comparación no tenía salida.
+ */
+describe("updateLocationAttributes cambia el rango de una microparcela (§6)", () => {
+  const micro = async (extra: Record<string, unknown> = {}) => {
+    const m = await microlote(`TEST Micro rango ${Date.now()}`, extra);
+    locationIds.push(m.id);
+    return m;
+  };
+
+  it("pone el rango de una microparcela que no lo tenía", async () => {
+    const m = await micro();
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: m.id,
+      rangeRowFrom: 1,
+      rangeRowTo: 4,
+      rangePlantFrom: 1,
+      rangePlantTo: 20,
+    });
+    const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(leido.rangeRowTo).toBe(4);
+    expect(leido.rangePlantTo).toBe(20);
+  });
+
+  /**
+   * **LA PRUEBA QUE IMPORTA.** `RejillaForm` manda sólo los cuatro campos de la rejilla.
+   * Si el servicio tratara «ausente» como `null`, guardar la rejilla **borraría** lo que
+   * no viene en el formulario sin decir nada — y nadie lo notaría hasta que la pantalla
+   * empezara a decir que falta algo que sí estaba.
+   *
+   * **Reescrita el 2026-10-03 al fusionar D3, y el montaje viejo era el que ya no vale,
+   * no la propiedad.** La versión anterior ponía la rejilla sobre la MICROPARCELA que
+   * tenía el rango, y eso es justo lo que D3 prohíbe desde este cambio
+   * (`rejilla_en_microparcela`): ninguna fila puede tener las dos cosas a la vez. Pero el
+   * escenario que su propio comentario describía son DOS filas — «guardar la rejilla de la
+   * parcela borraría el rango de sus microparcelas» —, así que eso es lo que se mide ahora,
+   * que además es el caso real. La propiedad «ausente no es null» se conserva entera, y se
+   * comprueba sobre la parcela con un atributo suyo que el formulario tampoco manda.
+   */
+  it("guardar la REJILLA no borra lo que el formulario no manda, porque ausente no es null", async () => {
+    const m = await micro({ rangeRowFrom: 1, rangeRowTo: 4, rangePlantFrom: 1, rangePlantTo: 20 });
+    // La parcela madre guarda SU rejilla, que es lo que hace `RejillaForm`.
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const madre = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(madre.rowCount, "la rejilla sí se guardó: el control de que la prueba mide").toBe(10);
+    expect(madre.soilType, "y lo que el formulario no manda sobrevive").toBe(ATRIBUTOS.soilType);
+    // Y el rango de su microparcela, que vive en otra fila, no se ha movido.
+    const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(leido.rangeRowFrom, "el rango de la microparcela sobrevive").toBe(1);
+    expect(leido.rangeRowTo).toBe(4);
+  });
+
+  /**
+   * Y el reverso: guardar el RANGO no borra lo que el formulario del rango no manda.
+   * Mismo motivo que arriba para no usar la rejilla como lo-que-sobrevive: una
+   * microparcela no puede tenerla. Se usa un atributo del terreno, que sí es suyo (D2).
+   */
+  it("guardar el rango no borra los atributos del terreno", async () => {
+    const m = await micro();
+    expect(m.soilType, "la microparcela nació con el suelo copiado de su madre (D2)").toBe(ATRIBUTOS.soilType);
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: m.id,
+      rangeRowFrom: 1,
+      rangeRowTo: 2,
+      rangePlantFrom: 1,
+      rangePlantTo: 2,
+    });
+    const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(leido.rangeRowTo, "el rango sí se guardó: el control de que la prueba mide").toBe(2);
+    expect(leido.soilType, "y el suelo sobrevive").toBe(ATRIBUTOS.soilType);
+  });
+
+  it("vaciar los cuatro quita el rango", async () => {
+    const m = await micro({ rangeRowFrom: 1, rangeRowTo: 4, rangePlantFrom: 1, rangePlantTo: 20 });
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: m.id,
+      rangeRowFrom: null,
+      rangeRowTo: null,
+      rangePlantFrom: null,
+      rangePlantTo: null,
+    });
+    const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(leido.rangeRowFrom).toBeNull();
+  });
+
+  /**
+   * **Se valida la fila RESULTANTE, no el input.** Cambiar sólo «hasta la hilera» sobre
+   * una microparcela que ya tiene rango manda UN campo y sigue siendo un rango completo:
+   * contar el input llamaría «medio rango» a la edición más normal que existe.
+   */
+  it("cambiar UN solo campo de un rango completo es válido", async () => {
+    const m = await micro({ rangeRowFrom: 1, rangeRowTo: 4, rangePlantFrom: 1, rangePlantTo: 20 });
+    await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, rangeRowTo: 6 });
+    const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(leido.rangeRowTo).toBe(6);
+  });
+
+  /** Y el control: UN solo campo sobre una SIN rango sí es medio rango. */
+  it("el control: un solo campo sobre una microparcela sin rango es medio rango", async () => {
+    const m = await micro();
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: m.id, rangeRowTo: 6 }),
+      "rejilla_rango_a_medias",
+    );
+  });
+
+  it("un rango que no cabe en la rejilla de la madre vuelve con su código, no con un P0001", async () => {
+    const m = await micro();
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, {
+        locationId: m.id,
+        rangeRowFrom: 1,
+        rangeRowTo: 99,
+        rangePlantFrom: 1,
+        rangePlantTo: 20,
+      }),
+      "rejilla_rango_fuera_de_rejilla",
+    );
+  });
+
+  it("un rango al revés vuelve con su código", async () => {
+    const m = await micro();
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, {
+        locationId: m.id,
+        rangeRowFrom: 7,
+        rangeRowTo: 3,
+        rangePlantFrom: 1,
+        rangePlantTo: 20,
+      }),
+      "rejilla_rango_al_reves",
+    );
+  });
+});
+

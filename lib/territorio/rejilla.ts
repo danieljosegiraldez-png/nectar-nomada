@@ -142,3 +142,30 @@ export function celdasEnComunConVarios(rangos: readonly Rango[], otro: Rango): n
   }
   return total;
 }
+
+/**
+ * ¿Cabe una celda en la rejilla de la parcela?
+ *
+ * **La garantía la da la base**, con el disparador
+ * `specimen_exigir_planton_en_la_rejilla`. Esto es la mitad que da la FRASE: sin
+ * ella, el `P0001` del disparador llega a la pantalla como un 500 — la clase de
+ * fallo del PR #433, donde una clase de error que la acción no sabía traducir
+ * escapaba y el formulario recibía la pantalla de error en vez de un mensaje.
+ *
+ * **Valida cada número contra su límite, no la pareja.** Media coordenada cabe, y
+ * no es un olvido: `lib/traceability/jornadasDeCosecha.ts` imprime
+ * `${gridRow}-${gridPosition ?? "?"}`, así que el repositorio ya tolera ese caso a
+ * propósito. Exigir «los dos o ninguno» rompería ese código.
+ *
+ * Sin ninguna coordenada devuelve `true`: un plantón puede no estar situado, y eso
+ * no es un error (ADR-080).
+ */
+export function celdaCabeEnLaRejilla(
+  rejilla: { rowCount: number; plantsPerRow: number },
+  fila: number | null,
+  planta: number | null,
+): boolean {
+  const cabe = (v: number | null, tope: number) =>
+    v == null || (Number.isInteger(v) && v >= 1 && v <= tope);
+  return cabe(fila, rejilla.rowCount) && cabe(planta, rejilla.plantsPerRow);
+}
