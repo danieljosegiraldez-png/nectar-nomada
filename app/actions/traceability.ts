@@ -82,6 +82,7 @@ import {
   setPlotBlockType,
   PlotBlockValidationError,
 } from "../../lib/traceability/plotBlocks";
+import { declararTrozoDeForma, quitarTrozoDeForma } from "../../lib/traceability/formaDeLaParcela";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -2911,6 +2912,69 @@ export async function anadirRangoAlBloqueAction(
     ...(sinPlantar > 0 ? [t("rejillaFueraDeLaFormaAviso", { celdas: sinPlantar })] : []),
   ];
   return avisos.length ? { avisos } : {};
+}
+
+/**
+ * Declarar un trozo de la forma del lote: qué celdas del tablero están plantadas (D9).
+ *
+ * Misma familia que `guardarRejillaAction`: `useActionState`, un `error` traducido de
+ * vuelta y **sin `redirect`**. El servicio lo cuelga de la raíz de la numeración, así que
+ * esta acción no tiene que resolver nada.
+ */
+export async function declararTrozoDeFormaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await declararTrozoDeForma(user.userAccountId, {
+      locationId,
+      rowFrom: Number(formData.get("rowFrom") ?? Number.NaN),
+      rowTo: Number(formData.get("rowTo") ?? Number.NaN),
+      plantFrom: Number(formData.get("plantFrom") ?? Number.NaN),
+      plantTo: Number(formData.get("plantTo") ?? Number.NaN),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
+ * Quitar un trozo de la forma, **avisando de las plantas que deja fuera** (§7.4).
+ *
+ * El aviso va aquí y no al declarar: declarar sólo añade suelo plantado, y quitar es lo
+ * que puede dejar una planta situada donde la forma ya no llega. Vuelve en `avisos` y no
+ * en `error` porque **el trozo se quitó**: rechazar obligaría a declarar como plantado un
+ * terreno que no lo está, y el operario sabe algo que la base no.
+ */
+export async function quitarTrozoDeFormaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  let fuera = 0;
+  try {
+    const r = await quitarTrozoDeForma(user.userAccountId, String(formData.get("trozoId") ?? ""));
+    fuera = r.plantasQueQuedanFuera;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return fuera > 0 ? { avisos: [t("rejillaFormaPlantasFueraAviso", { plantas: fuera })] } : {};
 }
 
 /** Quitar un rango. Es un acto y el servicio lo registra. */
