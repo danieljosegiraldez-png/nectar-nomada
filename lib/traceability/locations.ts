@@ -427,7 +427,17 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   // Se rechaza PONER una rejilla (los cuatro campos), no vaciarla: una
   // microparcela que ya la tenga —las hay, nada lo impedía hasta hoy— tiene que
   // poder quedarse sin ella, y `puestos === 0` es justo ese camino.
-  if (puestos === 4 && existing.parentLocationId) {
+  // **Se mira si el INPUT pone rejilla, no si la fila resultante la tiene.** Lo
+  // encontró una revisión independiente el mismo día: `puestos` se cuenta sobre la
+  // fila resultante —así tiene que ser para «cuatro o ninguna»—, de modo que una
+  // microparcela con rejilla heredada daba 4 aunque el input no trajera ninguna de
+  // las cuatro, y editarle la ALTITUD moría con `rejilla_en_microparcela`. El
+  // arreglo dejaba esas filas sin poder tocarse para nada, que es peor que el
+  // defecto que cerraba.
+  const ponenRejilla = [input.gridOrigin, input.rowCount, input.plantsPerRow, input.rowSpacingMeters].some(
+    (v) => v !== undefined && v !== null,
+  );
+  if (puestos === 4 && ponenRejilla && existing.parentLocationId) {
     const padre = await prisma.location.findUnique({
       where: { id: existing.parentLocationId },
       select: { locationType: true },

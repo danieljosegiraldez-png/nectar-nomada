@@ -305,6 +305,29 @@ describe("una microparcela no puede declarar rejilla propia (D3)", () => {
   });
 
   /**
+   * **Y el guardia no puede atrapar a quien no toca la rejilla.** Lo encontró una
+   * revisión independiente el 2026-10-03, sobre el commit anterior: `puestos` se
+   * cuenta sobre la FILA RESULTANTE —así tiene que ser para la regla «cuatro o
+   * ninguna»—, de modo que una microparcela con rejilla heredada daba 4 aunque el
+   * input no trajera ni una de las cuatro, y editarle la ALTITUD moría con
+   * `rejilla_en_microparcela`. O sea: el arreglo dejaba esas filas sin poder
+   * tocarse para nada.
+   */
+  it("con rejilla heredada, editarle OTRO atributo sigue funcionando", async () => {
+    const m = await microlote("Heredada, y le cambio la altitud");
+    locationIds.push(m.id);
+    await prisma.location.update({
+      where: { id: m.id },
+      data: { gridOrigin: "noreste", rowCount: 2, plantsPerRow: 3, rowSpacingMeters: 1.1 },
+    });
+    await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, altitudeMinM: 1234 });
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.altitudeMinM).toBe(1234);
+    // Y la rejilla heredada sigue donde estaba: esto no la limpia por la puerta de atrás.
+    expect(despues?.rowCount).toBe(2);
+  });
+
+  /**
    * **La consecuencia, preguntada a la función que la decide.** Lo que importa no
    * es que la columna quede nula sino que la numeración siga siendo una: con el
    * guardia puesto, la raíz de una microparcela es su madre. Y el control está
