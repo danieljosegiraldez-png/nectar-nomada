@@ -1810,6 +1810,7 @@
     "rejillaAnadirRangoBoton": "Add the part",
     "rejillaQuitarRangoBoton": "Remove",
     "rejillaSolapeAviso": "Saved. It shares {celdas} cells with “{bloque}”.",
+    "rejillaFueraDeLaFormaAviso": "Saved. This piece includes {celdas} cells that the plot's shape says are not planted.",
     "rejillaSinDeclarar": "This plot isn't numbered yet.",
     "rejillaSinForma": "Grid of {filas} × {columnas}. Declare the plot's shape — which cells are planted — to be able to compare it with what is sown.",
     "rejillaSinSiembras": "It fits {capacidad} plants. No planting has been recorded yet.",
