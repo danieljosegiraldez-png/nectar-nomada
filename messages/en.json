@@ -1512,6 +1512,7 @@
     "processTargetMoistureLabel": "Moisture % it will be stored at (required)",
     "processRecipeLabel": "Process recipe",
     "processNoRecipe": "— No recipe —",
+    "processNoRecipeLabel": "No recipe",
     "processNoRecipeHelp": "No recipe is fine: the intent above is what is required.",
     "openProcessButton": "Open process",
     "processNumberHeading": "Process {n}",

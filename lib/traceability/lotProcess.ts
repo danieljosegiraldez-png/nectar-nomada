@@ -22,6 +22,7 @@ import {
   abrirProcesoEnTx,
   bloquearLinaje,
   enMinusculas,
+  TRANSACCION_DEL_LINAJE,
   exigeSinCorridasAbiertas,
   exigeSinOtroProcesoAbierto,
   idsDeDescendencia,
@@ -211,7 +212,7 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
         provenanceClass: input.provenanceClass,
         sourceReference: input.sourceReference?.trim() || null,
       });
-    });
+    }, TRANSACCION_DEL_LINAJE);
   } catch (error) {
     // El índice único parcial es la red: si algo se colara entre el bloqueo y la escritura, sale con
     // nombre y no como un error de restricción ilegible.
@@ -470,7 +471,7 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
     );
 
     return cerrado;
-  });
+  }, TRANSACCION_DEL_LINAJE);
 }
 
 /**
@@ -652,7 +653,7 @@ export async function devolverASecado(userAccountId: string, input: DevolverASec
       tx,
     );
     return { continuacion, devolucion };
-  });
+  }, TRANSACCION_DEL_LINAJE);
 }
 
 /**

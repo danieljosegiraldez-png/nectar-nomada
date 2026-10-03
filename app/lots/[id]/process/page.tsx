@@ -145,7 +145,9 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         <section className="nn-section">
           <p>
             {t("processMixture", {
-              partes: cobertura.composicion.procesos.map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.etiqueta}`)).join(" + "),
+              partes: cobertura.composicion.procesos
+                .map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.recetaConVersion ?? t("processNoRecipeLabel")}`))
+                .join(" + "),
             })}
           </p>
           {cobertura.composicion.ramaSinProceso ? <p className="nn-muted">{t("processMixtureWithUnprocessed")}</p> : null}
@@ -160,7 +162,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         ) : (
         <section key={p.id} className="nn-section">
           <h2>
-            {t("processNumberHeading", { n: p.sequenceOrder })} · {p.etiqueta}
+            {/* M6 (revisión final): «Sin receta» en el idioma de la pantalla, no la constante del reporte. */}
+            {t("processNumberHeading", { n: p.sequenceOrder })} · {p.processRecipeVersion?.recipe.name ?? t("processNoRecipeLabel")}
             {p.lot.id !== lot.id ? <span className="nn-muted"> · {t("processLivesIn", { lotCode: p.lot.lotCode })}</span> : null}
             {p.origen === "continuacion" ? <span className="nn-muted"> · {t("processOriginContinuation")}</span> : null}
             {p.origen === "parte_de_division" ? <span className="nn-muted"> · {t("processOriginPart")}</span> : null}

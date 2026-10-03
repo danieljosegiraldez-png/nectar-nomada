@@ -357,6 +357,35 @@ describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
     }
   });
 
+  it("una espera de más de 5 s por el linaje no aborta la corrida: la transacción lleva su propio tope (M4)", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03). El tope de una transacción interactiva de Prisma es de 5 s por defecto y
+    // cuenta la espera por los `FOR UPDATE`: una corrida que espera más que eso a quien retiene el linaje se revertía (P2028) y
+    // no se podía registrar. Las transacciones que bloquean el linaje llevan `TRANSACCION_DEL_LINAJE`. Se prueba por la puerta
+    // del secado; las demás llevan la misma constante (ver el informe de la ronda).
+    const abuelo = await lote("R3-TOPE-ABUELO");
+    const hijo = await lote("R3-TOPE-HIJO");
+    await enlazar([abuelo], [hijo]);
+    const p = await abrirProcesoDePrueba(gestor, abuelo);
+    const retiene = retener((tx) => tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${abuelo}::uuid FOR UPDATE`);
+    let corrida: Promise<Resultado<{ run: { lotProcessId: string | null } }>> | undefined;
+    try {
+      const pid = await retiene.pid;
+      corrida = resultadoDe(startDryingRun(gestor, { lotId: hijo, startedAt: ahora(), provenanceClass: "original_record" }));
+      await esperarQueAlguienEspere(pid, "la corrida no quedó esperando la fila del ancestro");
+      // Más que los 5 s por defecto: con ellos la transacción de la corrida ya se habría revertido.
+      await new Promise((r) => setTimeout(r, 6000));
+      retiene.soltar();
+      await retiene.hecho;
+      const v = await corrida;
+      expect(v.ok, `la corrida se abortó tras esperar el linaje: ${v.ok ? "" : String((v as { error: unknown }).error)}`).toBe(true);
+      if (v.ok) expect(v.valor.run.lotProcessId).toBe(p.id);
+    } finally {
+      retiene.soltar();
+      await retiene.hecho.catch(() => undefined);
+      await corrida;
+    }
+  }, 30000);
+
   it("en bodega no se empieza nada", async () => {
     const l = await lote("R3-BODEGA");
     await abrirProcesoDePrueba(gestor, l);
@@ -572,6 +601,19 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
     await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: recetaVersionId });
     const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
     expect(run.processRecipeVersionId).toBe(recetaVersionId);
+  });
+
+  it("pedir explícitamente la MISMA versión del proceso empieza, con esa versión y unida al proceso (M5)", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03). R4: «si viene, tiene que ser ESA». Las demás pruebas de R4 no fijaban el
+    // lado que ACEPTA: rechazar toda versión explícita pasaba en verde, y la parte «Re-importar» (R9) empezará corridas pasando
+    // la versión del proceso que las cubre.
+    const l = await lote("R4-MISMA");
+    const p = await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: recetaVersionId });
+    const { run } = await startFermentationRun(gestor, {
+      lotId: l, startedAt: ahora(), provenanceClass: "original_record", processRecipeVersionId: recetaVersionId,
+    });
+    expect(run.processRecipeVersionId).toBe(recetaVersionId);
+    expect(run.lotProcessId).toBe(p.id);
   });
 
   it("rechaza otra versión distinta de la del proceso", async () => {

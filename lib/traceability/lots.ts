@@ -26,7 +26,7 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
-import { antesDeTransformar, dividirProcesoEnTx, type TipoConReglaDeProceso } from "./procesoDelLinaje";
+import { antesDeTransformar, dividirProcesoEnTx, TRANSACCION_DEL_LINAJE, type TipoConReglaDeProceso } from "./procesoDelLinaje";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
@@ -521,7 +521,7 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     if (input.enLaMismaTransaccion) await input.enLaMismaTransaccion(tx, transformation.id);
 
     return { transformation, outputLots, reconciliation };
-  });
+  }, TRANSACCION_DEL_LINAJE);
 
   return result;
 }

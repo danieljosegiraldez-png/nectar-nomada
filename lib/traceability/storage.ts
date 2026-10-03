@@ -13,7 +13,7 @@ import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { exigeSecadoTerminado } from "./lotProcess";
-import { bloquearLinaje } from "./procesoDelLinaje";
+import { bloquearLinaje, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 
 export interface MoveLotToStorageInput {
   lotId: string;
@@ -36,6 +36,8 @@ export async function moveLotToStorage(userAccountId: string, input: MoveLotToSt
   return unaVezPorEnvio(userAccountId, input.claveDeEnvio, {
     tipo: "StorageAssignment",
     recuperar: (id) => prisma.storageAssignment.findUniqueOrThrow({ where: { id } }),
+    // Bloquea el linaje: no cabe en los 5 s por defecto de Prisma (revisión final, ronda de arreglo 1, M4).
+    transaccion: TRANSACCION_DEL_LINAJE,
     crear: async (tx) => {
     // Parte 1, R2 (ronda de arreglo 1, 2026-10-02): el linaje se bloquea PRIMERO y en TODA llamada, también
     // en una reubicación. El diseño lo dice sin excepción —«toda transacción que lea o cambie la cobertura

@@ -1138,6 +1138,29 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
     expect(en.Traceability?.processCannotOpen_lote_en_bodega_se_puede_devolver).toContain(en.Traceability?.processBackToDryingButton);
   });
 
+  it("la ficha y la página del proceso dicen «Sin receta» en su idioma, y la ficha no pinta un veredicto sin cobertura (M6, M7)", () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03). GUARDIA DE FUENTE —las páginas no se renderizan en pruebas—: dice que el
+    // código está escrito así, no que la pantalla lo pinte. M6: un proceso sin receta salía con la constante `SIN_RECETA`
+    // («Sin receta», en español también con la interfaz en inglés). M7: con `lineage_too_deep`, `procesos` llegaba vacío al
+    // veredicto y la ficha decía «el proceso no dice qué grado es» junto a «el linaje es demasiado hondo».
+    const ficha = readFileSync("app/lots/[id]/page.tsx", "utf8");
+    const paginaDelProceso = readFileSync("app/lots/[id]/process/page.tsx", "utf8");
+    for (const [nombre, fuente] of [["ficha", ficha], ["página del proceso", paginaDelProceso]] as const) {
+      expect(fuente, `${nombre}: una frase del proceso cae en la etiqueta del reporte`).not.toMatch(/recetaConVersion \?\? [\w.]*etiqueta/);
+      expect(fuente, `${nombre}: la composición nombra la etiqueta del reporte`).not.toMatch(/lotCode\} · \$\{p\.etiqueta\}/);
+      expect(fuente, `${nombre}: no usa la clave de «Sin receta» de la pantalla`).toContain('t("processNoRecipeLabel")');
+    }
+    expect(paginaDelProceso, "el encabezado del proceso cae en la etiqueta del reporte").not.toMatch(/processNumberHeading[^\n]*\{p\.etiqueta\}/);
+    expect(ficha, "la ficha pinta el veredicto aunque la cobertura no se pudiera leer").toContain(
+      "const veredicto = entrada && errorDeCobertura === null ? veredictoDelLote(entrada) : null;",
+    );
+    // Control: las dos claves existen en los dos idiomas, y la inglesa no es la española.
+    const es = JSON.parse(readFileSync("messages/es.json", "utf8")) as Record<string, Record<string, string>>;
+    const en = JSON.parse(readFileSync("messages/en.json", "utf8")) as Record<string, Record<string, string>>;
+    expect(es.Traceability?.processNoRecipeLabel).toBe("Sin receta");
+    expect(en.Traceability?.processNoRecipeLabel).toBe("No recipe");
+  });
+
   it("cada motivo posible de los dos predicados tiene su frase en es.json y en en.json, y las páginas la piden con ese prefijo", () => {
     // Las claves son de PLANTILLA (`processCannotOpen_${motivo}`): `claves-de-traduccion-existen` no las ve, y `t()` acepta cualquier
     // cadena. Lo que las vigila es esto: la lista de motivos es la que los predicados pueden devolver (fuera de ella, relanzan).

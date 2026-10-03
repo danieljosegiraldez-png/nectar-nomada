@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
+import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `dt-${Date.now()}`;
@@ -521,6 +522,37 @@ describe("la línea de etapas", () => {
     // que es lo que hace verdad que la etapa cuente lotes y no filas; si alguien quita el índice, esto cae.
     await expect(procesoDe(abierto, { secuencia: 2 })).rejects.toThrow(/Unique constraint/);
     expect(await lotesEn("proceso")).toBe(antes + 1);
+  });
+
+  it("proceso: el café que un proceso cubre en DOS lotes —la cereza con el proceso y su hijo fermentando— cuenta UNA vez (M12)", async () => {
+    // Revisión final de la Parte 1 (ronda de arreglo 1, 2026-10-03). Desde R1 un proceso abierto en la cereza C cubre a su hijo
+    // F, que fermenta (una corrida vieja, SIN `lotProcessId`: R9). La etapa «proceso» cuenta los lotes DUEÑOS de un proceso
+    // abierto (la excepción n=1 del guardia `proceso-por-el-resolvedor`), no los cubiertos: con esta mutación —verosímil para
+    // que cuenten las corridas viejas— la celda diría «2 lotes» para un solo café, y las pruebas de arriba, con proceso y corrida
+    // en el MISMO lote, no lo verían:
+    //   cuentaLotes({ OR: [{ lotProcesses: { some: { endedAt: null } } },
+    //                      { transformationInputs: { some: { transformation: { fermentationRun: { endedAt: null } } } } }] })
+    const antes = await lotesEn("proceso");
+    const c = await loteSimple("P-CUBRE-C", miSitio, miOrgId);
+    const f = await loteSimple("P-CUBRE-F", miSitio, miOrgId);
+    const t = await prisma.lotTransformation.create({
+      data: {
+        transformationType: "stage_change",
+        occurredAt: haceHoras(11),
+        provenanceClass: "original_record",
+        inputs: { create: [{ lotId: c }] },
+        outputs: { create: [{ lotId: f }] },
+      },
+    });
+    transformationIds.push(t.id);
+    await procesoDe(c);
+    await fermentacionDe(f);
+    // Control del estado: F de verdad está cubierto por el proceso ABIERTO de C, y fermenta.
+    expect((await procesoQueCubre(prisma, f)).estado).toBe("abierto");
+    expect(await lotesEn("proceso")).toBe(antes + 1);
+    const etapa = (await datosDelTablero(operario, ahora)).etapas.find((x) => x.clave === "proceso")!.estado;
+    if (etapa.tipo !== "cuenta") throw new Error(`la etapa proceso no cuenta: ${etapa.tipo}`);
+    expect(etapa.pidenDecision, "piden decisión más lotes de los que hay en la etapa").toBeLessThanOrEqual(etapa.lotes);
   });
 
   it("secado: sólo la corrida abierta, de un lote visible, y un lote con dos corridas abiertas cuenta una vez", async () => {

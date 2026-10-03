@@ -30,7 +30,7 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
-import { procesoAbiertoParaCorrida } from "./procesoDelLinaje";
+import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import { LotProcessError } from "./errorDeProceso";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -126,7 +126,7 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
     );
 
     return { run, transformation };
-  });
+  }, TRANSACCION_DEL_LINAJE);
 
   return result;
 }

@@ -804,6 +804,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
               proceso: {
                 processGradeValue: grado === null ? null : { value: grado },
                 processRecipeVersion: conReceta ? { id: "receta" } : null,
+                endedAt: null,
               },
             },
       );

@@ -88,6 +88,11 @@ const PERFIL_POR_GRADO: Readonly<Record<string, ClaveDePerfil>> = {
  * pantalla. La ausencia de receta cierra la puerta igual que la cierran la fase y el grado. **Qué dice la
  * receta —leer sus `ProcessTarget` y compararlos con la matriz— NO se hace aquí:** basta con que exista.
  *
+ * **Y sólo si ese proceso sigue ABIERTO** (revisión final de la Parte 1, ronda de arreglo 1, 2026-10-03; menor M10). Desde R7
+ * el proceso que llega es el VIGENTE del resolvedor, abierto o cerrado, y el veredicto de la misma fila sólo toma un proceso
+ * abierto (`entradaDelLote`): con uno cerrado, la fila decía «sin grado declarado» y la curva citaba a la vez la matriz del
+ * lavado. Una corrida vieja (R9) abierta bajo un proceso ya cerrado no tiene grado que la rija.
+ *
  * `abierta` es la corrida abierta del lote (fermentación o secado) tal como la trae `datosDelTablero`, con el
  * `proceso` que CUBRE al lote (Parte 1, R7: del resolvedor, no de la FK de la corrida); `undefined` = el lote no
  * tiene ninguna. Sin fase abierta no hay perfil. La clave no se llama `lotProcess` para que no se lea como una
@@ -104,6 +109,8 @@ export function perfilDeLaFaseAbierta(
           readonly processGradeValue: { readonly value: string } | null;
           /** La versión de receta del proceso, o `null` si no tiene. Sólo importa que exista. */
           readonly processRecipeVersion: object | null;
+          /** `null` = abierto. Obligatorio a propósito: un valor por defecto «abierto» haría infalsificable la guarda. */
+          readonly endedAt: Date | null;
         } | null;
       }
     | undefined,
@@ -113,6 +120,8 @@ export function perfilDeLaFaseAbierta(
   if (abierta.fase !== "fermentation") return null;
   // Sin receta el motor no opina (ADR-181): el grado sólo sugiere una plantilla, no demuestra que la receta la use.
   if (!abierta.proceso?.processRecipeVersion) return null;
+  // Un proceso CERRADO no rige la fase abierta: el veredicto de la misma fila ya no lo toma (ver arriba, M10).
+  if (abierta.proceso.endedAt !== null) return null;
   const grado = abierta.proceso.processGradeValue?.value;
   if (!grado || !Object.hasOwn(PERFIL_POR_GRADO, grado)) return null;
   return PERFIL_POR_GRADO[grado] ?? null;

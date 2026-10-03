@@ -129,6 +129,9 @@ corrida, cerrar, dividir, seleccionar, fusionar y almacenar.
   `Serializable` no veía: almacenar mientras alguien abre un proceso nuevo, o dividir mientras alguien
   empieza una corrida.
 - **El orden por id evita los interbloqueos.**
+- **Cada transacción que bloquea el linaje lleva su tope explícito** (`TRANSACCION_DEL_LINAJE`,
+  revisión final, 2026-10-03): el de Prisma por defecto, 5 s, cuenta también la espera por los
+  `FOR UPDATE`, y una división en un linaje hondo o una espera en fila lo pasaban.
 - **Los ancestros de un lote no cambian nunca después de crearlo**, porque las transformaciones sólo
   añaden hijos. Así que el conjunto de filas a bloquear se puede calcular antes de bloquear.
 - **Es la práctica de la casa.** `lib/apiary/cierreDeCosecha.ts:50-56` documenta que `Serializable`

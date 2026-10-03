@@ -285,6 +285,16 @@ export async function procesoQueCubre(tx: Prisma.TransactionClient, lotId: strin
  * No es `Serializable`: `lib/apiary/cierreDeCosecha.ts` documenta que eso abortó transacciones ajenas
  * que sólo compartían tabla, y la casa prefirió bloquear filas.
  */
+/**
+ * Las opciones de TODA transacción interactiva que bloquea el linaje (revisión final de la Parte 1, ronda de arreglo 1,
+ * 2026-10-03; menor M4). El tope de Prisma por defecto es de 5 s y cuenta también la espera por los `FOR UPDATE`: una
+ * división bajo un proceso hace cientos de consultas en serie (una por nivel de linaje y por parte), y una operación del
+ * mismo linaje que espera detrás gasta su propio presupuesto esperando. Al pasarse, Prisma revierte todo (P2028) y la
+ * operación no se puede registrar nunca. `timeout` es el del precedente de la casa (`lib/equipos/bandejas.ts`, 60 s); `maxWait`
+ * —la espera por una conexión del grupo, 2 s por defecto— 10 s. La latencia real contra Neon NO está medida.
+ */
+export const TRANSACCION_DEL_LINAJE = { timeout: 60_000, maxWait: 10_000 } as const;
+
 export async function bloquearLinaje(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
   await bloquearLinajes(tx, [lotId]);
 }

@@ -383,7 +383,9 @@ export default async function LotDetailPage({
     estadosDeInstrumento,
     ahora: new Date(),
   });
-  const veredicto = entrada ? veredictoDelLote(entrada) : null;
+  // Revisión final (ronda de arreglo 1, M7): sin cobertura —un linaje de más de 64 generaciones— no hay veredicto. `procesos`
+  // llegaría vacío y el veredicto diría «el proceso no dice qué grado es», que es afirmar una ausencia que nadie pudo mirar.
+  const veredicto = entrada && errorDeCobertura === null ? veredictoDelLote(entrada) : null;
 
   // P3 §6 — the selection form is offered for cherry that is not already in a
   // run. A batch mid-fermentation is not waiting to be sorted, and a lot that
@@ -1116,14 +1118,17 @@ export default async function LotDetailPage({
               ? t("processCoveringHidden", { state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed") })
               : t("processCoveringShown", {
                   lotCode: cobertura.vigente.lot.lotCode,
-                  label: cobertura.vigente.recetaConVersion ?? cobertura.vigente.etiqueta,
+                  // M6: un proceso sin receta se dice en el idioma de la pantalla, no con la constante `SIN_RECETA` del reporte.
+                  label: cobertura.vigente.recetaConVersion ?? t("processNoRecipeLabel"),
                   state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed"),
                 })}
           </p>
         ) : cobertura?.composicion ? (
           <p className="nn-muted">
             {t("processMixture", {
-              partes: cobertura.composicion.procesos.map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.etiqueta}`)).join(" + "),
+              partes: cobertura.composicion.procesos
+                .map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.recetaConVersion ?? t("processNoRecipeLabel")}`))
+                .join(" + "),
             })}
           </p>
         ) : null}
@@ -1131,7 +1136,7 @@ export default async function LotDetailPage({
           <p className="nn-muted">
             {t("processChainShown", {
               cadena: cobertura.cadena
-                .map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.recetaConVersion ?? p.etiqueta}`))
+                .map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.recetaConVersion ?? t("processNoRecipeLabel")}`))
                 .join(" → "),
             })}
           </p>
