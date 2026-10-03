@@ -36,6 +36,11 @@ afterEach(async () => {
   cohorteIds = [];
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: microIds } }) });
   microIds = [];
+  // La forma se borra ANTES de anular la rejilla: un trozo que referencia un tablero
+  // que ya no existe no debería quedarse. (Que la base lo impida al encoger es el §7.4
+  // del diseño, y está sin hacer: va en el plan de las pantallas.)
+  await prisma.plotShapeRange.deleteMany({ where: assertDefinedWhere({ id: { in: formaIds } }) });
+  formaIds = [];
   await prisma.location.update({
     where: { id: parcela.id },
     data: { gridOrigin: null, rowCount: null, plantsPerRow: null, rowSpacingMeters: null },
@@ -59,6 +64,25 @@ afterAll(async () => {
   });
 });
 
+let formaIds: string[] = [];
+
+/**
+ * Declara una forma que cubre el tablero entero.
+ *
+ * **Hace falta desde D8 (2026-10-02):** sin forma declarada `compararConLaRejilla`
+ * devuelve `sin_forma` y no afirma ninguna capacidad, porque `filas × plantas` es falso
+ * en un lote irregular. Las pruebas de abajo siguen midiendo lo que medían —que el
+ * cableado expone la comparación, y que una microparcela usa su rango— y para eso
+ * necesitan una forma; la del tablero lleno deja sus cifras intactas.
+ */
+async function declararFormaLlena(locationId: string) {
+  const f = await prisma.plotShapeRange.create({
+    data: { locationId, rowFrom: 1, rowTo: 10, plantFrom: 1, plantTo: 20, createdBy: usuario.userAccountId },
+  });
+  formaIds.push(f.id);
+  return f;
+}
+
 async function siembra(locationId: string, plantCount: number | null) {
   const c = await prisma.plantingCohort.create({
     data: {
@@ -80,15 +104,31 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
     expect(d.rejilla.status).toBe("sin_rejilla");
   });
 
+  /**
+   * **Con rejilla y SIN forma, el cableado dice `sin_forma`** (D8, 2026-10-02) — y esto
+   * es además el control de las cuatro pruebas de abajo: si declarar la forma no
+   * estuviera haciendo nada, ellas pasarían igual y esta fallaría.
+   */
+  it("con rejilla y sin forma declarada dice sin_forma, sin capacidad", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await siembra(parcela.id, 140);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.rejilla).toMatchObject({ status: "sin_forma", filas: 10, columnas: 20 });
+    expect(d.rejilla).not.toHaveProperty("capacidad");
+    expect(d.rejilla).not.toHaveProperty("diferencia");
+  });
+
   /** El control positivo del cableado: con rejilla y sin siembras, la capacidad. */
   it("con rejilla y sin siembras dice sin_cohortes con su capacidad", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
     expect(d.rejilla).toMatchObject({ status: "sin_cohortes", capacidad: 200 });
   });
 
   it("con todo contado compara", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     await siembra(parcela.id, 140);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
     expect(d.rejilla).toMatchObject({ status: "ok", capacidad: 200, contadas: 140, diferencia: 60 });
@@ -101,6 +141,7 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
    */
   it("con una siembra sin conteo dice conteo_incompleto y no compara", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     await siembra(parcela.id, 140);
     await siembra(parcela.id, null);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
@@ -123,6 +164,8 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
    */
   it("una microparcela con rango: la rejilla sale de la madre y la capacidad es su rango", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    // La forma es de quien pone la numeración: la madre. La microparcela la hereda.
+    await declararFormaLlena(parcela.id);
     const m = await prisma.location.create({
       data: {
         name: `TEST Micro Alta ${Date.now()}`,
