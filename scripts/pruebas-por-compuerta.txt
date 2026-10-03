@@ -17,6 +17,7 @@
 tests/territorio/rejillaEnLaBase.test.ts
 tests/territorio/microparcelaConRango.test.ts
 tests/territorio/rangosDeBloque.test.ts
+tests/territorio/plantonEnLaRejilla.test.ts
 tests/territorio/rejillaEnGetPlotDetail.test.ts
 tests/arquitectura/colacion-de-la-base.test.ts
 # Necesitan base, y les basta `migrate deploy` + `db:seed` con las banderas

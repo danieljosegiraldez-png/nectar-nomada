@@ -1412,6 +1412,12 @@
       "operacion": "floracionesDeLaParcela",
       "razon": "Devuelve las ventanas de floración de la parcela que la llamadora ya nombró **y de sus ascendientes y descendientes** —`ubicacionesEmparentadas`, el mismo ayudante y la misma regla que la carencia fitosanitaria §3.3: madre e hija sí, hermano no—, para que el navegador decida el aviso de polinizadores. Lee sólo tres columnas (`startsAt`, `endsAt`, `plotBlockId`): sin `select` viajaban al navegador `notes` y `observerPersonId`, y lo señaló una revisión. **No recibe principal porque no autoriza**: sus dos llamadoras son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, y las dos pasan por `contextoDeManejo` (`lot:view` sobre esa misma parcela) ANTES de llamarla. Devuelve todas las ventanas y no las de un instante a propósito: la fecha de la intervención la escribe el operario en el navegador y puede corregirla, así que decidir en el servidor para «ahora» dejaría el aviso equivocado en cuanto la cambiara. No lleva recorte temporal porque una parcela florece una o dos veces al año; cualquier «últimos N días» sería un número inventado.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/plotBlocks.ts",
+      "operacion": "rejillaDelBloque",
+      "razon": "Resuelve la parcela que pone la numeracion de un sitio y su rejilla: devuelve el propio sitio si tiene `rowCount`, y si no su madre (D3, una sola numeracion). El nombre es mas estrecho que la funcion — toma un `locationId`, no un bloque — y se exporto el 2026-10-02 para que `createSpecimen` no escribiera una segunda copia de la regla; en la base vive en una sola funcion, `core.raiz_de_la_numeracion`, por lo mismo. No recibe principal: sus tres llamadores autorizan la Location de origen antes de invocarla. `setPlotBlockType` y `anadirRangoAlBloque` (plotBlocks.ts) llaman a `requireLocationAttributeAccess` sobre `existing.locationId` y `bloque.locationId` respectivamente; `createSpecimen` (specimens.ts) llama a `requireSpecimenAccess(manage)` sobre `input.locationId`, que es el mismo sitio del que se resuelve la rejilla. Comprobado leyendo los tres sitios de llamada, no deducido.",
+      "verificado": "2026-10-02"
     }
   ]
 }
