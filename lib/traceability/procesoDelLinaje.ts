@@ -17,7 +17,7 @@
  */
 import { Prisma, type ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
-import { computeLotBalance, FULL_CONSUMPTION_TYPES, resolveTolerancePct } from "./balance";
+import { computeLotBalance, CONSUMING_WITHOUT_OUTPUT, FULL_CONSUMPTION_TYPES, resolveTolerancePct } from "./balance";
 import { LotProcessError } from "./errorDeProceso";
 import { ordenDeBloqueo } from "./ordenDeBloqueo";
 import { TOPE_DE_LINAJE } from "./topeDeLinaje";
@@ -507,7 +507,9 @@ export async function procesoAbiertoParaCorrida(
  *   (`startFermentationRun` y `startDryingRun` escriben esa transformación, sin salidas, al empezar);
  * - `lote_consumido`: el lote es la entrada de una transformación de consumo total (`FULL_CONSUMPTION_TYPES`, el mismo
  *   conjunto con que el libro de masa descuenta el lote entero) que tiene alguna salida —la que escribe el FIN de una
- *   corrida—. La de inicio no tiene salidas y no cuenta. `split` y `selection` no son de consumo total (son parciales);
+ *   corrida—, o una de las que consumen SIN salida (`CONSUMING_WITHOUT_OUTPUT`: venta, pérdida, desecho; residuo de la ronda 1,
+ *   2026-10-03: exigir una salida las dejaba pasar). Es la misma regla que `movesMaterial` del libro de masa. La de inicio de
+ *   una corrida no tiene salidas y no cuenta. `split` y `selection` no son de consumo total (son parciales);
  *   una división bajo un proceso ya la cierra `lote_dividido`.
  */
 export async function procesoParaUnaCorrida(
@@ -524,7 +526,15 @@ export async function procesoParaUnaCorrida(
   });
   if (corridaAbierta) throw new LotProcessError("corrida_ya_abierta");
   const consumido = await tx.lotTransformationInput.findFirst({
-    where: { lotId, transformation: { transformationType: { in: [...FULL_CONSUMPTION_TYPES] }, outputs: { some: {} } } },
+    where: {
+      lotId,
+      transformation: {
+        OR: [
+          { transformationType: { in: [...FULL_CONSUMPTION_TYPES] }, outputs: { some: {} } },
+          { transformationType: { in: [...CONSUMING_WITHOUT_OUTPUT] } },
+        ],
+      },
+    },
     select: { id: true },
   });
   if (consumido) throw new LotProcessError("lote_consumido");

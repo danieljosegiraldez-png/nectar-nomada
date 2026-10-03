@@ -41,7 +41,7 @@ async function lote(codigo: string, locationId: string = plotId) {
   lotes.push(id);
   return id;
 }
-async function enlazar(padres: string[], hijos: string[], tipo: "stage_change" | "split" | "merge" = "stage_change") {
+async function enlazar(padres: string[], hijos: string[], tipo: "stage_change" | "split" | "merge" | "sale" | "loss" = "stage_change") {
   const t = await prisma.lotTransformation.create({ data: {
     transformationType: tipo, occurredAt: new Date("2026-03-05T12:00:00Z"), provenanceClass: "original_record", createdBy: gestor,
     inputs: { create: padres.map((lotId) => ({ lotId })) }, outputs: { create: hijos.map((lotId) => ({ lotId })) },
@@ -520,6 +520,29 @@ describe("R7 — una corrida consume su lote entero: no empieza otra sobre él",
     // Control: la corrida sobre el lote que salió empieza, unida al mismo proceso.
     const { run: secado } = await startDryingRun(gestor, { lotId: f1.id, startedAt: ahora(), provenanceClass: "original_record" });
     expect(secado.lotProcessId).toBe(p.id);
+  });
+
+  it("sobre un lote vendido o perdido entero tampoco empieza nada: lote_consumido, aunque esa transformación no tenga salida", async () => {
+    // Revisión final, residuo de la ronda 1 (F3-c): `sale`, `loss` y `disposal` consumen el lote entero SIN salida
+    // (`CONSUMING_WITHOUT_OUTPUT` del libro de masa). Exigir una salida los dejaba pasar.
+    for (const tipo of ["sale", "loss"] as const) {
+      const l = await lote(`R7-CONS-${tipo}`);
+      await abrirProcesoDePrueba(gestor, l);
+      await enlazar([l], [], tipo);
+      for (const { empezar } of EMPEZAR) {
+        await expect(empezar(gestor, l), `${tipo}`).rejects.toThrow(new LotProcessError("lote_consumido"));
+      }
+    }
+    // Control: el inicio de una corrida (un `stage_change` SIN salida) no consume: terminada esa corrida sin salida, el
+    // lote no es «consumido» por ella. Se monta en crudo una corrida cerrada cuya única transformación es la de inicio.
+    const l = await lote("R7-CONS-INICIO");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const inicio = await enlazar([l], []);
+    const corrida = await prisma.dryingRun.create({ data: { startedAt: ahora(), endedAt: ahora(), createdBy: gestor } });
+    // La recoge el afterAll por su transformación (sale de un lote de `lotes`).
+    await prisma.lotTransformation.update({ where: { id: inicio }, data: { dryingRunId: corrida.id } });
+    const { run } = await startDryingRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    expect(run.lotProcessId).toBe(p.id);
   });
 
   /** El predicado de la pantalla y el servicio, sobre el mismo lote: tienen que decir lo mismo. */

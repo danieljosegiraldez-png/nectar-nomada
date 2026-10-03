@@ -89,7 +89,7 @@ export const FULL_CONSUMPTION_TYPES: ReadonlySet<LotTransformationType> = new Se
  * Everything else with zero outputs is a marker, not a movement — see
  * `movesMaterial`.
  */
-const CONSUMING_WITHOUT_OUTPUT: ReadonlySet<LotTransformationType> = new Set([
+export const CONSUMING_WITHOUT_OUTPUT: ReadonlySet<LotTransformationType> = new Set([
   "loss",
   "disposal",
   "sale",
