@@ -108,11 +108,24 @@ archivo. La quinta la encontró la autorrevisión de este spec, no la primera le
 
 | ruta | consulta | qué alimenta |
 |---|---|---|
-| `plantingCohorts.ts:655` | `plantingCohort.findMany` | cohortes y densidad |
-| `plantingCohorts.ts:666` | `harvestEventSource.findMany` | el **rendimiento** |
-| `plantingCohorts.ts:684` | `plantingEvent.findMany` | «entró en producción» |
-| `plantingCohorts.ts:735` | `specimen.findMany` con `specimenType: "trap"` | las **trampas** |
-| `specimens.ts:228` | `specimen.findMany` con `specimenType: "plant"` | las **plantas** |
+| `plantingCohorts.ts:650` | `plantingCohort.findMany` | cohortes y densidad |
+| `plantingCohorts.ts:661` | `harvestEventSource.findMany` | el **rendimiento** |
+| `plantingCohorts.ts:679` | `plantingEvent.findMany` | «entró en producción» |
+| `plantingCohorts.ts:730` | `specimen.findMany` con `specimenType: "trap"` | las **trampas** |
+| `specimens.ts:248` | `specimen.findMany` con `specimenType: "plant"` | las **plantas** |
+
+**Esos números se midieron dos veces, y la primera vez ya habían caducado.** Este diseño se escribió
+sobre `origin/main` = `203d9236` y **otra sesión fusionó 34 commits en esa misma zona** mientras se
+escribía: `formaDeLaParcela.ts` y `densidadPorMarco.ts` nuevos, y **165 líneas cambiadas en
+`plantingCohorts.ts`**, que es justo el archivo de cuatro de las cinco consultas. Re-medido contra
+`origin/main` = `5c2df3c6`: **la sustancia aguanta** —las cinco siguen usando `locationId` pelado y
+ninguno de los dos archivos usa `ubicacionesEmparentadas`— y lo que se movió fueron las líneas, que
+son las de arriba.
+
+**Lo que esto le dice a quien ejecute:** esta zona la está tocando otra sesión. Antes de empezar,
+re-medir estas cinco con `grep`, no fiarse de los números — y mirar si `formaDeLaParcela` o
+`densidadPorMarco` ya resuelven parte de lo que este diseño propone, porque «la forma de la parcela»
+y «la densidad» son exactamente el vocabulario del principio.
 
 Las cinco pasan a `{ in: await ubicacionesEmparentadas(locationId) }` — el mismo conector que ya
 usan intervenciones (`intervenciones.ts:226`), floración (`floracion.ts:179`) y cosecha
