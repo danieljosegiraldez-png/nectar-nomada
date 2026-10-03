@@ -1817,6 +1817,7 @@
     "rejillaComparada": "It fits {capacidad} and {contadas} are counted: a difference of {diferencia}.",
     "rejillaHeading": "Plot grid",
     "rejillaDeLaMadre": "The numbering is “{value}”'s, its plot: a microplot isn't numbered separately. What it declares is its range inside that grid, and there is no screen for that yet.",
+    "rejillaHuerfanaEnMicroparcela": "This microplot has a grid of its own ({value}) from before the rule existed, so it is numbered apart from its plot. It shouldn't be: the grid has to be removed, and that is a data fix, not something done here.",
     "rejillaRangosDeBloqueTitulo": "Where this block is",
     "rejillaSinRango": "This microplot doesn't say which part of the grid it covers yet, so it can't be compared with what's planted.",
     "error_rango_no_encontrado": "That part is gone: someone removed it. Reload the page to see the current state.",

@@ -1817,6 +1817,7 @@
     "rejillaComparada": "Caben {capacidad} y hay {contadas} contadas: una diferencia de {diferencia}.",
     "rejillaHeading": "Rejilla de la parcela",
     "rejillaDeLaMadre": "La numeración es la de «{value}», su parcela: una microparcela no se numera aparte. Lo suyo es declarar su rango dentro de esa rejilla, y todavía no hay pantalla para eso.",
+    "rejillaHuerfanaEnMicroparcela": "Esta microparcela tiene una rejilla propia ({value}) de antes de que la regla existiera, y por eso se numera aparte de su parcela. No debería: hay que quitársela, y eso se hace sobre los datos, no desde aquí.",
     "rejillaRangosDeBloqueTitulo": "Dónde está este bloque",
     "rejillaSinRango": "Esta microparcela todavía no dice qué trozo de la rejilla ocupa, así que no se puede comparar con lo sembrado.",
     "error_rango_no_encontrado": "Ese trozo ya no está: alguien lo quitó. Recarga la página para ver cómo está ahora.",

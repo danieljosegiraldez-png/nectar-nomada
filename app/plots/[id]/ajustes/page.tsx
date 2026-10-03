@@ -211,7 +211,23 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
             rechaza desde el mismo cambio (`rejilla_en_microparcela`); esto es
             para no ofrecer lo que el servidor va a negar. */}
         {esMicroparcela ? (
-          <p className="nn-muted">{t("rejillaDeLaMadre", { value: location.parentLocation?.name ?? "" })}</p>
+          /* **Y si la microparcela YA tiene una, se dice, en vez de decir que la
+             numeración es la de su madre.** Nada lo impedía hasta este cambio, así
+             que esas filas existen —se creó una a mano el 2026-10-03 midiendo el
+             defecto— y en ellas `core.raiz_de_la_numeracion` SIGUE devolviendo la
+             microparcela: tapar el formulario no limpia el dato. La frase de abajo
+             sería falsa ahí, y una pantalla que afirma lo contrario de la base es
+             peor que la que ofrecía de más. Limpiarlas es una tarea de datos: el
+             servicio deja vaciarlas, ninguna pantalla lo ofrece. */
+          location.rowCount != null ? (
+            <p className="nn-muted">
+              {t("rejillaHuerfanaEnMicroparcela", {
+                value: `${location.rowCount} × ${location.plantsPerRow ?? "?"}`,
+              })}
+            </p>
+          ) : (
+            <p className="nn-muted">{t("rejillaDeLaMadre", { value: location.parentLocation?.name ?? "" })}</p>
+          )
         ) : (
           <RejillaForm
             locationId={location.id}
