@@ -863,8 +863,6 @@
     "plotDashboardAlertSamplingNever": "No {muestra} sampling has ever been done",
     "plotDashboardAlertSamplingDue": "{muestra} sampling overdue: the last one was on {fecha}",
     "plotDashboardAlertAwaitingResults": "Samples awaiting results: {suelo} soil, {foliar} foliar",
-    "plotDashboardAlertNoArea": "Plot without an area: no density or kg/ha without it",
-    "plotDashboardAlertBadArea": "The recorded area is not valid",
     "plotDashboardAlertNoCount": "Plantings without a plant count: {n}",
     "plotDashboardAlertUnmarked": "Plantings not marked as in production: {n}",
     "plotDashboardAlertReentry": "Reentry in effect: do not enter until {hasta}",

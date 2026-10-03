@@ -38,22 +38,17 @@ export interface EntradaDePendiente {
    */
   zona: string | null;
   /**
-   * `location.areaHectares`, pasado por `Number()` sólo si no es nulo.
+   * **`areaHectares` ya NO entra aquí, y no es un olvido** (decisión de Daniel,
+   * 2026-10-03). Su principio es que el espacio de un lote «no depende de definir el
+   * metraje, solamente cuántas plantas y espacio aprox de densidad de plantas», así que
+   * los pendientes `sin_area` y `area_no_valida` le pedían al operario —con un enlace a
+   * `ajustes#areaHectares`— un dato que el modelo ya no necesita.
    *
-   * **El aviso de área se calcula AQUÍ, y no delegándolo a la función de densidad.**
-   * La razón sigue valiendo aunque esa función haya cambiado: un agregado devuelve
-   * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con una
-   * siembra sin conteo se quedaba sin su aviso. `densidadDelLote`
-   * (`densidadPorMarco.ts`), que la sustituyó el 2026-10-03, tiene el mismo orden de
-   * estados, así que la delegación seguiría perdiendo el aviso.
-   *
-   * **Y queda una pregunta abierta para Daniel, no un defecto:** su principio del
-   * 2026-10-03 dice que el espacio de un lote «no depende de definir el metraje,
-   * solamente cuántas plantas y espacio aprox de densidad». Si eso vale, los
-   * pendientes `sin_area` y `area_no_valida` le piden al operario un metraje que ya
-   * dijo que no hace falta. No se quitan sin que lo diga.
+   * La columna sigue en el esquema y es opcional (`Decimal?`): nadie la borra, y quien
+   * la tenga puesta no pierde nada. Lo que se quitó es que la aplicación la reclame.
+   * La densidad y el área plantada salen del marco y de las celdas de la forma
+   * (`densidadPorMarco.ts`).
    */
-  areaHectares: number | null;
   cohortesActivas: readonly { id: string; plantCount: number | null }[];
   estados: ReadonlyMap<string, EstadoDeProduccion>;
   jornadas: readonly { id: string; startedAt: Date; endedAt: Date | null }[];
@@ -81,8 +76,6 @@ export type Aviso =
   | { tipo: "jornada_sin_cerrar"; fieldSessionId: string; startedAt: Date }
   | { tipo: "muestreo_vencido"; muestra: "suelo" | "foliar"; ultimo: string | null }
   | { tipo: "muestras_sin_resultado"; suelo: number; foliar: number }
-  | { tipo: "sin_area" }
-  | { tipo: "area_no_valida" }
   | { tipo: "siembras_sin_conteo"; n: number }
   | { tipo: "siembras_sin_marcar"; n: number }
   | { tipo: "reentrada_vigente"; interventionId: string; locationId: string; hasta: Date }
@@ -144,10 +137,6 @@ export function pendienteDeLaParcela(e: EntradaDePendiente): { tocaHacer: Aviso[
     ...avisosDeTrampas({ hoy: e.hoy, trampas: e.trampas, regla: e.regla, intervenciones: e.intervencionesDeTrampas, zona: e.zona }),
   );
 
-  if (e.areaHectares == null) faltaUnDato.push({ tipo: "sin_area" });
-  // `!(x > 0)` y no `x <= 0`: con `NaN` la segunda es falsa y lo dejaría pasar.
-  else if (!(e.areaHectares > 0)) faltaUnDato.push({ tipo: "area_no_valida" });
-
   const sinConteo = e.cohortesActivas.filter((c) => c.plantCount == null).length;
   if (sinConteo > 0) faltaUnDato.push({ tipo: "siembras_sin_conteo", n: sinConteo });
 
@@ -173,9 +162,6 @@ export function enlaceDelAviso(aviso: Aviso, locationId: string): string {
     case "muestreo_vencido":
     case "muestras_sin_resultado":
       return `/plots/${locationId}?pestana=muestras`;
-    case "sin_area":
-    case "area_no_valida":
-      return `/plots/${locationId}/ajustes#areaHectares`;
     case "siembras_sin_conteo":
     case "siembras_sin_marcar":
       return `/plots/${locationId}/ajustes#siembras`;

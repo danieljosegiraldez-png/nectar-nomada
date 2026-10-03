@@ -863,8 +863,6 @@
     "plotDashboardAlertSamplingNever": "Nunca se ha hecho muestreo {muestra}",
     "plotDashboardAlertSamplingDue": "Muestreo {muestra} vencido: el último fue el {fecha}",
     "plotDashboardAlertAwaitingResults": "Muestras esperando resultado: {suelo} de suelo, {foliar} foliares",
-    "plotDashboardAlertNoArea": "Lote sin área: sin ella no hay densidad ni kg/ha",
-    "plotDashboardAlertBadArea": "El área registrada no es válida",
     "plotDashboardAlertNoCount": "Siembras sin conteo de plantas: {n}",
     "plotDashboardAlertUnmarked": "Siembras sin marcar en producción: {n}",
     "plotDashboardAlertReentry": "Reentrada vigente: no entrar hasta las {hasta}",
