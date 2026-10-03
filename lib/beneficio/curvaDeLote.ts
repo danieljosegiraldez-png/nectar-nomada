@@ -1,0 +1,194 @@
+/**
+ * La curva de un lote —pH, Brix o humedad en el tiempo— contra la banda de su receta, pura.
+ *
+ * **Sin base de datos ni imports a propósito**, igual que `lineaDeEtapas.ts`: recibe lecturas y
+ * objetivo ya leídos y devuelve **coordenadas**. No dibuja nada; el `<svg>` lo pinta otra pieza.
+ *
+ * **La banda sale de un dato, no de un dibujo.** Sin `ProcessTarget` para esa variable, o con uno
+ * al que le falta `minValue` o `maxValue` (los tres son anulables en el esquema), no se pinta
+ * banda y se dice: `sin_objetivo_declarado`. Una banda a medias —centrada en `targetValue` con
+ * un ancho inventado— sería una banda que nadie declaró, y el operario la leería como la receta.
+ * Los puntos se devuelven igualmente: «sin banda» no es «sin curva».
+ *
+ * **Una receta al revés (`minValue > maxValue`) tampoco dibuja banda: `banda_al_reves`.** Escalar
+ * contra ella daría una banda IDÉNTICA a la de una receta correcta (`escalaY` manda `minValue` a
+ * `alto` y `maxValue` a `0` sin mirar cuál es mayor) y los PUNTOS saldrían espejados: un pH de 4,9
+ * sobrefermentado se pintaría abajo, donde una receta buena pone los valores bajos, y «hacia
+ * arriba, el valor más alto» sería falso. Se niega a dibujar la banda y lo dice, como con ancho
+ * cero; los puntos se escalan contra sus propios datos, igual que sin banda, y por eso el eje
+ * vuelve a significar lo que dice.
+ *
+ * **Una banda de ancho cero (`minValue === maxValue`) tampoco dibuja banda ni escala contra ella:
+ * `banda_de_ancho_cero`.** `escalaY` manda TODO valor a media altura cuando el rango es cero, así
+ * que escalar contra esa banda destruía la diferencia entre lecturas: una serie 4,5 → 4,9 → 4,7
+ * salía como una recta plana («nada cambió») y dos valores distintos a la misma hora se
+ * superponían exactamente — a la vez que la pantalla avisaba de que no puede juzgarlas. Ahora es el
+ * mismo camino que `banda_al_reves`: sin banda dibujada y puntos escalados contra sus propios
+ * datos. Qué lecturas «quedan dentro» sigue sin afirmarse (`juicioDeBanda`); sólo cambia la geometría.
+ *
+ * **En SVG la Y crece hacia ABAJO.** El valor máximo de la escala queda arriba (`y = 0`) y el
+ * mínimo abajo (`y = alto`). Con la Y al revés la curva seguiría pareciendo una curva, así que
+ * sólo una prueba con números a mano lo ve.
+ *
+ * **Contra qué se escala el eje Y** (decisión de diseño, no la deduce nadie del tipo):
+ * - con banda, contra la banda: `minValue` → `alto`, `maxValue` → `0`. Un valor fuera de la banda
+ *   queda fuera del lienzo (`y < 0` o `y > alto`); no se recorta aquí, porque recortar escondería
+ *   justo la lectura que se salió de la receta. Qué hacer con eso lo decide quien pinta.
+ * - sin banda (también con `banda_al_reves` y `banda_de_ancho_cero`), contra el mínimo y el máximo
+ *   de los propios datos: es la única escala disponible.
+ *
+ * **Los puntos degenerados no dan `NaN`.** Con una sola lectura, o con todas iguales, el rango
+ * vale cero y dividir entre él da `NaN` (o `Infinity`). El valor va a **media altura** (`alto / 2`):
+ * no hay un extremo que lo ponga arriba o abajo. Con la X pasa igual —una sola lectura, o todas a
+ * la misma hora— y va a **media anchura** (`ancho / 2`): un punto suelto en `x = 0` parecería el
+ * arranque de una curva que todavía no tiene recorrido, y en el centro se ve que es un dato solo.
+ *
+ * Las lecturas se ordenan por hora: el orden en que lleguen no debe cambiar la curva.
+ *
+ * **Devuelve también las lecturas sin escalar y el rango declarado** (`lecturas`, `rango`): los
+ * puntos son coordenadas y de ellas no se recupera qué se midió. Los necesitan los ejes
+ * (`ejesDeLaCurva`) y la cita de qué sugiere el último valor (`riesgoDeEsperar`); no cambian
+ * ninguna coordenada.
+ *
+ * Diseño: `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
+ */
+
+export interface PuntoDeCurva {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * `yMin` es la coordenada del **valor** mínimo de la banda (`minValue`) y `yMax` la del valor
+ * máximo: por la Y hacia abajo, `yMin >= yMax`. Son coordenadas de valores, no «la menor Y».
+ */
+export type Banda =
+  | {
+      readonly tipo: "banda";
+      readonly yMin: number;
+      readonly yMax: number;
+      readonly yObjetivo: number | null;
+    }
+  | { readonly tipo: "sin_objetivo_declarado" }
+  /** `minValue > maxValue`: no hay banda que dibujar sin espejar la curva. Ver el encabezado. */
+  | { readonly tipo: "banda_al_reves" }
+  /** `minValue === maxValue`: no hay rango contra el que escalar. Ver el encabezado. */
+  | { readonly tipo: "banda_de_ancho_cero" };
+
+/** Una lectura tal como llegó: instante y valor, sin escalar. */
+export interface LecturaDeCurva {
+  readonly occurredAt: Date;
+  readonly value: number;
+}
+
+export interface Curva {
+  readonly puntos: readonly PuntoDeCurva[];
+  readonly banda: Banda;
+  readonly ancho: number;
+  readonly alto: number;
+  /**
+   * Las lecturas de las que salieron `puntos`, **por hora ascendente y sin escalar**. Los puntos son
+   * coordenadas del lienzo y de ahí no se recupera qué se midió; quien rotula los ejes
+   * (`ejesDeLaCurva`) o cita qué sugiere el último valor (`riesgoDeEsperar`) las necesita tal cual.
+   * **«La última» no es `lecturas[lecturas.length - 1]`:** con varias en el mismo instante el orden entre
+   * ellas es arbitrario, y quien necesite la última pregunta a `ultimaLectura`, que dice `null` cuando
+   * no la hay.
+   */
+  readonly lecturas: readonly LecturaDeCurva[];
+  /**
+   * El rango que declaró la receta, **tal cual** (`minValue`, `maxValue`), o `null` si falta
+   * alguno de los dos extremos. A diferencia de `banda`, **no descarta** el rango al revés ni el de
+   * ancho cero: esos dos NO se dibujan (`banda` lo dice) pero siguen siendo lo que la receta
+   * declaró, y quien rotula decide qué hacer con ellos en vez de adivinar por qué falta.
+   */
+  readonly rango: { readonly min: number; readonly max: number } | null;
+}
+
+/**
+ * La lectura más reciente, **o `null` si no hay UNA última**: sin lecturas, o con varias que comparten
+ * el instante máximo.
+ *
+ * **Un empate de instante no tiene «última».** `curvaDeLote` ordena por `getTime()`, y un empate devuelve
+ * `0`: el orden entre lecturas del mismo instante es el que devolvió la base —arbitrario y no estable—,
+ * así que «la de más al final» cambia de una consulta a otra. Medido en la base local: 7 de 10 lotes
+ * tienen TODAS sus lecturas en el mismo instante, y en un lote se llegó a presentar la de **recepción**
+ * (la primera de la corrida) como «tu última lectura». **No se inventa un desempate** —ni por valor, ni
+ * por id, ni por nota—: cuando no se puede decir cuál es la última, no se afirma. Es el «nunca un cero
+ * donde falta un registro» aplicado a la identidad de la lectura.
+ *
+ * No depende de que `lecturas` venga ordenada: busca el instante máximo y cuenta las que caen en él.
+ * Un instante que no es un número (`Invalid Date`) tampoco tiene última: `null`.
+ */
+export function ultimaLectura(lecturas: readonly LecturaDeCurva[]): LecturaDeCurva | null {
+  if (lecturas.length === 0) return null;
+  const instantes = lecturas.map((l) => l.occurredAt.getTime());
+  const ultimo = Math.max(...instantes);
+  const enElUltimo = lecturas.filter((_, i) => instantes[i] === ultimo);
+  return enElUltimo.length === 1 ? enElUltimo[0]! : null;
+}
+
+/** Posición de `v` entre `min` y `max` en un eje de `tamano`, con el máximo en 0. Rango cero: mitad. */
+function escalaY(v: number, min: number, max: number, tamano: number): number {
+  if (max === min) return tamano / 2;
+  return tamano - ((v - min) / (max - min)) * tamano;
+}
+
+export function curvaDeLote(input: {
+  readonly lecturas: readonly LecturaDeCurva[];
+  /** De `ProcessTarget`. Los tres son anulables en el esquema. */
+  readonly objetivo: {
+    readonly minValue: number | null;
+    readonly maxValue: number | null;
+    readonly targetValue: number | null;
+  } | null;
+  readonly ancho: number;
+  readonly alto: number;
+}): Curva {
+  const { ancho, alto, objetivo } = input;
+  const lecturas = [...input.lecturas].sort(
+    (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
+  );
+
+  const minValue = objetivo?.minValue ?? null;
+  const maxValue = objetivo?.maxValue ?? null;
+  const alReves = minValue !== null && maxValue !== null && minValue > maxValue;
+  const anchoCero = minValue !== null && maxValue !== null && minValue === maxValue;
+  const hayBanda = minValue !== null && maxValue !== null && !alReves && !anchoCero;
+
+  const banda: Banda = alReves
+    ? { tipo: "banda_al_reves" }
+    : anchoCero
+      ? { tipo: "banda_de_ancho_cero" }
+      : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
+  const rango = minValue !== null && maxValue !== null ? { min: minValue, max: maxValue } : null;
+  if (lecturas.length === 0) return { puntos: [], banda, ancho, alto, lecturas, rango };
+
+  const valores = lecturas.map((l) => l.value);
+  const escalaMin = hayBanda ? minValue : Math.min(...valores);
+  const escalaMax = hayBanda ? maxValue : Math.max(...valores);
+
+  const t0 = lecturas[0]!.occurredAt.getTime();
+  const t1 = lecturas[lecturas.length - 1]!.occurredAt.getTime();
+
+  const puntos = lecturas.map((l): PuntoDeCurva => ({
+    x: t1 === t0 ? ancho / 2 : ((l.occurredAt.getTime() - t0) / (t1 - t0)) * ancho,
+    y: escalaY(l.value, escalaMin, escalaMax, alto),
+  }));
+
+  return { puntos, banda, ancho, alto, lecturas, rango };
+}
+
+function bandaDe(
+  minValue: number | null,
+  maxValue: number | null,
+  targetValue: number | null,
+  alto: number,
+): Banda {
+  if (minValue === null || maxValue === null) return { tipo: "sin_objetivo_declarado" };
+  return {
+    tipo: "banda",
+    yMin: escalaY(minValue, minValue, maxValue, alto),
+    yMax: escalaY(maxValue, minValue, maxValue, alto),
+    yObjetivo: targetValue === null ? null : escalaY(targetValue, minValue, maxValue, alto),
+  };
+}

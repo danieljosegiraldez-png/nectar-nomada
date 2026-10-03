@@ -660,7 +660,7 @@
     },
     {
       "archivo": "lib/beneficio/datosDelTablero.ts",
-      "razon": "Módulo de dominio: las lecturas del tablero del beneficio (diseño 2026-09-16 §4.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` ANTES de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de un tablero vacío — un tablero vacío le diría a una cuenta nueva que el beneficio no tiene café fermentando. Los equipos NO se consultan crudos: salen de `listarEquipos`, que ya filtra por `can(view, equipment)`. Las camas se acotan por las organizaciones de los lotes visibles, que es un apoderado dicho en el código y no la regla ideal: lo que no hace es traer todas las camas de la base. No escribe nada."
+      "razon": "Módulo de dominio: las lecturas del tablero del beneficio (diseño 2026-09-16 §4.1). Es de LECTURA y su permiso lo resuelve `resolveLotVisibility` + `lotWhereFromVisibility` ANTES de consultar nada: sólo trae corridas cuyo lote de entrada alcanza la visibilidad de quien mira, y cuando el ayudante dice «ninguna» devuelve `sinAmbito: true` en vez de un tablero vacío — un tablero vacío le diría a una cuenta nueva que el beneficio no tiene café fermentando. Los equipos NO se consultan crudos: salen de `listarEquipos`, que ya filtra por `can(view, equipment)`. Las camas se acotan por las organizaciones de los lotes visibles, que es un apoderado dicho en el código y no la regla ideal: lo que no hace es traer todas las camas de la base. **Las tres piezas visuales (2026-09-30, §4.5) usan el MISMO `lotWhere`**: los **tres** recuentos de la línea de etapas —proceso, secado y almacén; recepción y selección dejaron de contarse y flotación nunca se contó: ADR-195— son `prisma.lot.count({ where: { AND: [lotWhere, …] } })` —cuentan LOTES visibles, nunca filas de la tabla de la etapa—, y la curva de un lote (`curvaDeUnLote`, ayudante no exportado) primero comprueba con `prisma.lot.findFirst({ where: { AND: [lotWhere, { id }] } })` que ese lote es visible y, si no lo es, devuelve `null` **sin distinguirlo de «no pediste curva»** para no enseñar que existe. Sólo después lee sus mediciones, acotadas a ese `lotId` ya autorizado. No escribe nada."
     },
     {
       "archivo": "lib/beneficio/colaDeSecado.ts",
@@ -673,6 +673,10 @@
     {
       "archivo": "lib/traceability/destinoDeFinca.ts",
       "razon": "Módulo de dominio: a qué beneficio envía su cereza una finca (ADR-194, diseño 2026-09-30 §4.1). Una sola escritura, `location.beneficioDestinoId`, y va detrás de DOS permisos reusados —`exigeGestionarFinca` (lot:manage sobre la finca) y `exigeBeneficioDeDestino` (lot:view sobre el beneficio)— que corren ANTES de abrir la transacción. No lee nada que no sea el valor anterior, y sólo para poder auditar el `before`."
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
     }
   ],
   "reciben_transaccion": [
@@ -785,6 +789,10 @@
     {
       "archivo": "lib/traceability/samplingEvents.ts",
       "razon": "`crearInspeccionEnTransaccion(tx, userAccountId, input)` recibe el `tx` de `recordMeasurement` para crear la inspección IMPLÍCITA —la que nace cuando llega una zona de muestreo sin ninguna (Daniel, 2026-09-29)— dentro de la misma transacción que la medición. Anidar una transacción propia usaría otra conexión: la inspección podría quedar escrita mientras la medición se deshace, que es lo que la atomicidad existe para impedir. Misma forma y misma razón que `cerrarCorridaEnTransaccion` en drying.ts. `createSamplingEvent` pasa ahora por este mismo ayudante, así que no hay dos escrituras que puedan derivar."
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
@@ -1406,6 +1414,18 @@
       "operacion": "tienePreparacionTostada",
       "razon": "Decisión de Daniel, 2026-09-25: ¿la muestra tiene algún tueste registrado? Un `count` sobre `roastSession`, sin devolver ningún dato de la fila. Decide si un informe externo DEBE nombrar el tueste servido o si entra marcado «tueste no registrado». Mismo razonamiento que `esTuesteDeLaMuestra`: quien llama ya autorizó la muestra.",
       "verificado": "2026-09-25"
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "operacion": "enFloracion",
+      "razon": "Pregunta si una parcela estaba en floración en un instante. **No autoriza a propósito**: no recibe principal porque es una lectura de contexto para un aviso, y §32 sólo le permite proponer. Su llamadora prevista es el formulario de intervención, que ya pasó `requireLotAccess` sobre esa parcela antes de pintarse. **Desde el aviso de floración sí tiene llamadora**: `app/components/traceability/IntervencionForm.tsx` la usa a través de `hayFloracion`. La razón anterior decía que no tenía ninguna; se corrige en vez de dejarla envejecer. Devuelve las ventanas de floración de UNA parcela que la llamadora ya nombró, no una lista que se pueda recorrer para descubrir parcelas ajenas.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/floracion.ts",
+      "operacion": "floracionesDeLaParcela",
+      "razon": "Devuelve las ventanas de floración de la parcela que la llamadora ya nombró **y de sus ascendientes y descendientes** —`ubicacionesEmparentadas`, el mismo ayudante y la misma regla que la carencia fitosanitaria §3.3: madre e hija sí, hermano no—, para que el navegador decida el aviso de polinizadores. Lee sólo tres columnas (`startsAt`, `endsAt`, `plotBlockId`): sin `select` viajaban al navegador `notes` y `observerPersonId`, y lo señaló una revisión. **No recibe principal porque no autoriza**: sus dos llamadoras son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, y las dos pasan por `contextoDeManejo` (`lot:view` sobre esa misma parcela) ANTES de llamarla. Devuelve todas las ventanas y no las de un instante a propósito: la fecha de la intervención la escribe el operario en el navegador y puede corregirla, así que decidir en el servidor para «ahora» dejaría el aviso equivocado en cuanto la cambiara. No lleva recorte temporal porque una parcela florece una o dos veces al año; cualquier «últimos N días» sería un número inventado.",
+      "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/traceability/procesoDelLinaje.ts",

@@ -66,6 +66,15 @@ const EXCEPCIONES: Record<string, { razon: string; n: number }> = {
       "(`exigeSecadoTerminado`, `procesoQueDevolver`, `coberturaDelLote`).",
     n: 1,
   },
+  "lib/beneficio/datosDelTablero.ts": {
+    razon:
+      "La línea de etapas (ADR-195, llegada de `main` al juntarla el 2026-10-03) cuenta los lotes visibles DUEÑOS de un " +
+      "proceso abierto: `cuentaLotes({ lotProcesses: { some: { endedAt: null } } })`. Es «cuántos procesos hay abiertos», " +
+      "no «qué proceso cubre a este lote»: un descendiente cubierto por herencia (el pergamino de una cereza en proceso) " +
+      "no es otro proceso, y contarlo sumaría dos lotes por un solo proceso. Es la única lectura por lote del archivo; " +
+      "el proceso de cada lote de la cola, de la liberación y de la curva sale de `procesoQueCubre`.",
+    n: 1,
+  },
   "lib/traceability/reporteDeProceso.ts": {
     razon:
       "`reporteDeProceso` agrupa los procesos de cada lote por fila (`include: { lotProcesses }` sobre `lot.findMany`): " +

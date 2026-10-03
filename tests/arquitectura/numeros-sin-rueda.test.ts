@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { soltarFocoConLaRueda } from "../../app/components/CampoNumerico";
+import { sinComentarios } from "../helpers/sinComentarios";
 
 const RAIZ = new URL("../..", import.meta.url).pathname;
 const PIEZA = "app/components/CampoNumerico.tsx";
@@ -59,6 +60,22 @@ function etiquetasInput(src: string): string[] {
   return etiquetas;
 }
 
+/**
+ * Fuera los comentarios antes de buscar etiquetas.
+ *
+ * **Medido el 2026-10-02: este guardia marcaba PROSA.** El docstring de
+ * `app/components/traceability/RejillaForm.tsx` explica por qué sus campos son
+ * `<CampoNumerico>` y para eso nombra el problema —«girar la rueda sobre un
+ * `<input type="number">` con foco cambia su valor»—, y esa frase, dentro de un
+ * comentario, salía como incumplimiento. El archivo usaba `<CampoNumerico>` en
+ * sus cuatro números.
+ *
+ * Un guardia que marca código correcto es peor que no tener guardia: enseña a
+ * ignorarlo, o —peor— a contorsionar la documentación para que el escáner calle.
+ * La misma corrección se le hizo el día anterior a
+ * `codigos-de-rejilla-tienen-frase`, que contaba un código escrito en un
+ * comentario.
+ */
 function sinProteccion(etiqueta: string): boolean {
   const numerico = /\stype=(["']number["']|\{)/.test(etiqueta);
   const protegido = /\sonWheel=\{[^}]*(soltarFocoConLaRueda|\.blur\(\))/.test(etiqueta);
@@ -70,7 +87,7 @@ describe("la rueda no cambia un campo numérico", () => {
     const culpables: string[] = [];
     for (const f of archivosTsx()) {
       if (f === PIEZA) continue; // es la propia pieza
-      for (const tag of etiquetasInput(readFileSync(`${RAIZ}${f}`, "utf8"))) {
+      for (const tag of etiquetasInput(sinComentarios(readFileSync(`${RAIZ}${f}`, "utf8")))) {
         if (sinProteccion(tag)) culpables.push(`${f}: ${tag.replace(/\s+/g, " ").slice(0, 90)}`);
       }
     }

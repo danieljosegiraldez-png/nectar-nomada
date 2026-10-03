@@ -2364,14 +2364,51 @@ vercel inspect --logs <url-de-produccion> --scope <scope>
 ## Revisión independiente
 
 `docs/CODEX_REVIEW.md`. El CLI de Codex funciona y está autenticado; **no está
-en el PATH**: `/Applications/ChatGPT.app/Contents/Resources/codex`. El paquete de
-revisión lo arma `tools/pack-for-review.sh`, mecánicamente.
+en el PATH**, y **la ruta cambió el 2026-09-30**:
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
+
+**La corrigieron dos sesiones por separado el 2026-10-02**, cada una con la mitad
+que la otra no tenía; esto conserva las dos, y el hecho de que coincidieran dice
+que la instrucción vieja llevaba tiempo desorientando.
+
+La ruta vieja era la misma **sin** `codex-cli/bin`, y ya no existe. Tres cosas que
+cuesta un rato descubrir si no están escritas:
+
+- **No falla en rojo de forma visible.** `exec` sobre la ruta vieja devuelve 127
+  con «no such file or directory», pero si ese comando va en una línea compuesta
+  que termina en un `echo`, **el conjunto sale 0** con la salida vacía — o sea con
+  la forma exacta de una revisión que no encontró nada. Comprobar `[ -x ]` sobre
+  la ruta antes de usarla, y leer el **tamaño** de la salida.
+- **En `Contents/Resources` lo único que conserva ese nombre son dos archivos de
+  sonido**, así que un `ls` descuidado parece encontrar algo.
+- **El brief versionado `docs/CODEX_REVIEW.brief.md` lleva el encuadre del ÚLTIMO
+  cambio que se revisó** —hoy el de `auth:grant-admin`—, así que reusarlo tal cual
+  le da al revisor el marco equivocado: se escribe uno propio y no se pisa ése.
+
+**Y una cuarta, medida el 2026-10-01 y que costó 40 minutos de nada:
+`codex exec "<prompt>"` se cuelga esperando stdin** cuando se lanza de fondo. Su
+ayuda lo dice —«if stdin is piped and a prompt is also provided, stdin is appended
+as a `<stdin>` block»— y de fondo stdin es una tubería que nunca cierra. Imprime
+«Reading additional input from stdin...», 39 bytes, y ahí se queda. **Cerrar stdin:**
+
+```bash
+/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex exec \
+  --cd <ruta> --sandbox read-only "<prompt>" < /dev/null > salida.txt 2>&1
+```
+
+Control que lo discrimina: el mismo prompt trivial sin `/dev/null` da **39 bytes y
+0 aciertos** del marcador; con él, **385 y 3**. Existe además
+`codex exec review`, pensado para esto, sin usar todavía.
+
+Ahí quedó `codex-cli 0.159.2`, con sesión. El paquete de revisión lo arma
+`tools/pack-for-review.sh`, mecánicamente.
 
 ## Salud del repositorio — comprobado el 2026-08-28
 
 - Remoto `https://github.com/danieljosegiraldez-png/nectar-nomada.git`, rama `main`, árbol limpio.
 - `vercel` autenticado; vive en `~/.nvm/versions/node/v24.19.0/bin`.
-- Codex `0.150.0-alpha.12.2`, `login status` → «Logged in using ChatGPT».
+- Codex **`0.159.2`** (medido el 2026-10-01; decía `0.150.0-alpha.12.2`),
+  `login status` → «Logged in using ChatGPT».
 - Backups: `NN_BACKUP_DIR` está en `~/.zshrc` y apunta a Google Drive; el
   destino existe; `com.nectarnomada.backup` está cargado en launchd con último
   estado de salida 0; el log vive en `~/Library/Logs/nectar-nomada-backup.log`.
@@ -3275,6 +3312,65 @@ conflicto. Resuelto, las comprobaciones pasaron de **2 a 6** al instante.
 **Corolario para cualquier espera de CI:** antes de interpretar estados, comprobar
 que estén **las que deben estar**. Una comprobación ausente no tiene color.
 
+### Un recuento de filas no puede ver un `UPDATE`, y `SET NULL` borra sin fallar
+
+**2026-10-02, en `scripts/consolidar-persona-duplicada.ts`.** El guion borra una
+`core.user_account`, y su post-condición vigilaba que `core.audit_event` creciera
+exactamente en 1. Las dos mitades estaban mal, y la segunda es la que importa:
+
+- `audit_event_actor_user_account_id_fkey` es **`ON DELETE SET NULL`** —en el SQL de
+  `20260809221638_init_identity`—, así que borrar una cuenta que haya actuado **no
+  falla**: pone a NULL el actor de cada fila que escribió. En silencio, y es
+  exactamente lo que §35 prohíbe.
+- Y **un `count(*)` no puede ver un `UPDATE`.** Con los actores en blanco o intactos
+  devuelve el mismo número, así que esa post-condición habría devuelto lo mismo con la
+  respuesta contraria: no era un control.
+
+**Y el esquema de Prisma no lo dice.** Una relación opcional sin `onDelete` explícito
+emite `SET NULL`, así que leer `schema.prisma` no distingue «protegido» de «se borra
+callado». Lo dice el SQL de la migración. Medido ese día: de ~136 claves ajenas a
+`core.user_account(id)`, **unas 115 son `SET NULL` y 21 `RESTRICT`**, con control
+positivo —el mismo recuento sobre `core.person` da 53 sentencias contra las 52 columnas
+que la base midió en vivo, así que el patrón mide donde debe—.
+
+**Las dos reglas, y valen para cualquier borrado:**
+
+1. **Antes de borrar una fila, medir qué la referencia — generado del esquema, no de una
+   lista escrita a mano.** Y medir las referencias de **todo** lo que desaparece: ese
+   guion hacía desaparecer una persona *y* una cuenta, y durante un día midió sólo la
+   primera. Una guarda asimétrica no falla en rojo: deja pasar justo el caso que no mira.
+2. **Un `FOR UPDATE` sobre la fila padre al abrir la transacción cierra la carrera por
+   casi nada.** PostgreSQL exige un bloqueo en el padre para insertar un hijo con clave
+   ajena, así que mientras se tenga, nadie crea una referencia nueva. Sin él, una
+   escritura entre la medición y el borrado se traga el `SET NULL` sin avisar.
+
+### Arreglar una instancia de una clase y dejar su gemela al lado
+
+**El mismo día, y lo encontraron tres revisiones independientes, no una lectura.** En el
+mismo bloque de post-condiciones había **dos** invariantes globales con la misma forma:
+`core.audit_event` creciendo en 1, y `core.assignment` manteniendo su total exacto.
+Relajé la primera —escribiendo un comentario que explicaba por qué una invariante global
+no es de esta operación— y **dejé la segunda intacta, seis líneas más abajo**.
+
+La segunda era peor: sólo podía fallar por la escritura de otra persona, porque la
+pérdida que decía vigilar es **imposible** —`core.assignment.user_account_id` es
+`RESTRICT`, así que una fila sin mover haría fallar el borrado a gritos—. O sea, un
+generador de falsos positivos puro, al lado del comentario que explicaba la trampa.
+
+**La regla: al arreglar un defecto de clase, enumerar sus hermanos EN EL MISMO ÁMBITO
+antes de dar el arreglo por hecho.** Un `grep` de la forma —aquí, `!==` contra un
+`count()` global— cuesta una línea. Escribir el comentario que nombra la clase no
+protege de la instancia siguiente: la prosa se lee y se razona alrededor, incluso la
+propia, incluso recién escrita.
+
+**Y el corolario del mismo día: un guardia nuevo puede abortar trabajo correcto.** La
+guarda que escribí para los tríos `(cuenta, rol, ámbito)` duplicados no filtraba por
+`status`, y `AssignmentStatus` tiene `revoked` y `expired` —esas filas se quedan en la
+tabla, son historia, no permisos—. Una asignación retirada hace meses habría abortado una
+consolidación correcta. Abortar sobre código correcto es peor que no tener guarda: enseña
+a ignorar una línea roja. El filtro bueno ya estaba escrito al lado, en
+`grant-platform-admin.sql` (`a.status = 'active'`).
+
 ### Un guardia puede vigilar UN ARCHIVO creyendo vigilar una clase
 
 **2026-09-30.** `tests/arquitectura/desfase-horario-sobrevive-al-render.test.ts` existía para una
@@ -3372,6 +3468,118 @@ en `tests/beneficio/graficaDeSecado.test.ts`). Sin la segunda, devolver la serie
 rango que quepa dentro del de la principal pasa el guardia sin que nadie note el aplastamiento. La
 medición que lo motivó está en el comentario de `escalaDeAmbiente`, en
 `lib/beneficio/graficaDeSecado.ts`.
+
+### El nombre de la base desechable decide si cuatro suites pasan
+
+**2026-10-01, y me costó tres corridas del carril completo más un control que no
+valía.** Verificando una fusión, creé bases desechables llamadas `nectar_fusion`,
+`nectar_tras_576`, `nectar_578b` y `nectar_ctl`. El carril con base dio
+**4 archivos fallidos** en los cuatro casos:
+
+```
+tests/sensory/ruedas.test.ts
+tests/traceability/ambiente.test.ts
+tests/traceability/capacidadDeBandeja.test.ts
+tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
+```
+
+**Causa.** Esas tres familias de tablas son de **sólo-añadir**, con disparadores
+que rechazan el `DELETE` (`P0001`: «Un pesaje no se borra: se corrige con un
+registro nuevo que lo supersede», y dos hermanas). La limpieza de esas pruebas
+abre la escotilla con `SET LOCAL nn.limpieza_de_pruebas = 'on'` — y **el
+disparador exige DOS cosas**, no una:
+
+```sql
+IF current_setting('nn.limpieza_de_pruebas', true) = 'on'
+   AND current_database() ~ '^(nectar_test|nectar_ci|nn_flip_)' THEN
+```
+
+El segundo requisito es deliberado y bueno —el ajuste solo no abre nada en
+producción— pero significa que **una base desechable con otro nombre deja esas
+cuatro suites sin poder limpiar**, y mueren en su `afterAll`.
+
+**Por qué engaña más de lo que debería.** Mueren DESPUÉS de que sus 48 pruebas
+pasen, así que la salida dice:
+
+```
+ Test Files  4 failed | 190 passed (194)
+      Tests  2273 passed (2273)
+```
+
+«2273 passed (2273)» con **cero** líneas `×` se lee como verde, y un filtro por
+`×` —el que se usa para listar fallos— no devuelve nada. **El veredicto está en
+la línea `Test Files`, no en la de `Tests`.**
+
+**Y el control que me dejó seguir equivocado.** Comparé el árbol fusionado contra
+`origin/main` limpio, salió el mismo cuarteto en los dos, y lo leí como «no es de
+mi PR, es de `main`». Lo primero era cierto; lo segundo, falso. **Los dos brazos
+tenían el nombre malo**, así que el control mantuvo constante justo la variable
+que importaba: habría dado el mismo resultado con la respuesta contraria. El que
+sí discrimina cambia **sólo el nombre**, sobre el mismo árbol:
+
+| base | ¿casa `^(nectar_test|nectar_ci|nn_flip_)`? | las 4 suites |
+|---|---|---|
+| `nectar_ci_control` | sí | **4 passed** |
+| `nectar_nombre_malo` | no | **4 failed** |
+
+**La regla: una base desechable para el carril con base se llama `nectar_ci_<algo>`
+o `nn_flip_<algo>`.** Cualquier otro nombre no es «una base vacía más»: desarma la
+escotilla de limpieza y produce cuatro fallos que no son del código. El comentario
+de `scripts/ci-con-base.sh` dice «o cualquier base vacía», y es lo único de esa
+línea que no es cierto.
+
+### Postgres pliega el nombre de la base, y el arnés de flip mide NADA
+
+**2026-10-02.** El arnés de flip de la tarea 8 creaba su base desechable así:
+
+```sql
+CREATE DATABASE nn_flip_t8A TEMPLATE nectar_ci_t8;
+```
+
+y después se conectaba a `postgresql://…/nn_flip_t8A`. **Postgres pliega a
+minúsculas todo identificador sin comillas**, así que creó `nn_flip_t8a`; una URL
+de conexión, en cambio, **sí distingue mayúsculas**. Reproducido ese día con sus
+tres mitades:
+
+| lo que se pide | lo que existe | conectarse al nombre pedido |
+|---|---|---|
+| `CREATE DATABASE nn_flip_pruebaX` | `nn_flip_pruebax` | `FATAL: database "nn_flip_pruebaX" does not exist` |
+| `CREATE DATABASE "nn_flip_PruebaY"` | `nn_flip_PruebaY` | funciona |
+
+**Lo peligroso no es el fallo: es la forma que toma.** Sin base, `vitest` no puede
+conectar y la salida dice
+
+```
+ Test Files  1 failed (1)
+      Tests  18 skipped (18)
+```
+
+o sea **cero líneas `×`**. Y un arnés de flip que lista los fallos por `×`
+imprime «NINGUNA cayó — la mutación no la ve ninguna prueba», que es
+**exactamente el veredicto que se estaba buscando**: «este guardia no cubre la
+mutación». Es la familia de siempre —el instrumento devolviendo un valor
+plausible de algo que no midió— con una cara nueva, y del lado que halaga.
+
+**Lo que lo destapó fueron dos líneas de control, no releer el veredicto:** el
+`psql` del paso anterior imprimía su `FATAL`, y la línea «existe en `pg_proc`:»
+salía **vacía** donde debía decir 1. Las dos contradecían al resultado.
+
+**Dos reglas, y la segunda vale para cualquier arnés:**
+
+- **Entre comillas el identificador al crear la base, o el nombre en minúsculas.**
+  `CREATE DATABASE "<nombre>"` respeta lo que se escribe; sin comillas, no.
+- **Un arnés de mutación ABORTA si su base no existe**, en vez de dejar que las
+  pruebas se salten. «No pude medir» y «ninguna cayó» son la misma cadena de
+  caracteres si nadie lo comprueba:
+
+  ```bash
+  EXISTE=$(psql "$B/postgres" -At -c "select count(*) from pg_database where datname='$DB';")
+  [ "$EXISTE" = "1" ] || { echo "ABORTA: la base $DB no existe"; exit 1; }
+  ```
+
+Es la misma exigencia que ya está escrita arriba para el flip-test —imprimir el
+sha antes y después, que el archivo compile, y qué prueba cae por su nombre— con
+un cuarto requisito que faltaba: **que el mundo contra el que se mide exista**.
 
 ## Al cerrar la sesión
 

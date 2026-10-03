@@ -4651,3 +4651,126 @@ lienzo, y lo eran. La forma: **la misma unidad no es la misma magnitud** — a l
 había dado escala propia porque su unidad es otra; a la HR no, *porque coincidía*. El guardia son dos
 aserciones: que el aire no estira el eje, y **cuánto lienzo le queda al grano** (>90 %); sin la
 segunda, una HR de rango pequeño pasaría sin que nadie note el aplastamiento.
+
+### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
+
+**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
+imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
+errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
+Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
+peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
+
+**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
+la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
+error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
+sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
+Ahora descubre los archivos, con control del escáner y del detector por separado.
+
+**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
+la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
+esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
+01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
+#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
+manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
+que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
+`scripts/backup/`**. La corrida del lunes sale con él.
+
+**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
+#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
+etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
+cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
+un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
+el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
+
+**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
+y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
+desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
+archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
+conflicto.
+
+### 2026-10-01 · El ambiente del secado: visto en un navegador, y la corrección cableada (PR #579, #583)
+
+**Lo que encontró el recorrido, y no habría encontrado una lectura del código.** La pantalla
+funciona: la rejilla pone cada lectura en su nivel y deja «sin lectura de este nivel» en el que no la
+tiene (1 de 3, el control), y la lectura sin estante sale como «General de la instalación». De paso
+quedó verificado en vivo el fallo del `tzOffsetMinutes` (#531): **tres lecturas seguidas sin recargar,
+3 de 3**. Lo que no funcionaba era corregir: **el motor estaba completo y probado desde el 2026-09-21
+y ninguna pantalla lo llamaba**, y los disparadores no dejan otra vía —el UPDATE sólo admite el sello
+de supersedida, **sin puerta de pruebas**—, así que un 310 °C tecleado en vez de 31 era permanente.
+Ninguna prueba del servicio podía ver ese hueco, porque el servicio estaba bien.
+
+**Tu decisión: la reemplazada se queda a la vista, rotulada.** De las dos listas, `vigentes` sigue
+filtrando —no es la condición actual de ningún punto— y `recientes` deja de filtrar, porque es el
+registro. El motivo se guarda en la fila **nueva**, así que se consulta desde su reemplazo en vez de
+buscarlo entre las 20: un motivo ausente se leería como «no se dio ninguno» cuando el servicio lo
+exige.
+
+**Y dos cosas que el flip-test tumbó antes de salir.** Una afirmación —que un array de dependencias
+estable deja el campo de la hora vacío— se probó en vivo en los dos caminos del formulario y **la hora
+sobrevivió igual**, así que se corrigió el comentario y **no se abrió** el pendiente que iba contra
+`MeasurementCorrectionForm` e `IntervencionForm`. Y una frase de la entrega anterior era falsa: ese
+componente **no es genérico**, está atado a `correctMeasurementFormAction` y a `lotId`; lo reusable era
+el patrón, no el componente.
+
+**`PENDING_IMPLEMENTATIONS/020` queda en «hecho»**, con su ficha, porque lo que enseñó no está en el
+diff. Y el escáner del guardia del desfase horario pasó de `paraCampoLocal(new Date())` a
+`paraCampoLocal(` —de 4 archivos a 7—: con el patrón viejo daba **0** sobre el formulario nuevo.
+
+<!-- Las dos entradas de abajo llegaron de los PR #574 y #591, que quedaron en conflicto cuando otra
+     sesión archivó el 2026-09-30 y escribió el 2026-10-02. Su contenido no estaba en ninguna parte y
+     en §2 ya no cabía —el presupuesto estaba al 90 %—, así que aterrizan aquí, que es el sitio de una
+     narrativa de un día ya superado. Los hechos VIVOS de esos dos PR se rescataron a §3 midiéndolos
+     primero contra el árbol: dos de ellos habían dejado de ser ciertos esa misma mañana. -->
+
+### 2026-10-01 · Las etiquetas llegaron y ninguna registra café (PR #572)
+
+**Daniel entregó los cuatro PDF que §1 pedía, y leerlos cambió el bloqueo en vez de cerrarlo.**
+Regent (maíz, papa), Abamectin 18 EC y ABAMECTAN 1.8 EC (frutales y hortalizas): **cero** menciones
+de café, cafeto, broca ni *Hypothenemus*. Lo literal de cada una, con su procedencia, en
+`docs/dominio/fitosanitarios-etiquetas.md`.
+
+**Ese cero vale porque el control funciona:** «aplicación» sale 8 y 17 veces en los mismos textos y
+«ó» 52 y 101, así que los acentos se leen. Sin esa comprobación, un cero sobre una palabra acentuada
+no habría probado nada — y el extractor de PDF **sí** devuelve el texto con un espacio entre cada
+letra, que es justo lo que hace fallar un `grep` por palabras.
+
+**Y lo que NO se escribió es la mitad del trabajo.** De Bralic sólo se pudo rendir la página 1: esta
+máquina no tiene ninguna herramienta de PDF, y los otros tres caminos devolvieron nada **y su control
+también**. Queda como «sin leer», no como «no tiene café» — la primera frase pide una foto, la
+segunda habría dirigido una aplicación real en una finca. La ausencia de herramientas y qué funciona
+en su lugar quedó en `~/.claude/CLAUDE.md`.
+
+**P-J, y es de la otra sesión la idea.** Los dos documentos de abamectina no son el mismo producto y
+sus reingresos difieren —**24 h y 48 h**—, que es el tiempo que un lote queda prohibido para las
+personas. Eso no puede vivir sólo en prosa de §1: pasó a `open-decisions.sh`, que sale en el primer
+mensaje de cada sesión. **Es la única decisión abierta hoy** (`abiertas=1, rotas=0`).
+
+**El guardia del recuento de decisiones hizo su trabajo sin que yo supiera que existía:**
+`tests/decisiones-discriminan.test.ts` cuenta las pruebas del guion y cayó al añadir la décima sin su
+pareja de mundos, diciendo exactamente qué faltaba.
+
+### 2026-10-01 · El aviso de floración, y cinco defectos que ninguna lectura mía vio (PR #576, #578, #581, #587, #588)
+
+**Ya hay dónde anotar la floración y un aviso que la usa.** `PlotBloom` toma la forma de una
+intervención —parcela o microparcela, con bloque opcional— así que no entra ninguna familia nueva.
+El aviso lo dispara el **producto** (`harmfulToPollinators`), no la floración: decisión de Daniel,
+«eso no debe afectar las abejas, no es quimico». Con el campo en nulo no avisa, y **no bloquea nada**
+(§32: proponer, nunca afirmar).
+
+**De los cinco defectos reales, cuatro los encontró una revisión adversaria de seis lentes y uno un
+flip-test. Ninguno, releer el código.** (1) El último día de floración **callaba**: campos de DÍA
+comparados contra un instante. (2) La floración de la parcela madre **no llegaba** a su microparcela,
+ni al revés — se reusa `ubicacionesEmparentadas`, con su regla de la carencia §3.3: madre e hija sí,
+hermano no. (3) El texto **afirmaba** una recomendación de terceros cuyo archivo no está en `main`.
+(4) Las ventanas llevaban `notes` y `observerPersonId` al navegador. (5) Tres guardias míos pasaban
+sobre mutaciones que mataban el aviso.
+
+**El arreglo del día de cierre costó dos intentos equivocados** —redefinir el campo contra mi propio
+esquema, y aplicar un idioma de la casa que es para un filtro de Postgres—: el relato entero y su
+medición están en el docstring de `hayFloracion`. Lo bueno es comparar **días de calendario**, y da
+**6/6 en seis zonas** de UTC+14 a UTC−11.
+
+**Y dos guardias que mentían, corregidos.** El `#581` escribe en `CLAUDE.md` la trampa del **nombre**
+de la base desechable — ahí está medida, no se repite aquí. El `#588` arregla `grant-platform-admin`,
+que comparaba el recuento de permisos contra un **89 congelado** y abortó una concesión legítima con
+«permission grants changed: 144»; ahora toma una foto antes de escribir y exige «sin cambio».

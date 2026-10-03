@@ -19,8 +19,17 @@
 # restaurado que levanta `scripts/test-db.sh`.
 #
 # Corre igual en local:
-#   createdb nectar_ci_probe   # o cualquier base vacía
+#   createdb nectar_ci_probe   # vacía, y el NOMBRE importa: ver abajo
 #   TEST_DATABASE_URL=postgresql://…/nectar_ci_probe bash scripts/ci-con-base.sh
+#
+# **El nombre tiene que casar `^(nectar_test|nectar_ci|nn_flip_)`.** No es estilo:
+# los disparadores de sólo-añadir de pesaje, ambiente y ruedas abren su escotilla
+# de limpieza con DOS condiciones —el ajuste `nn.limpieza_de_pruebas` Y el nombre
+# de la base—, y con otro nombre esas cuatro suites mueren en su `afterAll`.
+# Medido el 2026-10-01, mismo árbol: `nectar_ci_control` → 4 passed;
+# `nectar_nombre_malo` → 4 failed. Y falla de la peor forma: las 48 pruebas pasan
+# antes de morir, así que el resumen dice «2273 passed (2273)» con cero `×` y el
+# único sitio donde se ve es la línea `Test Files`.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

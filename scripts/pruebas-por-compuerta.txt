@@ -14,6 +14,10 @@
 # porque hay pruebas que pasan acompañadas y fallan solas.
 
 # @grupo: base-sembrada
+tests/territorio/rejillaEnLaBase.test.ts
+tests/territorio/microparcelaConRango.test.ts
+tests/territorio/rangosDeBloque.test.ts
+tests/territorio/rejillaEnGetPlotDetail.test.ts
 tests/arquitectura/colacion-de-la-base.test.ts
 # Necesitan base, y les basta `migrate deploy` + `db:seed` con las banderas
 # `SEED_DEMO_*`. Las corre `scripts/ci-con-base.sh` contra el Postgres de
@@ -152,6 +156,7 @@ tests/inventario/custodia.test.ts
 tests/inventario/etiqueta.test.ts
 tests/apiary/tratamiento-descuenta.test.ts
 tests/inventario/avisos.test.ts
+tests/traceability/floracion.test.ts
 tests/inventario/recepcion.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts

@@ -137,6 +137,14 @@ const MUNDOS: Record<string, { abrir: Mundo; cerrar: Mundo }> = {
     abrir: { arbol: sinAdr("huerbsch registrada"), home: { url: true, zshrc: true } },
     cerrar: { arbol: conAdr("huerbsch registrada"), home: { url: true, zshrc: true } },
   },
+  // P-J · Cuál de los dos productos de abamectina está en la bodega. Su reingreso difiere —24 h
+  // contra 48 h— y eso es el tiempo que un lote tratado queda prohibido para las personas. Una
+  // prueba que sólo supiera decir «abierta» dejaría el aviso puesto para siempre y se aprendería a
+  // ignorarlo; una que sólo supiera decir «cerrada» lo borraría el día que Daniel conteste.
+  "P-J": {
+    abrir: { arbol: sinAdr("abamectina de la bodega"), home: { url: true, zshrc: true } },
+    cerrar: { arbol: conAdr("abamectina de la bodega"), home: { url: true, zshrc: true } },
+  },
   "P-E": {
     abrir: { home: { zshrc: false, url: true } },
     cerrar: { home: { zshrc: true, url: true } },
@@ -193,18 +201,18 @@ describe("las pruebas de las decisiones del dueño distinguen dos mundos", () =>
     expect(abiertas.has("P-E"), `P-E no se abrió con un HOME vacío:\n${salida}`).toBe(true);
   });
 
-  it("el guion sigue teniendo las nueve pruebas que estos mundos cubren", () => {
+  it("el guion sigue teniendo las diez pruebas que estos mundos cubren", () => {
     const n = execFileSync("grep", ["-c", "^probar ", "scripts/open-decisions.sh"], {
       cwd: RAIZ,
       encoding: "utf8",
     }).trim();
     const cubiertas = new Set(Object.keys(MUNDOS).map(ID));
-    expect(cubiertas.size, "cambiaron las decisiones cubiertas y nadie lo dijo").toBe(8);
+    expect(cubiertas.size, "cambiaron las decisiones cubiertas y nadie lo dijo").toBe(9);
     expect(
       n,
       `el guion tiene ${n} pruebas y aquí hay mundos para ${cubiertas.size} + P-B, que sale a la red. ` +
         `Si has añadido una decisión, añade su pareja de mundos; si has quitado una, quítala.`,
-    ).toBe("9");
+    ).toBe("10");
   });
 
   for (const [nombre, { abrir, cerrar }] of Object.entries(MUNDOS)) {

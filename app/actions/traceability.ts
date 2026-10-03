@@ -76,13 +76,20 @@ import {
   PlantingCohortValidationError,
 } from "../../lib/traceability/plantingCohorts";
 import { recordEnteredProduction, PlantingEventValidationError } from "../../lib/traceability/plantingEvents";
-import { createPlotBlock, setPlotBlockType, PlotBlockValidationError } from "../../lib/traceability/plotBlocks";
+import {
+  anadirRangoAlBloque,
+  createPlotBlock,
+  quitarRangoDelBloque,
+  setPlotBlockType,
+  PlotBlockValidationError,
+} from "../../lib/traceability/plotBlocks";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
   updateLocationAttributes,
   LocationAccessError,
   LocationValidationError,
+  RejillaInvalida,
 } from "../../lib/traceability/locations";
 import {
   createBiocharBatch,
@@ -146,6 +153,16 @@ export interface TraceabilityActionState {
    * umbral inventado es como llegó el marcador de 24 h a la pantalla del lote.
    */
   inspeccionId?: string;
+  /**
+   * Avisos que NO son errores: el acto se guardó y hay algo que decir.
+   *
+   * Lo pide D7 de la rejilla: un bloque experimental que se solapa con una
+   * trampa **se guarda**, porque es una decisión del agrónomo y no un error de
+   * captura — «señalarlo, no corregirlo en silencio». Van aparte de `error` a
+   * propósito: pintarlos con `role="alert"` y clase de error diría que algo falló
+   * cuando lo que pasó es que todo se guardó.
+   */
+  avisos?: string[];
 }
 
 // Matched by class, not by exact message string — UnitValidationError's
@@ -188,6 +205,26 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof SelectionValidationError) return t("error_selection", { detail: error.message });
   if (error instanceof LocationAccessError) return t("error_access", { detail: error.message });
   if (error instanceof LocationValidationError) return t("error_location", { detail: error.message });
+  // La rejilla tiene frase POR CODIGO, como `PropositoInvalido`: «media rejilla» y
+  // «algo queda fuera» se corrigen de maneras distintas, y el segundo trae dentro
+  // QUE estorba. Sin esta rama la clase cae al `throw` final y encoger la rejilla
+  // de una parcela es un 500 — el defecto del PR #433, que
+  // `tests/arquitectura/acciones-traducen-sus-errores.test.ts` ya vigila solo.
+  if (error instanceof RejillaInvalida) {
+    const [clave, ...resto] = error.message.split(":");
+    const valor = resto.join(":").trim();
+    // La planta trae DOS numeros, y van como parametros numericos. Lo que NO
+    // puede pasar es que la frase del disparador entre entera en `{value}`: eso
+    // hacia que la pantalla en INGLES dijera «una planta en la hilera 9, planta
+    // 3», que es el RULING que las bandejas ya habian resuelto mas abajo.
+    if (clave === "rejilla_con_planta_fuera") {
+      // `noUncheckedIndexedAccess`: el destructurado puede dar `undefined`, y un
+      // mensaje con un hueco vacio es peor que uno que no se imprime.
+      const [hilera = "?", planta = "?"] = valor.split(",");
+      return t("error_rejilla_con_planta_fuera", { hilera, planta });
+    }
+    return t(`error_${clave}` as "error_rejilla_a_medias", { value: valor });
+  }
   if (error instanceof PlantingEventValidationError) return t("error_production", { detail: error.message });
   if (error instanceof PlantingCohortValidationError) return t("error_harvest_sources", { detail: error.message });
   if (error instanceof FieldSessionValidationError) return t("error_field_session", { detail: error.message });
@@ -221,6 +258,19 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof TrapAccessError) return t("error_access", { detail: error.message });
   // «Revisa la lectura y la fecha» no es verdad de un bloque: el caso real es
   // un nombre repetido, y ése se dice.
+  // **Los tres códigos que NO son «no se pudo crear el bloque».** `error_block`
+  // dice literalmente eso, y quitar un rango que otro ya quitó —una página vieja—
+  // salía como «No se pudo crear el bloque: range_not_found», con el código crudo
+  // y en inglés. Lo encontró una revisión independiente el 2026-10-02.
+  if (error instanceof PlotBlockValidationError && error.message === "range_not_found") {
+    return t("error_rango_no_encontrado");
+  }
+  if (error instanceof PlotBlockValidationError && error.message === "block_not_found") {
+    return t("error_bloque_no_encontrado");
+  }
+  if (error instanceof PlotBlockValidationError && error.message === "block_location_not_found") {
+    return t("error_bloque_sin_sitio");
+  }
   if (error instanceof PlotBlockValidationError) return t("error_block", { detail: error.message });
   // Cada código de la regla tiene su frase: dice qué campo corregir.
   if (error instanceof TrapRuleValidationError) {
@@ -2795,5 +2845,96 @@ export async function vitalesEnSitioAction(
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
+/**
+ * La rejilla de una parcela (tarea 7 del plan de la rejilla).
+ *
+ * Misma forma que `updatePlotAttributesAction`, que es la vecina: `useActionState`
+ * y un `error` traducido de vuelta, **sin `redirect`**. No hay `?ok=` porque esta
+ * familia de formularios no redirige — y `confirmacion-que-se-lee` sólo vigila a
+ * las que sí, así que queda fuera por diseño y no por olvido.
+ */
+export async function guardarRejillaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateLocationAttributes(user.userAccountId, {
+      locationId,
+      gridOrigin: emptyToNull(formData.get("gridOrigin")) as never,
+      rowCount: emptyToNullNumber(formData.get("rowCount")),
+      plantsPerRow: emptyToNullNumber(formData.get("plantsPerRow")),
+      rowSpacingMeters: emptyToNullNumber(formData.get("rowSpacingMeters")),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
+ * Añadir un rango a un bloque, con los solapes que D7 permite **como aviso**.
+ *
+ * El servicio devuelve con quién se solapa y cuántas celdas comparte; aquí se
+ * traducen y vuelven en `avisos`, no en `error`: el rango se guardó.
+ */
+export async function anadirRangoAlBloqueAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  let solapes: Array<{ bloque: string; celdas: number }> = [];
+  try {
+    const r = await anadirRangoAlBloque(user.userAccountId, {
+      plotBlockId: String(formData.get("plotBlockId") ?? ""),
+      rowFrom: Number(formData.get("rowFrom") ?? Number.NaN),
+      rowTo: Number(formData.get("rowTo") ?? Number.NaN),
+      plantFrom: Number(formData.get("plantFrom") ?? Number.NaN),
+      plantTo: Number(formData.get("plantTo") ?? Number.NaN),
+    });
+    solapes = [...r.solapesAvisados];
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return solapes.length
+    ? { avisos: solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })) }
+    : {};
+}
+
+/** Quitar un rango. Es un acto y el servicio lo registra. */
+export async function quitarRangoDelBloqueAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await quitarRangoDelBloque(user.userAccountId, String(formData.get("rangoId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
   return {};
 }

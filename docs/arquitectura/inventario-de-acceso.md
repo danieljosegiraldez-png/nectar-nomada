@@ -13,9 +13,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**609 operaciones** que tocan la base, en **166 archivos** — medido el 2026-10-02 con
-`node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1
-(el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
+**614 operaciones** que tocan la base, en **167 archivos** — medido el 2026-10-03 con
+`node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
+`origin/main` (`203d9236`) (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
@@ -25,12 +25,18 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **461** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **464** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **91** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **93** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **Al juntar `origin/main` en la rama de la Parte 1 (2026-10-03): 609→614, 166→167 archivos, «guardia directo»
+> 461→464 y «depende del llamador» 91→93.** Medido con `--json` sobre los dos árboles, no sumado a mano: las cinco son de
+> `main`. `lib/traceability/floracion.ts` es el archivo nuevo —`registrarFloracion` con guardia directo; `enFloracion` y
+> `floracionesDeLaParcela` dependen del llamador y están en el allowlist—, y `anadirRangoAlBloque` y
+> `quitarRangoDelBloque` de `lib/traceability/plotBlocks.ts`, con guardia directo.
 
 > **Los formularios del proceso, según el lote donde vive (2026-10-02): 608→609, 166 archivos y «guardia directo»
 > 460→461.** Parte 1, tarea 9, ronda de arreglo 1. Una operación nueva en `lib/traceability/lotProcess.ts`,
@@ -104,6 +110,30 @@ rama de las lecturas de la clasificación de verde por malla):
 > resta una. `bloquearLinaje` y `gradoDelProcesoQueCubre` **no** entran: sólo delegan en otras
 > exportadas, y fijarlas haría caer «no quedan fijadas operaciones que ya no dependen del
 > llamador».
+
+> **La línea de etapas pierde dos consultas (2026-09-30, ADR-195): 596→596, 165 archivos, sin cambio.**
+> Decisión de Daniel: «recepción» y «selección» pasan a `sin_registro`, igual que la flotación,
+> porque contaban un acumulado (cuántos lotes pasaron alguna vez) donde proceso, secado y almacén
+> cuentan lo que hay ahora. `datosDelTablero` deja de hacer **dos** `prisma.lot.count` —la de
+> `desdeRecepciones` con recepción `recibida` y la de la transformación `selection`— y le quedan
+> **tres** en la línea (proceso, secado, almacén), todas con el mismo `lotWhere`. **Las cifras del
+> script no se mueven por la misma razón que no se movieron al añadirlas:** cuenta operaciones por
+> función y por archivo, y esas dos consultas vivían dentro de una función que ya estaba
+> inventariada como «guardia directo». O sea que quitar acceso **tampoco** aparece en el número:
+> la medición es `node scripts/inventario-de-acceso.mjs` (596 operaciones, 165 archivos, 458
+> guardia directo) y la confirman `cifras-del-inventario` y `acceso-a-datos`, no esta aritmética. La
+> razón de la allowlist se corrigió de «cinco recuentos» a «tres».
+
+> **Las tres piezas visuales del tablero (2026-09-30): 596→596, 165 archivos, sin cambio.** Diseño
+> §4.5. `datosDelTablero` ya estaba inventariada como «guardia directo» y sigue igual: la línea de
+> etapas, «cuándo se libera» y la curva de un lote son **más lecturas dentro de la misma función**
+> y de un ayudante **no exportado** (`curvaDeUnLote`), que el script no cuenta aparte. Que la cifra
+> no se mueva **no quiere decir que no haya acceso nuevo**: hay siete consultas crudas más, y por eso
+> la razón de la allowlist las nombra. Las cinco de la línea cuentan LOTES con el mismo `lotWhere` que
+> ya acota lo demás, y la curva comprueba con ese mismo `lotWhere` que el lote es visible **antes**
+> de leer una sola medición; si no lo es devuelve `null`, igual que si no se hubiera pedido —
+> distinguirlo diría que el lote existe. Medido con el script y confirmado por
+> `cifras-del-inventario` y `acceso-a-datos`, no por esta aritmética.
 
 > **La ficha de una unidad (2026-09-30): 595→596, 164→165 archivos y «recibía principal sin
 > guardia visible» 20→21.** Diseño §B.3. `lib/beneficio/fichaDeUnidad.ts` es archivo nuevo y su

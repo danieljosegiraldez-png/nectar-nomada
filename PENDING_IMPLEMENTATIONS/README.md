@@ -18,7 +18,13 @@ idea se pierda cuando la respuesta es «ahora no».
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en
-CI**, resuelto el 2026-09-06 en el PR #177. Los dos quedan en `SESSION_STATE.md`
-§2. Y **012 · pruebas que ven toda la base y afirman sobre una lista con
+CI**, resuelto el 2026-09-06 en el PR #177. Los dos están en
+`docs/SESSION_STATE_ARCHIVE.md` — **esta línea decía «en `SESSION_STATE.md` §2» y
+ese puntero ya estaba muerto**: las entradas de §2 se archivan, y las de agosto
+llevan semanas fuera. Es la misma forma que `scripts/check-archivo-de-estado.mjs`
+vigila dentro del estado, y que no vigila aquí.
+Y **012 · pruebas que ven toda la base y afirman sobre una lista con
 tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de cata. Y **013 · las clases que `friendlyError` relanzaba**, hecho el 2026-09-21 en el PR #450.
+Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
+el mismo día en que se encontró recorriendo la pantalla en un navegador.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.

@@ -12639,3 +12639,77 @@ nombrado en vez de vivir en una frase de conversación.
 - El pendiente de `permissionKeysAnywhere` que esta decisión cerró **queda cerrado**: de sus tres
   usos, dos se acotaron y `ruedas.ts` se revirtió a propósito, porque su spec da esa audiencia sin
   ámbito y la razón está escrita en el propio archivo.
+
+## ADR-195 — En la línea de etapas, recepción y selección dicen «sin registro», igual que la flotación
+
+**Fecha:** 2026-09-30 · **Estado:** aceptado · **Decisión de Daniel, en sesión, el 2026-09-30**,
+tomada sobre el hallazgo de la revisión final de la rama `piezas-del-tablero-45`
+
+**Contexto.** La línea de seis etapas del tablero (§4.5 de
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`) se construyó con **tres**
+columnas que contaban y tres que no, y la revisión final de la rama encontró que las que contaban
+no contaban lo mismo:
+
+- **proceso, secado y almacén** cuentan **lo que hay ahora**: cada uno tiene fin declarado
+  (`LotProcess.endedAt`, `DryingRun.endedAt`, `StorageAssignment.endedAt`) y «hay» es «sin
+  terminar»;
+- **recepción y selección** contaban un **acumulado**: cuántos lotes pasaron por ahí **alguna vez**
+  —una recepción `recibida`, un `LotTransformation` de tipo `selection`—, porque ninguna de las dos
+  tiene fin.
+
+La etiqueta de la línea dice «cuántos lotes **hay** en cada etapa» y §4.5 dice que la pieza
+responde «**dónde se atasca hoy**». Con una temporada encima se leería «Recepción 847 · Secado 3», y
+la columna más grande sería la que menos informa.
+
+**La rama ya llevaba el argumento escrito contra sí misma.** `lib/beneficio/lineaDeEtapas.ts`
+defendía por qué la flotación no se puede contar con estas palabras:
+
+> «un **método pasado** de una transformación no dice **cuánto hay en esa etapa ahora** […] Si se
+> pintara `0`, el operario leería que no hay café flotando.»
+
+`enSeleccion` es exactamente eso —un `LotTransformation` de tipo `selection`, un acto pasado— y una
+recepción recibida es igual: un hecho del pasado, no un sitio donde el lote esté hoy. El mismo
+razonamiento que prohibía pintar la flotación se aplicaba a **una sola de las tres**.
+
+**Decisión. En la línea de etapas, «recepción» y «selección» pasan a `sin_registro`, igual que la
+flotación. Dejan de contar.**
+
+**Qué cambia, y qué no.**
+
+- `lineaDeEtapas` **ya no recibe** `recepcion` ni `seleccion`, como no recibía `flotacion`: que no se
+  puedan pasar es a propósito, para que nadie les meta un número sin darse cuenta de lo que
+  significa. Devuelve las seis etapas en el mismo orden, **tres en `sin_registro`**.
+- `datosDelTablero` quita sus dos consultas (`desdeRecepciones` y la transformación `selection`); le
+  quedan tres recuentos en la línea.
+- Los textos no cambian: `etapaSinRegistro` ya existía y está en los dos idiomas.
+- **No cambia el esquema, ni ningún dato, ni la cola de «qué hacer ahora».**
+
+**Qué haría falta para revertirla —no es un olvido, es una decisión—.** Una condición de
+**vigencia**, es decir, lo que hace de «sin terminar» el criterio de las otras tres:
+
+- «en recepción» = recibido **y sin selección aún**;
+- «en selección» = con selección **y sin proceso abierto**.
+
+Con esas dos condiciones las columnas pasarían a ser un presente y volverían a poder contar; el
+cambio es de la función pura, de su prueba y de las dos consultas que aquí se quitaron, sin migración.
+La **flotación** no tiene esa salida: hoy es un método de una selección
+(`LotTransformation.selectionMethodValue`), no una etapa, y contarla exigiría una etapa propia en el
+esquema.
+
+**Contradicción con el diseño, dicha en vez de escondida.** §4.5 pide una línea de **seis columnas
+con cuenta** («con **cuánto hay** en cada una»), y hoy **tres dicen que no hay registro**. El propio
+§4.5 lo anticipa para recepción y flotación —«si no lo están [como etapas propias], esas dos
+columnas de la línea dicen sin registro»—, pero no para la selección, que sí existe en el modelo. La
+decisión no pretende que el diseño se cumpla: dice que una cuenta que no responde «dónde se atasca
+hoy» es peor que una ausencia declarada.
+
+**Consecuencias.**
+
+- El operario ve tres columnas con cuenta y tres con «sin registro de esta etapa», sin color de
+  alarma: es una ausencia, no una urgencia.
+- Las pruebas de recepción y selección contra la base **se quitaron**, no se adaptaron: probaban un
+  acumulado que ya no se calcula. La prueba que las sustituye comprueba que las tres dicen
+  `sin_registro` **y que las otras tres sí cuentan**.
+- Las cifras de `docs/arquitectura/inventario-de-acceso.md` **no se mueven** (596 operaciones, 165
+  archivos): el script cuenta por función, no por consulta. La razón de la allowlist sí cambió, de
+  «cinco recuentos» a «tres».

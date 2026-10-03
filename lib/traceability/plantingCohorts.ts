@@ -18,6 +18,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
 import { resolveFarmSiteId } from "./fincas";
+import { celdasDelRango, type Rango } from "../territorio/rejilla";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -440,6 +441,158 @@ export function computePlotDensity(
   };
 }
 
+/** La rejilla tal como la parcela la declara, y el rango propio si lo tiene. */
+export interface RejillaDeclarada {
+  readonly rowCount: number;
+  readonly plantsPerRow: number;
+  readonly rango: Rango | null;
+  /**
+   * `false` cuando la rejilla es de la MADRE.
+   *
+   * Y es la diferencia que decide si se puede comparar: una microparcela usa la
+   * numeración de su parcela (D3), pero su suelo es **el trozo que ocupa**, no la
+   * parcela entera. Sin rango declarado no hay con qué comparar.
+   */
+  readonly propia: boolean;
+}
+
+/**
+ * Lo que la rejilla CABE contra lo que las siembras CUENTAN.
+ *
+ * Diseño §6. Vive aquí, pura y al lado de `computePlotDensity`, por el mismo
+ * motivo que ella: un cociente —o una resta— guardado de dos entradas que se
+ * mueven **se queda viejo en silencio** cada vez que alguien corrige una de las
+ * dos. Se calcula al leer.
+ *
+ * **Devuelve un MOTIVO y no un número cuando no puede comparar**, y usa los
+ * mismos nombres de estado que su hermana (`status`, `sin_cohortes`,
+ * `conteo_incompleto`) a propósito: el plan proponía `estado` y `sin_siembras`,
+ * y dos uniones discriminadas en el mismo archivo con claves distintas para el
+ * mismo concepto es lo que vuelve un archivo imposible de sostener.
+ *
+ * Los dos casos que la escriben mal:
+ *
+ * - **Sin siembras NO es «0 de 200»** (ADR-080). Una parcela numerada y sin
+ *   siembras registradas cabe 200 y tiene cero *registradas*; decir «0 de 200»
+ *   afirmaría que el suelo está vacío cuando lo que pasa es que nadie contó.
+ * - **Con una siembra sin contar no se compara.** La resta sobre un total
+ *   incompleto es un número que parece cierto y no lo es.
+ *
+ * Y la diferencia **puede ser negativa**: más plantas contadas que celdas
+ * declaradas significa que la rejilla está mal medida o que hay siembras fuera
+ * de ella, que son las dos cosas que el agrónomo necesita ver. Un
+ * `Math.max(0, …)` convertiría ese aviso en un cero tranquilo.
+ */
+export type ComparacionDeLaRejilla =
+  | { status: "sin_rejilla" }
+  | { status: "sin_rango" }
+  | { status: "sin_cohortes"; capacidad: number }
+  | {
+      status: "conteo_incompleto";
+      capacidad: number;
+      contadas: number;
+      cohortesSinConteo: number;
+      cohortesTotales: number;
+    }
+  | { status: "ok"; capacidad: number; contadas: number; diferencia: number };
+
+export function compararConLaRejilla(
+  rejilla: RejillaDeclarada | null,
+  cohorts: ReadonlyArray<{ plantCount: number | null; status: PlantingCohortStatus }>,
+): ComparacionDeLaRejilla {
+  if (!rejilla) return { status: "sin_rejilla" };
+
+  // **Rejilla heredada y sin rango: NO se compara.** Lo encontró una revisión
+  // independiente el 2026-10-02, y era el peor defecto de esta tanda: una
+  // microparcela usa la numeración de su parcela (D3), pero su suelo es el trozo
+  // que ocupa. Comparando sus siembras contra la capacidad de la madre, toda
+  // microparcela decía «Caben 200 y hay 70 contadas: una diferencia de 130» sobre
+  // un suelo que no es suyo — y hoy **ninguna pantalla puede declarar ese rango**
+  // (medido: cero archivos de `app/` escriben `rangeRowFrom`), así que le pasaría
+  // a todas.
+  //
+  // Peor todavía: la primera versión de `rejillaEnGetPlotDetail.test.ts` fijaba
+  // esa conducta como correcta. Una prueba que certifica un defecto es más dañina
+  // que la ausencia de prueba.
+  //
+  // D3 dice que sin rango sólo se pierde una comprobación, no que se compare
+  // contra otro suelo.
+  if (!rejilla.propia && !rejilla.rango) return { status: "sin_rango" };
+
+  // **D3: la capacidad de una microparcela es su RANGO, no la rejilla entera.**
+  // La numeración es una sola, la de la parcela, así que una microparcela de la
+  // hilera 1 a la 4 cabe 4 × 20, no las 200 de su madre. Compararla contra las
+  // 200 diría que le faltan plantas por un suelo que no es suyo.
+  const capacidad = rejilla.rango
+    ? celdasDelRango(rejilla.rango)
+    : rejilla.rowCount * rejilla.plantsPerRow;
+
+  // Una siembra retirada no está en pie, así que no cuenta. Es la misma lectura
+  // que hace `computePlotDensity` del lado de la densidad.
+  const vivas = cohorts.filter((c) => c.status === "active");
+  if (vivas.length === 0) return { status: "sin_cohortes", capacidad };
+
+  const contadas = vivas.reduce((suma, c) => suma + (c.plantCount ?? 0), 0);
+  const cohortesSinConteo = vivas.filter((c) => c.plantCount == null).length;
+  if (cohortesSinConteo > 0) {
+    return {
+      status: "conteo_incompleto",
+      capacidad,
+      contadas,
+      cohortesSinConteo,
+      cohortesTotales: vivas.length,
+    };
+  }
+
+  return { status: "ok", capacidad, contadas, diferencia: capacidad - contadas };
+}
+
+/**
+ * La frase que pinta la ficha para cada estado, y los números que lleva dentro.
+ *
+ * **Devuelve la clave y los parámetros; no renderiza nada.** Es el mismo patrón
+ * que `claveDeTituloDeBloque` en `plotBlocks.ts`, y existe por el mismo motivo:
+ * así se puede probar sin montar un navegador — este repositorio no tiene
+ * infraestructura para renderizar componentes y sus cuatro guardias de pantalla
+ * leen la fuente.
+ *
+ * **Cada estado pasa sólo los números que su frase puede afirmar.** `sin_cohortes`
+ * no lleva `contadas`, porque un `0` ahí se leería como «0 de 200» — la
+ * afirmación que ADR-080 prohíbe. Y `conteo_incompleto` no lleva `diferencia`,
+ * porque la resta sobre un total incompleto es un número que parece cierto: si
+ * llegara a la plantilla, un descuido de redacción lo pintaría.
+ */
+export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
+  clave:
+    | "rejillaSinDeclarar"
+    | "rejillaSinRango"
+    | "rejillaSinSiembras"
+    | "rejillaConteoIncompleto"
+    | "rejillaComparada";
+  params: Record<string, number>;
+} {
+  switch (c.status) {
+    case "sin_rejilla":
+      return { clave: "rejillaSinDeclarar", params: {} };
+    case "sin_rango":
+      // Sin ningún número a propósito: pasar la capacidad de la madre es
+      // exactamente el error que este estado existe para no cometer.
+      return { clave: "rejillaSinRango", params: {} };
+    case "sin_cohortes":
+      return { clave: "rejillaSinSiembras", params: { capacidad: c.capacidad } };
+    case "conteo_incompleto":
+      return {
+        clave: "rejillaConteoIncompleto",
+        params: { capacidad: c.capacidad, contadas: c.contadas, sinContar: c.cohortesSinConteo },
+      };
+    case "ok":
+      return {
+        clave: "rejillaComparada",
+        params: { capacidad: c.capacidad, contadas: c.contadas, diferencia: c.diferencia },
+      };
+  }
+}
+
 /**
  * Everything the plot page shows, behind **one** gate.
  *
@@ -463,6 +616,18 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       locationType: true,
       areaHectares: true,
       plantSpacingMeters: true,
+      // La rejilla (D3) y el rango propio, para la comparación de abajo. Sin
+      // seleccionarlas aquí, `compararConLaRejilla` recibiría `undefined` y
+      // devolvería `sin_rejilla` en una parcela que SÍ la tiene — un estado falso
+      // que se lee como «aún no la han numerado».
+      gridOrigin: true,
+      rowCount: true,
+      plantsPerRow: true,
+      rowSpacingMeters: true,
+      rangeRowFrom: true,
+      rangeRowTo: true,
+      rangePlantFrom: true,
+      rangePlantTo: true,
       altitudeMinM: true,
       altitudeMaxM: true,
       sunExposure: true,
@@ -676,6 +841,38 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     };
   });
 
+  // La rejilla de esta Location, o la de su madre si ella no la tiene. El rango
+  // es SIEMPRE el propio: dice dónde está ESTA Location dentro de esa numeración.
+  const rango: Rango | null =
+    location.rangeRowFrom != null &&
+    location.rangeRowTo != null &&
+    location.rangePlantFrom != null &&
+    location.rangePlantTo != null
+      ? {
+          rowFrom: location.rangeRowFrom,
+          rowTo: location.rangeRowTo,
+          plantFrom: location.rangePlantFrom,
+          plantTo: location.rangePlantTo,
+        }
+      : null;
+  const propia =
+    location.rowCount != null && location.plantsPerRow != null
+      ? { rowCount: location.rowCount, plantsPerRow: location.plantsPerRow }
+      : null;
+  const madre =
+    propia || !location.parentLocation
+      ? null
+      : await prisma.location.findUnique({
+          where: { id: location.parentLocation.id },
+          select: { rowCount: true, plantsPerRow: true },
+        });
+  const base =
+    propia ??
+    (madre?.rowCount != null && madre.plantsPerRow != null
+      ? { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow }
+      : null);
+  const rejillaDeclarada: RejillaDeclarada | null = base ? { ...base, rango, propia: propia !== null } : null;
+
   return {
     location,
     cohorts,
@@ -688,6 +885,12 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     // debe recomponerla con `location.parentLocation`.
     farmLocationId,
     density: computePlotDensity(cohorts, location.areaHectares),
+    // **La rejilla se resuelve en el padre cuando esta Location no la tiene**, que
+    // es el caso de una microparcela: la numeración es UNA, la de la parcela (D3).
+    // Leer sólo la propia diría `sin_rejilla` de una microparcela que sí está
+    // numerada, y su rango —que es lo único que la sitúa— no se podría comparar
+    // contra nada.
+    rejilla: compararConLaRejilla(rejillaDeclarada, cohorts),
     yield: computePlotYield(
       harvestContributions.map((c) => ({
         harvestedAt: c.harvestEvent.harvestedAt,

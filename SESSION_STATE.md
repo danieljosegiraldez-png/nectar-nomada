@@ -39,75 +39,120 @@ de «hecho y sin rastro».
 
 ---
 
-#### Los seis productos de Finca Rosina: qué falta exactamente
+#### Los seis productos de Finca Rosina: y la dosis en café NO está en sus etiquetas
 
-Rescatado al archivar «2026-09-29 · La credencial rotada», el único sitio con el detalle — **medido por
-dos sesiones en paralelo y con el mismo resultado**: 0 en §1, 0 en `PENDING_IMPLEMENTATIONS/`, 0 en
-`docs/`, y la única «Rosina» de §3 es la de Kenis el apicultor, otro asunto. Faltan de Daniel: la
-**etiqueta** de Bralic, Regent y Beauveria —las otras llegaron—, la **cantidad** y el **lote del
-fabricante** de los seis, y desde el 2026-09-30 las **cifras de dosificación** que el PR #554 deja
-listas para recibir. Sin etiqueta ni cantidad, dar uno de alta afirma existencias que nadie contó.
+**CORREGIDO EL 2026-10-01: este bloque pedía «las etiquetas». Llegaron, y el bloqueo es otro.** Las
+cuatro que mandó Daniel **no registran café**: Regent (maíz, papa), Abamectin 18 EC y ABAMECTAN 1.8 EC
+(frutales y hortalizas). Cero menciones de café, cafeto, broca ni *Hypothenemus*, con control positivo
+de que los acentos se leen. Lo literal de cada una, con su procedencia, en
+`docs/dominio/fitosanitarios-etiquetas.md`.
+
+**Lo que falta de Daniel, en orden de lo que bloquea más:**
+
+1. **De dónde sale la dosis en café** — de la etiqueta no sale. Si es del técnico, de Anacafé o de la
+   práctica de la finca, se registra **con esa procedencia escrita**; lo que no se hace es tomar una
+   dosis de alcachofa y escribirla como de café.
+2. **Las páginas 2-4 de Bralic**, donde está su tabla. Esta máquina no tiene ninguna herramienta de PDF
+   y el visor nativo sólo rinde la primera; los otros caminos devolvieron nada **y su control también**.
+3. **Cuál de los DOS productos de abamectina** está en la bodega: sus reingresos son **24 h** y **48 h**,
+   que es la diferencia entre dejar entrar a alguien al lote o no.
+4. **Las imágenes de Beauveria**, perdidas al compactarse la conversación del 2026-09-30.
+5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
+   contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-09-30 · El respaldo que mentía, el pesaje que perdía la hora, y §3 dirigiendo a lo ya hecho (PR #565, #566, #568)
+### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
 
-**#565 — `verify-restore.sh` decía PASS sobre una restauración con errores.** Los contaba, los
-imprimía, copiaba el log y seguía: con el censo de filas cuadrando, el veredicto era bueno y «restore
-errors: N» quedaba en una línea del resumen. `RESTORE_RC` se guardaba **sin usarse en ninguna línea**.
-Endurecerlo se midió antes —29 veredictos, los 29 con cero errores— porque un guardia que nunca pasa es
-peor que ninguno; `RESTORE_RC` se **anota y no decide**, que es la primera vez que ese número se mide.
+**Lo que §4.5 pedía y faltaba:** los ejes con horas y valores, y la guía de la rúbrica 22 bajo la
+curva. Los ejes están, medidos en un navegador: 18 px de cuerpo → 13,8 efectivos → **11,2 en un
+teléfono de 375**, ningún rótulo fuera del lienzo y sin scroll horizontal. Y la curva ya dice qué
+sugiere el dato si se sigue esperando, **citado literal** de las ocho filas de
+`10_ph_fermentation.md` §1 — ocho, no las «seis» que el plan contaba.
 
-**#566 — en el pesaje de bandejas sólo se podía registrar UN pesaje por carga de página.** El campo de
-la hora se vaciaba al re-renderizar y, por obligatorio, el navegador **bloqueaba el envío sin ningún
-error**. Su comentario decía «Igual que MeasurementForm», que el #564 arregló esa misma tarde:
-sobrevivió porque el guardia **leía una sola ruta** —vigilaba un archivo creyendo vigilar una clase—.
-Ahora descubre los archivos, con control del escáner y del detector por separado.
+**Lo que NO se escribió, y es la mitad de un renglón de §4.5: «qué hacer».** No existe en ninguna
+fuente del proyecto; la cuarta columna de esa matriz dice lo que hace el *software*, no el operario.
+Así que se abre la columna **vacía**, con una nota que dice que la rellenas tú, y un guardia que
+falla si alguien la rellena sin que el código la recoja **hasta la pantalla**. Consecuencia que hay
+que decir en voz alta: **la rúbrica 22 §1 queda incumplida a propósito** —pide que todo punto que
+emite una alerta diga qué hacer— y eso es una decisión tuya, no una omisión.
 
-**Y el respaldo: nueve días sin uno.** El del lunes 28 falló con la conexión cortada durante el censo;
-la maquinaria se portó —borró el conjunto incompleto y mandó el ping— y nadie actuó. **Tres corridas
-esta noche, las tres PASS** con 212 tablas y 15.217 filas: la de las 23:41Z rompió la racha, y las de
-01:15Z y 01:18Z confirmaron el camino programado. Verificado por ARTEFACTO que el endurecimiento del
-#565 ya llega a ese camino —`restore_exit_code` sólo lo escribe la versión nueva, y está en el
-manifiesto de las 01:18Z pero **no** en el de las 01:15Z, así que entró entre las dos—: el checkout del
-que launchd lo corre está en `main` con el arreglo dentro, y los 5 commits que le faltan **no tocan
-`scripts/backup/`**. La corrida del lunes sale con él.
+**Lo que las revisiones encontraron, y vale más que el diff.** Dos Críticos de la revisión de rama:
+la cita se prestaba a **cualquier** lote cuando la matriz es del perfil `WASHED_STANDARD` —30 valores
+dentro de la ventana óptima de `NATURAL` recibían una cita de cinética de lavado, y tu ficha del lote
+ya se niega a prestarlos—; y «tu última lectura» no estaba determinada con varias lecturas en el
+mismo instante, que son **7 de 10 lotes** reales. Y Codex, que **no aprobó la primera vez**, construyó
+una entrada donde la pantalla se contradecía sola: «no tiene rango declarado en la receta» y debajo
+«Degradación ácida». Hoy el bloque sólo habla con grado `Washed`, **fermentación** abierta **y receta
+presente**; si falta cualquiera de las tres, calla.
 
-**#568 — la etiqueta del producto se propone al registrar una aplicación**, que es la mitad que el
-#554 dejaba sin usar. Dos cosas que NO hace, las dos con prueba: **no rellena la cantidad** —la
-etiqueta da un rango y elegir un valor de dentro inventa una precisión que nadie dio— y **no avisa
-cuando el producto no declara ninguna plaga**, porque vacío es «nadie lo declaró» y avisar ahí pondría
-un aviso en todos los productos hasta que se rellene el catálogo. El aviso tampoco bloquea. Esto cierra
-el bloque de §3 que se había rescatado esta misma tarde: **falta sólo que Daniel dé las cifras** (§1).
-
-**§3 estaba dirigiendo trabajo hacia cosas cerradas:** cinco afirmaciones medidas falsas el mismo día,
-y dos costaron trabajo real —escribí media prueba de clasificación antes de encontrar la que existía
-desde el 26—. Quitadas o corregidas aquí. **La lección no es que hubiera errores: es que el único
-archivo que toda sesión lee al arrancar envejece sin avisar**, y eso cuesta una jornada, no un
-conflicto.
+**Qué queda tuyo**, todo en §1 o aquí: leer los `ProcessTarget` de la receta en vez de la plantilla;
+«Daño consumado» contra la literatura que el propio documento cita; que el bloque hable en la hora 0
+de todo lote sano y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto de
+los dos lados); y `PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada
+puede sostener una afirmación.
 
 ## 3. Bloqueado, y en qué
 
-#### El tablero del beneficio: el paso 1 está en `main`; faltan las piezas visuales
+#### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
 
-**Corregido el 2026-09-30: esta entrada decía «la vista no existe» y era falso desde el PR
-#545**, que ejecutó el plan del paso 1. Medido pieza a pieza, no de memoria:
-`app/beneficio/page.tsx` cita el tablero 5 veces, `lib/beneficio/tablero.ts` y
-`datosDelTablero.ts` existen los dos, y la cola de §4.2 y la ocupación de §4.3 se pintan. La
-ruta la fijó **ADR-193**. El diseño sigue en
-`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`.
+El guion está arreglado y en `main` (#593, #594, #595) y **la consolidación no se ha aplicado**: la
+ficha del 13-08 tiene la membresía a Finca Rosina y la del 17-09 el correo y la cuenta activa con su
+Platform Admin. El ensayo contra producción confirma el plan: 2 asignaciones a mover, la duplicada
+referenciada sólo por su cuenta en 52 columnas. Falta que Daniel corra la misma línea con `--aplicar`
+y lea lo que el ensayo ahora imprime: el desglose «N propias + 2 movidas» y **las referencias a la
+cuenta que va a borrar**. Si esa cuenta tiene historia el guion se niega a propósito — borrarla
+pondría a NULL el actor de su auditoría (`ON DELETE SET NULL`), que es lo que §35 prohíbe. Lo que no
+tiene es prueba de conducta: los guardias leen la fuente y lo dicen en su cabecera.
 
-**Lo que SIGUE abierto, medido contra el código el 2026-09-30:**
+#### El aviso de floración está construido y no se puede alcanzar (PR #587, #590)
 
-- **§4.5 pieza 1, la línea por etapas.** No existe: los únicos archivos de `lib/beneficio/`
-  que dicen «etapa» son `balanceDeMasas.ts` y `comparacionDePesos.ts`, otro asunto.
-- **§4.5 pieza 2, su segunda mitad: «cuándo se libera».** La ocupación sí está; falta la hora
-  según `expectedHours` — sus dos citas en `tablero.ts` alimentan `estadoDeRitmo`, no esto.
-- **§4.5 pieza 3, la curva contra su banda.** No existe: el único `<svg>` de `app/` es la
-  rueda sensorial (control: 205 con `<div>`). El diseño la quiere sin librería.
-- **El paso 2, capacidad con migración: sin plan escrito** (0 archivos).
-- **Sin medir, y el diseño lo pide antes del plan:** si recepción y flotación se registran
-  como etapas propias; si no, esas columnas dicen «sin registro» y no un cero.
+`floracionesDeLaParcela` devuelve `[]` en toda parcela porque **nada registra una floración**. Medido
+con control positivo (`plotIntervention.create` sí tiene escritor): el único escritor de `plotBloom` es
+`lib/traceability/floracion.ts`, **0 pantallas** llaman a `registrarFloracion` y **0 acciones de
+servidor lo exponen**. Daniel dijo que la registraría él. Limitación a propósito: una intervención
+dirigida sólo a PLANTAS deja `bloquesElegidos` vacío, que la contención lee como «la parcela entera»,
+así que puede avisar por un bloque que esas plantas no tocan — de más, nunca de menos, y sin bloquear.
+
+#### La rejilla: tareas 1 a 3 en `main`, 4 a 8 empujadas, y las pantallas son la 7
+
+Diseño y plan del 2026-10-01 en `docs/superpowers/`, siete tareas. Medido por contenido: **en `main`**
+`lib/territorio/rejilla.ts`, la tabla `PlotBlockRange` con sus disparadores, y la rejilla en
+`updateLocationAttributes` (#589). **Fuera:** `rejilla-tarea-4` a `-8`, apiladas y sin PR; la 5 escribe
+los rangos —hoy **0 archivos de código** tocan `PlotBlockRange`— y la **7 son las pantallas**. Hoy se
+crea una microparcela y un bloque con nombre y tipo, pero **no se dice qué celdas cubre**. Decisión de
+Daniel abierta: si `description` se copia a la microparcela. Hoy no, y hay argumento para dejarlo así.
+
+#### Que la intervención de finca sirva para cualquier producto (de Daniel, 2026-10-01)
+
+Bioestimulante, fertilizante, insecticida, fungicida — no sólo fitosanitario. **No es quitar un
+filtro.** Medido: el acto ya admite `aplicacion`/`liberacion`/`manejo_cultural` y el encierro son dos
+líneas de `lib/traceability/intervenciones.ts` (834 filtra por `isPlantProtection`, 199 rechaza); pero
+el objetivo es una lista cerrada de **13 plagas y enfermedades** sin ningún valor de nutrición, así que
+un fertilizante no tendría cómo decir para qué se aplicó. **Y los nombres NO los fija el contrato:**
+`docs/beneficio/03_public_api.md` no menciona ninguno de los ocho términos —control positivo, «enum»
+sale 15 veces— y gobierna el beneficio, no la finca. La pregunta es si un fertilizante es otra clase
+con su propio objetivo, o si «objetivo» pasa a ser «propósito» y las plagas son un caso suyo.
+
+#### El tablero del beneficio: el paso 1 y las tres piezas de §4.5 están en `main`
+
+**Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
+«la vista no existe», falso desde el #545. Medido contra `origin/main` `7bc07339` el 2026-10-01, con
+control negativo en 0: `lineaDeEtapas.ts`, `liberacionDeUnidad.ts` y `curvaDeLote.ts` existen los
+tres, con su `CurvaDeLote.tsx`. La ruta la fijó **ADR-193**; el diseño sigue en
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. Y la decisión que esta entrada
+pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
+
+**Lo que SIGUE abierto, medido el 2026-10-01:**
+
+- **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
+- **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
+- **`PENDING_IMPLEMENTATIONS/014`–`021`.**
+- **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
+  en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
+  incumplida a propósito**. El detalle está en la entrada «Los ejes de la curva, y una cita que sólo
+  se hace cuando se sostiene», que vive aquí hasta que se archive y después en
+  `docs/SESSION_STATE_ARCHIVE.md`.
 
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
@@ -118,17 +163,6 @@ salía «0 de 0». Verde no es lo mismo que probado.
 Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
 `ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
 compartida es tocar trabajo ajeno.
-
-#### El ambiente del secado, sin ver en navegador
-
-Rescatado al archivar «2026-09-21 · Secado, paso 4» (ADR-185): `/instalaciones/[id]` anota ambiente
-por estante y nivel y **nunca se vio en un navegador**; corregir una lectura tampoco tiene pantalla.
-
-**Y por qué no es «abrir una pantalla», medido el 2026-09-30:** la copia local tiene **0**
-instalaciones de secado —ni estantes ni camas, 0 lecturas de ambiente, 0 tuestes, 0 tandas— así que
-abrirla verificaría el vacío. Hay que construir los datos por los formularios de la aplicación
-primero, lo cual ejercita el camino de escritura y es la mitad valiosa. Es su propia tarea, no un
-rato.
 
 #### Recolectores: darles su perfil (de Daniel)
 

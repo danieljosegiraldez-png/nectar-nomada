@@ -76,6 +76,13 @@ export default async function InstalacionPage({ params, searchParams }: {
   const puntoDe = (l: LecturaVigente) => l.rackId
     ? `${nombreDeEstante(l.rackId)}${l.rackLevel != null ? ` · ${t("nivel", { n: l.rackLevel })}` : ""}`
     : l.rackLevel != null ? t("ambienteNivelSinEstante", { n: l.rackLevel }) : t("ambienteGeneral");
+  /** Los mismos catálogos para registrar y para corregir: un solo sitio donde cambiarlos. */
+  const propsDeAmbiente = {
+    facilityId: id,
+    estantes: instalacion.estantes.map((e) => ({ id: e.id, name: e.name, niveles: e.niveles })),
+    nivelesSinEstante: [...new Set(instalacion.camas.map((c) => c.rackLevel).filter((n): n is number => n != null))],
+    personas,
+  };
   const posicionesTotal = instalacion.estantes.reduce((total, estante) => total + estante.posiciones.length, 0);
   const lecturaGeneral = ambiente ? lecturaDelPunto(ambiente.vigentes, { rackId: null, rackLevel: null }) : null;
   return <div className="nn-installation-page">
@@ -193,16 +200,31 @@ export default async function InstalacionPage({ params, searchParams }: {
       <div className="nn-installation-section-heading"><div><h2 id="ambiente-instalacion">{t("ambienteTitulo")}</h2><p>{t("ambienteIntroCorto")}</p></div></div>
       <h3>{t("ambienteRecientes")}</h3>
       {ambiente.recientes.length
-        ? <ul className="nn-reading-list">{ambiente.recientes.map((l) => <li key={l.id}><strong>{puntoDe(l)}</strong><span>{resumen(l)}</span></li>)}</ul>
+        ? <ul className="nn-reading-list">{ambiente.recientes.map((l) => <li key={l.id}>
+            <strong>{puntoDe(l)}</strong><span>{resumen(l)}</span>
+            {/* El rótulo va en TEXTO, no en un color: una lectura reemplazada
+                tiene que distinguirse también en blanco y negro y para quien
+                use lector de pantalla. Mismo criterio que la pantalla del lote. */}
+            {l.reemplazada ? <span> · <strong>{t("ambienteReemplazada")}</strong>{l.reemplazada.motivo ? ` — ${l.reemplazada.motivo}` : ""}</span> : null}
+            {/* Sólo se corrige lo vigente. Corregir una reemplazada bifurcaría
+                el historial y el servicio lo rechaza; la pantalla no ofrece lo
+                que sería rechazado. */}
+            {puedeRegistrarAmbiente && !l.reemplazada ? <details>
+              <summary>{t("ambienteCorregir")}</summary>
+              <FormularioAmbiente {...propsDeAmbiente} corrigiendo={{
+                id: l.id, occurredAt: l.occurredAt.toISOString(), rackId: l.rackId, rackLevel: l.rackLevel,
+                airTemperatureC: l.airTemperatureC, relativeHumidityPct: l.relativeHumidityPct,
+                skyCondition: l.skyCondition, ventilation: l.ventilation,
+                notaCielo: l.notaCielo, notaVentilacion: l.notaVentilacion, operadorPersonId: l.operadorPersonId,
+              }} />
+            </details> : null}
+          </li>)}</ul>
         : <p className="nn-empty-state">{t("ambienteSinLectura")}</p>}
       {puedeRegistrarAmbiente && <details id="registrar-ambiente" className="nn-disclosure nn-disclosure-compact" open={ok === "ambiente"}>
         <summary><span>{t("registrarAmbiente")}</span><small>{t("registrarAmbienteAyuda")}</small></summary>
         <div className="nn-disclosure-body">
           <p className="nn-muted">{t("ambienteIntro")}</p>
-          <FormularioAmbiente facilityId={id}
-            estantes={instalacion.estantes.map((e) => ({ id: e.id, name: e.name, niveles: e.niveles }))}
-            nivelesSinEstante={[...new Set(instalacion.camas.map((c) => c.rackLevel).filter((n): n is number => n != null))]}
-            personas={personas} />
+          <FormularioAmbiente {...propsDeAmbiente} />
         </div>
       </details>}
     </section>}

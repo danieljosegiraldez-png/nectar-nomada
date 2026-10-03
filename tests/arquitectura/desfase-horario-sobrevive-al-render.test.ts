@@ -104,9 +104,19 @@ describe("el desfase horario sobrevive a un re-render", () => {
 describe("ningún formulario precarga una fecha en un efecto que no se reaplica", () => {
   const RAIZ = new URL("../../app", import.meta.url).pathname;
 
-  /** Todo `.tsx` bajo `app/` que precargue «ahora» en un campo de fecha. */
+  /**
+   * Todo `.tsx` bajo `app/` que precargue una fecha, venga de «ahora» o de una
+   * fila existente.
+   *
+   * **El patrón se ensanchó el 2026-10-01, y por la misma razón que existe este
+   * guardia.** Buscaba `paraCampoLocal(new Date())` —sólo «ahora»— y encontraba
+   * 4 archivos; con `paraCampoLocal(` encuentra 6, y los dos de más precargan un
+   * instante existente, que es exactamente lo que hace el formulario de
+   * corrección de ambiente que se añadió ese día. Un escáner que sólo ve una de
+   * las dos formas de la misma clase deja la otra sin vigilar y sigue verde.
+   */
   function formulariosQuePrecargan(): string[] {
-    const salida = execFileSync("grep", ["-rl", "--include=*.tsx", "paraCampoLocal(new Date())", RAIZ], {
+    const salida = execFileSync("grep", ["-rl", "--include=*.tsx", "paraCampoLocal(", RAIZ], {
       encoding: "utf8",
     });
     return salida.split("\n").filter((l) => l.trim() !== "");

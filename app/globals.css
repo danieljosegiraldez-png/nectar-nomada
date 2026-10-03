@@ -1939,3 +1939,358 @@ a.nn-card-link:active {
     order: -1;
   }
 }
+
+/* El tablero del beneficio: la línea de etapas, la cola, «¿puedo recibir?» y la curva.
+
+   **El orden del documento ES el orden del celular** (diseño §4.5, decisión de Daniel del
+   2026-09-18): línea en dos filas de tres → qué hacer ahora → «¿puedo recibir?» reducido a dos
+   números → la curva SÓLO al tocar un lote. Por encima de 60rem las tres van juntas, con el mapa
+   de tanques y camas completo.
+
+   Por qué no las tres juntas en el celular: a unos 375 px, seis etapas en fila dejan unos 55 px por
+   etapa —se leen números, no etiquetas— y la curva comprimida pierde la banda que la hace útil.
+
+   **Color sólo cuando algo pide atención**, y nunca sólo color: cada estado también va en texto.
+   Una etapa «sin registro» NO se colorea — es una ausencia, no una alarma — y se distingue por el
+   borde discontinuo y la tinta apagada. */
+.nn-tablero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.nn-tablero h2 {
+  margin-bottom: 0.4rem;
+}
+
+.nn-warn {
+  color: var(--nn-aviso);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.nn-linea {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nn-etapa {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.6rem 0.65rem;
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-surface);
+  box-shadow: var(--nn-shadow);
+}
+
+.nn-etapa-nombre {
+  color: var(--nn-ink-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.nn-etapa-cuenta {
+  font-size: var(--nn-step-3);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.nn-etapa-unidad {
+  color: var(--nn-ink-muted);
+  font-size: 0.8rem;
+}
+
+.nn-etapa-decide {
+  border-color: var(--nn-aviso);
+  border-left-width: 4px;
+  background: var(--nn-warn-bg, #fdf6e6);
+}
+
+.nn-etapa-decision {
+  color: var(--nn-aviso);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.nn-etapa-sin-registro {
+  border-style: dashed;
+  border-color: var(--nn-border-strong);
+  background: transparent;
+  box-shadow: none;
+}
+
+.nn-etapa-sin-registro-texto {
+  color: var(--nn-ink-muted);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.nn-tablero-cola ul {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nn-tablero-cola li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--nn-border);
+}
+
+.nn-tablero-cola li[aria-current="true"] {
+  border-left: 4px solid var(--nn-accent);
+  padding-left: 0.6rem;
+}
+
+.nn-tablero-cola li a {
+  min-height: 1.5rem;
+}
+
+.nn-board-motivos,
+.nn-board-ritmo,
+.nn-board-sinlectura {
+  flex-basis: 100%;
+  color: var(--nn-ink-muted);
+  font-size: 0.88rem;
+}
+
+.nn-board-ficha {
+  font-size: 0.85rem;
+}
+
+.nn-cap-numeros {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.nn-cap-numeros p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.35rem;
+  margin: 0;
+  padding: 0.6rem 0.65rem;
+  border: 1px solid var(--nn-border);
+  border-radius: var(--nn-radius);
+  background: var(--nn-surface);
+}
+
+.nn-cap-numeros strong {
+  font-size: var(--nn-step-4);
+  line-height: 1;
+}
+
+.nn-cap-numeros span {
+  color: var(--nn-ink-muted);
+}
+
+.nn-cap-numeros small {
+  flex-basis: 100%;
+  color: var(--nn-ink-muted);
+  font-size: 0.82rem;
+}
+
+.nn-cap-liberacion {
+  margin: 0.5rem 0;
+}
+
+.nn-cap-ancho {
+  display: none;
+}
+
+.nn-mapa {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.nn-mapa h3 {
+  margin: 0 0 0.4rem;
+  font-size: var(--nn-step-0);
+}
+
+.nn-mapa-celdas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nn-celda {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--nn-border);
+  border-radius: 8px;
+  background: var(--nn-surface);
+  font-size: 0.85rem;
+}
+
+.nn-celda span {
+  color: var(--nn-ink-muted);
+}
+
+.nn-celda-libre {
+  border-color: var(--nn-accent);
+  background: var(--nn-accent-bg);
+}
+
+.nn-celda-intervencion {
+  border-color: var(--nn-aviso);
+  border-left-width: 4px;
+}
+
+.nn-curva-variables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.nn-curva-variables a {
+  min-height: var(--nn-tap);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--nn-border-strong);
+  border-radius: 8px;
+  color: var(--nn-ink-muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nn-curva-variables a[aria-current="true"] {
+  border-color: var(--nn-accent);
+  background: var(--nn-accent-bg);
+  color: var(--nn-accent);
+}
+
+/* `overflow: visible` es el cinturón de la decisión de `CurvaDeLote.tsx`: el `viewBox` ya está
+   ampliado con un margen vertical para que quepan las lecturas fuera de la banda, y esto evita
+   que el trazo o el marcador de un punto pegado al borde se corte por la mitad. */
+.nn-curva-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.nn-curva-lienzo {
+  fill: none;
+  stroke: var(--nn-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.nn-curva-banda {
+  fill: var(--nn-accent-bg);
+  stroke: var(--nn-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.nn-curva-objetivo {
+  stroke: var(--nn-accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.nn-curva-linea {
+  stroke: var(--nn-ink-muted);
+  stroke-width: 1.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.nn-curva-punto {
+  fill: var(--nn-ink);
+}
+
+.nn-curva-punto-fuera,
+.nn-curva-punto-lejos {
+  fill: var(--nn-error);
+  stroke: var(--nn-surface);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Los ejes van DENTRO del <svg>: sus unidades son las del viewBox, no píxeles de pantalla (por eso 18). */
+.nn-curva-eje {
+  fill: var(--nn-ink-muted);
+  font-size: 18px;
+}
+
+.nn-curva-marca {
+  stroke: var(--nn-border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Una frase con su fuente detrás de un toque: «a las cinco de la mañana nadie lee tres párrafos». */
+.nn-curva-riesgo {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-left: 4px solid var(--nn-aviso);
+  background: var(--nn-surface);
+}
+
+.nn-curva-riesgo > p {
+  margin: 0;
+}
+
+.nn-curva-riesgo-cita {
+  font-weight: 600;
+}
+
+.nn-curva-cerrar {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+/* Sin lote tocado, el hueco de la curva sólo existe en pantalla ancha. */
+.nn-curva-reposo {
+  display: none;
+}
+
+@media (min-width: 60rem) {
+  .nn-tablero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "linea linea"
+      "cola capacidad"
+      "cola curva";
+    align-items: start;
+  }
+
+  .nn-tablero-linea { grid-area: linea; }
+  .nn-tablero-cola { grid-area: cola; }
+  .nn-tablero-capacidad { grid-area: capacidad; }
+  .nn-tablero-curva { grid-area: curva; }
+
+  .nn-linea {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .nn-cap-ancho {
+    display: block;
+  }
+
+  .nn-curva-reposo {
+    display: block;
+  }
+}

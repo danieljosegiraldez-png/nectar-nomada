@@ -10,6 +10,7 @@ import {
   CAMPOS_NUMERICOS,
   VALORES_DE_OPCIONES,
   camposDe,
+  danaPolinizadores,
 } from "../../lib/inventario/camposDeProducto";
 
 const fuente = (ruta: string) => readFileSync(new URL(`../../${ruta}`, import.meta.url), "utf8");
@@ -102,5 +103,42 @@ describe("nadie vuelve a copiar la lista a mano", () => {
     const conCopia = 'const CAMPOS = ["manufacturer", "sanitaryRegistration", "safetyNotes"];';
     const declaraciones = [...conCopia.matchAll(/const\s+\w+[^=]*=\s*(?:new Set[^;]*|\[[^\]]*\])/g)].map((m) => m[0]);
     expect(declaraciones.filter((d) => d.includes('"sanitaryRegistration"') && d.includes('"safetyNotes"'))).toHaveLength(1);
+  });
+});
+
+/**
+ * **El hueco de «¿daña polinizadores?» tiene que sobrevivir el viaje del formulario.**
+ *
+ * Esta prueba existe porque su flip-test NO cayó. La función vivía dentro de
+ * `app/actions/inventario.ts`; las pruebas de recepción ejercitan el servicio y no la acción, así
+ * que mutarla a `valor === "si"` —convertir «sin responder» en «no daña»— dejó las 14 en verde.
+ * Mover la función aquí es lo que la hace probable, y esto es lo que la prueba.
+ */
+describe("«si»/«no» del formulario, con el hueco intacto", () => {
+  it("«si» es true y «no» es false", () => {
+    expect(danaPolinizadores("si")).toBe(true);
+    expect(danaPolinizadores("no")).toBe(false);
+  });
+
+  it("sin responder es NULO, no false — que es la distinción entera", () => {
+    // `false` afirmaría «este producto no daña polinizadores». Nadie lo afirmó.
+    for (const vacio of ["", null, undefined]) {
+      expect(danaPolinizadores(vacio), `«${String(vacio)}» debería ser nulo`).toBeNull();
+    }
+  });
+
+  it("cualquier otra cosa también es NULO, no una afirmación", () => {
+    for (const raro of ["quiza", "SI", "true", "1", "yes"]) {
+      expect(danaPolinizadores(raro), `«${raro}» debería ser nulo`).toBeNull();
+    }
+  });
+
+  it("y sus dos valores son los que la pantalla ofrece", () => {
+    // Si la lista cerrada cambiara sin cambiar la función, el desplegable ofrecería algo que esta
+    // traducción manda a nulo — un hueco que el operario creería haber rellenado.
+    for (const v of VALORES_DE_OPCIONES.harmfulToPollinators ?? []) {
+      expect(danaPolinizadores(v), `la pantalla ofrece «${v}» y la función lo manda a nulo`).not.toBeNull();
+    }
+    expect((VALORES_DE_OPCIONES.harmfulToPollinators ?? []).length).toBe(2); // control del instrumento
   });
 });

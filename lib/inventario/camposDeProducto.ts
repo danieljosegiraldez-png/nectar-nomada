@@ -26,6 +26,7 @@ export const CAMPOS_DEL_PRODUCTO = [
   "doseMin",
   "doseMax",
   "doseUnit",
+  "harmfulToPollinators",
 ] as const;
 
 export type CampoDelProducto = (typeof CAMPOS_DEL_PRODUCTO)[number];
@@ -57,7 +58,7 @@ export const CAMPOS_NUMERICOS: ReadonlySet<CampoDelProducto> = new Set([...CAMPO
 export const CAMPOS_LARGOS: ReadonlySet<CampoDelProducto> = new Set(["storageConditions", "safetyNotes"]);
 
 /** El que se elige de una lista cerrada en vez de escribirse. */
-export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plantProtectionUse"]);
+export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plantProtectionUse", "harmfulToPollinators"]);
 
 /**
  * Qué valores acepta cada uno de esos campos. **Es la única fuente**: la pantalla pinta de aquí y
@@ -66,6 +67,10 @@ export const CAMPOS_DE_OPCIONES: ReadonlySet<CampoDelProducto> = new Set(["plant
  */
 export const VALORES_DE_OPCIONES: Readonly<Partial<Record<CampoDelProducto, readonly string[]>>> = {
   plantProtectionUse: ["preventivo", "control"],
+  // **Tres valores y no un sí/no.** Dejar sin responder tiene que ser distinguible de «no daña»:
+  // lo primero es un hueco, lo segundo una afirmación sobre un producto real. El aviso sólo salta
+  // con `si`, así que un hueco nunca produce ruido.
+  harmfulToPollinators: ["si", "no"],
 };
 
 /**
@@ -78,9 +83,29 @@ const SOLO_FITOSANITARIO: ReadonlySet<CampoDelProducto> = new Set([
   "doseMin",
   "doseMax",
   "doseUnit",
+  "harmfulToPollinators",
 ]);
 
 /** Qué campos se piden según la clase del producto. */
 export function camposDe(clase: ClaseDeProducto): readonly CampoDelProducto[] {
   return clase === "fitosanitario" ? CAMPOS_DEL_PRODUCTO : CAMPOS_DEL_PRODUCTO.filter((c) => !SOLO_FITOSANITARIO.has(c));
+}
+
+/**
+ * «si»/«no» de un desplegable a booleano, y **cualquier otra cosa a NULO**.
+ *
+ * **Vive aquí y no en la acción de servidor por un motivo medido**, no por estilo: el 2026-10-01 su
+ * flip-test no cayó. Estaba dentro de `app/actions/inventario.ts`, las pruebas ejercitan el
+ * servicio y no la acción, y mutarla para que devolviera `valor === "si"` —o sea, para convertir el
+ * hueco en un «no daña»— dejó las 14 pruebas en verde. Un `"use server"` sólo puede exportar
+ * funciones `async`, así que exportarla allí rompería el build; moverla es lo que la hace probable.
+ *
+ * El hueco es la razón de existir de la función: un `Boolean(valor)` convertiría «sin responder» en
+ * la afirmación «este producto no daña polinizadores», sobre un producto real y sin que nadie la
+ * hiciera.
+ */
+export function danaPolinizadores(valor: string | null | undefined): boolean | null {
+  if (valor === "si") return true;
+  if (valor === "no") return false;
+  return null;
 }
