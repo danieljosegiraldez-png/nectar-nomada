@@ -76,6 +76,7 @@ vi.mock("next-intl/server", () => ({
 
 import {
   anadirRangoAlBloqueAction,
+  guardarRangoDeMicroparcelaAction,
   declararTrozoDeFormaAction,
   quitarTrozoDeFormaAction,
   guardarRejillaAction,
@@ -381,5 +382,81 @@ describe("las dos acciones de la forma del lote", () => {
       await expect(accion({}, form({ locationId: "p1" }))).rejects.toThrow("redirect:/login");
       expect(servicio).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("guardarRangoDeMicroparcelaAction", () => {
+  it("pasa los cuatro números al servicio, como números", async () => {
+    const r = await guardarRangoDeMicroparcelaAction(
+      {},
+      form({
+        locationId: "micro-1",
+        rangeRowFrom: "1",
+        rangeRowTo: "4",
+        rangePlantFrom: "1",
+        rangePlantTo: "20",
+      }),
+    );
+    expect(r).toEqual({});
+    expect(deps.updateLocationAttributes).toHaveBeenCalledWith("actor", {
+      locationId: "micro-1",
+      rangeRowFrom: 1,
+      rangeRowTo: 4,
+      rangePlantFrom: 1,
+      rangePlantTo: 20,
+    });
+  });
+
+  /**
+   * **Vaciar los cuatro quita el rango; no lo pone en cero.** `Number("")` es 0, y una
+   * microparcela de la hilera 0 a la 0 no existe (ADR-080). Y los cuatro van explícitos,
+   * no ausentes: el servicio trata `undefined` como «no tocar», así que mandar nada no
+   * borraría nada.
+   */
+  it("vaciar los cuatro los manda como null, no como cero", async () => {
+    await guardarRangoDeMicroparcelaAction(
+      {},
+      form({
+        locationId: "micro-1",
+        rangeRowFrom: "",
+        rangeRowTo: "",
+        rangePlantFrom: "",
+        rangePlantTo: "",
+      }),
+    );
+    expect(deps.updateLocationAttributes).toHaveBeenCalledWith("actor", {
+      locationId: "micro-1",
+      rangeRowFrom: null,
+      rangeRowTo: null,
+      rangePlantFrom: null,
+      rangePlantTo: null,
+    });
+  });
+
+  /**
+   * **No manda NINGÚN campo de la rejilla**, y eso es la mitad que protege el dato: el
+   * servicio trata `undefined` como «no tocar», así que guardar el rango de una
+   * microparcela no puede borrar la numeración de su madre.
+   */
+  it("no manda ningún campo de la rejilla", async () => {
+    await guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1", rangeRowFrom: "1" }));
+    const pasado = deps.updateLocationAttributes.mock.calls[0]?.[1] ?? {};
+    for (const campo of ["gridOrigin", "rowCount", "plantsPerRow", "rowSpacingMeters"]) {
+      expect(pasado, `${campo} no debe viajar en esta acción`).not.toHaveProperty(campo);
+    }
+  });
+
+  it("un rechazo del servicio vuelve como error traducido", async () => {
+    deps.updateLocationAttributes.mockRejectedValue(new deps.RejillaInvalida("rejilla_rango_fuera_de_rejilla"));
+    const r = await guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1" }));
+    expect(r.error).toContain("error_rejilla_rango_fuera_de_rejilla");
+  });
+
+  it("sin sesión redirige a /login y no llama al servicio", async () => {
+    deps.user.mockResolvedValue(null);
+    await expect(
+      guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1" })),
+    ).rejects.toThrow("redirect:/login");
+    expect(deps.updateLocationAttributes).not.toHaveBeenCalled();
   });
 });
