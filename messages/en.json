@@ -1590,6 +1590,8 @@
     "error_proceso_process_already_open": "There is already an open process in this coffee (in this lot, above or below it).",
     "error_proceso_devolucion_antes_del_cierre": "Going back to drying cannot be recorded now: the process closing or the lot's entry into storage is dated later than this moment. Tell whoever manages the platform.",
     "error_proceso_descendiente_en_bodega": "Part of this coffee is already in storage, and stored coffee is not reprocessed: on this lot you cannot open a process or send it back to drying. To process what is left, split the lot first; if what is stored has a moisture defect, send the lot that is in storage back to drying.",
+    "error_proceso_corrida_ya_abierta": "This lot already has an open fermentation or drying, and a run consumes its whole lot. End that run: the next one starts on the lot that comes out of it.",
+    "error_proceso_lote_consumido": "This lot has already gone, whole, into another one: the run or transformation that consumed it has ended. The next run starts on the lot that came out of it.",
     "error_bandeja": "The tray operation could not be completed: {detail}",
     "recordProcessInterventionButton": "Record handling",
     "processReportHeading": "Process, roast and cup report",

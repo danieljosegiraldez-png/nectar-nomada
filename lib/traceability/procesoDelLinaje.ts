@@ -17,7 +17,7 @@
  */
 import { Prisma, type ProvenanceClass } from "../../generated/prisma/client";
 import { recordAuditEvent } from "../audit";
-import { computeLotBalance, resolveTolerancePct } from "./balance";
+import { computeLotBalance, FULL_CONSUMPTION_TYPES, resolveTolerancePct } from "./balance";
 import { LotProcessError } from "./errorDeProceso";
 import { ordenDeBloqueo } from "./ordenDeBloqueo";
 import { TOPE_DE_LINAJE } from "./topeDeLinaje";
@@ -462,9 +462,43 @@ export async function procesoAbiertoParaCorrida(
   lotId: string,
 ): Promise<{ id: string; processRecipeVersionId: string | null }> {
   await bloquearLinaje(tx, lotId);
+  // Todo lo que decide va DESPUÉS del bloqueo, y es la MISMA función que pregunta la pantalla (`puedeEmpezarCorrida`).
+  return procesoParaUnaCorrida(tx, lotId);
+}
+
+/**
+ * Lo que decide si una corrida puede empezar sobre `lotId`, sin bloquear nada: la usan `procesoAbiertoParaCorrida`, ya con el
+ * linaje bloqueado, y `puedeEmpezarCorrida` (`lotProcess.ts`), que decide qué OFRECE la pantalla. Una sola función, para que
+ * la pantalla pregunte lo mismo que el servicio y no una copia que pueda divergir.
+ *
+ * **La garantía de R7, «bajo un proceso abierto hay una sola línea de café viva»** (revisión final, ronda de arreglo 1,
+ * 2026-10-03). El diseño la apoyaba en que una corrida consume su lote entero, y nada lo hacía cumplir: se podía empezar una
+ * segunda corrida sobre un lote con otra abierta, o sobre la cereza que su fermentación ya había consumido —nace F2, el
+ * mismo café dos veces, y la humedad que cierra el proceso deja de describir lo que va a bodega—. Se rechaza:
+ * - `corrida_ya_abierta`: el lote es la entrada de una transformación ligada a una fermentación o un secado sin terminar
+ *   (`startFermentationRun` y `startDryingRun` escriben esa transformación, sin salidas, al empezar);
+ * - `lote_consumido`: el lote es la entrada de una transformación de consumo total (`FULL_CONSUMPTION_TYPES`, el mismo
+ *   conjunto con que el libro de masa descuenta el lote entero) que tiene alguna salida —la que escribe el FIN de una
+ *   corrida—. La de inicio no tiene salidas y no cuenta. `split` y `selection` no son de consumo total (son parciales);
+ *   una división bajo un proceso ya la cierra `lote_dividido`.
+ */
+export async function procesoParaUnaCorrida(
+  tx: Prisma.TransactionClient,
+  lotId: string,
+): Promise<{ id: string; processRecipeVersionId: string | null }> {
   if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
   const enBodega = await tx.storageAssignment.findFirst({ where: { lotId, endedAt: null }, select: { id: true } });
   if (enBodega) throw new LotProcessError("lote_en_bodega");
+  const corridaAbierta = await tx.lotTransformationInput.findFirst({
+    where: { lotId, transformation: { OR: [{ fermentationRun: { is: { endedAt: null } } }, { dryingRun: { is: { endedAt: null } } }] } },
+    select: { id: true },
+  });
+  if (corridaAbierta) throw new LotProcessError("corrida_ya_abierta");
+  const consumido = await tx.lotTransformationInput.findFirst({
+    where: { lotId, transformation: { transformationType: { in: [...FULL_CONSUMPTION_TYPES] }, outputs: { some: {} } } },
+    select: { id: true },
+  });
+  if (consumido) throw new LotProcessError("lote_consumido");
   const cobertura = await procesoQueCubre(tx, lotId);
   if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
   if (cobertura.estado !== "abierto") throw new LotProcessError("sin_proceso_abierto");

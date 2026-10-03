@@ -26,7 +26,15 @@ import { entradaDelLote } from "../../../lib/beneficio/entradaDelLote";
 import { faseDelLote } from "../../../lib/beneficio/reposo";
 import { estadosDeInstrumentoPorMedicion } from "../../../lib/equipos/equipos";
 import type { EstadoDeVerificacion } from "../../../lib/equipos/verificacion";
-import { coberturaDelLote, puedeAbrirProceso, LotProcessError, type CoberturaDelLote, type MotivoParaNoAbrir } from "../../../lib/traceability/lotProcess";
+import {
+  coberturaDelLote,
+  puedeAbrirProceso,
+  puedeEmpezarCorrida,
+  LotProcessError,
+  type CoberturaDelLote,
+  type MotivoParaNoAbrir,
+  type MotivoParaNoEmpezar,
+} from "../../../lib/traceability/lotProcess";
 import { VeredictoDeBeneficio } from "../../components/traceability/VeredictoDeBeneficio";
 import { compareRunToTargets } from "../../../lib/traceability/processTargets";
 import { TargetComparisonTable } from "../../components/traceability/TargetComparisonTable";
@@ -325,11 +333,19 @@ export default async function LotDetailPage({
   let errorDeCobertura: string | null = null;
   /** Si no hay proceso abierto que lo cubra, si se podría abrir uno (R2) — o el motivo por el que no. */
   let puedeAbrir: { puede: true } | { puede: false; motivo: MotivoParaNoAbrir } | null = null;
+  /**
+   * Si `startFermentationRun` y `startDryingRun` aceptarían este lote (revisión final, ronda de arreglo 1, 2026-10-03): la misma
+   * función que corre el servicio, sin bloquear. Antes la ficha decidía con «proceso abierto y fuera de bodega», y ofrecía
+   * empezar sobre la cereza que su fermentación ya consumió o sobre un lote dividido cubierto por un reproceso (M8). Sólo a
+   * quien gestiona el lote, como los botones.
+   */
+  let puedeEmpezar: { puede: true } | { puede: false; motivo: MotivoParaNoEmpezar } | null = null;
   try {
     cobertura = await coberturaDelLote(user.userAccountId, lot.id);
     if (cobertura.estado !== "abierto" && lot.lotType !== "honey" && !activeFermentation && !activeDrying && puedeRegistrar) {
       puedeAbrir = await puedeAbrirProceso(user.userAccountId, lot.id);
     }
+    if (lot.lotType !== "honey" && puedeRegistrar) puedeEmpezar = await puedeEmpezarCorrida(user.userAccountId, lot.id);
   } catch (error) {
     if (!(error instanceof LotProcessError)) throw error;
     errorDeCobertura = error.message;
@@ -449,7 +465,9 @@ export default async function LotDetailPage({
       : []),
     // Parte 1, R3 (tarea 9): empezar una corrida exige un proceso abierto que cubra al lote, y en bodega no se empieza
     // nada. Sin eso el servicio rechaza: no se ofrece, y debajo de los botones va la frase de por qué.
-    ...(!esMiel && !activeFermentation && !activeDrying && procesoAbierto && !currentStorage
+    // Revisión final (ronda de arreglo 1): por `puedeEmpezarCorrida`, que pregunta lo mismo que el servicio —también la corrida ya
+    // abierta, el lote consumido y el lote dividido, que «proceso abierto y fuera de bodega» no veía—.
+    ...(!esMiel && !activeFermentation && !activeDrying && puedeEmpezar?.puede === true
       ? ([
           { action: "fermentation", href: `/lots/${lot.id}/fermentation/new`, label: t("startFermentationButton") },
           { action: "drying", href: `/lots/${lot.id}/drying/new`, label: t("startDryingButton") },
@@ -934,6 +952,14 @@ export default async function LotDetailPage({
             ) : (
               t(`processCannotOpen_${puedeAbrir.motivo}`)
             )}
+          </p>
+        ) : null}
+        {/* Revisión final (ronda de arreglo 1): con un proceso abierto que lo cubre y sin corrida en curso en este lote, si la
+            corrida no se puede empezar se dice por qué —la cereza ya consumida, la división, la bodega—, con el texto del mismo
+            código con que el servicio lo rechazaría. Sin proceso abierto lo dice la frase de arriba. */}
+        {procesoAbierto && !activeFermentation && !activeDrying && puedeEmpezar && !puedeEmpezar.puede && puedeEmpezar.motivo !== "sin_proceso_abierto" ? (
+          <p className="nn-muted" style={{ margin: "0.5rem 0 0" }}>
+            {t(`error_proceso_${puedeEmpezar.motivo}`)}
           </p>
         ) : null}
       </div>

@@ -66,8 +66,11 @@ export const SUBTRACTIVE_EVENT_TYPES: ReadonlySet<QuantityEventType> = new Set([
  * in real data carry a NULL quantity, so "decrement by the declared input
  * quantity" is not implementable for almost any of them. The balance is
  * knowable exactly when the declaration is not.
+ *
+ * Exportado (Parte 1, revisión final, ronda de arreglo 1, 2026-10-03): `procesoDelLinaje.ts` lo usa para no
+ * empezar una corrida sobre un lote que una de estas transformaciones ya consumió entero (`lote_consumido`).
  */
-const FULL_CONSUMPTION_TYPES: ReadonlySet<LotTransformationType> = new Set([
+export const FULL_CONSUMPTION_TYPES: ReadonlySet<LotTransformationType> = new Set([
   "stage_change",
   "merge",
   "blend",

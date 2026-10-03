@@ -25,6 +25,7 @@ import {
   exigeSinOtroProcesoAbierto,
   idsDeDescendencia,
   loteDividido,
+  procesoParaUnaCorrida,
   procesoQueCubre,
   procesosParaEntrada,
   type OrigenDelProceso,
@@ -873,6 +874,49 @@ export async function puedeGestionarProceso(userAccountId: string, lotProcessId:
     return true;
   } catch (error) {
     if (error instanceof TraceabilityAccessError) return false;
+    throw error;
+  }
+}
+
+/**
+ * Los motivos por los que una corrida no empieza sobre un lote (R3, R6.6 y R7): los códigos con que `procesoParaUnaCorrida`
+ * rechaza (revisión final, ronda de arreglo 1, 2026-10-03). Cada uno tiene su texto, `error_proceso_<motivo>`, en es y en
+ * en (lo vigila `corridaConProceso.test.ts`); `sin_proceso_abierto` la pantalla lo trata aparte, porque ahí la frase depende
+ * de si se puede abrir un proceso (`puedeAbrirProceso`).
+ */
+export const MOTIVOS_PARA_NO_EMPEZAR = [
+  "lote_dividido",
+  "lote_en_bodega",
+  "corrida_ya_abierta",
+  "lote_consumido",
+  "lote_mezclado",
+  "sin_proceso_abierto",
+  "lineage_too_deep",
+] as const;
+export type MotivoParaNoEmpezar = (typeof MOTIVOS_PARA_NO_EMPEZAR)[number];
+const esMotivoParaNoEmpezar = (m: string): m is MotivoParaNoEmpezar => (MOTIVOS_PARA_NO_EMPEZAR as readonly string[]).includes(m);
+
+/**
+ * Si `startFermentationRun` y `startDryingRun` dejarían empezar una corrida sobre este lote, para no OFRECER lo que va a fallar
+ * (revisión final, ronda de arreglo 1, 2026-10-03). Antes la ficha decidía con «hay un proceso abierto y no está en bodega» y
+ * ofrecía empezar sobre la cereza ya consumida por su fermentación, o sobre un lote dividido cubierto por el reproceso de su
+ * ancestro (menor M8), y la página de fermentación sólo miraba si el proceso estaba abierto.
+ *
+ * Pregunta LO MISMO que el servicio: `procesoParaUnaCorrida`, la función que `procesoAbiertoParaCorrida` corre después de
+ * bloquear el linaje —aquí sin bloquear, porque sólo lee—. No escribe; el servidor vuelve a comprobarlo al empezar.
+ */
+export async function puedeEmpezarCorrida(
+  userAccountId: string,
+  lotId: string,
+): Promise<{ puede: true } | { puede: false; motivo: MotivoParaNoEmpezar }> {
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) throw new LotProcessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [lot]);
+  try {
+    await procesoParaUnaCorrida(prisma, lot.id);
+    return { puede: true };
+  } catch (error) {
+    if (error instanceof LotProcessError && esMotivoParaNoEmpezar(error.message)) return { puede: false, motivo: error.message };
     throw error;
   }
 }

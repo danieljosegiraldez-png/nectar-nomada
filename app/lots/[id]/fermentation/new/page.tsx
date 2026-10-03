@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
-import { coberturaDelLote, puedeAbrirProceso, LotProcessError } from "../../../../../lib/traceability/lotProcess";
+import { coberturaDelLote, puedeAbrirProceso, puedeEmpezarCorrida, LotProcessError } from "../../../../../lib/traceability/lotProcess";
 import { FermentationForm } from "../../../../components/traceability/FermentationForm";
 
 export const dynamic = "force-dynamic";
@@ -30,15 +30,22 @@ export default async function NewFermentationPage({ params }: { params: Promise<
   // Sin proceso abierto no se ofrece el formulario (R3: el servicio rechazaría con `sin_proceso_abierto`), y se dice por
   // qué, con las mismas frases que la ficha y la página del proceso. Un `LotProcessError` al cargar —un linaje de más de 64
   // generaciones— se dice también: no es un 404 ni un 500.
+  //
+  // Revisión final (ronda de arreglo 1, 2026-10-03): la decisión es la de `puedeEmpezarCorrida`, la MISMA función que corre el
+  // servicio. Antes sólo miraba si el proceso que cubre al lote estaba abierto, y ofrecía el formulario en bodega, en un lote
+  // dividido, con otra corrida abierta o sobre la cereza ya consumida.
   let aviso: string | null = null;
   let recetaDelProceso: string | null = null;
   try {
-    const cobertura = await coberturaDelLote(user.userAccountId, id);
-    if (cobertura.estado === "abierto") {
+    const empezar = await puedeEmpezarCorrida(user.userAccountId, lot.id);
+    if (empezar.puede) {
+      const cobertura = await coberturaDelLote(user.userAccountId, lot.id);
       recetaDelProceso = cobertura.vigente?.recetaConVersion ?? null;
-    } else {
-      const puede = await puedeAbrirProceso(user.userAccountId, id);
+    } else if (empezar.motivo === "sin_proceso_abierto") {
+      const puede = await puedeAbrirProceso(user.userAccountId, lot.id);
       aviso = puede.puede ? t("startRunNeedsOpenProcess") : t(`processCannotOpen_${puede.motivo}`);
+    } else {
+      aviso = empezar.motivo === "lineage_too_deep" ? t("processLineageTooDeep") : t(`error_proceso_${empezar.motivo}`);
     }
   } catch (error) {
     if (!(error instanceof LotProcessError)) throw error;

@@ -142,6 +142,10 @@ corrida, cerrar, dividir, seleccionar, fusionar y almacenar.
 - **Se rechaza** con `sin_proceso_abierto` si no hay un proceso abierto que lo cubra, con
   `lote_en_bodega` si el lote está en bodega, y con `lote_dividido` o `lote_mezclado` en esos casos.
   Daniel eligió bloquear frente a dejar la corrida suelta.
+- **Y con `corrida_ya_abierta` o `lote_consumido`** (revisión final, 2026-10-03), que hacen cumplir la
+  garantía de R6 en la que se apoya R7: si el lote ya es la entrada de una fermentación o un secado sin
+  terminar, o si una transformación de consumo total con salida ya lo consumió entero —la cereza cuya
+  fermentación terminó—. La siguiente corrida empieza en el lote que salió.
 - **El permiso se pide sólo sobre el lote de la corrida**, como hoy. Nunca se exige gestionar el lote
   donde vive el proceso: copiar el patrón de `colgarCorrida`, que autoriza contra el lote del
   proceso, dejaría fuera a un operario que gestiona el hijo y no el padre.
@@ -230,7 +234,10 @@ vuelven dos o más procesos». Cuando se divide (`split`) un lote **cubierto por
 **Lo que garantizan juntas R2 y R6, y en lo que se apoya R7:** bajo un proceso abierto hay **una sola
 línea de café viva**. Dividir lo cierra, la selección y la fusión se rechazan, y una corrida consume
 su lote entero: al terminarla, `stage_change` está entre los tipos de consumo total del libro de
-balance (`balance.ts:70-77`). La comprobación de saldo de R6.1 queda como red por si algo de esto
+balance (`balance.ts`, `FULL_CONSUMPTION_TYPES`). **Desde la revisión final (2026-10-03) eso se hace
+cumplir al empezar**, y no sólo se supone: no empieza una corrida sobre un lote que ya tiene una abierta
+(`corrida_ya_abierta`) ni sobre uno que ya consumió una transformación de consumo total con salida
+(`lote_consumido`), R3. La comprobación de saldo de R6.1 queda como red por si algo de esto
 cambia. Por eso la humedad que cierra el proceso describe el café que va a bodega, y no el de una
 rama hermana.
 
@@ -360,7 +367,9 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 
 - **Ficha del lote:**
   - «Empezar fermentación» y «Empezar secado» sólo salen con un proceso abierto que cubra al lote; si
-    no lo hay, sale «Abrir proceso» con una frase que dice por qué.
+    no lo hay, sale «Abrir proceso» con una frase que dice por qué. Desde la revisión final lo decide
+    `puedeEmpezarCorrida`, que repite sin bloquear los pasos del servicio (también la corrida ya abierta,
+    el lote consumido y el lote dividido), y lo usan también las dos páginas `/new`.
   - «Abrir proceso» no se ofrece si R2 lo rechazaría (lote dividido, mezcla, en bodega o miel); en su
     lugar va la frase de por qué.
   - «Selección» no se ofrece bajo un proceso abierto.
@@ -373,7 +382,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
   motivos.
 - **Formulario de fermentación:** sin desplegable de receta; muestra la del proceso.
 - **Errores en español y en inglés, uno por código:** `sin_proceso_abierto`, `lote_dividido`,
-  `lote_mezclado`, `lote_en_bodega`, `descendiente_en_bodega`, `proceso_no_aplica_a_miel`, `corridas_abiertas`,
+  `lote_mezclado`, `lote_en_bodega`, `descendiente_en_bodega`, `corrida_ya_abierta`, `lote_consumido`,
+  `proceso_no_aplica_a_miel`, `corridas_abiertas`,
   `division_deja_remanente`, `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`,
   `receta_distinta_del_proceso`, `lineage_too_deep` y `motivo_otro_requiere_nota`, y también el ya
   existente `process_already_open`, que ahora dice «en este café». Hoy `LotProcessError` se traduce con un
@@ -383,7 +393,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 **Nombres nuevos para que Daniel los revise:** `closureKind` / `divided`,
 `dividedByTransformationId`, `derivedFromLotProcessId`, `lot_process_return`,
 `motivo_devolucion_a_secado`, el módulo `procesoDelLinaje` y los códigos de arriba. Y los que añadió la
-revisión final (2026-10-03): `descendiente_en_bodega` (R2, decisión de Daniel del 2026-10-02). Ninguno está en
+revisión final (2026-10-03): `descendiente_en_bodega` (R2, decisión de Daniel del 2026-10-02),
+`corrida_ya_abierta` y `lote_consumido` (R3/R7), y el predicado `puedeEmpezarCorrida`. Ninguno está en
 `03_public_api.md`, porque ese contrato no cubre los procesos de la aplicación.
 
 ## 4. Pruebas — cada guardia con su flip-test

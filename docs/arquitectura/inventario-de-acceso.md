@@ -13,9 +13,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**614 operaciones** que tocan la base, en **167 archivos** — medido el 2026-10-03 con
+**615 operaciones** que tocan la base, en **167 archivos** — medido el 2026-10-03 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
-`origin/main` (`203d9236`) (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
+`origin/main` (`203d9236`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
@@ -25,12 +25,22 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **464** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **465** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **93** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **La garantía de R7, «una sola línea viva bajo un proceso» (2026-10-03): 614→615, 167 archivos y «guardia directo»
+> 464→465; «depende del llamador» sigue en 93, con una fila que cambia de nombre.** Revisión final de la Parte 1, ronda
+> de arreglo 1. `puedeEmpezarCorrida` (`lib/traceability/lotProcess.ts`) es nueva, con guardia directo
+> (`requireLotAccess(view)` sobre el lote): decide si la ficha y las dos páginas `/new` ofrecen empezar una corrida. Lo que
+> decide sale de `procesoAbiertoParaCorrida` a una función nueva sin bloqueo, `procesoParaUnaCorrida`, para que pantalla y
+> servicio pregunten lo mismo: `procesoAbiertoParaCorrida` ya no toca la base por sí misma (bloquea y delega) y sale del
+> inventario, y `procesoParaUnaCorrida` entra en «depende del llamador» con su fila en el allowlist. Los cambios de las
+> decisiones de Daniel del 2026-10-02 —`exigeSinOtroProcesoAbierto` mira la bodega de la descendencia; `loteDividido` recibe
+> la fecha del registro— cambian el cuerpo de operaciones que ya estaban, no su fila.
 
 > **Al juntar `origin/main` en la rama de la Parte 1 (2026-10-03): 609→614, 166→167 archivos, «guardia directo»
 > 461→464 y «depende del llamador» 91→93.** Medido con `--json` sobre los dos árboles, no sumado a mano: las cinco son de

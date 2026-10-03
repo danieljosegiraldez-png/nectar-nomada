@@ -3,11 +3,12 @@
  * no empieza; la fermentación lleva la receta del proceso y no otra.
  */
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
-import { cambiarIntencion, cerrarProceso, puedeGestionarProceso } from "../../lib/traceability/lotProcess";
+import { cambiarIntencion, cerrarProceso, puedeGestionarProceso, puedeEmpezarCorrida, MOTIVOS_PARA_NO_EMPEZAR } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { puedeGestionarLote, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { procesoQueCubre, idsDeAscendencia, bloquearLinajes } from "../../lib/traceability/procesoDelLinaje";
@@ -221,22 +222,26 @@ describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
   });
 
   it("cubierto por un proceso CERRADO por humedad, no empieza: sin_proceso_abierto, en el propio lote y en un hijo", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03): el «propio lote» es uno SIN hijos. El padre de abajo pasó entero al hijo
+    // por un `stage_change` con salida, y desde R7 eso lo rechaza antes `lote_consumido`: la corrida sigue en el hijo.
+    const propio = await lote("R3-CERRADO-PROPIO");
+    await cerradoPorHumedad(propio);
     const padre = await lote("R3-CERRADO");
     const hijo = await lote("R3-CERRADO-HIJO");
     await enlazar([padre], [hijo]);
     await cerradoPorHumedad(padre);
     // Control: los dos lotes SÍ están cubiertos por un proceso —cerrado—, así que el rechazo de abajo no es el de
     // «no hay ninguno» (estado `sin_proceso`) sino el de «el que hay ya no está abierto».
-    expect((await procesoQueCubre(prisma, padre)).estado).toBe("cerrado");
+    expect((await procesoQueCubre(prisma, propio)).estado).toBe("cerrado");
     expect((await procesoQueCubre(prisma, hijo)).estado).toBe("cerrado");
     await expect(
-      startDryingRun(gestor, { lotId: padre, startedAt: ahora(), provenanceClass: "original_record" }),
+      startDryingRun(gestor, { lotId: propio, startedAt: ahora(), provenanceClass: "original_record" }),
     ).rejects.toThrow(new LotProcessError("sin_proceso_abierto"));
     await expect(
       startDryingRun(gestor, { lotId: hijo, startedAt: ahora(), provenanceClass: "original_record" }),
     ).rejects.toThrow(new LotProcessError("sin_proceso_abierto"));
     // Y no empezó nada: el rechazo es de la transacción entera.
-    expect(await corridasEmpezadasEn([padre, hijo])).toBe(0);
+    expect(await corridasEmpezadasEn([propio, padre, hijo])).toBe(0);
   });
 
   it("un secado en el nieto queda unido al proceso del abuelo", async () => {
@@ -447,6 +452,119 @@ for (const { nombre, clave, empezar } of EMPEZAR) {
     });
   });
 }
+
+/**
+ * R7, «bajo un proceso abierto hay una sola línea de café viva» (revisión final, ronda de arreglo 1, 2026-10-03). El diseño la
+ * apoyaba en que una corrida consume su lote entero, y nada lo hacía cumplir: una segunda corrida sobre el mismo lote, o una
+ * nueva sobre la cereza que su fermentación ya consumió, hacían nacer el mismo café dos veces.
+ */
+describe("R7 — una corrida consume su lote entero: no empieza otra sobre él", () => {
+  it("con una corrida abierta sobre el lote, no empieza otra: corrida_ya_abierta, por las dos puertas", async () => {
+    const l = await lote("R7-ABIERTA");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const { run } = await startDryingRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    // Control: la primera SÍ empezó, unida al proceso; sin esto, el rechazo de abajo podría ser el de cualquier otra cosa.
+    expect(run.lotProcessId).toBe(p.id);
+    for (const { empezar } of EMPEZAR) {
+      await expect(empezar(gestor, l)).rejects.toThrow(new LotProcessError("corrida_ya_abierta"));
+    }
+    expect(await prisma.dryingRun.count({ where: { transformations: { some: { inputs: { some: { lotId: l } } } } } })).toBe(1);
+    expect(await prisma.fermentationRun.count({ where: { transformations: { some: { inputs: { some: { lotId: l } } } } } })).toBe(0);
+  });
+
+  it("sobre la cereza que su fermentación ya consumió no empieza nada: lote_consumido; sobre el lote que salió, sí", async () => {
+    // El flujo normal —fermentar C, nace F1, secar F1— sigue pasando: es el control. Lo que se rechaza es volver a la cereza.
+    const c = await lote("R7-CONS-C");
+    const p = await abrirProcesoDePrueba(gestor, c);
+    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record" });
+    const { outputLot: f1 } = await endFermentationRun(gestor, {
+      fermentationRunId: run.id, endedAt: ahora(), outputLotCode: `R7-CONS-F1-${RUN}`, outputLotType: "processing", provenanceClass: "original_record",
+    });
+    lotes.push(f1.id);
+    for (const { empezar } of EMPEZAR) {
+      await expect(empezar(gestor, c)).rejects.toThrow(new LotProcessError("lote_consumido"));
+    }
+    // El proceso sigue abierto y cubre a la cereza: lo que la rechaza es que ya pasó a F1, no que falte un proceso.
+    expect((await procesoQueCubre(prisma, c)).estado).toBe("abierto");
+    expect(await prisma.dryingRun.count({ where: { transformations: { some: { inputs: { some: { lotId: c } } } } } })).toBe(0);
+    expect(await prisma.fermentationRun.count({ where: { transformations: { some: { inputs: { some: { lotId: c } } } } } })).toBe(1);
+    // Control: la corrida sobre el lote que salió empieza, unida al mismo proceso.
+    const { run: secado } = await startDryingRun(gestor, { lotId: f1.id, startedAt: ahora(), provenanceClass: "original_record" });
+    expect(secado.lotProcessId).toBe(p.id);
+  });
+
+  /** El predicado de la pantalla y el servicio, sobre el mismo lote: tienen que decir lo mismo. */
+  async function empezarDiceLoMismo(lotId: string) {
+    const veredicto = await puedeEmpezarCorrida(gestor, lotId);
+    const servicio = startDryingRun(gestor, { lotId, startedAt: ahora(), provenanceClass: "original_record" });
+    if (veredicto.puede) await expect(servicio, "el predicado dijo «se puede» y el servicio lo rechazó").resolves.toBeDefined();
+    else await expect(servicio, `el predicado dijo «${veredicto.motivo}» y el servicio no rechazó con ese código`).rejects.toThrow(new LotProcessError(veredicto.motivo));
+    return veredicto;
+  }
+
+  it("la pantalla pregunta lo mismo que el servicio: corrida abierta, lote consumido, lote dividido bajo un reproceso, sin proceso, y el que sí", async () => {
+    // Corrida abierta.
+    const abierta = await lote("R7-PE-ABI");
+    await abrirProcesoDePrueba(gestor, abierta);
+    await startFermentationRun(gestor, { lotId: abierta, startedAt: ahora(), provenanceClass: "original_record" });
+    expect(await empezarDiceLoMismo(abierta)).toEqual({ puede: false, motivo: "corrida_ya_abierta" });
+
+    // Consumido: la cereza cuya fermentación terminó. Y el lote que salió, que sí empieza (por el mismo camino del predicado).
+    const c = await lote("R7-PE-CONS");
+    await abrirProcesoDePrueba(gestor, c);
+    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record" });
+    const { outputLot: f1 } = await endFermentationRun(gestor, {
+      fermentationRunId: run.id, endedAt: ahora(), outputLotCode: `R7-PE-F1-${RUN}`, outputLotType: "processing", provenanceClass: "original_record",
+    });
+    lotes.push(f1.id);
+    expect(await empezarDiceLoMismo(c)).toEqual({ puede: false, motivo: "lote_consumido" });
+    expect(await empezarDiceLoMismo(f1.id)).toEqual({ puede: true });
+
+    // M8: un lote DIVIDIDO cubierto por el reproceso ABIERTO de su ancestro. La ficha lo ofrecía —proceso abierto y fuera de
+    // bodega— y el servicio lo rechaza con `lote_dividido`. C2 → L (y L se dividió bajo P1, que vivía en C2); P2, el reproceso,
+    // abierto sobre C2.
+    const c2 = await lote("R7-PE-DIV-C");
+    const l = await lote("R7-PE-DIV-L");
+    const l1 = await lote("R7-PE-DIV-L1");
+    await enlazar([c2], [l]);
+    const division = await enlazar([l], [l1], "split");
+    const [g, ce] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    await prisma.lotProcess.create({ data: {
+      lotId: c2, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: ce.id,
+      endedAt: new Date("2026-03-05T12:00:00Z"), closureKind: "divided", dividedByTransformationId: division,
+    } });
+    await abrirProcesoDePrueba(gestor, c2);
+    expect((await procesoQueCubre(prisma, l)).estado, "control: L está cubierto por el reproceso ABIERTO").toBe("abierto");
+    expect(await empezarDiceLoMismo(l)).toEqual({ puede: false, motivo: "lote_dividido" });
+
+    // Sin proceso.
+    expect(await empezarDiceLoMismo(await lote("R7-PE-SIN"))).toEqual({ puede: false, motivo: "sin_proceso_abierto" });
+  });
+
+  it("cada motivo por el que no se empieza tiene su texto en es y en (`error_proceso_<motivo>`), que la ficha y las páginas /new piden", () => {
+    // Las claves son de plantilla (`error_proceso_${motivo}`): `claves-de-traduccion-existen` no las ve.
+    const es = JSON.parse(readFileSync("messages/es.json", "utf8")) as Record<string, Record<string, string>>;
+    const en = JSON.parse(readFileSync("messages/en.json", "utf8")) as Record<string, Record<string, string>>;
+    expect(MOTIVOS_PARA_NO_EMPEZAR.length, "la lista de motivos salió vacía").toBeGreaterThanOrEqual(7);
+    expect([...MOTIVOS_PARA_NO_EMPEZAR]).toEqual(expect.arrayContaining(["corrida_ya_abierta", "lote_consumido"]));
+    const faltan: string[] = [];
+    for (const m of MOTIVOS_PARA_NO_EMPEZAR) {
+      if (!es.Traceability?.[`error_proceso_${m}`]?.trim()) faltan.push(`es: Traceability.error_proceso_${m}`);
+      if (!en.Traceability?.[`error_proceso_${m}`]?.trim()) faltan.push(`en: Traceability.error_proceso_${m}`);
+    }
+    expect(faltan).toEqual([]);
+    // Control: las páginas arman la clave con ese prefijo; si cambian de prefijo, esta prueba tiene que seguirlas.
+    for (const pagina of ["app/lots/[id]/page.tsx", "app/lots/[id]/fermentation/new/page.tsx", "app/lots/[id]/drying/new/page.tsx"]) {
+      const fuente = readFileSync(pagina, "utf8");
+      expect(fuente, `${pagina} no pregunta a puedeEmpezarCorrida`).toContain("puedeEmpezarCorrida(");
+      expect(fuente, `${pagina} no pinta el motivo con su texto`).toContain("error_proceso_${");
+    }
+  });
+});
 
 describe("R4 — la fermentación lleva la receta del proceso", () => {
   it("hereda la versión del proceso", async () => {

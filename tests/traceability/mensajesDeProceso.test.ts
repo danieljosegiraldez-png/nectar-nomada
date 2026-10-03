@@ -58,6 +58,8 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   // Ronda de arreglo 1 de la revisión final (2026-10-03): los códigos nuevos de las decisiones de Daniel del 2026-10-02 y de
   // la revisión final (diseño §3.3, «Nombres nuevos para que Daniel los revise»).
   "descendiente_en_bodega",
+  "corrida_ya_abierta",
+  "lote_consumido",
 ];
 
 /**
@@ -163,6 +165,16 @@ const SIN_PANTALLA_ES = /págin|pantalla|bot[oó]n|formulario/i;
 const SIN_PANTALLA_EN = /\bpage\b|screen|button|\bform\b/i;
 
 const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
+  corrida_ya_abierta: {
+    por: "Una corrida consume su lote entero (R7): el texto dice qué hacer —terminar la que hay— y dónde sigue el café.",
+    es: { debe: [/termin/i, /lote que salga/i] },
+    en: { debe: [/\bend\b/i, /lot that comes out/i] },
+  },
+  lote_consumido: {
+    por: "La cereza cuya fermentación terminó (R7): la siguiente corrida empieza en el lote que salió; el texto lo dice.",
+    es: { debe: [/lote que salió/i] },
+    en: { debe: [/lot that came out/i] },
+  },
   descendiente_en_bodega: {
     por:
       "Decisión de Daniel del 2026-10-02: para procesar lo que queda, PRIMERO se divide, y lo guardado conserva su proceso. El texto dice " +
