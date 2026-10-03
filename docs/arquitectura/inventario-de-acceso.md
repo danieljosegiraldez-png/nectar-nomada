@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
 
-**602 operaciones** que tocan la base, en **166 archivos** — medido con
+**604 operaciones** que tocan la base, en **167 archivos** — medido con
 `node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
 (`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
 
@@ -24,7 +24,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **461** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **463** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **86** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -915,6 +915,19 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `rejillaDelSitio`, que es como se lee allí. Sus tres llamadores autorizan antes —
 > `requireLocationAttributeAccess` los dos de `plotBlocks.ts`, `requireSpecimenAccess(manage)` el
 > de `specimens.ts`— y eso se comprobó **leyendo los tres sitios**, no deduciéndolo.
+
+> **Y (602→604, «guardia directo» 461→463), 2026-10-03:** `declararTrozoDeForma` y
+> `quitarTrozoDeForma` (`lib/traceability/formaDeLaParcela.ts`), que es donde vive la FORMA
+> declarada de un lote. Las dos exigen `requireLocationAttributeAccess` **sobre la raíz de la
+> numeración**, no sobre el sitio que pase quien llama: con el permiso de una microparcela no se
+> cambia la forma de su madre (D3). Ese archivo ya existía con su mitad pura —`celdasDeLaForma`,
+> `celdasSinPlantar`, `tableroDe`, que no tocan la base— y entra al inventario el día que gana las
+> dos que escriben.
+>
+> **Lo cazó el guardia por segunda vez en dos días**, y por el mismo mecanismo que la vez
+> anterior: añadir acceso a datos a un archivo que no lo tenía no se siente como añadir acceso a
+> datos. La primera fue exportar una función privada; ésta, darle a un módulo puro sus dos
+> escrituras.
 >
 > **Lo cazó el guardia, no yo.** Al exportarla, `acceso-a-datos` falló con «Operación nueva sin
 > principal» nombrándola, y `cifras-del-inventario` con las dos filas descuadradas. Exportar una

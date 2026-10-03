@@ -16,6 +16,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { updateLocationAttributes } from "../../lib/traceability/locations";
 import { crearFinca, crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
+import {
+  declararTrozoDeForma,
+  quitarTrozoDeForma,
+} from "../../lib/traceability/formaDeLaParcela";
+import { LocationAccessError, RejillaInvalida } from "../../lib/traceability/locations";
+import { crearUsuarioSinAcceso } from "../helpers/traceability";
 
 let actor: string;
 let personaId: string;
@@ -23,9 +29,11 @@ let fincaId: string;
 let organizacionId: string;
 let parcelaId: string;
 let parcelaSinRejillaId: string;
+let ajeno: Awaited<ReturnType<typeof crearUsuarioSinAcceso>>;
 
 beforeAll(async () => {
   const u = await crearUsuarioConAcceso();
+  ajeno = await crearUsuarioSinAcceso();
   actor = u.userAccountId;
   personaId = u.personId;
   const finca = await crearFinca();
@@ -62,6 +70,16 @@ afterAll(async () => {
   await prisma.assignment.deleteMany({ where: { userAccountId: actor } });
   await prisma.userAccount.deleteMany({ where: { id: actor } });
   await prisma.person.deleteMany({ where: { id: personaId } });
+  // El ajeno trae su propia organización, su ubicación y un `Scope` de UBICACIÓN que
+  // SÍ es suyo —a diferencia del de plataforma— y se borra después de su `Assignment`,
+  // que lo referencia con `RESTRICT`. El orden lo mandan las claves ajenas.
+  await prisma.auditEvent.deleteMany({ where: { actorUserAccountId: ajeno.userAccountId } });
+  await prisma.location.deleteMany({ where: { id: ajeno.locationId } });
+  await prisma.assignment.deleteMany({ where: { userAccountId: ajeno.userAccountId } });
+  await prisma.userAccount.deleteMany({ where: { id: ajeno.userAccountId } });
+  await prisma.person.deleteMany({ where: { id: ajeno.personId } });
+  await prisma.scope.deleteMany({ where: { id: ajeno.scopeId } });
+  await prisma.organization.deleteMany({ where: { id: ajeno.organizationId } });
 });
 
 const trozo = (
@@ -130,5 +148,132 @@ describe("la forma se declara con rectángulos que caben en el tablero", () => {
     await trozo(5, 9, 1, 20);
     const n = await prisma.plotShapeRange.count({ where: { locationId: parcelaId } });
     expect(n).toBe(2);
+  });
+});
+
+describe("declararTrozoDeForma y quitarTrozoDeForma", () => {
+  /** Lo que la corrida cree haber creado, para que la limpieza lo alcance. */
+  const plantados: string[] = [];
+
+  afterEach(async () => {
+    if (plantados.length) {
+      await prisma.specimen.deleteMany({ where: { id: { in: plantados } } });
+      plantados.length = 0;
+    }
+  });
+
+  const plantar = async (gridRow: number, gridPosition: number) => {
+    const s = await prisma.specimen.create({
+      data: {
+        locationId: parcelaId,
+        specimenType: "plant",
+        commonName: "TEST cafeto de la forma",
+        provenanceClass: "direct_observation",
+        gridRow,
+        gridPosition,
+      },
+    });
+    plantados.push(s.id);
+    return s;
+  };
+
+  it("declara un trozo y deja su AuditEvent", async () => {
+    const t = await declararTrozoDeForma(actor, {
+      locationId: parcelaId,
+      rowFrom: 1,
+      rowTo: 7,
+      plantFrom: 1,
+      plantTo: 20,
+    });
+    expect(t.rowTo).toBe(7);
+    const eventos = await prisma.auditEvent.count({
+      where: { entityId: parcelaId, operation: "location.declare_shape_range" },
+    });
+    expect(eventos, "la auditoría va en la MISMA transacción").toBe(1);
+  });
+
+  /** La validación es la misma que la de los rangos de bloque, no una copia. */
+  it("un trozo al revés vuelve con el código compartido, no con un error de Prisma", async () => {
+    const caido = await declararTrozoDeForma(actor, {
+      locationId: parcelaId,
+      rowFrom: 7,
+      rowTo: 3,
+      plantFrom: 1,
+      plantTo: 20,
+    }).catch((e) => e);
+    expect(caido).toBeInstanceOf(RejillaInvalida);
+    expect(caido.message).toBe("rejilla_rango_al_reves");
+  });
+
+  it("un trozo que no cabe en el tablero vuelve traducido, no como P0001 crudo", async () => {
+    const caido = await declararTrozoDeForma(actor, {
+      locationId: parcelaId,
+      rowFrom: 1,
+      rowTo: 99,
+      plantFrom: 1,
+      plantTo: 20,
+    }).catch((e) => e);
+    expect(caido).toBeInstanceOf(RejillaInvalida);
+    expect(caido.message).toBe("rejilla_rango_fuera_de_rejilla");
+  });
+
+  it("sin permiso no se declara nada", async () => {
+    const caido = await declararTrozoDeForma(ajeno.userAccountId, {
+      locationId: parcelaId,
+      rowFrom: 1,
+      rowTo: 2,
+      plantFrom: 1,
+      plantTo: 2,
+    }).catch((e) => e);
+    expect(caido).toBeInstanceOf(LocationAccessError);
+  });
+
+  /**
+   * **§7.4: encoger la forma AVISA, no rechaza.** Rechazar obligaría a declarar como
+   * plantado un terreno que no lo está — y el operario sabe algo que la base no.
+   */
+  it("quitar un trozo que deja plantas fuera lo quita y dice cuántas", async () => {
+    const arriba = await declararTrozoDeForma(actor, {
+      locationId: parcelaId, rowFrom: 1, rowTo: 5, plantFrom: 1, plantTo: 20,
+    });
+    await declararTrozoDeForma(actor, {
+      locationId: parcelaId, rowFrom: 6, rowTo: 10, plantFrom: 1, plantTo: 20,
+    });
+    await plantar(3, 3); // dentro del trozo que se va
+    await plantar(8, 8); // en el que se queda
+    const r = await quitarTrozoDeForma(actor, arriba.id);
+    expect(r.plantasQueQuedanFuera).toBe(1);
+    expect(
+      await prisma.plotShapeRange.count({ where: { id: arriba.id } }),
+      "se quita igual: avisa, no rechaza",
+    ).toBe(0);
+  });
+
+  /** El caso negativo, sin el cual un aviso que se emite siempre pasaría por bueno. */
+  it("quitar un trozo sin plantas dentro no avisa de ninguna", async () => {
+    const vacio = await declararTrozoDeForma(actor, {
+      locationId: parcelaId, rowFrom: 1, rowTo: 5, plantFrom: 1, plantTo: 20,
+    });
+    await declararTrozoDeForma(actor, {
+      locationId: parcelaId, rowFrom: 6, rowTo: 10, plantFrom: 1, plantTo: 20,
+    });
+    await plantar(8, 8); // sólo en el que se queda
+    const r = await quitarTrozoDeForma(actor, vacio.id);
+    expect(r.plantasQueQuedanFuera).toBe(0);
+  });
+
+  /**
+   * **Quitar el ÚLTIMO trozo no deja a todas las plantas «fuera».** Sin forma declarada
+   * el estado es «no se sabe», no «está vacío» (ADR-080) — y si esto devolviera el total
+   * de plantas, borrar la forma entera avisaría de que ninguna planta está plantada.
+   */
+  it("quitar el último trozo no avisa: sin forma no se sabe, no es que estén fuera", async () => {
+    const unico = await declararTrozoDeForma(actor, {
+      locationId: parcelaId, rowFrom: 1, rowTo: 5, plantFrom: 1, plantTo: 20,
+    });
+    await plantar(3, 3);
+    const r = await quitarTrozoDeForma(actor, unico.id);
+    expect(r.plantasQueQuedanFuera).toBe(0);
+    expect(await prisma.plotShapeRange.count({ where: { locationId: parcelaId } })).toBe(0);
   });
 });
