@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createMicrolot, RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
+import { pendienteDeLaParcela, type EntradaDePendiente } from "../../lib/traceability/pendienteDeLaParcela";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -123,12 +124,21 @@ const microlote = (name: string, extra: Record<string, unknown> = {}) =>
 
 describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
   /**
-   * **Los NUEVE, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
-   * los nueve es la forma de que el día que alguien añada un atributo a
+   * **Los OCHO, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
+   * los ocho es la forma de que el día que alguien añada un atributo a
    * `Location` y se olvide de copiarlo, la prueba siga verde. El `Decimal` va con
    * `Number()`, que es el idioma de la casa.
+   *
+   * **Eran nueve hasta el 2026-10-02, y el noveno era `areaHectares`.** Sale de la
+   * lista porque es la única EXTENSIVA: los ocho describen el sitio y valen igual en
+   * una parte que en el todo, mientras una microparcela es una PARTE, así que
+   * copiarle la superficie entera guarda un número que no puede ser suyo. Y no se
+   * queda en la ficha: `computePlotDensity` y `computePlotYield` dividen por esa
+   * columna, y `pendienteDeLaParcela` deja de pedir el área en cuanto no es nula —
+   * el único aviso que llevaría a medir la de verdad. La nota está en el §4.4 del
+   * diseño, que la nombraba entre los nueve.
    */
-  it("copia los nueve atributos, uno por uno", async () => {
+  it("copia los ocho atributos intensivos, uno por uno", async () => {
     const m = await microlote("Norte");
     locationIds.push(m.id);
     expect(m.altitudeMinM).toBe(1400);
@@ -139,7 +149,47 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(m.shadePercentage).toBe("pct_50");
     expect(m.aspect).toBe("north");
     expect(Number(m.plantSpacingMeters)).toBe(1.5);
-    expect(Number(m.areaHectares)).toBe(0.8);
+  });
+
+  /**
+   * **Y la que NO se copia, con su consecuencia medida en la misma prueba.**
+   *
+   * No basta afirmar el nulo: lo que importa es que el nulo haga saltar el aviso que
+   * lleva a medir el área de verdad. `pendienteDeLaParcela` es una función pura, así
+   * que se le puede preguntar aquí mismo. Con el área copiada esta prueba caía por
+   * las dos aserciones a la vez, que es lo que la hace un guardia y no un adorno.
+   */
+  it("NO copia el área, y por eso la microparcela vuelve a pedirla", async () => {
+    const m = await microlote("Este");
+    locationIds.push(m.id);
+    expect(m.areaHectares, "el área es extensiva: copiarla guarda un número que no puede ser suyo").toBeNull();
+    // **Sin `as never`, a propósito.** La primera versión lo llevaba y escondió que
+    // `EntradaDePendiente` exige nueve campos más: la prueba reventó con
+    // «e.jornadas is not iterable» en vez de decir que la forma estaba mal. Un casteo
+    // que silencia al compilador se cobra el silencio en tiempo de ejecución.
+    const entrada = (areaHectares: number | null): EntradaDePendiente => ({
+      hoy: "2026-10-02",
+      zona: null,
+      areaHectares,
+      cohortesActivas: [],
+      estados: new Map(),
+      jornadas: [],
+      muestrasDeSuelo: [],
+      muestrasFoliares: [],
+      ahora: new Date("2026-10-02T12:00:00.000Z"),
+      intervenciones: [],
+      trampas: [],
+      regla: null,
+      intervencionesDeTrampas: [],
+    });
+    const sinArea = pendienteDeLaParcela(entrada(m.areaHectares == null ? null : Number(m.areaHectares)));
+    expect(sinArea.faltaUnDato, "con el área en nulo nadie pide medirla").toContainEqual({ tipo: "sin_area" });
+    // Control del control: con un área puesta NO debe pedirla. Sin esta mitad, un aviso
+    // que saliera siempre pasaría la aserción de arriba sin medir nada.
+    const conArea = pendienteDeLaParcela(entrada(0.8));
+    expect(conArea.faltaUnDato, "pide el área incluso teniéndola: el aviso no discrimina").not.toContainEqual({
+      tipo: "sin_area",
+    });
   });
 
   /**
@@ -167,7 +217,7 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
       where: assertDefinedWhere({ entityId: m.id, operation: "location.copy_attributes_from_parent" }),
     });
     expect(ev, "sin el AuditEvent nadie distingue un valor copiado de uno medido").not.toBeNull();
-    // Y que diga DE DÓNDE y QUÉ — **los nueve, no una muestra**. Una revisión
+    // Y que diga DE DÓNDE y QUÉ — **los ocho, no una muestra**. Una revisión
     // independiente midió que comprobar sólo `soilType` dejaba sobrevivir la
     // mutación de quitar los otros ocho del `after`: el evento registraba que algo
     // se copió sin registrar qué, que para una auditoría es casi lo mismo que nada.
@@ -181,7 +231,9 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(despues?.shadePercentage).toBe("pct_50");
     expect(despues?.aspect).toBe("north");
     expect(Number(despues?.plantSpacingMeters)).toBe(1.5);
-    expect(Number(despues?.areaHectares)).toBe(0.8);
+    // Y el área **no** aparece, porque ya no se copia: este evento registra lo COPIADO,
+    // y un nulo aquí diría que se copió un nulo en vez de que no se copió nada.
+    expect(despues, "el evento sigue registrando un área que ya no se copia").not.toHaveProperty("areaHectares");
   });
 
   /** Y el evento de crear sigue estando: son dos actos, no uno. */
