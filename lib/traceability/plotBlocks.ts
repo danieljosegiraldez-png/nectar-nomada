@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { CODIGO_DEL_RANGO, RejillaInvalida, requireLocationAttributeAccess } from "./locations";
 import { celdasEnComunConVarios, seSolapan, validarRango, type Rango } from "../territorio/rejilla";
+import { celdasSinPlantar } from "./formaDeLaParcela";
 import { TIPOS_DE_BLOQUE } from "./tiposDeBloque";
 
 export class PlotBlockValidationError extends Error {}
@@ -210,6 +211,10 @@ export async function rejillaDelBloque(locationId: string) {
       rangeRowTo: true,
       rangePlantFrom: true,
       rangePlantTo: true,
+      // La forma declarada cuelga de la MISMA raíz que la rejilla (D9), así que se
+      // resuelve aquí y no con una consulta aparte: una segunda consulta de la misma
+      // cosa es una segunda copia de la regla de quién pone la numeración.
+      formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
     },
   });
   if (!sitio) throw new PlotBlockValidationError("block_location_not_found");
@@ -230,17 +235,34 @@ export async function rejillaDelBloque(locationId: string) {
       : null;
   const comun = { suyo, nombreDelSitio: sitio.name };
   if (sitio.rowCount != null && sitio.plantsPerRow != null) {
-    return { ...comun, raiz: sitio.id, rejilla: { rowCount: sitio.rowCount, plantsPerRow: sitio.plantsPerRow } };
+    return {
+      ...comun,
+      raiz: sitio.id,
+      rejilla: { rowCount: sitio.rowCount, plantsPerRow: sitio.plantsPerRow },
+      forma: sitio.formaDeclarada,
+    };
   }
-  if (!sitio.parentLocationId) return { ...comun, raiz: sitio.id, rejilla: null };
+  if (!sitio.parentLocationId) {
+    return { ...comun, raiz: sitio.id, rejilla: null, forma: sitio.formaDeclarada };
+  }
   const madre = await prisma.location.findUnique({
     where: { id: sitio.parentLocationId },
-    select: { id: true, rowCount: true, plantsPerRow: true },
+    select: {
+      id: true,
+      rowCount: true,
+      plantsPerRow: true,
+      formaDeclarada: { select: { rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
+    },
   });
   if (madre?.rowCount != null && madre.plantsPerRow != null) {
-    return { ...comun, raiz: madre.id, rejilla: { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow } };
+    return {
+      ...comun,
+      raiz: madre.id,
+      rejilla: { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow },
+      forma: madre.formaDeclarada,
+    };
   }
-  return { ...comun, raiz: sitio.parentLocationId, rejilla: null };
+  return { ...comun, raiz: sitio.parentLocationId, rejilla: null, forma: madre?.formaDeclarada ?? [] };
 }
 
 /**
@@ -263,12 +285,21 @@ export async function rejillaDelBloque(locationId: string) {
 export async function anadirRangoAlBloque(
   userAccountId: string,
   input: AnadirRangoAlBloqueInput,
-): Promise<{ rango: PlotBlockRange; solapesAvisados: SolapeAvisado[] }> {
+): Promise<{
+  rango: PlotBlockRange;
+  solapesAvisados: SolapeAvisado[];
+  /**
+   * Cuántas celdas de este trozo caen donde la forma declarada dice que NO hay planta
+   * (D11). **0 también cuando no hay forma declarada**, y no «todas»: «no se sabe» no
+   * es «está vacío» (ADR-080).
+   */
+  celdasSinPlantar: number;
+}> {
   const bloque = await prisma.plotBlock.findUnique({ where: { id: input.plotBlockId } });
   if (!bloque) throw new PlotBlockValidationError("block_not_found");
   await requireLocationAttributeAccess(userAccountId, bloque.locationId);
 
-  const { raiz, rejilla, suyo, nombreDelSitio } = await rejillaDelBloque(bloque.locationId);
+  const { raiz, rejilla, suyo, nombreDelSitio, forma } = await rejillaDelBloque(bloque.locationId);
   const malo = validarRango(input, rejilla);
   if (malo) throw new RejillaInvalida(CODIGO_DEL_RANGO[malo]);
 
@@ -353,7 +384,12 @@ export async function anadirRangoAlBloque(
     return creado;
   });
 
-  return { rango, solapesAvisados };
+  // **D11: cuántas de las celdas de este trozo NO están plantadas**, según la forma
+  // declarada. Se guarda igual —el límite duro es el tablero— y se avisa: una trampa en
+  // el claro de una roca es su sitio natural, y declarar el claro como plantado para
+  // poder ponerla sería mentir. Sin forma declarada devuelve 0, no «todas»: «no se
+  // sabe» no es «está vacío» (ADR-080).
+  return { rango, solapesAvisados, celdasSinPlantar: celdasSinPlantar(forma, input) };
 }
 
 /**

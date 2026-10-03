@@ -1810,6 +1810,7 @@
     "rejillaAnadirRangoBoton": "Añadir el trozo",
     "rejillaQuitarRangoBoton": "Quitar",
     "rejillaSolapeAviso": "Guardado. Comparte {celdas} celdas con «{bloque}».",
+    "rejillaFueraDeLaFormaAviso": "Guardado. Este trozo incluye {celdas} celdas que la forma del lote dice que no están plantadas.",
     "rejillaSinDeclarar": "Esta parcela aún no está numerada.",
     "rejillaSinForma": "Tablero de {filas} × {columnas}. Declara la forma del lote —qué celdas están plantadas— para poder comparar con lo sembrado.",
     "rejillaSinSiembras": "Caben {capacidad} plantas. Todavía no hay ninguna siembra registrada.",

@@ -34,6 +34,7 @@ let ajeno: Awaited<ReturnType<typeof crearUsuarioSinAcceso>>;
 let parcela: Awaited<ReturnType<typeof crearParcela>>;
 let bloqueIds: string[] = [];
 let microIds: string[] = [];
+let formaIds: string[] = [];
 
 const REJILLA = { gridOrigin: "noroeste" as const, rowCount: 10, plantsPerRow: 20, rowSpacingMeters: 2.5 };
 
@@ -65,6 +66,8 @@ afterEach(async () => {
   bloqueIds = [];
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: microIds } }) });
   microIds = [];
+  await prisma.plotShapeRange.deleteMany({ where: assertDefinedWhere({ id: { in: formaIds } }) });
+  formaIds = [];
 });
 
 /**
@@ -120,6 +123,15 @@ async function bloque(name: string, blockType: "trampa" | "experimental" | null,
 }
 
 const RANGO = { rowFrom: 1, rowTo: 5, plantFrom: 1, plantTo: 10 };
+
+/** Declara un trozo de forma en la parcela. Devuelve el creado. */
+async function forma(rowFrom: number, rowTo: number, plantFrom: number, plantTo: number) {
+  const f = await prisma.plotShapeRange.create({
+    data: { locationId: parcela.id, rowFrom, rowTo, plantFrom, plantTo, createdBy: usuario.userAccountId },
+  });
+  formaIds.push(f.id);
+  return f;
+}
 
 describe("anadirRangoAlBloque", () => {
   it("guarda un rango que cabe, y no avisa de nada — el control positivo", async () => {
@@ -483,5 +495,46 @@ describe("las tres reglas que la base NO garantizaba (tarea 8)", () => {
       blockType: "trampa",
     });
     expect(r.blockType).toBe("trampa");
+  });
+});
+
+describe("D11: cuántas celdas del trozo NO están plantadas", () => {
+  /**
+   * **Sin forma declarada da 0, no 50.** Es la mitad que importa: si devolviera el
+   * trozo entero, cada parcela sin forma avisaría de que todo está sin plantar, y eso
+   * convertiría un «no medido» en una afirmación (ADR-080).
+   */
+  it("sin forma declarada da 0, no el trozo entero", async () => {
+    const b = await bloque("Sin forma", "experimental");
+    const r = await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: b.id, ...RANGO });
+    expect(r.celdasSinPlantar).toBe(0);
+  });
+
+  it("con el trozo enteramente dentro de la forma da 0", async () => {
+    await forma(1, 7, 1, 20);
+    const b = await bloque("Dentro", "experimental");
+    const r = await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: b.id, ...RANGO });
+    expect(r.celdasSinPlantar).toBe(0);
+  });
+
+  /**
+   * **El caso que discrimina.** El trozo son las hileras 1-5 × plantas 1-10 = 50
+   * celdas; la forma sólo llega a la hilera 3, así que las hileras 4 y 5 quedan fuera:
+   * 2 × 10 = 20. Si los dos casos dieran lo mismo, la cuenta no estaría usando la
+   * forma.
+   */
+  it("con el trozo a medias cuenta sólo la parte de fuera", async () => {
+    await forma(1, 3, 1, 20);
+    const b = await bloque("A medias", "experimental");
+    const r = await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: b.id, ...RANGO });
+    expect(r.celdasSinPlantar).toBe(20);
+  });
+
+  /** Y en el claro entero: las 50 celdas del trozo. */
+  it("con el trozo enteramente fuera de la forma cuenta todas sus celdas", async () => {
+    await forma(8, 10, 1, 20);
+    const b = await bloque("En el claro", "experimental");
+    const r = await anadirRangoAlBloque(usuario.userAccountId, { plotBlockId: b.id, ...RANGO });
+    expect(r.celdasSinPlantar).toBe(50);
   });
 });

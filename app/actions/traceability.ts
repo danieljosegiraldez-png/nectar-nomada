@@ -2886,6 +2886,7 @@ export async function anadirRangoAlBloqueAction(
 
   const locationId = String(formData.get("locationId") ?? "");
   let solapes: Array<{ bloque: string; celdas: number }> = [];
+  let sinPlantar = 0;
   try {
     const r = await anadirRangoAlBloque(user.userAccountId, {
       plotBlockId: String(formData.get("plotBlockId") ?? ""),
@@ -2895,15 +2896,21 @@ export async function anadirRangoAlBloqueAction(
       plantTo: Number(formData.get("plantTo") ?? Number.NaN),
     });
     solapes = [...r.solapesAvisados];
+    sinPlantar = r.celdasSinPlantar;
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
-  return solapes.length
-    ? { avisos: solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })) }
-    : {};
+  // **Dos avisos distintos y que no se pisan** (D7 y D11): con quién se solapa, y
+  // cuántas de sus celdas la forma dice que no están plantadas. Los dos van por
+  // `avisos` y no por `error`, porque el rango SE GUARDÓ.
+  const avisos = [
+    ...solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })),
+    ...(sinPlantar > 0 ? [t("rejillaFueraDeLaFormaAviso", { celdas: sinPlantar })] : []),
+  ];
+  return avisos.length ? { avisos } : {};
 }
 
 /** Quitar un rango. Es un acto y el servicio lo registra. */
