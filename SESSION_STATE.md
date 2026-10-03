@@ -62,6 +62,17 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
+
+**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima doce PR de hoy. Lo que cambió es el
+concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión;
+la **forma** del lote es opcional y se declara como **varios rectángulos**, porque un lote no siempre es
+rectangular; la **densidad sale del marco de plantación** (metros entre plantones) y el área se **deriva de la
+rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**, no bloquea. Se retiraron
+`computePlotDensity` y los dos pendientes de área, que medían otra cosa. **Decisiones suyas abiertas**, con su
+sitio: si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03
+deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`.
+
 ### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
 
 **Lo que §4.5 pedía y faltaba:** los ejes con horas y valores, y la guía de la rúbrica 22 bajo la
@@ -113,15 +124,6 @@ con control positivo (`plotIntervention.create` sí tiene escritor): el único e
 servidor lo exponen**. Daniel dijo que la registraría él. Limitación a propósito: una intervención
 dirigida sólo a PLANTAS deja `bloquesElegidos` vacío, que la contención lee como «la parcela entera»,
 así que puede avisar por un bloque que esas plantas no tocan — de más, nunca de menos, y sin bloquear.
-
-#### La rejilla: tareas 1 a 3 en `main`, 4 a 8 empujadas, y las pantallas son la 7
-
-Diseño y plan del 2026-10-01 en `docs/superpowers/`, siete tareas. Medido por contenido: **en `main`**
-`lib/territorio/rejilla.ts`, la tabla `PlotBlockRange` con sus disparadores, y la rejilla en
-`updateLocationAttributes` (#589). **Fuera:** `rejilla-tarea-4` a `-8`, apiladas y sin PR; la 5 escribe
-los rangos —hoy **0 archivos de código** tocan `PlotBlockRange`— y la **7 son las pantallas**. Hoy se
-crea una microparcela y un bloque con nombre y tipo, pero **no se dice qué celdas cubre**. Decisión de
-Daniel abierta: si `description` se copia a la microparcela. Hoy no, y hay argumento para dejarlo así.
 
 #### Que la intervención de finca sirva para cualquier producto (de Daniel, 2026-10-01)
 
@@ -248,9 +250,9 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
 - **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
-  y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo, así
-  que no hay densidad ni rendimiento por hectárea, que es lo único comparable
-  entre lotes y entre años. Desde el 2026-08-31 el dueño puede cargarlas él
+  y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo. La
+  densidad **ya no depende de eso** —desde hoy sale del marco—, pero el
+  rendimiento por hectárea sí. Desde el 2026-08-31 el dueño puede cargarlas él
   mismo en la página de cada lote; cada página dice en pantalla que faltan. **La
   cosecha llega en febrero**; después, el dato ya no sirve para esa cosecha.
 - **Que el rendimiento se pueda calcular con datos reales** — bloqueado en el
