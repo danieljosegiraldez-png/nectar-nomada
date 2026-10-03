@@ -865,10 +865,26 @@ export async function coberturaDelLote(userAccountId: string, lotId: string) {
       },
     ]),
   );
+  // De un proceso oculto sólo sale un hecho más, `bloqueadoAlEntrar`: cerrado por encima de su objetivo (la misma lectura que la
+  // compuerta). Sin él, la página del proceso no podía decidir «bloqueado» y dejaba de ofrecer «Devolver a secado» a quien
+  // gestiona ESTE lote, que el servicio sí acepta (residuo de la ronda de arreglo 1, 2026-10-03). Es lo que la compuerta le
+  // diría al intentar mover a bodega; nada de su receta, su lote ni su medición.
+  const bloqueadoOculto = new Map<string, boolean>();
+  // Por los ids de procesos ya resueltos, no por lote (el guardia `proceso-por-el-resolvedor` lee el `where`).
+  const idsOcultos = enCadena.filter((p) => !visibles.has(p.lotId)).map((p) => p.id);
+  const ocultos = await prisma.lotProcess.findMany({
+    where: { id: { in: idsOcultos }, endedAt: { not: null } },
+    select: { id: true, targetMoisturePct: true, closingMoistureMeasurement: true },
+  });
+  for (const p of ocultos) {
+    if (p.closingMoistureMeasurement === null) continue;
+    const cierre = (await lecturaVigente(prisma, p.closingMoistureMeasurement)).value.toNumber();
+    bloqueadoOculto.set(p.id, cierre > p.targetMoisturePct.toNumber());
+  }
   const presentar = (p: { id: string; lotId: string; endedAt: Date | null; origen: OrigenDelProceso; profundidad: number }) =>
     visibles.has(p.lotId)
       ? { oculto: false as const, ...porId.get(p.id)!, origen: p.origen, profundidad: p.profundidad }
-      : { oculto: true as const, abierto: p.endedAt === null };
+      : { oculto: true as const, abierto: p.endedAt === null, bloqueadoAlEntrar: bloqueadoOculto.get(p.id) ?? false };
 
   return {
     estado: cobertura.estado,

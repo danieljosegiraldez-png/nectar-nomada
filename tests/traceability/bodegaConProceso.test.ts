@@ -1288,8 +1288,8 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
 
     const c = await coberturaDelLote(soloB, pergamino);
     expect(c.estado).toBe("abierto");
-    expect(c.vigente).toEqual({ oculto: true, abierto: true });
-    expect(c.cadena).toEqual([{ oculto: true, abierto: true }]);
+    expect(c.vigente).toEqual({ oculto: true, abierto: true, bloqueadoAlEntrar: false });
+    expect(c.cadena).toEqual([{ oculto: true, abierto: true, bloqueadoAlEntrar: false }]);
     // Nada del proceso de A en lo que devuelve: ni su id, ni su lote, ni su receta, ni su intención.
     const devuelto = JSON.stringify({ vigente: c.vigente, cadena: c.cadena, composicion: c.composicion });
     for (const dato of [p.id, cereza, `CB5-C-${RUN}`, `Lavado CB5 ${RUN}`, p.intent]) expect(devuelto).not.toContain(dato);
@@ -1300,5 +1300,20 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     expect(vigente.id).toBe(p.id);
     expect(vigente.lot.lotCode).toBe(`CB5-C-${RUN}`);
     expect(vigente.recetaConVersion).toBe(`TEST Lavado CB5 ${RUN} · v1`);
+  });
+
+  it("oculto y cerrado por encima del objetivo, la cobertura dice que bloquea la entrada a bodega; cerrado en el objetivo, no", async () => {
+    // Residuo de la ronda de arreglo 1 (2026-10-03). Con el vigente oculto la página del proceso no tenía con qué decidir
+    // «bloqueado», y dejaba de ofrecer «Devolver a secado» a quien gestiona el pergamino —que el servicio sí acepta—. La
+    // forma oculta lleva sólo ese booleano: el mismo hecho que la compuerta le diría al intentar mover a bodega.
+    for (const [cierre, bloquea] of [[13, true], [11, false]] as const) {
+      const cereza = await lote(`CB6-C-${cierre}`); // parcela A
+      const pergamino = await lote(`CB6-P-${cierre}`, plotB);
+      await enlazar([cereza], [pergamino]);
+      const p = await abrirProcesoDePrueba(gestor, cereza);
+      await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino, cierre) });
+      const c = await coberturaDelLote(soloB, pergamino);
+      expect(c.vigente, `cierre ${cierre}`).toEqual({ oculto: true, abierto: false, bloqueadoAlEntrar: bloquea });
+    }
   });
 });

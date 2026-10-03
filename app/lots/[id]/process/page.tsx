@@ -120,8 +120,10 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   // Cerrado y por encima del objetivo: es el estado que bloquea la ENTRADA a
   // bodega. Es una de las dos condiciones con que se ofrece `devolverASecado`; la
   // otra, `enBodega`, está justo debajo. Ya no es la única (Parte 1, R7).
-  const bloqueado =
-    ultimo !== null && ultimo.endedAt !== null && (ultimo.diferenciaContraObjetivo ?? 0) > 0;
+  // Con el vigente oculto no hay `ultimo`: el bloqueo llega como un booleano de la cobertura (mismo hecho que la compuerta).
+  const bloqueado = cobertura.vigente?.oculto
+    ? cobertura.vigente.bloqueadoAlEntrar
+    : ultimo !== null && ultimo.endedAt !== null && (ultimo.diferenciaContraObjetivo ?? 0) > 0;
   // Parte 1, R7: «devolver a secado» se ofrece en todo lote en bodega o bloqueado al entrar. Antes
   // sólo salía con el cierre por encima del objetivo, y como la compuerta impide guardar algo así,
   // un lote EN BODEGA nunca lo veía, que es justo el caso que pide Daniel. Y desde la tarea 9, sólo
