@@ -123,7 +123,7 @@ cinco preguntas clave.
    corrida sin proceso. Las compuertas, la ficha, el tablero, la lista de catas y la bodega miran el
    proceso que cubre al lote. Dividir reparte el lote entero, nunca con una corrida en curso, y crea
    un proceso por parte. En bodega no se reprocesa. Una v2 conserva las fases. Diseño:
-   `2026-09-30-parte-1-el-proceso-cubre-al-lote-design.md`.
+   `2026-09-30-parte-1-el-proceso-cubre-al-lote-design.md`. **Estado: construida (rama `recetas-base`).**
 - **Parte 2 — La receta con pasos.** Pasos en orden con valores por defecto: horas, recipiente, oxígeno,
    fuente microbiana, medio, ritmo de medición, volteo y humedad. El grado se ata a la receta. Se
    añaden al vocabulario cama africana, sacos de cosecha y atomizado, y la definición de Honey. Aquí

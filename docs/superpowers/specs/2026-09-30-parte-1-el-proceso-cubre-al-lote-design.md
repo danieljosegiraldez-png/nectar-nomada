@@ -148,7 +148,8 @@ corrida, cerrar, dividir, seleccionar, fusionar y almacenar.
 - **Y con `corrida_ya_abierta` o `lote_consumido`** (revisión final, 2026-10-03), que hacen cumplir la
   garantía de R6 en la que se apoya R7: si el lote ya es la entrada de una fermentación o un secado sin
   terminar, o si una transformación de consumo total con salida ya lo consumió entero —la cereza cuya
-  fermentación terminó—. La siguiente corrida empieza en el lote que salió.
+  fermentación terminó—, o una venta, una pérdida o un desecho, que lo consumen entero sin salida (la misma
+  regla que `movesMaterial` del libro de masa). La siguiente corrida empieza en el lote que salió.
 - **El permiso se pide sólo sobre el lote de la corrida**, como hoy. Nunca se exige gestionar el lote
   donde vive el proceso: copiar el patrón de `colgarCorrida`, que autoriza contra el lote del
   proceso, dejaría fuera a un operario que gestiona el hijo y no el padre.
@@ -245,8 +246,8 @@ línea de café viva**. Dividir lo cierra, la selección y la fusión se rechaza
 su lote entero: al terminarla, `stage_change` está entre los tipos de consumo total del libro de
 balance (`balance.ts`, `FULL_CONSUMPTION_TYPES`). **Desde la revisión final (2026-10-03) eso se hace
 cumplir al empezar**, y no sólo se supone: no empieza una corrida sobre un lote que ya tiene una abierta
-(`corrida_ya_abierta`) ni sobre uno que ya consumió una transformación de consumo total con salida
-(`lote_consumido`), R3. La comprobación de saldo de R6.1 queda como red por si algo de esto
+(`corrida_ya_abierta`) ni sobre uno que ya consumió una transformación de consumo total con salida, o una
+venta, pérdida o desecho sin ella (`lote_consumido`), R3. La comprobación de saldo de R6.1 queda como red por si algo de esto
 cambia. Por eso la humedad que cierra el proceso describe el café que va a bodega, y no el de una
 rama hermana.
 
@@ -304,9 +305,9 @@ nueva queda cubierta por R1 y se une por R3.
 
 | Lector | Qué cambia |
 |---|---|
-| la ficha y la página del proceso | pasan a una función nueva, `coberturaDelLote`, que devuelve `vigente`, `cadena` y `composicion`. Desde la revisión final (2026-10-03) autoriza `view` sobre **cada lote dueño** de un proceso que devuelve, por separado: un proceso de un lote que quien mira no ve sale `oculto` (sólo que lo cubre y si está abierto; decisión conservadora del controlador, pregunta abierta a Daniel). Las compuertas no cambian. `listarProcesosDeLote` **no cambia de forma**: sigue listando los procesos propios del lote, porque las pruebas la desestructuran 19 veces, y queda como excepción escrita del guardia |
+| la ficha y la página del proceso | pasan a una función nueva, `coberturaDelLote`, que devuelve `vigente`, `cadena` y `composicion`. Desde la revisión final (2026-10-03) autoriza `view` sobre **cada lote dueño** de un proceso que devuelve, por separado: un proceso de un lote que quien mira no ve sale `oculto` (sólo que lo cubre, si está abierto y si bloquea la entrada a bodega —`bloqueadoAlEntrar`, el mismo hecho que la compuerta le diría—; decisión conservadora del controlador, pregunta abierta a Daniel). Las compuertas no cambian. `listarProcesosDeLote` **no cambia de forma**: sigue listando los procesos propios del lote, porque las pruebas la desestructuran 19 veces, y queda como excepción escrita del guardia |
 | `entradaDelLote` (grado de la ficha y del tablero) | **ficha y tablero le pasan lo mismo**: el resultado de R1 sobre el lote. Hoy cada llamador arma su entrada por su cuenta, que es justo por lo que pueden discrepar |
-| `datosDelTablero` | proceso, grado, fases y metas salen de R1 sobre el lote de la corrida |
+| `datosDelTablero` | proceso, grado, fases y metas salen de R1 sobre el lote de la corrida. Al juntar `main` (2026-10-03) llegaron la curva del lote y la liberación de unidades, que leían el proceso por la FK de la corrida: leen el mismo resultado de R1, y el perfil de la curva sólo sale de un proceso ABIERTO. La línea de etapas de `main` cuenta los lotes DUEÑOS de un proceso abierto —«cuántos procesos hay», no «qué proceso cubre a este lote»—, y es la excepción escrita del guardia para este archivo |
 | `colaDeSecado` | igual. `estadoDeUnidad` recibe además si hay receta, y separa «sin receta declarada» (la etiqueta de hoy, `messages/es.json:3101`) de una nueva, «receta sin ritmo de secado», con su clave en es/en y su color (`app/beneficio/secado/page.tsx:34`). Desde que las corridas llevan proceso, la etiqueta única mentiría |
 | la lista de catas (`lib/sensory/sessions.ts:144,175`) | el grado de la muestra sale de R1 sobre su lote de origen |
 | la muestra verde (`samples.ts:117,161`) | **Con proceso, además de lo de hoy:** exige el vigente cerrado por humedad, y rechaza uno `divided` o una continuación abierta. Es aditivo: no quita ninguna de las comprobaciones que ya existen. **Sin proceso, como hoy:** se sigue exigiendo un secado terminado en la ascendencia, pero `tieneSecadoTerminadoArriba` deja de cortar en silencio a las 6 generaciones (responde «no» al llegar al tope) y pasa al tope de 64, que lanza. La condición de bodega sigue garantizada por la precondición de la trilla, como explica hoy `samples.ts:146-160` |
@@ -425,7 +426,7 @@ La mutación quita la conducta, no el texto con el que casa un detector.
 | Una mezcla devuelve su composición y no elige un padre, aunque una rama llegue antes | quedarse con el más cercano |
 | Un linaje que pasa del tope lanza; no responde «sin proceso» | devolver `sin_proceso` al tope |
 | Un descendiente más allá de 12 generaciones con proceso abierto impide abrir arriba | volver al tope silencioso de 12 |
-| Un diamante de divisiones y fusiones no multiplica caminos | volver a `UNION ALL` |
+| Un diamante de divisiones y fusiones no multiplica caminos | volver a `UNION ALL` — **sin flip-test posible**: la salida es un conjunto y la mutación no la cambia (tarea 2) |
 | La ficha dice `lineage_too_deep`, no da un 500 | quitar el `catch` |
 | **R2** | |
 | No se abre un proceso bajo otro abierto, ni encima de uno abierto abajo | volver al chequeo del propio lote |
@@ -462,13 +463,20 @@ La mutación quita la conducta, no el texto con el que casa un detector.
 | Devolver a secado no reabre el cerrado, y deja a los hermanos bajo el cerrado | reabrir el cerrado |
 | Devolver a secado rechaza un `divided` y exige texto con «otro» | quitar cada uno |
 | Ficha y tablero dan el mismo grado para el mismo lote | que uno vuelva a su consulta propia |
-| La lista de catas da el grado del verde | volver a `sourceLot.lotProcesses[0]` |
+| La lista de catas da el grado del verde | volver a `sourceLot.lotProcesses[0]` — lo vigila el **guardia de fuente** `proceso-por-el-resolvedor` (flip m1 de la tarea 10), no una prueba con base |
 | La muestra verde con proceso se bloquea con una continuación abierta | no mirar el vigente |
 | La muestra verde sin proceso sigue pasando con un secado terminado arriba, más allá de 6 generaciones | volver al tope de 6 |
 | La cola distingue «sin receta» de «receta sin ritmo de secado» | volver a la etiqueta única |
-| El tanque muestra el lote que fermenta, no la cereza | volver a `lotProcess.lotId` |
+| El tanque muestra el lote que fermenta, no la cereza | volver a `lotProcess.lotId` — igual: guardia de fuente (flip m2 de la tarea 10) |
 | El reporte no cuenta la fila `divided` como proceso | contarla |
-| El guardia de arquitectura cae con una lectura de `lotProcesses:` fuera del resolvedor | añadir una en `storage.ts` |
+| El guardia de arquitectura cae con una lectura de `lotProcesses:` fuera del resolvedor | añadir una en `storage.ts`, `sessions.ts`, `equipos.ts`, `datosDelTablero.ts` o `colaDeSecado.ts`, o una de más en `lotProcess.ts` o `reporteDeProceso.ts` (tarea 10, flips m1–m7) |
+| **Revisión final (2026-10-03)** | |
+| No se abre un proceso, ni se devuelve la cereza a secado, con un descendiente en bodega | quitar la comprobación de la descendencia |
+| En el lote dividido entra lo estrictamente anterior a la división, por las cuatro puertas | quitar la comparación de fechas |
+| No empieza una corrida sobre un lote con otra abierta, ni sobre uno consumido (también vendido, perdido o desechado) | quitar cada rechazo |
+| No se cierra un proceso con una humedad anterior a su inicio; la compuerta lee la última corrección | quitar la comparación; leer la medición original |
+| Un id en mayúsculas da la misma cobertura y la misma compuerta | quitar `enMinusculas` |
+| Quien no ve el lote dueño de un proceso no recibe sus datos, pero sí si bloquea la entrada a bodega | autorizar sólo el lote mirado; fijar `bloqueadoAlEntrar` |
 | **R8** | |
 | Una v2 conserva las fases, y el localizador nuevo del guardia ve el bloque `fases:` | quitar la copia; quitar el bloque |
 | **Migración** | |
