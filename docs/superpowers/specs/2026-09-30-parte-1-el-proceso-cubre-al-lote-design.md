@@ -204,10 +204,18 @@ vuelven dos o más procesos». Cuando se divide (`split`) un lote **cubierto por
    fermentaciones e intervenciones de antes de dividir a través de la `cadena` de R1. Es lo que pide
    `20` §1.2, sin duplicar filas.
 6. **El lote dividido queda cerrado** (`20` §1.1): no admite proceso, corridas, mediciones ni
-   muestras.
-   - Lo decide **una sola función**, `loteDividido(tx, lotId)`: el lote es la entrada de una división
-     que cerró un proceso (`dividedByTransformationId`).
-   - La usan R2, R3, `recordMeasurement` y `createSampleFromLot`, y todos rechazan con `lote_dividido`.
+   muestras **posteriores a la división**.
+   - Lo decide **una sola función**, `loteDividido(tx, lotId, occurredAt?)`: el lote es la entrada de una
+     división que cerró un proceso (`dividedByTransformationId`).
+   - La usan R2, R3, `recordMeasurement`, `correctMeasurement`, `createSampleFromLot` y
+     `registrarInspeccion`, y todos rechazan con `lote_dividido`.
+   - **Lo anterior a la división se admite** (decisión de Daniel, 2026-10-02, añadida en la revisión
+     final): las cuatro puertas que reciben la fecha del registro —medir, corregir una medición, sacar una
+     muestra e inspeccionar— se la pasan, y un registro cuyo instante es **estrictamente anterior** al de
+     la división entra en el lote dividido. El **mismo instante** se rechaza (decisión del controlador): una
+     lectura con la hora exacta de la división se cuelga de una parte. Es lo que pide `20` §1.1, «todo
+     registro POSTERIOR pertenece a un hijo». La lista de lotes del formulario de inspección ofrece el lote
+     dividido, porque deja elegir la hora; decide el servicio.
    - Vale **sólo** para divisiones hechas bajo un proceso. La miel divide en parcial a propósito
      (`dividirMiel` deja el remanente en el origen), y fuera de un proceso las divisiones siguen como
      hoy.
@@ -342,7 +350,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 - `startFermentationRun` y `startDryingRun`: R3 y R4.
 - `abrirProceso`, `cerrarProceso` (escribe `moisture`) y `devolverASecado`: R2, R5 y R7.
 - `recordTransformation`: R6 para `split`, `selection`, `merge` y `blend`, dentro de su transacción.
-- `recordMeasurement` y `createSampleFromLot`: `loteDividido` (R6.6) y la muestra verde (R7).
+- `recordMeasurement`, `correctMeasurement`, `createSampleFromLot` y `registrarInspeccion`: `loteDividido` (R6.6),
+  con la fecha del registro, y la muestra verde (R7).
 - `moveLotToStorage` y `exigeSecadoTerminado`: R7, dentro de la transacción y sólo al entrar.
 - Los lectores de la tabla de R7, y `createRecipeVersion` (R8).
 - `colgarCorrida` se elimina (R3).

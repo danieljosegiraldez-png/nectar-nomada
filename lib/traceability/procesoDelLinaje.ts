@@ -290,10 +290,26 @@ export async function bloquearLinajes(tx: Prisma.TransactionClient, lotIds: read
  * R6.6. Un lote es «dividido» si es la entrada de una división que cerró un proceso. Lo deciden
  * TODAS las reglas que lo rechazan por esta función, y no por cuatro consultas sueltas que puedan
  * divergir.
+ *
+ * **Con `occurredAt`, sólo lo es para lo que ocurrió desde la división** (decisión de Daniel, 2026-10-02,
+ * registro línea 188): un registro cuyo instante es ESTRICTAMENTE anterior al de la transformación que cerró
+ * el proceso describe el café de antes de dividir, y se admite en el lote dividido. Es lo que dice la fuente
+ * que cita la regla, `20_modelo_ciclo_completo.md` §1.1: «todo registro POSTERIOR pertenece a un hijo». **El
+ * mismo instante cuenta como dividido** (decisión del controlador de la revisión final, 2026-10-03): una
+ * lectura con la hora exacta de la división no se puede atribuir al café de antes, y se cuelga de una parte.
+ * La usan las puertas que reciben la fecha del registro: medir, corregir una medición, sacar una muestra e
+ * inspeccionar. Sin fecha —abrir un proceso, empezar una corrida, transformar, almacenar, devolver—, como
+ * siempre: lo que se hace AHORA sobre un lote dividido se rechaza.
  */
-export async function loteDividido(tx: Prisma.TransactionClient, lotId: string): Promise<boolean> {
+export async function loteDividido(tx: Prisma.TransactionClient, lotId: string, occurredAt?: Date): Promise<boolean> {
   const p = await tx.lotProcess.findFirst({
-    where: { closureKind: "divided", dividedByTransformation: { inputs: { some: { lotId } } } },
+    where: {
+      closureKind: "divided",
+      dividedByTransformation: {
+        inputs: { some: { lotId } },
+        ...(occurredAt === undefined ? {} : { occurredAt: { lte: occurredAt } }),
+      },
+    },
     select: { id: true },
   });
   return p !== null;

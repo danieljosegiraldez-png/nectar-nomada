@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { recordTransformation } from "../../lib/traceability/lots";
 import { startDryingRun } from "../../lib/traceability/drying";
-import { recordMeasurement } from "../../lib/traceability/measurements";
+import { recordMeasurement, correctMeasurement } from "../../lib/traceability/measurements";
 import { createSampleFromLot, SampleValidationError } from "../../lib/traceability/samples";
 import { registrarInspeccion, opcionesParaInspeccion } from "../../lib/traceability/samplingEvents";
 import { abrirProceso, cerrarProceso } from "../../lib/traceability/lotProcess";
@@ -153,6 +153,11 @@ afterAll(async () => {
   // También las de cualquier lote de la corrida: si la regla de R6.6 faltara, la medición sobre el lote dividido se
   // guardaría, y `measurement.lot_id` es SET NULL —borrar el lote la dejaría huérfana, sin lote—. Medido con el flip
   // que quita esa regla: dejó una.
+  // Su auditoría primero (ronda de arreglo 1 de la revisión final, 2026-10-03): desde que el lote dividido admite lo anterior a la
+  // división, el `admin` del seed —no una cuenta de esta prueba— escribe mediciones y correcciones aceptadas, y su
+  // `measurement.create`/`measurement.correct` cuelga de la medición por su `entityId`.
+  const medidas = await prisma.measurement.findMany({ where: assertDefinedWhere({ OR: [{ id: { in: mediciones } }, { lotId: { in: todos } }] }), select: { id: true } });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "measurement", entityId: { in: medidas.map((m) => m.id) } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ OR: [{ id: { in: mediciones } }, { lotId: { in: todos } }] }) });
   // Las muestras de cualquier lote de la corrida, sus inspecciones y su auditoría (ronda de arreglo 1, 2026-10-01). En
   // verde no queda ninguna —la inspección sobre el lote dividido se rechaza—, pero sin la regla de R6.6 en
@@ -557,7 +562,7 @@ describe("R6 — dividir bajo un proceso abierto", () => {
     await nadaEscrito(l, p.id, 0);
   });
 
-  it("una inspección no se registra sobre un lote dividido, y el lote dividido no se ofrece para inspeccionar", async () => {
+  it("una inspección no se registra sobre un lote dividido con la fecha de la división, y el lote dividido se ofrece (decide el servicio)", async () => {
     // Ronda de arreglo 1 (2026-10-01). R6.6: el lote dividido no admite muestras. `registrarInspeccion` (la pantalla
     // /inspecciones/nueva) crea muestras MOISTURE con `sourceLotId` y era una tercera puerta, sin la regla.
     const l = await lote("D16");
@@ -575,13 +580,90 @@ describe("R6 — dividir bajo un proceso abierto", () => {
     expect(await prisma.sample.count({ where: { sourceLotId: l } })).toBe(0);
     expect(await prisma.samplingEvent.count({ where: { notes: { contains: RUN } } })).toBe(0);
 
-    // Las opciones del formulario: el lote dividido no sale; una de sus partes sí (control: si no saliera
-    // ninguna, «no está» no diría nada).
+    // Las opciones del formulario (revisión final, ronda de arreglo 1, 2026-10-03): el lote dividido SÍ sale, junto a sus partes.
+    // El formulario deja elegir la hora, y una inspección anterior a la división se admite (decisión de Daniel, 2026-10-02):
+    // lo decide `registrarInspeccion` con la fecha, no la lista.
     const { lotes: ofrecidos } = await opcionesParaInspeccion(gestor);
     const ids = ofrecidos.map((o) => o.id);
     expect(ids).toContain(r.outputLots[0]!.id);
-    expect(ids).not.toContain(l);
+    expect(ids).toContain(l);
   }, 30000);
+});
+
+/**
+ * R6.6, decisión de Daniel del 2026-10-02 (registro, línea 188): en el lote dividido se admiten los registros cuyo `occurredAt` es
+ * ESTRICTAMENTE anterior a la división; los de su mismo instante o posteriores se siguen rechazando (el instante igual lo decidió
+ * el controlador de la revisión final). Una prueba por puerta —medir, sacar una muestra, inspeccionar y corregir una medición—, y
+ * cada una con sus tres fechas: antes (entra), en el instante (no) y después (no). Con las tres, quitar la comparación de fechas
+ * hace caer la primera, y volverla `<` en vez de `<=` hace caer la segunda.
+ */
+describe("R6.6 — en el lote dividido entra lo anterior a la división", () => {
+  const ANTES = new Date(T.getTime() - 60 * 60 * 1000);
+  const DESPUES = new Date(T.getTime() + 60 * 60 * 1000);
+  /** Un lote dividido a las `T` bajo un proceso abierto, por el servicio. */
+  async function divididoBajoProceso(codigo: string) {
+    const l = await lote(codigo);
+    await conSaldo(l, 100);
+    await abrirProcesoDePrueba(gestor, l);
+    const r = await dividir(l, 100, [60, 40]);
+    // Control del estado: el proceso del lote quedó cerrado por ESTA división, a las `T`.
+    expect((await prisma.lotTransformation.findUniqueOrThrow({ where: { id: r.transformation.id } })).occurredAt.toISOString()).toBe(T.toISOString());
+    return l;
+  }
+
+  it("medición: anterior a la división entra; en su instante o después, no", async () => {
+    const l = await divididoBajoProceso("D21");
+    const medir = (occurredAt: Date) =>
+      recordMeasurement(admin, { variable: "moisture", value: 11, unit: "%", occurredAt, lotId: l, provenanceClass: "measured_fact" });
+    const antes = await medir(ANTES);
+    expect(antes.lotId).toBe(l);
+    await expect(medir(T)).rejects.toThrow(/lote_dividido/);
+    await expect(medir(DESPUES)).rejects.toThrow(/lote_dividido/);
+    expect(await prisma.measurement.count({ where: { lotId: l } }), "sólo la anterior a la división quedó escrita").toBe(1);
+  });
+
+  it("muestra: anterior a la división entra; en su instante o después, no", async () => {
+    const l = await divididoBajoProceso("D22");
+    const muestra = (occurredAt: Date, sufijo: string) =>
+      createSampleFromLot(admin, {
+        sourceLotId: l, sampleCode: `D22-${sufijo}-${RUN}`, sampleType: "moisture", occurredAt, provenanceClass: "original_record",
+      } as Parameters<typeof createSampleFromLot>[1]);
+    await expect(muestra(ANTES, "ANTES")).resolves.toBeDefined();
+    await expect(muestra(T, "EN")).rejects.toThrow(/lote_dividido/);
+    await expect(muestra(DESPUES, "DESPUES")).rejects.toThrow(/lote_dividido/);
+    expect(await prisma.sample.count({ where: { sourceLotId: l } }), "sólo la anterior a la división quedó escrita").toBe(1);
+  });
+
+  it("inspección: anterior a la división entra; en su instante o después, no", async () => {
+    const l = await divididoBajoProceso("D23");
+    const nota = `TEST D23 ${RUN}`;
+    const inspeccionar = (occurredAt: Date) =>
+      registrarInspeccion(gestor, { lotId: l, occurredAt, notes: nota, muestras: [{ materialState: "CHERRY", samplingRole: "REPLICATE" }] });
+    const { muestras } = await inspeccionar(ANTES);
+    expect(muestras.map((m) => m.sourceLotId)).toEqual([l]);
+    await expect(inspeccionar(T)).rejects.toThrow(new SampleValidationError("lote_dividido"));
+    await expect(inspeccionar(DESPUES)).rejects.toThrow(new SampleValidationError("lote_dividido"));
+    expect(await prisma.samplingEvent.count({ where: { notes: nota } }), "sólo la anterior a la división quedó escrita").toBe(1);
+  });
+
+  it("corrección de una medición: con fecha anterior a la división entra; en su instante o después, no", async () => {
+    const l = await divididoBajoProceso("D24");
+    // La lectura original, de antes de dividir, insertada CRUDA: así esta prueba sólo depende de la puerta de corregir, y no de la
+    // de medir (que tiene su propia prueba arriba).
+    const original = await prisma.measurement.create({ data: {
+      variable: "moisture", value: 14, unit: "%", occurredAt: ANTES, lotId: l, provenanceClass: "measured_fact", createdBy: gestor,
+    } });
+    mediciones.push(original.id);
+    const corregir = (occurredAt: Date) =>
+      correctMeasurement(admin, { measurementId: original.id, value: 13, unit: "%", occurredAt, reason: `TEST D24 ${RUN}`, provenanceClass: "measured_fact" });
+    // Los rechazos primero: una corrección aceptada deja la original «ya corregida», y la siguiente saldría por eso.
+    await expect(corregir(T)).rejects.toThrow(/lote_dividido/);
+    await expect(corregir(DESPUES)).rejects.toThrow(/lote_dividido/);
+    const corregida = await corregir(ANTES);
+    expect(corregida.correctsId).toBe(original.id);
+    expect(corregida.lotId).toBe(l);
+    expect(await prisma.measurement.count({ where: { lotId: l } }), "la original y UNA corrección, la anterior a la división").toBe(2);
+  });
 });
 
 describe("R6 — el reporte y la división", () => {

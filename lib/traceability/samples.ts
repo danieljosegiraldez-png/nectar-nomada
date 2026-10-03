@@ -134,8 +134,9 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
   await requireSampleAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId }]);
   // Parte 1, R6.6 (2026-10-01): ver measurements.ts. Antes que la comprobación de la muestra verde, para que un
-  // lote dividido diga por qué y no «el secado no ha terminado».
-  if (await loteDividido(prisma, sourceLot.id)) throw new SampleValidationError("lote_dividido");
+  // lote dividido diga por qué y no «el secado no ha terminado». Con la fecha de la muestra: lo de antes de la
+  // división se admite (decisión de Daniel, 2026-10-02).
+  if (await loteDividido(prisma, sourceLot.id, input.occurredAt)) throw new SampleValidationError("lote_dividido");
 
   // Decisión de Daniel, 2026-09-18 (docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md
   // §3-4): una muestra de café VERDE sólo es válida si el lote ya llegó a

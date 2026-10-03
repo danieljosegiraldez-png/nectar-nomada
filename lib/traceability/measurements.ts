@@ -311,8 +311,9 @@ export async function recordMeasurement(userAccountId: string, input: RecordMeas
     },
     crear: async (tx) => {
   // Parte 1, R6.6 (2026-10-01): un lote dividido bajo un proceso queda cerrado: «todo registro posterior
-  // pertenece a un hijo» (`20_modelo_ciclo_completo.md` §1.1).
-  if (input.lotId && (await loteDividido(tx, input.lotId))) throw new MeasurementValidationError("lote_dividido");
+  // pertenece a un hijo» (`20_modelo_ciclo_completo.md` §1.1). Lo de ANTES de la división se admite (decisión de
+  // Daniel, 2026-10-02): `loteDividido` compara con la fecha de la lectura.
+  if (input.lotId && (await loteDividido(tx, input.lotId, input.occurredAt))) throw new MeasurementValidationError("lote_dividido");
   const lot = input.lotId ? await tx.lot.findUniqueOrThrow({ where: { id: input.lotId } }) : null;
   const modo = input.instrumentModeId ? await tx.instrumentMeasurementMode.findUnique({ where: { id: input.instrumentModeId } }) : null;
   if (input.instrumentModeId && (!modo || modo.equipmentId !== input.instrumentId || modo.retiredAt)) {
@@ -482,6 +483,11 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   // corregir un hecho evidencial es en sí una escritura evidencial, y una
   // corrección guardada sin su audit es peor que ninguna.
   const correction = await prisma.$transaction(async (tx) => {
+  // Parte 1, R6.6 (revisión final, ronda de arreglo 1, 2026-10-03): la cuarta puerta. Una corrección es una medición NUEVA
+  // sobre el lote de la original, con la fecha que se le dé, y no miraba la división: una corrección fechada después de
+  // dividir quedaba colgada del lote cerrado. La misma regla que `recordMeasurement`, con la fecha de la corrección: lo de
+  // antes de la división se admite (decisión de Daniel, 2026-10-02).
+  if (original.lotId && (await loteDividido(tx, original.lotId, input.occurredAt))) throw new MeasurementValidationError("lote_dividido");
   const creada = await tx.measurement.create({
     data: {
       variable: original.variable,
