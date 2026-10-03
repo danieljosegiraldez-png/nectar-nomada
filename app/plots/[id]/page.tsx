@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { claveDeLaComparacion, getPlotDetail } from "../../../lib/traceability/plantingCohorts";
+import { claveDeLaDensidad } from "../../../lib/traceability/densidadPorMarco";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { LandPhotoUploadForm } from "../../components/traceability/LandPhotoUploadForm";
 import { listLandAssets } from "../../../lib/traceability/landMedia";
@@ -77,7 +78,7 @@ export default async function PlotDetailPage({
     throw error;
   }
 
-  const { location, cohorts, density, organizationName, eventosDeProduccion, trampas, reglaDeTrampas, rejilla } =
+  const { location, cohorts, densidad, organizationName, eventosDeProduccion, trampas, reglaDeTrampas, rejilla } =
     detail;
   const rendimiento = detail.yield;
   const [jornadas, { people, selfPersonId }, calicatas, bloquesDeLaParcela] = await Promise.all([
@@ -324,28 +325,20 @@ export default async function PlotDetailPage({
             </p>
           </article>
 
+          {/* La densidad sale del MARCO de plantación, no del área del polígono (D10,
+              2026-10-02): en un lote irregular el área incluye la roca y el camino. La
+              frase la elige `claveDeLaDensidad`, que pasa SÓLO los números que su
+              estado puede afirmar — `conteo_incompleto` no lleva la real, porque una
+              densidad sobre un conteo incompleto es un número que parece cierto.
+              Mismo patrón que la tarjeta de la rejilla de arriba, a propósito. */}
           <article className="nn-card">
             <h3>{t("densityHeading")}</h3>
-            {density.status === "ok" ? (
-              <>
-                <p style={{ fontVariantNumeric: "tabular-nums", fontSize: "1.25rem" }}>
-                  {t("densityValue", { plants: density.plantsPerHectare })}
-                </p>
-                <p className="nn-detail-meta">
-                  {t("densityBasis", { plants: density.totalPlants, hectares: density.hectares })}
-                </p>
-              </>
-            ) : (
-              <p className="nn-muted">
-                {density.status === "sin_area"
-                  ? t("densityMissingArea")
-                  : density.status === "area_no_positiva"
-                    ? t("densityBadArea")
-                    : density.status === "conteo_incompleto"
-                      ? t("densityMissingCount", { cohorts: density.cohortesSinConteo })
-                      : t("densityNoCohorts")}
-              </p>
-            )}
+            <p
+              className={densidad.status === "ok" ? undefined : "nn-muted"}
+              style={densidad.status === "ok" ? { fontVariantNumeric: "tabular-nums" } : undefined}
+            >
+              {t(claveDeLaDensidad(densidad).clave, claveDeLaDensidad(densidad).params)}
+            </p>
             {/* Dicho para que nadie busque una columna guardada que está vacía
                 a propósito: se calcula al leer, nunca se escribe en
                 `PlantingCohort.densityPerHectare`. */}
