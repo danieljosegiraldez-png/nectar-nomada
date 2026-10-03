@@ -178,7 +178,7 @@
           "stage": "field",
           "required": false,
           "order": 3,
-          "coversExistingColumn": "Inspection.broodPatternNote"
+          "coversExistingColumn": "Inspection.broodPattern"
         },
         {
           "key": "brood_stages",
@@ -309,7 +309,7 @@
           "stage": "field",
           "required": false,
           "order": 14,
-          "coversExistingColumn": "Inspection.temperamentNote"
+          "coversExistingColumn": "Inspection.temperament"
         },
         {
           "key": "irregularities",

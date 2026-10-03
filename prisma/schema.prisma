@@ -8158,6 +8158,42 @@ enum StoresLevel {
   @@schema("apiary")
 }
 
+/// Lo que el protocolo pregunta de la reina (`apiario-campo-v2.json`, `queen_sighted`).
+///
+/// **`no_se_busco` es un HECHO, no una ausencia**: dice que alguien miró la pregunta y decidió no
+/// buscarla, que en una inspección rápida —comprobar que la caja sigue viva— es la respuesta
+/// correcta. Con la columna `Boolean?` que había no se podía decir, y se guardaba como `null`, sin
+/// distinguirse de «no se contestó» (`PENDING_IMPLEMENTATIONS/010`).
+enum QueenSighting {
+  vista
+  no_vista
+  no_se_busco
+
+  @@schema("apiary")
+}
+
+/// `brood_pattern` del protocolo. Los cinco valores son del dueño, y **`nulo` es uno de ellos**:
+/// una colonia sin cría es una observación, no un dato que falte.
+enum BroodPattern {
+  compacto
+  salteado
+  apretado
+  promedio
+  nulo
+
+  @@schema("apiary")
+}
+
+/// `temperament` del protocolo. En español y con los tres valores del dueño, como `FeedingMethod`
+/// y `FeedingMaterial`: quien lo lee en el campo lo lee en español.
+enum Temperament {
+  mansa
+  normal
+  defensiva
+
+  @@schema("apiary")
+}
+
 model Inspection {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   colonyId         String            @map("colony_id") @db.Uuid
@@ -8166,8 +8202,17 @@ model Inspection {
   operatorPersonId String?           @map("operator_person_id") @db.Uuid
   operator         Person?           @relation("InspectionOperator", fields: [operatorPersonId], references: [id])
   outcome          InspectionOutcome
-  broodPatternNote String?           @map("brood_pattern_note")
-  queenSighted     Boolean?          @map("queen_sighted")
+  /// **Era `broodPatternNote String?`** hasta el 2026-10-03
+  /// (`PENDING_IMPLEMENTATIONS/010`, requisito 4). El protocolo declara sus cinco valores desde
+  /// A9.4 y la columna aceptaba cualquier grafía —«Spotty pattern, several empty cells» era un
+  /// valor legítimo—, así que nada las podía agrupar. **Y pierde el sufijo `Note`**, que una vez
+  /// cerrado el vocabulario pasaría a mentir: una nota es texto libre.
+  broodPattern     BroodPattern?     @map("brood_pattern")
+  /// **Era `Boolean?`** hasta el 2026-10-03, y ahí vivía el defecto: el protocolo pregunta la
+  /// reina con TRES respuestas y un booleano nulable tiene dos más el nulo, así que «no se buscó»
+  /// aterrizaba en el mismo `null` que «no se contestó». El `null` sigue significando sólo lo
+  /// segundo, que es lo que tiene que significar.
+  queenSighted     QueenSighting?    @map("queen_sighted")
   /// **Reemplazada por `honeyStoresLevel`/`honeyNextToBrood` (A9, Anexo B §2.2).**
   /// No se elimina: medido el 2026-09-12, las inspecciones de la copia local no
   /// tienen ni un valor aquí, pero esa copia es de un respaldo y **no se mide
@@ -8208,7 +8253,9 @@ model Inspection {
   /// otros seis: los dos documentos del dueño no coinciden, y se sigue el Anexo
   /// porque trae el motivo escrito. Anotado para la v2 del protocolo.
   droneBroodPresent Boolean?         @map("drone_brood_present")
-  temperamentNote  String?           @map("temperament_note")
+  /// **Era `temperamentNote String?`** hasta el 2026-10-03: mismo caso que `broodPattern`, y
+  /// pierde el sufijo por el mismo motivo. Sus tres valores los declara el protocolo.
+  temperament      Temperament?      @map("temperament")
   /// LA VALORACION del tecnico sobre esta colonia -- Anexo E, y el UNICO campo de etapa
   /// «cierre» de la inspeccion: los otros dieciseis son de campo. Se escribe en casa.
   ///

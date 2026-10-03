@@ -1080,8 +1080,8 @@ async function seedDemoApiaryChain() {
     colonyId: colony.id,
     occurredAt: new Date("2026-11-10"),
     outcome: "issue_observed",
-    broodPatternNote: "Good, solid brood pattern",
-    queenSighted: true,
+    broodPattern: "compacto",
+    queenSighted: "vista",
     storesLevel: "abundant",
   });
 
