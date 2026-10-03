@@ -20,6 +20,7 @@ import { requireLocationAttributeAccess, LocationAccessError } from "./locations
 import { resolveFarmSiteId } from "./fincas";
 import { celdasDelRango, type Rango } from "../territorio/rejilla";
 import { celdasDeLaForma, tableroDe } from "./formaDeLaParcela";
+import { densidadDelLote } from "./densidadPorMarco";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -919,6 +920,26 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     ? { ...base, rango, propia: propia !== null, forma }
     : null;
 
+  // **La densidad sale del MARCO de plantación, no del área del polígono** (D10,
+  // 2026-10-02): «la densidad se coloca por mts entre cada plantón, y hay tantos
+  // plantones». En un lote irregular el área del polígono incluye la roca y el camino.
+  //
+  // Los dos metros son de ESTA Location —D2: los atributos del terreno se copian al
+  // crear una microparcela y desde ahí son suyos— mientras las celdas salen de la forma
+  // de quien pone la numeración. No es una inconsistencia: son dos cosas distintas.
+  const vivas = cohorts.filter((c) => c.status === "active");
+  const densidad = densidadDelLote({
+    marco: {
+      plantSpacingMeters: location.plantSpacingMeters == null ? null : Number(location.plantSpacingMeters),
+      rowSpacingMeters: location.rowSpacingMeters == null ? null : Number(location.rowSpacingMeters),
+    },
+    celdasPlantadas: rejillaDeclarada
+      ? celdasDeLaForma(rejillaDeclarada.forma, rejillaDeclarada.rango ?? tableroDe(rejillaDeclarada))
+      : 0,
+    plantasContadas: vivas.reduce((suma, c) => suma + (c.plantCount ?? 0), 0),
+    cohortesSinConteo: vivas.filter((c) => c.plantCount == null).length,
+  });
+
   return {
     location,
     cohorts,
@@ -930,7 +951,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     // ver el comentario junto a `resolveFarmSiteId` arriba. El llamador no
     // debe recomponerla con `location.parentLocation`.
     farmLocationId,
-    density: computePlotDensity(cohorts, location.areaHectares),
+    densidad,
     // **La rejilla se resuelve en el padre cuando esta Location no la tiene**, que
     // es el caso de una microparcela: la numeración es UNA, la de la parcela (D3).
     // Leer sólo la propia diría `sin_rejilla` de una microparcela que sí está

@@ -107,3 +107,42 @@ export function densidadDelLote(entrada: {
     plantasContadas: entrada.plantasContadas,
   };
 }
+
+/**
+ * La frase que pinta la ficha para cada estado de la densidad, y los números que lleva.
+ *
+ * **Devuelve la clave y los parámetros; no renderiza nada.** Es el mismo patrón que
+ * `claveDeLaComparacion`, y existe por el mismo motivo: así se puede probar sin montar un
+ * navegador — este repositorio no tiene infraestructura para renderizar componentes y sus
+ * guardias de pantalla leen la fuente.
+ *
+ * **Cada estado pasa sólo los números que su frase puede afirmar.** `conteo_incompleto`
+ * no lleva `real`, porque una densidad calculada sobre un conteo incompleto es un número
+ * que parece cierto; si llegara a la plantilla, un descuido de redacción lo pintaría.
+ */
+export function claveDeLaDensidad(d: DensidadDelLote): {
+  clave: "densidadSinMarco" | "densidadSinForma" | "densidadConteoIncompleto" | "densidadComparada";
+  params: Record<string, number>;
+} {
+  switch (d.status) {
+    case "sin_marco":
+      // Sin los dos metros no hay ninguna cifra, ni la diseñada.
+      return { clave: "densidadSinMarco", params: {} };
+    case "sin_forma":
+      // El marco da la diseñada sin necesitar la forma; la real y el área sí la
+      // necesitan, y pasarlas aquí sería inventarlas.
+      return { clave: "densidadSinForma", params: { disenada: d.disenada } };
+    case "conteo_incompleto":
+      return {
+        clave: "densidadConteoIncompleto",
+        params: { disenada: d.disenada, sinContar: d.cohortesSinConteo },
+      };
+    case "ok":
+      return {
+        clave: "densidadComparada",
+        // **Se redondea, no se trunca.** Un truncado sesga la cifra siempre hacia abajo,
+        // y 1.894,6 plantas/ha no es una medición: es una división.
+        params: { disenada: d.disenada, real: Math.round(d.real), hectareas: d.areaHectareas },
+      };
+  }
+}
