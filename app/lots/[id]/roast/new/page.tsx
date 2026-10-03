@@ -59,7 +59,7 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1>{t("recordRoastButton")}</h1>
       <p className="nn-muted">{t("recordRoastIntro")}</p>
-      <RoastSessionForm lotId={id} perfiles={perfiles} muestras={muestrasVerdes} equipos={equipos} />
+      <RoastSessionForm lotId={lot.id} perfiles={perfiles} muestras={muestrasVerdes} equipos={equipos} />
     </div>
   );
 }

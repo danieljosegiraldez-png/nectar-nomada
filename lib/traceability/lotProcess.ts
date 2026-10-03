@@ -21,6 +21,7 @@ import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import {
   abrirProcesoEnTx,
   bloquearLinaje,
+  enMinusculas,
   exigeSinCorridasAbiertas,
   exigeSinOtroProcesoAbierto,
   idsDeDescendencia,
@@ -488,6 +489,7 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
  * la parte «Re-importar» rehaga el histórico (R9).
  */
 export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   // R6.6 (ronda de arreglo 1, 2026-10-02). NO es redundante con la de `closureKind` de más abajo, aunque lo parezca: con un REPROCESO
   // del ancestro (R2 lo permite sobre un proceso cerrado), el proceso que cubre a un lote dividido es el reproceso —cerrado por
   // humedad, en el objetivo—, no el `divided`. Sólo esta línea, que mira la división de la que el lote es entrada, lo deja fuera.
@@ -545,6 +547,7 @@ async function lecturaVigente<M extends { id: string; value: Prisma.Decimal }>(
  * Dentro de la devolución corre con su `tx` y DESPUÉS de `bloquearLinaje`; el predicado la llama con el cliente global, sólo lee.
  */
 async function procesoQueDevolver(tx: Prisma.TransactionClient, lotId: string) {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
   const cobertura = await procesoQueCubre(tx, lotId);
   if (cobertura.estado === "mezcla") throw new LotProcessError("lote_mezclado");
@@ -708,6 +711,7 @@ export async function listarProcesosDeLote(userAccountId: string, lotId: string)
  * desplegable vacío.
  */
 export async function opcionesParaProceso(userAccountId: string, lotId: string) {
+  lotId = enMinusculas(lotId); // F5: compara `m.lotId === lotId` para la etiqueta; ver `enMinusculas`.
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new LotProcessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [lot]);
@@ -804,6 +808,7 @@ const INCLUIR_PARA_PANTALLA = {
  * Lanza `lineage_too_deep` como el resolvedor: quien pinta lo atrapa y lo dice.
  */
 export async function coberturaDelLote(userAccountId: string, lotId: string) {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new LotProcessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [lot]);

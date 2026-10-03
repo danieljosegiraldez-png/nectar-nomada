@@ -829,6 +829,16 @@ describe("R5 — no se cierra un proceso con corridas abiertas", () => {
 });
 
 describe("R2 — el orden del bloqueo del linaje no depende de la caja del uuid", () => {
+  it("un secado sobre un lote raíz con su proceso abierto empieza aunque el id llegue en MAYÚSCULAS", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03; F5). El resolvedor comparaba el id recibido con los que devuelve la base:
+    // con el propio lote en mayúsculas, su proceso «no era suyo» y la rama terminaba en una raíz sin proceso —una mezcla—, así que
+    // empezar salía con `lote_mezclado`.
+    const l = await lote("R2-MAYUS");
+    const p = await abrirProcesoDePrueba(gestor, l);
+    const { run } = await startDryingRun(gestor, { lotId: l.toUpperCase(), startedAt: ahora(), provenanceClass: "original_record" });
+    expect(run.lotProcessId).toBe(p.id);
+  });
+
   it("un uuid en mayúsculas se bloquea en el orden de los minúsculos: la fila menor se toma ANTES de esperar la mayor", async () => {
     // Dos lotes sin parentesco con id elegido: en el orden de cadenas, «B» (mayúscula) va ANTES que «a», y «b» después.
     // Sin normalizar, quien pide `[B…, a…]` esperaría a la fila `b` SIN haber tomado la `a`, y otra transacción que pida

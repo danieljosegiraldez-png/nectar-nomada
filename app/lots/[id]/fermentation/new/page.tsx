@@ -63,7 +63,7 @@ export default async function NewFermentationPage({ params }: { params: Promise<
           <Link href={`/lots/${id}/process`}>{aviso}</Link>
         </p>
       ) : (
-        <FermentationForm lotId={id} recetaDelProceso={recetaDelProceso} />
+        <FermentationForm lotId={lot.id} recetaDelProceso={recetaDelProceso} />
       )}
     </div>
   );

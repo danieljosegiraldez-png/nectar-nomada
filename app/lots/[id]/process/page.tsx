@@ -70,14 +70,14 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   // generaciones, y eso se DICE en la pantalla: no es un 404 —el lote existe— ni un 500.
   let cargado;
   try {
-    const cobertura = await coberturaDelLote(user.userAccountId, id);
+    const cobertura = await coberturaDelLote(user.userAccountId, lot.id);
     const abiertoAhora = cobertura.estado === "abierto";
     cargado = {
       cobertura,
-      opciones: await opcionesParaProceso(user.userAccountId, id),
+      opciones: await opcionesParaProceso(user.userAccountId, lot.id),
       // Sólo hace falta preguntar si hay algo que ofrecer: con un proceso abierto que lo cubre, la página trata de ese.
-      puede: !abiertoAhora && puedeGestionar ? await puedeAbrirProceso(user.userAccountId, id) : null,
-      puedeDevolver: puedeGestionar ? await puedeDevolverASecado(user.userAccountId, id) : null,
+      puede: !abiertoAhora && puedeGestionar ? await puedeAbrirProceso(user.userAccountId, lot.id) : null,
+      puedeDevolver: puedeGestionar ? await puedeDevolverASecado(user.userAccountId, lot.id) : null,
       // Ronda de arreglo 1 (2026-10-02): los formularios del proceso abierto piden `manage` sobre el lote DONDE VIVE el proceso,
       // que puede ser un ancestro; `puedeGestionar` es el de ESTE lote, y con él se ofrecía lo que el servicio rechaza.
       puedeGestionarElAbierto:
@@ -103,7 +103,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   const { intervenciones, mediciones, grados, estadosDeCereza, motivosDeDevolucion } = cargado.opciones;
   // La misma etiqueta que ya usa la página del lote, para que una receta se
   // llame igual en las dos pantallas.
-  const recetas = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
+  const recetas = (await listRecipeVersionsForLot(user.userAccountId, lot.id)).map((v) => ({
     id: v.id,
     label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
   }));
@@ -121,7 +121,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   // un lote EN BODEGA nunca lo veía, que es justo el caso que pide Daniel. Y desde la tarea 9, sólo
   // donde el servicio lo aceptaría (`puedeDevolverASecado`): un lote guardado sin proceso, una
   // mezcla o un dividido reciben la frase de por qué, no un formulario que siempre falla.
-  const enBodega = (await getCurrentStorageAssignment(user.userAccountId, id)) !== null;
+  const enBodega = (await getCurrentStorageAssignment(user.userAccountId, lot.id)) !== null;
 
   const fecha = (d: Date | null) => (d === null ? "—" : d.toISOString().slice(0, 10));
 
@@ -146,7 +146,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         <section key={p.id} className="nn-section">
           <h2>
             {t("processNumberHeading", { n: p.sequenceOrder })} · {p.etiqueta}
-            {p.lot.id !== id ? <span className="nn-muted"> · {t("processLivesIn", { lotCode: p.lot.lotCode })}</span> : null}
+            {p.lot.id !== lot.id ? <span className="nn-muted"> · {t("processLivesIn", { lotCode: p.lot.lotCode })}</span> : null}
             {p.origen === "continuacion" ? <span className="nn-muted"> · {t("processOriginContinuation")}</span> : null}
             {p.origen === "parte_de_division" ? <span className="nn-muted"> · {t("processOriginPart")}</span> : null}
           </h2>
@@ -199,20 +199,20 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
         <>
           <section className="nn-section">
             <h2>{t("recordProcessInterventionButton")}</h2>
-            <IntervencionForm lotProcessId={abierto.id} lotId={id} opciones={intervenciones} />
+            <IntervencionForm lotProcessId={abierto.id} lotId={lot.id} opciones={intervenciones} />
           </section>
 
           <section className="nn-section">
             <h2>{t("closeProcessButton")}</h2>
-            <CerrarProcesoForm lotProcessId={abierto.id} lotId={id} mediciones={mediciones} />
+            <CerrarProcesoForm lotProcessId={abierto.id} lotId={lot.id} mediciones={mediciones} />
           </section>
 
           <section className="nn-section">
             <h2>{t("processChangeIntentButton")}</h2>
-            <CambiarIntencionForm lotProcessId={abierto.id} lotId={id} actual={abierto.intent} />
+            <CambiarIntencionForm lotProcessId={abierto.id} lotId={lot.id} actual={abierto.intent} />
             <CambiarObjetivoForm
               lotProcessId={abierto.id}
-              lotId={id}
+              lotId={lot.id}
               actual={abierto.targetMoisturePct.toNumber()}
             />
           </section>
@@ -224,7 +224,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
           <h2>{t("processBackToDryingButton")}</h2>
           {bloqueado ? <p className="nn-error">{t("processBlockedFromStorage")}</p> : null}
           {puedeDevolver.puede ? (
-            <DevolverASecadoForm lotId={id} motivos={motivosDeDevolucion} />
+            <DevolverASecadoForm lotId={lot.id} motivos={motivosDeDevolucion} />
           ) : (
             <p className="nn-muted">{t(`processCannotReturn_${puedeDevolver.motivo}`)}</p>
           )}
@@ -239,7 +239,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
           {puede.puede ? (
             <>
               {cobertura.cadena.length > 0 || cobertura.composicion ? <p className="nn-muted">{t("processOpenAnotherHelp")}</p> : null}
-              <AbrirProcesoForm lotId={id} recetas={recetas} grados={grados} estadosDeCereza={estadosDeCereza} />
+              <AbrirProcesoForm lotId={lot.id} recetas={recetas} grados={grados} estadosDeCereza={estadosDeCereza} />
             </>
           ) : (
             // Ronda de arreglo 1: en bodega sólo se manda a «Devolver a secado» si esta misma página lo ofrece.

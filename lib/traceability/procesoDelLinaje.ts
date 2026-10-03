@@ -88,6 +88,18 @@ function enCadena(p: FilaDeProceso, profundidad: number): ProcesoEnCadena {
   };
 }
 
+/**
+ * El id de un lote en minúsculas, que es como la base lo devuelve (revisión final, ronda de arreglo 1, 2026-10-03; corrige el
+ * registro, línea 139). Postgres compara un `uuid` sin distinguir mayúsculas, así que una consulta con el id en mayúsculas
+ * encuentra la fila; pero este módulo compara en JavaScript el id que RECIBE con los que la base devuelve (`conProceso.has`,
+ * `padres.get`, `vistos`), y ahí `"ABC…" !== "abc…"`. Con el id de la URL en mayúsculas, `procesoQueCubre` daba `sin_proceso` a
+ * un lote cuyo proceso vive en un ancestro —y la compuerta de bodega lo dejaba ENTRAR con el proceso abierto—, y `mezcla` a uno
+ * con proceso propio. Se normaliza UNA vez, a la entrada de cada función pública que recibe un id de lote.
+ */
+export function enMinusculas(lotId: string): string {
+  return lotId.toLowerCase();
+}
+
 /** Los padres directos de cada lote: las entradas de las transformaciones que lo produjeron. */
 async function padresDe(tx: Prisma.TransactionClient, lotIds: readonly string[]): Promise<Map<string, string[]>> {
   const mapa = new Map<string, string[]>();
@@ -121,6 +133,7 @@ async function hijosDe(tx: Prisma.TransactionClient, lotIds: readonly string[]):
  * ausencia, y es justo el cero que significa «no miré».
  */
 export async function idsDeAscendencia(tx: Prisma.TransactionClient, lotId: string): Promise<string[]> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const vistos = new Set<string>([lotId]);
   let frontera = [lotId];
   for (let nivel = 0; frontera.length > 0; nivel++) {
@@ -146,6 +159,7 @@ export async function idsDeAscendencia(tx: Prisma.TransactionClient, lotId: stri
  * SILENCIO (R1): un multiproceso largo dejaba fuera a un descendiente con un proceso abierto.
  */
 export async function idsDeDescendencia(tx: Prisma.TransactionClient, lotId: string): Promise<string[]> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const vistos = new Set<string>([lotId]);
   let frontera = [lotId];
   for (let nivel = 0; frontera.length > 0; nivel++) {
@@ -216,6 +230,7 @@ async function historiaArriba(tx: Prisma.TransactionClient, vigente: ProcesoEnCa
  * 5 atribuye las tazas por esa cadena.
  */
 export async function procesoQueCubre(tx: Prisma.TransactionClient, lotId: string): Promise<Cobertura> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const encontrados = new Map<string, ProcesoEnCadena>();
   let ramaSinProceso = false;
   const vistos = new Set<string>([lotId]);
@@ -302,6 +317,7 @@ export async function bloquearLinajes(tx: Prisma.TransactionClient, lotIds: read
  * siempre: lo que se hace AHORA sobre un lote dividido se rechaza.
  */
 export async function loteDividido(tx: Prisma.TransactionClient, lotId: string, occurredAt?: Date): Promise<boolean> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const p = await tx.lotProcess.findFirst({
     where: {
       closureKind: "divided",
@@ -355,6 +371,7 @@ export async function gradoDelProcesoQueCubre(tx: Prisma.TransactionClient, lotI
  * lectura y la escritura.
  */
 export async function exigeSinOtroProcesoAbierto(tx: Prisma.TransactionClient, lotId: string): Promise<void> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   const lote = await tx.lot.findUnique({ where: { id: lotId }, select: { lotType: true } });
   if (!lote) throw new LotProcessError("lot_not_found");
   if (lote.lotType === "honey") throw new LotProcessError("proceso_no_aplica_a_miel");
@@ -461,6 +478,7 @@ export async function procesoAbiertoParaCorrida(
   tx: Prisma.TransactionClient,
   lotId: string,
 ): Promise<{ id: string; processRecipeVersionId: string | null }> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   await bloquearLinaje(tx, lotId);
   // Todo lo que decide va DESPUÉS del bloqueo, y es la MISMA función que pregunta la pantalla (`puedeEmpezarCorrida`).
   return procesoParaUnaCorrida(tx, lotId);
@@ -486,6 +504,7 @@ export async function procesoParaUnaCorrida(
   tx: Prisma.TransactionClient,
   lotId: string,
 ): Promise<{ id: string; processRecipeVersionId: string | null }> {
+  lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
   if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
   const enBodega = await tx.storageAssignment.findFirst({ where: { lotId, endedAt: null }, select: { id: true } });
   if (enBodega) throw new LotProcessError("lote_en_bodega");
@@ -557,18 +576,20 @@ export async function antesDeTransformar(
   tx: Prisma.TransactionClient,
   args: { tipo: TipoConReglaDeProceso; inputLotIds: readonly string[]; numeroDePartes: number },
 ): Promise<{ procesoId: string } | null> {
-  await bloquearLinajes(tx, args.inputLotIds);
-  for (const lotId of args.inputLotIds) {
+  // F5: ver `enMinusculas`. Las entradas, una vez, antes de todo lo demás.
+  const inputLotIds = args.inputLotIds.map(enMinusculas);
+  await bloquearLinajes(tx, inputLotIds);
+  for (const lotId of inputLotIds) {
     if (await loteDividido(tx, lotId)) throw new LotProcessError("lote_dividido");
   }
   const abiertos: ProcesoEnCadena[] = [];
-  for (const lotId of args.inputLotIds) {
+  for (const lotId of inputLotIds) {
     const c = await procesoQueCubre(tx, lotId);
     if (c.estado === "abierto") abiertos.push(c.vigente);
   }
   if (abiertos.length === 0) return null;
   if (args.tipo === "selection") throw new LotProcessError("seleccion_bajo_proceso_abierto");
-  if (args.tipo === "merge" || args.tipo === "blend" || args.inputLotIds.length > 1) {
+  if (args.tipo === "merge" || args.tipo === "blend" || inputLotIds.length > 1) {
     throw new LotProcessError("fusion_bajo_proceso_abierto");
   }
   // R6.1 (ronda de arreglo 1, 2026-10-01): se divide el lote ENTERO en sus partes. Sin ninguna, TODO el café queda
@@ -623,8 +644,10 @@ export async function dividirProcesoEnTx(tx: Prisma.TransactionClient, userAccou
   }
   // Y ningún OTRO lote cubierto por el proceso puede conservar saldo: quedaría bajo un proceso dividido sin
   // haber sido dividido (`20_modelo_ciclo_completo.md` §1.1). Las muestras no cuentan.
+  // F5: los ids de la base vienen en minúsculas; el del lote dividido llega de quien llamó (ver `enMinusculas`).
+  const dividido = enMinusculas(args.loteDividido);
   const cubiertos = [proceso.lotId, ...(await idsDeDescendencia(tx, proceso.lotId))].filter(
-    (id) => id !== args.loteDividido && !args.partes.includes(id),
+    (id) => id !== dividido && !args.partes.map(enMinusculas).includes(id),
   );
   for (const id of cubiertos) {
     const lote = await tx.lot.findUniqueOrThrow({ where: { id }, select: { lotType: true } });

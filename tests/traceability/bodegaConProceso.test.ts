@@ -226,6 +226,19 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     expect((await asignaciones(pergamino)).todas, "una entrada rechazada dejó una asignación escrita").toBe(0);
   });
 
+  it("con el id en MAYÚSCULAS, el pergamino tampoco entra con el proceso abierto en la cereza: la compuerta no falla abierta", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03; corrige el registro, línea 139). Postgres encuentra el lote con el id en
+    // mayúsculas —compara `uuid` sin caja—, pero el resolvedor comparaba en JavaScript el id recibido con los que devuelve la
+    // base: el pergamino «no tenía padres», salía `sin_proceso`, y la compuerta lo dejaba entrar con el proceso abierto.
+    const cereza = await lote("B14-C");
+    const pergamino = await lote("B14-P");
+    await enlazar([cereza], [pergamino]);
+    await abrirProcesoDePrueba(gestor, cereza);
+    await expect(moveLotToStorage(gestor, { lotId: pergamino.toUpperCase(), locationId: plotId, startedAt: ahora() }))
+      .rejects.toThrow(new LotProcessError("drying_not_finished"));
+    expect((await asignaciones(pergamino)).todas, "la entrada con el id en mayúsculas dejó una asignación escrita").toBe(0);
+  });
+
   it("cerrado por humedad en el objetivo, el pergamino entra; por encima, no", async () => {
     const cereza = await lote("B2-C");
     const pergamino = await lote("B2-P");
@@ -1185,6 +1198,22 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     expect(c.cadena[1]!.etiqueta).toBe("Sin receta");
     expect(c.cadena[1]!.recetaConVersion, "«Sin receta» no tiene versión que enseñar").toBeNull();
     expect(c.cadena[1]!.humedadDeCierre).toBe(11);
+  });
+
+  it("con el id en MAYÚSCULAS devuelve lo mismo que en minúsculas", async () => {
+    // Revisión final (ronda de arreglo 1, F5): la ficha y la página del proceso la llaman con el id del lote; en mayúsculas, el
+    // resolvedor no encontraba los padres y el pergamino salía sin proceso (o una mezcla, si el proceso era suyo).
+    const cereza = await lote("CB4-C");
+    const pergamino = await lote("CB4-P");
+    await enlazar([cereza], [pergamino]);
+    await abrirProcesoDePrueba(gestor, cereza);
+    const enMinusculas = await coberturaDelLote(gestor, pergamino);
+    expect(enMinusculas.estado, "control: en minúsculas lo cubre el proceso abierto de la cereza").toBe("abierto");
+    expect(await coberturaDelLote(gestor, pergamino.toUpperCase())).toEqual(enMinusculas);
+    // Y con el proceso PROPIO: en mayúsculas salía «mezcla».
+    const propio = await coberturaDelLote(gestor, cereza.toUpperCase());
+    expect(propio.estado).toBe("abierto");
+    expect(propio).toEqual(await coberturaDelLote(gestor, cereza));
   });
 
   it("una mezcla devuelve su composición, ningún vigente y nada para el veredicto", async () => {
