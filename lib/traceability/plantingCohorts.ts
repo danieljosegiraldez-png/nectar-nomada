@@ -41,11 +41,11 @@ export interface CreatePlantingCohortInput {
   plantedAt?: Date | null;
   plantedPrecision?: HarvestWindowPrecision | null;
   plantCount?: number | null;
-  // `densityPerHectare` NO se acepta aquí, a propósito. Es un derivado de
-  // conteo y área, los dos corregibles, y `computePlotDensity` lo calcula al
-  // leer. Aceptarlo dejaba que un llamador guardara un 400 que sobrevivía a la
-  // corrección de sus dos insumos — justo lo que el comentario de
-  // `computePlotDensity` decía que no pasaba. Lo señaló una revisión
+  // `densityPerHectare` NO se acepta aquí, a propósito. Es un derivado, y
+  // `densidadDelLote` (`densidadPorMarco.ts`) lo calcula al leer. Aceptarlo dejaba
+  // que un llamador guardara un 400 que sobrevivía a la corrección de sus insumos —
+  // justo lo que el comentario de la función de densidad decía que no pasaba. Lo
+  // señaló una revisión
   // independiente: el comentario era cierto para nuestros llamadores y no
   // estaba impuesto por el código.
   spacingMeters?: number | null;
@@ -390,59 +390,6 @@ export async function recordHarvestSources(
   };
 }
 
-/**
- * Plants per hectare for a block, **computed and never stored.**
- *
- * `PlantingCohort.densityPerHectare` exists as a column and stays null here on
- * purpose. Density is a quotient of two numbers that are still moving — the
- * owner has said the per-block counts will be revised, and no block has an
- * area yet — and a stored quotient of moving inputs is a derived value that
- * goes stale in silence every time either input is corrected. Storing it would
- * be the same failure the platform already avoids by keeping raw measurements
- * and calculated values apart (CLAUDE.md §49).
- *
- * Returns a reason rather than a number when it cannot divide, because the
- * three ways this fails are different facts and a page should say which one it
- * hit. `null` collapses them into "no data", and zero would be a claim
- * (ADR-080: never recorded and recorded-as-zero must stay distinguishable).
- */
-export type PlotDensity =
-  | { status: "ok"; plantsPerHectare: number; totalPlants: number; hectares: number }
-  | { status: "sin_area" }
-  | { status: "area_no_positiva"; hectares: number }
-  | { status: "sin_cohortes" }
-  | { status: "conteo_incompleto"; cohortesSinConteo: number; cohortesTotales: number };
-
-export function computePlotDensity(
-  cohorts: ReadonlyArray<{ plantCount: number | null; status: PlantingCohortStatus }>,
-  areaHectares: Prisma.Decimal | number | null,
-): PlotDensity {
-  // A removed block's trees are not standing in the field, so counting them
-  // would overstate what is planted. `renovatePlantingCohort` is what puts a
-  // cohort into a non-active status, and this is the read side of that.
-  const vivas = cohorts.filter((c) => c.status === "active");
-  if (vivas.length === 0) return { status: "sin_cohortes" };
-
-  const sinConteo = vivas.filter((c) => c.plantCount == null).length;
-  if (sinConteo > 0) {
-    return { status: "conteo_incompleto", cohortesSinConteo: sinConteo, cohortesTotales: vivas.length };
-  }
-
-  if (areaHectares == null) return { status: "sin_area" };
-  const hectares = Number(areaHectares);
-  // Guards the division and a nonsense area alike. An area recorded as 0 is a
-  // bad record, not an infinite density.
-  if (!Number.isFinite(hectares) || hectares <= 0) return { status: "area_no_positiva", hectares };
-
-  const totalPlants = vivas.reduce((sum, c) => sum + (c.plantCount ?? 0), 0);
-  return {
-    status: "ok",
-    totalPlants,
-    hectares,
-    plantsPerHectare: Number((totalPlants / hectares).toFixed(1)),
-  };
-}
-
 /** La rejilla tal como la parcela la declara, y el rango propio si lo tiene. */
 export interface RejillaDeclarada {
   readonly rowCount: number;
@@ -470,10 +417,10 @@ export interface RejillaDeclarada {
 /**
  * Lo que la rejilla CABE contra lo que las siembras CUENTAN.
  *
- * Diseño §6. Vive aquí, pura y al lado de `computePlotDensity`, por el mismo
- * motivo que ella: un cociente —o una resta— guardado de dos entradas que se
- * mueven **se queda viejo en silencio** cada vez que alguien corrige una de las
- * dos. Se calcula al leer.
+ * Diseño §6. Pura y calculada al leer, por el mismo motivo que la densidad —que
+ * desde el 2026-10-03 vive en `densidadPorMarco.ts`—: un cociente, o una resta,
+ * guardado de dos entradas que se mueven **se queda viejo en silencio** cada vez que
+ * alguien corrige una de las dos.
  *
  * **Devuelve un MOTIVO y no un número cuando no puede comparar**, y usa los
  * mismos nombres de estado que su hermana (`status`, `sin_cohortes`,
@@ -556,7 +503,7 @@ export function compararConLaRejilla(
   const capacidad = celdasDeLaForma(rejilla.forma, ambito);
 
   // Una siembra retirada no está en pie, así que no cuenta. Es la misma lectura
-  // que hace `computePlotDensity` del lado de la densidad.
+  // que hace `densidadDelLote` del lado de la densidad.
   const vivas = cohorts.filter((c) => c.status === "active");
   if (vivas.length === 0) return { status: "sin_cohortes", capacidad };
 

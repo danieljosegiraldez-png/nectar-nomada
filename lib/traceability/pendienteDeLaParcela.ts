@@ -38,10 +38,20 @@ export interface EntradaDePendiente {
    */
   zona: string | null;
   /**
-   * `location.areaHectares`, pasado por `Number()` sólo si no es nulo. El aviso
-   * de área sale de aquí y NO de `computePlotDensity`: ésa devuelve
-   * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con
-   * una siembra sin conteo se quedaba sin su aviso.
+   * `location.areaHectares`, pasado por `Number()` sólo si no es nulo.
+   *
+   * **El aviso de área se calcula AQUÍ, y no delegándolo a la función de densidad.**
+   * La razón sigue valiendo aunque esa función haya cambiado: un agregado devuelve
+   * `conteo_incompleto` antes de mirar el área, así que un lote sin área y con una
+   * siembra sin conteo se quedaba sin su aviso. `densidadDelLote`
+   * (`densidadPorMarco.ts`), que la sustituyó el 2026-10-03, tiene el mismo orden de
+   * estados, así que la delegación seguiría perdiendo el aviso.
+   *
+   * **Y queda una pregunta abierta para Daniel, no un defecto:** su principio del
+   * 2026-10-03 dice que el espacio de un lote «no depende de definir el metraje,
+   * solamente cuántas plantas y espacio aprox de densidad». Si eso vale, los
+   * pendientes `sin_area` y `area_no_valida` le piden al operario un metraje que ya
+   * dijo que no hace falta. No se quitan sin que lo diga.
    */
   areaHectares: number | null;
   cohortesActivas: readonly { id: string; plantCount: number | null }[];

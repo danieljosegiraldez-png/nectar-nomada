@@ -113,7 +113,7 @@ describe("pendienteDeLaParcela", () => {
   });
 
   // Revisión final, I2: esta prueba construía `density: sin_area` junto a una
-  // siembra sin conteo, combinación que `computePlotDensity` nunca produce
+  // siembra sin conteo, combinación que un agregado de densidad nunca produce
   // (devuelve `conteo_incompleto` antes de mirar el área). El aviso sale ahora
   // del área de la ubicación, y el caso es el que sí ocurre: sin área Y con una
   // siembra sin conteo. Tienen que salir los dos avisos.
