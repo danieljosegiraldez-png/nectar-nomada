@@ -677,6 +677,11 @@
     {
       "archivo": "lib/traceability/floracion.ts",
       "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
+    },
+    {
+      "archivo": "lib/traceability/formaDeLaParcela.ts",
+      "razon": "Modulo de dominio: la FORMA declarada de un lote, como union de rectangulos (D9, 2026-10-03). La mitad pura —`celdasDeLaForma`, `celdasSinPlantar`, `tableroDe`— no toca la base; las dos que escriben exigen `requireLocationAttributeAccess` sobre la RAIZ de la numeracion ANTES de escribir, no sobre el sitio que pase quien llama: con el permiso de una microparcela no se cambia la forma de su madre (D3). Cada escritura lleva su AuditEvent en la MISMA transaccion (`location.declare_shape_range` y `location.remove_shape_range`). El disparador `plot_shape_range_exigir_forma_en_la_rejilla` de la migracion 20261002210000 es la red en la base: exige que el trozo quepa en el tablero. Quitar un trozo AVISA de las plantas que quedan fuera en vez de rechazar (§7.4), y con la forma vacia devuelve 0 y no «todas», porque «no se sabe» no es «esta vacio» (ADR-080).",
+      "verificado": "2026-10-03"
     }
   ],
   "reciben_transaccion": [

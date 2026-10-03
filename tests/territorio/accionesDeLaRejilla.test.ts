@@ -31,6 +31,8 @@ const deps = vi.hoisted(() => ({
   quitarRangoDelBloque: vi.fn(),
   revalidate: vi.fn(),
   RejillaInvalida: class extends Error {},
+  declararTrozoDeForma: vi.fn(),
+  quitarTrozoDeForma: vi.fn(),
 }));
 
 vi.mock("../../lib/auth/session", () => ({ getCurrentUser: deps.user }));
@@ -46,6 +48,17 @@ vi.mock("../../lib/traceability/plotBlocks", () => ({
   quitarRangoDelBloque: deps.quitarRangoDelBloque,
   setPlotBlockType: vi.fn(),
   PlotBlockValidationError: class extends Error {},
+}));
+vi.mock("../../lib/traceability/formaDeLaParcela", () => ({
+  declararTrozoDeForma: deps.declararTrozoDeForma,
+  quitarTrozoDeForma: deps.quitarTrozoDeForma,
+  // La mitad pura la importan otros módulos del árbol: un mock incompleto rompe la
+  // CARGA, y vitest lo reporta como «no tests» — que se lee igual que «no falló».
+  celdasDeLaForma: () => 0,
+  celdasSinPlantar: () => 0,
+  tableroDe: (r: { rowCount: number; plantsPerRow: number }) => ({
+    rowFrom: 1, rowTo: r.rowCount, plantFrom: 1, plantTo: r.plantsPerRow,
+  }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: deps.revalidate }));
 vi.mock("next/navigation", () => ({
@@ -63,6 +76,9 @@ vi.mock("next-intl/server", () => ({
 
 import {
   anadirRangoAlBloqueAction,
+  guardarRangoDeMicroparcelaAction,
+  declararTrozoDeFormaAction,
+  quitarTrozoDeFormaAction,
   guardarRejillaAction,
   quitarRangoDelBloqueAction,
 } from "../../app/actions/traceability";
@@ -79,6 +95,8 @@ beforeEach(() => {
   deps.updateLocationAttributes.mockResolvedValue({ id: "parcela-1" });
   deps.anadirRangoAlBloque.mockResolvedValue({ rango: { id: "r1" }, solapesAvisados: [], celdasSinPlantar: 0 });
   deps.quitarRangoDelBloque.mockResolvedValue(undefined);
+  deps.declararTrozoDeForma.mockResolvedValue({ id: "t1" });
+  deps.quitarTrozoDeForma.mockResolvedValue({ plantasQueQuedanFuera: 0 });
 });
 
 describe("guardarRejillaAction", () => {
@@ -297,5 +315,148 @@ describe("las tres, sin sesión", () => {
       await expect(accion({}, form({ locationId: "p1" }))).rejects.toThrow("redirect:/login");
       expect(servicio).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("las dos acciones de la forma del lote", () => {
+  it("declarar pasa los cuatro números y el sitio", async () => {
+    const r = await declararTrozoDeFormaAction(
+      {},
+      form({ locationId: "p1", rowFrom: "1", rowTo: "7", plantFrom: "1", plantTo: "20" }),
+    );
+    expect(r).toEqual({});
+    expect(deps.declararTrozoDeForma).toHaveBeenCalledWith("actor", {
+      locationId: "p1",
+      rowFrom: 1,
+      rowTo: 7,
+      plantFrom: 1,
+      plantTo: 20,
+    });
+  });
+
+  it("un rechazo del servicio vuelve como error traducido", async () => {
+    deps.declararTrozoDeForma.mockRejectedValue(new deps.RejillaInvalida("rejilla_rango_al_reves"));
+    const r = await declararTrozoDeFormaAction({}, form({ locationId: "p1" }));
+    expect(r.error).toContain("error_rejilla_rango_al_reves");
+    expect(r.avisos).toBeUndefined();
+  });
+
+  it("quitar pasa el trozo que se le nombra", async () => {
+    const r = await quitarTrozoDeFormaAction({}, form({ locationId: "p1", trozoId: "t9" }));
+    expect(r).toEqual({});
+    expect(deps.quitarTrozoDeForma).toHaveBeenCalledWith("actor", "t9");
+  });
+
+  /**
+   * **§7.4: el aviso va al QUITAR, no al declarar.** Quitar un trozo puede dejar plantas
+   * fuera de lo que resta, y eso se dice — el trozo SE QUITÓ, así que no es un error.
+   */
+  it("quitar un trozo que deja plantas fuera vuelve en avisos, no en error", async () => {
+    deps.quitarTrozoDeForma.mockResolvedValue({ plantasQueQuedanFuera: 12 });
+    const r = await quitarTrozoDeFormaAction({}, form({ locationId: "p1", trozoId: "t9" }));
+    expect(r.error, "el trozo SE QUITÓ: esto no es un error").toBeUndefined();
+    expect(r.avisos).toHaveLength(1);
+    expect(r.avisos?.[0]).toContain("rejillaFormaPlantasFueraAviso");
+    expect(r.avisos?.[0], "cuántas plantas tiene que llegar").toContain("12");
+  });
+
+  /** El caso negativo, sin el cual un aviso que se emite siempre pasaría por bueno. */
+  it("quitar un trozo sin plantas fuera NO avisa", async () => {
+    deps.quitarTrozoDeForma.mockResolvedValue({ plantasQueQuedanFuera: 0 });
+    const r = await quitarTrozoDeFormaAction({}, form({ locationId: "p1", trozoId: "t9" }));
+    expect(r).toEqual({});
+  });
+
+  it("un trozo que ya no está vuelve con su propia frase", async () => {
+    deps.quitarTrozoDeForma.mockRejectedValue(new deps.RejillaInvalida("rejilla_trozo_no_encontrado"));
+    const r = await quitarTrozoDeFormaAction({}, form({ locationId: "p1", trozoId: "t9" }));
+    expect(r.error).toContain("error_rejilla_trozo_no_encontrado");
+  });
+
+  it("las dos redirigen a /login y no llaman a su servicio", async () => {
+    deps.user.mockResolvedValue(null);
+    for (const [accion, servicio] of [
+      [declararTrozoDeFormaAction, deps.declararTrozoDeForma],
+      [quitarTrozoDeFormaAction, deps.quitarTrozoDeForma],
+    ] as const) {
+      await expect(accion({}, form({ locationId: "p1" }))).rejects.toThrow("redirect:/login");
+      expect(servicio).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("guardarRangoDeMicroparcelaAction", () => {
+  it("pasa los cuatro números al servicio, como números", async () => {
+    const r = await guardarRangoDeMicroparcelaAction(
+      {},
+      form({
+        locationId: "micro-1",
+        rangeRowFrom: "1",
+        rangeRowTo: "4",
+        rangePlantFrom: "1",
+        rangePlantTo: "20",
+      }),
+    );
+    expect(r).toEqual({});
+    expect(deps.updateLocationAttributes).toHaveBeenCalledWith("actor", {
+      locationId: "micro-1",
+      rangeRowFrom: 1,
+      rangeRowTo: 4,
+      rangePlantFrom: 1,
+      rangePlantTo: 20,
+    });
+  });
+
+  /**
+   * **Vaciar los cuatro quita el rango; no lo pone en cero.** `Number("")` es 0, y una
+   * microparcela de la hilera 0 a la 0 no existe (ADR-080). Y los cuatro van explícitos,
+   * no ausentes: el servicio trata `undefined` como «no tocar», así que mandar nada no
+   * borraría nada.
+   */
+  it("vaciar los cuatro los manda como null, no como cero", async () => {
+    await guardarRangoDeMicroparcelaAction(
+      {},
+      form({
+        locationId: "micro-1",
+        rangeRowFrom: "",
+        rangeRowTo: "",
+        rangePlantFrom: "",
+        rangePlantTo: "",
+      }),
+    );
+    expect(deps.updateLocationAttributes).toHaveBeenCalledWith("actor", {
+      locationId: "micro-1",
+      rangeRowFrom: null,
+      rangeRowTo: null,
+      rangePlantFrom: null,
+      rangePlantTo: null,
+    });
+  });
+
+  /**
+   * **No manda NINGÚN campo de la rejilla**, y eso es la mitad que protege el dato: el
+   * servicio trata `undefined` como «no tocar», así que guardar el rango de una
+   * microparcela no puede borrar la numeración de su madre.
+   */
+  it("no manda ningún campo de la rejilla", async () => {
+    await guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1", rangeRowFrom: "1" }));
+    const pasado = deps.updateLocationAttributes.mock.calls[0]?.[1] ?? {};
+    for (const campo of ["gridOrigin", "rowCount", "plantsPerRow", "rowSpacingMeters"]) {
+      expect(pasado, `${campo} no debe viajar en esta acción`).not.toHaveProperty(campo);
+    }
+  });
+
+  it("un rechazo del servicio vuelve como error traducido", async () => {
+    deps.updateLocationAttributes.mockRejectedValue(new deps.RejillaInvalida("rejilla_rango_fuera_de_rejilla"));
+    const r = await guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1" }));
+    expect(r.error).toContain("error_rejilla_rango_fuera_de_rejilla");
+  });
+
+  it("sin sesión redirige a /login y no llama al servicio", async () => {
+    deps.user.mockResolvedValue(null);
+    await expect(
+      guardarRangoDeMicroparcelaAction({}, form({ locationId: "micro-1" })),
+    ).rejects.toThrow("redirect:/login");
+    expect(deps.updateLocationAttributes).not.toHaveBeenCalled();
   });
 });

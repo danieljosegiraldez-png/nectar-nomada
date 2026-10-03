@@ -22,9 +22,11 @@
  * «registrado como cero» (ADR-080), y una densidad es una división: un cero en el
  * denominador no es una densidad infinita, es que falta el dato.
  *
- * **No sustituye a `computePlotDensity` todavía.** Entra al lado; sus dos consumidores
- * de producción —`plantingCohorts.ts` y `pendienteDeLaParcela.ts`— se migran uno a uno
- * con su prueba, y la vieja se retira cuando no quede ninguno.
+ * **Sustituye a `computePlotDensity`, retirada el 2026-10-03.** Aquélla dividía las
+ * plantas contadas por `areaHectares`, y el plan de esta tarea decía que tenía DOS
+ * consumidores de producción. Medido al llegar: tenía **uno**, `getPlotDetail`. El
+ * «segundo» era una mención en un comentario de `pendienteDeLaParcela.ts`, no una
+ * llamada — leer las líneas, no contarlas, fue lo que lo dijo.
  */
 export interface Marco {
   readonly plantSpacingMeters: number | null;
@@ -106,4 +108,43 @@ export function densidadDelLote(entrada: {
     real: entrada.plantasContadas / areaHectareas,
     plantasContadas: entrada.plantasContadas,
   };
+}
+
+/**
+ * La frase que pinta la ficha para cada estado de la densidad, y los números que lleva.
+ *
+ * **Devuelve la clave y los parámetros; no renderiza nada.** Es el mismo patrón que
+ * `claveDeLaComparacion`, y existe por el mismo motivo: así se puede probar sin montar un
+ * navegador — este repositorio no tiene infraestructura para renderizar componentes y sus
+ * guardias de pantalla leen la fuente.
+ *
+ * **Cada estado pasa sólo los números que su frase puede afirmar.** `conteo_incompleto`
+ * no lleva `real`, porque una densidad calculada sobre un conteo incompleto es un número
+ * que parece cierto; si llegara a la plantilla, un descuido de redacción lo pintaría.
+ */
+export function claveDeLaDensidad(d: DensidadDelLote): {
+  clave: "densidadSinMarco" | "densidadSinForma" | "densidadConteoIncompleto" | "densidadComparada";
+  params: Record<string, number>;
+} {
+  switch (d.status) {
+    case "sin_marco":
+      // Sin los dos metros no hay ninguna cifra, ni la diseñada.
+      return { clave: "densidadSinMarco", params: {} };
+    case "sin_forma":
+      // El marco da la diseñada sin necesitar la forma; la real y el área sí la
+      // necesitan, y pasarlas aquí sería inventarlas.
+      return { clave: "densidadSinForma", params: { disenada: d.disenada } };
+    case "conteo_incompleto":
+      return {
+        clave: "densidadConteoIncompleto",
+        params: { disenada: d.disenada, sinContar: d.cohortesSinConteo },
+      };
+    case "ok":
+      return {
+        clave: "densidadComparada",
+        // **Se redondea, no se trunca.** Un truncado sesga la cifra siempre hacia abajo,
+        // y 1.894,6 plantas/ha no es una medición: es una división.
+        params: { disenada: d.disenada, real: Math.round(d.real), hectareas: d.areaHectareas },
+      };
+  }
 }

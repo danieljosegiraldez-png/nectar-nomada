@@ -17,7 +17,6 @@ import type { IntervencionParaAviso } from "../../lib/traceability/pendienteDeLa
 const base = (over: Partial<EntradaDePendiente> = {}): EntradaDePendiente => ({
   hoy: "2026-09-16",
   zona: "UTC",
-  areaHectares: 1,
   cohortesActivas: [{ id: "c1", plantCount: 4000 }],
   // Tipo explícito: sin él TypeScript ensancha "en_produccion" a string.
   estados: new Map<string, EstadoDeProduccion>([
@@ -112,15 +111,18 @@ describe("pendienteDeLaParcela", () => {
     expect(r.tocaHacer).toEqual([{ tipo: "jornada_sin_cerrar", fieldSessionId: "j1", startedAt: new Date("2026-09-10T12:00:00Z") }]);
   });
 
-  // Revisión final, I2: esta prueba construía `density: sin_area` junto a una
-  // siembra sin conteo, combinación que `computePlotDensity` nunca produce
-  // (devuelve `conteo_incompleto` antes de mirar el área). El aviso sale ahora
-  // del área de la ubicación, y el caso es el que sí ocurre: sin área Y con una
-  // siembra sin conteo. Tienen que salir los dos avisos.
-  it("falta un dato: sin área, área no válida, siembras sin conteo y sin marcar", () => {
+  /**
+   * **Ya no hay aviso de área, y no es un olvido** (decisión de Daniel, 2026-10-03).
+   * Su principio es que el espacio de un lote «no depende de definir el metraje,
+   * solamente cuántas plantas y espacio aprox de densidad», así que `sin_area` y
+   * `area_no_valida` le pedían un dato que el modelo ya no necesita.
+   *
+   * Lo que queda es lo que sí falta de verdad: siembras sin conteo y sin marcar — las
+   * dos sobre PLANTAS, que es lo que él dice que describe el espacio.
+   */
+  it("falta un dato: siembras sin conteo y sin marcar", () => {
     const r = pendienteDeLaParcela(
       base({
-        areaHectares: null,
         cohortesActivas: [
           { id: "c1", plantCount: null },
           { id: "c2", plantCount: 300 },
@@ -132,13 +134,18 @@ describe("pendienteDeLaParcela", () => {
       }),
     );
     expect(r.faltaUnDato).toEqual([
-      { tipo: "sin_area" },
       { tipo: "siembras_sin_conteo", n: 1 },
       { tipo: "siembras_sin_marcar", n: 2 },
     ]);
-    expect(pendienteDeLaParcela(base({ areaHectares: 0 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
-    expect(pendienteDeLaParcela(base({ areaHectares: -2 })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
-    expect(pendienteDeLaParcela(base({ areaHectares: Number.NaN })).faltaUnDato).toEqual([{ tipo: "area_no_valida" }]);
+  });
+
+  /**
+   * **El control de que el aviso de área se fue de verdad.** Un lote con TODO en orden
+   * salvo el metraje no produce ningún pendiente: antes producía uno y mandaba al
+   * operario a medir un polígono.
+   */
+  it("un lote sin metraje y con todo lo demás en orden no tiene ningún pendiente", () => {
+    expect(pendienteDeLaParcela(base({})).faltaUnDato).toEqual([]);
   });
 
   it("reentrada y carencia vigentes: dos avisos en «toca hacer»", () => {
@@ -182,8 +189,6 @@ describe("enlaceDelAviso", () => {
     expect(enlaceDelAviso({ tipo: "jornada_sin_cerrar", fieldSessionId: "j1", startedAt: new Date() }, "L")).toBe("/field-sessions/j1");
     expect(enlaceDelAviso({ tipo: "muestreo_vencido", muestra: "foliar", ultimo: null }, "L")).toBe("/plots/L?pestana=muestras");
     expect(enlaceDelAviso({ tipo: "muestras_sin_resultado", suelo: 1, foliar: 0 }, "L")).toBe("/plots/L?pestana=muestras");
-    expect(enlaceDelAviso({ tipo: "sin_area" }, "L")).toBe("/plots/L/ajustes#areaHectares");
-    expect(enlaceDelAviso({ tipo: "area_no_valida" }, "L")).toBe("/plots/L/ajustes#areaHectares");
     expect(enlaceDelAviso({ tipo: "siembras_sin_conteo", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
     expect(enlaceDelAviso({ tipo: "siembras_sin_marcar", n: 1 }, "L")).toBe("/plots/L/ajustes#siembras");
     expect(

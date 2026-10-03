@@ -6,7 +6,7 @@ import { compararConLaRejilla, type RejillaDeclarada } from "../../lib/traceabil
  *
  * Diseño §6 de `docs/superpowers/specs/2026-10-01-rejilla-y-bloques-design.md`.
  * Hermética: es una función pura y no toca la base, por lo mismo que
- * `computePlotDensity` a su lado — un cociente guardado de dos entradas que se
+ * la densidad a su lado — un cociente guardado de dos entradas que se
  * mueven se queda viejo en silencio cada vez que alguien corrige una de las dos.
  *
  * **Devuelve un MOTIVO y no un número cuando no puede comparar**, porque las
@@ -27,7 +27,7 @@ const LLENO = [{ rowFrom: 1, rowTo: 10, plantFrom: 1, plantTo: 20 }] as const;
 
 const REJILLA: RejillaDeclarada = { rowCount: 10, plantsPerRow: 20, rango: null, propia: true, forma: LLENO };
 
-/** Lo que `computePlotDensity` recibe: sólo el conteo y el estado. */
+/** Lo que la comparación recibe de cada siembra: sólo el conteo y el estado. */
 const siembra = (plantCount: number | null, status = "active" as const) => ({ plantCount, status });
 
 describe("compararConLaRejilla", () => {
