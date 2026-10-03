@@ -1,10 +1,16 @@
-# Protocolo de campo · los nueve ítems que faltan — Plan (Parte A)
+# Protocolo de campo · los diez ítems que faltan — Plan (Parte A)
+
+> **Son DIEZ, y el nombre del archivo dice nueve.** Contados al empezar a ejecutarlo: la Tarea 2
+> añade 2 (`honey_next_to_brood`, `pollen_next_to_brood`), la Tarea 3 añade 1
+> (`drone_brood_present`) y la Tarea 4 añade 7 (las siete columnas de §2.4). La actividad
+> `inspection` pasa de **17** a **27** ítems y el protocolo de **44** a **54**. El nombre del
+> archivo se queda como está porque el PR que lo trae ya lo cita; lo que manda es esta línea.
 
 > **Para quien lo ejecute:** SUB-SKILL REQUERIDA: `superpowers:subagent-driven-development`
 > (recomendada) o `superpowers:executing-plans`, tarea por tarea. Los pasos usan casillas
 > (`- [ ]`) para seguirlos.
 
-**Objetivo:** que `protocolos/apiario-campo-v2.json` pregunte los nueve hechos del Anexo B que
+**Objetivo:** que `protocolos/apiario-campo-v2.json` pregunte los diez hechos del Anexo B que
 hoy no pregunta, cada uno apuntando a la columna que ya existe, y que un guardia impida que el
 JSON y el mapa vuelvan a decir cosas distintas.
 
@@ -443,10 +449,11 @@ node -e 'const j=require("./protocolos/apiario-campo-v2.json");
 console.log(j.activities.map(a=>`${a.activityType}  ${a.label}  (${a.items.length})`).join("\n"));'
 ```
 
-Van en la actividad de **inspección de colonia**, que es la que ya lleva los demás campos del
-§2.2. **Si su `activityType` no deja claro cuál es, parar y preguntar** — meterlos en la
-actividad equivocada cambia cuándo se le preguntan a alguien en el campo, y eso es una decisión
-del dueño, no del implementador.
+**Medido al ejecutar el plan, así que esto ya no hay que averiguarlo:** la actividad es
+`activityType: "inspection"`, «Inspección de colonia», y tenía 17 ítems. Y su orden **ya sigue el
+del Anexo**: §2.3 irregularidades es `irregularities` (15) y §2.5 varroa son los tres
+`varroa_*` (16-18), así que los siete de §2.4 van **entre esos dos**, que es su sitio en el
+Anexo. Nada que preguntar.
 
 - [ ] **Paso 4: correr los guardias y leer las dos líneas**
 
