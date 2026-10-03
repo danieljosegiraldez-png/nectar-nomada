@@ -160,6 +160,16 @@ describe("declararTrozoDeForma y quitarTrozoDeForma", () => {
       await prisma.specimen.deleteMany({ where: { id: { in: plantados } } });
       plantados.length = 0;
     }
+    // **Y los AuditEvent de la forma**, porque la prueba que los CUENTA depende de
+    // empezar en cero. Sin esto, una prueba anterior que declare un trozo le deja uno
+    // puesto y la cuenta sale 2 — me pasó al añadir la de la microparcela, cuyo evento
+    // cae sobre la PARCELA (la raíz) y no sobre la microparcela que lo declaró.
+    await prisma.auditEvent.deleteMany({
+      where: {
+        entityId: parcelaId,
+        operation: { in: ["location.declare_shape_range", "location.remove_shape_range"] },
+      },
+    });
   });
 
   const plantar = async (gridRow: number, gridPosition: number) => {
@@ -176,6 +186,43 @@ describe("declararTrozoDeForma y quitarTrozoDeForma", () => {
     plantados.push(s.id);
     return s;
   };
+
+  /**
+   * **El trozo se cuelga de la RAÍZ de la numeración, no del sitio que lo declara.**
+   *
+   * D3: la numeración es una sola, la de la parcela, así que declararlo desde una
+   * microparcela tiene que aterrizar en su madre. Si cayera en la microparcela, la forma
+   * se partiría en dos sitios y `getPlotDetail` leería la de quien tiene rejilla propia —
+   * o sea ninguna.
+   *
+   * **Esta prueba existe porque una mutación sobrevivió.** El flip cambió `locationId:
+   * raiz` por `locationId: input.locationId` y **ninguna de las quince pruebas cayó**: la
+   * decisión estaba en el mensaje del commit y en un comentario, sin guardia.
+   */
+  it("declarado desde una microparcela, el trozo aterriza en la PARCELA", async () => {
+    const micro = await prisma.location.create({
+      data: {
+        name: `TEST Micro de la forma ${process.pid}`,
+        locationType: "plot",
+        parentLocationId: parcelaId,
+        organizationId: organizacionId,
+        status: "approved",
+      },
+    });
+    const t = await declararTrozoDeForma(actor, {
+      locationId: micro.id,
+      rowFrom: 1,
+      rowTo: 3,
+      plantFrom: 1,
+      plantTo: 5,
+    });
+    expect(t.locationId, "la forma es de quien pone la numeración").toBe(parcelaId);
+    expect(t.locationId).not.toBe(micro.id);
+    await prisma.plotShapeRange.deleteMany({ where: { id: t.id } });
+    // El `AuditEvent` de esto cae sobre la PARCELA, no sobre la microparcela: lo limpia
+    // el `afterEach` de este describe, que es donde tiene que estar.
+    await prisma.location.deleteMany({ where: { id: micro.id } });
+  });
 
   it("declara un trozo y deja su AuditEvent", async () => {
     const t = await declararTrozoDeForma(actor, {
