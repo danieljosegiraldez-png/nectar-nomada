@@ -531,6 +531,12 @@ hay nada, el cambio es sólo documental y el commit lo dice.
 
 - [ ] **Paso 3: la compuerta completa, porque este commit cierra la Parte A**
 
+**ESTA COMPUERTA LE FALTABA EL CARRIL CON BASE, y por eso la Parte A se dio por verde estando
+roja.** Corregido el 2026-10-03, al ejecutarla: `tests/apiary/protocoloDeCampo.test.ts` va en el
+carril **con base** y lee el JSON que estas tareas cambian — cuatro de sus filas patrón son cuentas
+a mano (ítems, ítems que declaran columna, variables guardadas, etapas). Un cambio de contenido del
+protocolo **toca ese carril aunque no toque ninguna columna**, y el hermético no lo ve.
+
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 export NODE_OPTIONS="--max-old-space-size=6144"
@@ -541,6 +547,18 @@ echo "CODIGO DEL CARRIL HERMETICO: $?"
 grep -E '^ *(Test Files|Tests) ' /tmp/ci.txt
 npm run build > /tmp/build.txt 2>&1
 echo "CODIGO DEL BUILD: $?"
+```
+
+Y el carril con base, sobre una base **vacía** cuyo nombre case `^(nectar_test|nectar_ci|nn_flip_)`,
+creada con `TEMPLATE template0 ENCODING UTF8 LOCALE_PROVIDER builtin BUILTIN_LOCALE 'C.UTF-8'` y
+comprobando que **pliega** antes de fiarse — `SELECT lower('FERRETERÍA') = 'ferretería'` tiene que
+dar `t`. **La compartida del 55433 no se resetea ni se migra.**
+
+```bash
+TEST_DATABASE_URL="postgresql://postgres@127.0.0.1:55433/nectar_ci_010" bash scripts/ci-con-base.sh > /tmp/base.txt 2>&1
+echo "CODIGO DEL CARRIL CON BASE: $?"
+grep -E '^ *(Test Files|Tests) ' /tmp/base.txt
+grep -iE 'correrá .* archivos' /tmp/base.txt
 ```
 
 **Cada código de salida en su propia línea impresa**, y se lee de ahí — no de la notificación
