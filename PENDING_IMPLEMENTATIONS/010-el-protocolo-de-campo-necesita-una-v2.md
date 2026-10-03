@@ -1,10 +1,18 @@
 # 010 · El protocolo de campo necesita una v2, y no se puede editar la v1
 
-**Estado: la PARTE A está hecha (2026-10-03); queda la PARTE B.** Lo hecho: los diez ítems que
-faltaban —las reservas partidas en nivel y sitio, la cría de zángano, y los siete de §2.4— más el
-mapa, los guardias y la cabecera. **Lo que queda es el requisito 4**: las tres columnas a `enum`
-(`queenSighted` de `Boolean?`, `broodPatternNote` y `temperamentNote` de `String?`), con su
-migración. Sus dos planes están en `docs/superpowers/plans/2026-10-03-*`.
+**Estado: HECHA (2026-10-03), las dos partes.**
+
+- **Parte A** — los diez ítems que faltaban: las reservas partidas en nivel y sitio (ADR-117), la
+  cría de zángano, y los siete de §2.4, que apuntan a `Hive` porque el Anexo dice que «se guarda en
+  la colmena». Más el mapa, los guardias y la cabecera, que decía que D2 no estaba tomada.
+- **Parte B** — el requisito 4: `queenSighted` de `Boolean?` y `broodPatternNote`/`temperamentNote`
+  de `String?` a los tres `enum` que el protocolo ya declaraba, con su migración a mano y los dos
+  renombrados. **«No se buscó» ya se puede decir**, y no cae en el mismo `null` que «no se
+  preguntó».
+
+Sus dos planes están en `docs/superpowers/plans/2026-10-03-*`, y lo que cada parte midió va en su
+PR. **Lo que esta ficha enseñó, aparte de lo suyo:** tres de sus hechos habían derivado —ver abajo—
+y uno me hizo concluir «resuelta» por leer un nombre de archivo como un entregable.
 
 No es una deuda técnica: es una **divergencia medida**
 entre dos documentos del dueño y el esquema que acaba de construirse.
