@@ -77,7 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   deps.user.mockResolvedValue({ userAccountId: "actor" });
   deps.updateLocationAttributes.mockResolvedValue({ id: "parcela-1" });
-  deps.anadirRangoAlBloque.mockResolvedValue({ rango: { id: "r1" }, solapesAvisados: [] });
+  deps.anadirRangoAlBloque.mockResolvedValue({ rango: { id: "r1" }, solapesAvisados: [], celdasSinPlantar: 0 });
   deps.quitarRangoDelBloque.mockResolvedValue(undefined);
 });
 
@@ -181,6 +181,53 @@ describe("anadirRangoAlBloqueAction", () => {
     expect(r.avisos?.[0]).toContain("rejillaSolapeAviso");
     expect(r.avisos?.[0], "el nombre del bloque tiene que llegar").toContain("Trampas Alto");
     expect(r.avisos?.[0], "y las celdas también").toContain("50");
+  });
+
+  /**
+   * **D11: marcar sobre celdas que la forma dice que NO están plantadas se GUARDA y
+   * se avisa.** El límite duro sigue siendo el tablero; la forma sirve para contar y
+   * para avisar. Una trampa en el claro de una roca es su sitio natural, y declarar
+   * ese claro como plantado para poder ponerla sería mentir.
+   */
+  it("un rango sobre celdas sin plantar se guarda y vuelve en avisos", async () => {
+    deps.anadirRangoAlBloque.mockResolvedValue({
+      rango: { id: "r1" },
+      solapesAvisados: [],
+      celdasSinPlantar: 12,
+    });
+    const r = await anadirRangoAlBloqueAction({}, form({ locationId: "p1", plotBlockId: "b1" }));
+    expect(r.error, "el rango SE GUARDÓ: esto no es un error").toBeUndefined();
+    expect(r.avisos).toHaveLength(1);
+    expect(r.avisos?.[0]).toContain("rejillaFueraDeLaFormaAviso");
+    expect(r.avisos?.[0], "cuántas celdas tiene que llegar").toContain("12");
+  });
+
+  /**
+   * **El caso negativo, sin el cual un aviso que se emite SIEMPRE pasaría por bueno.**
+   * Es la misma exigencia que el control positivo: una comprobación que no puede salir
+   * del otro modo no mide.
+   */
+  it("un rango enteramente dentro de la forma NO avisa de celdas sin plantar", async () => {
+    deps.anadirRangoAlBloque.mockResolvedValue({
+      rango: { id: "r1" },
+      solapesAvisados: [],
+      celdasSinPlantar: 0,
+    });
+    const r = await anadirRangoAlBloqueAction({}, form({ locationId: "p1", plotBlockId: "b1" }));
+    expect(r).toEqual({});
+  });
+
+  /** Los dos avisos a la vez: solape de D7 y celdas sin plantar de D11, sin pisarse. */
+  it("un solape y celdas sin plantar vuelven los DOS avisos", async () => {
+    deps.anadirRangoAlBloque.mockResolvedValue({
+      rango: { id: "r1" },
+      solapesAvisados: [{ bloque: "Ensayo B", celdas: 6 }],
+      celdasSinPlantar: 12,
+    });
+    const r = await anadirRangoAlBloqueAction({}, form({ locationId: "p1", plotBlockId: "b1" }));
+    expect(r.avisos).toHaveLength(2);
+    expect(r.avisos?.join(" ")).toContain("rejillaSolapeAviso");
+    expect(r.avisos?.join(" ")).toContain("rejillaFueraDeLaFormaAviso");
   });
 
   /** Y el control de que no inventa avisos: sin solape, no hay ninguno. */

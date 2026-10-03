@@ -271,6 +271,7 @@ model UserAccount {
   specimenObservationsCreated       SpecimenObservation[]        @relation("SpecimenObservationCreatedBy")
   plotBlocksCreados                 PlotBlock[]                  @relation("PlotBlockCreatedBy")
   plotBlockRangesCreados PlotBlockRange[] @relation("PlotBlockRangeCreatedBy")
+  plotShapeRangesCreados PlotShapeRange[] @relation("PlotShapeRangeCreatedBy")
   trapRulesCreadas                  TrapRule[]                   @relation("TrapRuleCreatedBy")
   externalCoffeeOriginsCreated      ExternalCoffeeOrigin[]       @relation("ExternalCoffeeOriginCreatedBy")
 
@@ -995,6 +996,8 @@ model Location {
   specimens                   Specimen[]
   specimensDeLaFinca          Specimen[]                 @relation("SpecimenFarm")
   plotBlocks                  PlotBlock[]
+  /// La forma REAL de lo plantado, como union de rectangulos (D9, 2026-10-02).
+  formaDeclarada              PlotShapeRange[]
   trapRule                    TrapRule?                  @relation("TrapRuleFarm")
   plantingEvents              PlantingEvent[]
   plantingCohorts             PlantingCohort[]
@@ -7181,6 +7184,40 @@ model PlotBlockRange {
 
   @@index([plotBlockId])
   @@map("plot_block_range")
+  @@schema("traceability")
+}
+
+/// La forma REAL de lo plantado en una parcela, como union de rectangulos.
+///
+/// **Cero filas significa forma SIN DECLARAR, que no es un lote vacio** (ADR-080):
+/// sin forma, la aplicacion no afirma capacidad y dice solo el tamaño del tablero.
+/// Varias filas: su union es lo plantado, y asi se expresan hileras de distinto
+/// largo, hileras desplazadas y un hueco en medio por una roca (D9).
+///
+/// **Cuelga de la parcela que pone la numeracion**, nunca de una microparcela: D3
+/// dice que la numeracion es una sola, la de la parcela. Lo impone el disparador
+/// `plot_shape_range_exigir_forma_en_la_rejilla`, que resuelve la raiz con
+/// `core.raiz_de_la_numeracion`.
+///
+/// Misma estructura que `PlotBlockRange` a proposito: dos conductas parecidas no
+/// deben contarse de dos maneras, y asi la cuenta de celdas reusa la misma funcion
+/// (`celdasEnComunConVarios`).
+model PlotShapeRange {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  rowFrom   Int @map("row_from")
+  rowTo     Int @map("row_to")
+  plantFrom Int @map("plant_from")
+  plantTo   Int @map("plant_to")
+
+  createdAt DateTime    @default(now()) @map("created_at")
+  createdBy String      @map("created_by") @db.Uuid
+  creator   UserAccount @relation("PlotShapeRangeCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([locationId])
+  @@map("plot_shape_range")
   @@schema("traceability")
 }
 

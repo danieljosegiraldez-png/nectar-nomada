@@ -1428,6 +1428,12 @@
       "verificado": "2026-10-01"
     },
     {
+      "archivo": "lib/traceability/plotBlocks.ts",
+      "operacion": "rejillaDelBloque",
+      "razon": "Resuelve la parcela que pone la numeracion de un sitio y su rejilla: devuelve el propio sitio si tiene `rowCount`, y si no su madre (D3, una sola numeracion). El nombre es mas estrecho que la funcion — toma un `locationId`, no un bloque — y se exporto el 2026-10-02 para que `createSpecimen` no escribiera una segunda copia de la regla; en la base vive en una sola funcion, `core.raiz_de_la_numeracion`, por lo mismo. No recibe principal: sus tres llamadores autorizan la Location de origen antes de invocarla. `setPlotBlockType` y `anadirRangoAlBloque` (plotBlocks.ts) llaman a `requireLocationAttributeAccess` sobre `existing.locationId` y `bloque.locationId` respectivamente; `createSpecimen` (specimens.ts) llama a `requireSpecimenAccess(manage)` sobre `input.locationId`, que es el mismo sitio del que se resuelve la rejilla. Comprobado leyendo los tres sitios de llamada, no deducido.",
+      "verificado": "2026-10-02"
+    },
+    {
       "archivo": "lib/traceability/procesoDelLinaje.ts",
       "operacion": "procesoQueCubre",
       "razon": "Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1): sube por las ramas hasta el primer lote con proceso y devuelve el vigente, la cadena y, si las ramas no coinciden, la composición de la mezcla. No recibe principal: quien la llame debe haber autorizado el lote de partida antes. Devuelve ids y estado de los procesos, no filas de lote.",

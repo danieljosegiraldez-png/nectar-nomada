@@ -1868,7 +1868,9 @@
     "rejillaAnadirRangoBoton": "Añadir el trozo",
     "rejillaQuitarRangoBoton": "Quitar",
     "rejillaSolapeAviso": "Guardado. Comparte {celdas} celdas con «{bloque}».",
+    "rejillaFueraDeLaFormaAviso": "Guardado. Este trozo incluye {celdas} celdas que la forma del lote dice que no están plantadas.",
     "rejillaSinDeclarar": "Esta parcela aún no está numerada.",
+    "rejillaSinForma": "Tablero de {filas} × {columnas}. Declara la forma del lote —qué celdas están plantadas— para poder comparar con lo sembrado.",
     "rejillaSinSiembras": "Caben {capacidad} plantas. Todavía no hay ninguna siembra registrada.",
     "rejillaConteoIncompleto": "Caben {capacidad} y hay {contadas} contadas, pero {sinContar} siembra(s) están sin contar: no se puede comparar todavía.",
     "rejillaComparada": "Caben {capacidad} y hay {contadas} contadas: una diferencia de {diferencia}.",
@@ -1879,7 +1881,8 @@
     "error_bloque_no_encontrado": "Ese bloque ya no está. Recarga la página para ver cómo está ahora.",
     "error_bloque_sin_sitio": "Ese bloque no tiene una parcela asociada, así que no se le puede asignar un trozo de la rejilla.",
     "error_rejilla_fuera_de_la_microparcela": "Ese trozo se sale de la microparcela «{value}». Un bloque no puede ocupar suelo que no es de su microparcela.",
-    "error_rejilla_trampas_se_solapan_al_marcar": "No se puede marcar como trampa: sus celdas se solapan con la trampa «{value}». Mueve uno de los dos primero."
+    "error_rejilla_trampas_se_solapan_al_marcar": "No se puede marcar como trampa: sus celdas se solapan con la trampa «{value}». Mueve uno de los dos primero.",
+    "error_celda_fuera_de_la_rejilla": "Esa celda no existe en la rejilla de la parcela. Revisa la hilera y la posición, o la rejilla."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

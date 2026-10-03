@@ -1868,7 +1868,9 @@
     "rejillaAnadirRangoBoton": "Add the part",
     "rejillaQuitarRangoBoton": "Remove",
     "rejillaSolapeAviso": "Saved. It shares {celdas} cells with “{bloque}”.",
+    "rejillaFueraDeLaFormaAviso": "Saved. This piece includes {celdas} cells that the plot's shape says are not planted.",
     "rejillaSinDeclarar": "This plot isn't numbered yet.",
+    "rejillaSinForma": "Grid of {filas} × {columnas}. Declare the plot's shape — which cells are planted — to be able to compare it with what is sown.",
     "rejillaSinSiembras": "It fits {capacidad} plants. No planting has been recorded yet.",
     "rejillaConteoIncompleto": "It fits {capacidad} and {contadas} are counted, but {sinContar} planting(s) are uncounted: it can't be compared yet.",
     "rejillaComparada": "It fits {capacidad} and {contadas} are counted: a difference of {diferencia}.",
@@ -1879,7 +1881,8 @@
     "error_bloque_no_encontrado": "That block is gone. Reload the page to see the current state.",
     "error_bloque_sin_sitio": "That block has no plot attached, so it can't be given a part of the grid.",
     "error_rejilla_fuera_de_la_microparcela": "That part falls outside the microplot “{value}”. A block can't cover ground that isn't its microplot's.",
-    "error_rejilla_trampas_se_solapan_al_marcar": "It can't be marked as a trap: its cells overlap the trap “{value}”. Move one of the two first."
+    "error_rejilla_trampas_se_solapan_al_marcar": "It can't be marked as a trap: its cells overlap the trap “{value}”. Move one of the two first.",
+    "error_celda_fuera_de_la_rejilla": "That cell does not exist in the plot's grid. Check the row and position, or the grid."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

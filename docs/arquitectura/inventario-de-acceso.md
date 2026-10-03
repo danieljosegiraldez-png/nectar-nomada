@@ -13,9 +13,9 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**615 operaciones** que tocan la base, en **167 archivos** — medido el 2026-10-03 con
+**616 operaciones** que tocan la base, en **167 archivos** — medido el 2026-10-03 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
-`origin/main` (`203d9236`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
+`origin/main` (`1d24c431`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
@@ -27,7 +27,7 @@ rama de las lecturas de la clasificación de verde por malla):
 |---:|---|---|
 | **465** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **93** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **94** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
@@ -48,6 +48,10 @@ rama de las lecturas de la clasificación de verde por malla):
 > inventario, y `procesoParaUnaCorrida` entra en «depende del llamador» con su fila en el allowlist. Los cambios de las
 > decisiones de Daniel del 2026-10-02 —`exigeSinOtroProcesoAbierto` mira la bodega de la descendencia; `loteDividido` recibe
 > la fecha del registro— cambian el cuerpo de operaciones que ya estaban, no su fila.
+
+> **Segunda unión con `origin/main` (2026-10-03, `1d24c431`): 615→616 y «depende del llamador» 93→94.** Medido con
+> `--json` sobre los dos árboles: la única operación nueva es de `main`, `rejillaDelBloque` de
+> `lib/traceability/plotBlocks.ts`, que no recibe principal y está en el allowlist.
 
 > **Al juntar `origin/main` en la rama de la Parte 1 (2026-10-03): 609→614, 166→167 archivos, «guardia directo»
 > 461→464 y «depende del llamador» 91→93.** Medido con `--json` sobre los dos árboles, no sumado a mano: las cinco son de
@@ -1002,6 +1006,20 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `tienePreparacionTostada` (`lib/sensory/sessions.ts`), la regla del tueste servido extraída para
 > que la usen los DOS escritores de sesiones de cata. Sólo leen; quien llama ya autorizó la muestra
 > y exige `sensory:manage_session`. Están en el allowlist con su razón.
+
+> **Y (601→602, «depende del llamador» 85→86), 2026-10-02:** `rejillaDelBloque`
+> (`lib/traceability/plotBlocks.ts`) se **exporta**, y por eso entra al inventario: ya existía,
+> privada. Resuelve la parcela que pone la numeración de un sitio y su rejilla (D3), y **su nombre
+> es más estrecho que la función** — toma un `locationId`, no un bloque—. Se exportó para que
+> `createSpecimen` no escribiera una segunda copia de la regla: en la base vive en una sola
+> función, `core.raiz_de_la_numeracion`, por lo mismo. `specimens.ts` la importa con alias
+> `rejillaDelSitio`, que es como se lee allí. Sus tres llamadores autorizan antes —
+> `requireLocationAttributeAccess` los dos de `plotBlocks.ts`, `requireSpecimenAccess(manage)` el
+> de `specimens.ts`— y eso se comprobó **leyendo los tres sitios**, no deduciéndolo.
+>
+> **Lo cazó el guardia, no yo.** Al exportarla, `acceso-a-datos` falló con «Operación nueva sin
+> principal» nombrándola, y `cifras-del-inventario` con las dos filas descuadradas. Exportar una
+> función privada no se siente como añadir acceso a datos, y para este inventario lo es.
 
 - **`lib/auth/config.ts authConfig()`** — es la configuración de Auth.js: el
   propio flujo de autenticación, previo a que exista sesión.
