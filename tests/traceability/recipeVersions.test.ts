@@ -289,12 +289,16 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
   });
 
   it("si recibe fases, reemplazan a las anteriores; un arreglo vacío significa «sin fases»", async () => {
+    // Con el rango de humedad, y distinto del de la v1 (11–12) y no entero: la rama explícita de
+    // `fasesDeLaVersion` tiene que escribir esos DOS campos, y un cruce (mínimo ← máximo) o un `null`
+    // sólo se ve si cada extremo tiene un valor propio. Sin rango, la prueba esperaba `null` y no
+    // distinguía un `null` escrito de uno que se perdió.
     const v3 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.2), null, null, [
-      { phase: "drying", expectedHours: 240, turnEveryHours: 2 },
+      { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: 10.5, targetMoistureMaxPct: 11.75 },
     ]);
     created.versionIds.push(v3.id);
     expect(comoSeLee(v3.fases)).toEqual([
-      { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: null, targetMoistureMaxPct: null },
+      { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: 10.5, targetMoistureMaxPct: 11.75 },
     ]);
 
     const v4 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.3), null, null, []);
