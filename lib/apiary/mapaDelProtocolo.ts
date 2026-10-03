@@ -85,7 +85,16 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   queen_cells: { clase: "campo", modelo: "Inspection", campo: "queenCellKind" },
   queen_cells_count: { clase: "campo", modelo: "Inspection", campo: "queenCellCount" },
   honey_stores: { clase: "campo", modelo: "Inspection", campo: "honeyStoresLevel" },
+  // **El sitio de «junto a la cría», que no es un nivel más** (ADR-117,
+  // `PENDING_IMPLEMENTATIONS/010`). El protocolo lo ofrecía como cuarta opción de la escala, y en
+  // la misma lista impide decir «alta Y junto a la cría»; ahora es su propia pregunta y su propia
+  // columna, que ya existían y no tenían nada que las escribiera.
+  honey_next_to_brood: { clase: "campo", modelo: "Inspection", campo: "honeyNextToBrood" },
   pollen_stores: { clase: "campo", modelo: "Inspection", campo: "pollenStoresLevel" },
+  pollen_next_to_brood: { clase: "campo", modelo: "Inspection", campo: "pollenNextToBrood" },
+  // Anexo B §2.2, con su motivo escrito: «señal de obrera ponedora si aparece sin reina». El JSON
+  // tenía los otros seis campos de esa sección y no ésta, y la columna llevaba ahí sin escritor.
+  drone_brood_present: { clase: "campo", modelo: "Inspection", campo: "droneBroodPresent" },
   temperament: { clase: "campo", modelo: "Inspection", campo: "temperamentNote" },
   irregularities: { clase: "tabla", modelo: "InspectionIrregularity", nota: "Una fila por irregularidad observada: son varias a la vez y por eso no es una columna." },
   varroa_method: { clase: "campo", modelo: "VarroaCount", campo: "method" },

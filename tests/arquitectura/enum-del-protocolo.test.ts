@@ -82,28 +82,18 @@ interface ParPermitido {
   enEsquema: readonly string[];
   razon: string;
 }
-const DIVERGENCIAS_HEREDADAS: ReadonlyMap<string, ParPermitido> = new Map<string, ParPermitido>([
-  [
-    "honey_stores",
-    {
-      enProtocolo: ["alta", "baja", "junto_a_cria", "media"],
-      enEsquema: ["alta", "baja", "media"],
-      razon:
-        "El protocolo declara `junto_a_cria` como cuarto nivel; el esquema lo modela APARTE, " +
-        "como `honeyNextToBrood` booleano. Es deliberado y mejor: «junto a cría» no es una " +
-        "cantidad, es una posición, y meterlo en la misma escala obliga a elegir entre decir " +
-        "cuánta hay y decir dónde está.",
-    },
-  ],
-  [
-    "pollen_stores",
-    {
-      enProtocolo: ["alta", "baja", "junto_a_cria", "media"],
-      enEsquema: ["alta", "baja", "media"],
-      razon: "Igual que `honey_stores`: `pollenNextToBrood` es una columna aparte.",
-    },
-  ],
-]);
+/**
+ * **VACÍA desde el 2026-10-03, y así debería quedarse.** Tenía las dos de las reservas, y las dos
+ * dejaron de ser divergencias: el protocolo ya NO declara `junto_a_cria` como cuarto nivel — es su
+ * propia pregunta `honey_next_to_brood` / `pollen_next_to_brood`, apuntando a las columnas que ya
+ * existían (`PENDING_IMPLEMENTATIONS/010`, Parte A).
+ *
+ * **Se quitan y no se dejan «por si acaso»**, porque una exención eximía la pregunta entera: con
+ * ella puesta, cualquier OTRA diferencia futura en `honey_stores` se habría quedado sin vigilar.
+ * Es el hallazgo 1 de la corrección del 2026-09-17, y vale igual al revés — una exención que
+ * sobrevive a su motivo es una línea roja que ya no puede ponerse roja.
+ */
+const DIVERGENCIAS_HEREDADAS: ReadonlyMap<string, ParPermitido> = new Map<string, ParPermitido>([]);
 
 export interface Desajuste {
   clave: string;
@@ -167,9 +157,20 @@ export function compararVocabularios(
   return { desajustes, comprobados };
 }
 
-/** Un desajuste está exento sólo si su par coincide EXACTAMENTE con el declarado. */
-export function esHeredado(d: Desajuste): boolean {
-  const permitido = DIVERGENCIAS_HEREDADAS.get(d.clave);
+/**
+ * Un desajuste está exento sólo si su par coincide EXACTAMENTE con el declarado.
+ *
+ * **El mapa entra por parámetro, con el real por omisión** (2026-10-03). Antes cerraba sobre
+ * `DIVERGENCIAS_HEREDADAS`, así que la prueba que demuestra este mecanismo sólo podía demostrarlo
+ * **mientras existiera alguna divergencia real** — y al quedarse el mapa vacío, esa prueba cayó
+ * por no tener con qué, no por estar mal. Es la corrección 3 de este mismo archivo otra vez: un
+ * detector que lee sus entradas del módulo no se puede llamar con entrada hostil.
+ */
+export function esHeredado(
+  d: Desajuste,
+  mapa: ReadonlyMap<string, ParPermitido> = DIVERGENCIAS_HEREDADAS,
+): boolean {
+  const permitido = mapa.get(d.clave);
   if (!permitido) return false;
   return (
     JSON.stringify(d.enProtocolo) === JSON.stringify([...permitido.enProtocolo].sort()) &&
@@ -267,13 +268,26 @@ describe("el DETECTOR detecta — con entrada inventada, que es la única forma 
 
   it("una heredada con un desajuste DISTINTO del declarado ya NO está exenta", () => {
     // El hallazgo 1, hecho prueba: antes la clave sola eximía cualquier diferencia futura.
-    expect(esHeredado({ clave: "honey_stores", enProtocolo: ["alta", "inventado"], enEsquema: ["alta"] })).toBe(false);
-    expect(
-      esHeredado({
-        clave: "honey_stores",
-        enProtocolo: ["alta", "baja", "junto_a_cria", "media"],
-        enEsquema: ["alta", "baja", "media"],
-      }),
-    ).toBe(true);
+    //
+    // **El mapa es sintético y no el real**, porque el real está vacío desde el 2026-10-03 y una
+    // prueba del MECANISMO no puede depender de que haya datos que lo ejerciten. Con el mapa real
+    // esta prueba cayó al vaciarlo — por no tener con qué, no por estar mal.
+    const sintetico = new Map<string, ParPermitido>([
+      ["x", { enProtocolo: ["a", "b"], enEsquema: ["a"], razon: "inventada para probar el detector" }],
+    ]);
+    expect(esHeredado({ clave: "x", enProtocolo: ["a", "inventado"], enEsquema: ["a"] }, sintetico)).toBe(false);
+    expect(esHeredado({ clave: "x", enProtocolo: ["a", "b"], enEsquema: ["a"] }, sintetico)).toBe(true);
+    // Y una clave que no está en el mapa nunca está exenta.
+    expect(esHeredado({ clave: "otra", enProtocolo: ["a", "b"], enEsquema: ["a"] }, sintetico)).toBe(false);
+  });
+
+  /**
+   * **Cuántas divergencias heredadas hay HOY, dicho en voz alta.** No es una aserción sobre el
+   * mecanismo: es el inventario, para que añadir una exención sea un cambio visible en el diff y
+   * no una línea que entra sin que nadie la cuente. Si sube, la razón de la nueva va en su
+   * `razon` y esta cifra se actualiza a mano, a propósito.
+   */
+  it("hoy no hay ninguna divergencia heredada", () => {
+    expect([...DIVERGENCIAS_HEREDADAS.keys()]).toEqual([]);
   });
 });

@@ -67,9 +67,14 @@ function camposPorModelo(): Map<string, Set<string>> {
 const CAMPOS_POR_MODELO = camposPorModelo();
 
 describe("el protocolo de campo y el esquema hablan el mismo idioma", () => {
-  it("el JSON trae las 44 preguntas en cinco actividades — control positivo antes de todo", () => {
+  it("el JSON trae las 47 preguntas en cinco actividades — control positivo antes de todo", () => {
     // Si esto baja, el resto pasa sin mirar nada.
-    expect(ITEMS.length).toBe(44);
+    //
+    // **Eran 44 hasta el 2026-10-03.** `PENDING_IMPLEMENTATIONS/010`, Parte A, añadió tres a
+    // `inspection`: `honey_next_to_brood`, `pollen_next_to_brood` y `drone_brood_present`. La
+    // cifra se actualiza **a mano** a propósito: así un ítem nuevo no entra sin que nadie lo
+    // cuente, que es para lo que esta fila existe.
+    expect(ITEMS.length).toBe(47);
     expect(new Set(ITEMS.map((i) => i.actividad))).toEqual(
       new Set(["visit", "inspection", "feeding", "treatment", "harvest"]),
     );
