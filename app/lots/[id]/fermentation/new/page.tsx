@@ -40,7 +40,8 @@ export default async function NewFermentationPage({ params }: { params: Promise<
     const empezar = await puedeEmpezarCorrida(user.userAccountId, lot.id);
     if (empezar.puede) {
       const cobertura = await coberturaDelLote(user.userAccountId, lot.id);
-      recetaDelProceso = cobertura.vigente?.recetaConVersion ?? null;
+      // Un vigente `oculto` vive en un lote que quien mira no puede ver: su receta no se enseña (revisión final, ronda de arreglo 1).
+      recetaDelProceso = cobertura.vigente?.oculto ? t("processRecipeHidden") : (cobertura.vigente?.recetaConVersion ?? null);
     } else if (empezar.motivo === "sin_proceso_abierto") {
       const puede = await puedeAbrirProceso(user.userAccountId, lot.id);
       aviso = puede.puede ? t("startRunNeedsOpenProcess") : t(`processCannotOpen_${puede.motivo}`);

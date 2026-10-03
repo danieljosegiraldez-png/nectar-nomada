@@ -301,7 +301,7 @@ nueva queda cubierta por R1 y se une por R3.
 
 | Lector | Qué cambia |
 |---|---|
-| la ficha y la página del proceso | pasan a una función nueva, `coberturaDelLote`, que devuelve `vigente`, `cadena` y `composicion`. `listarProcesosDeLote` **no cambia de forma**: sigue listando los procesos propios del lote, porque las pruebas la desestructuran 19 veces, y queda como excepción escrita del guardia |
+| la ficha y la página del proceso | pasan a una función nueva, `coberturaDelLote`, que devuelve `vigente`, `cadena` y `composicion`. Desde la revisión final (2026-10-03) autoriza `view` sobre **cada lote dueño** de un proceso que devuelve, por separado: un proceso de un lote que quien mira no ve sale `oculto` (sólo que lo cubre y si está abierto; decisión conservadora del controlador, pregunta abierta a Daniel). Las compuertas no cambian. `listarProcesosDeLote` **no cambia de forma**: sigue listando los procesos propios del lote, porque las pruebas la desestructuran 19 veces, y queda como excepción escrita del guardia |
 | `entradaDelLote` (grado de la ficha y del tablero) | **ficha y tablero le pasan lo mismo**: el resultado de R1 sobre el lote. Hoy cada llamador arma su entrada por su cuenta, que es justo por lo que pueden discrepar |
 | `datosDelTablero` | proceso, grado, fases y metas salen de R1 sobre el lote de la corrida |
 | `colaDeSecado` | igual. `estadoDeUnidad` recibe además si hay receta, y separa «sin receta declarada» (la etiqueta de hoy, `messages/es.json:3101`) de una nueva, «receta sin ritmo de secado», con su clave en es/en y su color (`app/beneficio/secado/page.tsx:34`). Desde que las corridas llevan proceso, la etiqueta única mentiría |

@@ -24,7 +24,7 @@ import {
 } from "../../lib/traceability/lotProcess";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
-import { recordTransformation } from "../../lib/traceability/lots";
+import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
 import { loteDividido, procesoQueCubre, procesosParaEntrada } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
@@ -33,6 +33,8 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `bodega-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string, gestor: string;
+/** Revisión final (ronda de arreglo 1, F7): una segunda parcela, quien sólo la ve a ella (`soloB`) y quien ve las dos (`ambos`). */
+let plotB: string, scopeB: string, soloB: string, ambos: string;
 /** Los dos valores de catálogo que lleva todo proceso, buscados una vez: la carrera no tiene que gastar su
  *  arranque en dos lecturas, o una de las dos mitades llegaría siempre tarde y la prueba no correría nada. */
 let gradoId: string, cerezaId: string;
@@ -168,6 +170,13 @@ beforeAll(async () => {
   scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
+  plotB = (await prisma.location.create({ data: { locationType: "plot", name: `TEST plot B ${RUN}`, organizationId: orgId, status: "approved", classification: "internal" } })).id;
+  scopeB = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotB } })).id;
+  soloB = await cuenta("SoloB");
+  ambos = await cuenta("Ambos");
+  await prisma.assignment.create({ data: { userAccountId: soloB, roleProfileId: farm.id, scopeId: scopeB } });
+  await prisma.assignment.create({ data: { userAccountId: ambos, roleProfileId: farm.id, scopeId: scopeB } });
+  await prisma.assignment.create({ data: { userAccountId: ambos, roleProfileId: farm.id, scopeId } });
   const [g, c] = await Promise.all([
     prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
     prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
@@ -205,12 +214,12 @@ afterAll(async () => {
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
   // Los eventos de proceso (`lot_process.open`, `…close`) ya los borró el ayudante por el id de su proceso; esto recoge
   // lo que cualquier otra escritura de la cuenta haya dejado.
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: [gestor] } }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId: { in: [scopeId] } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [scopeId] } }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [gestor] } }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: [gestor, soloB, ambos] } }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId: { in: [scopeId, scopeB] } }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [scopeId, scopeB] } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [gestor, soloB, ambos] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [plotId] } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [plotId, plotB] } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });
 }, 60000);
 
@@ -284,7 +293,7 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     await expect(moveLotToStorage(gestor, { lotId: pergamino, locationId: plotId, startedAt: ahora() })).rejects.toThrow(new LotProcessError("moisture_above_target"));
     expect((await asignaciones(pergamino)).todas, "una entrada rechazada dejó una asignación escrita").toBe(0);
     // La ficha y la página del proceso enseñan la misma humedad que la compuerta lee.
-    expect((await coberturaDelLote(gestor, pergamino)).vigente?.humedadDeCierre).toBe(13);
+    expect(visible((await coberturaDelLote(gestor, pergamino)).vigente).humedadDeCierre).toBe(13);
 
     const cereza2 = await lote("B13-C");
     const pergamino2 = await lote("B13-P");
@@ -295,7 +304,7 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     await correccion(await correccion(m2, 12.5), 11);
     const entrada = await moveLotToStorage(gestor, { lotId: pergamino2, locationId: plotId, startedAt: ahora() });
     expect(entrada.lotId).toBe(pergamino2);
-    expect((await coberturaDelLote(gestor, pergamino2)).vigente?.humedadDeCierre).toBe(11);
+    expect(visible((await coberturaDelLote(gestor, pergamino2)).vigente).humedadDeCierre).toBe(11);
   });
 
   it("reubicar dentro de bodega no vuelve a juzgar el secado", async () => {
@@ -1156,6 +1165,16 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
 });
 
 /**
+ * Un proceso de `coberturaDelLote` que quien mira SÍ ve, o la prueba falla diciéndolo (revisión final, F7: los de un lote que no
+ * puede ver salen `oculto`). Estrecha el tipo para leer sus campos.
+ */
+function visible<P extends { oculto: boolean }>(p: P | null | undefined): Extract<P, { oculto: false }> {
+  expect(p, "no hay proceso que mirar").toBeTruthy();
+  expect(p!.oculto, "el proceso salió oculto a quien sí puede ver su lote").toBe(false);
+  return p as Extract<P, { oculto: false }>;
+}
+
+/**
  * `coberturaDelLote` (tarea 9): lo que la ficha y la página del proceso enseñan. Sin prueba propia, el flip lo midió: dejar
  * `recetaConVersion` siempre nulo, cortar la cadena al vigente o dejar `paraEntrada` vacío no hacía caer nada —las pantallas
  * no se renderizan en pruebas—. Esto fija lo que esas pantallas leen.
@@ -1173,12 +1192,13 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     const p = await abrirProcesoDePrueba(gestor, cereza, { processRecipeVersionId: await versionDeReceta("Lavado CB1") });
     const c = await coberturaDelLote(gestor, pergamino);
     expect(c.estado).toBe("abierto");
-    expect(c.vigente?.id).toBe(p.id);
-    expect(c.vigente?.lot.lotCode, "la ficha no sabría decir en qué lote vive el proceso").toBe(`CB1-C-${RUN}`);
-    expect(c.vigente?.etiqueta).toBe(`TEST Lavado CB1 ${RUN}`);
-    expect(c.vigente?.recetaConVersion, "la ficha y el formulario de fermentación leen la receta con su versión").toBe(`TEST Lavado CB1 ${RUN} · v1`);
-    expect(c.vigente?.origen).toBe("original");
-    expect(c.vigente?.profundidad).toBe(1);
+    const vigente = visible(c.vigente);
+    expect(vigente.id).toBe(p.id);
+    expect(vigente.lot.lotCode, "la ficha no sabría decir en qué lote vive el proceso").toBe(`CB1-C-${RUN}`);
+    expect(vigente.etiqueta).toBe(`TEST Lavado CB1 ${RUN}`);
+    expect(vigente.recetaConVersion, "la ficha y el formulario de fermentación leen la receta con su versión").toBe(`TEST Lavado CB1 ${RUN} · v1`);
+    expect(vigente.origen).toBe("original");
+    expect(vigente.profundidad).toBe(1);
     // Lo que la ficha pasa al veredicto es lo que el tablero le pasa: la misma función, y no vacío.
     expect(c.paraEntrada).toEqual(await procesosParaEntrada(prisma, pergamino));
     expect(c.paraEntrada).toEqual([{ endedAt: null, gradoDeProceso: "Washed" }]);
@@ -1192,12 +1212,13 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     await cerrarProceso(gestor, { lotProcessId: p1.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino, 11) });
     const p2 = await abrirProcesoDePrueba(gestor, pergamino, { processRecipeVersionId: await versionDeReceta("Reproceso CB2") });
     const c = await coberturaDelLote(gestor, pergamino);
-    expect(c.vigente?.id).toBe(p2.id);
-    expect(c.cadena.map((p) => p.id), "la cadena perdió la historia de arriba").toEqual([p2.id, p1.id]);
-    expect(c.cadena.map((p) => p.lot.lotCode)).toEqual([`CB2-P-${RUN}`, `CB2-C-${RUN}`]);
-    expect(c.cadena[1]!.etiqueta).toBe("Sin receta");
-    expect(c.cadena[1]!.recetaConVersion, "«Sin receta» no tiene versión que enseñar").toBeNull();
-    expect(c.cadena[1]!.humedadDeCierre).toBe(11);
+    expect(visible(c.vigente).id).toBe(p2.id);
+    const cadena = c.cadena.map((p) => visible(p));
+    expect(cadena.map((p) => p.id), "la cadena perdió la historia de arriba").toEqual([p2.id, p1.id]);
+    expect(cadena.map((p) => p.lot.lotCode)).toEqual([`CB2-P-${RUN}`, `CB2-C-${RUN}`]);
+    expect(cadena[1]!.etiqueta).toBe("Sin receta");
+    expect(cadena[1]!.recetaConVersion, "«Sin receta» no tiene versión que enseñar").toBeNull();
+    expect(cadena[1]!.humedadDeCierre).toBe(11);
   });
 
   it("con el id en MAYÚSCULAS devuelve lo mismo que en minúsculas", async () => {
@@ -1226,8 +1247,35 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     const c = await coberturaDelLote(gestor, m);
     expect(c.estado).toBe("mezcla");
     expect(c.vigente).toBeNull();
-    expect(c.composicion?.procesos.map((p) => p.id).sort()).toEqual([pa.id, pb.id].sort());
+    expect(c.composicion?.procesos.map((p) => visible(p).id).sort()).toEqual([pa.id, pb.id].sort());
     expect(c.composicion?.ramaSinProceso).toBe(false);
     expect(c.paraEntrada).toEqual([]);
+  });
+
+  it("quien ve sólo el pergamino (parcela B) no recibe los datos del proceso que vive en la cereza (parcela A); quien ve las dos, sí", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03; Codex y registro, línea 205). `view` sobre el lote mirado no autoriza los
+    // procesos que viven en otros lotes: cada lote dueño se autoriza por separado, y uno que no se ve sale `oculto` —sólo que lo
+    // cubre un proceso y si está abierto—.
+    const cereza = await lote("CB5-C"); // parcela A
+    const pergamino = await lote("CB5-P", plotB);
+    await enlazar([cereza], [pergamino]);
+    const p = await abrirProcesoDePrueba(gestor, cereza, { processRecipeVersionId: await versionDeReceta("Lavado CB5") });
+    // Control de los permisos: `soloB` ve el pergamino y NO la cereza; sin esto, «oculto» podría ser cualquier otra cosa.
+    await expect(coberturaDelLote(soloB, cereza)).rejects.toThrow(TraceabilityAccessError);
+
+    const c = await coberturaDelLote(soloB, pergamino);
+    expect(c.estado).toBe("abierto");
+    expect(c.vigente).toEqual({ oculto: true, abierto: true });
+    expect(c.cadena).toEqual([{ oculto: true, abierto: true }]);
+    // Nada del proceso de A en lo que devuelve: ni su id, ni su lote, ni su receta, ni su intención.
+    const devuelto = JSON.stringify({ vigente: c.vigente, cadena: c.cadena, composicion: c.composicion });
+    for (const dato of [p.id, cereza, `CB5-C-${RUN}`, `Lavado CB5 ${RUN}`, p.intent]) expect(devuelto).not.toContain(dato);
+
+    // Control: quien ve las DOS parcelas recibe el proceso entero.
+    const deAmbos = await coberturaDelLote(ambos, pergamino);
+    const vigente = visible(deAmbos.vigente);
+    expect(vigente.id).toBe(p.id);
+    expect(vigente.lot.lotCode).toBe(`CB5-C-${RUN}`);
+    expect(vigente.recetaConVersion).toBe(`TEST Lavado CB5 ${RUN} · v1`);
   });
 });

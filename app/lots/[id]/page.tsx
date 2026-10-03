@@ -1108,23 +1108,31 @@ export default async function LotDetailPage({
         <h2>{t("processingHeading")}</h2>
         {/* Parte 1, R1/R7 (tarea 9): el proceso que cubre al lote, en qué lote vive y su receta con versión; la cadena si hay
             más de uno (del más cercano al más lejano); la composición si es una mezcla, sin nombrar ningún proceso. */}
+        {/* Revisión final (ronda de arreglo 1): un proceso que vive en un lote que quien mira no puede ver sale `oculto` —sólo que
+            lo cubre y si está abierto—, sin código de lote ni receta. */}
         {cobertura?.vigente ? (
           <p className="nn-muted">
-            {t("processCoveringShown", {
-              lotCode: cobertura.vigente.lot.lotCode,
-              label: cobertura.vigente.recetaConVersion ?? cobertura.vigente.etiqueta,
-              state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed"),
-            })}
+            {cobertura.vigente.oculto
+              ? t("processCoveringHidden", { state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed") })
+              : t("processCoveringShown", {
+                  lotCode: cobertura.vigente.lot.lotCode,
+                  label: cobertura.vigente.recetaConVersion ?? cobertura.vigente.etiqueta,
+                  state: cobertura.estado === "abierto" ? t("processOpen") : t("processClosed"),
+                })}
           </p>
         ) : cobertura?.composicion ? (
           <p className="nn-muted">
-            {t("processMixture", { partes: cobertura.composicion.procesos.map((p) => `${p.lot.lotCode} · ${p.etiqueta}`).join(" + ") })}
+            {t("processMixture", {
+              partes: cobertura.composicion.procesos.map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.etiqueta}`)).join(" + "),
+            })}
           </p>
         ) : null}
         {cobertura && cobertura.cadena.length > 1 ? (
           <p className="nn-muted">
             {t("processChainShown", {
-              cadena: cobertura.cadena.map((p) => `${p.lot.lotCode} · ${p.recetaConVersion ?? p.etiqueta}`).join(" → "),
+              cadena: cobertura.cadena
+                .map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.recetaConVersion ?? p.etiqueta}`))
+                .join(" → "),
             })}
           </p>
         ) : null}

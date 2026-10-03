@@ -32,6 +32,13 @@ rama de las lecturas de la clasificación de verde por malla):
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
 
+> **`coberturaDelLote` autoriza cada lote dueño de un proceso (2026-10-03): ninguna cifra cambia.** Revisión final de la Parte 1,
+> ronda de arreglo 1 (Codex; registro, línea 205). Sigue en «guardia directo», en su fila: además de `requireLotAccess(view)`
+> sobre el lote mirado, llama a `requireLotAccess(view)` una vez por cada lote DONDE VIVE un proceso que devuelve —una por lote,
+> porque con varios candidatos autoriza si pasa cualquiera—, y un proceso cuyo lote no se ve sale `oculto`, sin sus datos. Es
+> el único lector de la Parte 1 que enseña procesos de otros lotes con su detalle; las compuertas y el grado de la lista de
+> catas y del tablero no cambian (pregunta abierta a Daniel).
+
 > **La garantía de R7, «una sola línea viva bajo un proceso» (2026-10-03): 614→615, 167 archivos y «guardia directo»
 > 464→465; «depende del llamador» sigue en 93, con una fila que cambia de nombre.** Revisión final de la Parte 1, ronda
 > de arreglo 1. `puedeEmpezarCorrida` (`lib/traceability/lotProcess.ts`) es nueva, con guardia directo

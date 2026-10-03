@@ -80,8 +80,11 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
       puedeDevolver: puedeGestionar ? await puedeDevolverASecado(user.userAccountId, lot.id) : null,
       // Ronda de arreglo 1 (2026-10-02): los formularios del proceso abierto piden `manage` sobre el lote DONDE VIVE el proceso,
       // que puede ser un ancestro; `puedeGestionar` es el de ESTE lote, y con él se ofrecía lo que el servicio rechaza.
+      // Un vigente `oculto` vive en un lote que quien mira no puede ver: sin su id no hay formularios que ofrecer.
       puedeGestionarElAbierto:
-        abiertoAhora && cobertura.vigente ? await puedeGestionarProceso(user.userAccountId, cobertura.vigente.id) : false,
+        abiertoAhora && cobertura.vigente && !cobertura.vigente.oculto
+          ? await puedeGestionarProceso(user.userAccountId, cobertura.vigente.id)
+          : false,
     };
   } catch (error) {
     if (error instanceof LotProcessError) {
@@ -109,8 +112,11 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   }));
 
   // Parte 1, R7: el proceso que CUBRE al lote, que puede vivir en un ancestro. Una mezcla no tiene vigente.
-  const abierto = cobertura.estado === "abierto" ? cobertura.vigente : null;
-  const ultimo = cobertura.vigente;
+  // Revisión final (ronda de arreglo 1): un vigente `oculto` —vive en un lote que quien mira no puede ver— no trae ni su id ni su
+  // humedad de cierre, así que no hay formularios ni «bloqueado» que decidir con él.
+  const visible = cobertura.vigente && !cobertura.vigente.oculto ? cobertura.vigente : null;
+  const abierto = cobertura.estado === "abierto" ? visible : null;
+  const ultimo = visible;
   // Cerrado y por encima del objetivo: es el estado que bloquea la ENTRADA a
   // bodega. Es una de las dos condiciones con que se ofrece `devolverASecado`; la
   // otra, `enBodega`, está justo debajo. Ya no es la única (Parte 1, R7).
@@ -137,12 +143,21 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
 
       {cobertura.composicion ? (
         <section className="nn-section">
-          <p>{t("processMixture", { partes: cobertura.composicion.procesos.map((p) => `${p.lot.lotCode} · ${p.etiqueta}`).join(" + ") })}</p>
+          <p>
+            {t("processMixture", {
+              partes: cobertura.composicion.procesos.map((p) => (p.oculto ? t("processHiddenLot") : `${p.lot.lotCode} · ${p.etiqueta}`)).join(" + "),
+            })}
+          </p>
           {cobertura.composicion.ramaSinProceso ? <p className="nn-muted">{t("processMixtureWithUnprocessed")}</p> : null}
         </section>
       ) : null}
 
-      {cobertura.cadena.map((p) => (
+      {cobertura.cadena.map((p, i) =>
+        p.oculto ? (
+          <section key={`oculto-${i}`} className="nn-section">
+            <p className="nn-muted">{t("processCoveringHidden", { state: p.abierto ? t("processOpen") : t("processClosed") })}</p>
+          </section>
+        ) : (
         <section key={p.id} className="nn-section">
           <h2>
             {t("processNumberHeading", { n: p.sequenceOrder })} · {p.etiqueta}
@@ -192,7 +207,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
             </p>
           ) : null}
         </section>
-      ))}
+        ),
+      )}
 
       {/* Ronda de arreglo 1: con el permiso del lote DONDE VIVE el proceso, que es lo que piden sus servicios. */}
       {abierto !== null && puedeGestionarElAbierto ? (

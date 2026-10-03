@@ -806,6 +806,16 @@ const INCLUIR_PARA_PANTALLA = {
  *
  * `listarProcesosDeLote` sigue existiendo: lista los procesos PROPIOS del lote, que es otra pregunta (y la usan las pruebas).
  * Lanza `lineage_too_deep` como el resolvedor: quien pinta lo atrapa y lo dice.
+ *
+ * **Permisos, proceso a proceso** (revisión final, ronda de arreglo 1, 2026-10-03; Codex y registro, línea 205). `view` sobre el
+ * lote MIRADO no autoriza a ver los procesos que viven en OTROS lotes —un ancestro, las ramas de una mezcla—: quien ve sólo el
+ * pergamino de la parcela B no ve la cereza de la parcela A. Cada lote dueño de un proceso se autoriza por SEPARADO
+ * (`requireLotAccess` con varios candidatos autoriza si pasa cualquiera, así que se llama una vez por lote). Un proceso cuyo lote
+ * dueño no se ve sale como `{ oculto: true, abierto }`: sólo que lo cubre un proceso de un lote que no puede ver y si está abierto
+ * —sin código de lote, receta, intención, notas, intervenciones, operadores, corridas ni medición—. Decisión conservadora del
+ * controlador (CLAUDE.md §10, «las asignaciones estrechan»), con la pregunta a Daniel de si abrirlo. Las COMPUERTAS no cambian:
+ * deciden con `procesoQueCubre`, que no mira permisos. `paraEntrada` sigue llevando el grado del vigente al veredicto, como el
+ * tablero y la lista de catas (va con la misma pregunta).
  */
 export async function coberturaDelLote(userAccountId: string, lotId: string) {
   lotId = enMinusculas(lotId); // F5: ver `enMinusculas`.
@@ -814,8 +824,23 @@ export async function coberturaDelLote(userAccountId: string, lotId: string) {
   await requireLotAccess(userAccountId, "view", [lot]);
 
   const cobertura = await procesoQueCubre(prisma, lotId);
-  const ids =
-    cobertura.estado === "mezcla" ? cobertura.composicion.procesos.map((p) => p.id) : cobertura.cadena.map((p) => p.id);
+  const enCadena = cobertura.estado === "mezcla" ? cobertura.composicion.procesos : cobertura.cadena;
+  // Los lotes dueños que quien mira puede VER, uno por uno. El propio lote ya se autorizó arriba.
+  const duenos = await prisma.lot.findMany({
+    where: { id: { in: [...new Set(enCadena.map((p) => p.lotId))] } },
+    select: { id: true, projectId: true, locationId: true, classification: true },
+  });
+  const visibles = new Set<string>([lot.id]);
+  for (const dueno of duenos) {
+    if (dueno.id === lot.id) continue;
+    try {
+      await requireLotAccess(userAccountId, "view", [dueno]);
+      visibles.add(dueno.id);
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+  }
+  const ids = enCadena.filter((p) => visibles.has(p.lotId)).map((p) => p.id);
   const filas = await prisma.lotProcess.findMany({ where: { id: { in: ids } }, include: INCLUIR_PARA_PANTALLA });
   // La humedad de cierre que se enseña es la que la compuerta lee: la última corrección de la medición, si la tiene (revisión
   // final, ronda de arreglo 1, 2026-10-03). Si no, la página diría «cerró en el objetivo» de un lote que la compuerta rechaza, y
@@ -839,11 +864,10 @@ export async function coberturaDelLote(userAccountId: string, lotId: string) {
       },
     ]),
   );
-  const presentar = (p: { id: string; origen: OrigenDelProceso; profundidad: number }) => ({
-    ...porId.get(p.id)!,
-    origen: p.origen,
-    profundidad: p.profundidad,
-  });
+  const presentar = (p: { id: string; lotId: string; endedAt: Date | null; origen: OrigenDelProceso; profundidad: number }) =>
+    visibles.has(p.lotId)
+      ? { oculto: false as const, ...porId.get(p.id)!, origen: p.origen, profundidad: p.profundidad }
+      : { oculto: true as const, abierto: p.endedAt === null };
 
   return {
     estado: cobertura.estado,
@@ -858,7 +882,8 @@ export async function coberturaDelLote(userAccountId: string, lotId: string) {
 }
 
 export type CoberturaDelLote = Awaited<ReturnType<typeof coberturaDelLote>>;
-/** Un proceso como lo pinta la pantalla: con su lote (`lot`), por qué existe (`origen`) y a cuántas generaciones vive. */
+/** Un proceso como lo pinta la pantalla: con su lote (`lot`), por qué existe (`origen`) y a cuántas generaciones vive; o, si
+ *  vive en un lote que quien mira no puede ver, sólo eso y si está abierto (`oculto: true`). */
 export type ProcesoDeLoteConLugar = CoberturaDelLote["cadena"][number];
 
 /**
