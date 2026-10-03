@@ -36,6 +36,12 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   "lote_consumido",
   // R7: la humedad que cierra un proceso no puede ser anterior a su inicio (revisión final).
   "medicion_anterior_al_proceso",
+  // Códigos que existían antes de la Parte 1 y salían crudos por el mensaje genérico (revisión final, S7/M1, y registro, línea
+  // 255): los tres de la compuerta de bodega, que desde R7 salta en todo pergamino con proceso, y el del doble envío.
+  "drying_not_finished",
+  "moisture_above_target",
+  "no_closing_moisture",
+  "process_already_closed",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

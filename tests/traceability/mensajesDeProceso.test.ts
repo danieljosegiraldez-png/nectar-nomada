@@ -61,6 +61,10 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "corrida_ya_abierta",
   "lote_consumido",
   "medicion_anterior_al_proceso",
+  "drying_not_finished",
+  "moisture_above_target",
+  "no_closing_moisture",
+  "process_already_closed",
 ];
 
 /**
@@ -175,6 +179,23 @@ const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
     por: "La cereza cuya fermentación terminó (R7): la siguiente corrida empieza en el lote que salió; el texto lo dice.",
     es: { debe: [/lote que salió/i] },
     en: { debe: [/lot that came out/i] },
+  },
+  drying_not_finished: {
+    por:
+      "La compuerta de bodega (R7) lo lanza en el camino normal —el pergamino cuyo proceso sigue abierto en la cereza—, y el genérico decía " +
+      "«No se pudo registrar el proceso: drying_not_finished» al mover a bodega. Dice qué hacer: cerrar el proceso con su humedad.",
+    es: { debe: [/bodega/i, /cierr/i, /Proceso del lote/] },
+    en: { debe: [/storage/i, /clos/i, /Lot process/] },
+  },
+  moisture_above_target: {
+    por: "Cerrado por encima del objetivo no entra en bodega: el texto manda a «Devolver a secado», que la página del proceso ofrece en ese caso.",
+    es: { debe: [/Devolver a secado/, /bodega/i] },
+    en: { debe: [/Back to drying/, /storage/i] },
+  },
+  process_already_closed: {
+    por: "Sale con un doble envío (cerrar, manejo, intención, objetivo): el texto dice que está cerrado y qué mirar, no «no se pudo registrar».",
+    es: { debe: [/cerrado/i] },
+    en: { debe: [/closed/i] },
   },
   medicion_anterior_al_proceso: {
     por: "Lo lanza cerrarProceso con una humedad de antes del inicio (la de la continuación de una devolución): el texto dice qué hacer.",

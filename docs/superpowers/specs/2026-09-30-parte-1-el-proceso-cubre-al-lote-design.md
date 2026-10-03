@@ -395,7 +395,10 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
   `proceso_no_aplica_a_miel`, `corridas_abiertas`,
   `division_deja_remanente`, `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`,
   `receta_distinta_del_proceso`, `lineage_too_deep` y `motivo_otro_requiere_nota`, y también el ya
-  existente `process_already_open`, que ahora dice «en este café». Hoy `LotProcessError` se traduce con un
+  existente `process_already_open`, que ahora dice «en este café». Desde la revisión final también los
+  cuatro que existían antes y salían crudos: `drying_not_finished`, `moisture_above_target` y
+  `no_closing_moisture` —la compuerta de bodega, que desde R7 salta en todo pergamino con proceso— y
+  `process_already_closed`, el del doble envío. Cada texto dice qué hacer. Hoy `LotProcessError` se traduce con un
   mensaje genérico que enseña el código crudo (`traceability.ts:176`); se sigue el patrón de
   `BandejaError`. Las clases nuevas entran en `friendlyError` en el mismo cambio; sin eso, son un 500.
 
