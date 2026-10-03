@@ -1816,6 +1816,7 @@
     "rejillaRangosDeBloqueTitulo": "Dónde está este bloque",
     "rejillaSinRango": "Esta microparcela todavía no dice qué trozo de la rejilla ocupa, así que no se puede comparar con lo sembrado.",
     "error_rango_no_encontrado": "Ese trozo ya no está: alguien lo quitó. Recarga la página para ver cómo está ahora.",
+    "error_rejilla_trozo_no_encontrado": "Ese trozo de la forma ya no está: alguien lo quitó. Recarga la página para ver cómo está ahora.",
     "error_bloque_no_encontrado": "Ese bloque ya no está. Recarga la página para ver cómo está ahora.",
     "error_bloque_sin_sitio": "Ese bloque no tiene una parcela asociada, así que no se le puede asignar un trozo de la rejilla.",
     "error_rejilla_fuera_de_la_microparcela": "Ese trozo se sale de la microparcela «{value}». Un bloque no puede ocupar suelo que no es de su microparcela.",
