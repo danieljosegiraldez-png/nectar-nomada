@@ -210,8 +210,12 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
     // de varias respuestas (`multi_enum`) quedaban fuera aunque fueran a un enum del esquema. Al
     // incluirlas entraron tres —`brood_stages`, `purpose` y la nueva `site_condition`— y las tres
     // coinciden: ninguna divergencia escondida, pero hasta hoy nada lo comprobaba.
+    // **Y DIECISÉIS desde el 2026-10-03** (`PENDING_IMPLEMENTATIONS/010`, Parte A): entra
+    // `feeder_type`, de los siete ítems de §2.4, y es la primera pregunta del protocolo que
+    // aterriza en `Hive` y no en `Inspection` o `ColonyEvent`. Coincide con `FeedingMethod`.
     expect([...cubiertas].sort()).toEqual([
       "brood_stages",
+      "feeder_type",
       "honey_stores",
       "honey_type",
       "material",
@@ -230,6 +234,13 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
     expect(comprobados).toBe(cubiertas.size);
   });
 
+  /**
+   * **VACÍA mientras `DIVERGENCIAS_HEREDADAS` esté vacío, y se dice aquí para que nadie la cuente
+   * como cobertura.** Desde el 2026-10-03 el mapa no tiene ninguna entrada, así que este bucle no
+   * da ni una vuelta y la prueba pasa sin afirmar nada. Vuelve a tener dientes el día que alguien
+   * declare una divergencia, que es cuando hace falta. Si lo que se quiere saber es si hay alguna,
+   * lo dice la prueba «hoy no hay ninguna divergencia heredada».
+   */
   it("las heredadas siguen ahí, con SU par exacto", () => {
     for (const [clave, permitido] of DIVERGENCIAS_HEREDADAS) {
       const d = desajustes.find((x) => x.clave === clave);

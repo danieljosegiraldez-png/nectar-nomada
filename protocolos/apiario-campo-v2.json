@@ -1,11 +1,11 @@
 {
   "_lee_esto_antes": [
-    "BORRADOR DE CONTENIDO, NO DE ESQUEMA. Estas son las listas de chequeo de campo",
-    "que el dueño propone para el módulo apícola. DONDE se guardan --columnas,",
-    "protocolo versionado reutilizando un motor existente, o motor nuevo-- es la",
-    "decision D2 de docs/implementation/48_A9_CAPTURA_DE_CAMPO_PROMPT.md y NO esta",
-    "tomada. Ya existen dos motores de protocolo versionado en el repositorio.",
-    "Este archivo aporta el contenido; el informe de alcance decide el continente.",
+    "BORRADOR DE CONTENIDO. Estas son las listas de chequeo de campo que el dueño",
+    "propone para el módulo apícola. DONDE se guardan lo decidió D2 el 2026-09-07:",
+    "`ProtocolVersion` de Research OS, ejecutada contra la VISITA y no contra la",
+    "`Colony`, con cuatro columnas nuevas y ningún motor nuevo",
+    "(docs/implementation/48_A9_CAPTURA_DE_CAMPO_REPORTE.md:1356). A9.4 la construyó.",
+    "Este archivo aporta el contenido; esa decision le dio su continente.",
     "Vive en un archivo versionado a propósito: qué se le pregunta a alguien que",
     "está de pie al sol, con guantes y sin señal, es una decisión del dueño, y así",
     "se lee en el diff antes de tocar producción.",
@@ -22,7 +22,7 @@
   "name": "Captura de campo — apiario Néctar Nómada v1",
   "description": "Listas de chequeo por actividad para la captura en campo y el cierre posterior. Ver docs/implementation/48_A9_CAPTURA_EN_DOS_ETAPAS.md y su Anexo A.",
   "version": 2,
-  "status": "draft_contenido_sin_esquema_decidido",
+  "status": "contenido_aprobado_esquema_decidido",
   "locale": "es",
   "activities": [
     {
@@ -337,6 +337,89 @@
           "coversExistingColumn": "Inspection.pestDiseaseFlags"
         },
         {
+          "key": "brood_boxes",
+          "label": "Cámaras de cría",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió desde la última visita.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.broodBoxes",
+          "order": 16
+        },
+        {
+          "key": "supers",
+          "label": "Alzas",
+          "valueType": "integer",
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió desde la última visita.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.supers",
+          "order": 17
+        },
+        {
+          "key": "frames_per_box",
+          "label": "Cuadros por caja",
+          "valueType": "integer",
+          "stage": "close",
+          "required": false,
+          "hint": "Denominador de «cuadros cubiertos».",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.framesPerBox",
+          "order": 18
+        },
+        {
+          "key": "queen_excluder",
+          "label": "Excluidor de reina",
+          "valueType": "boolean",
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió. Afecta a la calidad de la miel cosechada.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.queenExcluder",
+          "order": 19
+        },
+        {
+          "key": "feeder_type",
+          "label": "Alimentador",
+          "valueType": "enum",
+          "options": [
+            "bolsa_sobre_cabezales",
+            "alimentador_entrada",
+            "alimentador_division",
+            "otro"
+          ],
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.feederType",
+          "order": 20
+        },
+        {
+          "key": "entrance_reducer",
+          "label": "Reductor de piquera",
+          "valueType": "boolean",
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió. Defensa de colonia débil o recién instalada.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.entranceReducer",
+          "order": 21
+        },
+        {
+          "key": "screened_bottom_board",
+          "label": "Piso sanitario / bandeja",
+          "valueType": "boolean",
+          "stage": "field",
+          "required": false,
+          "hint": "Sólo si cambió. Requisito del conteo de varroa.",
+          "prefillLastUsed": true,
+          "coversExistingColumn": "Hive.screenedBottomBoard",
+          "order": 22
+        },
+        {
           "key": "varroa_method",
           "label": "Método de conteo de varroa",
           "valueType": "enum",
@@ -348,7 +431,7 @@
           ],
           "stage": "field",
           "required": false,
-          "order": 16
+          "order": 23
         },
         {
           "key": "varroa_bees_sampled",
@@ -356,7 +439,7 @@
           "valueType": "integer",
           "stage": "field",
           "required": false,
-          "order": 17,
+          "order": 24,
           "requiredWith": "varroa_method"
         },
         {
@@ -365,7 +448,7 @@
           "valueType": "integer",
           "stage": "field",
           "required": false,
-          "order": 18,
+          "order": 25,
           "requiredWith": "varroa_method"
         },
         {
@@ -374,7 +457,7 @@
           "valueType": "short_text",
           "stage": "field",
           "required": false,
-          "order": 19,
+          "order": 26,
           "hint": "Una línea. La descripción larga va en el cierre.",
           "coversExistingColumn": "Inspection.note"
         },
@@ -384,7 +467,7 @@
           "valueType": "long_text",
           "stage": "close",
           "required": false,
-          "order": 20,
+          "order": 27,
           "provenance": "interpretation"
         }
       ]
