@@ -22,9 +22,11 @@
  * «registrado como cero» (ADR-080), y una densidad es una división: un cero en el
  * denominador no es una densidad infinita, es que falta el dato.
  *
- * **No sustituye a `computePlotDensity` todavía.** Entra al lado; sus dos consumidores
- * de producción —`plantingCohorts.ts` y `pendienteDeLaParcela.ts`— se migran uno a uno
- * con su prueba, y la vieja se retira cuando no quede ninguno.
+ * **Sustituye a `computePlotDensity`, retirada el 2026-10-03.** Aquélla dividía las
+ * plantas contadas por `areaHectares`, y el plan de esta tarea decía que tenía DOS
+ * consumidores de producción. Medido al llegar: tenía **uno**, `getPlotDetail`. El
+ * «segundo» era una mención en un comentario de `pendienteDeLaParcela.ts`, no una
+ * llamada — leer las líneas, no contarlas, fue lo que lo dijo.
  */
 export interface Marco {
   readonly plantSpacingMeters: number | null;
