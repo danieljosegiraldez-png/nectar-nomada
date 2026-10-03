@@ -32,3 +32,17 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];
+
+/**
+ * La clave de `Traceability` de un error del proceso, o null si no tiene texto propio (Parte 1, tarea 12, 2026-10-03).
+ * Vive aquí, y no en la acción, para poder PROBARLA: `friendlyError` no se exporta (su archivo es "use server").
+ *
+ * Mira la clase Y el código: un `Error` cualquiera con el mensaje `sin_proceso_abierto` no es del proceso, y un
+ * `LotProcessError` con un código que no está en la lista (`process_not_found`…) sigue por el mensaje genérico.
+ */
+export function claveDeErrorDeProceso(error: unknown): `error_proceso_${CodigoDeProcesoTraducido}` | null {
+  if (error instanceof LotProcessError && (CODIGOS_DE_PROCESO_TRADUCIDOS as readonly string[]).includes(error.message)) {
+    return `error_proceso_${error.message as CodigoDeProcesoTraducido}`;
+  }
+  return null;
+}

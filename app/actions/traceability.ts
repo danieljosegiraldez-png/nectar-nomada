@@ -39,6 +39,7 @@ import {
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
+import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
@@ -173,6 +174,13 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
     return t(`error_${clave}` as "error_provenance_required", { value: resto.join(":") });
   }
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
+  // Parte 1 (tarea 12, 2026-10-03): un texto por código. El genérico de abajo sigue para los demás, con el código de detalle.
+  const claveDeProceso = claveDeErrorDeProceso(error);
+  if (claveDeProceso) return t(claveDeProceso as "error_proceso_sin_proceso_abierto");
+  // R6.6 lanza `lote_dividido` también desde las mediciones y las muestras, con sus propias clases.
+  if ((error instanceof MeasurementValidationError || error instanceof SampleFromLotValidationError) && error.message === "lote_dividido") {
+    return t("error_proceso_lote_dividido");
+  }
   if (error instanceof LotProcessError) return t("error_lot_process", { detail: error.message });
   if (error instanceof QuantityValidationError) return t("error_quantity", { detail: error.message });
   if (error instanceof MeasurementValidationError) return t("error_measurement", { detail: error.message });
