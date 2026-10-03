@@ -20,12 +20,14 @@ import { recordAuditEvent } from "../audit";
 import { computeLotBalance, resolveTolerancePct } from "./balance";
 import { LotProcessError } from "./errorDeProceso";
 import { ordenDeBloqueo } from "./ordenDeBloqueo";
+import { TOPE_DE_LINAJE } from "./topeDeLinaje";
 
 /**
- * R1: 64 generaciones en las dos direcciones. Un multiproceso real tiene unas diez. Una cadena de 64
- * ancestros se resuelve; la generación 65 lanza (`nivel > TOPE` al empezar cada vuelta).
+ * R1: 64 generaciones en las dos direcciones; una cadena de 64 ancestros se resuelve y la generación 65 lanza (`nivel > TOPE` al
+ * empezar cada vuelta). El valor vive en `topeDeLinaje.ts`, un módulo puro que lee la prueba hermética de los textos de error; se
+ * reexporta aquí con el mismo nombre (ronda de arreglo 1 de la tarea 12, 2026-10-03).
  */
-export const TOPE_DE_LINAJE = 64;
+export { TOPE_DE_LINAJE };
 
 export type OrigenDelProceso = "original" | "parte_de_division" | "continuacion";
 
