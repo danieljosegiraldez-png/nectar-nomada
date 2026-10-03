@@ -170,6 +170,12 @@ abrir el proceso**.
 sobre un lote cubierto sin estar unidas. Lo segundo cubre las corridas viejas, que R9 no rellena.
 `cerrarProceso` escribe `closureKind: moisture` (§3.1).
 
+**Y no se cierra con una humedad anterior a su inicio** (`medicion_anterior_al_proceso`, revisión final,
+2026-10-03): la humedad de cierre dice cómo terminó el proceso. Sin esto, la continuación de una
+devolución a secado (R7) se cerraba con la misma lectura que cerró el proceso anterior —la que la
+devolución declaraba errónea— y el lote volvía a bodega sin secar. El desplegable de cierre sólo ofrece
+las humedades desde el inicio del proceso abierto que cubre al lote, y nunca una ya corregida.
+
 ### R6. Dividir un lote con proceso abierto: un proceso por parte — decisiones de Daniel
 
 Daniel lo planteó así: «ambos llevan conexión con su hilo anterior para tener trazabilidad, pero se
@@ -247,7 +253,9 @@ rama hermana.
 - `exigeSecadoTerminado` recibe `tx` y corre **dentro** de la transacción de `moveLotToStorage`,
   después de bloquear el linaje. Hoy comprueba antes de la transacción (`storage.ts:35`).
 - **Exige** que el proceso vigente esté cerrado por humedad (`closureKind: moisture`), con la medición
-  de cierre en el objetivo o por debajo. Un proceso dividido sale como `lote_dividido`, y una mezcla
+  de cierre en el objetivo o por debajo. Si esa medición se corrigió, vale la **última corrección** de su
+  cadena (`correctsId`), y es la misma humedad de cierre que enseñan la ficha y la página del proceso
+  (revisión final, 2026-10-03). Un proceso dividido sale como `lote_dividido`, y una mezcla
   como `lote_mezclado` (propuesta, aprobada).
 - **Un lote sin proceso pasa, como hoy.** Así lo dice su propia cabecera, y así queda hasta el
   reimport (R9).
@@ -383,6 +391,7 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 - **Formulario de fermentación:** sin desplegable de receta; muestra la del proceso.
 - **Errores en español y en inglés, uno por código:** `sin_proceso_abierto`, `lote_dividido`,
   `lote_mezclado`, `lote_en_bodega`, `descendiente_en_bodega`, `corrida_ya_abierta`, `lote_consumido`,
+  `medicion_anterior_al_proceso`,
   `proceso_no_aplica_a_miel`, `corridas_abiertas`,
   `division_deja_remanente`, `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`,
   `receta_distinta_del_proceso`, `lineage_too_deep` y `motivo_otro_requiere_nota`, y también el ya
@@ -394,7 +403,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 `dividedByTransformationId`, `derivedFromLotProcessId`, `lot_process_return`,
 `motivo_devolucion_a_secado`, el módulo `procesoDelLinaje` y los códigos de arriba. Y los que añadió la
 revisión final (2026-10-03): `descendiente_en_bodega` (R2, decisión de Daniel del 2026-10-02),
-`corrida_ya_abierta` y `lote_consumido` (R3/R7), y el predicado `puedeEmpezarCorrida`. Ninguno está en
+`corrida_ya_abierta` y `lote_consumido` (R3/R7), el predicado `puedeEmpezarCorrida`, y
+`medicion_anterior_al_proceso` (R5). Ninguno está en
 `03_public_api.md`, porque ese contrato no cubre los procesos de la aplicación.
 
 ## 4. Pruebas — cada guardia con su flip-test

@@ -60,6 +60,7 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "descendiente_en_bodega",
   "corrida_ya_abierta",
   "lote_consumido",
+  "medicion_anterior_al_proceso",
 ];
 
 /**
@@ -174,6 +175,11 @@ const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
     por: "La cereza cuya fermentación terminó (R7): la siguiente corrida empieza en el lote que salió; el texto lo dice.",
     es: { debe: [/lote que salió/i] },
     en: { debe: [/lot that came out/i] },
+  },
+  medicion_anterior_al_proceso: {
+    por: "Lo lanza cerrarProceso con una humedad de antes del inicio (la de la continuación de una devolución): el texto dice qué hacer.",
+    es: { debe: [/antes/i, /desde su inicio/i] },
+    en: { debe: [/before/i, /since it started/i] },
   },
   descendiente_en_bodega: {
     por:

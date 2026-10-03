@@ -34,6 +34,8 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   // R7, «una sola línea viva bajo un proceso» (revisión final).
   "corrida_ya_abierta",
   "lote_consumido",
+  // R7: la humedad que cierra un proceso no puede ser anterior a su inicio (revisión final).
+  "medicion_anterior_al_proceso",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

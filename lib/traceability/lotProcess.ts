@@ -405,6 +405,8 @@ export interface CerrarProcesoInput {
  *
  * **R5 (Parte 1, 2026-10-01): no cierra con corridas abiertas** en el linaje que cubre
  * (`exigeSinCorridasAbiertas`), y lo decide dentro de la transacción con el linaje bloqueado.
+ *
+ * **Ni con una humedad anterior a su inicio** (`medicion_anterior_al_proceso`, revisión final, 2026-10-03).
  */
 export async function cerrarProceso(userAccountId: string, input: CerrarProcesoInput) {
   const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
@@ -416,6 +418,11 @@ export async function cerrarProceso(userAccountId: string, input: CerrarProcesoI
   const medicion = await prisma.measurement.findUnique({ where: { id: input.closingMoistureMeasurementId } });
   if (!medicion) throw new LotProcessError("measurement_not_found");
   if (medicion.variable !== "moisture") throw new LotProcessError("measurement_is_not_moisture");
+  // R7 (revisión final, ronda de arreglo 1, 2026-10-03): la humedad que cierra un proceso dice cómo TERMINÓ, así que no puede ser
+  // anterior a su inicio. Sin esto, la continuación de una devolución a secado se cerraba con la misma lectura que cerró el
+  // proceso anterior —la que la devolución acababa de declarar errónea— y el lote volvía a bodega sin secar. El instante igual
+  // vale: una lectura tomada al abrir es posterior a nada.
+  if (medicion.occurredAt < proceso.startedAt) throw new LotProcessError("medicion_anterior_al_proceso");
 
   return prisma.$transaction(async (tx) => {
     // R5 (Parte 1, 2026-10-01): con el linaje bloqueado, para que ninguna corrida empiece entre la
@@ -496,9 +503,35 @@ export async function exigeSecadoTerminado(tx: Prisma.TransactionClient, lotId: 
   if (proceso.endedAt === null) throw new LotProcessError("drying_not_finished");
   if (proceso.closureKind === "divided") throw new LotProcessError("lote_dividido");
   if (proceso.closingMoistureMeasurement === null) throw new LotProcessError("no_closing_moisture");
-  const medida = proceso.closingMoistureMeasurement.value.toNumber();
+  // Con la ÚLTIMA corrección de la medición de cierre, si la tiene (revisión final, ronda de arreglo 1, 2026-10-03): corregir
+  // la lectura que cerró el proceso no tocaba la compuerta, que seguía leyendo el número que se acababa de declarar erróneo.
+  const medida = (await lecturaVigente(tx, proceso.closingMoistureMeasurement)).value.toNumber();
   const objetivo = proceso.targetMoisturePct.toNumber();
   if (medida > objetivo) throw new LotProcessError("moisture_above_target");
+}
+
+/**
+ * La lectura que hoy vale de una medición: ella misma, o la última corrección de su cadena (`correctsId`). `correctMeasurement`
+ * no deja corregir dos veces la misma fila —se corrige la corrección—, así que la cadena es una línea. Revisión final, ronda de
+ * arreglo 1 (2026-10-03): la usan la compuerta de bodega y lo que la ficha y la página del proceso enseñan como humedad de
+ * cierre, para que digan lo mismo. Con un tope, por si la base trajera un ciclo que el servicio no puede escribir: se lanza en
+ * vez de devolver una lectura cualquiera.
+ */
+async function lecturaVigente<M extends { id: string; value: Prisma.Decimal }>(
+  tx: Prisma.TransactionClient,
+  medicion: M,
+): Promise<{ id: string; value: Prisma.Decimal }> {
+  let vigente: { id: string; value: Prisma.Decimal } = medicion;
+  for (let paso = 0; paso <= 1000; paso++) {
+    const correccion = await tx.measurement.findFirst({
+      where: { correctsId: vigente.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, value: true },
+    });
+    if (!correccion) return vigente;
+    vigente = correccion;
+  }
+  throw new LotProcessError("measurement_correction_chain_too_long");
 }
 
 /**
@@ -679,6 +712,15 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
   if (!lot) throw new LotProcessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [lot]);
 
+  // R7 (revisión final, ronda de arreglo 1, 2026-10-03): el desplegable de cierre ofrece sólo lo que `cerrarProceso` acepta y la
+  // compuerta lee. Con un proceso ABIERTO que cubre al lote, sólo las humedades desde su inicio —una anterior no dice cómo
+  // terminó, y la de la continuación de una devolución sería la misma que la motivó—. Y nunca una lectura ya corregida: vale su
+  // corrección, que es otra fila y sale en la lista.
+  const cobertura = await procesoQueCubre(prisma, lotId);
+  const desde =
+    cobertura.estado === "abierto"
+      ? (await prisma.lotProcess.findUniqueOrThrow({ where: { id: cobertura.vigente.id }, select: { startedAt: true } })).startedAt
+      : null;
   const [valores, mediciones] = await Promise.all([
     prisma.variableCatalogValue.findMany({
       where: { catalog: { key: { in: [...CATALOGOS_DE_INTERVENCION] } } },
@@ -689,7 +731,12 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     // cierra un proceso abierto en cereza se mide sobre el pergamino que salió de él.
     idsDeDescendencia(prisma, lotId).then((descendencia) =>
       prisma.measurement.findMany({
-        where: { lotId: { in: [lotId, ...descendencia] }, variable: "moisture" },
+        where: {
+          lotId: { in: [lotId, ...descendencia] },
+          variable: "moisture",
+          corrections: { none: {} },
+          ...(desde === null ? {} : { occurredAt: { gte: desde } }),
+        },
         orderBy: { occurredAt: "desc" },
         take: 20,
         include: { lot: { select: { lotCode: true } } },
@@ -765,17 +812,25 @@ export async function coberturaDelLote(userAccountId: string, lotId: string) {
   const ids =
     cobertura.estado === "mezcla" ? cobertura.composicion.procesos.map((p) => p.id) : cobertura.cadena.map((p) => p.id);
   const filas = await prisma.lotProcess.findMany({ where: { id: { in: ids } }, include: INCLUIR_PARA_PANTALLA });
+  // La humedad de cierre que se enseña es la que la compuerta lee: la última corrección de la medición, si la tiene (revisión
+  // final, ronda de arreglo 1, 2026-10-03). Si no, la página diría «cerró en el objetivo» de un lote que la compuerta rechaza, y
+  // no ofrecería devolverlo a secado.
+  const conCierre = await Promise.all(
+    filas.map(async (p) => {
+      const cierre = p.closingMoistureMeasurement === null ? null : (await lecturaVigente(prisma, p.closingMoistureMeasurement)).value.toNumber();
+      return [p, cierre] as const;
+    }),
+  );
   const porId = new Map(
-    filas.map((p) => [
+    conCierre.map(([p, cierre]) => [
       p.id,
       {
         ...p,
         etiqueta: p.processRecipeVersion?.recipe.name ?? SIN_RECETA,
         recetaConVersion: p.processRecipeVersion ? `${p.processRecipeVersion.recipe.name} · v${p.processRecipeVersion.version}` : null,
-        humedadDeCierre: p.closingMoistureMeasurement?.value.toNumber() ?? null,
+        humedadDeCierre: cierre,
         /** Negativo = cerró por debajo del objetivo. Null hasta que se cierra por humedad. */
-        diferenciaContraObjetivo:
-          p.closingMoistureMeasurement === null ? null : p.closingMoistureMeasurement.value.toNumber() - p.targetMoisturePct.toNumber(),
+        diferenciaContraObjetivo: cierre === null ? null : cierre - p.targetMoisturePct.toNumber(),
       },
     ]),
   );

@@ -1592,6 +1592,7 @@
     "error_proceso_descendiente_en_bodega": "Part of this coffee is already in storage, and stored coffee is not reprocessed: on this lot you cannot open a process or send it back to drying. To process what is left, split the lot first; if what is stored has a moisture defect, send the lot that is in storage back to drying.",
     "error_proceso_corrida_ya_abierta": "This lot already has an open fermentation or drying, and a run consumes its whole lot. End that run: the next one starts on the lot that comes out of it.",
     "error_proceso_lote_consumido": "This lot has already gone, whole, into another one: the run or transformation that consumed it has ended. The next run starts on the lot that came out of it.",
+    "error_proceso_medicion_anterior_al_proceso": "That moisture was measured before this process started, so it does not say how it ended. Close the process with a reading taken since it started.",
     "error_bandeja": "The tray operation could not be completed: {detail}",
     "recordProcessInterventionButton": "Record handling",
     "processReportHeading": "Process, roast and cup report",

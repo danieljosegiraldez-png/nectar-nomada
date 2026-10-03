@@ -13,6 +13,7 @@ import {
   cerrarProceso,
   coberturaDelLote,
   devolverASecado,
+  opcionesParaProceso,
   puedeAbrirProceso,
   puedeDevolverASecado,
   fraseDeNoAbrir,
@@ -63,8 +64,20 @@ async function enlazar(padres: string[], hijos: string[], tipo: "stage_change" |
 }
 const ahora = () => new Date();
 
-async function humedad(lotId: string, value: number) {
-  const id = (await prisma.measurement.create({ data: { variable: "moisture", value, unit: "%", occurredAt: new Date("2026-03-20T12:00:00Z"), lotId, provenanceClass: "measured_fact", createdBy: gestor } })).id;
+/** Una humedad del lote, insertada cruda. `occurredAt` por defecto el 2026-03-20: una humedad que cierra un proceso no puede ser
+ *  anterior a su inicio (`medicion_anterior_al_proceso`), así que un proceso que empieza después necesita la suya. */
+async function humedad(lotId: string, value: number, occurredAt: Date = new Date("2026-03-20T12:00:00Z")) {
+  const id = (await prisma.measurement.create({ data: { variable: "moisture", value, unit: "%", occurredAt, lotId, provenanceClass: "measured_fact", createdBy: gestor } })).id;
+  mediciones.push(id);
+  return id;
+}
+/** Una corrección de `medicionId`, insertada cruda, como la escribiría `correctMeasurement` (`correctsId`). */
+async function correccion(medicionId: string, value: number) {
+  const original = await prisma.measurement.findUniqueOrThrow({ where: { id: medicionId } });
+  const id = (await prisma.measurement.create({ data: {
+    variable: "moisture", value, unit: "%", occurredAt: original.occurredAt, lotId: original.lotId, provenanceClass: "measured_fact",
+    createdBy: gestor, correctsId: medicionId, reason: `TEST ${RUN}`,
+  } })).id;
   mediciones.push(id);
   return id;
 }
@@ -244,6 +257,34 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     expect(entrada.lotId).toBe(pergamino);
   });
 
+  it("la compuerta juzga con la ÚLTIMA corrección de la humedad de cierre: corregida por encima del objetivo no entra; por debajo, sí", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03, M2). Corregir la lectura que cerró el proceso no tocaba la compuerta, que
+    // seguía leyendo el número declarado erróneo. Dos árboles, en las dos direcciones: con la lectura ORIGINAL, el primero entraría
+    // y el segundo no. El segundo lleva una cadena de DOS correcciones: vale la última, no la primera.
+    const cereza = await lote("B12-C");
+    const pergamino = await lote("B12-P");
+    await enlazar([cereza], [pergamino]);
+    const p = await abrirProcesoDePrueba(gestor, cereza); // objetivo 11,5
+    const m = await humedad(pergamino, 11);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: ahora(), closingMoistureMeasurementId: m });
+    await correccion(m, 13);
+    await expect(moveLotToStorage(gestor, { lotId: pergamino, locationId: plotId, startedAt: ahora() })).rejects.toThrow(new LotProcessError("moisture_above_target"));
+    expect((await asignaciones(pergamino)).todas, "una entrada rechazada dejó una asignación escrita").toBe(0);
+    // La ficha y la página del proceso enseñan la misma humedad que la compuerta lee.
+    expect((await coberturaDelLote(gestor, pergamino)).vigente?.humedadDeCierre).toBe(13);
+
+    const cereza2 = await lote("B13-C");
+    const pergamino2 = await lote("B13-P");
+    await enlazar([cereza2], [pergamino2]);
+    const p2 = await abrirProcesoDePrueba(gestor, cereza2);
+    const m2 = await humedad(pergamino2, 13);
+    await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: ahora(), closingMoistureMeasurementId: m2 });
+    await correccion(await correccion(m2, 12.5), 11);
+    const entrada = await moveLotToStorage(gestor, { lotId: pergamino2, locationId: plotId, startedAt: ahora() });
+    expect(entrada.lotId).toBe(pergamino2);
+    expect((await coberturaDelLote(gestor, pergamino2)).vigente?.humedadDeCierre).toBe(11);
+  });
+
   it("reubicar dentro de bodega no vuelve a juzgar el secado", async () => {
     const cereza = await lote("B4-C");
     const guardado = await lote("B4-G");
@@ -407,7 +448,9 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     }
     // El reproceso sobre el ancestro, cerrado por humedad en el objetivo (11 contra 11,5).
     const p2 = await abrirProcesoDePrueba(gestor, c, { startedAt: new Date("2026-04-01T12:00:00Z") });
-    await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-04-20T12:00:00Z"), closingMoistureMeasurementId: await humedad(c, 11) });
+    // La humedad del reproceso, tomada DESPUÉS de su inicio: con la del 2026-03-20 se cerraba antes (registro, línea 172) y desde la
+    // revisión final se rechaza (`medicion_anterior_al_proceso`).
+    await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-04-20T12:00:00Z"), closingMoistureMeasurementId: await humedad(c, 11, new Date("2026-04-15T12:00:00Z")) });
 
     // Controles de que el estado es el que se quiere probar: sin ellos, el rechazo de abajo podría venir de cualquier otra cosa.
     expect(await loteDividido(prisma, l), "L debería ser la entrada de una división que cerró un proceso").toBe(true);
@@ -696,6 +739,35 @@ describe("R7 — de bodega a secado sólo por un defecto de humedad", () => {
     expect(await asignaciones(a), "el rechazo dejó terminada la asignación de bodega").toEqual({ todas: 1, abiertas: 1 });
     expect(await devolucionesDe(p.id), "el rechazo dejó una devolución escrita").toBe(0);
     expect(await prisma.lotProcess.count({ where: { lotId: a } }), "el rechazo dejó una continuación escrita").toBe(0);
+  });
+
+  it("la continuación no se cierra con la humedad que cerró el proceso anterior: medicion_anterior_al_proceso; con una lectura nueva, sí", async () => {
+    // Revisión final (ronda de arreglo 1, 2026-10-03). M1 cierra P1 en el objetivo y el lote entra en bodega; se devuelve a secado
+    // (la continuación P2 empieza el 2026-06-01). Cerrar P2 con M1 —la lectura que la devolución acaba de declarar errónea— dejaba
+    // volver a bodega sin secar. La pantalla tampoco la ofrece: el desplegable de cierre sólo trae lo medido desde el inicio de P2.
+    const l = await lote("V14");
+    const p1 = await abrirProcesoDePrueba(gestor, l);
+    const m1 = await humedad(l, 11);
+    await cerrarProceso(gestor, { lotProcessId: p1.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: m1 });
+    await moveLotToStorage(gestor, { lotId: l, locationId: plotId, startedAt: new Date("2026-05-02T12:00:00Z") });
+    const motivo = (await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } })).id;
+    const { continuacion: p2 } = await devolverASecado(gestor, { lotId: l, motivoValueId: motivo, ocurrioEn: new Date("2026-06-01T12:00:00Z") });
+    // Una lectura nueva, y otra corregida: la corregida no se ofrece, su corrección sí.
+    const m2 = await humedad(l, 11, new Date("2026-06-10T12:00:00Z"));
+    const m3 = await humedad(l, 14, new Date("2026-06-09T12:00:00Z"));
+    const c3 = await correccion(m3, 12);
+
+    const ofrecidas = (await opcionesParaProceso(gestor, l)).mediciones.map((m) => m.id);
+    expect(ofrecidas, "el desplegable ofrece la humedad que cerró el proceso anterior").not.toContain(m1);
+    expect(ofrecidas, "el desplegable ofrece una lectura ya corregida").not.toContain(m3);
+    expect(ofrecidas, "control: el desplegable no ofrece las lecturas nuevas").toEqual(expect.arrayContaining([m2, c3]));
+
+    await expect(cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-06-11T12:00:00Z"), closingMoistureMeasurementId: m1 }))
+      .rejects.toThrow(new LotProcessError("medicion_anterior_al_proceso"));
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p2.id } })).endedAt, "el rechazo cerró la continuación").toBeNull();
+    // Control: con la lectura nueva, cierra por humedad.
+    const cerrada = await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-06-11T12:00:00Z"), closingMoistureMeasurementId: m2 });
+    expect(cerrada.closureKind).toBe("moisture");
   });
 
   it("devolver a secado decide DESPUÉS de tener el linaje: si mientras esperaba el lote se reubicó, termina la asignación NUEVA", async () => {
