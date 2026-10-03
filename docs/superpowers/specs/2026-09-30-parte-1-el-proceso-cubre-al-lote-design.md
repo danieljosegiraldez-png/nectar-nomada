@@ -104,11 +104,18 @@ un proceso abierto**: abrir uno y devolver a secado (R7). Rechaza cuando:
 | Hay un proceso abierto en el lote, en algún ancestro o en algún descendiente | `process_already_open` | Daniel |
 | El lote fue dividido bajo un proceso (R6) | `lote_dividido` | normativo, `20` §1.1 |
 | El lote está en bodega (asignación de almacenamiento activa) | `lote_en_bodega` | Daniel, 2026-09-30 |
+| Algún descendiente del lote está en bodega | `descendiente_en_bodega` | Daniel, 2026-10-02 |
 | El lote es una mezcla (R1) | `lote_mezclado` | propuesta, aprobada |
 | El lote es de miel: `LotProcess` es del café | `proceso_no_aplica_a_miel` | propuesta, aprobada |
 
 - **Abrir un proceso nuevo sobre un lote cubierto por uno CERRADO está permitido.** Es el reproceso,
   y un lote puede pasar por varios procesos (decisión de Daniel).
+- **Ni sobre un lote con algún descendiente en bodega** (decisión de Daniel, 2026-10-02, añadida en la
+  revisión final): «ya en almacén/reposo no se puede abrir un lote, pero sí puede una parte ir a almacén
+  al ser dividido y otra regresar a fermentación o seguir en secado, y viceversa, y luego entrar a
+  almacén». Un proceso abierto arriba cubriría también a lo guardado. Para procesar lo que queda, primero
+  se divide (R6) y lo guardado conserva su proceso. Vale para las dos puertas: devolver a secado la cereza
+  con su pergamino en bodega también se rechaza. El propio lote en bodega sigue siendo `lote_en_bodega`.
 - **En la base:** un índice único parcial `lot_process(lot_id) WHERE ended_at IS NULL` cierra el caso
   de un mismo lote. La migración cuenta antes y aborta si no se cumple, con el patrón de
   `20260908070000_grado_y_cereza_obligatorios`.
@@ -357,7 +364,7 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
   motivos.
 - **Formulario de fermentación:** sin desplegable de receta; muestra la del proceso.
 - **Errores en español y en inglés, uno por código:** `sin_proceso_abierto`, `lote_dividido`,
-  `lote_mezclado`, `lote_en_bodega`, `proceso_no_aplica_a_miel`, `corridas_abiertas`,
+  `lote_mezclado`, `lote_en_bodega`, `descendiente_en_bodega`, `proceso_no_aplica_a_miel`, `corridas_abiertas`,
   `division_deja_remanente`, `seleccion_bajo_proceso_abierto`, `fusion_bajo_proceso_abierto`,
   `receta_distinta_del_proceso`, `lineage_too_deep` y `motivo_otro_requiere_nota`, y también el ya
   existente `process_already_open`, que ahora dice «en este café». Hoy `LotProcessError` se traduce con un
@@ -366,7 +373,8 @@ Las corridas no cambian: `lotProcessId` ya existe y ya es anulable.
 
 **Nombres nuevos para que Daniel los revise:** `closureKind` / `divided`,
 `dividedByTransformationId`, `derivedFromLotProcessId`, `lot_process_return`,
-`motivo_devolucion_a_secado`, el módulo `procesoDelLinaje` y los códigos de arriba. Ninguno está en
+`motivo_devolucion_a_secado`, el módulo `procesoDelLinaje` y los códigos de arriba. Y los que añadió la
+revisión final (2026-10-03): `descendiente_en_bodega` (R2, decisión de Daniel del 2026-10-02). Ninguno está en
 `03_public_api.md`, porque ese contrato no cubre los procesos de la aplicación.
 
 ## 4. Pruebas — cada guardia con su flip-test

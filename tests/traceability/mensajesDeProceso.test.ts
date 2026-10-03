@@ -55,6 +55,9 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "motivo_otro_requiere_nota",
   "process_already_open",
   "devolucion_antes_del_cierre",
+  // Ronda de arreglo 1 de la revisión final (2026-10-03): los códigos nuevos de las decisiones de Daniel del 2026-10-02 y de
+  // la revisión final (diseño §3.3, «Nombres nuevos para que Daniel los revise»).
+  "descendiente_en_bodega",
 ];
 
 /**
@@ -160,6 +163,13 @@ const SIN_PANTALLA_ES = /págin|pantalla|bot[oó]n|formulario/i;
 const SIN_PANTALLA_EN = /\bpage\b|screen|button|\bform\b/i;
 
 const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
+  descendiente_en_bodega: {
+    por:
+      "Decisión de Daniel del 2026-10-02: para procesar lo que queda, PRIMERO se divide, y lo guardado conserva su proceso. El texto dice " +
+      "qué hacer (dividir), y también llega por la devolución a secado de un lote cuyo descendiente está en bodega.",
+    es: { debe: [/divid/i, /bodega/i, /secado/i] },
+    en: { debe: [/split/i, /storage/i, /drying/i] },
+  },
   seleccion_bajo_proceso_abierto: {
     por:
       "También llega por la clasificación de verde (`recordGreenGrading` pide una `selection` sobre un verde que el proceso abierto aún cubre, " +

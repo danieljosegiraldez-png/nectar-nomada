@@ -348,12 +348,28 @@ export async function exigeSinOtroProcesoAbierto(tx: Prisma.TransactionClient, l
   // Por el linaje, no sólo el vigente: el vigente sólo mira hacia arriba, así que no ve un proceso
   // abierto en un descendiente, y un ancestro puede tener uno abierto más arriba de otro cerrado más
   // cerca.
-  const linaje = [lotId, ...(await idsDeAscendencia(tx, lotId)), ...(await idsDeDescendencia(tx, lotId))];
+  const descendencia = await idsDeDescendencia(tx, lotId);
+  const linaje = [lotId, ...(await idsDeAscendencia(tx, lotId)), ...descendencia];
   const abierto = await tx.lotProcess.findFirst({
     where: { lotId: { in: linaje }, endedAt: null },
     select: { id: true },
   });
   if (abierto) throw new LotProcessError("process_already_open");
+  // Decisión de Daniel, 2026-10-02 (registro, línea 189): «ya en almacén/reposo no se puede abrir un lote, pero sí puede
+  // una parte ir a almacén al ser dividido y otra regresar a fermentación o seguir en secado». Un proceso abierto aquí
+  // cubriría también al descendiente que ya está guardado, así que se rechaza; para procesar lo que queda, primero se
+  // divide (R6) y lo guardado conserva su proceso. Vale para las dos puertas: abrir, y devolver a secado un lote cuyo
+  // descendiente está en bodega (registro, línea 182).
+  //
+  // ANTES de la bodega del propio lote, a propósito: `puedeDevolverASecado` lee un `lote_en_bodega` como «todo lo anterior
+  // pasó», porque la devolución termina esa bodega antes de abrir la continuación. La del descendiente no la termina nadie.
+  if (descendencia.length > 0) {
+    const descendienteEnBodega = await tx.storageAssignment.findFirst({
+      where: { lotId: { in: descendencia }, endedAt: null },
+      select: { id: true },
+    });
+    if (descendienteEnBodega) throw new LotProcessError("descendiente_en_bodega");
+  }
   const enBodega = await tx.storageAssignment.findFirst({ where: { lotId, endedAt: null }, select: { id: true } });
   if (enBodega) throw new LotProcessError("lote_en_bodega");
 }

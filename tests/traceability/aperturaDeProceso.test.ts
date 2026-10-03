@@ -134,6 +134,29 @@ describe("R2 — un solo proceso abierto por café", () => {
     await expect(abrirProcesoDePrueba(gestor, miel)).rejects.toThrow(new LotProcessError("proceso_no_aplica_a_miel"));
   });
 
+  it("no se abre sobre un lote con un descendiente en bodega: descendiente_en_bodega; el mismo árbol sin bodega abre", async () => {
+    // Decisión de Daniel, 2026-10-02 (registro, línea 189): «ya en almacén/reposo no se puede abrir un lote». El que está en
+    // bodega es el NIETO, a dos generaciones: no es el propio lote (eso es `lote_en_bodega`), y un proceso abierto en el
+    // abuelo lo cubriría. Ningún proceso en el árbol, para que el rechazo no pueda venir de `process_already_open`.
+    const abuelo = await lote("P9-ABUELO");
+    const padre = await lote("P9-PADRE");
+    const nieto = await lote("P9-NIETO");
+    await enlazar("stage_change", [abuelo], [padre]);
+    await enlazar("stage_change", [padre], [nieto]);
+    await prisma.storageAssignment.create({ data: { lotId: nieto, locationId: plotId, startedAt: new Date("2026-03-22T12:00:00Z") } });
+    await expect(abrirProcesoDePrueba(gestor, abuelo)).rejects.toThrow(new LotProcessError("descendiente_en_bodega"));
+    expect(await prisma.lotProcess.count({ where: { lotId: abuelo } }), "el rechazo dejó un proceso escrito").toBe(0);
+
+    // Control: el MISMO árbol, sin nada en bodega, abre. Sin él, el rechazo de arriba podría venir de cualquier cosa del árbol.
+    const abuelo2 = await lote("P9C-ABUELO");
+    const padre2 = await lote("P9C-PADRE");
+    const nieto2 = await lote("P9C-NIETO");
+    await enlazar("stage_change", [abuelo2], [padre2]);
+    await enlazar("stage_change", [padre2], [nieto2]);
+    const p = await abrirProcesoDePrueba(gestor, abuelo2);
+    expect(p.endedAt).toBeNull();
+  });
+
   it("un descendiente a más de 12 generaciones con proceso abierto impide abrir arriba", async () => {
     const ids: string[] = [];
     for (let i = 0; i < 15; i++) ids.push(await lote(`P6-${i}`));

@@ -29,6 +29,8 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   "motivo_otro_requiere_nota",
   "process_already_open",
   "devolucion_antes_del_cierre",
+  // Ronda de arreglo 1 de la revisión final (2026-10-03): decisión de Daniel del 2026-10-02 (R2).
+  "descendiente_en_bodega",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

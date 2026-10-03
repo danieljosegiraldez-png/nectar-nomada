@@ -810,6 +810,7 @@ export const MOTIVOS_PARA_NO_ABRIR = [
   "process_already_open",
   "lote_dividido",
   "lote_mezclado",
+  "descendiente_en_bodega",
   "lote_en_bodega",
   "proceso_no_aplica_a_miel",
   "lineage_too_deep",
@@ -885,6 +886,7 @@ export const MOTIVOS_PARA_NO_DEVOLVER = [
   "process_already_open",
   "lote_dividido",
   "lote_mezclado",
+  "descendiente_en_bodega",
   "proceso_no_aplica_a_miel",
   "lineage_too_deep",
   "lot_not_found",
@@ -899,9 +901,11 @@ const esMotivoParaNoDevolver = (m: string): m is MotivoParaNoDevolver => (MOTIVO
  *
  * Imita al servicio paso por paso, sin escribir:
  * 1. `procesoQueDevolver`, la MISMA función que la devolución corre antes de escribir;
- * 2. R2 tal como la aplica la devolución: con la bodega YA terminada. `exigeSinOtroProcesoAbierto` mira la bodega lo ÚLTIMO,
- *    así que un `lote_en_bodega` dice que todo lo anterior pasó —y la devolución termina esa bodega antes de abrir—. Si algún
- *    día esa comprobación se mueve antes, `bodegaConProceso.test.ts` («…con un DESCENDIENTE con su proceso abierto…») cae.
+ * 2. R2 tal como la aplica la devolución: con la bodega YA terminada. `exigeSinOtroProcesoAbierto` mira la bodega del PROPIO
+ *    lote lo ÚLTIMO, así que un `lote_en_bodega` dice que todo lo anterior pasó —y la devolución termina esa bodega antes de
+ *    abrir—. Si algún día esa comprobación se mueve antes, `bodegaConProceso.test.ts` («…con un DESCENDIENTE con su proceso
+ *    abierto…») cae. La bodega de un DESCENDIENTE (`descendiente_en_bodega`, decisión de Daniel del 2026-10-02) va antes, y
+ *    la devolución no la termina: es un motivo más.
  *
  * No mira lo que trae el formulario —el motivo, la nota, la fecha—: eso lo rechaza el servicio con su frase al enviar.
  */

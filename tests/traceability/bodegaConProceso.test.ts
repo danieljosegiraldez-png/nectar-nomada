@@ -88,6 +88,19 @@ function abrirDirecto(lotId: string) {
 }
 
 /**
+ * Un proceso ABIERTO insertado crudo, sin pasar por `abrirProceso` (ronda de arreglo 1 de la revisión final, 2026-10-03). Para
+ * las pruebas de bodega cuyo estado de partida —un lote guardado bajo un ancestro con proceso abierto— ya no se puede construir
+ * por el servicio: desde la decisión de Daniel del 2026-10-02, abrir sobre un lote con un descendiente en bodega se rechaza. Es
+ * el estado de un lote guardado antes de la Parte 1. El primero del lote (`sequenceOrder` 1).
+ */
+async function procesoAbiertoCrudo(lotId: string) {
+  return prisma.lotProcess.create({ data: {
+    lotId, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: new Date("2020-01-01T00:00:00Z"),
+    provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId,
+  } });
+}
+
+/**
  * El resultado de una promesa sin que llegue a rechazarse nunca: mientras la prueba espera a otra cosa, una
  * entrada que falla no deja un rechazo sin atender (vitest lo contaría como error aparte). Misma forma que en
  * `corridaConProceso.test.ts`.
@@ -236,10 +249,12 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     const guardado = await lote("B4-G");
     await enlazar([cereza], [guardado]);
     await prisma.storageAssignment.create({ data: { lotId: guardado, locationId: plotId, startedAt: new Date("2026-03-01T12:00:00Z") } });
-    // Un ancestro con proceso ABIERTO: R2 lo deja abrir, porque `lote_en_bodega` mira el propio lote
-    // y no su descendencia. Con el proceso abierto, la compuerta rechazaría una ENTRADA; una
-    // reubicación no la consulta.
-    await abrirProcesoDePrueba(gestor, cereza);
+    // Un ancestro con proceso ABIERTO sobre un lote ya guardado: es un lote guardado ANTES de la Parte 1 cuyo ancestro tiene
+    // un proceso abierto (diseño R7, «Sólo al entrar a bodega»). Se inserta CRUDO: por el servicio ya no se puede, porque
+    // abrir un proceso sobre un lote con un descendiente en bodega se rechaza (`descendiente_en_bodega`, decisión de Daniel
+    // del 2026-10-02). Esta prueba es de la reubicación, no de la apertura: con el proceso abierto la compuerta rechazaría
+    // una ENTRADA, y una reubicación no la consulta.
+    await procesoAbiertoCrudo(cereza);
     const nueva = await moveLotToStorage(gestor, { lotId: guardado, locationId: plotId, startedAt: ahora() });
     expect(nueva.lotId).toBe(guardado);
     // Control: de verdad se reubicó —la vieja se cerró y hay una nueva abierta—, no se devolvió nada por otro camino.
@@ -420,7 +435,9 @@ describe("R7 — la compuerta de bodega mira el proceso que cubre al lote", () =
     const guardado = await lote("B11-G");
     await enlazar([cereza], [guardado]);
     const vieja = await prisma.storageAssignment.create({ data: { lotId: guardado, locationId: plotId, startedAt: new Date("2026-03-01T12:00:00Z") } });
-    await abrirProcesoDePrueba(gestor, cereza);
+    // Crudo, como en «reubicar dentro de bodega…»: por el servicio ya no se abre un proceso sobre un lote con un descendiente
+    // en bodega (`descendiente_en_bodega`), y esta prueba es del orden de la reubicación, no de la apertura.
+    await procesoAbiertoCrudo(cereza);
 
     const saca = retener(async (tx) => {
       await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${guardado}::uuid FOR UPDATE`;
@@ -936,6 +953,31 @@ describe("R7 — la pantalla sólo ofrece lo que el servicio aceptaría", () => 
     await moveLotToStorage(gestor, { lotId: a, locationId: plotId, startedAt: ahora() });
     await abrirProcesoDePrueba(gestor, hijo);
     expect(await devolverDiceLoMismo(a)).toEqual({ puede: false, motivo: "process_already_open" });
+  });
+
+  it("devolver la cereza con su pergamino en bodega se rechaza, y abrir sobre ella también: descendiente_en_bodega", async () => {
+    // Decisión de Daniel, 2026-10-02 (registro, líneas 182 y 189). La cereza NO está en bodega —sólo su pergamino—, así que el
+    // rechazo no es `lote_en_bodega`: es que la continuación abierta sobre la cereza cubriría al pergamino guardado. El
+    // predicado y el servicio tienen que decir lo mismo, y el rechazo no deja nada escrito.
+    const cereza = await lote("PD-DB-C");
+    const pergamino = await lote("PD-DB-P");
+    await enlazar([cereza], [pergamino]);
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    await cerrarProceso(gestor, { lotProcessId: p.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: await humedad(pergamino, 11) });
+    await moveLotToStorage(gestor, { lotId: pergamino, locationId: plotId, startedAt: new Date("2026-05-02T12:00:00Z") });
+    expect(await devolverDiceLoMismo(cereza)).toEqual({ puede: false, motivo: "descendiente_en_bodega" });
+    expect(await prisma.lotProcess.count({ where: { lotId: cereza } }), "el rechazo dejó una continuación escrita").toBe(1);
+    expect(await prisma.lotProcessReturn.count({ where: { closedLotProcessId: p.id } }), "el rechazo dejó una devolución escrita").toBe(0);
+    expect(await abrirDiceLoMismo(cereza)).toEqual({ puede: false, motivo: "descendiente_en_bodega" });
+
+    // Control: el MISMO árbol con el pergamino FUERA de bodega se devuelve —y abre la continuación sobre la cereza—. Sin él, el
+    // rechazo de arriba podría venir de cualquier otra comprobación de la devolución.
+    const cereza2 = await lote("PD-DBC-C");
+    const pergamino2 = await lote("PD-DBC-P");
+    await enlazar([cereza2], [pergamino2]);
+    const p2 = await abrirProcesoDePrueba(gestor, cereza2);
+    await cerrarProceso(gestor, { lotProcessId: p2.id, endedAt: new Date("2026-05-01T12:00:00Z"), closingMoistureMeasurementId: await humedad(pergamino2, 11) });
+    expect(await devolverDiceLoMismo(cereza2)).toEqual({ puede: true });
   });
 
   it("abrir un proceso: libre se ofrece; en bodega, bajo otro abierto, en una mezcla o dividido, no — cada uno con el código del servicio", async () => {
