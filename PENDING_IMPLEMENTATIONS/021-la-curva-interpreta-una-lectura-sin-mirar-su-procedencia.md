@@ -56,6 +56,49 @@ eje: no qué umbral aplica, sino **si la lectura vale como prueba**.
 ninguna receta en la base local y el bloque no llega a pintarse. Así que esto es **propagación leída**,
 no un fallo observado — y hay que tratarlo como tal hasta que alguien lo vea en pantalla.
 
+## La decisión de Daniel, 2026-10-02, y lo que se derivó midiendo
+
+**Eligió: dibujarla marcada, y nunca interpretarla.** Se pinta con una marca propia que dice que su
+instrumento no está verificado, y queda fuera de toda afirmación — no cuenta como «tu última lectura»
+ni sostiene ninguna cita. Conserva el registro, que es autoritativo, y separa dibujar de interpretar.
+
+**Y preguntó algo que obligó a medir, porque la pregunta estaba mal planteada por mí:** «aunque no
+esté calibrado, la idea era que avisara pero igual registrara, ¿qué pasó?». Nada pasó. Su regla del
+2026-09-14 **está implementada y se llama `REVISION_VENCIDA`**, no `UNCALIBRATED`. Son dos estados
+distintos y la pregunta los mezcló:
+
+| estado del instrumento | confianza | qué hace hoy |
+|---|---|---|
+| pasó el contraste, dentro de su plazo | `VALIDATED` | todo |
+| pasó el contraste, **vencido** su plazo de aviso | `REVISION_VENCIDA` | alimenta curvas y puede avisar; **no confirma una `CRITICAL`** |
+| **falló** el contraste | `UNCALIBRATED` | excluida del cálculo |
+| nunca se contrastó | `UNCALIBRATED` | excluida del cálculo |
+
+(`lib/equipos/verificacion.ts`, `confianzaPorVerificacion`.) Y **las cuatro se registran**: la
+confianza es un campo de la lectura, no un filtro de escritura — `ph.ts:55` dice «`UNCALIBRATED` se
+persiste pero no alimenta ninguna alerta». Así que «igual registra» vale siempre; lo que cambia es
+qué puede sostener.
+
+**Lo que esto derivó, y no es una preferencia:** `riesgoDeEsperar.ts` **no lleva ninguna severidad**
+—0 menciones en sus 170 líneas, con el control de que el grep miró—, pero el documento normativo
+clasifica así las cinco bandas que la pantalla cita:
+
+| banda | severidad en `10_ph_fermentation.md` §1 |
+|---|---|
+| `[5.20, 6.50)` | **INFO** |
+| `[4.50, 5.20)` | INFO antes de `ph_stall_grace_hours`; **CRITICAL (con confirmación)** después — y la pantalla la cita condicionada («si el pH se estanca…»), que es el caso CRITICAL |
+| `[3.50, 3.80)` | **WARNING** |
+| `[3.30, 3.50)` | **CRITICAL con confirmación** |
+| `< 3.30` | **CRITICAL disparo inmediato** |
+
+**Tres de las cinco citas son de grado CRITICAL.** Aplicando su regla del 2026-09-14 sin inventar
+nada: una lectura `REVISION_VENCIDA` puede sostener la de INFO y la de WARNING, y **no** las tres
+críticas. Una `UNCALIBRATED` no sostiene ninguna y se dibuja marcada.
+
+**La única sub-decisión que queda suya:** si esa compuerta por severidad entra en el mismo cambio que
+la marca de procedencia —son dos cosas que el mismo módulo necesita— o si va en una ficha aparte. El
+alcance de esta ficha era la procedencia; la severidad salió al medirla.
+
 ## Lo que hay que hacer
 
 1. Decidir con Daniel qué hace la curva con una lectura que el motor excluye: no dibujarla, dibujarla
