@@ -215,10 +215,10 @@ recorrido, cada registro se une a su paso).
 ### 4.4 Desviación (D5)
 
 Una desviación es un registro **sin `recipeStepId`** de uno de los cuatro tipos de 4.1, bajo un
-proceso **abierto** cuya receta **tiene pasos** y **no es «Libre»**. Exige `motivoDesviacion`
+proceso **abierto** cuya receta **tiene pasos** (también una Libre, que desde el 2026-10-03 los planea al abrir). Exige `motivoDesviacion`
 (`desviacion_sin_motivo`), queda marcado, y no bloquea. La Parte 5 separa esos lotes al comparar.
 
-**No son desviación:** un registro con paso; cualquier registro bajo «Libre», bajo una receta sin
+**No son desviación:** un registro con paso; cualquier registro bajo una receta sin
 pasos o bajo un proceso viejo sin receta; la trilla y los tuestes, que ocurren con el proceso cerrado
 y ninguna receta declara.
 
@@ -256,29 +256,38 @@ al verde queda fuera.
   no son desviación. El reimport los rehace.
 - Las columnas nuevas de 4.1 son anulables: lo histórico queda nulo y no se deduce.
 
-### 5.2 La receta libre
+### 5.2 La receta libre — se define antes de ejecutarla
 
-- Cada organización tiene **una** receta «Libre», marcada por una columna `esLibre` (única por
-  organización donde es verdadera), no por su nombre. Una receta propia llamada «Libre» no choca.
-- Se crea **dentro de la transacción de apertura**, la primera vez que alguien abre un proceso con
-  ella, **sin exigir `edit_beneficio`**: un operario que puede abrir procesos puede usarla. Dos
-  primeras aperturas a la vez no chocan, porque es un `upsert` sobre esa unicidad.
-- No tiene pasos. Bajo ella, cada registro lleva sólo `stepType`.
+**Corregido el 2026-10-03 por Daniel.** La primera versión dejaba escribir los pasos sobre la marcha.
+Daniel: «puedo escoger un proceso o inventar un proceso, pero debo mantenerlo dentro de su receta;
+**no se improvisa constante: se define y se ejecuta**», y «libre pero es igual un wash» no vale.
 
-### 5.3 El borrador al cerrar
+- **Abrir con «Libre» es escribir una receta pequeña en ese momento.** El formulario exige:
+  1. **la intención**, escrita (qué se busca probar);
+  2. **los pasos planeados**, en orden, aunque sea a grandes rasgos (tipo de paso y lo esencial de
+     sus ejes);
+  3. **el grado** que se declara, como hoy (`grado_proceso`). Sus umbrales y tiempos de reposo salen
+     del perfil de ese grado (2b §7).
+- Con eso se crea una versión **publicada** de una receta marcada `esLibre`, propia de la
+  organización y de ese proceso (`nombre`: «Libre — <intención>»). Desde ahí todo funciona como con
+  cualquier receta: los registros se unen a sus pasos, y lo que se salga es **desviación** (4.4).
+- **Control de parecido.** Antes de crearla, el servicio compara la secuencia planeada (tipos de paso
+  y ejes esenciales) con las recetas publicadas que la organización puede usar. Si coincide con una,
+  lo dice («estos pasos son la receta Lavado») y hay que **usar esa receta** o escribir **por qué**
+  es distinta (`motivoDeLibre`, obligatorio en ese caso). La comparación y su resultado se guardan.
+- **No exige `edit_beneficio`**: quien puede abrir procesos puede abrir una Libre. Una receta propia
+  llamada «Libre» no choca, porque la marca es la columna, no el nombre.
 
-- Se arma **sólo al cerrar por humedad** (`closureKind: moisture`) el proceso vigente, recorriendo la
-  cadena como en 4.3. Al cerrar `divided` no se arma nada: cada parte arma el suyo al cerrar, con el
-  prefijo común incluido.
-- Un paso por registro, en orden de inicio, con su tipo, los ejes que el registro guarda y las horas
-  reales como `horasSugeridas`.
-- **Fin:** al terminar una corrida o registrar una intervención, el operario puede **marcar las
-  lecturas que motivaron el cierre** (`lecturasDeCierre`, opcional). El borrador sólo propone como fin
-  esas lecturas, y nunca deduce un umbral de una lectura que nadie marcó. Si no hay ninguna marcada,
-  el fin del paso es por tiempo.
-- Daniel lo nombra y lo publica (§3.3). El proceso conserva que se hizo con «Libre» (es lo que
-  ocurrió) y gana `origenDeRecetaVersionId`, que cuenta como uso de esa versión. La Parte 5 lo agrupa
-  con los lotes de esa receta, marcado como origen.
+### 5.3 Convertirla en receta
+
+- Al cerrar por humedad, se **ofrece** convertir la Libre en receta de la organización: copia su
+  versión, ya con lo planeado, y deja editar en borrador lo que la ejecución enseñó (horas reales,
+  lecturas de cierre marcadas) antes de publicar.
+- **Fin de cada paso:** al terminar una corrida o registrar una intervención, el operario puede
+  **marcar las lecturas que motivaron el cierre** (`lecturasDeCierre`, opcional). El borrador sólo
+  propone como fin esas lecturas, y nunca deduce un umbral de una lectura que nadie marcó.
+- El proceso conserva su Libre (es lo que ocurrió) y gana `origenDeRecetaVersionId`, que cuenta como
+  uso de la receta nueva. La Parte 5 lo agrupa con sus lotes, marcado como origen.
 
 ---
 
@@ -335,15 +344,15 @@ Cada prueba lleva su **control válido** al lado, para que no pase vacía.
 | 4.2 paso de otra receta | rechaza `paso_de_otra_receta`; el mismo registro con un paso de su versión pasa | quitar la comprobación → cae |
 | 4.2 tipo que no corresponde | una `DryingRun` con un paso `washing` **de la misma versión** se rechaza `paso_no_corresponde` (así no la tapa la regla anterior); con un paso `drying` pasa | idem |
 | 4.2 tipo igual al del paso | una `FermentationRun` declarando `fermentation` sobre un paso `prefermentacion` acaba con `prefermentacion` o se rechaza | quitar la igualdad → cae |
-| 4.4 desviación | sin paso y sin motivo bajo receta con pasos → rechazo; con motivo pasa marcada; **bajo «Libre», bajo receta sin pasos y en una trilla → no exige motivo** | «exigir motivo siempre» → caen los tres negativos |
+| 4.4 desviación | sin paso y sin motivo bajo receta con pasos → rechazo; con motivo pasa marcada; **bajo receta sin pasos y en una trilla → no exige motivo** | «exigir motivo siempre» → caen los negativos |
 | §3.1 dos secados | una versión con dos pasos `drying` de volteo distinto: cada corrida lee el suyo en la cola | leer de la fase → cae |
 | §3.2 metas por paso | pH inicial en `prefermentacion` y en `fermentation` de la misma versión se guardan las dos; repetirla en el mismo paso se rechaza | quitar `recipeStepId` de la unicidad → cae |
 | §3.3 borrador | editar una versión `approved` se rechaza; un borrador sí; abrir proceso con un borrador se rechaza | idem |
 | §3.3 copia | una v1 con **las cuatro colecciones no vacías** → la v2 trae ids nuevos, y **cada `recipeStepId` de sus metas apunta a un paso de la v2**, no de la v1 | no remapear → cae |
 | 4.3 cadena | tras dividir un proceso con dos pasos hechos, la parte propone el tercero | calcular sólo sobre el vigente → propone el primero |
 | §5.1 receta obligatoria | abrir sin receta → `sin_receta`; con «Libre» pasa; dividir un proceso viejo sin receta pasa | quitar la comprobación → cae; moverla al núcleo → cae la división |
-| §5.2 «Libre» | dos aperturas concurrentes crean una sola «Libre»; una receta propia llamada «Libre» no la sustituye | buscar por nombre → cae |
-| §5.3 borrador libre | tres registros insertados **fuera de orden** con fechas distintas → el borrador sale en orden de inicio, con el despulpado incluido; con una lectura marcada el fin es esa lectura, sin marcar es tiempo | invertir el orden → cae |
+| §5.2 «Libre» | abrir sin intención o sin pasos planeados → rechazo; con pasos iguales a «Lavado» → exige usarla o `motivoDeLibre`; con pasos distintos → pasa; una receta propia llamada «Libre» no se confunde | quitar el control de parecido → cae |
+| §5.3 convertir | la receta nueva copia los pasos planeados con ids nuevos; con una lectura de cierre marcada, ese paso propone ese fin; sin marcar, no propone ninguno | deducir el fin de una lectura no marcada → cae |
 | 4.5 recepción | dos recepciones (Brix 26 y 20) → un aviso que nombra la de 26; sin recepción → aviso propio; una de 20 → ninguno | las tres ramas |
 
 Si una tarea toca TypeScript, su plan manda `npm run build`, no sólo el runner de pruebas.
