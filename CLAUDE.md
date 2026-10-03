@@ -3092,6 +3092,45 @@ Se anota aquí, y no en un log, por lo mismo que la de arriba: la entrada de est
 que lo contaba se archivó el 2026-09-29, y medido antes de moverla daba **cero**
 menciones en este archivo, en `DECISIONS.md` y en el archivo histórico.
 
+### Un formulario rechazado se vacía, y hay que teclearlo todo otra vez
+
+**2026-10-03, recorriendo la rejilla con una cuenta de operario.** Se escriben los cuatro
+campos de la rejilla menos uno, el servidor rechaza con su frase —correcta y clara— y **los
+cuatro campos quedan en blanco**. Lo mismo al dar un rango que no cabe en la rejilla: el
+mensaje dice «Ese rango no cabe en la rejilla de la parcela», y las cuatro cifras
+desaparecen.
+
+**No es de esos dos formularios.** Reproducido con dos componentes, dos servicios y dos
+validaciones distintas. La causa es el patrón, que es el de toda la casa: `useActionState`
+con `<form action={formAction}>` y campos no controlados cuyo `defaultValue` sale de **lo
+guardado**. React 19 reinicia los campos de un formulario al terminar su acción, así que al
+repintar vuelven al valor almacenado — que en un alta es vacío.
+
+Medido ese día, con su control:
+
+| | |
+|---|---|
+| componentes con `useActionState` | **70** |
+| de ellos, los que repintan lo ENVIADO | **0** |
+| React | 19.2.8 |
+
+**Por qué importa más de lo que parece.** La validación funciona y el mensaje es bueno: esto
+no es «la pantalla miente». Es peor en otro sentido — la pantalla dice la verdad y castiga
+por haberla escuchado. En un formulario de cuatro campos es molesto; en el de 134 campos que
+`CLAUDE.md` ya menciona, o en el campo con guantes y sol, es lo que hace abandonar un
+registro. Y no sale en ninguna prueba: las que hay afirman que el servicio rechaza, que es
+justo lo que sí ocurre.
+
+**Lo que NO se ha hecho, dicho para que nadie lo cuente por hecho.** Arreglarlo es devolver
+los valores enviados en el estado de la acción y usarlos como `defaultValue`, y eso toca los
+70 componentes: es un cambio de patrón y una decisión de Daniel, no una tarea. Queda escrito
+aquí para que la próxima sesión no lo redescubra recorriendo pantallas.
+
+**Y un falso positivo del mismo recorrido, porque distinguirlos cuesta una recarga.** Justo
+después de guardar bien, el selector de esquina de la rejilla aparece vacío. **No es un
+defecto**: es el repintado posterior al envío, y al recargar muestra el valor guardado. La
+diferencia entre eso y el vaciado de arriba no se ve mirando una vez — se ve recargando.
+
 ### Una prueba puede cerrarse sola por una errata
 
 **Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
