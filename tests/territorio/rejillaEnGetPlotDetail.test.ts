@@ -229,6 +229,28 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
   });
 
   /**
+   * **La diseñada aisladas de las celdas, y esto lo pidió el flip-test.**
+   *
+   * Las dos pruebas de arriba afirman estado, diseñada, celdas y área a la vez, así que
+   * tres mutaciones distintas del cableado —no pasar las celdas, no pasar el metro entre
+   * plantas, o sacar el área del polígono— tumbaban **las mismas dos**. No distinguían
+   * qué mitad se rompió.
+   *
+   * El marco y las celdas son dos entradas distintas: ésta afirma **sólo la diseñada**,
+   * que depende del marco y NO de la forma. Así una mutación del marco cae aquí y una de
+   * las celdas no.
+   */
+  it("la diseñada sale del marco y no depende de la forma", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({ where: { id: parcela.id }, data: { plantSpacingMeters: 1.8 } });
+    // A propósito SIN declarar forma: la diseñada tiene que llegar igual.
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad.status, "sin forma no hay real, pero sí diseñada").toBe("sin_forma");
+    expect(d.densidad).toMatchObject({ disenada: 2222 });
+  });
+
+  /**
    * **El control de que el área NO sale de `areaHectares`.** `crearParcela` no le pone
    * área, así que si el cableado la usara este caso daría `sin_area` o un número distinto;
    * con las celdas de la forma da 0,09 ha pase lo que pase con la columna del polígono.
