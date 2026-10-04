@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Lote L-0407 — lavado</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9ECE7}
+a{color:#1F5FA8}a:hover{color:#174A85}
+</style>
+</helmet>
+<div style="width: 390px; height: 1780px; box-sizing: border-box; background: #E9ECE7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #16201A; display: flex; flex-direction: column">
+
+<header style="background: #16201A; color: #F3F5F1; padding: 10px 12px 12px; display: flex; align-items: center; gap: 8px">
+<a href="Main.dc.html" aria-label="Volver a inicio" style="height: 44px; width: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F3F5F1; text-decoration: none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #A9B3AC">Lote en proceso · lavado</span>
+<span style="font-size: 18px; font-weight: 600">L-0407 · Caturra · 1.180 kg</span>
+</div>
+</header>
+
+<section style="margin: 12px 12px 0; border-radius: 12px; padding: 14px; background: #9E1C14; color: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+<span style="font: 700 12px 'IBM Plex Mono', monospace; letter-spacing: 0.08em">ROJO · PRÓXIMA ACCIÓN</span>
+<span style="font-size: 17px; font-weight: 600; line-height: 1.3">Lavar antes de las 14:30 (± 40 min). Pasado de las 16:30 sube el riesgo de sobrefermentación.</span>
+<sc-if value="{{assigned}}" hint-placeholder-val="{{false}}">
+<span style="font-size: 14px; font-weight: 600; padding: 10px; border-radius: 8px; background: #FFFFFF; color: #1E7B4A">Asignado a {{who}} · WhatsApp enviado 13:42</span>
+</sc-if>
+<sc-if value="{{unassigned}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 4px">
+<button type="button" onClick="{{assignA}}" style="min-height: 44px; border-radius: 10px; border: 0; background: #FFFFFF; color: #9E1C14; font: 600 14px 'IBM Plex Sans', sans-serif">Asignar a [Persona A]</button>
+<button type="button" onClick="{{assignB}}" style="min-height: 44px; border-radius: 10px; border: 1px solid #FFFFFF; background: transparent; color: #FFFFFF; font: 600 14px 'IBM Plex Sans', sans-serif">Asignar a [Persona B]</button>
+</div>
+</sc-if>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Etapas</h2>
+<sc-for list="{{stages}}" as="s" hint-placeholder-count="7">
+<div style="display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center">
+<span style="width: 18px; height: 18px; border-radius: 9px; box-sizing: border-box; border: 2px solid {{s.ring}}; background: {{s.fill}}"></span>
+<div style="display: flex; flex-direction: column; gap: 1px">
+<span style="font-size: 13px; font-weight: {{s.weight}}">{{s.name}}</span>
+<span style="font-size: 11px; color: #59625C">{{s.note}}</span>
+</div>
+<span style="font: 500 12px 'IBM Plex Mono', monospace; color: {{s.timeColor}}">{{s.time}}</span>
+</div>
+</sc-for>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Fermentación · pH</h2>
+<span style="font-size: 12px; color: #59625C">protocolo LAV-STD v3</span>
+</div>
+<figure style="margin: 0">
+<svg width="358" height="200" viewBox="0 0 358 200" role="img" aria-label="pH contra horas: lecturas dentro de la banda del protocolo, punto final previsto a las 33 horas">
+<rect x="36" y="10" width="310" height="160" fill="#FFFFFF"></rect>
+<path d="M36 34 L113 52 L191 82 L268 116 L346 140 L346 166 L268 146 L191 116 L113 84 L36 64 Z" fill="#DCE7F5"></path>
+<line x1="36" y1="170" x2="346" y2="170" stroke="#C9CFC8"></line>
+<line x1="36" y1="10" x2="36" y2="170" stroke="#C9CFC8"></line>
+<line x1="36" y1="130" x2="346" y2="130" stroke="#9E1C14" stroke-dasharray="4 4"></line>
+<text x="40" y="125" font-family="IBM Plex Mono, monospace" font-size="10" fill="#9E1C14">pH 4,6 límite inferior</text>
+<line x1="291" y1="10" x2="291" y2="170" stroke="#16201A" stroke-dasharray="3 3"></line>
+<text x="236" y="22" font-family="IBM Plex Mono, monospace" font-size="10" fill="#16201A">punto final 33 h</text>
+<rect x="276" y="10" width="30" height="160" fill="#16201A" opacity="0.06"></rect>
+<polyline points="36,46 75,52 113,66 152,80 191,96 230,108 268,118" fill="none" stroke="#1F5FA8" stroke-width="2.5"></polyline>
+<polyline points="268,118 291,124" fill="none" stroke="#1F5FA8" stroke-width="2" stroke-dasharray="4 3"></polyline>
+<circle cx="36" cy="46" r="3.5" fill="#1F5FA8"></circle>
+<circle cx="113" cy="66" r="3.5" fill="#1F5FA8"></circle>
+<circle cx="191" cy="96" r="3.5" fill="#1F5FA8"></circle>
+<circle cx="268" cy="118" r="4.5" fill="#1F5FA8"></circle>
+<text x="4" y="40" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">5,6</text>
+<text x="4" y="100" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">5,1</text>
+<text x="4" y="160" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">4,6</text>
+<text x="36" y="186" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">0 h</text>
+<text x="180" y="186" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">20 h</text>
+<text x="326" y="186" font-family="IBM Plex Mono, monospace" font-size="10" fill="#59625C">40 h</text>
+</svg>
+<figcaption style="font-size: 12px; color: #3E4741; line-height: 1.4">Lecturas dentro de la banda del protocolo (azul claro). Último pH 4,9 a las 31 h. Predicción del punto final: 33 h (14:30 ± 40 min), por la pendiente de pH y °Brix y la historia de 14 lotes del bloque 5.</figcaption>
+</figure>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Últimas lecturas</h2>
+<div style="display: grid; grid-template-columns: 46px repeat(3, minmax(0, 1fr)) 64px; gap: 6px; font-size: 11px; color: #59625C; border-bottom: 1px solid #D9DDD7; padding-bottom: 4px">
+<span>Hora</span><span>pH</span><span>°Brix</span><span>Masa °C</span><span>Calib.</span>
+</div>
+<sc-for list="{{readings}}" as="r" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: 46px repeat(3, minmax(0, 1fr)) 64px; gap: 6px; font: 500 12px 'IBM Plex Mono', monospace; align-items: center">
+<span>{{r.t}}</span><span>{{r.ph}}</span><span>{{r.brix}}</span><span>{{r.temp}}</span>
+<span style="font-size: 11px; padding: 2px 4px; border-radius: 4px; text-align: center; background: {{r.calBg}}; color: {{r.calFg}}">{{r.cal}}</span>
+</div>
+</sc-for>
+<span style="font-size: 11px; color: #59625C">pH-metro LAB-PH-02 calibrado hoy 06:10 (pH 4 y 7, pendiente 98 %). Sonda T3-núcleo cada 15 min.</span>
+</section>
+
+<section style="margin: 12px 12px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">Activo</h2>
+<span style="font-size: 13px; font-weight: 600">T3 · tanque tina</span>
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">Inox 304 · 900 L · llenado 790 L · espacio libre 12 %</span>
+<span style="font-size: 12px; color: #8A3A05">Por debajo del 30 % de espacio libre recomendado</span>
+</div>
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">Genealogía</h2>
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">2 entregas (bloque 5, pasadas 3 y 4) → L-0407 → al lavar: clasificación por correteo en L-0407-A (1ª) y L-0407-B (2ª)</span>
+</div>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">Plan siguiente</h2>
+<span style="font-size: 12px; color: #3E4741; line-height: 1.4">Lavado 4 enjuagues (≈ 4,2 L/kg pergamino seco) → remojo 12 h → secador solar S2 a 2 cm (≈ 14 kg/m²) · secado previsto 11–14 días según clima → reposo ≥ 21 días.</span>
+</section>
+
+<div style="flex-grow: 1"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1780}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { who: '' }; }
+  renderVals() {
+    var self = this;
+    var mk = function (name, note, time, st) {
+      var done = st === 'done', now = st === 'now';
+      return { name: name, note: note, time: time,
+        ring: done ? '#1E7B4A' : (now ? '#9E1C14' : '#AEB5AF'),
+        fill: done ? '#1E7B4A' : (now ? '#FDECEA' : '#FFFFFF'),
+        weight: now ? '700' : '500',
+        timeColor: now ? '#9E1C14' : '#59625C' };
+    };
+    var stages = [
+      mk('Recepción y selección', 'flotes 3,2 % · 88 % maduro · 20,6 °Brix', 'lun 06:20', 'done'),
+      mk('Espera a despulpado', '3 h 10 · bajo límite de 10 h', '09:30', 'done'),
+      mk('Despulpado', 'daño 0,6 % · sin pulpa en café', 'lun 09:30', 'done'),
+      mk('Fermentación', '31 h · punto final 14:30 ± 40 min', 'ahora', 'now'),
+      mk('Lavado y clasificación', 'correteo → 1ª y 2ª', 'hoy', 'next'),
+      mk('Secado', 'solar S2 · meta 10–12 %', '≈ 26 ene', 'next'),
+      mk('Reposo', '≥ 21 d', '≈ 16 feb', 'next')
+    ];
+    var readings = [
+      { t: '13:30', ph: '4,9', brix: '14,8', temp: '22,4', cal: 'válida' },
+      { t: '09:30', ph: '5,0', brix: '15,6', temp: '22,9', cal: 'válida' },
+      { t: '05:30', ph: '5,2', brix: '16,3', temp: '21,7', cal: 'válida' },
+      { t: 'lun 22', ph: '5,4', brix: '17,0', temp: '20,8', cal: 'válida' }
+    ].map(function (r) { return Object.assign({}, r, { calBg: '#E6F4EC', calFg: '#1E7B4A' }); });
+    var who = this.state.who;
+    return {
+      stages: stages, readings: readings,
+      assigned: who !== '', unassigned: who === '', who: who,
+      assignA: function () { self.setState({ who: '[Persona A]' }); },
+      assignB: function () { self.setState({ who: '[Persona B]' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
