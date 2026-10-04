@@ -48,6 +48,23 @@ export interface EntradaDelLoteInput {
    */
   readonly procesos: readonly ProcesoCrudo[];
   readonly mediciones: readonly MedicionCruda[];
+  /**
+   * **Los ids de las mediciones del lote que YA FUERON CORREGIDAS**, calculados sobre **todas** sus
+   * mediciones y no sólo sobre las de `mediciones`.
+   *
+   * **Por qué entra en vez de deducirse aquí** (`PENDING_IMPLEMENTATIONS/018`): se armaba con los
+   * `correctsId` de `mediciones`, que llega ya acotada a la fase abierta. Y `correctMeasurement`
+   * permite corregir la **fecha**, así que una corrección puede caer antes del inicio de la fase: la
+   * corrección queda fuera de esa lista, su `correctsId` no entra en el conjunto, y la original —ya
+   * corregida— vuelve a contarse como vigente.
+   *
+   * La vigencia de una medición es una propiedad de la **cadena de correcciones**, no de la ventana
+   * de la pantalla. Se resuelve antes, y por eso el conjunto lo arma quien consulta.
+   *
+   * **Obligatorio y sin valor por defecto, a propósito:** un llamador que lo olvide no compila. Con
+   * un `?? new Set()` el defecto volvería en silencio, que es exactamente cómo llegó.
+   */
+  readonly idsCorregidos: ReadonlySet<string>;
   /** Cómo estaba el instrumento **en el instante de cada lectura**, por id de medición. */
   readonly estadosDeInstrumento: ReadonlyMap<string, EstadoDeVerificacion>;
   readonly ahora: Date;
@@ -67,12 +84,13 @@ export function entradaDelLote(input: EntradaDelLoteInput): EntradaDelLote | nul
   });
   if (!fase) return null;
 
-  // La corrección supersede a la original, y los motores la excluyen del cálculo. El conjunto se
-  // arma aquí y no en cada llamador: la ficha lo hacía en su línea 229 y el tablero habría tenido
-  // que repetirlo.
-  const corregidas = new Set(
-    input.mediciones.map((m) => m.correctsId).filter((id): id is string => id != null),
-  );
+  // La corrección supersede a la original, y los motores la excluyen del cálculo.
+  //
+  // **El conjunto YA NO se arma aquí** (`PENDING_IMPLEMENTATIONS/018`). Se armaba con los
+  // `correctsId` de `input.mediciones`, que llega acotada a la fase abierta, así que una corrección
+  // con fecha anterior al inicio de la fase quedaba fuera y la original volvía a contarse como
+  // vigente. Lo calcula quien consulta, sobre TODAS las mediciones del lote; ver `idsCorregidos`.
+  const corregidas = input.idsCorregidos;
 
   const procesoAbierto = input.procesos.find((p) => p.endedAt === null) ?? null;
   // En reposo NO hay proceso abierto —el secado ya terminó— así que el grado, y con él los

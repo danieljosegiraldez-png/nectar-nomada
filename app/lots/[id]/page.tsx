@@ -371,6 +371,10 @@ export default async function LotDetailPage({
     ultimoSecadoTerminado: secadosTerminados[0] ?? null,
     // Parte 1, R7: lo MISMO que el tablero le pasa, por la misma función (`procesosParaEntrada`).
     procesos: cobertura?.paraEntrada ?? [],
+    // **Esta página no tiene el defecto de `PENDING_IMPLEMENTATIONS/018`**: `getLotDetail` carga las
+    // mediciones **sin ventana de fecha** (`lots.ts`: `where: { lotId }`), así que el conjunto que ya
+    // calculó arriba está completo. Se reusa en vez de dejar que la función lo deduzca otra vez.
+    idsCorregidos: supersededMeasurementIds,
     mediciones: measurements.map((m) => ({
       id: m.id,
       variable: m.variable,

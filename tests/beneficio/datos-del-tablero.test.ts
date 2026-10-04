@@ -17,6 +17,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import { ocupacionDelSitio } from "../../lib/beneficio/tablero";
+import { proximaLiberacion } from "../../lib/beneficio/liberacionDeUnidad";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
 import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -696,7 +698,7 @@ describe("«pide decisión» llega a la etapa de su fase", () => {
 });
 
 describe("cuándo se libera la próxima unidad", () => {
-  let cama: string, camaAjena: string, versionCon48h: string, versionFermenta20h: string, tanque: string;
+  let cama: string, camaDos: string, camaAjena: string, versionCon48h: string, versionFermenta20h: string, tanque: string;
 
   beforeAll(async () => {
     const receta = await prisma.processRecipe.create({
@@ -722,6 +724,13 @@ describe("cuándo se libera la próxima unidad", () => {
       return l.id;
     };
     cama = await nuevaCama("cama mía", miOrgId);
+    // **Una SEGUNDA cama mía, y la razón es un hallazgo.** La corrida con duración vivía en la misma
+    // cama que la corrida muda, y la prueba esperaba la hora de la que habla: una hora a la que esa
+    // cama NO iba a estar libre, porque no se libera hasta que acaben las dos. Era el defecto de
+    // `PENDING_IMPLEMENTATIONS/015` dentro del fixture que lo daba por bueno. Separarlas deja que la
+    // propiedad que esa prueba quiere medir —una duración declarada gana al silencio— siga medida,
+    // que es cierta ENTRE unidades; dentro de una unidad no lo es.
+    camaDos = await nuevaCama("cama mía, la segunda", miOrgId);
     camaAjena = await nuevaCama("cama ajena", otraOrgId);
 
     // Una receta que declara SÓLO la fermentación (20 h) y ninguna duración de secado: así leer la
@@ -771,10 +780,12 @@ describe("cuándo se libera la próxima unidad", () => {
     expect((await datosDelTablero(operario, ahora)).liberacion).toEqual({ tipo: "sin_duracion_declarada" });
 
     // Con una corrida cuya receta dice 48 h, gana la que habla: inicio + 48 h, y no una hora inventada.
+    // **En OTRA cama**, y es lo que el hallazgo de 015 obligó a separar: en la misma, la cama no se
+    // libera hasta que acabe también la muda, así que no hay hora que prometer. Ver el `beforeAll`.
     const inicio = haceHoras(10);
     const conDuracion = await loteSimple("L-CON-DURACION", miSitio, miOrgId);
     const proceso = await procesoDe(conDuracion, { versionId: versionCon48h });
-    await secadoDe(conDuracion, { camaId: cama, lotProcessId: proceso, inicio });
+    await secadoDe(conDuracion, { camaId: camaDos, lotProcessId: proceso, inicio });
     const esperada = new Date(inicio.getTime() + 48 * HORA);
     expect((await datosDelTablero(operario, ahora)).liberacion).toEqual({ tipo: "a_las", cuando: esperada });
 
@@ -790,7 +801,8 @@ describe("cuándo se libera la próxima unidad", () => {
   // **Corre DESPUÉS de la de arriba a propósito**: aquélla exige `null` al empezar, y esta deja una
   // fermentación en un tanque declarado.
   it("un TANQUE se libera igual que una cama: lee la duración de la FERMENTACIÓN y llega como unidad declarada", async () => {
-    // La cama de la prueba anterior sigue ocupada y se libera dentro de 38 h. El tanque, que empezó
+    // La segunda cama de la prueba anterior sigue ocupada y se libera dentro de 38 h (la primera no
+    // tiene hora conocida: su corrida no declara duración). El tanque, que empezó
     // hace 10 h y dura 20, se libera dentro de 10: gana, y `cuando` es **su** inicio + 20 h.
     const lote = await loteSimple("T-TANQUE", miSitio, miOrgId);
     const proceso = await procesoDe(lote, { versionId: versionFermenta20h });
@@ -872,16 +884,16 @@ describe("la curva de un lote", () => {
         // Banda de humedad 10–12 con objetivo 11, en la fase de secado y `during`. **Del pH no hay
         // ninguna**: es el control de «sin objetivo declarado».
         //
-        // Las demás son las **cuatro reglas de elección de banda** de `curvaDeUnLote`, cada una con una
+        // Las demás son las **reglas de elección de banda** de `elegirObjetivo`, cada una con una
         // variable propia y con el objetivo **de cada candidato en un sitio distinto de su banda**
         // (80, 50, 20…), para que `yObjetivo` diga CUÁL se eligió. Todas de 0 a 10 o de 20 a 30, así
         // que el objetivo `t` cae en `yObjetivo = 100 − 100·(t − mín)/(máx − mín)` en el lienzo de 100.
         targets: {
           create: [
             { variable: "moisture", moment: "during", phase: "drying", minValue: 10, maxValue: 12, targetValue: 11, unit: "%" },
-            // Sólo `initial`: no se pinta nunca.
+            // Sólo `initial`: se pinta como MARCA DEL INICIO (objetivo 25 en 20–30 → y = 50).
             { variable: "temperature", moment: "initial", phase: "drying", minValue: 20, maxValue: 30, targetValue: 25, unit: "C" },
-            // `initial` Y `final`: sale la final (objetivo 22 → y = 80), no la inicial (1,5 → 50).
+            // `initial` Y `final` y ningún `during`: no se elige ninguno (antes salía la final).
             { variable: "brix", moment: "initial", phase: "drying", minValue: 1, maxValue: 2, targetValue: 1.5, unit: "Bx" },
             { variable: "brix", moment: "final", phase: "drying", minValue: 20, maxValue: 30, targetValue: 22, unit: "Bx" },
             // Un `during` SIN fase: no dice de qué fase habla, no se pinta.
@@ -891,7 +903,8 @@ describe("la curva de un lote", () => {
             // `during` Y `final` de la fase: gana `during` (objetivo 2 → y = 80), no `final` (8 → 20).
             { variable: "water_volume_pulping", moment: "during", phase: "drying", minValue: 0, maxValue: 10, targetValue: 2, unit: "L" },
             { variable: "water_volume_pulping", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 8, unit: "L" },
-            // `during` sin fase Y `final` de la fase: gana la final (5 → y = 50), no el `during` huérfano (1 → 90).
+            // `during` sin fase Y `final` de la fase: el huérfano lo descarta el filtro de fase, así que
+            // queda UNA meta y se elige, como marca del final (5 → y = 50); el `during` daría 90.
             { variable: "wash_medium_ph", moment: "during", phase: null, minValue: 0, maxValue: 10, targetValue: 1, unit: "pH" },
             { variable: "wash_medium_ph", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 5, unit: "pH" },
           ],
@@ -931,7 +944,7 @@ describe("la curva de un lote", () => {
     const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable: "moisture", ...LIENZO } });
     expect(curva).not.toBeNull();
     // Banda 10–12: 12 → y=0, 10 → y=100, objetivo 11 → y=50.
-    expect(curva!.banda).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
+    expect(curva!.banda).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
     // Exactamente tres puntos, en x = 0, 150, 300 (8, 6 y 4 h) y y = -100, -50, 0 (14, 13, 12).
     // **Los valores discriminan**: sumar la lectura de hace 20 h (30) o la equivocada (99) cambia el
     // número de puntos, y usar la equivocada en vez de su corrección cambia el último y. **Y sumar la
@@ -962,28 +975,53 @@ describe("la curva de un lote", () => {
     expect(propia.curva).not.toBeNull();
   });
 
-  // **Las cuatro reglas de elección de banda** (`curvaDeUnLote`): «nunca `initial`, nunca un objetivo
-  // sin fase, `during` y si no `final`». Pintar la banda de otra fase —o la de un momento que no es
-  // el que se vigila— es exactamente «una banda que nadie declaró», que el diseño prohíbe.
-  it("nunca un objetivo `initial`: si es el único, no hay banda", async () => {
-    expect(await bandaDe("temperature")).toEqual({ tipo: "sin_objetivo_declarado" });
+  // **Las reglas de elección de banda** (`elegirObjetivo`, en `curvaDeLote.ts`). **Reescritas el
+  // 2026-10-02 por `PENDING_IMPLEMENTATIONS/017`**: antes decían «nunca `initial`, `during` y si no
+  // `final`», y esas dos mitades eran el defecto. Un objetivo `initial` se tiraba —y es el caso
+  // normal de lavado y natural, donde el Brix o el pH se miden UNA vez en la cereza o el mosto— y
+  // un `final` se pintaba como banda de toda la trayectoria.
+  //
+  // Lo que sigue valiendo intacto: un objetivo sin fase, o de otra fase, no se pinta. Pintar la
+  // banda de otra fase es «una banda que nadie declaró», que el diseño prohíbe.
+  const curvaDe = async (variable: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable, ...LIENZO } });
+    return curva!;
+  };
+
+  it("un objetivo `initial` solo SÍ se pinta, como marca del inicio: es el caso de lavado y natural", async () => {
+    // Banda 20–30 con objetivo 25 → y = 50. Lo que cambia frente a `during` es el ALCANCE, no la geometría.
+    expect(await bandaDe("temperature")).toEqual({
+      tipo: "banda", alcance: "al_inicio", yMin: 100, yMax: 0, yObjetivo: 50,
+    });
   });
 
-  it("sin `during`, la banda es la `final`, y no la `initial` que la acompaña", async () => {
-    // y = 80 es el objetivo 22 de la final (20–30); el de la inicial (1,5 en 1–2) daría 50.
-    expect(await bandaDe("brix")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
+  it("`initial` y `final` juntos y ningún `during`: NO se elige uno, y se dice cuáles había", async () => {
+    // Antes salía la `final` (objetivo 22 → y = 80) y la `initial` se perdía en silencio. Las dos son
+    // legítimas y hablan de instantes distintos: elegir era inventar cuál le importa al operario.
+    const c = await curvaDe("brix");
+    expect(c.banda).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(c.eleccion).toEqual({ tipo: "varios_sin_trayectoria", momentos: ["initial", "final"] });
+    // Control: «sin banda» no es «sin curva» — y el motivo NO es que la receta no declare nada.
+    expect(c.puntos.length).toBeGreaterThanOrEqual(0);
   });
 
   it("un objetivo SIN fase, o de OTRA fase, no se pinta", async () => {
     expect(await bandaDe("relative_humidity")).toEqual({ tipo: "sin_objetivo_declarado" });
     expect(await bandaDe("water_activity")).toEqual({ tipo: "sin_objetivo_declarado" });
+    // Y el motivo que se cuenta es el de verdad: no hay ninguno declarado PARA ESTA FASE.
+    expect((await curvaDe("relative_humidity")).eleccion).toEqual({ tipo: "sin_objetivo_declarado" });
   });
 
-  it("`during` gana a `final`; y un `during` sin fase no le gana a una `final` que sí la tiene", async () => {
-    // Objetivo 2 de la `during` → 80; el 8 de la `final` daría 20.
-    expect(await bandaDe("water_volume_pulping")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
-    // Objetivo 5 de la `final` → 50; el 1 del `during` huérfano daría 90.
-    expect(await bandaDe("wash_medium_ph")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
+  it("`during` gana a `final`; y un `during` sin fase deja sola a la `final`, que se pinta como marca del final", async () => {
+    // Objetivo 2 de la `during` → 80; el 8 de la `final` daría 20. Gana el único que describe una trayectoria.
+    expect(await bandaDe("water_volume_pulping")).toEqual({
+      tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 80,
+    });
+    // El `during` huérfano lo descarta el filtro de fase, así que queda UNA sola meta —la `final`— y
+    // se elige: objetivo 5 → y = 50. Lo que cambió es el alcance, que antes era «toda la trayectoria».
+    expect(await bandaDe("wash_medium_ph")).toEqual({
+      tipo: "banda", alcance: "al_final", yMin: 100, yMax: 0, yObjetivo: 50,
+    });
   });
 
   // **El perfil que rige el lote** (`perfilDelLote`) sale del grado del proceso de LA FASE ABIERTA, por la misma
@@ -1033,5 +1071,383 @@ describe("la curva de un lote", () => {
 
   it("sin pedir curva, no hay curva", async () => {
     expect((await datosDelTablero(operario, ahora)).curva).toBeNull();
+  });
+});
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/015`, y sólo él puede verlo.**
+ *
+ * El defecto no estaba en cómo se clasifica una unidad: estaba en QUÉ llega a clasificarse. Las dos
+ * consultas de fases abiertas llevan `inputs.some.lot: lotWhere`, así que una corrida sobre un lote
+ * que quien mira no ve no llegaba, y la unidad salía «libre y sano». Ninguna prueba de la función
+ * pura podía verlo —`ocupacionDelSitio` clasificaba correctamente lo que recibía— y por eso este
+ * caso vive aquí, donde se ejerce la consulta de verdad.
+ *
+ * El montaje es el de la ficha: una cama **visible** —de mi organización, porque las camas se acotan
+ * por las organizaciones de los lotes visibles— con un secado ABIERTO de `loteAjeno`, que es de otra
+ * organización y otro sitio y por tanto invisible para el operario.
+ */
+describe("la ocupación cuenta las corridas sin filtrar por lote (015)", () => {
+  let camaVisible: string, camaLibre: string, camaDosCorridas: string;
+
+  beforeAll(async () => {
+    const cama = async (etiqueta: string) => {
+      const l = await prisma.location.create({
+        data: {
+          name: nombre(etiqueta),
+          locationType: "drying_bed",
+          classification: "internal",
+          status: "approved",
+          organizationId: miOrgId,
+        },
+      });
+      locationIds.push(l.id);
+      return l.id;
+    };
+    camaVisible = await cama("cama ocupada por un lote invisible");
+    camaLibre = await cama("cama de control, sin nada dentro");
+    camaDosCorridas = await cama("cama con dos secados declarados");
+    await secadoDe(loteAjeno, { camaId: camaVisible });
+
+    // **El otro caso que la ficha pide comprobar con base**: dos corridas abiertas en la MISMA
+    // unidad. Sin receta a propósito: lo que esta mitad ejerce es el RECUENTO y el conflicto, que no
+    // dependen de la duración. La regla del fin mayor se afirma abajo llamando a la función pura con
+    // horas hechas a mano, que es donde se puede escribir el caso exacto.
+    const temprano = await loteSimple("L-DOS-TEMPRANO", miSitio, miOrgId);
+    const tarde = await loteSimple("L-DOS-TARDE", miSitio, miOrgId);
+    await secadoDe(temprano, { camaId: camaDosCorridas, inicio: haceHoras(5) });
+    await secadoDe(tarde, { camaId: camaDosCorridas, inicio: haceHoras(1) });
+  });
+
+  it("dos corridas en la MISMA cama: la liberación de esa cama es la POSTERIOR, y es un conflicto declarado", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const o = ocupacionDelSitio({
+      tanques: d.tanques, camas: d.camas, corridas: d.corridas, corridasPorUnidad: d.corridasPorUnidad,
+    });
+    // El recuento sin filtrar ve las dos, así que el conflicto se declara.
+    expect(d.corridasPorUnidad).toContainEqual({ unidadId: camaDosCorridas, corridas: 2 });
+    expect(o.conflictos).toContain(camaDosCorridas);
+    // Y sigue contando como UNA unidad en uso, no dos.
+    expect(o.mapa.camas.filter((c) => c.id === camaDosCorridas)).toHaveLength(1);
+
+    // La cama se libera cuando acabe la ÚLTIMA: la que empezó hace 1 h, no la de hace 5.
+    // `proximaLiberacion` mira TODAS las unidades, así que se le pregunta sólo por ésta para que la
+    // aserción hable de esta cama y no de la que gane en el archivo.
+    const suyas = [
+      { equipmentId: null, bedLocationId: camaDosCorridas, iniciadaEn: haceHoras(5), expectedHours: 48 },
+      { equipmentId: null, bedLocationId: camaDosCorridas, iniciadaEn: haceHoras(1), expectedHours: 48 },
+    ];
+    const unaSola = d.camas.filter((c) => c.id === camaDosCorridas);
+    expect(unaSola, "la cama es visible para quien mira").toHaveLength(1);
+    expect(proximaLiberacion({ corridas: suyas, unidades: unaSola, ahora })).toEqual({
+      tipo: "a_las",
+      cuando: new Date(haceHoras(1).getTime() + 48 * HORA),
+    });
+    // **Control: el mínimo sin agrupar daría la de hace 5 h**, que es la respuesta vieja. Si las dos
+    // horas fueran iguales, esta prueba no distinguiría nada.
+    expect(new Date(haceHoras(5).getTime() + 48 * HORA)).not.toEqual(
+      new Date(haceHoras(1).getTime() + 48 * HORA),
+    );
+  });
+
+  it("la cama con un secado de un lote invisible aparece en el recuento SIN filtrar, y no entre las corridas", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    // Las dos mitades, y la primera es el control de la segunda: si la corrida LLEGARA, el recuento
+    // no probaría nada porque `enUso` ya habría salido bien por el camino viejo.
+    expect(d.corridas.map((c) => c.bedLocationId)).not.toContain(camaVisible);
+    expect(d.corridasPorUnidad).toContainEqual({ unidadId: camaVisible, corridas: 1 });
+    // Y la cama de control no aparece en el recuento: ausente = cero, no «desconocida».
+    expect(d.corridasPorUnidad.map((o) => o.unidadId)).not.toContain(camaLibre);
+  });
+
+  it("clasificada con ese recuento, la cama NO sale libre y sano, y se rotula que su lote no es visible", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const o = ocupacionDelSitio({
+      tanques: d.tanques,
+      camas: d.camas,
+      corridas: d.corridas,
+      corridasPorUnidad: d.corridasPorUnidad,
+    });
+    const ocupada = o.mapa.camas.find((c) => c.id === camaVisible);
+    const libre = o.mapa.camas.find((c) => c.id === camaLibre);
+    expect(ocupada, "la cama ocupada está en el mapa").toBeDefined();
+    expect(libre, "la cama de control está en el mapa").toBeDefined();
+    expect(ocupada!.libreYSano).toBe(false);
+    expect(ocupada!.motivos).toContain("EN_USO");
+    expect(ocupada!.loteNoVisible).toBe(true);
+    expect(o.ocupadasSinLoteVisible).toContain(camaVisible);
+    // **El control que exige la ficha**, y sin él esta prueba no mide: la MISMA llamada, el MISMO
+    // mapa, y la cama sin nada dentro sí sale libre y sano.
+    expect(libre!.libreYSano).toBe(true);
+    expect(libre!.motivos).toEqual([]);
+    expect(libre!.loteNoVisible).toBe(false);
+  });
+});
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/018`: una corrección puede resucitar la lectura
+ * que corrige.**
+ *
+ * `correctMeasurement` permite corregir la **fecha**, así que la corrección es una fila nueva con su
+ * propio `occurredAt`. La consulta de la curva filtraba por la ventana de la fase y **después**
+ * armaba el conjunto de corregidas con los `correctsId` de lo que quedó dentro: una corrección con
+ * fecha anterior al inicio de la fase quedaba fuera, su `correctsId` nunca entraba, y **la original,
+ * ya corregida, se seguía dibujando**.
+ *
+ * Es el caso que ningún test ejercía: corrección **fuera** de la ventana, original **dentro**. Vive
+ * aquí y no en una prueba pura porque el defecto no estaba en cómo se decide la vigencia sino en
+ * **qué filas llegan a decidirla**, y eso sólo lo ejerce la consulta.
+ */
+describe("la vigencia de una medición no la decide la ventana de la pantalla (018)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let fuera: string, sinCorregir: string, dentro: string;
+
+  beforeAll(async () => {
+    // Tres lotes, cada uno con su secado abierto empezado hace 10 h: la ventana va de ahí en adelante.
+    const conSecado = async (etiqueta: string) => {
+      const l = await loteSimple(etiqueta, miSitio, miOrgId);
+      await secadoDe(l, { inicio: haceHoras(10) });
+      return l;
+    };
+    fuera = await conSecado("L-018-FUERA");
+    sinCorregir = await conSecado("L-018-SIN");
+    dentro = await conSecado("L-018-DENTRO");
+
+    // **El caso roto.** Original DENTRO de la fase; su corrección, con fecha ANTERIOR al inicio.
+    const original = await medicionDe(fuera, "moisture", 30, haceHoras(5));
+    await medicionDe(fuera, "moisture", 12, haceHoras(20), { id: original });
+
+    // Control 1: la misma original, sin corregir.
+    await medicionDe(sinCorregir, "moisture", 30, haceHoras(5));
+
+    // Control 2: corrección DENTRO de la ventana — el caso que ya funcionaba.
+    const originalDentro = await medicionDe(dentro, "moisture", 30, haceHoras(5));
+    await medicionDe(dentro, "moisture", 12, haceHoras(4), { id: originalDentro });
+  });
+
+  const valoresDe = async (lotId: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId, variable: "moisture", ...LIENZO } });
+    expect(curva, "la curva se calcula").not.toBeNull();
+    return curva!.lecturas.map((l) => l.value);
+  };
+
+  it("una corrección ANTERIOR a la fase oculta la original, y tampoco se dibuja ella", async () => {
+    // Ninguna de las dos: la original porque está corregida, la corrección porque su fecha la deja
+    // fuera de la ventana — y eso es correcto, no un hueco.
+    expect(await valoresDe(fuera)).toEqual([]);
+  });
+
+  it("CONTROL: la MISMA lectura sin corregir SÍ se dibuja", async () => {
+    // Sin esta fila, un `[]` podría venir de que la consulta no trae nada y la prueba de arriba
+    // pasaría sobre una curva vacía por cualquier motivo.
+    expect(await valoresDe(sinCorregir)).toEqual([30]);
+  });
+
+  it("CONTROL: con la corrección DENTRO de la ventana sale la corrección y no la original", async () => {
+    // El caso que ya funcionaba antes del arreglo: 12 es la corrección, 30 la original.
+    expect(await valoresDe(dentro)).toEqual([12]);
+  });
+
+  /**
+   * **La otra mitad del defecto —`entradaDelLote` deduciendo el conjunto de las mediciones ya
+   * acotadas— no se afirma aquí, y conviene decir por qué.** `EntradaDeLoteParaTablero` no expone
+   * las mediciones, y sus tres campos observables no sirven de testigo: `ultimaLectura` sale de la
+   * lista cruda sin mirar las corregidas, `metas` necesita una receta con ritmo que este fixture no
+   * tiene, y el `veredicto` de estos lotes ya es `SinVeredicto` por falta de grado — así que una
+   * aserción sobre él saldría igual con el defecto puesto y sin él.
+   *
+   * Esa mitad la guardan dos pruebas PURAS en `tests/beneficio/entrada-del-lote.test.ts`: «una
+   * corrección que NO está entre las mediciones corrige igual, si el llamador la conoce» y su
+   * control. Escribir aquí un testigo que no discrimina sería peor que no escribirlo.
+   */
+});
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/016`: la corrida que sale es la del aviso, y la
+ * curva abre ÉSA.**
+ *
+ * Se deduplicaba antes de evaluar, quedándose con la que empezó antes, así que una corrida posterior
+ * con algo que pide decisión desaparecía sin que nada la mirara. Medido el 2026-10-02: invertir esa
+ * comparación dejaba **188 de 188 archivos y 2460 pruebas en verde** — la regla no tenía guardia.
+ *
+ * El montaje es el de la ficha, y las dos corridas tienen que diferir en **ritmo** para que una sea
+ * más grave: las ventanas están anidadas (la nueva ve un subconjunto de las lecturas de la vieja),
+ * así que una lectura no puede hacer más grave a la nueva. Lo que sí puede es su receta: la nueva
+ * declara «pH cada 2 h» y su última lectura es de hace 5 h, así que **debe** una medición y sube a
+ * aviso; la vieja no declara ritmo y se queda en curso.
+ */
+describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa (016)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let lote016: string, corridaNueva: string, corridaVieja: string;
+
+  beforeAll(async () => {
+    // Una receta que declara humedad cada 2 h EN EL SECADO: es lo que hace que la corrida nueva —un
+    // secado— «deba» una lectura, y que la vieja —una fermentación, sin ritmo declarado— no deba nada.
+    const receta = await prisma.processRecipe.create({
+      data: { name: nombre("receta con ritmo"), organizationId: miOrgId, status: "approved" },
+    });
+    recetaIds.push(receta.id);
+    const version = await prisma.processRecipeVersion.create({
+      data: {
+        recipeId: receta.id,
+        version: 1,
+        status: "approved",
+        targets: {
+          create: [
+            {
+              variable: "moisture",
+              moment: "during",
+              phase: "drying",
+              minValue: 10,
+              maxValue: 12,
+              targetValue: 11,
+              unit: "%",
+              everyHours: 2,
+            },
+          ],
+        },
+      },
+    });
+    versionIds.push(version.id);
+
+    lote016 = await loteSimple("L-016", miSitio, miOrgId);
+    // Al juntar main en la Parte 1 (2026-10-03): un lote tiene UN proceso abierto
+    // (`lot_process_un_abierto_por_lote`), y el tablero lee el proceso de cada corrida por el
+    // resolvedor, no por su FK — así que dos corridas del mismo lote comparten receta y ritmo, y dos
+    // FERMENTACIONES no podrían diferir en ritmo. La asimetría que esta prueba necesita sale de la
+    // FASE: la receta sólo declara «humedad cada 2 h» para el secado.
+    //
+    // Y el orden importa para que el flip discrimine: `datosDelTablero` recorre las fermentaciones
+    // ANTES que los secados, así que la vieja —la menos grave— tiene que ser la fermentación. Si la
+    // más grave llegara primero, «quedarse con la primera» y «quedarse con la más grave» elegirían lo
+    // mismo y quitar la regla no haría caer nada (medido el 2026-10-03 con la versión al revés).
+    const proceso = await procesoDe(lote016, { versionId: version.id, natural: true });
+    // La VIEJA es una fermentación: la receta no le declara ritmo, así que no debe nada.
+    corridaVieja = await fermentacionDe(lote016, { lotProcessId: proceso, inicio: haceHoras(40) });
+    // La NUEVA, un secado con «humedad cada 2 h» que no tiene ninguna: debe una lectura.
+    corridaNueva = await secadoDe(lote016, { lotProcessId: proceso, inicio: haceHoras(6) });
+
+    // Dos lecturas: una que SÓLO ve la vieja (hace 20 h) y una que ven las dos (hace 5 h).
+    await medicionDe(lote016, "ph", 5.0, haceHoras(20));
+    await medicionDe(lote016, "ph", 4.2, haceHoras(5));
+  });
+
+  it("sale UNA entrada, y es la corrida POSTERIOR porque es la que pide decisión", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const suyas = d.lotes.filter((l) => l.lotId === lote016);
+    // Control: las dos corridas existen y están abiertas. Sin esto, «una entrada» podría ser «sólo
+    // llegó una».
+    expect(await prisma.fermentationRun.count({ where: { endedAt: null, id: corridaVieja } })).toBe(1);
+    expect(await prisma.dryingRun.count({ where: { endedAt: null, id: corridaNueva } })).toBe(1);
+    expect(suyas).toHaveLength(1);
+    expect(suyas[0]!.corridaId, "gana la que pide decisión, no la que empezó antes").toBe(corridaNueva);
+  });
+
+  it("y la curva abre la ventana de ESA corrida: la lectura de hace 20 h queda fuera", async () => {
+    const { curva } = await datosDelTablero(operario, ahora, {
+      curva: { lotId: lote016, variable: "ph", ...LIENZO },
+    });
+    expect(curva).not.toBeNull();
+    // La ventana de la nueva empieza hace 6 h: sólo la de hace 5 h. Con la ventana de la vieja
+    // (40 h) saldrían las dos, y con el `find` sin orden de antes podía salir cualquiera.
+    expect(curva!.lecturas.map((l) => l.value)).toEqual([4.2]);
+  });
+
+  it("CONTROL: la lectura de hace 20 h existe y SÍ entra en la ventana de la corrida vieja", async () => {
+    // Sin esta fila, el `[4.2]` de arriba podría venir de que la lectura de hace 20 h no se creó, y
+    // la prueba pasaría sobre una base que no monta el caso.
+    expect(
+      await prisma.measurement.count({ where: { lotId: lote016, variable: "ph", occurredAt: { gte: haceHoras(40) } } }),
+    ).toBe(2);
+    expect(
+      await prisma.measurement.count({ where: { lotId: lote016, variable: "ph", occurredAt: { gte: haceHoras(6) } } }),
+    ).toBe(1);
+  });
+});
+
+/**
+ * **«No se pudo resolver la receta» NO es «la receta no declara rango»**
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * `objetivos` sale de `abierta?.lotProcess?.processRecipeVersion?.targets ?? []`, así que sin
+ * corrida abierta está vacío **porque no se consultó ninguna receta**. La pantalla lo decía como
+ * «esta variable no tiene rango declarado en la receta»: una afirmación sobre algo que nadie miró.
+ *
+ * Este guardia vive en el carril con base a propósito. `curvaDeLote` acepta `recetaResuelta`
+ * **opcional** —con `true` por omisión, para no reescribir 82 llamadas de prueba que hablan de
+ * bandas y ejes—, y ese valor por omisión es el riesgo: un sitio que lo olvide vuelve a afirmar
+ * sobre la receta. Lo que lo cubre es esta prueba, que no construye la curva a mano: pide el
+ * tablero de verdad y comprueba que el **único sitio de producción** lo pasa.
+ *
+ * Flip-test: quitar `recetaResuelta` de la llamada de `datosDelTablero.ts` hace caer las dos
+ * primeras y deja pasar el control.
+ */
+describe("sin corrida abierta la curva no afirma nada sobre la receta (019)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let sinCorrida: string, sinReceta: string, conReceta: string;
+
+  beforeAll(async () => {
+    // (a) lecturas y NINGUNA corrida: nunca hubo de dónde sacar una receta.
+    sinCorrida = await loteSimple("L-019-SIN-CORRIDA", miSitio, miOrgId);
+    await medicionDe(sinCorrida, "ph", 4.2, haceHoras(5));
+
+    // (b) corrida abierta cuyo proceso NO apunta a ninguna versión de receta. Es la mitad que una
+    // condición escrita sólo sobre `abierta` se dejaría fuera: hay corrida, y receta no hay.
+    sinReceta = await loteSimple("L-019-SIN-RECETA", miSitio, miOrgId);
+    const procesoPelado = await procesoDe(sinReceta, { natural: true });
+    await fermentacionDe(sinReceta, { lotProcessId: procesoPelado, inicio: haceHoras(8) });
+    await medicionDe(sinReceta, "ph", 4.3, haceHoras(5));
+
+    // (c) **EL CONTROL**: corrida abierta con versión de receta que declara algo para OTRA
+    // variable. La receta SÍ se resolvió y de verdad no declara rango para pH, así que aquí la
+    // frase de siempre es cierta. Si este caso saliera igual que (a) y (b), el indicador no mide.
+    const receta = await prisma.processRecipe.create({
+      data: { name: nombre("receta sin ph"), organizationId: miOrgId, status: "approved" },
+    });
+    recetaIds.push(receta.id);
+    const version = await prisma.processRecipeVersion.create({
+      data: {
+        recipeId: receta.id,
+        version: 1,
+        status: "approved",
+        targets: {
+          create: [{
+            variable: "brix", moment: "during", phase: "fermentation",
+            minValue: 18, maxValue: 24, targetValue: 21, unit: "°Bx",
+          }],
+        },
+      },
+    });
+    versionIds.push(version.id);
+    conReceta = await loteSimple("L-019-CON-RECETA", miSitio, miOrgId);
+    const procesoConReceta = await procesoDe(conReceta, { versionId: version.id, natural: true });
+    await fermentacionDe(conReceta, { lotProcessId: procesoConReceta, inicio: haceHoras(8) });
+    await medicionDe(conReceta, "ph", 4.4, haceHoras(5));
+  });
+
+  const curvaPhDe = async (lotId: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId, variable: "ph", ...LIENZO } });
+    // Sin esta fila, una curva nula haría pasar cualquier aserción sobre `eleccion` por accidente.
+    expect(curva, "la curva tiene que existir, o lo de abajo no mide nada").not.toBeNull();
+    return curva!;
+  };
+
+  it("sin ninguna corrida dice que no se pudo resolver, no que la receta no declare rango", async () => {
+    const c = await curvaPhDe(sinCorrida);
+    expect(c.eleccion).toEqual({ tipo: "receta_no_resuelta" });
+    // Control: las lecturas SÍ se traen. «Sin banda» no es «sin curva».
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.2]);
+  });
+
+  it("con corrida abierta pero SIN versión de receta, tampoco se resolvió", async () => {
+    const c = await curvaPhDe(sinReceta);
+    expect(c.eleccion).toEqual({ tipo: "receta_no_resuelta" });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.3]);
+  });
+
+  it("CONTROL: con versión de receta que no declara pH, sí se afirma que no declara rango", async () => {
+    const c = await curvaPhDe(conReceta);
+    expect(c.eleccion).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.4]);
   });
 });

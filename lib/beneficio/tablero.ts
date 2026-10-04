@@ -64,6 +64,13 @@ export const LINAJE_DEMASIADO_HONDO = "LINAJE_DEMASIADO_HONDO";
 export interface EntradaDeLoteParaTablero {
   readonly lotId: string;
   readonly lotCode: string;
+  /**
+   * **La corrida que esta entrada describe.** Un lote puede tener varias abiertas, y el tablero
+   * ensaña UNA; sin este campo la curva tenía que volver a elegir con un `find` propio y podía abrir
+   * otra distinta de la que explica el aviso (`PENDING_IMPLEMENTATIONS/016`, segunda mitad): dos
+   * reglas de selección para la misma pregunta.
+   */
+  readonly corridaId: string;
   /** El veredicto ya resuelto, o la razón por la que no lo hay. */
   readonly veredicto: VeredictoParaCola | SinVeredicto | typeof LINAJE_DEMASIADO_HONDO;
   /** Cuándo empezó la fase abierta. `null` = no hay fase, y el lote no entra en la cola. */
@@ -99,6 +106,179 @@ function dictamenes(v: VeredictoParaCola): readonly DictamenParaCola[] {
   return [v.ph, v.brix, v.secado].filter((d): d is DictamenParaCola => d != null);
 }
 
+/**
+ * **En qué grupo cae UNA entrada, y por qué** — el cálculo que `colaDeAtencion` hacía en su propio
+ * bucle, extraído para que tenga **un solo sitio**.
+ *
+ * **Por qué se extrajo** (`PENDING_IMPLEMENTATIONS/016`): `datosDelTablero` tiene que elegir, entre
+ * las varias corridas abiertas de un lote, **cuál sale en el tablero**, y la regla que Daniel eligió
+ * el 2026-10-02 es «la de veredicto más grave; si empatan, la que empezó antes». Eso necesita el
+ * grupo de cada candidata **antes** de descartar ninguna. Calcularlo allí con un orden de gravedad
+ * propio habría puesto dos definiciones de «más grave» en el repositorio, y la que discrepa en
+ * silencio es la que esconde una decisión.
+ *
+ * Devuelve también `motivos` y `ritmo` porque la cola los necesita y recalcularlos sería hacer dos
+ * veces el mismo trabajo — y porque el ritmo puede **lanzar**, y ese error se captura aquí una vez.
+ */
+export function grupoDeLaEntrada(input: {
+  readonly lote: EntradaDeLoteParaTablero;
+  /**
+   * **Cuándo empezó la fase, NO nula.** Va aparte de `lote` a propósito: en el bucle de la cola el
+   * `continue` la estrecha, y ese estrechamiento no viaja dentro del objeto. Pedirla aquí obliga a
+   * quien llama a haber decidido ya qué hace con una entrada sin fase abierta —la cola la salta—,
+   * en vez de afirmar dentro que no es nula.
+   */
+  readonly faseIniciada: Date;
+  readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
+  readonly ahora: Date;
+}): { readonly grupo: GrupoDeAtencion; readonly motivos: readonly string[]; readonly ritmo: EstadoDeRitmo | { readonly error: string } } {
+  const lote = input.lote;
+  // El ritmo se calcula lote por lote y su error se captura AQUÍ. Un dato corrupto en uno no
+  // puede dejar la página en blanco para los demás.
+  let ritmo: EstadoDeRitmo | { error: string };
+  try {
+    ritmo = estadoDeRitmo({
+      ahora: input.ahora,
+      faseIniciada: input.faseIniciada,
+      expectedHours: lote.expectedHours,
+      metas: lote.metas,
+    });
+  } catch (e) {
+    if (!(e instanceof RitmoError)) throw e;
+    ritmo = { error: e.message };
+  }
+
+  const motivos: string[] = [];
+  let grupo: GrupoDeAtencion;
+
+  if (typeof lote.veredicto === "string") {
+    // `SinVeredicto` dice la razón, y la razón va a la fila: «este lote no tiene receta que
+    // diga su protocolo» y «este lote va bien» son hechos distintos.
+    motivos.push(lote.veredicto);
+    grupo = "sin_veredicto";
+  } else {
+    const ds = dictamenes(lote.veredicto);
+    for (const d of ds) motivos.push(d.status);
+    const critico = ds.some((d) => d.severity === "CRITICAL");
+    const listo = ds.some((d) => LISTO.has(d.status));
+    const aviso = ds.some((d) => d.severity === "WARNING");
+    const noSeSabe = ds.some((d) => NO_SE_SABE.has(d.status));
+
+    const desviaciones = input.desviacionesAbiertasPorLote.get(lote.lotId) ?? 0;
+    if (desviaciones > 0) motivos.push(MOTIVO_DESVIACION);
+
+    // Una lectura debida sube a «Aviso». **Ir tarde NO**: una fase larga puede ser deliberada
+    // (Daniel, 2026-09-17), así que `demora` sólo ordena dentro de su grupo.
+    //
+    // El estrechamiento se hace AQUÍ y no se guarda en un booleano: TypeScript no puede
+    // estrechar `ritmo` a través de una variable `boolean`, y guardarlo así fue lo que dejó
+    // pasar doce pruebas en verde con el typecheck en rojo.
+    let debe = false;
+    let ritmoRoto = false;
+    if ("error" in ritmo) {
+      // Un ritmo corrupto es «no se sabe», no «va bien».
+      ritmoRoto = true;
+      motivos.push(`RITMO_INVALIDO:${ritmo.error}`);
+    } else {
+      debe = ritmo.debidas.length > 0;
+      for (const d of ritmo.debidas) motivos.push(`DEBE_${d.variable.toUpperCase()}`);
+    }
+
+    if (critico) grupo = "critico";
+    else if (listo) grupo = "listo_para_decidir";
+    else if (aviso || desviaciones > 0 || debe) grupo = "aviso";
+    else if (noSeSabe || ritmoRoto) grupo = "sin_veredicto";
+    else grupo = "en_curso";
+  }
+
+  return { grupo, motivos, ritmo };
+}
+
+/** La gravedad de un grupo, **menor es más grave**: es el índice en `ORDEN`, que es el único orden. */
+export function gravedadDelGrupo(grupo: GrupoDeAtencion): number {
+  return ORDEN.indexOf(grupo);
+}
+
+/**
+ * **UNA entrada por lote, elegida DESPUÉS de evaluar todas sus corridas.**
+ *
+ * El tablero ensaña una fila por lote —si no, el mismo lote saldría dos veces con la misma clave de
+ * React, y `pidenDecision` contaría corridas mientras el recuento cuenta lotes, de modo que una
+ * celda diría «1 lote · 2 piden decisión»—. Lo que cambia aquí es **cuál** se queda.
+ *
+ * **El defecto que cierra** (`PENDING_IMPLEMENTATIONS/016`): se deduplicaba **antes** de evaluar,
+ * quedándose con la que empezó antes. Una corrida posterior con una lectura debida, otro veredicto o
+ * una duración más corta desaparecía **sin que nada la mirara**. Medido el 2026-10-02: invertir esa
+ * comparación dejaba **188 de 188 archivos y 2460 pruebas en verde**, así que la regla no tenía
+ * guardia en ninguna parte — y el fixture del caso existía, pero afirmaba cuántas entradas salen y
+ * nunca cuál.
+ *
+ * **La regla, decidida por Daniel el 2026-10-02:** se queda la de **veredicto más grave**; si
+ * empatan, la que **empezó antes** —que era la regla vieja, y su razón sigue siendo buena: la que
+ * lleva más tiempo abierta es la más atrasada—. La gravedad es la de `ORDEN`, la misma que ordena la
+ * cola, no un criterio paralelo.
+ *
+ * **Determinista a igualdad total:** con el mismo grupo y el mismo instante de inicio se queda la de
+ * `corridaId` menor, para que el tablero no cambie entre dos consultas que devuelven las filas en
+ * otro orden.
+ */
+export function unaEntradaPorLote(input: {
+  readonly entradas: readonly EntradaDeLoteParaTablero[];
+  readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
+  readonly ahora: Date;
+}): readonly EntradaDeLoteParaTablero[] {
+  const gravedadDe = (e: EntradaDeLoteParaTablero): number => {
+    // Sin fase abierta no se puede calcular el grupo —la cola salta esas entradas— y una entrada así
+    // no compite: cae al fondo del orden.
+    if (e.faseIniciada === null) return ORDEN.length;
+    return gravedadDelGrupo(
+      grupoDeLaEntrada({
+        lote: e,
+        faseIniciada: e.faseIniciada,
+        desviacionesAbiertasPorLote: input.desviacionesAbiertasPorLote,
+        ahora: input.ahora,
+      }).grupo,
+    );
+  };
+
+  const mejorPorLote = new Map<string, { readonly entrada: EntradaDeLoteParaTablero; readonly gravedad: number }>();
+  for (const entrada of input.entradas) {
+    const gravedad = gravedadDe(entrada);
+    const actual = mejorPorLote.get(entrada.lotId);
+    if (actual === undefined) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (gravedad < actual.gravedad) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (gravedad > actual.gravedad) continue;
+    // Empate de gravedad: la que empezó antes. Una sin fase no le gana a una con fase.
+    const nueva = entrada.faseIniciada;
+    const vieja = actual.entrada.faseIniciada;
+    if (nueva === null) continue;
+    if (vieja === null || nueva < vieja) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (nueva > vieja) continue;
+    // Mismo grupo y mismo instante: por `corridaId`, para que no decida el orden de la consulta.
+    if (entrada.corridaId < actual.entrada.corridaId) mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+  }
+
+  // En el orden en que llegó el primer candidato de cada lote: el orden de la lista no es una señal,
+  // y la cola ordena por su cuenta, pero una salida estable hace las pruebas legibles.
+  const vistos = new Set<string>();
+  const salida: EntradaDeLoteParaTablero[] = [];
+  for (const e of input.entradas) {
+    if (vistos.has(e.lotId)) continue;
+    vistos.add(e.lotId);
+    salida.push(mejorPorLote.get(e.lotId)!.entrada);
+  }
+  return salida;
+}
+
 export function colaDeAtencion(input: {
   readonly lotes: readonly EntradaDeLoteParaTablero[];
   readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
@@ -110,63 +290,15 @@ export function colaDeAtencion(input: {
     // Sin fase abierta no hay nada que vigilar: el lote no es trabajo pendiente del beneficio.
     if (!lote.faseIniciada) continue;
 
-    // El ritmo se calcula lote por lote y su error se captura AQUÍ. Un dato corrupto en uno no
-    // puede dejar la página en blanco para los demás.
-    let ritmo: EstadoDeRitmo | { error: string };
-    try {
-      ritmo = estadoDeRitmo({
-        ahora: input.ahora,
-        faseIniciada: lote.faseIniciada,
-        expectedHours: lote.expectedHours,
-        metas: lote.metas,
-      });
-    } catch (e) {
-      if (!(e instanceof RitmoError)) throw e;
-      ritmo = { error: e.message };
-    }
-
-    const motivos: string[] = [];
-    let grupo: GrupoDeAtencion;
-
-    if (typeof lote.veredicto === "string") {
-      // `SinVeredicto` dice la razón, y la razón va a la fila: «este lote no tiene receta que
-      // diga su protocolo» y «este lote va bien» son hechos distintos.
-      motivos.push(lote.veredicto);
-      grupo = "sin_veredicto";
-    } else {
-      const ds = dictamenes(lote.veredicto);
-      for (const d of ds) motivos.push(d.status);
-      const critico = ds.some((d) => d.severity === "CRITICAL");
-      const listo = ds.some((d) => LISTO.has(d.status));
-      const aviso = ds.some((d) => d.severity === "WARNING");
-      const noSeSabe = ds.some((d) => NO_SE_SABE.has(d.status));
-
-      const desviaciones = input.desviacionesAbiertasPorLote.get(lote.lotId) ?? 0;
-      if (desviaciones > 0) motivos.push(MOTIVO_DESVIACION);
-
-      // Una lectura debida sube a «Aviso». **Ir tarde NO**: una fase larga puede ser deliberada
-      // (Daniel, 2026-09-17), así que `demora` sólo ordena dentro de su grupo.
-      //
-      // El estrechamiento se hace AQUÍ y no se guarda en un booleano: TypeScript no puede
-      // estrechar `ritmo` a través de una variable `boolean`, y guardarlo así fue lo que dejó
-      // pasar doce pruebas en verde con el typecheck en rojo.
-      let debe = false;
-      let ritmoRoto = false;
-      if ("error" in ritmo) {
-        // Un ritmo corrupto es «no se sabe», no «va bien».
-        ritmoRoto = true;
-        motivos.push(`RITMO_INVALIDO:${ritmo.error}`);
-      } else {
-        debe = ritmo.debidas.length > 0;
-        for (const d of ritmo.debidas) motivos.push(`DEBE_${d.variable.toUpperCase()}`);
-      }
-
-      if (critico) grupo = "critico";
-      else if (listo) grupo = "listo_para_decidir";
-      else if (aviso || desviaciones > 0 || debe) grupo = "aviso";
-      else if (noSeSabe || ritmoRoto) grupo = "sin_veredicto";
-      else grupo = "en_curso";
-    }
+    // **El grupo, los motivos y el ritmo los calcula `grupoDeLaEntrada`**, no este bucle: el mismo
+    // cálculo lo necesita `datosDelTablero` para elegir cuál de las corridas de un lote sale
+    // (`PENDING_IMPLEMENTATIONS/016`), y dos definiciones de «más grave» derivan en silencio.
+    const { grupo, motivos, ritmo } = grupoDeLaEntrada({
+      lote,
+      faseIniciada: lote.faseIniciada,
+      desviacionesAbiertasPorLote: input.desviacionesAbiertasPorLote,
+      ahora: input.ahora,
+    });
 
     filas.push({
       lotId: lote.lotId,
@@ -246,6 +378,32 @@ export interface CeldaDelMapa {
   readonly nombre: string | null;
   readonly libreYSano: boolean;
   readonly motivos: readonly MotivoNoDisponible[];
+  /**
+   * **Está ocupada y su lote no es visible para quien mira.** No es un motivo más —el motivo es
+   * `EN_USO`, y es verdad— sino lo que el operario necesita saber para no buscar un lote que no va
+   * a encontrar.
+   *
+   * La ficha de `PENDING_IMPLEMENTATIONS/015` lo llamaba «ocupación desconocida». Con el recuento
+   * sin filtrar **no es desconocida**: se sabe que está ocupada, y lo único que falta es de qué
+   * lote. Se nombra por lo que el dato sostiene.
+   */
+  readonly loteNoVisible: boolean;
+}
+
+/**
+ * Cuántas corridas abiertas tiene UNA unidad, **contadas sin filtrar por lote**.
+ *
+ * **Por qué existe, medido:** las corridas del tablero se consultan con
+ * `inputs.some.lot: lotWhere` —filtradas por lote visible—, así que una corrida sobre un lote que
+ * quien mira no ve nunca llegaba aquí, y `enUso` salía `false`. «No me llegó ninguna corrida» se
+ * presentaba como «la unidad está libre», y la capacidad visible se leía como capacidad disponible.
+ *
+ * **Es un recuento y nada más.** No trae el lote, ni su código, ni su fase: dice cuántas filas hay.
+ * Así se deja de mentir sobre la capacidad sin enseñar nada que la visibilidad oculte.
+ */
+export interface OcupacionDeUnidad {
+  readonly unidadId: string;
+  readonly corridas: number;
 }
 
 /** Una corrida abierta, con lo que declara de su unidad. */
@@ -266,8 +424,19 @@ export interface Ocupacion {
    * alguien le echaría cereza encima. Es el error caro, así que salen contadas y en voz alta.
    */
   readonly sinUnidadDeclarada: number;
-  /** Unidades con más de una corrida abierta: conflicto de datos, no doble ocupación. */
+  /**
+   * Unidades con más de una corrida abierta: conflicto de datos, no doble ocupación.
+   *
+   * **Sale del recuento sin filtrar por lote**, no de lo visible: dos corridas en un tanque son un
+   * conflicto aunque ninguno de sus dos lotes se vea, y contándolo sobre lo visible el conflicto
+   * desaparecía junto con sus lotes.
+   */
   readonly conflictos: readonly string[];
+  /**
+   * Unidades ocupadas **cuyo lote no es visible** para quien mira, ordenadas. Es el tercer estado
+   * de `PENDING_IMPLEMENTATIONS/015`: ni «libre comprobada» ni «ocupada por algo que puedes abrir».
+   */
+  readonly ocupadasSinLoteVisible: readonly string[];
   /**
    * Corridas que nombran una unidad que no es de este sitio. No ocupan nada aquí y **no se
    * silencian**: contarlas como «sin unidad» mezclaría un dato incompleto con un filtro.
@@ -283,12 +452,23 @@ export interface Ocupacion {
 export function ocupacionDelSitio(input: {
   readonly tanques: readonly UnidadDelSitio[];
   readonly camas: readonly UnidadDelSitio[];
+  /**
+   * Corridas abiertas sobre lotes **visibles** para quien mira: las únicas de las que se sabe el
+   * lote. Siguen diciendo qué está sin unidad declarada y qué nombra una unidad ajena.
+   */
   readonly corridas: readonly CorridaAbierta[];
+  /**
+   * **Cuántas corridas abiertas hay por unidad, SIN filtrar por lote**, sobre las unidades
+   * visibles. De aquí sale `enUso` y de aquí salen los conflictos. Ver `OcupacionDeUnidad`.
+   */
+  readonly corridasPorUnidad: readonly OcupacionDeUnidad[];
 }): Ocupacion {
   const idsDeTanque = new Set(input.tanques.map((t) => t.id));
   const idsDeCama = new Set(input.camas.map((c) => c.id));
 
-  const cuenta = new Map<string, number>();
+  // Lo visible, que es lo que tiene lote: sólo sirve para distinguir «ocupada» de «ocupada por un
+  // lote que no ves», y para contar lo que no ocupa nada aquí.
+  const conLoteVisible = new Map<string, number>();
   let sinUnidadDeclarada = 0;
   let ajenas = 0;
 
@@ -302,16 +482,28 @@ export function ocupacionDelSitio(input: {
       ajenas += 1;
       continue;
     }
-    cuenta.set(declarada, (cuenta.get(declarada) ?? 0) + 1);
+    conLoteVisible.set(declarada, (conLoteVisible.get(declarada) ?? 0) + 1);
   }
+
+  // **La ocupación sale de aquí, no de las corridas visibles.** Una unidad que no aparece cuenta
+  // como cero: el recuento cubre TODAS las unidades visibles, así que ausente es «ninguna corrida».
+  const sinFiltro = new Map(input.corridasPorUnidad.map((o) => [o.unidadId, o.corridas] as const));
+  const ocupada = (id: string) => (sinFiltro.get(id) ?? 0) > 0;
 
   // El mismo `clasificar` para las dos, no una regla paralela: así el tablero y `app/equipos`
   // dicen lo mismo del mismo tanque. Una unidad con dos corridas cuenta como UNA en uso — es una
   // unidad, con un problema de datos —, y el conflicto se dice aparte.
   const clasificarTodas = (us: readonly UnidadDelSitio[]): Clasificacion[] =>
-    us.map((u) => clasificar({ ...u, enUso: (cuenta.get(u.id) ?? 0) > 0 }));
+    us.map((u) => clasificar({ ...u, enUso: ocupada(u.id) }));
   const celdas = (us: readonly UnidadDelSitio[], cs: readonly Clasificacion[]): CeldaDelMapa[] =>
-    cs.map((c, i) => ({ id: c.id, nombre: us[i]?.nombre ?? null, libreYSano: c.libreYSano, motivos: c.motivos }));
+    cs.map((c, i) => ({
+      id: c.id,
+      nombre: us[i]?.nombre ?? null,
+      libreYSano: c.libreYSano,
+      motivos: c.motivos,
+      // Ocupada, y su lote no está entre los que esta cuenta puede ver.
+      loteNoVisible: ocupada(c.id) && (conLoteVisible.get(c.id) ?? 0) === 0,
+    }));
   const clasifTanques = clasificarTodas(input.tanques);
   const clasifCamas = clasificarTodas(input.camas);
 
@@ -320,8 +512,12 @@ export function ocupacionDelSitio(input: {
     camas: resumir(clasifCamas),
     mapa: { tanques: celdas(input.tanques, clasifTanques), camas: celdas(input.camas, clasifCamas) },
     sinUnidadDeclarada,
-    conflictos: [...cuenta].filter(([, n]) => n > 1).map(([id]) => id).sort(),
+    conflictos: [...sinFiltro].filter(([, n]) => n > 1).map(([id]) => id).sort(),
     ajenas,
+    ocupadasSinLoteVisible: [...clasifTanques, ...clasifCamas]
+      .map((c) => c.id)
+      .filter((id) => ocupada(id) && (conLoteVisible.get(id) ?? 0) === 0)
+      .sort(),
   };
 }
 
@@ -356,4 +552,24 @@ export function instrumentosQuePidenAtencion(
   equipos: readonly EquipoParaTablero[],
 ): readonly EquipoParaTablero[] {
   return equipos.filter((e) => e.kind === "instrument" && PIDEN_ATENCION.has(e.verificacion));
+}
+
+/**
+ * **Los instrumentos que esta cuenta VE**, pidan o no atención
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * Hace falta para distinguir «ninguno pide atención» de «no ves ninguno», que es el defecto de
+ * 019(a): la pantalla decía lo primero sobre una lista vacía, y lo vacío puede ser que no haya
+ * nada que mirar. `DatosDelTablero.instrumentos` lleva **todo el equipo visible** con su `kind`
+ * —`datosDelTablero.ts:516` no filtra—, así que contar esa lista haría decir «ninguno pide
+ * atención» a una cuenta que ve tanques y **cero instrumentos**: la misma mentira con otra cara.
+ * Yo escribí esa versión y una de mis propias pruebas la daba por buena.
+ *
+ * El filtro de `kind` vive aquí, al lado del otro, para que la regla de qué cuenta como
+ * instrumento esté en un solo sitio: duplicarla en la pantalla es cómo se pierde.
+ */
+export function instrumentosVisibles(
+  equipos: readonly EquipoParaTablero[],
+): readonly EquipoParaTablero[] {
+  return equipos.filter((e) => e.kind === "instrument");
 }

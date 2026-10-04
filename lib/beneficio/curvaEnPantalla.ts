@@ -20,7 +20,7 @@
  *    recorta en silencio. Sin esta capa, un valor 50 veces mayor pintaría por encima del resto de
  *    la página o se saldría del dibujo sin dejar rastro.
  */
-import type { Curva } from "./curvaDeLote";
+import { indiceDeLaUnicaEnElExtremo, type AlcanceDeLaBanda, type Curva } from "./curvaDeLote";
 
 /** El lienzo en que se pide la curva. El `viewBox` real lo amplía `margenVertical`. */
 export const LIENZO_DE_CURVA = { ancho: 480, alto: 200 } as const;
@@ -49,23 +49,49 @@ export interface PuntoColocado {
   readonly fuera: "arriba" | "abajo" | null;
 }
 
+/**
+ * **A cuántas lecturas alcanza la banda**, que lo decide el momento del objetivo y nada más.
+ *
+ * `trayectoria` (un objetivo `during`) juzga todas. Un objetivo `initial` o `final` es un evento de
+ * un instante y juzga **una**: la que `indiceDeLaUnicaEnElExtremo` identifica, que se niega a
+ * desempatar. Un empate de instante da `ninguna` — no «todas dentro» ni una elegida al azar.
+ *
+ * Es el defecto de `PENDING_IMPLEMENTATIONS/017`: antes toda banda juzgaba toda lectura, así que
+ * una meta FINAL convertía un descenso de pH por diseño en «2 lecturas fuera del rango».
+ */
+export type AQuienJuzgaLaBanda =
+  | { readonly tipo: "todas" }
+  | { readonly tipo: "una"; readonly indice: number }
+  | { readonly tipo: "ninguna"; readonly alcance: "al_inicio" | "al_final" };
+
+export function aQuienJuzgaLaBanda(curva: Curva, alcance: AlcanceDeLaBanda): AQuienJuzgaLaBanda {
+  if (alcance === "trayectoria") return { tipo: "todas" };
+  const extremo = alcance === "al_inicio" ? "primera" : "ultima";
+  const indice = indiceDeLaUnicaEnElExtremo(curva.lecturas, extremo);
+  return indice === null ? { tipo: "ninguna", alcance } : { tipo: "una", indice };
+}
+
 export function colocarPuntos(curva: Curva, margen: number = margenVertical(curva.alto)): PuntoColocado[] {
   const banda = curva.banda;
   // Los extremos se ordenan en vez de suponer `yMin >= yMax`. Una receta al revés (min > max) ya no
   // llega aquí como banda: `curvaDeLote` la devuelve como `banda_al_reves` y no se juzga.
   const arriba = banda.tipo === "banda" ? Math.min(banda.yMin, banda.yMax) : null;
   const abajo = banda.tipo === "banda" ? Math.max(banda.yMin, banda.yMax) : null;
+  const aQuien = banda.tipo === "banda" ? aQuienJuzgaLaBanda(curva, banda.alcance) : null;
 
-  return curva.puntos.map((p): PuntoColocado => {
+  return curva.puntos.map((p, i): PuntoColocado => {
     const tope = -margen;
     const piso = curva.alto + margen;
     const fuera = p.y < tope ? "arriba" : p.y > piso ? "abajo" : null;
+    // Una lectura a la que la banda no alcanza es `null`, no `false`: `false` diría «dentro» de un
+    // rango que no la mira. Es la misma distinción que ya se hacía sin banda, por el otro motivo.
+    const laJuzga = aQuien !== null && (aQuien.tipo === "todas" || (aQuien.tipo === "una" && aQuien.indice === i));
     return {
       x: p.x,
       y: fuera === "arriba" ? tope : fuera === "abajo" ? piso : p.y,
       // Sin banda (también al revés o de ancho cero: no se dibuja ni se escala contra ella) no hay con
       // qué juzgar: `null`, no `false`. `false` diría «dentro» de un rango que no distingue nada.
-      fueraDeBanda: arriba === null || abajo === null ? null : p.y < arriba || p.y > abajo,
+      fueraDeBanda: arriba === null || abajo === null || !laJuzga ? null : p.y < arriba || p.y > abajo,
       fuera,
     };
   });
@@ -121,7 +147,18 @@ export type JuicioDeBanda =
   | { readonly tipo: "banda_de_ancho_cero" }
   | { readonly tipo: "banda_al_reves" }
   | { readonly tipo: "sin_lecturas" }
-  | { readonly tipo: "juzgada"; readonly fuera: number; readonly total: number };
+  /**
+   * El objetivo es de un instante (`initial` o `final`) y **varias lecturas comparten ese
+   * instante**, así que no se puede decir cuál es. No se desempata: ver `ultimaLectura`, y los
+   * 7 de 10 lotes reales que lo motivaron.
+   */
+  | { readonly tipo: "extremo_ambiguo"; readonly alcance: "al_inicio" | "al_final" }
+  /**
+   * `total` es **cuántas lecturas juzgó esta banda**, no cuántas hay. Con un objetivo `during`
+   * coinciden; con uno de un instante, `total` es 1 y las demás lecturas siguen dibujadas sin
+   * juicio. Decir «0 de 3 fuera» cuando sólo se mira una sería contar lo que no se midió.
+   */
+  | { readonly tipo: "juzgada"; readonly alcance: AlcanceDeLaBanda; readonly fuera: number; readonly total: number };
 
 export function juicioDeBanda(curva: Curva, puntos: readonly PuntoColocado[]): JuicioDeBanda {
   const banda = curva.banda;
@@ -129,5 +166,13 @@ export function juicioDeBanda(curva: Curva, puntos: readonly PuntoColocado[]): J
   if (banda.tipo === "banda_de_ancho_cero") return { tipo: "banda_de_ancho_cero" };
   if (banda.tipo !== "banda") return { tipo: "sin_banda" };
   if (puntos.length === 0) return { tipo: "sin_lecturas" };
-  return { tipo: "juzgada", fuera: puntos.filter((p) => p.fueraDeBanda === true).length, total: puntos.length };
+  const aQuien = aQuienJuzgaLaBanda(curva, banda.alcance);
+  if (aQuien.tipo === "ninguna") return { tipo: "extremo_ambiguo", alcance: aQuien.alcance };
+  const juzgadas = puntos.filter((p) => p.fueraDeBanda !== null);
+  return {
+    tipo: "juzgada",
+    alcance: banda.alcance,
+    fuera: juzgadas.filter((p) => p.fueraDeBanda === true).length,
+    total: juzgadas.length,
+  };
 }

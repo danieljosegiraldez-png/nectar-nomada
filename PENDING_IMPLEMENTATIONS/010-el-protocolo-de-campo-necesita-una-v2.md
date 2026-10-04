@@ -1,6 +1,12 @@
 # 010 · El protocolo de campo necesita una v2, y no se puede editar la v1
 
-**Estado: no empezado.** No es una deuda técnica: es una **divergencia medida**
+**Estado: la PARTE A está hecha (2026-10-03); queda la PARTE B.** Lo hecho: los diez ítems que
+faltaban —las reservas partidas en nivel y sitio, la cría de zángano, y los siete de §2.4— más el
+mapa, los guardias y la cabecera. **Lo que queda es el requisito 4**: las tres columnas a `enum`
+(`queenSighted` de `Boolean?`, `broodPatternNote` y `temperamentNote` de `String?`), con su
+migración. Sus dos planes están en `docs/superpowers/plans/2026-10-03-*`.
+
+No es una deuda técnica: es una **divergencia medida**
 entre dos documentos del dueño y el esquema que acaba de construirse.
 
 ## Qué pasó
@@ -61,3 +67,51 @@ Así que la v1 **no se toca**. Lo que hace falta es una v2 que:
 - El cargador es idempotente por `apiario-campo-v<versión>`
   (`scripts/cargar-protocolo-de-campo.ts:69`), así que una v2 entra sin pisar la
   v1 y sin necesitar ninguna migración.
+
+---
+
+## Lo que derivó, medido el 2026-10-03 — **sigue abierta**
+
+Tres hechos de esta ficha ya son falsos. No cambian lo que hay que hacer, pero sí lo que hay
+que creer al empezar, y uno de ellos me hizo concluir «resuelta» antes de leerla entera.
+
+**1. `apiario-campo-v2.json` YA EXISTE — y no es la v2 que esta ficha pide.** Es el error de
+leer un nombre de archivo como un entregable. Medido contra sus **44 ítems**:
+
+| lo que pide esta ficha | en la v2 de hoy |
+|---|---|
+| partir `honey_stores` y `pollen_stores` en nivel + sitio | **no**: `honey_stores` sigue siendo `enum` de 4 opciones, y apunta a `Inspection.storesLevel` — la columna que el esquema marca como **reemplazada** (`schema.prisma:8171`). `pollen_stores`, 4 opciones y **sin** `coversExistingColumn` |
+| el ítem de cría de zángano | **no existe ninguno** (`drone`: 0 coincidencias) |
+| los ítems de §2.4, configuración de caja | **ninguno** |
+| los tres a `enum` | el protocolo **sí** los declara como `enum` —`queen_sighted` 3, `brood_pattern` 5, `temperament` 3— pero las **columnas** siguen sin serlo: ver abajo |
+
+**2. Las tres columnas del punto 4, con su tipo de hoy.** `queenSighted` es **`Boolean?`**
+(`schema.prisma:8170`), `broodPatternNote` y `temperamentNote` son **`String?`** (`:8169`,
+`:8211`). Lo de `queenSighted` no es sólo un tipo: el protocolo ofrece **tres** estados y la
+columna guarda dos, así que **«no se buscó» se guarda como `null` y no se distingue de «no se
+preguntó»**. Es la misma forma que `PENDING_IMPLEMENTATIONS/019` —una ausencia presentada como
+un hecho— en otro sitio.
+
+**3. «El protocolo no está cargado» sigue siendo cierto, pero su comando no.** La columna
+`external_identifier` de `research.protocol_version` **no existe**; sus columnas son
+`protocol_id, version, status, notes, created_at, created_by, superseded_by_version_id`. Medido
+por la otra vía, uniendo con `research.protocol`: hay **2** versiones cargadas y son **«PE
+Cafelino 25-26»** y **«Cryobloom»** — **cero** de apiario de campo, de 2 protocolos en total.
+
+**Y eso decide la pregunta que esta ficha dejaba abierta: la v2 se puede editar.** Su cabecera
+prohíbe editar «para que las respuestas ya dadas sigan significando lo mismo», y **no hay
+ninguna respuesta dada**: ningún `apiario-campo` está cargado, ni la v1 ni la v2. La regla no
+está en juego porque su motivo no está en juego. Si alguna vez se carga y se responde, entonces
+sí hace falta una v3 — y conviene decidirlo antes de cargarla, no después.
+
+**Lo que esto no cambia:** las columnas de destino existen todas —`honey_stores_level`,
+`honey_next_to_brood` y sus gemelas de polen (ADR-117), `drone_brood_present`, y las de §2.4 en
+`Hive`: `framesPerBox`, `queenExcluder`, `entranceReducer`…—. Lo que falta son los **ítems que
+las nombren** y los tres cambios de tipo de columna. Sigue sin necesitar ninguna decisión nueva
+del dueño: ADR-117 y el Anexo B §2.2/§2.4 ya las traen.
+
+**Y la divergencia de `honey_stores` está declarada y vigilada, no silenciosa:**
+`tests/arquitectura/enum-del-protocolo.test.ts` la lleva en `DIVERGENCIAS_HEREDADAS` con **el
+par exacto** permitido y su razón —«junto a cría no es una cantidad, es una posición»—, así que
+cualquier OTRA diferencia en esa misma pregunta vuelve a ser rojo. Al cerrar esta ficha, esa
+entrada se quita: si se queda, eximirá un desajuste que ya no existe.

@@ -85,9 +85,32 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   queen_cells: { clase: "campo", modelo: "Inspection", campo: "queenCellKind" },
   queen_cells_count: { clase: "campo", modelo: "Inspection", campo: "queenCellCount" },
   honey_stores: { clase: "campo", modelo: "Inspection", campo: "honeyStoresLevel" },
+  // **El sitio de «junto a la cría», que no es un nivel más** (ADR-117,
+  // `PENDING_IMPLEMENTATIONS/010`). El protocolo lo ofrecía como cuarta opción de la escala, y en
+  // la misma lista impide decir «alta Y junto a la cría»; ahora es su propia pregunta y su propia
+  // columna, que ya existían y no tenían nada que las escribiera.
+  honey_next_to_brood: { clase: "campo", modelo: "Inspection", campo: "honeyNextToBrood" },
   pollen_stores: { clase: "campo", modelo: "Inspection", campo: "pollenStoresLevel" },
+  pollen_next_to_brood: { clase: "campo", modelo: "Inspection", campo: "pollenNextToBrood" },
+  // Anexo B §2.2, con su motivo escrito: «señal de obrera ponedora si aparece sin reina». El JSON
+  // tenía los otros seis campos de esa sección y no ésta, y la columna llevaba ahí sin escritor.
+  drone_brood_present: { clase: "campo", modelo: "Inspection", campo: "droneBroodPresent" },
   temperament: { clase: "campo", modelo: "Inspection", campo: "temperamentNote" },
   irregularities: { clase: "tabla", modelo: "InspectionIrregularity", nota: "Una fila por irregularidad observada: son varias a la vez y por eso no es una columna." },
+  // **Anexo B §2.4, y aterrizan en `Hive` y no en `Inspection`** porque lo dice el propio Anexo:
+  // «cambia poco entre visitas, así que se guarda EN LA COLMENA y en la inspección sólo se
+  // registra la diferencia. Preguntarlo cada vez es coste sin información». Por eso los siete
+  // llevan `prefillLastUsed`, que es cómo este protocolo modela «sólo si cambió».
+  //
+  // `frames_per_box` va en etapa `close` por la regla de corte del propio archivo —«si se puede
+  // escribir en el carro, `stage` es `close`»— y el Anexo dice lo mismo de ese campo.
+  brood_boxes: { clase: "campo", modelo: "Hive", campo: "broodBoxes" },
+  supers: { clase: "campo", modelo: "Hive", campo: "supers" },
+  frames_per_box: { clase: "campo", modelo: "Hive", campo: "framesPerBox" },
+  queen_excluder: { clase: "campo", modelo: "Hive", campo: "queenExcluder" },
+  feeder_type: { clase: "campo", modelo: "Hive", campo: "feederType" },
+  entrance_reducer: { clase: "campo", modelo: "Hive", campo: "entranceReducer" },
+  screened_bottom_board: { clase: "campo", modelo: "Hive", campo: "screenedBottomBoard" },
   varroa_method: { clase: "campo", modelo: "VarroaCount", campo: "method" },
   varroa_bees_sampled: { clase: "campo", modelo: "VarroaCount", campo: "sampleBees" },
   varroa_mites_counted: { clase: "campo", modelo: "VarroaCount", campo: "mitesCounted" },

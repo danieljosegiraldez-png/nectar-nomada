@@ -20,11 +20,12 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
+import { curvaDeLote, type ObjetivoDeCurva } from "../../lib/beneficio/curvaDeLote";
 import { LIENZO_DE_CURVA } from "../../lib/beneficio/curvaEnPantalla";
 import { perfilDeLaFaseAbierta } from "../../lib/beneficio/desdeElLote";
 import { ejesDeLaCurva } from "../../lib/beneficio/ejesDeLaCurva";
 import type { ClaveDePerfil } from "../../lib/beneficio/perfiles";
+import type { CeldaDelMapa } from "../../lib/beneficio/tablero";
 import { riesgoDeEsperar } from "../../lib/beneficio/riesgoDeEsperar";
 import { lineaDeEtapas } from "../../lib/beneficio/lineaDeEtapas";
 
@@ -40,16 +41,19 @@ vi.mock("next-intl/server", async () => {
   };
 });
 
-const { CurvaDeLote, ESPACIO_DE_LOS_VALORES, FRANJA_DE_LAS_HORAS, PAD_X } = await import("../../app/components/beneficio/CurvaDeLote");
+const { ANCHO_DE_LA_MARCA, CurvaDeLote, ESPACIO_DE_LOS_VALORES, FRANJA_DE_LAS_HORAS, PAD_X } = await import(
+  "../../app/components/beneficio/CurvaDeLote"
+);
 const { LineaDeEtapas } = await import("../../app/components/beneficio/LineaDeEtapas");
 const { LiberacionDeUnidad } = await import("../../app/components/beneficio/LiberacionDeUnidad");
+const { MapaDeUnidades } = await import("../../app/components/beneficio/MapaDeUnidades");
 
 const ID = "3f2b6c1e-8a44-4d0e-9b57-0c1d2e3f4a5b";
 const t = (h: number) => new Date(`2026-03-10T${String(h).padStart(2, "0")}:00:00.000Z`);
 // **El lienzo REAL, no una copia:** esta constante fue `{ ancho: 480, alto: 200 }` escrita a mano, y subir
 // `LIENZO_DE_CURVA.ancho` a 720 dejaba verdes los guardias de legibilidad de abajo —medían un lienzo que la pantalla ya no usa—.
 const LIENZO = LIENZO_DE_CURVA;
-const BANDA = { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 };
+const BANDA = { momento: "during", minValue: 4.0, maxValue: 4.6, targetValue: 4.3 } as const;
 
 const aTexto = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
@@ -98,7 +102,7 @@ const CURVA_CON_FUERA = curvaDeLote({
     { occurredAt: t(14), value: -5 }, // muy abajo: se ancla
     { occurredAt: t(16), value: 4.4 }, // dentro
   ],
-  objetivo: BANDA, ...LIENZO,
+  objetivos: [BANDA], ...LIENZO,
 });
 
 describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
@@ -155,7 +159,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
   it("sin objetivo declarado se dibujan los puntos, NO la banda, y se dice", async () => {
     const sin = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.6 }, { occurredAt: t(12), value: 4.1 }, { occurredAt: t(16), value: 3.9 }],
-      objetivo: null, ...LIENZO,
+      objetivos: [], ...LIENZO,
     });
     const html = await pintarCurva(sin);
     expect(marcas(html)).toHaveLength(3); // los puntos SÍ
@@ -163,13 +167,13 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     expect(html).not.toContain("nn-curva-objetivo");
     expect(aTexto(html)).toContain("no tiene rango declarado en la receta");
     // Control: la misma curva CON banda pinta una (si no, el `not.toContain` de arriba no distingue nada).
-    const con = await pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.3 }], objetivo: BANDA, ...LIENZO }));
+    const con = await pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.3 }], objetivos: [BANDA], ...LIENZO }));
     expect(con).toContain('class="nn-curva-banda"');
     // MUTACIÓN: pintar la banda cuando es `sin_objetivo_declarado` (p. ej. con valores por defecto) → cae.
   });
 
   it("con banda y CERO lecturas no se afirma nada sobre el rango (hallazgo 2)", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: [], objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: [], objetivos: [BANDA], ...LIENZO }));
     const texto = aTexto(html);
     expect(texto).toContain("no hay curva que dibujar"); // control: esta es la pantalla de «sin lecturas»
     expect(texto).not.toContain("dentro del rango");
@@ -182,7 +186,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     const html = await pintarCurva(
       curvaDeLote({
         lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 9.9 }],
-        objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ...LIENZO,
+        objetivos: [{ momento: "during", minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }], ...LIENZO,
       }),
     );
     const texto = aTexto(html);
@@ -203,7 +207,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     // MUTACIÓN: quitar la rama visible `banda_de_ancho_cero` del componente → cae (el `<desc>` sigue).
     // Control positivo: con una banda de verdad y lecturas dentro, SÍ lo dice (si no, el `not` de arriba no discrimina).
     const sana = aTexto(
-      await pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }], objetivo: BANDA, ...LIENZO })),
+      await pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }], objetivos: [BANDA], ...LIENZO })),
     );
     expect(sana).toContain("Todas las lecturas están dentro del rango de la receta");
     // MUTACIÓN: quitar el caso `banda_de_ancho_cero` de `juicioDeBanda` → cae.
@@ -216,7 +220,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
       { occurredAt: t(16), value: 4.0 },
     ];
     const html = await pintarCurva(
-      curvaDeLote({ lecturas, objetivo: { minValue: 4.6, maxValue: 4.0, targetValue: 4.3 }, ...LIENZO }),
+      curvaDeLote({ lecturas, objetivos: [{ momento: "during", minValue: 4.6, maxValue: 4.0, targetValue: 4.3 }], ...LIENZO }),
     );
     const texto = aTexto(html);
     expect(marcas(html)).toHaveLength(3); // control: las lecturas se dibujan
@@ -234,7 +238,7 @@ describe("CurvaDeLote — lo que se salió de la receta SE VE", () => {
     expect(ys[0]!).toBeLessThan(ys[2]!);
     // Control positivo: la misma receta bien puesta SÍ dibuja la banda (si no, los `not` de arriba no distinguen).
     const bien = await pintarCurva(
-      curvaDeLote({ lecturas, objetivo: { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }, ...LIENZO }),
+      curvaDeLote({ lecturas, objetivos: [{ momento: "during", minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }], ...LIENZO }),
     );
     expect(bien).toContain('class="nn-curva-banda"');
     expect(bien).not.toContain("nn-curva-al-reves");
@@ -253,13 +257,13 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
   // `ejesDeLaCurva` REPITE la escala de `curvaDeLote` en vez de importarla (dos módulos puros no se
   // acoplan). El precio es que si divergen, los números del eje dejan de corresponder a los puntos y
   // nada lo diría: cada módulo pasa sus pruebas por separado. Esta es la que las pone frente a frente.
-  const OBJETIVO = { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 };
+  const OBJETIVO = { momento: "during", minValue: 4.0, maxValue: 4.6, targetValue: 4.3 } as const;
   const BANDA_DEL_EJE = { min: 4.0, max: 4.6 };
   const AL_10 = new Date("2026-03-10T10:00:00Z");
 
   it("la marca del eje Y cae en la MISMA coordenada que el punto de ese valor — los TRES pares", () => {
     const yDelPunto = (value: number) =>
-      curvaDeLote({ lecturas: [{ occurredAt: AL_10, value }], objetivo: OBJETIVO, ancho: 300, alto: 120 }).puntos[0]!.y;
+      curvaDeLote({ lecturas: [{ occurredAt: AL_10, value }], objetivos: [OBJETIVO], ancho: 300, alto: 120 }).puntos[0]!.y;
     const e = ejesDeLaCurva({
       lecturas: [{ occurredAt: AL_10, value: 4.3 }], banda: BANDA_DEL_EJE, ancho: 300, alto: 120,
     });
@@ -296,7 +300,7 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
     // de su eje. Se añaden valores que no son ancla (4,1; 4,15; 4,2; 4,45) y se comparan con la interpolación LINEAL entre
     // las marcas que dice el eje (el mínimo y el máximo), y además con el número hecho a mano para 4,2.
     const yDelPunto = (value: number) =>
-      curvaDeLote({ lecturas: [{ occurredAt: AL_10, value }], objetivo: OBJETIVO, ancho: 300, alto: 120 }).puntos[0]!.y;
+      curvaDeLote({ lecturas: [{ occurredAt: AL_10, value }], objetivos: [OBJETIVO], ancho: 300, alto: 120 }).puntos[0]!.y;
     const e = ejesDeLaCurva({ lecturas: [{ occurredAt: AL_10, value: 4.3 }], banda: BANDA_DEL_EJE, ancho: 300, alto: 120 });
     const [yMax, yCentro, yMin] = [e.y[0]!.pos, e.y[1]!.pos, e.y[2]!.pos];
     for (const v of [4.1, 4.15, 4.2, 4.45]) {
@@ -318,7 +322,7 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
       { occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.3 },
       { occurredAt: new Date("2026-03-10T16:00:00Z"), value: 4.4 },
     ];
-    const c = curvaDeLote({ lecturas, objetivo: OBJETIVO, ancho: 300, alto: 120 });
+    const c = curvaDeLote({ lecturas, objetivos: [OBJETIVO], ancho: 300, alto: 120 });
     const e = ejesDeLaCurva({ lecturas, banda: BANDA_DEL_EJE, ancho: 300, alto: 120 });
     expect(e.x).toHaveLength(2); // control: las dos marcas están
     expect(c.puntos[0]!.x).toBe(e.x[0]!.pos);
@@ -332,7 +336,7 @@ describe("los ejes y la curva usan LA MISMA escala — la prueba que justifica q
     // El caso degenerado: el rango vale cero y dividir entre él da `NaN`. Dentro de cada módulo hay
     // una decisión (media altura, media anchura); sin esta prueba nada dice que las dos TOMARON LA MISMA.
     const lecturas = [{ occurredAt: AL_10, value: 4.5 }];
-    const c = curvaDeLote({ lecturas, objetivo: null, ancho: 300, alto: 120 });
+    const c = curvaDeLote({ lecturas, objetivos: [], ancho: 300, alto: 120 });
     const e = ejesDeLaCurva({ lecturas, banda: null, ancho: 300, alto: 120 });
     expect(e.x).toHaveLength(1); // control: una marca por eje, no tres con el mismo texto
     expect(e.y).toHaveLength(1);
@@ -362,7 +366,7 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
   const LECTURAS = [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(16), value: 4.4 }];
 
   it("el eje Y rotula máximo, centro y mínimo de la banda, y el X las horas; todo DENTRO del mismo <svg>", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivos: [BANDA], ...LIENZO }));
     const svg = soloElSvg(html);
     // Con alto 200 y banda 4,0–4,6: arriba el máximo, en medio el centro, abajo el mínimo.
     expect(rotulos(svg, "y").map((r) => [r.texto, r.y])).toEqual([["4.6", 0], ["4.3", 100], ["4.0", 200]]);
@@ -375,7 +379,7 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
   });
 
   it("el rótulo «4.3» y el punto de 4.3 están a la MISMA altura en la pantalla, no sólo en los módulos", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivos: [BANDA], ...LIENZO }));
     const centroDelPunto = centro(marcas(html)[0]!.vertices)[1]; // la lectura de 4.3, a las 8 h
     const rotulo = rotulos(html, "y").find((r) => r.texto === "4.3")!;
     expect(rotulo, "hay un rótulo 4.3").toBeDefined();
@@ -387,7 +391,7 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
 
   it("sin banda, el eje Y rotula el mínimo y el máximo de los DATOS", async () => {
     const html = await pintarCurva(
-      curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 4.1 }], objetivo: null, ...LIENZO }),
+      curvaDeLote({ lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 4.1 }], objetivos: [], ...LIENZO }),
     );
     const y = rotulos(html, "y");
     expect(y.map((r) => r.texto)).toEqual(["4.5", "4.3", "4.1"]);
@@ -398,7 +402,7 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
   it("con la receta AL REVÉS el eje no se espeja: el 4,9 se rotula ARRIBA, a la altura de su punto", async () => {
     const lecturas = [{ occurredAt: t(8), value: 4.2 }, { occurredAt: t(12), value: 4.9 }, { occurredAt: t(16), value: 4.0 }];
     const html = await pintarCurva(
-      curvaDeLote({ lecturas, objetivo: { minValue: 4.6, maxValue: 4.0, targetValue: 4.3 }, ...LIENZO }),
+      curvaDeLote({ lecturas, objetivos: [{ momento: "during", minValue: 4.6, maxValue: 4.0, targetValue: 4.3 }], ...LIENZO }),
     );
     const y = rotulos(html, "y");
     // Los rótulos salen de los datos (4,0–4,9), no de la receta mal cargada...
@@ -414,14 +418,14 @@ describe("CurvaDeLote — los ejes dicen a qué valor está la banda y cuánto l
   it("sin lecturas no hay HORAS que rotular; con banda el eje Y sigue diciendo a qué valor está, y sin banda no hay nada", async () => {
     // `ejesDeLaCurva` lo decide así (su prueba: «con banda el eje Y no depende de que haya lecturas»):
     // la banda se dibuja aunque no haya curva, y sin números no se sabe a qué pH está.
-    const conBanda = soloElSvg(await pintarCurva(curvaDeLote({ lecturas: [], objetivo: BANDA, ...LIENZO })));
+    const conBanda = soloElSvg(await pintarCurva(curvaDeLote({ lecturas: [], objetivos: [BANDA], ...LIENZO })));
     expect(rotulos(conBanda, "y").map((r) => r.texto)).toEqual(["4.6", "4.3", "4.0"]);
     expect(rotulos(conBanda, "x")).toEqual([]); // unas horas sin ninguna lectura serían inventadas
     // Sin banda y sin lecturas no hay NINGÚN rótulo: no hay con qué escalar.
-    const sinNada = await pintarCurva(curvaDeLote({ lecturas: [], objetivo: null, ...LIENZO }));
+    const sinNada = await pintarCurva(curvaDeLote({ lecturas: [], objetivos: [], ...LIENZO }));
     expect(sinNada).not.toContain("nn-curva-eje");
     // Control positivo: con lecturas SÍ hay horas (si no, el `toEqual([])` de arriba sería «nunca pinta horas»).
-    expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivo: BANDA, ...LIENZO })), "x")).toHaveLength(2);
+    expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: LECTURAS, objetivos: [BANDA], ...LIENZO })), "x")).toHaveLength(2);
     // MUTACIÓN: rotular las horas con `0 h` y `0 h` aunque no haya lecturas → cae por `rotulos(…, "x")`.
     // MUTACIÓN: rotular con una banda inventada cuando no hay objetivo ni lecturas → cae por `sinNada`.
   });
@@ -471,15 +475,20 @@ const ANCHO_DE_UN_TELEFONO = 343;
 
 describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometría, no sólo la presencia)", () => {
   const LECTURAS_8H = [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(16), value: 4.4 }];
-  const BANDA_BAJA = { minValue: 3.8, maxValue: 4.5, targetValue: 4.15 };
+  const BANDA_BAJA = { momento: "during", minValue: 3.8, maxValue: 4.5, targetValue: 4.15 } as const;
   /** Las tres curvas que más aprietan las horas: la lectura de sobrefermentación va justo debajo del mínimo de la banda. */
   const CURVAS_QUE_APRIETAN = {
     "la ÚLTIMA lectura apenas bajo el mínimo (3,72 contra 3,8–4,5)": [{ occurredAt: t(8), value: 4.2 }, { occurredAt: t(16), value: 3.72 }],
     "la PRIMERA lectura apenas bajo el mínimo": [{ occurredAt: t(8), value: 3.72 }, { occurredAt: t(16), value: 4.2 }],
     "una lectura TAN abajo que se ancla en el borde (0 contra 3,8–4,5)": [{ occurredAt: t(8), value: 4.2 }, { occurredAt: t(16), value: 0 }],
   } as const;
-  const pintar = (lecturas: readonly { occurredAt: Date; value: number }[], objetivo = BANDA_BAJA, variable: "ph" | "brix" | "moisture" = "ph") =>
-    pintarCurva(curvaDeLote({ lecturas: [...lecturas], objetivo, ...LIENZO }), variable);
+  // Toma UN objetivo y lo envuelve en la lista, para que los sitios de llamada sigan hablando de
+  // una sola banda: la lista de varios la ejercita `elegirObjetivo` en `curva-de-lote.test.ts`.
+  const pintar = (
+    lecturas: readonly { occurredAt: Date; value: number }[],
+    objetivo: ObjetivoDeCurva = BANDA_BAJA,
+    variable: "ph" | "brix" | "moisture" = "ph",
+  ) => pintarCurva(curvaDeLote({ lecturas: [...lecturas], objetivos: [objetivo], ...LIENZO }), variable);
 
   it("el cuerpo de los rótulos se lee del CSS real (control de la prueba: si el patrón no casa, todo lo de abajo mediría con NaN)", () => {
     expect(Number.isFinite(CUERPO_DE_LOS_EJES)).toBe(true);
@@ -489,7 +498,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
   });
 
   it("los rótulos del eje Y quedan a la IZQUIERDA del lienzo y DENTRO del viewBox ensanchado", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivos: [BANDA], ...LIENZO }));
     const vb = viewBoxDe(html);
     const y = rotulos(html, "y");
     expect(y).toHaveLength(3); // control: están los tres
@@ -505,7 +514,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
   it("el rótulo MÁS ANCHO posible («10.25») también cabe, y sólo cabe porque el viewBox se ensanchó", async () => {
     const html = await pintar(
       [{ occurredAt: t(8), value: 10 }, { occurredAt: t(16), value: 10.1 }],
-      { minValue: 9.5, maxValue: 10.25, targetValue: 10 },
+      { momento: "during", minValue: 9.5, maxValue: 10.25, targetValue: 10 },
       "moisture",
     );
     const vb = viewBoxDe(html);
@@ -558,7 +567,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
   });
 
   it("el viewBox mide exactamente lo que dice, leído del ATRIBUTO: ancho + relleno + hueco, y la franja de las horas debajo", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivos: [BANDA], ...LIENZO }));
     const vb = viewBoxDe(html);
     expect(vb.x).toBe(-(PAD_X + ESPACIO_DE_LOS_VALORES));
     expect(vb.w).toBe(LIENZO.ancho + 2 * PAD_X + ESPACIO_DE_LOS_VALORES);
@@ -593,7 +602,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
     // 120 h → «120 h»: tres dígitos, el rótulo más ancho que puede salir de una fase de fermentación larga.
     const largas = [{ occurredAt: new Date("2026-03-10T08:00:00Z"), value: 4.3 }, { occurredAt: new Date("2026-03-15T08:00:00Z"), value: 4.4 }];
     for (const lecturas of [LECTURAS_8H, largas]) {
-      const html = await pintarCurva(curvaDeLote({ lecturas, objetivo: BANDA, ...LIENZO }));
+      const html = await pintarCurva(curvaDeLote({ lecturas, objetivos: [BANDA], ...LIENZO }));
       const vb = viewBoxDe(html);
       const x = rotulos(html, "x");
       expect(x).toHaveLength(2);
@@ -604,7 +613,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
       }
     }
     // Control: lo de arriba se mide con un rótulo de verdad ancho.
-    expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: largas, objetivo: BANDA, ...LIENZO })), "x").map((r) => r.texto)).toEqual(["0 h", "120 h"]);
+    expect(rotulos(await pintarCurva(curvaDeLote({ lecturas: largas, objetivos: [BANDA], ...LIENZO })), "x").map((r) => r.texto)).toEqual(["0 h", "120 h"]);
     // MUTACIÓN: `textAnchor="middle"` fijo → «120 h» a `x = ancho` se sale ~24 por la derecha (el relleno es 10) y cae.
   });
 
@@ -637,7 +646,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
   });
 
   it("los ejes se pintan ANTES que la curva y los puntos: si un rótulo y un punto coinciden, manda el dato", async () => {
-    const html = soloElSvg(await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO })));
+    const html = soloElSvg(await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivos: [BANDA], ...LIENZO })));
     const ultimoEje = Math.max(html.lastIndexOf('class="nn-curva-eje'), html.lastIndexOf('class="nn-curva-marca"'));
     const primerDato = Math.min(html.indexOf('class="nn-curva-linea"'), html.indexOf('class="nn-curva-punto'));
     expect(ultimoEje, "hay ejes").toBeGreaterThan(0);
@@ -647,7 +656,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
   });
 
   it("en un teléfono de 375 px el rótulo de los ejes mide al menos 10 px de pantalla", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: LECTURAS_8H, objetivos: [BANDA], ...LIENZO }));
     const vb = viewBoxDe(html);
     // El `<svg>` ocupa el ancho del contenedor y el cuerpo se escala con él: unidades del viewBox × (ancho de pantalla / ancho del viewBox).
     const enPantalla = (CUERPO_DE_LOS_EJES * ANCHO_DE_UN_TELEFONO) / vb.w;
@@ -662,7 +671,7 @@ describe("CurvaDeLote — los ejes CABEN, SE LEEN y NO TAPAN el dato (la geometr
 describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo pH, citado, sin ordenar", () => {
   /** Una lectura sola del valor dado, contra la banda de siempre. */
   const conUnPh = (value: number, variable: "ph" | "brix" | "moisture" = "ph") =>
-    pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value }], objetivo: BANDA, ...LIENZO }), variable);
+    pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value }], objetivos: [BANDA], ...LIENZO }), variable);
   const bloqueDeRiesgo = (html: string) => /<div class="nn-curva-riesgo">[\s\S]*?<\/div>/.exec(html)?.[0] ?? null;
   /**
    * El bloque SIN el párrafo de la guía de Daniel (`nn-curva-riesgo-guia`). Hoy las ocho celdas de «Qué hace el operario» están
@@ -770,7 +779,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   it("el riesgo sale de la ÚLTIMA lectura por hora, no de la primera ni de la que llegó última", async () => {
     // Llegan desordenadas: la de las 16 h (4,8) va primero en el arreglo, la de las 8 h (3,0) después.
     const html = await pintarCurva(
-      curvaDeLote({ lecturas: [{ occurredAt: t(16), value: 4.8 }, { occurredAt: t(8), value: 3.0 }], objetivo: BANDA, ...LIENZO }),
+      curvaDeLote({ lecturas: [{ occurredAt: t(16), value: 4.8 }, { occurredAt: t(8), value: 3.0 }], objetivos: [BANDA], ...LIENZO }),
     );
     const texto = aTexto(bloqueDeRiesgo(html)!);
     expect(texto).toContain("stinker"); // la de las 16 h
@@ -781,7 +790,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   });
 
   it("con cero lecturas no hay riesgo que citar", async () => {
-    const html = await pintarCurva(curvaDeLote({ lecturas: [], objetivo: BANDA, ...LIENZO }));
+    const html = await pintarCurva(curvaDeLote({ lecturas: [], objetivos: [BANDA], ...LIENZO }));
     expect(bloqueDeRiesgo(html)).toBeNull();
     // MUTACIÓN: `const ultima = curva.lecturas.at(-1) ?? { value: 3 }` → cero lecturas cita «Daño consumado» y cae.
     // (Con `{ value: 0 }` NO cae, medido: 0 es «fuera de [2.50, 8.00]», la fila del electrodo, que no se pinta.)
@@ -811,7 +820,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     /** 4,7 está DENTRO de la ventana óptima de NATURAL (3,9–4,8) y, en la matriz del lavado, es «proliferación butírica y mohos». */
     const PH = 4.7;
     const pintarConPerfil = (perfil: ClaveDePerfil | null, valor = PH) =>
-      pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value: valor }], objetivo: BANDA, ...LIENZO }), "ph", perfil);
+      pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value: valor }], objetivos: [BANDA], ...LIENZO }), "ph", perfil);
 
     it("un lote Washed SÍ pinta el bloque, con la cita del lavado (control de las pruebas de abajo)", async () => {
       expect(perfilDe("Washed")).toBe("WASHED_STANDARD");
@@ -875,9 +884,9 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     it("un lote Washed en fermentación SIN receta no cita nada (y dice que no hay rango); el mismo CON receta sí cita", async () => {
       const sinReceta = perfilDe("Washed", "fermentation", false);
       expect(sinReceta, "sin receta no hay perfil que citar").toBeNull();
-      // Sin receta tampoco hay objetivo: `curvaDeUnLote` pasa `objetivo: null`, y es lo que la pantalla ya dice.
+      // Sin receta tampoco hay objetivo: `curvaDeUnLote` pasa `objetivos: []`, y es lo que la pantalla ya dice.
       const htmlSin = await pintarCurva(
-        curvaDeLote({ lecturas: [{ occurredAt: t(10), value: 3.4 }], objetivo: null, ...LIENZO }),
+        curvaDeLote({ lecturas: [{ occurredAt: t(10), value: 3.4 }], objetivos: [], ...LIENZO }),
         "ph",
         sinReceta,
       );
@@ -908,7 +917,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
   // **C2: con varias lecturas en el instante máximo NO hay «última».**
   describe("«tu última lectura»: con varias en el mismo instante no se cita ninguna", () => {
     const conLecturas = (lecturas: { occurredAt: Date; value: number }[]) =>
-      pintarCurva(curvaDeLote({ lecturas, objetivo: BANDA, ...LIENZO }));
+      pintarCurva(curvaDeLote({ lecturas, objetivos: [BANDA], ...LIENZO }));
 
     it("dos lecturas al MISMO instante, en cualquier orden: no se escribe nada (y la misma pareja con una hora de diferencia SÍ)", async () => {
       // Tres textos distintos según cuál llegara última: la de 3,0 («Daño consumado») o la de 4,8 («stinker»).
@@ -1210,5 +1219,191 @@ describe("las cuentas de la capacidad llevan plural ICU, en los dos idiomas (hal
     expect(await dar("es", "capacidadCamas", dos)).toBe("Camas: 2 libres de 5");
     expect(await dar("en", "capacidadTanques", dos)).toBe("Tanks: 2 free and sound of 5 · 3 need attention");
     // MUTACIÓN: volver `capacidadTanques` de es a «{libres} libres y sanos … {intervencion} requieren …» → cae.
+  });
+});
+
+/**
+ * **El guardia de pantalla de `PENDING_IMPLEMENTATIONS/017`.** El defecto vivía en el artefacto que
+ * mira el operario, no en una función: un objetivo `final` se pintaba como una franja sobre TODO el
+ * recorrido y la frase contaba las lecturas intermedias como desviaciones. Con el pH bajando de 6,5
+ * a 4,3 —que es el diseño de una fermentación— la pantalla decía «2 lecturas fuera del rango de la
+ * receta» sobre un lote que va exactamente como debe.
+ *
+ * **Cada caso va con su control, y el control tiene que salir distinto.** Las mismas tres lecturas
+ * con un objetivo `during` sí dan la franja ancha y sí cuentan dos fuera; si las dos columnas
+ * coincidieran, esta prueba no mediría nada.
+ */
+describe("la curva en pantalla — un objetivo de un instante no se pinta como banda de todo el recorrido", () => {
+  const BAJANDO = [
+    { occurredAt: t(8), value: 6.5 },
+    { occurredAt: t(12), value: 5.0 },
+    { occurredAt: t(16), value: 4.3 },
+  ];
+  const META = { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 } as const;
+  const bandaDelHtml = (html: string) => {
+    const r = /<rect[^>]*class="nn-curva-banda"[^>]*>/.exec(html)?.[0] ?? null;
+    if (r === null) return null;
+    const leer = (atr: string) => Number(new RegExp(`${atr}="([-0-9.]+)"`).exec(r)?.[1] ?? NaN);
+    return { x: leer("x"), ancho: leer("width") };
+  };
+  const pintarCon = (momento: "initial" | "during" | "final") =>
+    pintarCurva(curvaDeLote({ lecturas: BAJANDO, objetivos: [{ momento, ...META }], ...LIENZO }));
+
+  it("con meta FINAL la banda es una marca en el borde derecho, no una franja de lado a lado", async () => {
+    const b = bandaDelHtml(await pintarCon("final"));
+    expect(b, "la marca se pinta").not.toBeNull();
+    // Afirmar que NO son NaN antes de comparar: `NaN < x` es `false` y se leería como «cabe».
+    expect(Number.isNaN(b!.x) || Number.isNaN(b!.ancho), "ni x ni ancho son NaN").toBe(false);
+    expect(b!.ancho).toBe(ANCHO_DE_LA_MARCA);
+    expect(b!.x).toBe(LIENZO.ancho - ANCHO_DE_LA_MARCA);
+  });
+
+  it("con meta INICIAL la marca va en el borde izquierdo", async () => {
+    const b = bandaDelHtml(await pintarCon("initial"));
+    expect(Number.isNaN(b!.x) || Number.isNaN(b!.ancho)).toBe(false);
+    expect(b!.ancho).toBe(ANCHO_DE_LA_MARCA);
+    expect(b!.x).toBe(0);
+  });
+
+  it("CONTROL: con meta `during` la banda SÍ cruza el lienzo entero", async () => {
+    const b = bandaDelHtml(await pintarCon("during"));
+    expect(Number.isNaN(b!.x) || Number.isNaN(b!.ancho)).toBe(false);
+    expect(b!.ancho).toBe(LIENZO.ancho);
+    expect(b!.x).toBe(0);
+    // Y el control del control: la franja ancha y la marca NO miden lo mismo, o las tres pruebas
+    // de arriba pasarían con cualquier implementación.
+    expect(LIENZO.ancho).not.toBe(ANCHO_DE_LA_MARCA);
+  });
+
+  it("con meta FINAL la pantalla NO llama desviación a las lecturas intermedias", async () => {
+    const texto = aTexto(await pintarCon("final"));
+    expect(texto).not.toContain("lecturas fuera del rango de la receta");
+    expect(texto).toContain("La última lectura está dentro del rango que la receta pide al final");
+    // Y dice a qué alcanzó el juicio, también en la descripción accesible del SVG.
+    expect(texto).toContain("sólo se juzga la lectura final");
+  });
+
+  it("CONTROL: las MISMAS lecturas con meta `during` sí se cuentan como dos desviaciones", async () => {
+    const texto = aTexto(await pintarCon("during"));
+    expect(texto).toContain("2 lecturas fuera del rango de la receta");
+    expect(texto).not.toContain("sólo se juzga la lectura final");
+  });
+
+  it("dos objetivos de instantes distintos y ninguno de trayectoria: no se elige, y se dice", async () => {
+    const html = await pintarCurva(
+      curvaDeLote({
+        lecturas: BAJANDO,
+        objetivos: [
+          { momento: "initial", minValue: 5.8, maxValue: 6.8, targetValue: 6.3 },
+          { momento: "final", ...META },
+        ],
+        ...LIENZO,
+      }),
+    );
+    // Ninguna banda dibujada —no se elige por el operario— y el motivo dicho, que NO es «la receta
+    // no declara rango»: eso sería falso, declara dos.
+    expect(html).not.toContain("nn-curva-banda");
+    expect(aTexto(html)).toContain("declara dos objetivos para esta variable en esta fase");
+    expect(aTexto(html)).not.toContain("no tiene rango declarado en la receta");
+  });
+});
+
+/**
+ * **El mapa de unidades no tenía NINGUNA prueba de render**, y `loteNoVisible` habría sido un campo
+ * que la API expone y el operario no lee nunca. Es el defecto que Codex encontró el 2026-10-01 en la
+ * curva —«la promesa llegaba hasta la API y no hasta el productor»— y la forma de no repetirlo es
+ * que el guardia **renderice** y exija el texto en el HTML.
+ */
+describe("el mapa de unidades — una unidad ocupada por un lote que no ves lo dice en palabras", () => {
+  const celda = (over: Partial<CeldaDelMapa> = {}): CeldaDelMapa => ({
+    id: "u1",
+    nombre: "Tanque 1",
+    libreYSano: false,
+    motivos: ["EN_USO"],
+    loteNoVisible: false,
+    ...over,
+  });
+  const pintar = async (celdas: readonly CeldaDelMapa[]) =>
+    aTexto(renderToStaticMarkup(await MapaDeUnidades({ tanques: celdas, camas: [] })));
+
+  it("lo dice, además del motivo y no en su lugar", async () => {
+    const texto = await pintar([celda({ loteNoVisible: true })]);
+    expect(texto).toContain("ocupada por un lote que no ves");
+    // `EN_USO` sigue estando: es verdad y es el motivo. Lo otro explica por qué no lo encontrará.
+    expect(texto).toContain("en uso");
+  });
+
+  it("CONTROL: la MISMA celda sin la bandera no lo dice, y sigue diciendo el motivo", async () => {
+    const texto = await pintar([celda({ loteNoVisible: false })]);
+    expect(texto).not.toContain("ocupada por un lote que no ves");
+    expect(texto).toContain("en uso");
+  });
+
+  it("una unidad libre y sana no lo dice tampoco", async () => {
+    const texto = await pintar([celda({ libreYSano: true, motivos: [], loteNoVisible: false })]);
+    expect(texto).toContain("libre y sana");
+    expect(texto).not.toContain("ocupada por un lote que no ves");
+  });
+
+  it("y con dos unidades sólo lo lleva la que toca", async () => {
+    const texto = await pintar([
+      celda({ id: "a", nombre: "Tanque A", loteNoVisible: true }),
+      celda({ id: "b", nombre: "Tanque B", loteNoVisible: false }),
+    ]);
+    // Una sola aparición: si el componente lo pintara en todas, saldrían dos.
+    expect(texto.match(/ocupada por un lote que no ves/g) ?? []).toHaveLength(1);
+  });
+});
+
+/**
+ * **«No se pudo resolver la receta» tiene que PINTARSE, y no es «no declara rango»**
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * Este guardia existe por lo que pasó con el mensaje de «varios objetivos» del 017: estaba
+ * escrito, era correcto, y **no se pintaba nunca** porque `sin_banda` cortaba la cadena de
+ * ternarios antes de llegar a él. Lo cazó una prueba de pantalla, no una lectura del código.
+ * El caso nuevo entra por la misma puerta —`juicio.tipo === "sin_banda"`— así que corre el
+ * mismo riesgo y necesita el mismo guardia.
+ *
+ * El flip-test que le toca: mover la rama de `receta_no_resuelta` DEBAJO de `sin_banda` en
+ * `CurvaDeLote.tsx` tiene que hacer caer la primera prueba de aquí.
+ */
+describe("la curva en pantalla — sin receta resuelta no se afirma nada SOBRE la receta (019)", () => {
+  const SIN_RECETA = curvaDeLote({
+    lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }],
+    objetivos: [], recetaResuelta: false, ...LIENZO,
+  });
+  const RECETA_SIN_RANGO = curvaDeLote({
+    lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.4 }],
+    objetivos: [], recetaResuelta: true, ...LIENZO,
+  });
+
+  it("dice que no se pudo resolver, y NO dice que la receta no declara rango", async () => {
+    const texto = aTexto(await pintarCurva(SIN_RECETA));
+    expect(texto).toContain("No se pudo saber qué receta aplica");
+    expect(texto).not.toContain("no tiene rango declarado en la receta");
+  });
+
+  // **El control que TIENE que salir distinto.** Las dos curvas llevan la MISMA lista vacía de
+  // objetivos y las mismas lecturas: lo único que cambia es si la receta se resolvió. Si las dos
+  // pintaran lo mismo, la prueba de arriba pasaría con el defecto puesto.
+  it("CONTROL: la MISMA lista vacía con la receta resuelta sí dice que no declara rango", async () => {
+    const texto = aTexto(await pintarCurva(RECETA_SIN_RANGO));
+    expect(texto).toContain("no tiene rango declarado en la receta");
+    expect(texto).not.toContain("No se pudo saber qué receta aplica");
+  });
+
+  it("los puntos se siguen dibujando: «sin banda» no es «no dibujé nada»", async () => {
+    const html = await pintarCurva(SIN_RECETA);
+    expect(marcas(html)).toHaveLength(2);
+  });
+
+  // El rótulo accesible del `<desc>` también tiene que decirlo: un lector de pantalla no ve el
+  // párrafo de abajo si el `<desc>` ya afirmó otra cosa.
+  it("el rótulo accesible lo dice igual, y con la frase corta que le toca", async () => {
+    // El `<desc>` lleva `id`, así que el patrón no puede ser `<desc>` a secas.
+    const desc = /<desc[^>]*>([\s\S]*?)<\/desc>/.exec(await pintarCurva(SIN_RECETA))![1]!;
+    expect(desc).toContain("no se pudo resolver qué receta aplica");
+    expect(desc).not.toContain("sin rango declarado en la receta");
   });
 });

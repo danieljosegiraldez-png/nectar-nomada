@@ -14,16 +14,18 @@ import { entradaDelLote } from "./entradaDelLote";
 import { procesoQueCubre, procesosParaEntrada, type Cobertura } from "../traceability/procesoDelLinaje";
 import { LotProcessError } from "../traceability/errorDeProceso";
 import { perfilDeLaFaseAbierta, veredictoDelLote } from "./desdeElLote";
-import { curvaDeLote, type Curva } from "./curvaDeLote";
+import { curvaDeLote, type Curva, type MomentoDeObjetivo } from "./curvaDeLote";
 import type { ClaveDePerfil } from "./perfiles";
 import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
 import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
 import {
   LINAJE_DEMASIADO_HONDO,
   pidenDecisionPorEtapa,
+  unaEntradaPorLote,
   type CorridaAbierta,
   type EntradaDeLoteParaTablero,
   type EquipoParaTablero,
+  type OcupacionDeUnidad,
   type UnidadDelSitio,
   type VeredictoParaCola,
 } from "./tablero";
@@ -49,6 +51,12 @@ export interface DatosDelTablero {
   readonly tanques: readonly UnidadDelSitio[];
   readonly camas: readonly UnidadDelSitio[];
   readonly corridas: readonly CorridaAbierta[];
+  /**
+   * Cuántas corridas abiertas tiene cada unidad visible, **sin filtrar por lote**. Ver
+   * `OcupacionDeUnidad`: es lo que impide que «no me llegó ninguna corrida» se lea como «la unidad
+   * está libre» cuando el lote que la ocupa no es visible (`PENDING_IMPLEMENTATIONS/015`).
+   */
+  readonly corridasPorUnidad: readonly OcupacionDeUnidad[];
   readonly instrumentos: readonly EquipoParaTablero[];
   readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
   /**
@@ -95,6 +103,7 @@ const VACIO: Omit<DatosDelTablero, "medidoEn"> = {
   tanques: [],
   camas: [],
   corridas: [],
+  corridasPorUnidad: [],
   instrumentos: [],
   desviacionesAbiertasPorLote: new Map(),
   sinAmbito: true,
@@ -172,6 +181,7 @@ export async function datosDelTablero(
     prisma.fermentationRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
+        id: true,
         startedAt: true,
         vesselNote: true,
         vesselEquipmentId: true,
@@ -185,6 +195,7 @@ export async function datosDelTablero(
     prisma.dryingRun.findMany({
       where: { endedAt: null, transformations: { some: { inputs: { some: { lot: lotWhere } } } } },
       select: {
+        id: true,
         startedAt: true,
         dryingBedLocationId: true,
         transformations: {
@@ -218,27 +229,17 @@ export async function datosDelTablero(
     ...secados.map((s) => ({ ...s, fase: "drying" as const })),
   ];
 
-  // **Una entrada por LOTE, no por corrida.** Este bucle recorre corridas, y un lote puede tener
-  // varias abiertas (dos secados, o una fermentación y un secado): sin esto el mismo lote saldría dos
-  // veces en `lotes` y la cola lo listaría dos veces con la misma clave de React; y, peor,
-  // `pidenDecision` contaría corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes, y una misma
-  // celda diría «1 lote · 2 piden decisión». Si el lote ya está, se queda la corrida que EMPEZÓ
-  // antes: es la que lleva más tiempo abierta, y esconder la más vieja es esconder la más atrasada.
-  const anotar = (destino: EntradaDeLoteParaTablero[], nueva: EntradaDeLoteParaTablero) => {
-    const i = destino.findIndex((e) => e.lotId === nueva.lotId);
-    if (i === -1) {
-      destino.push(nueva);
-    } else if (
-      nueva.faseIniciada !== null &&
-      (destino[i]!.faseIniciada === null || nueva.faseIniciada < destino[i]!.faseIniciada!)
-    ) {
-      destino[i] = nueva;
-    }
-  };
-  const lotes: EntradaDeLoteParaTablero[] = [];
+  // **Una entrada por CORRIDA aquí, y una por LOTE más abajo.** El tablero ensaña una fila por lote
+  // —si no, el mismo lote saldría dos veces con la misma clave de React, y `pidenDecision` contaría
+  // corridas mientras `lotes` (`prisma.lot.count`) cuenta lotes: una celda diría «1 lote · 2 piden
+  // decisión»—. Pero **cuál** se queda no se puede decidir en este bucle: todavía no se han evaluado
+  // las demás corridas del lote. Lo decide `unaEntradaPorLote` cuando ya están todas y se conocen las
+  // desviaciones abiertas, con la regla que Daniel eligió el 2026-10-02: la de veredicto más grave y,
+  // a igualdad, la que empezó antes. Ver `PENDING_IMPLEMENTATIONS/016`.
+  const porCorrida: EntradaDeLoteParaTablero[] = [];
   // Las mismas entradas, separadas por fase: la cola se calcula por fase para que «pide decisión»
   // llegue a la etapa correcta aunque un lote tuviera las dos fases abiertas a la vez.
-  const entradasPorFase = {
+  const porCorridaYFase = {
     fermentation: [] as EntradaDeLoteParaTablero[],
     drying: [] as EntradaDeLoteParaTablero[],
   };
@@ -246,6 +247,31 @@ export async function datosDelTablero(
   // El proceso que cubre a cada lote, resuelto UNA vez en el bucle de abajo. La liberación de unidades y la curva lo leen
   // de aquí y no de la FK de la corrida (Parte 1, R7; al juntar `main` el 2026-10-03, las dos lo leían por la FK).
   const procesoPorLote = new Map<string, ProcesoDelTablero | null>();
+
+  // **Qué mediciones de estos lotes ya fueron corregidas, SIN ninguna ventana de fecha**
+  // (`PENDING_IMPLEMENTATIONS/018`). `entradaDelLote` lo deducía de las mediciones que recibe, y ésas
+  // llegan acotadas a la fase abierta: una corrección cuya fecha cae antes del inicio de la fase
+  // —`correctMeasurement` permite corregir la fecha— quedaba fuera, su `correctsId` no entraba, y la
+  // original ya corregida volvía a contarse como vigente.
+  //
+  // Una sola consulta para todos los lotes crudos, no una por vuelta del bucle: trae dos columnas y
+  // sólo las filas que corrigen algo.
+  const idsDeLotesCrudos = [
+    ...new Set(crudas.map((c) => c.transformations[0]?.inputs[0]?.lot?.id).filter((id): id is string => id != null)),
+  ];
+  const correcciones = idsDeLotesCrudos.length
+    ? await prisma.measurement.findMany({
+        where: { lotId: { in: idsDeLotesCrudos }, correctsId: { not: null } },
+        select: { lotId: true, correctsId: true },
+      })
+    : [];
+  const corregidasPorLote = new Map<string, Set<string>>();
+  for (const c of correcciones) {
+    if (c.lotId === null || c.correctsId === null) continue;
+    const yaHay = corregidasPorLote.get(c.lotId);
+    if (yaHay) yaHay.add(c.correctsId);
+    else corregidasPorLote.set(c.lotId, new Set([c.correctsId]));
+  }
 
   for (const c of crudas) {
     const lot = c.transformations[0]?.inputs[0]?.lot;
@@ -300,6 +326,9 @@ export async function datosDelTablero(
         correctsId: m.correctsId,
         instrumentId: m.instrumentId,
       })),
+      // Un lote sin ninguna corrección no tiene fila en el mapa, y el conjunto vacío es la
+      // traducción fiel de eso — no un valor por defecto que tape nada.
+      idsCorregidos: corregidasPorLote.get(lot.id) ?? new Set<string>(),
       estadosDeInstrumento,
       ahora,
     });
@@ -318,10 +347,15 @@ export async function datosDelTablero(
       faseIniciada: c.startedAt,
       expectedHours: fases.find((f) => f.phase === c.fase)?.expectedHours ?? null,
       metas: metasDeFase(targets, c.fase, ultimaPorVariable),
+      corridaId: c.id,
       ultimaLectura: mediciones[0]?.occurredAt ?? null,
     };
-    anotar(lotes, entradaDeTablero);
-    anotar(entradasPorFase[c.fase], entradaDeTablero);
+    // **UNA entrada por CORRIDA aquí; la de por lote se elige después** (`PENDING_IMPLEMENTATIONS/016`).
+    // Deduplicar en este punto era el defecto: todavía no se sabe el veredicto de las demás corridas
+    // del lote, así que elegir ahora es elegir a ciegas. Lo hace `unaEntradaPorLote`, cuando ya están
+    // evaluadas todas y se conocen las desviaciones abiertas que el grupo necesita.
+    porCorrida.push(entradaDeTablero);
+    porCorridaYFase[c.fase].push(entradaDeTablero);
   }
 
   // Los equipos salen de `listarEquipos`, que YA filtra por `can(view, equipment)`: una sola
@@ -342,11 +376,17 @@ export async function datosDelTablero(
     : [];
 
   // Una desviación está ABIERTA mientras no tenga ninguna `CorrectiveAction` (Daniel, 2026-09-16).
-  const desviaciones = lotes.length
+  //
+  // **Se consulta sobre las entradas POR CORRIDA, antes de deduplicar**, y tiene que ser así: el
+  // grupo de cada candidata depende de si su lote tiene desviaciones abiertas, así que el dato hace
+  // falta ANTES de elegir cuál se queda. Los ids se repiten cuando un lote tiene varias corridas, y
+  // a un `in` eso le da igual.
+  const idsParaDesviaciones = [...new Set(porCorrida.map((l) => l.lotId))];
+  const desviaciones = idsParaDesviaciones.length
     ? await prisma.deviation.findMany({
         where: {
           correctiveActions: { none: {} },
-          lotTransformation: { inputs: { some: { lotId: { in: lotes.map((l) => l.lotId) } } } },
+          lotTransformation: { inputs: { some: { lotId: { in: idsParaDesviaciones } } } },
         },
         select: { lotTransformation: { select: { inputs: { select: { lotId: true } } } } },
       })
@@ -357,6 +397,19 @@ export async function datosDelTablero(
       porLote.set(i.lotId, (porLote.get(i.lotId) ?? 0) + 1);
     }
   }
+
+  // **Y aquí sí: una entrada por lote, elegida con todas las corridas ya evaluadas.** La regla vive
+  // en `unaEntradaPorLote` (`tablero.ts`), junto al orden de gravedad que usa la cola, para que no
+  // haya dos definiciones de «más grave».
+  const lotes = unaEntradaPorLote({ entradas: porCorrida, desviacionesAbiertasPorLote: porLote, ahora });
+  const entradasPorFase = {
+    fermentation: unaEntradaPorLote({
+      entradas: porCorridaYFase.fermentation,
+      desviacionesAbiertasPorLote: porLote,
+      ahora,
+    }),
+    drying: unaEntradaPorLote({ entradas: porCorridaYFase.drying, desviacionesAbiertasPorLote: porLote, ahora }),
+  };
 
   const etapas = lineaDeEtapas({
     proceso: enProceso,
@@ -409,6 +462,41 @@ export async function datosDelTablero(
     condicion: null,
   }));
   const idsVisibles = new Set([...tanquesVisibles, ...camasVisibles].map((u) => u.id));
+
+  // **Cuántas corridas abiertas tiene cada unidad visible, SIN filtrar por lote.** Es el arreglo de
+  // `PENDING_IMPLEMENTATIONS/015`: las dos consultas de arriba llevan `inputs.some.lot: lotWhere`,
+  // así que una corrida sobre un lote que quien mira no ve no llegaba, y la unidad salía «libre».
+  //
+  // **Es un `groupBy` con `_count`: no selecciona ni una columna del lote.** Dice cuántas filas hay
+  // sobre unidades que esta cuenta YA puede ver, así que no enseña nada que la visibilidad oculte —
+  // sólo deja de afirmar que un tanque ocupado está libre. Acotado a los ids visibles: una corrida
+  // sobre una unidad ajena no entra, igual que `ocupacionDelSitio` la manda a `ajenas`.
+  const idsDeTanquesVisibles = tanquesVisibles.map((u) => u.id);
+  const idsDeCamasVisibles = camasVisibles.map((u) => u.id);
+  const [ocupacionDeTanques, ocupacionDeCamas] = await Promise.all([
+    idsDeTanquesVisibles.length === 0
+      ? Promise.resolve([])
+      : prisma.fermentationRun.groupBy({
+          by: ["vesselEquipmentId"],
+          where: { endedAt: null, vesselEquipmentId: { in: idsDeTanquesVisibles } },
+          _count: { _all: true },
+        }),
+    idsDeCamasVisibles.length === 0
+      ? Promise.resolve([])
+      : prisma.dryingRun.groupBy({
+          by: ["dryingBedLocationId"],
+          where: { endedAt: null, dryingBedLocationId: { in: idsDeCamasVisibles } },
+          _count: { _all: true },
+        }),
+  ]);
+  const corridasPorUnidad: OcupacionDeUnidad[] = [
+    ...ocupacionDeTanques.flatMap((g) =>
+      g.vesselEquipmentId === null ? [] : [{ unidadId: g.vesselEquipmentId, corridas: g._count._all }],
+    ),
+    ...ocupacionDeCamas.flatMap((g) =>
+      g.dryingBedLocationId === null ? [] : [{ unidadId: g.dryingBedLocationId, corridas: g._count._all }],
+    ),
+  ];
   const corridasConDuracion: CorridaConDuracion[] = [
     ...fermentaciones.map((f) => ({
       equipmentId: f.vesselEquipmentId,
@@ -426,15 +514,32 @@ export async function datosDelTablero(
     const declarada = c.equipmentId ?? c.bedLocationId;
     return declarada !== null && idsVisibles.has(declarada);
   });
-  const liberacion = proximaLiberacion({ corridas: corridasConDuracion, ahora });
+  // Las unidades visibles con su estado: `proximaLiberacion` las necesita para no prometer la
+  // liberación de una unidad retirada o averiada, que no va a servir cuando se vacíe (015).
+  const liberacion = proximaLiberacion({
+    corridas: corridasConDuracion,
+    unidades: [...tanquesVisibles, ...camasVisibles],
+    ahora,
+  });
 
-  const curva = opciones.curva ? await curvaDeUnLote(lotWhere, crudas, procesoPorLote, opciones.curva) : null;
+  // **La curva abre la MISMA corrida que el aviso** (`PENDING_IMPLEMENTATIONS/016`, segunda mitad).
+  // Antes la elegía con un `find` propio sobre `crudas`, que lleva las fermentaciones primero y sin
+  // ordenar: podía abrir una corrida distinta de la que explica la fila del tablero, o sea dos reglas
+  // de selección para la misma pregunta. `null` = el lote pedido no tiene entrada, y entonces la
+  // curva no tiene corrida que abrir.
+  const corridaDeLaCurva = opciones.curva
+    ? (lotes.find((l) => l.lotId === opciones.curva!.lotId)?.corridaId ?? null)
+    : null;
+  const curva = opciones.curva
+    ? await curvaDeUnLote(lotWhere, crudas, procesoPorLote, opciones.curva, corridaDeLaCurva)
+    : null;
 
   return {
     lotes,
     tanques: tanquesVisibles,
     camas: camasVisibles,
     corridas,
+    corridasPorUnidad,
     instrumentos: equipos.map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
     desviacionesAbiertasPorLote: porLote,
     sinAmbito: false,
@@ -462,30 +567,70 @@ export async function datosDelTablero(
 async function curvaDeUnLote(
   lotWhere: Prisma.LotWhereInput,
   crudas: readonly {
+    /** El id de la corrida: con él se elige, en vez de buscar por lote. Ver `corridaElegida`. */
+    readonly id: string;
     readonly fase: "fermentation" | "drying";
     readonly startedAt: Date;
     readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
   }[],
   procesoPorLote: ReadonlyMap<string, ProcesoDelTablero | null>,
   pedida: NonNullable<OpcionesDelTablero["curva"]>,
+  /**
+   * **La corrida que el tablero eligió para este lote**, o `null` si el lote no tiene entrada.
+   *
+   * Entra en vez de buscarse aquí (`PENDING_IMPLEMENTATIONS/016`): el `find` que había no ordenaba y
+   * `crudas` lleva las fermentaciones primero, así que con dos corridas abiertas la curva podía abrir
+   * una y el aviso explicar otra. Una sola pregunta —«¿qué corrida es la de este lote?»— con una sola
+   * respuesta.
+   */
+  corridaElegida: string | null,
 ): Promise<CurvaDelTablero | null> {
   const { lotId, variable, ancho, alto } = pedida;
   const visible = await prisma.lot.findFirst({ where: { AND: [lotWhere, { id: lotId }] }, select: { id: true } });
   if (!visible) return null;
 
-  const abierta = crudas.find((c) => c.transformations.some((t) => t.inputs.some((i) => i.lot.id === lotId)));
-  const mediciones = await prisma.measurement.findMany({
-    where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
-    select: { id: true, value: true, occurredAt: true, correctsId: true },
-    orderBy: { occurredAt: "asc" },
-  });
-  const corregidas = new Set(mediciones.map((m) => m.correctsId).filter((id): id is string => id != null));
+  const abierta = corridaElegida === null ? undefined : crudas.find((c) => c.id === corridaElegida);
+  // **Dos consultas, y el orden importa** (`PENDING_IMPLEMENTATIONS/018`). La vigencia de una
+  // medición —«¿alguien la corrigió?»— es una propiedad de la **cadena de correcciones**, no de la
+  // ventana de la pantalla: se resuelve ANTES de aplicar la ventana, o el filtro de tiempo decide
+  // qué correcciones existen.
+  //
+  // Esto hacía lo contrario: filtraba por la ventana de la fase y **después** armaba `corregidas`
+  // con los `correctsId` de lo que quedó dentro. `correctMeasurement` permite corregir la **fecha**,
+  // así que una corrección cuya fecha cae antes del inicio de la fase quedaba fuera de la consulta,
+  // su `correctsId` nunca entraba, y **la original, ya corregida, se seguía dibujando**: una lectura
+  // que nadie sostiene volvía a la pantalla.
+  //
+  // La segunda consulta no lleva ventana y trae una sola columna. Una corrección anterior a la fase
+  // deja la original oculta y **tampoco se dibuja ella**, que es correcto: su propia fecha la deja
+  // fuera de la ventana.
+  const [mediciones, correcciones] = await Promise.all([
+    prisma.measurement.findMany({
+      where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
+      select: { id: true, value: true, occurredAt: true, correctsId: true },
+      orderBy: { occurredAt: "asc" },
+    }),
+    prisma.measurement.findMany({
+      where: { lotId, variable, correctsId: { not: null } },
+      select: { correctsId: true },
+    }),
+  ]);
+  const corregidas = new Set(correcciones.map((m) => m.correctsId).filter((id): id is string => id != null));
 
   // El proceso que cubre al lote, del resolvedor (Parte 1, R7), no el de la FK de la corrida abierta.
   const proceso = abierta ? (procesoPorLote.get(lotId) ?? null) : null;
   const metas = proceso?.processRecipeVersion?.targets ?? [];
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
-  const meta = delaFase.find((t) => t.moment === "during") ?? delaFase.find((t) => t.moment === "final");
+  // **TODOS los objetivos de la fase, con su momento, y la elección la hace `curvaDeLote`.** Esta
+  // línea hacía `find("during") ?? find("final")`, y ahí vivían los dos defectos de
+  // `PENDING_IMPLEMENTATIONS/017`: elegía en silencio entre lo que la receta declaraba, y la meta
+  // `final` que elegía se usaba después como banda de TODA la trayectoria. Esta capa ya no elige.
+  const objetivos = delaFase.map((t) => ({
+    momento: t.moment,
+    minValue: t.minValue?.toNumber() ?? null,
+    maxValue: t.maxValue?.toNumber() ?? null,
+    targetValue: t.targetValue?.toNumber() ?? null,
+  }));
 
   // **El perfil que rige el lote, de la misma fuente que su veredicto** (`PERFIL_POR_GRADO` en
   // `desdeElLote.ts`): el grado del proceso de LA FASE ABIERTA. Sin fase abierta (`abierta` indefinida)
@@ -493,17 +638,23 @@ async function curvaDeUnLote(
   // nada no se escribe qué pasa si espera. Y con una fase de secado también: la matriz es de fermentación.
   const perfilDelLote = perfilDeLaFaseAbierta(abierta ? { fase: abierta.fase, proceso } : undefined);
 
+  // **¿Se supo qué receta aplicaba?** (`PENDING_IMPLEMENTATIONS/019`.) `objetivos` sale de
+  // `proceso?.processRecipeVersion?.targets ?? []` (el proceso que cubre al lote, del resolvedor), así que **sin corrida abierta está
+  // vacío porque no se consultó ninguna receta**, no porque la receta no declare rango. Las dos
+  // llegaban a la pantalla como una sola frase —«esta variable no tiene rango declarado en la
+  // receta»— que afirma sobre una receta que nadie miró. Es la misma forma que esta rama existe
+  // para impedir: una consulta que no recupera nada leída como un hecho.
+  //
+  // Resuelta = hay corrida abierta Y el proceso que cubre al lote tiene versión de receta. Con cualquiera de las dos
+  // ausentes no se afirma nada de la receta; se dice que no se pudo resolver.
+  const recetaResuelta = proceso?.processRecipeVersion != null;
+
   const curva = curvaDeLote({
     lecturas: mediciones
       .filter((m) => !corregidas.has(m.id))
       .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
-    objetivo: meta
-      ? {
-          minValue: meta.minValue?.toNumber() ?? null,
-          maxValue: meta.maxValue?.toNumber() ?? null,
-          targetValue: meta.targetValue?.toNumber() ?? null,
-        }
-      : null,
+    objetivos,
+    recetaResuelta,
     ancho,
     alto,
   });
