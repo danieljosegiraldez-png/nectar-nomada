@@ -300,11 +300,11 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
-- **El inventario de acceso: el escalón 1 está HECHO** (#639, 2026-10-04) y lee
-  el AST. Lo que sigue abierto es **tuyo**: el escalón 2 —resolver el símbolo del
-  guardia con el comprobador de tipos, por su coste en CI— y qué subconjunto de
-  los **50** `exige*` cuenta como guardia, porque la mayoría son validadores y
-  meterlos movería «guardia directo» de 396 a 432. Ficha `007`, «Cómo quedó».
+- **El inventario de acceso: ficha `007` CERRADA, los dos escalones** (#639,
+  2026-10-04). El detector lee el AST y una compuerta nueva resuelve el guardia
+  hasta su **símbolo**: de las 396 «guardia directo» por nombre, **0 mienten**. La
+  pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
+  Queda la `005` —si el guardia es el **debido**—, que ningún comprobador cierra.
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver

@@ -42,12 +42,15 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 >    `TraceabilityAccessError`) y lo convierte en `notFound()`. No hay ninguna llamada a un guardia en la
 >    página, así que sale «no autoriza». Pasa en `app/plots/[id]/page.tsx`,
 >    `app/field-sessions/[id]/page.tsx` y las dos de `app/plots/[id]/manejo/`.
-> 2. **Un guardia en español.** La convención es `require\w*(Access|Admin|Override)|can|…`, y la casa usa
->    además `exigePoderAnotar`, `exigeReportarEnJornada`, `exigePermiso`, `exigeGestionarFinca`… Hay **50**
->    funciones `exige*` contra **18** `require*(Access|Admin|Override)`. **Ampliar la convención sería peor:**
->    la mayoría de las 50 son **validadores** (`exigeFecha`, `exigeNombre`, `exigePct`), así que meterlas
->    marcaría «guardia directo» de **396 a 432** por la fuerza de un validador de fechas — el defecto que esta
->    ficha persigue, amplificado. Elegir el subconjunto, o resolver el símbolo, es **una decisión del dueño**.
+> 2. ~~**Un guardia en español.**~~ **RESUELTO el 2026-10-04 por el escalón 2.** La convención es
+>    `require\w*(Access|Admin|Override)|can|…` y la casa usa además `exigePoderAnotar`,
+>    `exigeReportarEnJornada`, `exigePermiso`… Hay **50** funciones `exige*` contra **18**
+>    `require*(Access|Admin|Override)`, y ampliar la convención habría sido **peor**: la mayoría de las 50
+>    son **validadores** (`exigeFecha`, `exigeNombre`, `exigePct`), así que meterlas marcaba «guardia
+>    directo» de **396 a 432** por la fuerza de un validador de fechas. Con **símbolos no hay nada que
+>    enumerar**: `node scripts/inventario-de-acceso.mjs --simbolos` resuelve cada llamada hasta su
+>    declaración real y los tres que autorizan **alcanzan** el servicio mientras los cuatro validadores
+>    **no**. Lo vigila `tests/arquitectura/el-guardia-es-un-simbolo.test.ts`.
 >
 > Y una corrección de método que costó tres razones mal escritas el mismo día: **que un archivo tenga un
 > guardia no significa que lo tenga el camino.** `lib/traceability/floracion.ts` llama a

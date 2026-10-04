@@ -1,9 +1,10 @@
 # 007 · El inventario de acceso lee texto, no programa
 
-**Estado: el escalón 1 está HECHO** — [#639](https://github.com/danieljosegiraldez-png/nectar-nomada/pull/639),
-2026-10-04, plan en `docs/superpowers/plans/2026-10-04-el-inventario-con-ast.md`.
-**El escalón 2 sigue abierto y sigue siendo decisión de Daniel.** Lo medido al
-cerrarlo está al final, en «Cómo quedó».
+**Estado: CERRADA — los dos escalones están hechos**, los dos en el
+[#639](https://github.com/danieljosegiraldez-png/nectar-nomada/pull/639) del 2026-10-04. El escalón 1
+(AST, sólo sintaxis) con plan en `docs/superpowers/plans/2026-10-04-el-inventario-con-ast.md`; el
+escalón 2 (comprobador de tipos) por decisión de Daniel ese mismo día, con su coste medido antes de
+construirlo. Lo medido de los dos está al final, en «Cómo quedó».
 
 Es la respuesta estructural a un límite **medido**, no supuesto. Lo pidió la
 revisión independiente del 2026-08-31 después de que su segunda pasada
@@ -178,10 +179,8 @@ el allowlist desde ese día.
 
 ### Lo que NO cierra, y hay que decirlo cada vez
 
-- **El escalón 2.** `require\w*(Access|Admin|Override)` sigue siendo una
-  convención de **nombres**: una función que no haga nada con ese nombre sigue
-  contando como guardia. Sólo lo cierra resolver el símbolo, y eso **pide una
-  decisión del dueño** por su coste en CI. 1 sin 2 es coherente.
+- ~~**El escalón 2.**~~ **HECHO el 2026-10-04**, por decisión de Daniel, y va abajo
+  en su propia sección.
 - **Si el guardia es el *debido*.** Ficha `005`.
 - **Dos mecanismos de autorización que el inventario no ve**, medidos al cerrar
   esto y escritos en `docs/arquitectura/inventario-de-acceso.md`: una página que
@@ -211,3 +210,93 @@ unidad: `OK` 48 → 32, `MIRAR` 51 → 67), no sólo al texto.
 documento la fila de una clase la dejaba **en verde**, porque comparaba las filas
 que existen y nunca que cada clase medida **tuviera** fila. Mi propia fila nueva
 era decorativa hasta que se cerró.
+
+---
+
+## El escalón 2, hecho el 2026-10-04 — el guardia como símbolo
+
+Daniel lo pidió el mismo día. **Lo primero fue medir su coste**, porque esta ficha
+lo dejaba a su decisión precisamente por eso y porque si era prohibitivo cambiaba
+qué construir. Tres mediciones del mismo número diferían **25×**, y las tres
+tenían una explicación:
+
+| medición | qué medía de verdad |
+|---|---|
+| **8 s** | el primer spike: construía el `Program` y recorría **un** archivo, no los 591 |
+| **208 s** | con `analizar` ya en memoria: presión de recolección de basura, no coste |
+| **16-23 s**, ~1,8 GB | **el bueno**: sola, en proceso limpio, las 19.996 llamadas resueltas al 100 % |
+| **~+10 s** | lo que le añade al carril hermético entero, porque vitest la paraleliza |
+
+### Qué hace, y qué deliberadamente NO hace
+
+Resuelve cada llamada hasta la **declaración real** de su símbolo —siguiendo los
+alias de `import`, que es lo que distingue el `can` de `lib/rbac/service.ts` del
+**homónimo** de `lib/rbac/resolve.ts`— y calcula qué funciones **alcanzan** el
+servicio de autorización: **1.530** funciones con llamadas, **842** alcanzan.
+
+**No sustituye la clasificación: la verifica.** La allowlist y las tres compuertas
+se apoyan en las clases de `analizar.mjs`, y cambiarlas de substrato es otro
+cambio con otra discusión. La compuerta nueva sólo falla cuando la convención
+**miente**.
+
+### Lo medido, con el control primero
+
+El control va antes del resultado porque los nombres los calculan **dos**
+funciones distintas —`unidades()` en `analizar.mjs` y `unidadDe()` en
+`simbolos.mjs`—: si divergen, el cruce da cero en silencio.
+
+```
+CONTROL · claves de los dos lados que casan: 624 de 624
+«guardia directo» por nombre: 396
+  de ellas, las que por símbolo NO alcanzan el servicio: 0
+```
+
+**El caso que esta ficha temía —«una función que no hace nada con ese nombre
+cuenta como guardia»— tiene cero instancias hoy.** Es un hecho medido, y ahora hay
+una compuerta que lo mantiene: `tests/arquitectura/el-guardia-es-un-simbolo.test.ts`.
+
+**Y su flip-test lo prueba.** Un archivo con `requireFlipAccess()` que no hace
+nada **compila**, el inventario lo clasifica «guardia directo» con
+`guardias=["requireFlipAccess"]` —o sea, la convención cae— y la compuerta tira
+**exactamente una** prueba, por su nombre.
+
+### El premio, que no estaba en el plan
+
+**Dos operaciones autorizan de verdad y la convención no las ve**, y sus propias
+razones en la allowlist dicen por qué: *«que el detector no reconoce porque está a
+dos saltos»* (`registrarBandejas`) y *«el detector no lo reconoce como guardia»*
+(`declararModoDeInstrumento`). Dos justificaciones escritas **a mano** cuyo único
+motivo de existir era que el detector no veía. El comprobador de tipos las
+sostiene.
+
+**Y cierra gratis el punto ciego del escalón 1:** los guardias en español.
+`exigePermiso`, `exigePoderAnotar` y `exigeReportarEnJornada` **alcanzan** el
+servicio; `exigeFecha`, `exigeNombre`, `exigePct` y `exigeEnteroContado` **no**.
+Sin enumerar nada — que es lo que habría marcado 36 operaciones como guardadas por
+la fuerza de un validador de fechas.
+
+### Tres errores propios que cazó medir, no releer
+
+Van escritos porque la forma reincide:
+
+1. El primer spike resolvía `can` a `lots.ts`, donde está el `import`, en vez de a
+   `rbac/service.ts`: faltaba `getAliasedSymbol`. Daba «2 resueltas» — un
+   resultado plausible de algo que no medía.
+2. `unidadDe` subía hasta la primera declaración y atribuía la llamada a una
+   **variable local**: en `const ok = … await can(…)` la arista quedaba en `ok` y
+   `exigePermiso` salía como que no autoriza, teniendo el `can` dos líneas abajo.
+   Eso inflaba el grafo de 1.530 a 3.422 nodos.
+3. En la prueba misma: el caso del validador ponía `exigeFecha` en
+   `intervenciones.ts` cuando vive en `ritmo.ts`, y **pasaba en verde** — una
+   aserción de «no autoriza» sobre una clave que no existe da `false` por el
+   motivo equivocado. Lleva ahora un control de existencia que lo impide.
+
+### Lo que sigue sin cerrar, y no es de este escalón
+
+- **Si el guardia es el *debido*.** Un `requireLotAccess` con el permiso
+  equivocado alcanza el servicio igual. Es la ficha `005`, y ningún comprobador de
+  tipos la cierra.
+- **La página que autoriza atrapando un error** de un servicio que lanza. El grafo
+  de llamadas lo haría posible —es un camino más—, pero decidir que «atrapar
+  `LocationAccessError` y hacer `notFound()`» cuenta como autorizar es una
+  decisión de diseño, no una medición.
