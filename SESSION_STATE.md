@@ -306,11 +306,21 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
 - **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
   por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
-  del **lote**: 89 operaciones con guardia, 72 exigen `lot`, 17 declaradas con razón.
-  **Queda tuyo:** confirmar los **14 veredictos**, y sobre todo los **DOS DEFECTOS
-  PROPUESTOS** —`completeExternalCoffeeOrigin` y `recordWashMedium`, que dejan atar
-  una muestra o un medio de lavado a un lote que no puedes ver—. Y los otros
-  dominios, que son un bloque más en el mismo archivo.
+  del **lote**: 15 modelos gobernados y **13 excepciones** declaradas con su razón.
+  **Los dos defectos están arreglados** (2026-10-04, cada uno con su prueba en rojo
+  primero y su control positivo, en el grupo `base-sembrada`):
+  `completeExternalCoffeeOrigin` exige ahora `lot:view` sobre el lote que cita, y
+  `recordWashMedium` exige mismo proyecto —su actor, `Research Lead`, **no tiene**
+  permiso de `lot`, y exigírselo habría roto `mosto_de_otro_lote` y forzado una
+  concesión de RBAC que es tuya—.
+  **El `action` también está medido** y no hay defecto vivo: de 23 unidades que
+  escriben un modelo del dominio, **0 exigen sólo `view`**, y las 28 raíces exigen
+  todas una acción de escritura; el flip lo confirma mutando una línea. Si se
+  convierte en compuerta tiene que resolver **valores por omisión de parámetro** o
+  nace con un falso positivo —`bajarBandejaAction`, que autoriza bien—.
+  **Queda tuyo:** los **12 veredictos** sin confirmar, si se construye esa compuerta
+  del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
+  `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
