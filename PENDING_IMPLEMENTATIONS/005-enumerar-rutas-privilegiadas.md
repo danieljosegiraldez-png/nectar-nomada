@@ -163,7 +163,7 @@ literal** (94 %), y sólo 6 de 83 unidades pasan más de uno.
 
 | veredicto | cuántas |
 |---|---|
-| **PROPUESTO DEFECTO** | **2** |
+| ~~PROPUESTO DEFECTO~~ → **arreglados el 2026-10-04** | **2** |
 | propuesto legítimo | 14 (uno con una nota) |
 | legítimo por construcción | 1 |
 | **confirmadas por Daniel** | **0 — a propósito: son juicios suyos** |
@@ -206,9 +206,39 @@ lote autorizando con `sensory`. El cuarto se rehízo porque la primera versión
 buena compila (`tsc` 0), el inventario la clasifica «guardia directo» con
 `modelos=["lot"]`, y la compuerta la caza.
 
+### Los dos defectos, arreglados el 2026-10-04
+
+Daniel los confirmó y se arreglaron **con prueba en rojo primero**, cada una con su
+control —un rechazo puede venir de que el actor no pueda citar **ningún** lote, así
+que cada prueba comprueba también que la cita legítima **sí** funciona—:
+
+| operación | el arreglo | su guardia |
+|---|---|---|
+| `completeExternalCoffeeOrigin` | `requireLotAccess(userAccountId, "view", [lot])` sobre el lote que cita | `tests/traceability/loteCitadoExigeSuPermiso.test.ts` |
+| `recordWashMedium` | el lote citado tiene que estar en el **mismo proyecto** que el lote de tratamiento | `tests/research/ro1.test.ts` |
+
+**Por qué dos arreglos distintos, y no es inconsistencia.** El actor del primero es
+un `Farm Operator`, que **tiene** `lot:view`, así que exigirlo es gratis y es el
+cierre completo. El del segundo es un `Research Lead`, y medido el 2026-10-04 ese
+perfil **no tiene ningún permiso de `lot`** —sólo `research:*` y
+`classification:*`—: exigir `lot:view` ahí rompería `mosto_de_otro_lote`, que es
+una función deliberada, y obligaría a conceder un permiso nuevo a los perfiles de
+investigación. **Eso es una decisión de Daniel, no un arreglo.** La regla del
+proyecto cierra «cualquier lote de la base» sin tocar el modelo de permisos,
+porque la autorización de research ya es por proyecto. Si prefiere la vía fuerte,
+el cambio está escrito en la declaración: conceder `["lot", "view"]` a
+`Research Lead` y `Research Contributor`, más una siembra.
+
+**Y una trampa de carril que casi deja los dos guardias sin ejercer.** La primera
+versión de la prueba del primero fue a `s1.test.ts`, donde viven las demás pruebas
+de esa operación — y **ese archivo está en el grupo `datos-reales`, que CI no
+corre**: necesita el backup restaurado. Una prueba escrita ahí no se ejecuta nunca.
+Las dos viven ahora en el grupo `base-sembrada`, y se verificó corriendo el carril
+entero: 207 archivos, 2576 pruebas, salida 0.
+
 ### Lo que sigue abierto
 
-- **Tus catorce veredictos**, y sobre todo los **dos defectos propuestos**. La
+- **Tus doce veredictos restantes.** Los dos defectos ya están arreglados. La
   compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
   en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
 - **Los otros dominios.** Hoy hay uno. Añadir el siguiente es un bloque más en el

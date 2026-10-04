@@ -24,24 +24,14 @@
       ],
       "excepciones": [
         {
-          "archivo": "lib/traceability/samples.ts",
-          "operacion": "completeExternalCoffeeOrigin",
-          "permisos": [
-            "sample"
-          ],
-          "veredicto": "PROPUESTO DEFECTO",
-          "confirmado_por_daniel": false,
-          "razon": "Autoriza `sample:manage` sobre el ambito de la MUESTRA y despues lee un lote cuyo id lo da quien llama (`input.linkToLotId`, linea 544), solo para comprobar que existe -- el valor se descarta, asi que NO filtra datos del lote. Lo que si hace es ESCRIBIR el enlace: con `sample:manage` sobre tu propia muestra puedes atarla a cualquier lote de la base, incluido uno que no puedes ver, y la trazabilidad de ese lote queda con una muestra colgada que su dueño no autorizo. El arreglo seria pedir `lot` sobre `linkToLotId` antes de enlazar. Pendiente de tu veredicto: puede que atar una muestra externa a un lote sea deliberadamente libre."
-        },
-        {
           "archivo": "lib/research/treatments.ts",
           "operacion": "recordWashMedium",
           "permisos": [
             "research"
           ],
-          "veredicto": "PROPUESTO DEFECTO",
-          "confirmado_por_daniel": false,
-          "razon": "La misma forma exacta que `completeExternalCoffeeOrigin`, y por eso van juntas: autoriza `research:execute_protocol` sobre el ambito del lote de tratamiento (linea 414), y DESPUES lee un lote cuyo id lo da quien llama (`input.washMediumSourceLotId`, linea 422) solo para comprobar que existe. No filtra datos, pero escribe `washMediumSourceLotId` apuntando a un lote que puede no ser tuyo. El arreglo es el mismo. Pendiente de tu veredicto."
+          "veredicto": "ARREGLADO 2026-10-04: la cita se queda en el proyecto autorizado",
+          "confirmado_por_daniel": true,
+          "razon": "ERA UN DEFECTO y Daniel lo confirmo el 2026-10-04. Autorizaba `research:execute_protocol` sobre el proyecto del lote de tratamiento y despues leia el lote de `washMediumSourceLotId` SOLO para comprobar que existe -- el valor se descartaba --, asi que podia citar CUALQUIER lote de la base como medio de lavado y escribir esa cita en la etapa. ARREGLADO exigiendo que el lote citado este en el MISMO PROYECTO que el lote de tratamiento. Sigue usando el permiso `research` y no `lot`, y eso es deliberado: medido el 2026-10-04, el perfil `Research Lead` NO TIENE NINGUN permiso de `lot` --solo `research:*` y `classification:*`--, asi que exigir `lot:view` romperia `mosto_de_otro_lote`, que es una funcion deliberada, y obligaria a conceder un permiso nuevo a los perfiles de investigacion: eso es una decision del dueño, no un arreglo. La regla del proyecto cierra «cualquier lote de la base» sin tocar el modelo de permisos, porque la autorizacion de research YA es por proyecto. Guardado por tests/research/ro1.test.ts, que esta en el grupo `base-sembrada` y por tanto CI lo corre."
         },
         {
           "archivo": "lib/traceability/samples.ts",
@@ -165,7 +155,21 @@
           "razon": "La hermana de `pedidosPorDespachar`, y el mismo caso: autoriza `commerce:manage_store` con `exigeTienda` y toca `lotTransformationOutput`, que son los frascos que salieron de una transformacion del lote. El propio archivo documenta la division deliberada: asignar un lote a una variante exige `lot:manage` --y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`--, mientras recibir y despachar exigen tienda."
         }
       ],
-      "_como_salio_esta_lista": "SACADA DEL ESQUEMA, no de la prosa de la ficha, y es una correccion: la primera version declaraba `lotClassification`, `lotStorageMove` y `greenSample`, que NO EXISTEN como modelos de Prisma -- me los invente leyendo la 005. Lo cazo la propia compuerta en su primera corrida, que es el mejor estreno que puede tener un guardia. Las 16 de ahora salen de `grep '^model (Lot|Harvest|RoastSession|FermentationRun|DryingRun)'` sobre prisma/schema.prisma y las 16 las toca al menos una operacion, medido. `Sample` queda fuera a proposito: es su propio dominio, con su propio permiso. SEGUNDA CORRECCION, tambien de la propia compuerta: `harvestContainer` entro por el prefijo `Harvest*` y NO es del dominio del lote -- cuelga de `ApiaryHarvestEvent`, son los baldes y tambores de una cosecha de MIEL («balde 3», «tambor A»), y solo `lib/apiary/*` lo toca. Una heuristica por nombre barre de mas; lo que decide es la relacion del modelo. `harvestWithdrawalFlag` y `loteDesdeRecepcion` si se quedan: el primero cuelga de `HarvestEvent` (cosecha de cafe) y el segundo del `Lot`."
+      "_como_salio_esta_lista": "SACADA DEL ESQUEMA, no de la prosa de la ficha, y es una correccion: la primera version declaraba `lotClassification`, `lotStorageMove` y `greenSample`, que NO EXISTEN como modelos de Prisma -- me los invente leyendo la 005. Lo cazo la propia compuerta en su primera corrida, que es el mejor estreno que puede tener un guardia. Las 16 de ahora salen de `grep '^model (Lot|Harvest|RoastSession|FermentationRun|DryingRun)'` sobre prisma/schema.prisma y las 16 las toca al menos una operacion, medido. `Sample` queda fuera a proposito: es su propio dominio, con su propio permiso. SEGUNDA CORRECCION, tambien de la propia compuerta: `harvestContainer` entro por el prefijo `Harvest*` y NO es del dominio del lote -- cuelga de `ApiaryHarvestEvent`, son los baldes y tambores de una cosecha de MIEL («balde 3», «tambor A»), y solo `lib/apiary/*` lo toca. Una heuristica por nombre barre de mas; lo que decide es la relacion del modelo. `harvestWithdrawalFlag` y `loteDesdeRecepcion` si se quedan: el primero cuelga de `HarvestEvent` (cosecha de cafe) y el segundo del `Lot`.",
+      "_arreglados": [
+        {
+          "operacion": "completeExternalCoffeeOrigin",
+          "archivo": "lib/traceability/samples.ts",
+          "cuando": "2026-10-04",
+          "como": "Exige ahora `requireLotAccess(userAccountId, \"view\", [lot])` sobre el lote que cita. `view` y no `manage` a proposito: el defecto medido era «un lote que no puedes ver», y exigir `manage` impediria citar un lote que legitimamente ves sin gestionarlo. Guardado por `tests/traceability/loteCitadoExigeSuPermiso.test.ts`, en el grupo `base-sembrada` -- NO en `s1.test.ts`, donde viven sus otras pruebas, porque ese archivo esta en `datos-reales` y CI no corre ese grupo: una prueba escrita alli no se ejecutaria nunca."
+        },
+        {
+          "operacion": "recordWashMedium",
+          "archivo": "lib/research/treatments.ts",
+          "cuando": "2026-10-04",
+          "como": "Exige que `sourceLot.projectId === stage.treatmentBatch.projectId`. NO exige `lot:view`, y la razon de la excepcion explica por que: habria obligado a cambiar el modelo de permisos de los perfiles de investigacion. Si Daniel prefiere esa via, el cambio es conceder `[\"lot\", \"view\"]` a `Research Lead` y `Research Contributor` en lib/rbac/catalog.ts, mas una siembra."
+        }
+      ]
     }
   ]
 }
