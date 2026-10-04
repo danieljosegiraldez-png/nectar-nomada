@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createMicrolot, RejillaInvalida, updateLocationAttributes } from "../../lib/traceability/locations";
-import { pendienteDeLaParcela, type EntradaDePendiente } from "../../lib/traceability/pendienteDeLaParcela";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -152,44 +151,30 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
   });
 
   /**
-   * **Y la que NO se copia, con su consecuencia medida en la misma prueba.**
+   * **La que NO se copia.**
    *
-   * No basta afirmar el nulo: lo que importa es que el nulo haga saltar el aviso que
-   * lleva a medir el área de verdad. `pendienteDeLaParcela` es una función pura, así
-   * que se le puede preguntar aquí mismo. Con el área copiada esta prueba caía por
-   * las dos aserciones a la vez, que es lo que la hace un guardia y no un adorno.
+   * **Recortada el 2026-10-04 al poner este PR al día, y es un recorte honesto, no una
+   * prueba debilitada por comodidad.** La versión anterior medía además la consecuencia
+   * —que el nulo hiciera saltar el aviso `sin_area`, el que llevaba a medir el área de
+   * verdad—, y eso era lo que la hacía un guardia y no un adorno. Ese aviso **ya no
+   * existe**: Daniel decidió el 2026-10-03 que la aplicación deja de pedir el área,
+   * porque el espacio de un lote sale de las plantas y la densidad y no del metraje, y
+   * `areaHectares` salió de `EntradaDePendiente` (su comentario lo explica, en
+   * `lib/traceability/pendienteDeLaParcela.ts`).
+   *
+   * O sea que la segunda columna no se quitó por pesar: desapareció el comportamiento
+   * que medía. Afirmar el nulo sigue cazando la regresión —volver a copiar el área hace
+   * caer esta prueba— y la procedencia la vigila la del libro de auditoría, aquí abajo.
+   * Lo que ya no hay es consecuencia que preguntar, y queda escrito para que nadie
+   * cuente esta prueba por dos.
    */
-  it("NO copia el área, y por eso la microparcela vuelve a pedirla", async () => {
+  it("NO copia el área: es extensiva, y una microparcela es una parte", async () => {
     const m = await microlote("Este");
     locationIds.push(m.id);
     expect(m.areaHectares, "el área es extensiva: copiarla guarda un número que no puede ser suyo").toBeNull();
-    // **Sin `as never`, a propósito.** La primera versión lo llevaba y escondió que
-    // `EntradaDePendiente` exige nueve campos más: la prueba reventó con
-    // «e.jornadas is not iterable» en vez de decir que la forma estaba mal. Un casteo
-    // que silencia al compilador se cobra el silencio en tiempo de ejecución.
-    const entrada = (areaHectares: number | null): EntradaDePendiente => ({
-      hoy: "2026-10-02",
-      zona: null,
-      areaHectares,
-      cohortesActivas: [],
-      estados: new Map(),
-      jornadas: [],
-      muestrasDeSuelo: [],
-      muestrasFoliares: [],
-      ahora: new Date("2026-10-02T12:00:00.000Z"),
-      intervenciones: [],
-      trampas: [],
-      regla: null,
-      intervencionesDeTrampas: [],
-    });
-    const sinArea = pendienteDeLaParcela(entrada(m.areaHectares == null ? null : Number(m.areaHectares)));
-    expect(sinArea.faltaUnDato, "con el área en nulo nadie pide medirla").toContainEqual({ tipo: "sin_area" });
-    // Control del control: con un área puesta NO debe pedirla. Sin esta mitad, un aviso
-    // que saliera siempre pasaría la aserción de arriba sin medir nada.
-    const conArea = pendienteDeLaParcela(entrada(0.8));
-    expect(conArea.faltaUnDato, "pide el área incluso teniéndola: el aviso no discrimina").not.toContainEqual({
-      tipo: "sin_area",
-    });
+    // El control de que esto mide algo: los intensivos SÍ llegaron en la misma creación.
+    // Sin esta línea, una `createMicrolot` que no copiara NADA pasaría igual de verde.
+    expect(m.soilType, "y los intensivos sí se copiaron, o esto no mediría nada").toBe(ATRIBUTOS.soilType);
   });
 
   /**
