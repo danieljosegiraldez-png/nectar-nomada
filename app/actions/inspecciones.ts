@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "../../lib/auth/session";
 import { registrarInspeccion } from "../../lib/traceability/samplingEvents";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { SampleValidationError } from "../../lib/traceability/samples";
 import { leerInspeccion, SecadoFormError, type SecadoFormState } from "../../lib/traceability/secadoForm";
 import { LocalDateTimeError } from "../../lib/time/localDateTime";
 
@@ -24,6 +25,9 @@ export async function registrarInspeccionFormAction(_state: SecadoFormState, for
     // La lista junta las personas de todas las fincas ofrecidas: elegir a alguien de una y un lote
     // de otra es un error de quien rellena, no un 500.
     if (error instanceof PersonaNoPermitidaError) return { error: "persona_no_permitida" };
+    // Parte 1, R6.6 (2026-10-01): el servicio rechaza un lote dividido bajo un proceso (`lote_dividido`), con su
+    // clave `Secado.error_lote_dividido`. Sin esta rama, un 500.
+    if (error instanceof SampleValidationError) return { error: error.message };
     throw error;
   }
   revalidatePath(`/lots/${lotId}`);

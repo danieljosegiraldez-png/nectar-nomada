@@ -11,12 +11,15 @@ import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
+import { procesoQueCubre, procesosParaEntrada, type Cobertura } from "../traceability/procesoDelLinaje";
+import { LotProcessError } from "../traceability/errorDeProceso";
 import { perfilDeLaFaseAbierta, veredictoDelLote } from "./desdeElLote";
 import { curvaDeLote, type Curva, type MomentoDeObjetivo } from "./curvaDeLote";
 import type { ClaveDePerfil } from "./perfiles";
 import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
 import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
 import {
+  LINAJE_DEMASIADO_HONDO,
   pidenDecisionPorEtapa,
   unaEntradaPorLote,
   type CorridaAbierta,
@@ -145,6 +148,8 @@ const procesoSelect = {
   },
 } as const;
 
+type ProcesoDelTablero = Prisma.LotProcessGetPayload<{ select: typeof procesoSelect }>;
+
 const medicionSelect = {
   id: true,
   variable: true,
@@ -180,7 +185,6 @@ export async function datosDelTablero(
         startedAt: true,
         vesselNote: true,
         vesselEquipmentId: true,
-        lotProcess: { select: procesoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -194,7 +198,6 @@ export async function datosDelTablero(
         id: true,
         startedAt: true,
         dryingBedLocationId: true,
-        lotProcess: { select: procesoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -241,6 +244,9 @@ export async function datosDelTablero(
     drying: [] as EntradaDeLoteParaTablero[],
   };
   const organizaciones = new Set<string>();
+  // El proceso que cubre a cada lote, resuelto UNA vez en el bucle de abajo. La liberación de unidades y la curva lo leen
+  // de aquí y no de la FK de la corrida (Parte 1, R7; al juntar `main` el 2026-10-03, las dos lo leían por la FK).
+  const procesoPorLote = new Map<string, ProcesoDelTablero | null>();
 
   // **Qué mediciones de estos lotes ya fueron corregidas, SIN ninguna ventana de fecha**
   // (`PENDING_IMPLEMENTATIONS/018`). `entradaDelLote` lo deducía de las mediciones que recibe, y ésas
@@ -272,6 +278,25 @@ export async function datosDelTablero(
     if (!lot) continue;
     if (lot.organizationId) organizaciones.add(lot.organizationId);
 
+    // Parte 1, R7 (tarea 9, 2026-10-02): el proceso del lote se busca HACIA ARRIBA, por la misma función que la ficha.
+    // Antes salía de la FK de la corrida, que en toda corrida vieja es nula (R9 no la rellena).
+    //
+    // Ronda de arreglo 1 (2026-10-02). UNA subida por lote: `procesosParaEntrada` reutiliza la cobertura en vez de volver a
+    // resolverla. Y `lineage_too_deep` se atrapa AQUÍ, fila a fila (diseño R1: «las pantallas atrapan lineage_too_deep y lo
+    // dicen»): un solo lote con más de 64 generaciones tumbaba el tablero entero para todos. Esa fila sale marcada y sin
+    // proceso; cualquier otro error se relanza.
+    let cobertura: Cobertura | null = null;
+    try {
+      cobertura = await procesoQueCubre(prisma, lot.id);
+    } catch (error) {
+      if (!(error instanceof LotProcessError && error.message === "lineage_too_deep")) throw error;
+    }
+    const procesos = cobertura ? await procesosParaEntrada(prisma, lot.id, cobertura) : [];
+    const proceso = cobertura?.vigente
+      ? await prisma.lotProcess.findUnique({ where: { id: cobertura.vigente.id }, select: procesoSelect })
+      : null;
+    procesoPorLote.set(lot.id, proceso);
+
     // Sólo las lecturas de ESTA fase: una humedad de la fermentación anterior no dice nada del
     // secado de ahora, y contarla apagaría una lectura debida que sí lo está.
     const mediciones = await prisma.measurement.findMany({
@@ -291,9 +316,7 @@ export async function datosDelTablero(
       fermentacionAbierta: c.fase === "fermentation" ? { startedAt: c.startedAt } : null,
       secadoAbierto: c.fase === "drying" ? { startedAt: c.startedAt } : null,
       ultimoSecadoTerminado: null,
-      procesos: c.lotProcess
-        ? [{ endedAt: c.lotProcess.endedAt, gradoDeProceso: c.lotProcess.processGradeValue?.value ?? null }]
-        : [],
+      procesos,
       mediciones: mediciones.map((m) => ({
         id: m.id,
         variable: m.variable,
@@ -313,9 +336,9 @@ export async function datosDelTablero(
     // fuera incoherente, el lote se salta en vez de inventarle una fase.
     if (!entrada) continue;
 
-    const veredicto = veredictoDelLote(entrada);
-    const fases = c.lotProcess?.processRecipeVersion?.fases ?? [];
-    const targets = c.lotProcess?.processRecipeVersion?.targets ?? [];
+    const veredicto = cobertura === null ? LINAJE_DEMASIADO_HONDO : veredictoDelLote(entrada);
+    const fases = proceso?.processRecipeVersion?.fases ?? [];
+    const targets = proceso?.processRecipeVersion?.targets ?? [];
 
     const entradaDeTablero: EntradaDeLoteParaTablero = {
       lotId: lot.id,
@@ -414,9 +437,13 @@ export async function datosDelTablero(
   // (`tanques` ∪ `camas`, los dos de abajo), calculado aquí porque la ocupación lo calcula una función
   // más allá, en la página.
   const duracionDeFase = (
-    lotProcess: (typeof crudas)[number]["lotProcess"],
+    corrida: { readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[] },
     fase: "fermentation" | "drying",
-  ) => lotProcess?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
+  ) => {
+    const lotId = corrida.transformations[0]?.inputs[0]?.lot.id;
+    const proceso = lotId ? procesoPorLote.get(lotId) : null;
+    return proceso?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
+  };
   const tanquesVisibles: UnidadDelSitio[] = equipos
     .filter((e) => e.kind === "vessel")
     .map((e) => ({
@@ -475,13 +502,13 @@ export async function datosDelTablero(
       equipmentId: f.vesselEquipmentId,
       bedLocationId: null,
       iniciadaEn: f.startedAt,
-      expectedHours: duracionDeFase(f.lotProcess, "fermentation"),
+      expectedHours: duracionDeFase(f, "fermentation"),
     })),
     ...secados.map((d) => ({
       equipmentId: null,
       bedLocationId: d.dryingBedLocationId,
       iniciadaEn: d.startedAt,
-      expectedHours: duracionDeFase(d.lotProcess, "drying"),
+      expectedHours: duracionDeFase(d, "drying"),
     })),
   ].filter((c) => {
     const declarada = c.equipmentId ?? c.bedLocationId;
@@ -504,7 +531,7 @@ export async function datosDelTablero(
     ? (lotes.find((l) => l.lotId === opciones.curva!.lotId)?.corridaId ?? null)
     : null;
   const curva = opciones.curva
-    ? await curvaDeUnLote(lotWhere, crudas, opciones.curva, corridaDeLaCurva)
+    ? await curvaDeUnLote(lotWhere, crudas, procesoPorLote, opciones.curva, corridaDeLaCurva)
     : null;
 
   return {
@@ -544,27 +571,9 @@ async function curvaDeUnLote(
     readonly id: string;
     readonly fase: "fermentation" | "drying";
     readonly startedAt: Date;
-    readonly lotProcess: {
-      readonly processGradeValue: { readonly value: string } | null;
-      readonly processRecipeVersion: {
-        readonly targets: readonly {
-          readonly variable: string;
-          readonly phase: string | null;
-          /**
-           * Los tres literales del enum, **no `string`**. Era `string`, y con eso el momento se
-           * perdía al entrar en la curva: `elegirObjetivo` no podía distinguir un objetivo de
-           * trayectoria de uno de un instante, que es la mitad del defecto de
-           * `PENDING_IMPLEMENTATIONS/017`. El tipo que la base produce ya es éste.
-           */
-          readonly moment: MomentoDeObjetivo;
-          readonly minValue: { toNumber(): number } | null;
-          readonly maxValue: { toNumber(): number } | null;
-          readonly targetValue: { toNumber(): number } | null;
-        }[];
-      } | null;
-    } | null;
     readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
   }[],
+  procesoPorLote: ReadonlyMap<string, ProcesoDelTablero | null>,
   pedida: NonNullable<OpcionesDelTablero["curva"]>,
   /**
    * **La corrida que el tablero eligió para este lote**, o `null` si el lote no tiene entrada.
@@ -608,7 +617,9 @@ async function curvaDeUnLote(
   ]);
   const corregidas = new Set(correcciones.map((m) => m.correctsId).filter((id): id is string => id != null));
 
-  const metas = abierta?.lotProcess?.processRecipeVersion?.targets ?? [];
+  // El proceso que cubre al lote, del resolvedor (Parte 1, R7), no el de la FK de la corrida abierta.
+  const proceso = abierta ? (procesoPorLote.get(lotId) ?? null) : null;
+  const metas = proceso?.processRecipeVersion?.targets ?? [];
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
   // **TODOS los objetivos de la fase, con su momento, y la elección la hace `curvaDeLote`.** Esta
   // línea hacía `find("during") ?? find("final")`, y ahí vivían los dos defectos de
@@ -625,18 +636,18 @@ async function curvaDeUnLote(
   // `desdeElLote.ts`): el grado del proceso de LA FASE ABIERTA. Sin fase abierta (`abierta` indefinida)
   // sale `null` y el bloque de «qué sugiere el dato si se espera» calla: sobre un lote que no espera
   // nada no se escribe qué pasa si espera. Y con una fase de secado también: la matriz es de fermentación.
-  const perfilDelLote = perfilDeLaFaseAbierta(abierta);
+  const perfilDelLote = perfilDeLaFaseAbierta(abierta ? { fase: abierta.fase, proceso } : undefined);
 
   // **¿Se supo qué receta aplicaba?** (`PENDING_IMPLEMENTATIONS/019`.) `objetivos` sale de
-  // `abierta?.lotProcess?.processRecipeVersion?.targets ?? []`, así que **sin corrida abierta está
+  // `proceso?.processRecipeVersion?.targets ?? []` (el proceso que cubre al lote, del resolvedor), así que **sin corrida abierta está
   // vacío porque no se consultó ninguna receta**, no porque la receta no declare rango. Las dos
   // llegaban a la pantalla como una sola frase —«esta variable no tiene rango declarado en la
   // receta»— que afirma sobre una receta que nadie miró. Es la misma forma que esta rama existe
   // para impedir: una consulta que no recupera nada leída como un hecho.
   //
-  // Resuelta = hay corrida abierta Y esa corrida tiene versión de receta. Con cualquiera de las dos
+  // Resuelta = hay corrida abierta Y el proceso que cubre al lote tiene versión de receta. Con cualquiera de las dos
   // ausentes no se afirma nada de la receta; se dice que no se pudo resolver.
-  const recetaResuelta = abierta?.lotProcess?.processRecipeVersion != null;
+  const recetaResuelta = proceso?.processRecipeVersion != null;
 
   const curva = curvaDeLote({
     lecturas: mediciones

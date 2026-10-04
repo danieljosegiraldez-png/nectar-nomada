@@ -20,6 +20,7 @@ import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { ocupacionDelSitio } from "../../lib/beneficio/tablero";
 import { proximaLiberacion } from "../../lib/beneficio/liberacionDeUnidad";
 import { CATALOGO_ESTADO_CEREZA, CATALOGO_GRADO_PROCESO } from "../../lib/traceability/lotProcess";
+import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `dt-${Date.now()}`;
@@ -39,6 +40,8 @@ const correctiveIds: string[] = [];
 const procesoIds: string[] = [];
 const storageIds: string[] = [];
 const medicionIds: string[] = [];
+/** Las humedades que CIERRAN un proceso: el proceso las referencia, así que se borran después de él (abajo). */
+const medicionDeCierreIds: string[] = [];
 const recetaIds: string[] = [];
 const versionIds: string[] = [];
 const catalogoValorIds: string[] = [];
@@ -218,6 +221,7 @@ afterAll(async () => {
     // El tanque lo referencia la corrida (`vesselEquipmentId`): después de ella.
     ["equipment", () => prisma.equipment.deleteMany({ where: assertDefinedWhere({ id: { in: equipoIds } }) })],
     ["lotProcess", () => prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ id: { in: procesoIds } }) })],
+    ["measurement (cierre de proceso)", () => prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: medicionDeCierreIds } }) })],
     ["processTarget", () => prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) })],
     ["processRecipePhase", () => prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) })],
     ["processRecipeVersion", () => prisma.processRecipeVersion.deleteMany({ where: assertDefinedWhere({ id: { in: versionIds } }) })],
@@ -366,10 +370,19 @@ async function procesoDe(
   lotId: string,
   o: { cerrado?: boolean; versionId?: string; secuencia?: number; natural?: boolean; washed?: boolean } = {},
 ) {
+  // Parte 1 (R5): un proceso cerrado dice CÓMO se cerró, y el cierre por humedad lleva su medición (lo exige la base,
+  // `lot_process_cierre_sii_tipo` y `lot_process_cierre_por_humedad_lleva_medicion`).
+  const cierre = o.cerrado
+    ? (await prisma.measurement.create({
+        data: { variable: "moisture", value: 10.5, unit: "%", occurredAt: haceHoras(1), lotId, provenanceClass: "measured_fact" },
+      })).id
+    : null;
+  if (cierre) medicionDeCierreIds.push(cierre);
   const p = await prisma.lotProcess.create({
     data: {
       lotId,
-      // La unicidad es `(lotId, sequenceOrder)`: un lote puede tener varios procesos abiertos.
+      // La unicidad es `(lotId, sequenceOrder)`, y desde la Parte 1 la base sólo deja UN proceso abierto por lote
+      // (`lot_process_un_abierto_por_lote`).
       sequenceOrder: o.secuencia ?? 1,
       intent: nombre("intención"),
       processGradeValueId: o.washed ? valorWashed : o.natural ? valorNatural : valorGrado,
@@ -377,6 +390,7 @@ async function procesoDe(
       targetMoisturePct: 11,
       startedAt: haceHoras(12),
       endedAt: o.cerrado ? haceHoras(1) : null,
+      ...(cierre ? { closureKind: "moisture" as const, closingMoistureMeasurementId: cierre } : {}),
       provenanceClass: "original_record",
       processRecipeVersionId: o.versionId ?? null,
     },
@@ -490,7 +504,7 @@ describe("la línea de etapas", () => {
     expect(otras.every((e) => e.estado.tipo === "cuenta")).toBe(true);
   });
 
-  it("proceso: sólo el que sigue abierto, de un lote visible, y un lote con dos procesos abiertos cuenta una vez", async () => {
+  it("proceso: sólo el que sigue abierto, de un lote visible, y un lote no puede tener dos procesos abiertos", async () => {
     const antes = await lotesEn("proceso");
 
     const ajeno = await loteSimple("P-AJENO", otroSitio, otraOrgId);
@@ -505,10 +519,42 @@ describe("la línea de etapas", () => {
     await procesoDe(abierto);
     expect(await lotesEn("proceso")).toBe(antes + 1);
 
-    // Un lote puede tener DOS procesos abiertos (la unicidad es `(lotId, sequenceOrder)`): la etapa
-    // cuenta LOTES, no filas. Mutación que la hace caer: contar `lotProcess` en vez de `lot`.
-    await procesoDe(abierto, { secuencia: 2 });
+    // Esta prueba afirmaba que un lote con DOS procesos abiertos cuenta una vez. Desde la Parte 1 (al juntar `main` el
+    // 2026-10-03) ese caso no puede existir: la base lo rechaza con `lot_process_un_abierto_por_lote`. Se afirma el rechazo,
+    // que es lo que hace verdad que la etapa cuente lotes y no filas; si alguien quita el índice, esto cae.
+    await expect(procesoDe(abierto, { secuencia: 2 })).rejects.toThrow(/Unique constraint/);
     expect(await lotesEn("proceso")).toBe(antes + 1);
+  });
+
+  it("proceso: el café que un proceso cubre en DOS lotes —la cereza con el proceso y su hijo fermentando— cuenta UNA vez (M12)", async () => {
+    // Revisión final de la Parte 1 (ronda de arreglo 1, 2026-10-03). Desde R1 un proceso abierto en la cereza C cubre a su hijo
+    // F, que fermenta (una corrida vieja, SIN `lotProcessId`: R9). La etapa «proceso» cuenta los lotes DUEÑOS de un proceso
+    // abierto (la excepción n=1 del guardia `proceso-por-el-resolvedor`), no los cubiertos: con esta mutación —verosímil para
+    // que cuenten las corridas viejas— la celda diría «2 lotes» para un solo café, y las pruebas de arriba, con proceso y corrida
+    // en el MISMO lote, no lo verían:
+    //   cuentaLotes({ OR: [{ lotProcesses: { some: { endedAt: null } } },
+    //                      { transformationInputs: { some: { transformation: { fermentationRun: { endedAt: null } } } } }] })
+    const antes = await lotesEn("proceso");
+    const c = await loteSimple("P-CUBRE-C", miSitio, miOrgId);
+    const f = await loteSimple("P-CUBRE-F", miSitio, miOrgId);
+    const t = await prisma.lotTransformation.create({
+      data: {
+        transformationType: "stage_change",
+        occurredAt: haceHoras(11),
+        provenanceClass: "original_record",
+        inputs: { create: [{ lotId: c }] },
+        outputs: { create: [{ lotId: f }] },
+      },
+    });
+    transformationIds.push(t.id);
+    await procesoDe(c);
+    await fermentacionDe(f);
+    // Control del estado: F de verdad está cubierto por el proceso ABIERTO de C, y fermenta.
+    expect((await procesoQueCubre(prisma, f)).estado).toBe("abierto");
+    expect(await lotesEn("proceso")).toBe(antes + 1);
+    const etapa = (await datosDelTablero(operario, ahora)).etapas.find((x) => x.clave === "proceso")!.estado;
+    if (etapa.tipo !== "cuenta") throw new Error(`la etapa proceso no cuenta: ${etapa.tipo}`);
+    expect(etapa.pidenDecision, "piden decisión más lotes de los que hay en la etapa").toBeLessThanOrEqual(etapa.lotes);
   });
 
   it("secado: sólo la corrida abierta, de un lote visible, y un lote con dos corridas abiertas cuenta una vez", async () => {
@@ -1235,7 +1281,8 @@ describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa 
   let lote016: string, corridaNueva: string, corridaVieja: string;
 
   beforeAll(async () => {
-    // Una receta que declara pH cada 2 h: es lo que hace que la corrida nueva «deba» una lectura.
+    // Una receta que declara humedad cada 2 h EN EL SECADO: es lo que hace que la corrida nueva —un
+    // secado— «deba» una lectura, y que la vieja —una fermentación, sin ritmo declarado— no deba nada.
     const receta = await prisma.processRecipe.create({
       data: { name: nombre("receta con ritmo"), organizationId: miOrgId, status: "approved" },
     });
@@ -1248,13 +1295,13 @@ describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa 
         targets: {
           create: [
             {
-              variable: "ph",
+              variable: "moisture",
               moment: "during",
-              phase: "fermentation",
-              minValue: 3.8,
-              maxValue: 4.5,
-              targetValue: 4.2,
-              unit: "pH",
+              phase: "drying",
+              minValue: 10,
+              maxValue: 12,
+              targetValue: 11,
+              unit: "%",
               everyHours: 2,
             },
           ],
@@ -1264,14 +1311,21 @@ describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa 
     versionIds.push(version.id);
 
     lote016 = await loteSimple("L-016", miSitio, miOrgId);
-    // La VIEJA, sin receta: no declara ritmo, así que no debe nada.
-    const procesoViejo = await procesoDe(lote016, { natural: true });
-    corridaVieja = await fermentacionDe(lote016, { lotProcessId: procesoViejo, inicio: haceHoras(40) });
-    // La NUEVA, con la receta de «pH cada 2 h». `secuencia: 2` porque la unicidad es
-    // `(lotId, sequenceOrder)`: un lote puede tener varios procesos abiertos, pero no dos con el
-    // mismo número de orden.
-    const procesoNuevo = await procesoDe(lote016, { versionId: version.id, natural: true, secuencia: 2 });
-    corridaNueva = await fermentacionDe(lote016, { lotProcessId: procesoNuevo, inicio: haceHoras(6) });
+    // Al juntar main en la Parte 1 (2026-10-03): un lote tiene UN proceso abierto
+    // (`lot_process_un_abierto_por_lote`), y el tablero lee el proceso de cada corrida por el
+    // resolvedor, no por su FK — así que dos corridas del mismo lote comparten receta y ritmo, y dos
+    // FERMENTACIONES no podrían diferir en ritmo. La asimetría que esta prueba necesita sale de la
+    // FASE: la receta sólo declara «humedad cada 2 h» para el secado.
+    //
+    // Y el orden importa para que el flip discrimine: `datosDelTablero` recorre las fermentaciones
+    // ANTES que los secados, así que la vieja —la menos grave— tiene que ser la fermentación. Si la
+    // más grave llegara primero, «quedarse con la primera» y «quedarse con la más grave» elegirían lo
+    // mismo y quitar la regla no haría caer nada (medido el 2026-10-03 con la versión al revés).
+    const proceso = await procesoDe(lote016, { versionId: version.id, natural: true });
+    // La VIEJA es una fermentación: la receta no le declara ritmo, así que no debe nada.
+    corridaVieja = await fermentacionDe(lote016, { lotProcessId: proceso, inicio: haceHoras(40) });
+    // La NUEVA, un secado con «humedad cada 2 h» que no tiene ninguna: debe una lectura.
+    corridaNueva = await secadoDe(lote016, { lotProcessId: proceso, inicio: haceHoras(6) });
 
     // Dos lecturas: una que SÓLO ve la vieja (hace 20 h) y una que ven las dos (hace 5 h).
     await medicionDe(lote016, "ph", 5.0, haceHoras(20));
@@ -1283,7 +1337,8 @@ describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa 
     const suyas = d.lotes.filter((l) => l.lotId === lote016);
     // Control: las dos corridas existen y están abiertas. Sin esto, «una entrada» podría ser «sólo
     // llegó una».
-    expect(await prisma.fermentationRun.count({ where: { endedAt: null, id: { in: [corridaVieja, corridaNueva] } } })).toBe(2);
+    expect(await prisma.fermentationRun.count({ where: { endedAt: null, id: corridaVieja } })).toBe(1);
+    expect(await prisma.dryingRun.count({ where: { endedAt: null, id: corridaNueva } })).toBe(1);
     expect(suyas).toHaveLength(1);
     expect(suyas[0]!.corridaId, "gana la que pide decisión, no la que empezó antes").toBe(corridaNueva);
   });

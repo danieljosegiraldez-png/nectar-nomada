@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { nextActionFor } from "../../lib/traceability/batchActions";
+import { nextActionFor, sugerenciaOfrecida } from "../../lib/traceability/batchActions";
 import type { LotType } from "../../generated/prisma/client";
 
 describe("nextActionFor", () => {
@@ -66,5 +66,23 @@ describe("nextActionFor", () => {
       expect(result === null || typeof result === "string").toBe(true);
       expect(result).not.toBeUndefined();
     }
+  });
+});
+
+/**
+ * Tarea 9, ronda de arreglo 1 (2026-10-02). Desde la Parte 1 «Empezar fermentación» y «Empezar secado» sólo se ofrecen con un
+ * proceso abierto, y «Selección» no se ofrece bajo uno. `nextActionFor` mira el tipo del lote y no lo sabe, así que la ficha
+ * decía «Siguiente paso sugerido» sobre un botón que no estaba. La sugerencia sólo vale si la ficha ofrece esa acción.
+ */
+describe("sugerenciaOfrecida", () => {
+  it("sólo sugiere una acción que la ficha ofrece en ese momento; si no la ofrece, ninguna", () => {
+    // Una cereza ya seleccionada, sin proceso abierto: `nextActionFor` dice fermentar, y la ficha no ofrece ese botón.
+    expect(nextActionFor("cherry", false, true)).toBe("fermentation");
+    expect(sugerenciaOfrecida("fermentation", ["process", "storage", "sample", "report"])).toBeNull();
+    // Una cereza sin seleccionar bajo un proceso abierto: dice seleccionar, y la selección no se ofrece bajo un proceso.
+    expect(sugerenciaOfrecida("selection", ["fermentation", "drying", "process", "storage", "sample", "report"])).toBeNull();
+    // Control: con el botón ofrecido, la sugerencia se queda.
+    expect(sugerenciaOfrecida("fermentation", ["fermentation", "drying", "process", "storage", "sample", "report"])).toBe("fermentation");
+    expect(sugerenciaOfrecida(null, ["report"])).toBeNull();
   });
 });

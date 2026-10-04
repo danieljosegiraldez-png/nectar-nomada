@@ -36,7 +36,7 @@ export default async function NewGreenSelectionPage({ params }: { params: Promis
       <h1>{t("greenGradingTitle")}</h1>
       <p className="nn-muted">{t("greenGradingIntro")}</p>
       <GreenGradingForm
-        lotId={id}
+        lotId={lot.id}
         lotCode={lot.lotCode}
         usedCodes={usedCodes}
         currentQuantityKg={quantity.recorded && quantity.unit === "kg" ? Number(quantity.quantity) : null}

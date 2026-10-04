@@ -630,10 +630,17 @@ export async function createRecipeVersion(
    * v1 la tuviera, y nada lo decía.
    */
   expectedHours?: number | null,
+  /**
+   * R8 (Parte 1, 2026-09-30): las fases de la versión. **Sin pasarlas (`undefined`), se copian las de
+   * la versión anterior** —la pantalla todavía no las edita, y publicar una v2 desde ella las borraba
+   * en silencio, el mismo fallo que con las horas el 2026-09-13—. Un arreglo vacío explícito sí
+   * significa «sin fases».
+   */
+  fases?: CreateRecipeInput["fases"],
 ) {
   const recipe = await prisma.processRecipe.findUnique({
     where: { id: recipeId },
-    include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+    include: { versions: { orderBy: { version: "desc" }, take: 1, include: { fases: true } } },
   });
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
@@ -646,6 +653,25 @@ export async function createRecipeVersion(
 
   validateTargets(targets);
   validateExpectedHours(expectedHours);
+  if (fases !== undefined) validateFases(fases);
+  // Las copiadas ya se validaron al escribirse, y traen `Decimal`: no pasan por `validateFases`, que
+  // compara números.
+  const fasesDeLaVersion =
+    fases !== undefined
+      ? fases.map((f) => ({
+          phase: f.phase,
+          expectedHours: f.expectedHours ?? null,
+          turnEveryHours: f.turnEveryHours ?? null,
+          targetMoistureMinPct: f.targetMoistureMinPct ?? null,
+          targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
+        }))
+      : (recipe.versions[0]?.fases ?? []).map((f) => ({
+          phase: f.phase,
+          expectedHours: f.expectedHours,
+          turnEveryHours: f.turnEveryHours,
+          targetMoistureMinPct: f.targetMoistureMinPct,
+          targetMoistureMaxPct: f.targetMoistureMaxPct,
+        }));
 
   const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
 
@@ -675,8 +701,19 @@ export async function createRecipeVersion(
             displayOrder: i,
           })),
         },
+        fases: fasesDeLaVersion.length
+          ? {
+              create: fasesDeLaVersion.map((f) => ({
+                phase: f.phase,
+                expectedHours: f.expectedHours,
+                turnEveryHours: f.turnEveryHours,
+                targetMoistureMinPct: f.targetMoistureMinPct,
+                targetMoistureMaxPct: f.targetMoistureMaxPct,
+              })),
+            }
+          : undefined,
       },
-      include: { targets: true },
+      include: { targets: true, fases: true },
     });
 
     await recordAuditEvent(
