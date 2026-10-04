@@ -28,7 +28,7 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { analizar, archivosQueGuardan, invocacionesPorArchivo } from "./inventario/analizar.mjs";
+import { analizar, unidadesQueLlaman } from "./inventario/analizar.mjs";
 import { modelosDelEsquema } from "./inventario/esquema.mjs";
 
 const RAIZ = new URL("..", import.meta.url).pathname;
@@ -51,35 +51,45 @@ const filas = analizar(fuentes, modelos);
 
 if (process.argv.includes("--llamadores")) {
   const objetivo = filas.filter((f) => f.clase === "depende del llamador (verificar a mano)");
-  // Las dos preguntas resueltas sobre el AST. Antes se hacían con una expresión
-  // regular sobre el texto del archivo entero, y mentían en LAS DOS direcciones:
-  // un comentario que nombra un guardia salía «autoriza», y un `/g` con
-  // `lastIndex` sucio dentro de un `filter` hacía que el segundo llamador y los
-  // siguientes se midieran a partir de media lectura.
-  const invocaciones = invocacionesPorArchivo(fuentes);
-  const guardan = archivosQueGuardan(fuentes);
+  // **Responde por UNIDAD, no por archivo.** Antes la pregunta era «¿este
+  // archivo autoriza?», con una expresión regular sobre su texto entero, y eso
+  // mentía en LAS DOS direcciones: un comentario que nombra un guardia salía
+  // «autoriza», y un `/g` con `lastIndex` sucio dentro de un `filter` medía el
+  // segundo llamador a partir de media lectura. Pero el defecto de fondo era
+  // otro: que el archivo tenga un guardia **no** significa que lo tenga el
+  // camino. Medido el 2026-10-04, me hizo escribir dos razones falsas en la
+  // allowlist: `floracion.ts` llama a `ubicacionesEmparentadas` desde
+  // `floracionesDeLaParcela`, que no autoriza — su `requireLotAccess` vive en
+  // `registrarFloracion`, otro camino.
   console.log(`${objetivo.length} operaciones que dependen del llamador\n`);
   let pendientes = 0;
   for (const op of objetivo) {
-    const llamadores = TODOS.filter(
-      (f) => f !== op.archivo && (invocaciones.get(f)?.has(op.nombre) ?? false)
+    const caminos = unidadesQueLlaman(fuentes, op.nombre).filter(
+      (c) => !(c.archivo === op.archivo && c.unidad === op.nombre)
     );
-    const guardados = llamadores.filter((f) => guardan.has(f));
-    const ok = llamadores.length > 0 && guardados.length === llamadores.length;
+    const ok = caminos.length > 0 && caminos.every((c) => c.guarda);
     if (!ok) pendientes++;
     console.log(`  ${ok ? "OK   " : "MIRAR"} ${op.archivo} ${op.nombre}()`);
-    for (const f of llamadores) console.log(`         ${guardan.has(f) ? "✓" : "✗"} ${f}`);
-    if (!llamadores.length) console.log(`         (ningún llamador fuera de su propio archivo)`);
+    for (const c of caminos) console.log(`         ${c.guarda ? "✓" : "✗"} ${c.archivo}  →  ${c.unidad}()`);
+    if (!caminos.length) console.log(`         (ninguna unidad la llama)`);
   }
   console.log(`\n  ${pendientes} necesitan juicio humano. Las conclusiones del 2026-08-31 están`);
   console.log(`  en docs/arquitectura/inventario-de-acceso.md — este modo dice a quién mirar,`);
   console.log(`  no si está bien.`);
-  console.log(`\n  Y un ✗ NO significa «no autoriza»: significa «no llama a un guardia».`);
-  console.log(`  Una página que llama a un servicio que LANZA un error de acceso y lo`);
-  console.log(`  convierte en notFound() autoriza, y aquí sale ✗. Medido el 2026-10-04 en`);
-  console.log(`  app/plots/[id]/page.tsx, app/field-sessions/[id]/page.tsx y`);
-  console.log(`  app/lots/[id]/page.tsx. Seguir la llamada hasta el servicio es el escalón 2`);
-  console.log(`  de PENDING_IMPLEMENTATIONS/007, que no está hecho.`);
+  console.log(`\n  Un ✗ NO significa «no autoriza»: significa «esa unidad no llama a un`);
+  console.log(`  guardia de la convención». Hay DOS mecanismos que esto no ve, los dos`);
+  console.log(`  medidos el 2026-10-04:`);
+  console.log(`   · una página que llama a un servicio que LANZA un error de acceso y lo`);
+  console.log(`     convierte en notFound() — app/plots/[id]/page.tsx,`);
+  console.log(`     app/field-sessions/[id]/page.tsx, app/plots/[id]/manejo/*;`);
+  console.log(`   · un guardia en español: exigePoderAnotar, exigeReportarEnJornada y`);
+  console.log(`     compañía. Hay 50 funciones «exige*» contra 18 «require*(Access|...)»,`);
+  console.log(`     pero la mayoría de las 50 son VALIDADORES (exigeFecha, exigeNombre),`);
+  console.log(`     así que meterlas en la convención marcaría «guardia directo» de 396 a`);
+  console.log(`     432 por la fuerza de un validador de fechas. Es una decisión, no una`);
+  console.log(`     tarea.`);
+  console.log(`  Y un ✗ tampoco cierra el camino: puede que lo autorice el llamador DEL`);
+  console.log(`  llamador. Seguir la cadena es el escalón 2 de PENDING_IMPLEMENTATIONS/007.`);
 } else if (process.argv.includes("--json")) {
   console.log(JSON.stringify(filas, null, 2));
 } else {

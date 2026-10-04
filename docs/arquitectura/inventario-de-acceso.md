@@ -35,6 +35,26 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
 
+> **DOS MECANISMOS DE AUTORIZACIÓN QUE ESTE INVENTARIO NO VE (2026-10-04).** Los destapó la revisión
+> independiente al mirar las razones nuevas del allowlist, y conviene leerlos antes de apoyarse en una cifra:
+>
+> 1. **Una página que autoriza atrapando un error.** Llama a un servicio que **lanza** (`LocationAccessError`,
+>    `TraceabilityAccessError`) y lo convierte en `notFound()`. No hay ninguna llamada a un guardia en la
+>    página, así que sale «no autoriza». Pasa en `app/plots/[id]/page.tsx`,
+>    `app/field-sessions/[id]/page.tsx` y las dos de `app/plots/[id]/manejo/`.
+> 2. **Un guardia en español.** La convención es `require\w*(Access|Admin|Override)|can|…`, y la casa usa
+>    además `exigePoderAnotar`, `exigeReportarEnJornada`, `exigePermiso`, `exigeGestionarFinca`… Hay **50**
+>    funciones `exige*` contra **18** `require*(Access|Admin|Override)`. **Ampliar la convención sería peor:**
+>    la mayoría de las 50 son **validadores** (`exigeFecha`, `exigeNombre`, `exigePct`), así que meterlas
+>    marcaría «guardia directo» de **396 a 432** por la fuerza de un validador de fechas — el defecto que esta
+>    ficha persigue, amplificado. Elegir el subconjunto, o resolver el símbolo, es **una decisión del dueño**.
+>
+> Y una corrección de método que costó tres razones mal escritas el mismo día: **que un archivo tenga un
+> guardia no significa que lo tenga el camino.** `lib/traceability/floracion.ts` llama a
+> `ubicacionesEmparentadas` desde `floracionesDeLaParcela`, que no autoriza; su `requireLotAccess` vive en
+> `registrarFloracion`. Por eso `--llamadores` pasó a responder **por unidad** y no por archivo: `OK` 48 → 32
+> y `MIRAR` 51 → 67. El modo se volvió más estricto, que es la dirección correcta.
+
 > **El detector pasó a leer el AST (2026-10-04, `PENDING_IMPLEMENTATIONS/007`): 618→624, 168→170 archivos, cero bajas.**
 > Un acceso ya no es `prisma|aiPrisma|tx|client` seguido de un modelo: es **cualquier receptor** seguido de un modelo que
 > declare `prisma/schema.prisma`. Eso destapó **seis operaciones que no existían en el inventario** —no «sin clasificar»:

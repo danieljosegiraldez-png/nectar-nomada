@@ -51,3 +51,13 @@ export declare function invocacionesPorArchivo(fuentes: Map<string, string>): Ma
  * `PENDING_IMPLEMENTATIONS/007`.
  */
 export declare function archivosQueGuardan(fuentes: Map<string, string>): Set<string>;
+
+/**
+ * Qué **unidades** llaman a `nombre`, y si esa unidad guarda. Responde por
+ * unidad y no por archivo, porque que el archivo tenga un guardia no significa
+ * que lo tenga el camino.
+ */
+export declare function unidadesQueLlaman(
+  fuentes: Map<string, string>,
+  nombre: string
+): { archivo: string; unidad: string; guarda: boolean }[];

@@ -31,6 +31,7 @@ import {
   analizar,
   archivosQueGuardan,
   invocacionesPorArchivo,
+  unidadesQueLlaman,
   type Fila,
 } from "../../scripts/inventario/analizar.mjs";
 
@@ -164,6 +165,74 @@ describe("RED PARA MAÑANA · formas con cero apariciones hoy, medidas", () => {
   });
 });
 
+describe("RED PARA MAÑANA · envolturas y unidades que la revisión de Codex reprodujo", () => {
+  /**
+   * **Las cuatro que la revisión independiente del 2026-10-04 reprodujo**, y que
+   * el detector de TEXTO sí veía. Cero apariciones en el árbol —medido, 0 en 590
+   * archivos, con el control del detector al lado— pero cerrarlas cuesta cuatro
+   * líneas (`pelar`) y dejarlas abiertas es la misma no-convergencia que esta
+   * reescritura existe para acabar.
+   */
+  it.each([
+    ["entre paréntesis", "export function f() { return (prisma.lot.findMany)(); }"],
+    ["con un as", "export function f() { return (prisma.lot.findMany as Any)(); }"],
+    ["con el ! de no-nulo", "export function f() { return prisma.lot.findMany!(); }"],
+    ["con el receptor entre paréntesis", "export function f() { return (prisma.lot).findMany(); }"],
+  ])("una llamada %s", (_etiqueta, fuente) => {
+    expect(sola(fuente).modelos).toContain("lot");
+  });
+
+  /**
+   * **Una sentencia suelta de nivel superior corre al importar el módulo**, así
+   * que es un camino de acceso. El texto la atribuía a la declaración anterior
+   * —identidad falsa— y la primera versión de este recorrido la perdía entera,
+   * que es peor: silencio.
+   */
+  it("una consulta suelta de nivel superior no desaparece", () => {
+    const f = sola('export const dynamic = "force-dynamic";\nprisma.lot.findMany({});\n');
+    expect(f.nombre).toBe("(nivel superior)");
+    expect(f.modelos).toContain("lot");
+  });
+
+  it("un export default que es una flecha", () => {
+    const f = sola('export const dynamic = "force-dynamic";\nexport default () => prisma.lot.findMany({});\n');
+    expect(f.nombre).toBe("default");
+  });
+
+  it.each([
+    ["un getter", "export class C { get filas() { return prisma.lot.findMany({}); } }", "C.filas"],
+    ["un constructor", "export class C { constructor() { prisma.lot.findMany({}); } }", "C.constructor"],
+    ["una clase anónima", "export default class { m() { return prisma.lot.findMany({}); } }", "(clase anónima).m"],
+  ])("%s de clase", (_etiqueta, fuente, esperado) => {
+    expect(ver(fuente).map((x) => x.nombre)).toContain(esperado);
+  });
+
+  it("una exportación desestructurada se identifica por lo que liga", () => {
+    const f = sola("export const { filas } = { filas: prisma.lot.findMany({}) };");
+    expect(f.nombre).toBe("filas");
+  });
+});
+
+describe("EL LÍMITE de «sólo sintaxis», fijado a propósito", () => {
+  /**
+   * **Esto NO se cubre, y la prueba existe para que nadie lo suponga cubierto.**
+   * Las tres formas piden seguir el VALOR, no la forma: eso es el escalón 2 de
+   * `PENDING_IMPLEMENTATIONS/007` (comprobador de tipos), que es una decisión de
+   * Daniel por su coste en CI. Medido el 2026-10-04: **cero apariciones** de las
+   * tres en el árbol.
+   *
+   * Si algún día una de éstas aparece de verdad, esta prueba **falla** y obliga a
+   * mirar — que es justo lo que se quiere, en vez de un hueco callado.
+   */
+  it.each([
+    [".call sobre el método", "export function f() { return prisma.lot.findMany.call(prisma.lot); }"],
+    ["el método por índice", 'export function f() { return prisma.lot["findMany"](); }'],
+    ["un alias guardado en una variable", "export function f() { const g = prisma.lot.findMany; return g(); }"],
+  ])("no ve %s", (_etiqueta, fuente) => {
+    expect(ver(fuente)).toHaveLength(0);
+  });
+});
+
 describe("y distingue guardar de llamar a quien guarda", () => {
   /** Dos unidades en el mismo archivo: una guarda, la otra la llama. */
   const ARCHIVO = `export async function guardaAqui(userAccountId: string) {
@@ -261,6 +330,42 @@ describe("y «este archivo autoriza» también se pregunta al árbol", () => {
       }`],
     ]);
     expect(invocacionesPorArchivo(fuentes).get("lib/d.ts")?.has("ubicacionesEmparentadas")).toBe(false);
+  });
+});
+
+describe("y «quién la llama» se responde por UNIDAD, no por archivo", () => {
+  /**
+   * **El defecto que esto cierra, y me lo encontró la revisión independiente del
+   * 2026-10-04 en dos razones que YO había escrito en la allowlist.**
+   * `archivosQueGuardan` contesta «¿este archivo autoriza?», y eso no es la
+   * pregunta: `lib/traceability/floracion.ts` llama a `ubicacionesEmparentadas`
+   * desde `floracionesDeLaParcela`, que **no** autoriza — el `requireLotAccess`
+   * del archivo vive en `registrarFloracion`, que es otro camino. Con la
+   * pregunta por archivo escribí «floracion.ts autoriza antes», que era falso.
+   *
+   * Medido el delta al cambiarla: `OK` 48 → 32 y `MIRAR` 51 → 67. El modo se
+   * vuelve más estricto, que es la dirección correcta: saca trabajo a la luz en
+   * vez de taparlo.
+   */
+  const ARCHIVO = `export async function autoriza(userAccountId: string, id: string) {
+      await requireLotAccess(userAccountId, "view", id);
+      return ayuda(id);
+    }
+    export async function noAutoriza(id: string) {
+      return ayuda(id);
+    }
+    export function ayuda(id: string) { return id; }`;
+
+  it("una unidad que llama sin guardia sale ✗ aunque su archivo tenga uno", () => {
+    const caminos = unidadesQueLlaman(new Map([["lib/z.ts", ARCHIVO]]), "ayuda");
+    expect(caminos.map((c) => `${c.unidad}:${c.guarda}`).sort()).toEqual([
+      "autoriza:true",
+      "noAutoriza:false",
+    ]);
+  });
+
+  it("y el archivo entero sí diría que autoriza, que es justo el error", () => {
+    expect([...archivosQueGuardan(new Map([["lib/z.ts", ARCHIVO]]))]).toEqual(["lib/z.ts"]);
   });
 });
 

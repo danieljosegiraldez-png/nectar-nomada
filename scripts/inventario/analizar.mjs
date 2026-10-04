@@ -69,6 +69,32 @@ const METODOS = new Set([
 /** El SQL crudo no tiene modelo que capturar, y es el que más importa ver. */
 const CRUDO = /^\$(?:query|execute)Raw(?:Unsafe)?$/;
 
+/**
+ * Quita las envolturas que no cambian a quién se llama: paréntesis, `!`, `as` y
+ * `satisfies`.
+ *
+ * Lo pidió la revisión independiente del 2026-10-04, que reprodujo **cuatro**
+ * formas que el detector de texto SÍ veía y el AST descartaba:
+ * `(prisma.lot.findMany)()`, `(prisma.lot.findMany as any)()`,
+ * `prisma.lot.findMany!()` y `(prisma.lot).findMany()`. Ninguna aparece en el
+ * árbol hoy —medido: **0** en 590 archivos— pero cerrarlas cuesta cuatro líneas
+ * y dejarlas abiertas es la misma no-convergencia que esta reescritura existe
+ * para acabar, con otra cara.
+ *
+ * **Lo que esto NO alcanza, y es el límite de «sólo sintaxis»:**
+ * `prisma.lot.findMany.call(...)`, `prisma.lot["findMany"]()` y un alias
+ * (`const f = prisma.lot.findMany; f()`). Eso pide seguir el valor, o sea el
+ * escalón 2 de `PENDING_IMPLEMENTATIONS/007`. También medido a 0 hoy.
+ */
+function pelar(n) {
+  let x = n;
+  while (x && (ts.isParenthesizedExpression(x) || ts.isNonNullExpression(x) ||
+               ts.isAsExpression(x) || ts.isSatisfiesExpression(x))) {
+    x = x.expression;
+  }
+  return x;
+}
+
 function arbol(archivo, texto) {
   return ts.createSourceFile(
     archivo,
@@ -93,25 +119,75 @@ function arbol(archivo, texto) {
  * su `VariableStatement` — eso es lo que significa «Combined»; no hay que buscar
  * el padre a mano.
  */
+/** Los identificadores que liga un patrón de desestructuración. */
+function nombresLigados(patron) {
+  const out = [];
+  (function walk(n) {
+    if (ts.isBindingElement(n) && ts.isIdentifier(n.name)) out.push(n.name.text);
+    ts.forEachChild(n, walk);
+  })(patron);
+  return out;
+}
+
 function unidades(sf) {
   const out = [];
   const exportada = (n) => (ts.getCombinedModifierFlags(n) & ts.ModifierFlags.Export) !== 0;
+  /**
+   * Las sentencias **ejecutables** de nivel superior: un `prisma.lot.findMany()`
+   * suelto corre al importar el módulo, así que es un camino de acceso como
+   * cualquier otro. El troceo por texto lo atribuía a la declaración anterior
+   * —identidad falsa— y la primera versión de este recorrido lo perdía entero,
+   * que es peor. Lo encontró la revisión independiente del 2026-10-04. Van todas
+   * juntas en una unidad, porque el módulo se ejecuta de una pieza.
+   */
+  const sueltas = [];
   for (const st of sf.statements) {
     if (ts.isFunctionDeclaration(st)) {
-      out.push({ nombre: st.name?.text ?? "default", exportada: exportada(st), nodo: st });
+      out.push({ nombre: st.name?.text ?? "default", exportada: exportada(st), nodos: [st] });
     } else if (ts.isVariableStatement(st)) {
       for (const d of st.declarationList.declarations) {
-        if (ts.isIdentifier(d.name)) out.push({ nombre: d.name.text, exportada: exportada(d), nodo: d });
-      }
-    } else if (ts.isClassDeclaration(st) && st.name) {
-      const exp = exportada(st);
-      for (const m of st.members) {
-        if ((ts.isMethodDeclaration(m) || ts.isPropertyDeclaration(m)) && m.name && ts.isIdentifier(m.name)) {
-          out.push({ nombre: `${st.name.text}.${m.name.text}`, exportada: exp, nodo: m });
+        if (ts.isIdentifier(d.name)) {
+          out.push({ nombre: d.name.text, exportada: exportada(d), nodos: [d] });
+        } else {
+          // `export const { rows } = …`: se identifica por lo que liga.
+          const ligados = nombresLigados(d.name);
+          out.push({
+            nombre: ligados.length ? ligados.join("+") : "(desestructurado)",
+            exportada: exportada(d),
+            nodos: [d],
+          });
         }
       }
+    } else if (ts.isClassDeclaration(st)) {
+      const clase = st.name?.text ?? "(clase anónima)";
+      const exp = exportada(st);
+      for (const m of st.members) {
+        if (ts.isConstructorDeclaration(m)) {
+          out.push({ nombre: `${clase}.constructor`, exportada: exp, nodos: [m] });
+        } else if (ts.isClassStaticBlockDeclaration(m)) {
+          out.push({ nombre: `${clase}.(static)`, exportada: exp, nodos: [m] });
+        } else if (
+          (ts.isMethodDeclaration(m) || ts.isPropertyDeclaration(m) ||
+            ts.isGetAccessor(m) || ts.isSetAccessor(m)) && m.name
+        ) {
+          // Un nombre computado o literal también nombra un camino.
+          const miembro = ts.isIdentifier(m.name) ? m.name.text : m.name.getText();
+          out.push({ nombre: `${clase}.${miembro}`, exportada: exp, nodos: [m] });
+        }
+      }
+    } else if (ts.isExportAssignment(st)) {
+      // `export default <expresión>`, incluida una función flecha.
+      out.push({ nombre: "default", exportada: true, nodos: [st] });
+    } else if (
+      !ts.isImportDeclaration(st) && !ts.isExportDeclaration(st) &&
+      !ts.isInterfaceDeclaration(st) && !ts.isTypeAliasDeclaration(st) &&
+      !ts.isEnumDeclaration(st) && !ts.isModuleDeclaration(st)
+    ) {
+      sueltas.push(st);
     }
   }
+  // Corre al importar, así que es alcanzable por definición: `exportada`.
+  if (sueltas.length) out.push({ nombre: "(nivel superior)", exportada: true, nodos: sueltas });
   return out;
 }
 
@@ -135,12 +211,13 @@ function unidades(sf) {
 function accesos(nodo, modelos) {
   const vistos = new Set();
   let crudo = false;
-  const mirar = (callee) => {
+  const mirar = (crudoCallee) => {
+    const callee = pelar(crudoCallee);
     if (!callee || !ts.isPropertyAccessExpression(callee)) return;
     const metodo = callee.name.text;
     if (CRUDO.test(metodo)) { crudo = true; return; }
     if (!METODOS.has(metodo)) return;
-    const recv = callee.expression;
+    const recv = pelar(callee.expression);
     if (ts.isPropertyAccessExpression(recv) && modelos.has(recv.name.text)) vistos.add(recv.name.text);
   };
   (function walk(n) {
@@ -158,7 +235,8 @@ function accesos(nodo, modelos) {
 function llamadas(nodo) {
   const ns = new Set();
   (function walk(n) {
-    const t = ts.isCallExpression(n) ? n.expression : ts.isTaggedTemplateExpression(n) ? n.tag : null;
+    const bruto = ts.isCallExpression(n) ? n.expression : ts.isTaggedTemplateExpression(n) ? n.tag : null;
+    const t = bruto ? pelar(bruto) : null;
     if (t) {
       if (ts.isIdentifier(t)) ns.add(t.text);
       else if (ts.isPropertyAccessExpression(t)) ns.add(t.name.text);
@@ -332,6 +410,33 @@ export function archivosQueGuardan(fuentes) {
   return out;
 }
 
+/**
+ * **Qué UNIDADES llaman a `nombre`, y si esa unidad guarda.**
+ *
+ * `archivosQueGuardan` responde «¿este archivo autoriza?», y eso **no es la
+ * pregunta**: confunde que el archivo tenga un guardia con que lo tenga el
+ * camino. Lo encontró la revisión independiente del 2026-10-04 sobre dos razones
+ * que yo había escrito en la allowlist: `lib/traceability/floracion.ts` llama a
+ * `ubicacionesEmparentadas` desde `floracionesDeLaParcela`, que **no** autoriza
+ * —el `requireLotAccess` del archivo vive en `registrarFloracion`, otro camino—.
+ *
+ * Esto responde por unidad, que es la unidad del inventario. Sigue sin poder ver
+ * una página que autoriza llamando a un servicio que **lanza** un error de
+ * acceso: eso es el escalón 2 de `PENDING_IMPLEMENTATIONS/007`.
+ */
+export function unidadesQueLlaman(fuentes, nombre) {
+  const out = [];
+  for (const [archivo, texto] of fuentes) {
+    for (const u of unidades(arbol(archivo, texto))) {
+      const lla = new Set();
+      for (const n of u.nodos) for (const x of llamadas(n)) lla.add(x);
+      if (!lla.has(nombre)) continue;
+      out.push({ archivo, unidad: u.nombre, guarda: [...lla].some((n) => GUARDIA.test(n)) });
+    }
+  }
+  return out;
+}
+
 export function analizar(fuentes, modelos) {
   const arboles = new Map();
   for (const [archivo, texto] of fuentes) arboles.set(archivo, arbol(archivo, texto));
@@ -339,15 +444,28 @@ export function analizar(fuentes, modelos) {
   const hechosPorArchivo = new Map();
   for (const [archivo, sf] of arboles) {
     const lista = unidades(sf).map((u) => {
-      const lla = llamadas(u.nodo);
+      // Una unidad puede llevar varios nodos —las sentencias de nivel superior—,
+      // así que los hechos se UNEN sobre la lista en vez de leerse de uno.
+      const lla = new Set();
+      const acc = new Set();
+      let usaPrincipal = false;
+      let acotado = false;
+      for (const n of u.nodos) {
+        for (const x of llamadas(n)) lla.add(x);
+        for (const x of accesos(n, modelos)) acc.add(x);
+        usaPrincipal = usaPrincipal || usa(n, "userAccountId");
+        acotado = acotado || acotadoPorElPrincipal(n);
+      }
+      const modelosVistos = [...acc].filter((m) => m !== "SQL-crudo");
+      if (acc.has("SQL-crudo")) modelosVistos.push("SQL-crudo");
       return {
         archivo,
         nombre: u.nombre,
         exportada: u.exportada,
-        accesos: accesos(u.nodo, modelos),
+        accesos: modelosVistos,
         llamadas: lla,
-        usaPrincipal: usa(u.nodo, "userAccountId"),
-        acotado: acotadoPorElPrincipal(u.nodo),
+        usaPrincipal,
+        acotado,
         resolutor: [...lla].some((n) => RESOLUTOR.test(n)),
       };
     });
