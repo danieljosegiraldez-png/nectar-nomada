@@ -58,6 +58,13 @@ export interface VeredictoParaCola {
 export interface EntradaDeLoteParaTablero {
   readonly lotId: string;
   readonly lotCode: string;
+  /**
+   * **La corrida que esta entrada describe.** Un lote puede tener varias abiertas, y el tablero
+   * ensaña UNA; sin este campo la curva tenía que volver a elegir con un `find` propio y podía abrir
+   * otra distinta de la que explica el aviso (`PENDING_IMPLEMENTATIONS/016`, segunda mitad): dos
+   * reglas de selección para la misma pregunta.
+   */
+  readonly corridaId: string;
   /** El veredicto ya resuelto, o la razón por la que no lo hay. */
   readonly veredicto: VeredictoParaCola | SinVeredicto;
   /** Cuándo empezó la fase abierta. `null` = no hay fase, y el lote no entra en la cola. */
@@ -93,6 +100,179 @@ function dictamenes(v: VeredictoParaCola): readonly DictamenParaCola[] {
   return [v.ph, v.brix, v.secado].filter((d): d is DictamenParaCola => d != null);
 }
 
+/**
+ * **En qué grupo cae UNA entrada, y por qué** — el cálculo que `colaDeAtencion` hacía en su propio
+ * bucle, extraído para que tenga **un solo sitio**.
+ *
+ * **Por qué se extrajo** (`PENDING_IMPLEMENTATIONS/016`): `datosDelTablero` tiene que elegir, entre
+ * las varias corridas abiertas de un lote, **cuál sale en el tablero**, y la regla que Daniel eligió
+ * el 2026-10-02 es «la de veredicto más grave; si empatan, la que empezó antes». Eso necesita el
+ * grupo de cada candidata **antes** de descartar ninguna. Calcularlo allí con un orden de gravedad
+ * propio habría puesto dos definiciones de «más grave» en el repositorio, y la que discrepa en
+ * silencio es la que esconde una decisión.
+ *
+ * Devuelve también `motivos` y `ritmo` porque la cola los necesita y recalcularlos sería hacer dos
+ * veces el mismo trabajo — y porque el ritmo puede **lanzar**, y ese error se captura aquí una vez.
+ */
+export function grupoDeLaEntrada(input: {
+  readonly lote: EntradaDeLoteParaTablero;
+  /**
+   * **Cuándo empezó la fase, NO nula.** Va aparte de `lote` a propósito: en el bucle de la cola el
+   * `continue` la estrecha, y ese estrechamiento no viaja dentro del objeto. Pedirla aquí obliga a
+   * quien llama a haber decidido ya qué hace con una entrada sin fase abierta —la cola la salta—,
+   * en vez de afirmar dentro que no es nula.
+   */
+  readonly faseIniciada: Date;
+  readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
+  readonly ahora: Date;
+}): { readonly grupo: GrupoDeAtencion; readonly motivos: readonly string[]; readonly ritmo: EstadoDeRitmo | { readonly error: string } } {
+  const lote = input.lote;
+  // El ritmo se calcula lote por lote y su error se captura AQUÍ. Un dato corrupto en uno no
+  // puede dejar la página en blanco para los demás.
+  let ritmo: EstadoDeRitmo | { error: string };
+  try {
+    ritmo = estadoDeRitmo({
+      ahora: input.ahora,
+      faseIniciada: input.faseIniciada,
+      expectedHours: lote.expectedHours,
+      metas: lote.metas,
+    });
+  } catch (e) {
+    if (!(e instanceof RitmoError)) throw e;
+    ritmo = { error: e.message };
+  }
+
+  const motivos: string[] = [];
+  let grupo: GrupoDeAtencion;
+
+  if (typeof lote.veredicto === "string") {
+    // `SinVeredicto` dice la razón, y la razón va a la fila: «este lote no tiene receta que
+    // diga su protocolo» y «este lote va bien» son hechos distintos.
+    motivos.push(lote.veredicto);
+    grupo = "sin_veredicto";
+  } else {
+    const ds = dictamenes(lote.veredicto);
+    for (const d of ds) motivos.push(d.status);
+    const critico = ds.some((d) => d.severity === "CRITICAL");
+    const listo = ds.some((d) => LISTO.has(d.status));
+    const aviso = ds.some((d) => d.severity === "WARNING");
+    const noSeSabe = ds.some((d) => NO_SE_SABE.has(d.status));
+
+    const desviaciones = input.desviacionesAbiertasPorLote.get(lote.lotId) ?? 0;
+    if (desviaciones > 0) motivos.push(MOTIVO_DESVIACION);
+
+    // Una lectura debida sube a «Aviso». **Ir tarde NO**: una fase larga puede ser deliberada
+    // (Daniel, 2026-09-17), así que `demora` sólo ordena dentro de su grupo.
+    //
+    // El estrechamiento se hace AQUÍ y no se guarda en un booleano: TypeScript no puede
+    // estrechar `ritmo` a través de una variable `boolean`, y guardarlo así fue lo que dejó
+    // pasar doce pruebas en verde con el typecheck en rojo.
+    let debe = false;
+    let ritmoRoto = false;
+    if ("error" in ritmo) {
+      // Un ritmo corrupto es «no se sabe», no «va bien».
+      ritmoRoto = true;
+      motivos.push(`RITMO_INVALIDO:${ritmo.error}`);
+    } else {
+      debe = ritmo.debidas.length > 0;
+      for (const d of ritmo.debidas) motivos.push(`DEBE_${d.variable.toUpperCase()}`);
+    }
+
+    if (critico) grupo = "critico";
+    else if (listo) grupo = "listo_para_decidir";
+    else if (aviso || desviaciones > 0 || debe) grupo = "aviso";
+    else if (noSeSabe || ritmoRoto) grupo = "sin_veredicto";
+    else grupo = "en_curso";
+  }
+
+  return { grupo, motivos, ritmo };
+}
+
+/** La gravedad de un grupo, **menor es más grave**: es el índice en `ORDEN`, que es el único orden. */
+export function gravedadDelGrupo(grupo: GrupoDeAtencion): number {
+  return ORDEN.indexOf(grupo);
+}
+
+/**
+ * **UNA entrada por lote, elegida DESPUÉS de evaluar todas sus corridas.**
+ *
+ * El tablero ensaña una fila por lote —si no, el mismo lote saldría dos veces con la misma clave de
+ * React, y `pidenDecision` contaría corridas mientras el recuento cuenta lotes, de modo que una
+ * celda diría «1 lote · 2 piden decisión»—. Lo que cambia aquí es **cuál** se queda.
+ *
+ * **El defecto que cierra** (`PENDING_IMPLEMENTATIONS/016`): se deduplicaba **antes** de evaluar,
+ * quedándose con la que empezó antes. Una corrida posterior con una lectura debida, otro veredicto o
+ * una duración más corta desaparecía **sin que nada la mirara**. Medido el 2026-10-02: invertir esa
+ * comparación dejaba **188 de 188 archivos y 2460 pruebas en verde**, así que la regla no tenía
+ * guardia en ninguna parte — y el fixture del caso existía, pero afirmaba cuántas entradas salen y
+ * nunca cuál.
+ *
+ * **La regla, decidida por Daniel el 2026-10-02:** se queda la de **veredicto más grave**; si
+ * empatan, la que **empezó antes** —que era la regla vieja, y su razón sigue siendo buena: la que
+ * lleva más tiempo abierta es la más atrasada—. La gravedad es la de `ORDEN`, la misma que ordena la
+ * cola, no un criterio paralelo.
+ *
+ * **Determinista a igualdad total:** con el mismo grupo y el mismo instante de inicio se queda la de
+ * `corridaId` menor, para que el tablero no cambie entre dos consultas que devuelven las filas en
+ * otro orden.
+ */
+export function unaEntradaPorLote(input: {
+  readonly entradas: readonly EntradaDeLoteParaTablero[];
+  readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
+  readonly ahora: Date;
+}): readonly EntradaDeLoteParaTablero[] {
+  const gravedadDe = (e: EntradaDeLoteParaTablero): number => {
+    // Sin fase abierta no se puede calcular el grupo —la cola salta esas entradas— y una entrada así
+    // no compite: cae al fondo del orden.
+    if (e.faseIniciada === null) return ORDEN.length;
+    return gravedadDelGrupo(
+      grupoDeLaEntrada({
+        lote: e,
+        faseIniciada: e.faseIniciada,
+        desviacionesAbiertasPorLote: input.desviacionesAbiertasPorLote,
+        ahora: input.ahora,
+      }).grupo,
+    );
+  };
+
+  const mejorPorLote = new Map<string, { readonly entrada: EntradaDeLoteParaTablero; readonly gravedad: number }>();
+  for (const entrada of input.entradas) {
+    const gravedad = gravedadDe(entrada);
+    const actual = mejorPorLote.get(entrada.lotId);
+    if (actual === undefined) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (gravedad < actual.gravedad) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (gravedad > actual.gravedad) continue;
+    // Empate de gravedad: la que empezó antes. Una sin fase no le gana a una con fase.
+    const nueva = entrada.faseIniciada;
+    const vieja = actual.entrada.faseIniciada;
+    if (nueva === null) continue;
+    if (vieja === null || nueva < vieja) {
+      mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+      continue;
+    }
+    if (nueva > vieja) continue;
+    // Mismo grupo y mismo instante: por `corridaId`, para que no decida el orden de la consulta.
+    if (entrada.corridaId < actual.entrada.corridaId) mejorPorLote.set(entrada.lotId, { entrada, gravedad });
+  }
+
+  // En el orden en que llegó el primer candidato de cada lote: el orden de la lista no es una señal,
+  // y la cola ordena por su cuenta, pero una salida estable hace las pruebas legibles.
+  const vistos = new Set<string>();
+  const salida: EntradaDeLoteParaTablero[] = [];
+  for (const e of input.entradas) {
+    if (vistos.has(e.lotId)) continue;
+    vistos.add(e.lotId);
+    salida.push(mejorPorLote.get(e.lotId)!.entrada);
+  }
+  return salida;
+}
+
 export function colaDeAtencion(input: {
   readonly lotes: readonly EntradaDeLoteParaTablero[];
   readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
@@ -104,63 +284,15 @@ export function colaDeAtencion(input: {
     // Sin fase abierta no hay nada que vigilar: el lote no es trabajo pendiente del beneficio.
     if (!lote.faseIniciada) continue;
 
-    // El ritmo se calcula lote por lote y su error se captura AQUÍ. Un dato corrupto en uno no
-    // puede dejar la página en blanco para los demás.
-    let ritmo: EstadoDeRitmo | { error: string };
-    try {
-      ritmo = estadoDeRitmo({
-        ahora: input.ahora,
-        faseIniciada: lote.faseIniciada,
-        expectedHours: lote.expectedHours,
-        metas: lote.metas,
-      });
-    } catch (e) {
-      if (!(e instanceof RitmoError)) throw e;
-      ritmo = { error: e.message };
-    }
-
-    const motivos: string[] = [];
-    let grupo: GrupoDeAtencion;
-
-    if (typeof lote.veredicto === "string") {
-      // `SinVeredicto` dice la razón, y la razón va a la fila: «este lote no tiene receta que
-      // diga su protocolo» y «este lote va bien» son hechos distintos.
-      motivos.push(lote.veredicto);
-      grupo = "sin_veredicto";
-    } else {
-      const ds = dictamenes(lote.veredicto);
-      for (const d of ds) motivos.push(d.status);
-      const critico = ds.some((d) => d.severity === "CRITICAL");
-      const listo = ds.some((d) => LISTO.has(d.status));
-      const aviso = ds.some((d) => d.severity === "WARNING");
-      const noSeSabe = ds.some((d) => NO_SE_SABE.has(d.status));
-
-      const desviaciones = input.desviacionesAbiertasPorLote.get(lote.lotId) ?? 0;
-      if (desviaciones > 0) motivos.push(MOTIVO_DESVIACION);
-
-      // Una lectura debida sube a «Aviso». **Ir tarde NO**: una fase larga puede ser deliberada
-      // (Daniel, 2026-09-17), así que `demora` sólo ordena dentro de su grupo.
-      //
-      // El estrechamiento se hace AQUÍ y no se guarda en un booleano: TypeScript no puede
-      // estrechar `ritmo` a través de una variable `boolean`, y guardarlo así fue lo que dejó
-      // pasar doce pruebas en verde con el typecheck en rojo.
-      let debe = false;
-      let ritmoRoto = false;
-      if ("error" in ritmo) {
-        // Un ritmo corrupto es «no se sabe», no «va bien».
-        ritmoRoto = true;
-        motivos.push(`RITMO_INVALIDO:${ritmo.error}`);
-      } else {
-        debe = ritmo.debidas.length > 0;
-        for (const d of ritmo.debidas) motivos.push(`DEBE_${d.variable.toUpperCase()}`);
-      }
-
-      if (critico) grupo = "critico";
-      else if (listo) grupo = "listo_para_decidir";
-      else if (aviso || desviaciones > 0 || debe) grupo = "aviso";
-      else if (noSeSabe || ritmoRoto) grupo = "sin_veredicto";
-      else grupo = "en_curso";
-    }
+    // **El grupo, los motivos y el ritmo los calcula `grupoDeLaEntrada`**, no este bucle: el mismo
+    // cálculo lo necesita `datosDelTablero` para elegir cuál de las corridas de un lote sale
+    // (`PENDING_IMPLEMENTATIONS/016`), y dos definiciones de «más grave» derivan en silencio.
+    const { grupo, motivos, ritmo } = grupoDeLaEntrada({
+      lote,
+      faseIniciada: lote.faseIniciada,
+      desviacionesAbiertasPorLote: input.desviacionesAbiertasPorLote,
+      ahora: input.ahora,
+    });
 
     filas.push({
       lotId: lote.lotId,

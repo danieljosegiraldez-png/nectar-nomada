@@ -105,6 +105,7 @@ describe("la página — el ritmo de la cola, en palabras", () => {
   const lote = (lotCode: string, expectedHours: number | null, inicioHaceHoras: number): EntradaDeLoteParaTablero => ({
     lotId: `id-${lotCode}`,
     lotCode,
+    corridaId: `c-${lotCode}`,
     veredicto: "SIN_LECTURAS",
     faseIniciada: haceHoras(inicioHaceHoras),
     expectedHours,

@@ -1215,3 +1215,97 @@ describe("la vigencia de una medición no la decide la ventana de la pantalla (0
    * control. Escribir aquí un testigo que no discrimina sería peor que no escribirlo.
    */
 });
+
+/**
+ * **El guardia con base de `PENDING_IMPLEMENTATIONS/016`: la corrida que sale es la del aviso, y la
+ * curva abre ÉSA.**
+ *
+ * Se deduplicaba antes de evaluar, quedándose con la que empezó antes, así que una corrida posterior
+ * con algo que pide decisión desaparecía sin que nada la mirara. Medido el 2026-10-02: invertir esa
+ * comparación dejaba **188 de 188 archivos y 2460 pruebas en verde** — la regla no tenía guardia.
+ *
+ * El montaje es el de la ficha, y las dos corridas tienen que diferir en **ritmo** para que una sea
+ * más grave: las ventanas están anidadas (la nueva ve un subconjunto de las lecturas de la vieja),
+ * así que una lectura no puede hacer más grave a la nueva. Lo que sí puede es su receta: la nueva
+ * declara «pH cada 2 h» y su última lectura es de hace 5 h, así que **debe** una medición y sube a
+ * aviso; la vieja no declara ritmo y se queda en curso.
+ */
+describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa (016)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let lote016: string, corridaNueva: string, corridaVieja: string;
+
+  beforeAll(async () => {
+    // Una receta que declara pH cada 2 h: es lo que hace que la corrida nueva «deba» una lectura.
+    const receta = await prisma.processRecipe.create({
+      data: { name: nombre("receta con ritmo"), organizationId: miOrgId, status: "approved" },
+    });
+    recetaIds.push(receta.id);
+    const version = await prisma.processRecipeVersion.create({
+      data: {
+        recipeId: receta.id,
+        version: 1,
+        status: "approved",
+        targets: {
+          create: [
+            {
+              variable: "ph",
+              moment: "during",
+              phase: "fermentation",
+              minValue: 3.8,
+              maxValue: 4.5,
+              targetValue: 4.2,
+              unit: "pH",
+              everyHours: 2,
+            },
+          ],
+        },
+      },
+    });
+    versionIds.push(version.id);
+
+    lote016 = await loteSimple("L-016", miSitio, miOrgId);
+    // La VIEJA, sin receta: no declara ritmo, así que no debe nada.
+    const procesoViejo = await procesoDe(lote016, { natural: true });
+    corridaVieja = await fermentacionDe(lote016, { lotProcessId: procesoViejo, inicio: haceHoras(40) });
+    // La NUEVA, con la receta de «pH cada 2 h». `secuencia: 2` porque la unicidad es
+    // `(lotId, sequenceOrder)`: un lote puede tener varios procesos abiertos, pero no dos con el
+    // mismo número de orden.
+    const procesoNuevo = await procesoDe(lote016, { versionId: version.id, natural: true, secuencia: 2 });
+    corridaNueva = await fermentacionDe(lote016, { lotProcessId: procesoNuevo, inicio: haceHoras(6) });
+
+    // Dos lecturas: una que SÓLO ve la vieja (hace 20 h) y una que ven las dos (hace 5 h).
+    await medicionDe(lote016, "ph", 5.0, haceHoras(20));
+    await medicionDe(lote016, "ph", 4.2, haceHoras(5));
+  });
+
+  it("sale UNA entrada, y es la corrida POSTERIOR porque es la que pide decisión", async () => {
+    const d = await datosDelTablero(operario, ahora);
+    const suyas = d.lotes.filter((l) => l.lotId === lote016);
+    // Control: las dos corridas existen y están abiertas. Sin esto, «una entrada» podría ser «sólo
+    // llegó una».
+    expect(await prisma.fermentationRun.count({ where: { endedAt: null, id: { in: [corridaVieja, corridaNueva] } } })).toBe(2);
+    expect(suyas).toHaveLength(1);
+    expect(suyas[0]!.corridaId, "gana la que pide decisión, no la que empezó antes").toBe(corridaNueva);
+  });
+
+  it("y la curva abre la ventana de ESA corrida: la lectura de hace 20 h queda fuera", async () => {
+    const { curva } = await datosDelTablero(operario, ahora, {
+      curva: { lotId: lote016, variable: "ph", ...LIENZO },
+    });
+    expect(curva).not.toBeNull();
+    // La ventana de la nueva empieza hace 6 h: sólo la de hace 5 h. Con la ventana de la vieja
+    // (40 h) saldrían las dos, y con el `find` sin orden de antes podía salir cualquiera.
+    expect(curva!.lecturas.map((l) => l.value)).toEqual([4.2]);
+  });
+
+  it("CONTROL: la lectura de hace 20 h existe y SÍ entra en la ventana de la corrida vieja", async () => {
+    // Sin esta fila, el `[4.2]` de arriba podría venir de que la lectura de hace 20 h no se creó, y
+    // la prueba pasaría sobre una base que no monta el caso.
+    expect(
+      await prisma.measurement.count({ where: { lotId: lote016, variable: "ph", occurredAt: { gte: haceHoras(40) } } }),
+    ).toBe(2);
+    expect(
+      await prisma.measurement.count({ where: { lotId: lote016, variable: "ph", occurredAt: { gte: haceHoras(6) } } }),
+    ).toBe(1);
+  });
+});
