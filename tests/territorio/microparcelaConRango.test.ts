@@ -113,6 +113,29 @@ afterAll(async () => {
   });
 });
 
+/**
+ * Deja una microparcela con rejilla propia **saltándose los disparadores**, que es la
+ * única forma de fabricar ese estado desde que existe
+ * `20261003190000_rejilla_solo_en_la_parcela`.
+ *
+ * **No es una trampa para que la prueba pase: es el escenario.** Lo que se está
+ * probando son las filas que ya tenían rejilla ANTES de esa migración — nada lo
+ * impedía hasta entonces—, y una migración con disparadores no valida ni arregla lo
+ * existente. Producción tenía 0 de esas filas el 2026-10-03, así que estas dos pruebas
+ * son una red para el día que aparezca una, no el guardia de un camino vivo, y eso hay
+ * que leerlo así en vez de contarlas dos veces.
+ *
+ * `SET LOCAL` lo deja dentro de la transacción: medido con una sonda el 2026-10-03, el
+ * mismo `update` sin el truco **sí** se rechaza, y el disparador sigue vivo al salir.
+ */
+const conRejillaHeredada = (locationId: string) =>
+  prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+    await tx.$executeRaw`update core.location
+       set grid_origin = 'noreste', row_count = 2, plants_per_row = 3, row_spacing_meters = 1.1
+     where id = ${locationId}::uuid`;
+  });
+
 const microlote = (name: string, extra: Record<string, unknown> = {}) =>
   createMicrolot(usuario.userAccountId, {
     parentLocationId: parcela.id,
@@ -288,10 +311,7 @@ describe("una microparcela no puede declarar rejilla propia (D3)", () => {
   it("una microparcela que YA tiene rejilla puede quedarse sin ella", async () => {
     const m = await microlote("Rejilla heredada de antes");
     locationIds.push(m.id);
-    await prisma.location.update({
-      where: { id: m.id },
-      data: { gridOrigin: "noreste", rowCount: 2, plantsPerRow: 3, rowSpacingMeters: 1.1 },
-    });
+    await conRejillaHeredada(m.id);
     await updateLocationAttributes(usuario.userAccountId, {
       locationId: m.id,
       gridOrigin: null,
@@ -316,10 +336,7 @@ describe("una microparcela no puede declarar rejilla propia (D3)", () => {
   it("con rejilla heredada, editarle OTRO atributo sigue funcionando", async () => {
     const m = await microlote("Heredada, y le cambio la altitud");
     locationIds.push(m.id);
-    await prisma.location.update({
-      where: { id: m.id },
-      data: { gridOrigin: "noreste", rowCount: 2, plantsPerRow: 3, rowSpacingMeters: 1.1 },
-    });
+    await conRejillaHeredada(m.id);
     await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, altitudeMinM: 1234 });
     const despues = await prisma.location.findUnique({ where: { id: m.id } });
     expect(despues?.altitudeMinM).toBe(1234);
@@ -353,6 +370,118 @@ describe("una microparcela no puede declarar rejilla propia (D3)", () => {
     expect(filas[0]?.raiz).toBe(parcela.id);
     expect(filasDeLaMadre[0]?.raiz).toBe(parcela.id);
     expect(filas[0]?.raiz).not.toBe(m.id);
+  });
+});
+
+/**
+ * **Los dos disparadores de D3, ejercidos por SQL directo.**
+ *
+ * El servicio es la puerta de la aplicación, pero mira el padre EN EL MOMENTO de
+ * escribir la rejilla, así que hay un hueco que no puede ver: re-colgar una parcela
+ * ya numerada bajo otra parcela no toca ninguna de las cuatro columnas. La migración
+ * `20261003190000_rejilla_solo_en_la_parcela` lo cierra con dos disparadores, uno en
+ * el hijo y otro en el padre, el mismo patrón que `exigir_arbol_de_estante`.
+ *
+ * **Estas pruebas NO pasan por el servicio a propósito.** Un disparador que sólo se
+ * ejerciera a través de TypeScript no estaría probado: lo que vigila es justo lo que
+ * no pasa por ahí.
+ */
+describe("los disparadores de D3, por SQL directo (sin pasar por el servicio)", () => {
+  /** Una parcela hermana bajo el MISMO sitio: `crearParcela()` levantaría otra finca
+      entera y el `afterEach` no la limpia, que es la fuga que describe la cabecera. */
+  const hermana = async (nombre: string) => {
+    const p = await prisma.location.create({
+      data: {
+        name: `TEST Hermana ${nombre}`,
+        locationType: "plot",
+        parentLocationId: parcela.parentLocationId,
+        organizationId: parcela.organizationId,
+        status: "approved",
+      },
+    });
+    locationIds.push(p.id);
+    return p;
+  };
+
+  it("la base rechaza ponerle rejilla a una microparcela", async () => {
+    const m = await microlote("Rejilla por la puerta de atrás");
+    locationIds.push(m.id);
+    await expect(
+      prisma.$executeRaw`update core.location
+         set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+       where id = ${m.id}::uuid`,
+    ).rejects.toThrow(/no se numera aparte/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(despues.rowCount, "y no se quedó a medias").toBeNull();
+  });
+
+  /**
+   * **El control positivo, y discrimina.** Si el disparador estuviera rechazando
+   * cualquier rejilla, este caso caería: es el MISMO `update`, con los mismos cuatro
+   * valores, sobre una parcela de primer nivel.
+   */
+  it("y la deja poner en una parcela de primer nivel — el control positivo", async () => {
+    const otra = await hermana("control positivo");
+    await prisma.$executeRaw`update core.location
+       set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+     where id = ${otra.id}::uuid`;
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: otra.id } });
+    expect(despues.rowCount).toBe(4);
+  });
+
+  /**
+   * **El hueco que el servicio no puede ver.** La rejilla se pone siendo parcela
+   * legítima y DESPUÉS la fila cambia de padre: ninguna de las cuatro columnas se
+   * toca, así que `updateLocationAttributes` no se entera nunca.
+   */
+  it("la base rechaza re-colgar una parcela ya numerada bajo otra parcela", async () => {
+    const otra = await hermana("re-colgada");
+    await prisma.$executeRaw`update core.location
+       set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+     where id = ${otra.id}::uuid`;
+    await expect(
+      prisma.$executeRaw`update core.location set parent_location_id = ${parcela.id}::uuid where id = ${otra.id}::uuid`,
+    ).rejects.toThrow(/no se numera aparte/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: otra.id } });
+    expect(despues.parentLocationId, "sigue colgando de donde estaba").not.toBe(parcela.id);
+  });
+
+  /**
+   * **La otra mitad, la del padre.** Un `site` con una parcela numerada debajo no
+   * puede convertirse en parcela: eso haría microparcela a su hija sin tocarla.
+   */
+  /**
+   * **Con sitio propio, no con el compartido.** Si este caso retipara el sitio del que
+   * cuelga `parcela` y el disparador no estuviera, `parcela` pasaría a ser microparcela
+   * para todo lo que corra después y el `afterEach` no lo deshace — se vio al hacer el
+   * flip-test: tumbó una prueba del §6 que no tenía nada que ver. Una prueba no deja
+   * al fixture compartido en un estado que ella misma no pueda revertir.
+   */
+  it("la base rechaza volver parcela a un sitio que ya tiene hijas numeradas", async () => {
+    const sitio = await prisma.location.create({
+      data: { name: "TEST Sitio propio del retipado", locationType: "site", organizationId: parcela.organizationId, status: "approved" },
+    });
+    locationIds.push(sitio.id);
+    const hija = await prisma.location.create({
+      data: {
+        name: "TEST Hija numerada",
+        locationType: "plot",
+        parentLocationId: sitio.id,
+        organizationId: parcela.organizationId,
+        status: "approved",
+        gridOrigin: "noroeste",
+        rowCount: 4,
+        plantsPerRow: 5,
+        rowSpacingMeters: 1.5,
+      },
+    });
+    locationIds.push(hija.id);
+    expect(hija.rowCount, "la fila patrón: la hija está numerada, o esto no mediría nada").toBe(4);
+    await expect(
+      prisma.$executeRaw`update core.location set location_type = 'plot' where id = ${sitio.id}::uuid`,
+    ).rejects.toThrow(/ya tiene rejilla propia/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: sitio.id } });
+    expect(despues.locationType, "y el sitio sigue siendo sitio").toBe("site");
   });
 });
 
