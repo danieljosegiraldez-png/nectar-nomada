@@ -420,6 +420,42 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   };
   const puestos = Object.values(rejilla).filter((v) => v !== null && v !== undefined).length;
   if (puestos !== 0 && puestos !== 4) throw new RejillaInvalida("rejilla_a_medias");
+  // **D3: una sola numeración, la de la parcela.** Una microparcela es una
+  // `Location` `plot` cuyo padre es OTRO `plot` (spec fincas y parcelas §3.3), y
+  // como hija lo que declara es su RANGO dentro de la rejilla de su madre
+  // (diseño §4.2: «como padre declaras tu rejilla; como hija, tu sitio en la de
+  // tu padre»), nunca una rejilla propia.
+  //
+  // **El defecto que esto cierra, medido en vivo el 2026-10-03** contra la base
+  // desechable `nectar_ci_area`, como operaria de finca y de punta a punta: la
+  // pantalla de ajustes ofrecía el formulario de rejilla también a una
+  // microparcela, guardaba —`sureste`, 3×5, 1,20 m, comprobado en la fila— y a
+  // partir de ahí `core.raiz_de_la_numeracion` devolvía **la microparcela misma**
+  // en vez de su madre, porque esa función corona como raíz a cualquier sitio con
+  // `row_count` propio. O sea: dos numeraciones dentro de la misma parcela, que es
+  // exactamente lo que D3 prohíbe, y el rango de la microparcela en la rejilla de
+  // su madre dejaba de querer decir nada.
+  //
+  // Se rechaza PONER una rejilla (los cuatro campos), no vaciarla: una
+  // microparcela que ya la tenga —las hay, nada lo impedía hasta hoy— tiene que
+  // poder quedarse sin ella, y `puestos === 0` es justo ese camino.
+  // **Se mira si el INPUT pone rejilla, no si la fila resultante la tiene.** Lo
+  // encontró una revisión independiente el mismo día: `puestos` se cuenta sobre la
+  // fila resultante —así tiene que ser para «cuatro o ninguna»—, de modo que una
+  // microparcela con rejilla heredada daba 4 aunque el input no trajera ninguna de
+  // las cuatro, y editarle la ALTITUD moría con `rejilla_en_microparcela`. El
+  // arreglo dejaba esas filas sin poder tocarse para nada, que es peor que el
+  // defecto que cerraba.
+  const ponenRejilla = [input.gridOrigin, input.rowCount, input.plantsPerRow, input.rowSpacingMeters].some(
+    (v) => v !== undefined && v !== null,
+  );
+  if (puestos === 4 && ponenRejilla && existing.parentLocationId) {
+    const padre = await prisma.location.findUnique({
+      where: { id: existing.parentLocationId },
+      select: { locationType: true },
+    });
+    if (padre?.locationType === "plot") throw new RejillaInvalida("rejilla_en_microparcela");
+  }
   // «No entera» seria falso para el 0 y el -3, que SON enteros. La propiedad es
   // «entero y desde 1», y el codigo lo dice entera: la misma correccion que se le
   // hizo a `no_es_celda` en `lib/territorio/rejilla.ts`.

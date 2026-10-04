@@ -630,6 +630,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
           id: true,
           name: true,
           organization: { select: { name: true } },
+          // `locationType` del PADRE: es lo único que distingue una microparcela —un
+          // `plot` hijo de otro `plot`— de una parcela de primer nivel, y la pantalla
+          // lo necesita para no ofrecerle la rejilla a quien D3 no se la da.
+          locationType: true,
           // **La rejilla de la madre**, para que la pantalla de ajustes pueda ofrecer el
           // rango de una microparcela y decir contra qué tablero se cuenta, sin que el
           // operario tenga que irse a buscarlo (§6 del diseño del 2026-10-01).
