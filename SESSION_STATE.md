@@ -84,6 +84,10 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 3. Bloqueado, y en qué
 
+> **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
+> `docs/SESSION_STATE_ARCHIVE.md`, «Auditoría de §3»), una falsa —archivada— y ocho con cifras rancias, corregidas aquí con su fecha.
+
+
 #### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
 
 El guion está arreglado y en `main` (#593, #594, #595) y **la consolidación no se ha aplicado**: la
@@ -108,7 +112,7 @@ así que puede avisar por un bloque que esas plantas no tocan — de más, nunca
 
 Bioestimulante, fertilizante, insecticida, fungicida — no sólo fitosanitario. **No es quitar un
 filtro.** Medido: el acto ya admite `aplicacion`/`liberacion`/`manejo_cultural` y el encierro son dos
-líneas de `lib/traceability/intervenciones.ts` (834 filtra por `isPlantProtection`, 199 rechaza); pero
+líneas de `lib/traceability/intervenciones.ts` (193 filtra por `isPlantProtection`, 199 rechaza; re-medido el 2026-10-04 — decía 834, y el archivo tiene 896 líneas); pero
 el objetivo es una lista cerrada de **13 plagas y enfermedades** sin ningún valor de nutrición, así que
 un fertilizante no tendría cómo decir para qué se aplicó. **Y los nombres NO los fija el contrato:**
 `docs/beneficio/03_public_api.md` no menciona ninguno de los ocho términos —control positivo, «enum»
@@ -117,16 +121,13 @@ con su propio objetivo, o si «objetivo» pasa a ser «propósito» y las plagas
 
 #### El tablero del beneficio: el paso 1 y las tres piezas de §4.5 están en `main`
 
-**Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
-«la vista no existe», falso desde el #545. Medido contra `origin/main` `7bc07339` el 2026-10-01, con
-control negativo en 0: `lineaDeEtapas.ts`, `liberacionDeUnidad.ts` y `curvaDeLote.ts` existen los
-tres, con su `CurvaDeLote.tsx`. La ruta la fijó **ADR-193**; el diseño sigue en
-`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. Y la decisión que esta entrada
-pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
+Las tres piezas están en `main` (re-verificado el 2026-10-04) y la ruta la fijó **ADR-193**; el
+diseño sigue en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. La decisión que
+esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
 
 **Lo que SIGUE abierto, medido el 2026-10-01:**
 
-- **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
+- **El paso 2, capacidad con migración: sin plan propio** — re-medido el 2026-10-04: hay **47** planes (decía 39) y **ninguno se llama** «capacidad», aunque **5** mencionan «paso 2» y «capacidad» de pasada.
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
 - **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
   2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 estaba HECHA desde A9.3 y su
@@ -145,12 +146,6 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
 
-#### Deuda de filas en `nectar_test` (PR #488, #498)
-
-Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
-`ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
-compartida es tocar trabajo ajeno.
-
 #### Recolectores: darles su perfil (de Daniel)
 
 Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
@@ -161,9 +156,6 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
 Estate** desde `/fincas` → «sin terreno».
 
-**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
-El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas 180-184 y 274— y usa `DEMO Rivera
-Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
 
 **Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
 `data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
@@ -185,34 +177,21 @@ Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigi
 Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
 **cerrada por defecto** hasta entonces.
 
-#### Lo que se vio al recorrer las pantallas en un móvil de verdad
+#### Las pantallas en un móvil: dos decisiones de producto, y lo que sigue sin probarse
 
-**2026-09-05, primera vez que alguien las usa** — hasta hoy todo lo que se sabía
-de ellas venía de tests. Sesión con sesión iniciada, 375×812, datos de la copia
-local. Se arregló lo objetivo (PR #166, la tabla que desplazaba la página); lo
-de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**.
+Del recorrido del 2026-09-05 (375×812, sesión iniciada). Lo mecánico se arregló y lo cerrado está en
+`docs/SESSION_STATE_ARCHIVE.md`; **comprimido el 2026-10-04 porque dos de sus cuatro viñetas decían
+ellas mismas que estaban cerradas y archivadas.** Queda, y es decisión tuya:
 
-- **El menú tiene 10 entradas y el objetivo del móvil son 8.** El guardia que
-  afirmaba lo contrario **se arregló** el 2026-09-08 —su entrada está en
-  `docs/SESSION_STATE_ARCHIVE.md`—: ahora mide al
-  visor más privilegiado de verdad y fija el 10, así que el hueco está a la
-  vista en vez de escondido tras un verde. Lo que sigue abierto es la decisión:
-  **acortar el menú o mover el objetivo**. En el teléfono son 234 px de
-  cabecera en tres filas, el 29 % de la pantalla antes de ver nada.
+- **El menú tiene 10 entradas y el objetivo del móvil son 8** — acortar el menú o mover el objetivo.
+  En el teléfono son 234 px de cabecera en tres filas, el 29 % de la pantalla antes de ver nada. **No
+  re-medido el 2026-10-04:** no se encontró el archivo que declara las entradas.
+- **`/plots` no ofrece nada que pulsar** — las ocho acciones existen un nivel abajo, en `/plots/[id]`;
+  subir alguna a la lista es decisión de producto.
 
-- ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — su
-  entrada está en `docs/SESSION_STATE_ARCHIVE.md`. El café es «Lote»/«Lot» y
-  el terreno es «Parcela».
-- **`/plots` no ofrece nada que pulsar.** Las acciones existen —ocho
-  formularios— pero **un nivel abajo**, en `/plots/[id]`; subir alguna a la
-  lista es decisión de producto. La repetición **sí se arregló** el 2026-09-08:
-  lo que falta se cuenta una vez arriba en vez de recitarse por tarjeta.
-- **Lo que sí aguantó:** cero objetivos de toque por debajo de 44 px en un
-  formulario de 134 campos.
-
-**Y lo que esto no prueba.** Fue un ratón sobre una pantalla de 375 px: ni
-guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
-faltando que una persona registre un dato real en el campo.
+**Y lo que el recorrido no prueba:** fue un ratón sobre 375 px — ni guantes, ni sol, ni una conexión
+que se cae a mitad de un formulario. Sigue faltando que una persona registre un dato real en el campo.
+Lo que sí aguantó: cero objetivos de toque por debajo de 44 px en un formulario de 134 campos.
 
 #### Pendientes sueltos, sin sección propia
 
@@ -220,12 +199,12 @@ Una veintena de pendientes distintos colgaba de un encabezado que sólo nombraba
 al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 
 - **Un vocabulario de procedencia por formulario — declarado el 2026-09-08.**
-  Los ocho subconjuntos viven en `lib/traceability/procedencia.ts`, tipados
+  Los **cinco** subconjuntos viven en `lib/traceability/procedencia.ts` —decía ocho—, tipados
   contra el enum, y el servidor ya no acepta más de lo que la pantalla pinta
   —su entrada está en `docs/SESSION_STATE_ARCHIVE.md`—. **Sigue abierto cuál
   debe ofrecer cada una**: que una medición pueda declararse `interpretation` y
-  una calicata no, que el enum tenga diez valores y las pantallas ofrezcan
-  cinco, y si `manufacturer_specification` debería estar en alguna. Decisión de
+  una calicata no, que `MeasurementSourceType` tenga **siete** valores —decía diez, re-medido el
+  2026-10-04— y los **cinco** subconjuntos de `procedencia.ts` ofrezcan menos, y si `manufacturer_specification` debería estar en alguna. Decisión de
   diseño, sin tomar.
 - **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
   dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
@@ -234,18 +213,14 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
-- **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
-  y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo. La
-  densidad **ya no depende de eso** —desde hoy sale del marco—, pero el
-  rendimiento por hectárea sí. Desde el 2026-08-31 el dueño puede cargarlas él
-  mismo en la página de cada lote; cada página dice en pantalla que faltan. **La
-  cosecha llega en febrero**; después, el dato ya no sirve para esa cosecha.
-- **Que el rendimiento se pueda calcular con datos reales** — bloqueado en el
-  dueño, y ya no en construir nada. La cadena entera (siembra → hectáreas →
-  cosecha → bloques → kg/ha) está en pantalla desde el 2026-08-31. Faltan las
-  dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
-  bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
-  ahora sin ayuda.
+- **Área y rendimiento: bloqueado en el dueño, no en construir nada** (dos viñetas fundidas y
+  **re-medidas el 2026-10-04** contra la base compartida; las cifras viejas decían «seis lotes» y
+  «0 de 8», y ninguna de las dos era la cuenta). `area_hectares` vive en `core.location`, y **de
+  las 38 parcelas, 16 sitios y 6 microparcelas, CERO tienen área**. De 35 eventos de cosecha, **17
+  llevan `cherry_weight_kg` y 0 declaran su origen** (`harvest_event_source` está vacía). La
+  densidad ya no depende del área —sale del marco— pero el rendimiento por hectárea sí. La cadena
+  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **La cosecha llega
+  en febrero**; después, el dato ya no sirve para esa cosecha.
 - **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — lo que la
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
