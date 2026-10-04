@@ -10,6 +10,7 @@ import { createLot, TraceabilityAccessError } from "../../lib/traceability/lots"
 import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceability/quantity";
 import { createSampleFromLot, retirarMuestra, SampleValidationError } from "../../lib/traceability/samples";
 import { startDryingRun, endDryingRun } from "../../lib/traceability/drying";
+import { recordRoastSession } from "../../lib/traceability/roasting";
 import { cerrarProceso } from "../../lib/traceability/lotProcess";
 import { registrarTrilla } from "../../lib/traceability/trilla";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -84,6 +85,16 @@ afterAll(async () => {
   });
   const dryingRunIds = [...new Set(transformacionesConSecado.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
+  // El tueste desde muestra (2026-10-04): `roast_session.source_sample_id` es ON DELETE SET NULL, así
+  // que borrar la muestra NO falla — deja un tueste huérfano en la base COMPARTIDA, con su actor en
+  // blanco. Se borra antes y por la muestra; su lote de salida ya entra por `lotIds`.
+  const muestrasDelRun = await prisma.sample.findMany({
+    where: assertDefinedWhere({ sampleCode: { startsWith: RUN_ID } }),
+    select: { id: true },
+  });
+  await prisma.roastSession.deleteMany({
+    where: assertDefinedWhere({ sourceSampleId: { in: muestrasDelRun.map((m) => m.id) } }),
+  });
   await prisma.sample.deleteMany({ where: assertDefinedWhere({ sampleCode: { startsWith: RUN_ID } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.byproductBatch.deleteMany({
@@ -690,5 +701,201 @@ describe("retirarMuestra", () => {
     await expect(
       retirarMuestra(wrongProjectUserAccountId, sample.id, new Date(), "TEST: intento ajeno"),
     ).rejects.toThrow(TraceabilityAccessError);
+  });
+});
+
+/**
+ * El tueste desde muestra, 2026-10-04.
+ *
+ * El formulario de la muestra YA pregunta cuánto se extrajo —`quantityGrams`, que
+ * `createSampleAction` convierte a kg y pasa como `quantity`— y eso se escribía en el libro del
+ * lote (`QuantityEvent`) y en el `LotTransformationInput`. Pero el tueste de muestra lee la
+ * INSTANTÁNEA de la fila de la muestra (`massAtExtraction` / `massUnitAtExtraction`), que quedaba
+ * nula: toda muestra creada por la pantalla fallaba con `sample_mass_in_kg_required`, y
+ * `listGreenSamplesForRoast` la ofrecía igual porque conserva las de masa desconocida. Se
+ * escribía en un sitio y se leía de otro.
+ *
+ * La instantánea no es redundante con el libro, y por eso se congela en vez de recalcularse: su
+ * comentario en `prisma/schema.prisma` dice para qué está —«que nadie lea el 11 % de hoy creyendo
+ * que es el 18 % de entonces»—. El saldo del lote cambia con cada movimiento posterior; la
+ * columna dice lo que salió aquel día.
+ */
+describe("createSampleFromLot — la masa extraída se congela en la muestra (2026-10-04)", () => {
+  /** La receta del lote verde con almacenamiento, la misma que usa la prueba de 2026-09-18. */
+  async function loteVerdeConAlmacenamiento(sufijo: string) {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-${sufijo}`,
+      lotType: "drying",
+      organizationId,
+      projectId: projectAId,
+    });
+    const proceso = await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
+    const { run } = await startDryingRun(authorizedUserAccountId, {
+      lotId: lot.id,
+      startedAt: new Date(Date.now() - 86_400_000),
+      provenanceClass: "original_record",
+    });
+    const finDelSecado = new Date();
+    const { outputLot } = await endDryingRun(authorizedUserAccountId, {
+      dryingRunId: run.id,
+      endedAt: finDelSecado,
+      endedOutcome: "target_reached",
+      outputLotCode: `${RUN_ID}-${sufijo}-seco`,
+      outputLotType: "parchment",
+      provenanceClass: "original_record",
+    });
+    const cierre = new Date(finDelSecado.getTime() + 60_000);
+    const humedadDeCierre = await prisma.measurement.create({
+      data: {
+        variable: "moisture",
+        value: 11,
+        unit: "%",
+        occurredAt: cierre,
+        lotId: outputLot.id,
+        provenanceClass: "measured_fact",
+      },
+    });
+    await cerrarProceso(authorizedUserAccountId, {
+      lotProcessId: proceso.id,
+      endedAt: cierre,
+      closingMoistureMeasurementId: humedadDeCierre.id,
+    });
+    return lot;
+  }
+
+  it("la cantidad extraída queda en massAtExtraction, con su unidad", async () => {
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-masa-congelada`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+    await recordQuantityEvent(authorizedUserAccountId, {
+      provenanceClass: "measured_fact",
+      lotId: lot.id,
+      eventType: "received",
+      quantity: 100,
+      unit: "kg",
+      occurredAt: new Date("2026-01-01"),
+    });
+
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-masa-1`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      quantity: 1.5,
+      unit: "kg",
+      occurredAt: new Date("2026-01-02"),
+    });
+
+    expect(Number(sample.massAtExtraction)).toBe(1.5);
+    expect(sample.massUnitAtExtraction).toBe("kg");
+  });
+
+  it("control: una masa declarada en otra unidad GANA sobre la derivada", async () => {
+    // El servicio ya aceptaba estas dos columnas, y algún día las manda otro camino —una
+    // importación, una corrección—. Derivar por encima de lo declarado cambiaría 300 g por
+    // 0,3 kg: el mismo café con otra cifra y otra unidad. Y el control discrimina de verdad,
+    // porque si la derivación pisara lo declarado aquí saldría 0,3 / "kg".
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-masa-declarada`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-masa-2`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      quantity: 0.3,
+      unit: "kg",
+      massAtExtraction: 300,
+      massUnitAtExtraction: "g",
+      occurredAt: new Date("2026-01-02"),
+    });
+
+    expect(Number(sample.massAtExtraction)).toBe(300);
+    expect(sample.massUnitAtExtraction).toBe("g");
+  });
+
+  it("control negativo: sin cantidad las dos columnas quedan en NULL, no en cero", async () => {
+    // «Missing must remain missing» (§3 de la especificación). Un cero diría que se sacó nada,
+    // que no es lo mismo que no haberlo pesado — y el tueste leería «0 kg disponibles» en vez
+    // de «no se sabe».
+    const lot = await createLot(authorizedUserAccountId, {
+      lotCode: `${RUN_ID}-masa-ausente`,
+      lotType: "green",
+      organizationId,
+      projectId: projectAId,
+    });
+
+    const { sample } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-masa-3`,
+      sampleType: "green_coffee",
+      sourceLotId: lot.id,
+      occurredAt: new Date("2026-01-02"),
+    });
+
+    expect(sample.massAtExtraction).toBeNull();
+    expect(sample.massUnitAtExtraction).toBeNull();
+  });
+
+  it("un tueste de muestra entra con una muestra recién creada, y sigue rechazando la que no tiene masa", async () => {
+    const lot = await loteVerdeConAlmacenamiento("tueste-desde-muestra");
+
+    const { sample: conMasa } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-tueste-con-masa`,
+      sampleType: "green_coffee",
+      materialState: "GREEN",
+      sourceLotId: lot.id,
+      quantity: 0.35,
+      unit: "kg",
+      occurredAt: new Date(),
+    });
+
+    // Este lote no tiene libro de cantidades, así que no se escribe ningún asiento. La
+    // instantánea no puede depender de que el saldo exista: lo que se sacó se sacó, lo registre
+    // el libro o no.
+    expect(await prisma.quantityEvent.count({ where: { lotId: lot.id } })).toBe(0);
+    expect(Number(conMasa.massAtExtraction)).toBe(0.35);
+
+    const { roastSession } = await recordRoastSession(authorizedUserAccountId, {
+      lotId: lot.id,
+      sourceSampleId: conMasa.id,
+      purpose: "sample",
+      outputLotCode: `${RUN_ID}-tostado`,
+      startedAt: new Date(),
+      chargeWeightKg: 0.2,
+      provenanceClass: "original_record",
+    });
+    expect(roastSession.sourceSampleId).toBe(conMasa.id);
+
+    // El control que hace que la mitad de arriba signifique algo: el guardia sigue vivo. Si el
+    // arreglo hubiera sido quitarlo, esta mitad pasaría también y la prueba no distinguiría
+    // «la masa se congela» de «ya no se exige masa».
+    const { sample: sinMasa } = await createSampleFromLot(authorizedUserAccountId, {
+      provenanceClass: "original_record",
+      sampleCode: `${RUN_ID}-S-tueste-sin-masa`,
+      sampleType: "green_coffee",
+      materialState: "GREEN",
+      sourceLotId: lot.id,
+      occurredAt: new Date(),
+    });
+    await expect(
+      recordRoastSession(authorizedUserAccountId, {
+        lotId: lot.id,
+        sourceSampleId: sinMasa.id,
+        purpose: "sample",
+        outputLotCode: `${RUN_ID}-tostado-sin-masa`,
+        startedAt: new Date(),
+        chargeWeightKg: 0.2,
+        provenanceClass: "original_record",
+      }),
+    ).rejects.toThrow("sample_mass_in_kg_required");
   });
 });
