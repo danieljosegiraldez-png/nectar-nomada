@@ -4,7 +4,7 @@ Dónde está el proyecto. Cómo se construye está en `CLAUDE.md`; son archivos
 distintos a propósito. El registro largo de decisiones es
 `docs/architecture/DECISIONS.md` (ADR-001 … ADR-103) y **no** se duplica aquí.
 
-**Presupuesto: ≤400 líneas y <20.000 tokens.** Lo hace cumplir
+**Presupuesto: ≤450 líneas y <20.000 tokens.** Lo hace cumplir
 `npm run check:state` y el test `tests/session-state-budget.test.ts`, no esta
 frase. Pasado ese punto una lectura devuelve solo el principio **y reporta
 éxito**. Lo viejo se va a `docs/SESSION_STATE_ARCHIVE.md`, lo más viejo primero.

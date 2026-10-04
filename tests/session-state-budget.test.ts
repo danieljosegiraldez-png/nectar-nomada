@@ -76,7 +76,7 @@ describe("el guardia del presupuesto", () => {
 
     expect(codigo).toBe(1);
     expect(salida).toContain("excede el presupuesto");
-    expect(salida).toMatch(/líneas\s*:\s*\d+ \/ 400\s+← excedido/);
+    expect(salida).toMatch(/líneas\s*:\s*\d+ \/ 450\s+← excedido/);
     // Nombra la más VIEJA primero, y cuenta cuántas hacen falta.
     expect(salida).toMatch(/Mover [1-9]\d* sección/);
     expect(salida).toContain("### 2026-01-01 · relleno 1");
@@ -126,10 +126,11 @@ describe("el aviso al 90 %", () => {
   const relleno = (n: number) => Array.from({ length: n }, (_, i) => `linea ${i}`).join("\n");
 
   it("avisa cerca del techo sin romper la compuerta", () => {
-    // ~92 % de las 400 líneas: avisa, pero sale 0. Un aviso que falla a los
+    // ~92 % de las 450 líneas: avisa, pero sale 0. Un aviso que falla a los
     // pocos días de cada archivado enseñaría a ignorar la compuerta entera.
-    // Era ~84 % hasta el 2026-10-04, cuando el umbral subió de 0,8 a 0,9.
-    const contenido = `# Estado\n\n### 2026-01-01 · la más vieja\n${relleno(182)}\n\n### 2026-02-02 · la nueva\n${relleno(182)}\n`;
+    // Re-dimensionado dos veces el 2026-10-04: el umbral subió de 0,8 a 0,9 y el
+    // techo de 400 a 450, y cada cambio deja esta franja en otro sitio.
+    const contenido = `# Estado\n\n### 2026-01-01 · la más vieja\n${relleno(205)}\n\n### 2026-02-02 · la nueva\n${relleno(205)}\n`;
     const { codigo, salida } = correr(fixture("cerca.md", contenido));
     expect(codigo, salida).toBe(0);
     expect(salida).toContain("⚠");
@@ -148,8 +149,8 @@ describe("el aviso al 90 %", () => {
   it("con fechas empatadas nombra la de más abajo, que es la más vieja", () => {
     const contenido =
       "# Estado\n\n## 2. Lo que se entregó — más nuevo primero\n\n" +
-      `### 2026-05-05 · la nueva de hoy\n${relleno(182)}\n\n` +
-      `### 2026-05-05 · la vieja de hoy\n${relleno(182)}\n`;
+      `### 2026-05-05 · la nueva de hoy\n${relleno(204)}\n\n` +
+      `### 2026-05-05 · la vieja de hoy\n${relleno(204)}\n`;
     const { codigo, salida } = correr(fixture("empate.md", contenido));
     expect(codigo, salida).toBe(0);
     expect(salida).toContain("⚠");
@@ -168,7 +169,7 @@ describe("el aviso al 90 %", () => {
    * trabajo reciente — que es lo que ese archivo existe para contar.
    */
   it("con una sola entrada no la nombra: archivarla vaciaría §2", () => {
-    const contenido = `# Estado\n\n### 2026-01-01 · la única\n${relleno(367)}\n`;
+    const contenido = `# Estado\n\n### 2026-01-01 · la única\n${relleno(412)}\n`;
     const { codigo, salida } = correr(fixture("suelo.md", contenido));
     expect(codigo, salida).toBe(0);
     expect(salida).toContain("⚠");
@@ -197,23 +198,23 @@ describe("el aviso al 90 %", () => {
    * «holgado» muy por debajo, así que los dos valores darían el mismo verde.
    *
    * El filtro es `>=`, así que el 90 % EXACTO avisa. Importa: con el techo en
-   * 400, un archivo de 360 líneas está justo en el borde y sí suena.
+   * 450, un archivo de 405 líneas está justo en el borde y sí suena.
    */
   it("a un pelo por debajo del umbral se calla", () => {
-    const { codigo, salida } = correr(fixture("justo-debajo.md", `# Estado\n\n${relleno(354)}\n`));
+    const { codigo, salida } = correr(fixture("justo-debajo.md", `# Estado\n\n${relleno(399)}\n`));
     expect(codigo, salida).toBe(0);
-    expect(salida, "357/400 es el 89 %: no debe avisar").not.toContain("⚠");
+    expect(salida, "402/450 es el 89 %: no debe avisar").not.toContain("⚠");
   });
 
   it("y en el umbral exacto avisa, porque el filtro es >=", () => {
-    const { codigo, salida } = correr(fixture("justo-encima.md", `# Estado\n\n${relleno(357)}\n`));
+    const { codigo, salida } = correr(fixture("justo-encima.md", `# Estado\n\n${relleno(402)}\n`));
     expect(codigo, salida).toBe(0);
-    expect(salida, "360/400 es el 90 % exacto: tiene que avisar").toContain("⚠");
+    expect(salida, "405/450 es el 90 % exacto: tiene que avisar").toContain("⚠");
     expect(salida).toMatch(/Al 90 % del presupuesto/);
   });
 
   it("por encima del techo sigue fallando, no avisando", () => {
-    const { codigo, salida } = correr(fixture("pasado.md", `# Estado\n\n${relleno(450)}\n`));
+    const { codigo, salida } = correr(fixture("pasado.md", `# Estado\n\n${relleno(480)}\n`));
     expect(codigo).toBe(1);
     expect(salida).toContain("excede el presupuesto");
   });

@@ -15,7 +15,21 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-const MAX_LINEAS = 400;
+// **SUBIDO DE 400 A 450 EL 2026-10-04, decisión de Daniel.** El 400 no salía de
+// una medida: era el presupuesto de líneas al lado de los de tokens y bytes. Ese
+// día §3 quedó, ya auditada bloque por bloque, en 231 líneas de estado VIVO, y el
+// archivado llegó a su suelo —§2 con dos entradas y el guardia negándose a bajar
+// de una—, así que 400 ya no cabía el proyecto sin borrar cosas ciertas.
+//
+// **Y 450 sigue cabiendo en los otros dos topes, medido el 2026-10-04** sobre el
+// archivo real (358 líneas, 27.758 bytes, ~9.044 tokens): la densidad es 77,5
+// bytes y 25,3 tokens por línea, así que 450 líneas son ~34.900 bytes y ~11.400
+// tokens. El tope de BYTES ataría a las ~580 líneas y el de TOKENS a las ~791, o
+// sea que el de líneas sigue siendo el que manda — que es lo que se quiere, porque
+// es el que el dueño puede leer de un vistazo. Si alguna vez el de bytes empieza a
+// atar antes, es que la prosa se densificó y entonces la cuenta de líneas dejó de
+// ser el proxy bueno.
+const MAX_LINEAS = 450;
 const MAX_TOKENS = 20000;
 
 // `caracteres / 3` es una ESTIMACIÓN, no una cota. En español con markdown la
