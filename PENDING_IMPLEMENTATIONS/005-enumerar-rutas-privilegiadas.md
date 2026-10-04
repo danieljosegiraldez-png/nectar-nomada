@@ -1,7 +1,12 @@
 # 005 · Probar la frontera de RBAC
 
-**Estado: parcialmente hecho.** Lo que hay demuestra tres propiedades concretas.
-Lo que falta está escrito abajo, con el intento que se rechazó y por qué.
+**Estado: la propiedad que faltaba YA TIENE MECANISMO, y el primer dominio está
+declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
+concretas, las dos nombradas al final: **los otros dominios** (hoy sólo el del
+lote) y **tus catorce veredictos**, de los que dos son defectos propuestos.
+
+Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
+debido*— está en la sección «El guardia debido, 2026-10-04».
 
 ## Lo que sí queda demostrado
 
@@ -123,3 +128,92 @@ el terreno en vez de supuesto.
 
 No hace falta hacerlo entero de una vez: por dominio, empezando por el de más
 consecuencia, es una progresión legítima.
+
+---
+
+## El guardia debido — 2026-10-04, el primer dominio
+
+Esta ficha decía que la propiedad que le quedaba *«no lo da ningún inventario,
+porque no es una forma que se pueda reconocer — hay que decir, por dominio, qué
+permiso corresponde a qué dato, y comprobarlo»*. Eso es exactamente lo que se
+hizo: **decirlo** en `docs/arquitectura/permiso-por-dominio.json` y
+**comprobarlo** en `tests/arquitectura/el-guardia-es-un-simbolo.test.ts`.
+
+**Y respeta el rechazo de esta misma ficha.** El `AuthzContext` universal cayó en
+compuerta 2 por coste; esto es la otra vía que ella sugiere — por dominio,
+empezando por el de más consecuencia, y **sin tocar una línea de ningún
+servicio**, así que no puede romper nada en producción.
+
+### Por qué ahora se puede medir, y antes no
+
+El permiso que exige una operación se resuelve **por símbolo**, no por el nombre
+del guardia: el tercer argumento de
+`can(userAccountId, action, resourceType, …)`, propagado desde el envoltorio que
+lo pasa. Eso lo trajo el **escalón 2 de la ficha 007**, hecho el mismo día.
+Medido: de las **109** llamadas al `can` real, **103 pasan el `resourceType`
+literal** (94 %), y sólo 6 de 83 unidades pasan más de uno.
+
+### Lo medido, dominio del lote
+
+```
+15 modelos gobernados · 118 operaciones los tocan · 89 con clase de guardia
+   72 exigen «lot»
+   17 usan otro permiso  →  las 17 declaradas, una a una, con razón y veredicto
+```
+
+| veredicto | cuántas |
+|---|---|
+| **PROPUESTO DEFECTO** | **2** |
+| propuesto legítimo | 14 (uno con una nota) |
+| legítimo por construcción | 1 |
+| **confirmadas por Daniel** | **0 — a propósito: son juicios suyos** |
+
+**Los dos defectos propuestos son la misma forma**, y por eso van juntos:
+`completeExternalCoffeeOrigin` (`samples.ts`) y `recordWashMedium`
+(`treatments.ts`) autorizan sobre el ámbito de **otra** cosa —la muestra, el lote
+de tratamiento— y después leen un lote cuyo id **lo da quien llama**, sólo para
+comprobar que existe. **No filtran datos** (el valor se descarta) pero
+**escriben el enlace**: con permiso sobre tu muestra puedes atarla a cualquier
+lote de la base, incluido uno que no puedes ver, y la trazabilidad de ese lote
+queda con algo colgado que su dueño no autorizó.
+
+Las legítimas son tres patrones, y conviene nombrarlos porque se repiten: leer el
+lote para **sacar su ámbito** y autorizar sobre ese ámbito (cinco); el lote lo
+**crea** el otro dominio (`recordApiaryHarvest` hace `tx.lot.create` bajo la
+colmena que ya autorizó); y el modelo es **compartido de verdad** (el origen de
+una cosecha es dato del lote *y* de la parcela).
+
+### La compuerta cazó dos errores de su propia declaración en la primera corrida
+
+Es el mejor estreno que puede tener un guardia, y las dos van escritas **dentro**
+de la declaración porque la forma reincide:
+
+1. Declaré `lotClassification`, `lotStorageMove` y `greenSample` como modelos
+   gobernados. **No existen**: me los inventé leyendo la prosa de esta ficha. La
+   compuerta exige ahora que cada modelo declarado exista en `prisma/schema.prisma`.
+2. Saqué la lista con un `grep '^model (Lot|Harvest|…)'` y **el prefijo barrió de
+   más**: `harvestContainer` cuelga de `ApiaryHarvestEvent` —son los baldes y
+   tambores de una cosecha de **miel**— y sólo `lib/apiary/*` lo toca. Lo que
+   decide no es el nombre del modelo: es su relación.
+
+### Los cuatro flip-tests
+
+Cada aserción tiene el suyo, y cada uno tumba **exactamente la suya** por su
+nombre: quitar una excepción declarada, añadir una **fantasma**, declarar un
+modelo **inventado**, y —el que de verdad importa— **código nuevo** que toca el
+lote autorizando con `sensory`. El cuarto se rehízo porque la primera versión
+**no compilaba**, y una mutación que no compila prueba menos de lo que parece: la
+buena compila (`tsc` 0), el inventario la clasifica «guardia directo» con
+`modelos=["lot"]`, y la compuerta la caza.
+
+### Lo que sigue abierto
+
+- **Tus catorce veredictos**, y sobre todo los **dos defectos propuestos**. La
+  compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
+  en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
+- **Los otros dominios.** Hoy hay uno. Añadir el siguiente es un bloque más en el
+  mismo archivo y **no toca la compuerta**. Los candidatos por volumen, medidos:
+  `location` (34 llamadas a `can`), `equipment` (20), `specimen` (7), `sample` (4).
+- **Lo que ningún mecanismo de éstos cierra:** que el `action` sea el debido, no
+  sólo el `resourceType`. Pedir `view` donde correspondía `manage` pasa esta
+  compuerta. Es la misma clase de pregunta, un nivel más fino, y hoy no está medida.

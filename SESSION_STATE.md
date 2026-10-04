@@ -74,7 +74,7 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
 
-**618 → 624 operaciones en 170 archivos, cero bajas**, con el detector sobre el AST (ficha `007`, escalón 1). Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
+**Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
 **Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
 
 ### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
@@ -304,7 +304,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   2026-10-04). El detector lee el AST y una compuerta nueva resuelve el guardia
   hasta su **símbolo**: de las 396 «guardia directo» por nombre, **0 mienten**. La
   pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
-  Queda la `005` —si el guardia es el **debido**—, que ningún comprobador cierra.
+- **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
+  por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
+  del **lote**: 89 operaciones con guardia, 72 exigen `lot`, 17 declaradas con razón.
+  **Queda tuyo:** confirmar los **14 veredictos**, y sobre todo los **DOS DEFECTOS
+  PROPUESTOS** —`completeExternalCoffeeOrigin` y `recordWashMedium`, que dejan atar
+  una muestra o un medio de lavado a un lote que no puedes ver—. Y los otros
+  dominios, que son un bloque más en el mismo archivo.
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
