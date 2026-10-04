@@ -826,16 +826,16 @@ describe("la curva de un lote", () => {
         // Banda de humedad 10–12 con objetivo 11, en la fase de secado y `during`. **Del pH no hay
         // ninguna**: es el control de «sin objetivo declarado».
         //
-        // Las demás son las **cuatro reglas de elección de banda** de `curvaDeUnLote`, cada una con una
+        // Las demás son las **reglas de elección de banda** de `elegirObjetivo`, cada una con una
         // variable propia y con el objetivo **de cada candidato en un sitio distinto de su banda**
         // (80, 50, 20…), para que `yObjetivo` diga CUÁL se eligió. Todas de 0 a 10 o de 20 a 30, así
         // que el objetivo `t` cae en `yObjetivo = 100 − 100·(t − mín)/(máx − mín)` en el lienzo de 100.
         targets: {
           create: [
             { variable: "moisture", moment: "during", phase: "drying", minValue: 10, maxValue: 12, targetValue: 11, unit: "%" },
-            // Sólo `initial`: no se pinta nunca.
+            // Sólo `initial`: se pinta como MARCA DEL INICIO (objetivo 25 en 20–30 → y = 50).
             { variable: "temperature", moment: "initial", phase: "drying", minValue: 20, maxValue: 30, targetValue: 25, unit: "C" },
-            // `initial` Y `final`: sale la final (objetivo 22 → y = 80), no la inicial (1,5 → 50).
+            // `initial` Y `final` y ningún `during`: no se elige ninguno (antes salía la final).
             { variable: "brix", moment: "initial", phase: "drying", minValue: 1, maxValue: 2, targetValue: 1.5, unit: "Bx" },
             { variable: "brix", moment: "final", phase: "drying", minValue: 20, maxValue: 30, targetValue: 22, unit: "Bx" },
             // Un `during` SIN fase: no dice de qué fase habla, no se pinta.
@@ -845,7 +845,8 @@ describe("la curva de un lote", () => {
             // `during` Y `final` de la fase: gana `during` (objetivo 2 → y = 80), no `final` (8 → 20).
             { variable: "water_volume_pulping", moment: "during", phase: "drying", minValue: 0, maxValue: 10, targetValue: 2, unit: "L" },
             { variable: "water_volume_pulping", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 8, unit: "L" },
-            // `during` sin fase Y `final` de la fase: gana la final (5 → y = 50), no el `during` huérfano (1 → 90).
+            // `during` sin fase Y `final` de la fase: el huérfano lo descarta el filtro de fase, así que
+            // queda UNA meta y se elige, como marca del final (5 → y = 50); el `during` daría 90.
             { variable: "wash_medium_ph", moment: "during", phase: null, minValue: 0, maxValue: 10, targetValue: 1, unit: "pH" },
             { variable: "wash_medium_ph", moment: "final", phase: "drying", minValue: 0, maxValue: 10, targetValue: 5, unit: "pH" },
           ],
@@ -885,7 +886,7 @@ describe("la curva de un lote", () => {
     const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable: "moisture", ...LIENZO } });
     expect(curva).not.toBeNull();
     // Banda 10–12: 12 → y=0, 10 → y=100, objetivo 11 → y=50.
-    expect(curva!.banda).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
+    expect(curva!.banda).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
     // Exactamente tres puntos, en x = 0, 150, 300 (8, 6 y 4 h) y y = -100, -50, 0 (14, 13, 12).
     // **Los valores discriminan**: sumar la lectura de hace 20 h (30) o la equivocada (99) cambia el
     // número de puntos, y usar la equivocada en vez de su corrección cambia el último y. **Y sumar la
@@ -916,28 +917,53 @@ describe("la curva de un lote", () => {
     expect(propia.curva).not.toBeNull();
   });
 
-  // **Las cuatro reglas de elección de banda** (`curvaDeUnLote`): «nunca `initial`, nunca un objetivo
-  // sin fase, `during` y si no `final`». Pintar la banda de otra fase —o la de un momento que no es
-  // el que se vigila— es exactamente «una banda que nadie declaró», que el diseño prohíbe.
-  it("nunca un objetivo `initial`: si es el único, no hay banda", async () => {
-    expect(await bandaDe("temperature")).toEqual({ tipo: "sin_objetivo_declarado" });
+  // **Las reglas de elección de banda** (`elegirObjetivo`, en `curvaDeLote.ts`). **Reescritas el
+  // 2026-10-02 por `PENDING_IMPLEMENTATIONS/017`**: antes decían «nunca `initial`, `during` y si no
+  // `final`», y esas dos mitades eran el defecto. Un objetivo `initial` se tiraba —y es el caso
+  // normal de lavado y natural, donde el Brix o el pH se miden UNA vez en la cereza o el mosto— y
+  // un `final` se pintaba como banda de toda la trayectoria.
+  //
+  // Lo que sigue valiendo intacto: un objetivo sin fase, o de otra fase, no se pinta. Pintar la
+  // banda de otra fase es «una banda que nadie declaró», que el diseño prohíbe.
+  const curvaDe = async (variable: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId: lotK, variable, ...LIENZO } });
+    return curva!;
+  };
+
+  it("un objetivo `initial` solo SÍ se pinta, como marca del inicio: es el caso de lavado y natural", async () => {
+    // Banda 20–30 con objetivo 25 → y = 50. Lo que cambia frente a `during` es el ALCANCE, no la geometría.
+    expect(await bandaDe("temperature")).toEqual({
+      tipo: "banda", alcance: "al_inicio", yMin: 100, yMax: 0, yObjetivo: 50,
+    });
   });
 
-  it("sin `during`, la banda es la `final`, y no la `initial` que la acompaña", async () => {
-    // y = 80 es el objetivo 22 de la final (20–30); el de la inicial (1,5 en 1–2) daría 50.
-    expect(await bandaDe("brix")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
+  it("`initial` y `final` juntos y ningún `during`: NO se elige uno, y se dice cuáles había", async () => {
+    // Antes salía la `final` (objetivo 22 → y = 80) y la `initial` se perdía en silencio. Las dos son
+    // legítimas y hablan de instantes distintos: elegir era inventar cuál le importa al operario.
+    const c = await curvaDe("brix");
+    expect(c.banda).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(c.eleccion).toEqual({ tipo: "varios_sin_trayectoria", momentos: ["initial", "final"] });
+    // Control: «sin banda» no es «sin curva» — y el motivo NO es que la receta no declare nada.
+    expect(c.puntos.length).toBeGreaterThanOrEqual(0);
   });
 
   it("un objetivo SIN fase, o de OTRA fase, no se pinta", async () => {
     expect(await bandaDe("relative_humidity")).toEqual({ tipo: "sin_objetivo_declarado" });
     expect(await bandaDe("water_activity")).toEqual({ tipo: "sin_objetivo_declarado" });
+    // Y el motivo que se cuenta es el de verdad: no hay ninguno declarado PARA ESTA FASE.
+    expect((await curvaDe("relative_humidity")).eleccion).toEqual({ tipo: "sin_objetivo_declarado" });
   });
 
-  it("`during` gana a `final`; y un `during` sin fase no le gana a una `final` que sí la tiene", async () => {
-    // Objetivo 2 de la `during` → 80; el 8 de la `final` daría 20.
-    expect(await bandaDe("water_volume_pulping")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 80 });
-    // Objetivo 5 de la `final` → 50; el 1 del `during` huérfano daría 90.
-    expect(await bandaDe("wash_medium_ph")).toEqual({ tipo: "banda", yMin: 100, yMax: 0, yObjetivo: 50 });
+  it("`during` gana a `final`; y un `during` sin fase deja sola a la `final`, que se pinta como marca del final", async () => {
+    // Objetivo 2 de la `during` → 80; el 8 de la `final` daría 20. Gana el único que describe una trayectoria.
+    expect(await bandaDe("water_volume_pulping")).toEqual({
+      tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 80,
+    });
+    // El `during` huérfano lo descarta el filtro de fase, así que queda UNA sola meta —la `final`— y
+    // se elige: objetivo 5 → y = 50. Lo que cambió es el alcance, que antes era «toda la trayectoria».
+    expect(await bandaDe("wash_medium_ph")).toEqual({
+      tipo: "banda", alcance: "al_final", yMin: 100, yMax: 0, yObjetivo: 50,
+    });
   });
 
   // **El perfil que rige el lote** (`perfilDelLote`) sale del grado del proceso de LA FASE ABIERTA, por la misma

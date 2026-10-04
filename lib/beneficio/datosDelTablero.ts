@@ -12,7 +12,7 @@ import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lo
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
 import { entradaDelLote } from "./entradaDelLote";
 import { perfilDeLaFaseAbierta, veredictoDelLote } from "./desdeElLote";
-import { curvaDeLote, type Curva } from "./curvaDeLote";
+import { curvaDeLote, type Curva, type MomentoDeObjetivo } from "./curvaDeLote";
 import type { ClaveDePerfil } from "./perfiles";
 import { lineaDeEtapas, type Etapa } from "./lineaDeEtapas";
 import { proximaLiberacion, type CorridaConDuracion, type Liberacion } from "./liberacionDeUnidad";
@@ -443,7 +443,13 @@ async function curvaDeUnLote(
         readonly targets: readonly {
           readonly variable: string;
           readonly phase: string | null;
-          readonly moment: string;
+          /**
+           * Los tres literales del enum, **no `string`**. Era `string`, y con eso el momento se
+           * perdía al entrar en la curva: `elegirObjetivo` no podía distinguir un objetivo de
+           * trayectoria de uno de un instante, que es la mitad del defecto de
+           * `PENDING_IMPLEMENTATIONS/017`. El tipo que la base produce ya es éste.
+           */
+          readonly moment: MomentoDeObjetivo;
           readonly minValue: { toNumber(): number } | null;
           readonly maxValue: { toNumber(): number } | null;
           readonly targetValue: { toNumber(): number } | null;
@@ -468,7 +474,16 @@ async function curvaDeUnLote(
 
   const metas = abierta?.lotProcess?.processRecipeVersion?.targets ?? [];
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
-  const meta = delaFase.find((t) => t.moment === "during") ?? delaFase.find((t) => t.moment === "final");
+  // **TODOS los objetivos de la fase, con su momento, y la elección la hace `curvaDeLote`.** Esta
+  // línea hacía `find("during") ?? find("final")`, y ahí vivían los dos defectos de
+  // `PENDING_IMPLEMENTATIONS/017`: elegía en silencio entre lo que la receta declaraba, y la meta
+  // `final` que elegía se usaba después como banda de TODA la trayectoria. Esta capa ya no elige.
+  const objetivos = delaFase.map((t) => ({
+    momento: t.moment,
+    minValue: t.minValue?.toNumber() ?? null,
+    maxValue: t.maxValue?.toNumber() ?? null,
+    targetValue: t.targetValue?.toNumber() ?? null,
+  }));
 
   // **El perfil que rige el lote, de la misma fuente que su veredicto** (`PERFIL_POR_GRADO` en
   // `desdeElLote.ts`): el grado del proceso de LA FASE ABIERTA. Sin fase abierta (`abierta` indefinida)
@@ -480,13 +495,7 @@ async function curvaDeUnLote(
     lecturas: mediciones
       .filter((m) => !corregidas.has(m.id))
       .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
-    objetivo: meta
-      ? {
-          minValue: meta.minValue?.toNumber() ?? null,
-          maxValue: meta.maxValue?.toNumber() ?? null,
-          targetValue: meta.targetValue?.toNumber() ?? null,
-        }
-      : null,
+    objetivos,
     ancho,
     alto,
   });

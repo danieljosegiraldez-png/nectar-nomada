@@ -190,7 +190,7 @@ describe("la página — le pasa a la curva el perfil que rige el lote", () => {
   const curvaCon = (perfilDelLote: CurvaDelTablero["perfilDelLote"]): CurvaDelTablero => ({
     ...curvaDeLote({
       lecturas: [{ occurredAt: haceHoras(5), value: 5.0 }, { occurredAt: haceHoras(1), value: 4.7 }],
-      objetivo: { minValue: 3.8, maxValue: 4.5, targetValue: 4.15 },
+      objetivos: [{ momento: "during", minValue: 3.8, maxValue: 4.5, targetValue: 4.15 }],
       ancho: 480, alto: 200,
     }),
     perfilDelLote,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ultimaLectura, type Curva } from "../../../lib/beneficio/curvaDeLote";
+import { ultimaLectura, type AlcanceDeLaBanda, type Curva } from "../../../lib/beneficio/curvaDeLote";
 import { ejesDeLaCurva } from "../../../lib/beneficio/ejesDeLaCurva";
 import type { ClaveDePerfil } from "../../../lib/beneficio/perfiles";
 import { riesgoDeEsperar } from "../../../lib/beneficio/riesgoDeEsperar";
@@ -34,6 +34,44 @@ export const ESPACIO_DE_LOS_VALORES = 52;
 export const FRANJA_DE_LAS_HORAS = 34;
 
 /** El documento de donde `riesgoDeEsperar` cita, tal como se le nombra a quien pregunta de dónde sale. */
+/**
+ * **Lo que mide la marca de un objetivo de un instante** (`initial` o `final`), en píxeles del
+ * lienzo.
+ *
+ * Un objetivo que ocurre una vez no se dibuja como una franja a lo ancho: eso es justo el defecto
+ * de `PENDING_IMPLEMENTATIONS/017` —una meta FINAL pintada sobre toda la trayectoria se lee como el
+ * rango de todo el recorrido—. Se pinta en SU extremo del eje, con el mismo relleno, para que se
+ * vea que es la misma clase de cosa aplicada a un solo instante.
+ *
+ * No es cero ni un píxel: con un relleno suave una marca de 1 px no se ve, y una marca invisible
+ * deja la pantalla sin decir que la receta declara algo.
+ */
+export const ANCHO_DE_LA_MARCA = 12;
+
+/** Dónde empieza la banda: al final del eje si el objetivo es `final`, y al principio si no. */
+const xDeLaBanda = (alcance: AlcanceDeLaBanda, ancho: number) =>
+  alcance === "al_final" ? Math.max(ancho - ANCHO_DE_LA_MARCA, 0) : 0;
+
+/** Cuánto mide: todo el eje con `trayectoria`, y la marca con los dos momentos de un instante. */
+const anchoDeLaBanda = (alcance: AlcanceDeLaBanda, ancho: number) =>
+  alcance === "trayectoria" ? ancho : Math.min(ANCHO_DE_LA_MARCA, ancho);
+
+/**
+ * Las cuatro frases de un objetivo de un instante: qué momento, y si esa lectura cumplió.
+ *
+ * Son cuatro claves y no una con interpolación a propósito: meter «inicial» o «final» como
+ * parámetro obliga a cada idioma a que la frase funcione con las dos palabras, y en español el
+ * género y la concordancia no sobreviven a eso.
+ */
+const claveDelInstante = (alcance: "al_inicio" | "al_final", fuera: boolean) =>
+  alcance === "al_inicio"
+    ? fuera
+      ? "curvaInicialFuera"
+      : "curvaInicialCumple"
+    : fuera
+      ? "curvaFinalFuera"
+      : "curvaFinalCumple";
+
 const DOCUMENTO_DEL_RIESGO = "docs/beneficio/10_ph_fermentation.md";
 
 /**
@@ -264,8 +302,24 @@ export async function CurvaDeLote({
         <title id="curva-svg-titulo">{titulo}</title>
         <desc id="curva-svg-desc">
           {resumen}
-          {juicio.tipo === "juzgada" ? ` · ${t("curvaFueraDeBanda", { n: juicio.fuera })}` : null}
-          {juicio.tipo === "sin_banda" ? ` · ${t("curvaSinBandaCorto")}` : null}
+          {/*
+            **La cuenta sobre «las lecturas» es sólo de `trayectoria`.** Con un objetivo de un
+            instante se juzga UNA, y «0 lecturas fuera del rango» leído en voz alta junto a «3
+            lecturas» es la misma media verdad que esta pantalla existe para no decir. Lo cazó el
+            guardia de este cambio, no una lectura del código.
+          */}
+          {juicio.tipo === "juzgada" && juicio.alcance === "trayectoria"
+            ? ` · ${t("curvaFueraDeBanda", { n: juicio.fuera })}`
+            : null}
+          {juicio.tipo === "juzgada" && juicio.alcance !== "trayectoria"
+            ? ` · ${t(claveDelInstante(juicio.alcance, juicio.fuera > 0))}` +
+              ` · ${t(juicio.alcance === "al_inicio" ? "curvaSoloInicialCorto" : "curvaSoloFinalCorto")}`
+            : null}
+          {juicio.tipo === "extremo_ambiguo" ? ` · ${t("curvaExtremoAmbiguoCorto")}` : null}
+          {/* Con dos objetivos declarados, «sin rango declarado» sería falso: declara dos. */}
+          {juicio.tipo === "sin_banda"
+            ? ` · ${t(curva.eleccion.tipo === "varios_sin_trayectoria" ? "curvaVariosObjetivosCorto" : "curvaSinBandaCorto")}`
+            : null}
           {juicio.tipo === "banda_de_ancho_cero" ? ` · ${t("curvaBandaAnchoCeroCorto")}` : null}
           {juicio.tipo === "banda_al_reves" ? ` · ${t("curvaBandaAlRevesCorto")}` : null}
         </desc>
@@ -275,13 +329,19 @@ export async function CurvaDeLote({
           <>
             <rect
               className="nn-curva-banda"
-              x={0}
+              x={xDeLaBanda(banda.alcance, curva.ancho)}
               y={Math.min(banda.yMin, banda.yMax)}
-              width={curva.ancho}
+              width={anchoDeLaBanda(banda.alcance, curva.ancho)}
               height={Math.max(Math.abs(banda.yMin - banda.yMax), 1)}
             />
             {banda.yObjetivo !== null ? (
-              <line className="nn-curva-objetivo" x1={0} x2={curva.ancho} y1={banda.yObjetivo} y2={banda.yObjetivo} />
+              <line
+                className="nn-curva-objetivo"
+                x1={xDeLaBanda(banda.alcance, curva.ancho)}
+                x2={xDeLaBanda(banda.alcance, curva.ancho) + anchoDeLaBanda(banda.alcance, curva.ancho)}
+                y1={banda.yObjetivo}
+                y2={banda.yObjetivo}
+              />
             ) : null}
           </>
         ) : null}
@@ -334,7 +394,15 @@ export async function CurvaDeLote({
         )}
       </svg>
 
-      {juicio.tipo === "sin_banda" ? (
+      {/*
+        **Va ANTES de `sin_banda` porque ese caso corta la cadena.** La receta declara dos objetivos
+        de instantes distintos y ninguno de trayectoria: no hay banda, pero el motivo NO es «no tiene
+        rango declarado» —eso sería falso—. Con el mensaje puesto más abajo, en la rama larga, no se
+        pintaba nunca; lo cazó el guardia de pantalla de este cambio.
+      */}
+      {curva.eleccion.tipo === "varios_sin_trayectoria" ? (
+        <p className="nn-warn nn-curva-varios-objetivos">{t("curvaVariosObjetivos")}</p>
+      ) : juicio.tipo === "sin_banda" ? (
         <p className="nn-warn nn-curva-sin-banda">{t("curvaSinBanda")}</p>
       ) : juicio.tipo === "banda_de_ancho_cero" ? (
         // **No se afirma «todas dentro»**: con min = max la escala no distingue valores.
@@ -347,13 +415,31 @@ export async function CurvaDeLote({
         <>
           {banda.tipo === "banda" ? (
             <p className="nn-muted">
-              {banda.yObjetivo !== null ? t("curvaBandaConObjetivo") : t("curvaBandaSinObjetivo")}
+              {banda.alcance === "trayectoria"
+                ? banda.yObjetivo !== null
+                  ? t("curvaBandaConObjetivo")
+                  : t("curvaBandaSinObjetivo")
+                : t(banda.alcance === "al_inicio" ? "curvaMarcaAlInicio" : "curvaMarcaAlFinal")}
             </p>
           ) : null}
           {/* Con cero lecturas no se dice nada del rango: «no hay curva que dibujar» ya está arriba. */}
+          {juicio.tipo === "extremo_ambiguo" ? (
+            <p className="nn-warn nn-curva-extremo-ambiguo">
+              {t(juicio.alcance === "al_inicio" ? "curvaExtremoAmbiguoInicio" : "curvaExtremoAmbiguoFinal")}
+            </p>
+          ) : null}
           {juicio.tipo === "juzgada" ? (
             <p className={juicio.fuera > 0 ? "nn-warn" : "nn-muted"}>
-              {juicio.fuera > 0 ? t("curvaFueraDeBanda", { n: juicio.fuera }) : t("curvaTodasDentro")}
+              {/*
+                Con `trayectoria` la frase habla de «las lecturas», en plural, porque las juzga todas.
+                Con un objetivo de un instante juzga UNA, y decir «todas las lecturas están dentro»
+                cuando se miró una sola es contar lo que no se midió.
+              */}
+              {juicio.alcance === "trayectoria"
+                ? juicio.fuera > 0
+                  ? t("curvaFueraDeBanda", { n: juicio.fuera })
+                  : t("curvaTodasDentro")
+                : t(claveDelInstante(juicio.alcance, juicio.fuera > 0))}
             </p>
           ) : null}
         </>
