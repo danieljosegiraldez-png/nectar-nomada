@@ -77,6 +77,24 @@ Al crear una microparcela se copian `altitudeMinM`, `altitudeMaxM`, `shadePercen
 
 **Lo que esto NO resuelve, dicho aquí para que no se lea como resuelto:** un valor copiado y nunca revisado sigue siendo un valor prestado. La pantalla lo señala; nadie obliga a medirlo. Daniel aceptó ese riesgo con el conocimiento de causa.
 
+**CORREGIDO EL 2026-10-02: `areaHectares` sale de la lista, y son ocho, no nueve.** El riesgo que Daniel
+aceptó es el de un valor **prestado** que nadie revisa, y eso vale para los ocho primeros, que son
+INTENSIVOS: la altitud de media hectárea es la de la hectárea, y la separación entre plantas no cambia
+porque se mire un trozo. El área es **EXTENSIVA** — una microparcela es una PARTE — así que copiarla no
+guarda un valor prestado sino uno que **no puede ser suyo** y que es siempre demasiado grande. No es el
+mismo riesgo con otra cara: es otra clase de dato.
+
+Y no se queda en la ficha. Tres cosas dividen por esa columna: `computePlotDensity` (plantas/ha),
+`computePlotYield` (kg/ha) y `pendienteDeLaParcela`, que **deja de pedir el área** en cuanto la columna
+no es nula — el único aviso que llevaría a medir la de verdad. Medido ese día sobre una microparcela de
+una décima de una parcela de 2 ha con 1.000 matas: su ficha afirmaba «1.000 plantas en 2 ha» y 500
+plantas/ha cuando son 5.000, y el formulario de alta no tiene campo de área con el que corregirlo.
+
+Con el área en nulo la microparcela vuelve a decir «no sé», que es lo que la jerarquía de fuentes
+exige: Missing se queda Missing. **Y hay un camino mejor que ahora existe y antes no:** calcularla de su
+propio rango —las celdas por la separación entre plantas— ahora que la rejilla está en `main`. Eso es
+trabajo propio y una decisión de Daniel, no parte de esta corrección.
+
 ## 5. Las reglas
 
 ### 5.1 Lo que rechaza la base

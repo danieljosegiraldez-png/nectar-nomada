@@ -712,7 +712,27 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
         sunExposure: parent.sunExposure,
         aspect: parent.aspect,
         plantSpacingMeters: parent.plantSpacingMeters,
-        areaHectares: parent.areaHectares,
+        // **`areaHectares` TAMPOCO esta en esta lista, y por una razon distinta de la rejilla.**
+        // Los ocho de arriba son INTENSIVOS: describen el sitio y valen igual en una parte que en el
+        // todo — la altitud de media hectarea es la de la hectarea, y la separacion entre plantas no
+        // cambia porque se mire un trozo. El area es EXTENSIVA: una microparcela es una PARTE, asi
+        // que copiar la superficie entera no es heredar un dato prestado, es guardar uno que no
+        // puede ser suyo y que es siempre demasiado grande.
+        //
+        // Y no se queda en la ficha: tres cosas dividen por esa columna. `computePlotDensity` saca
+        // plantas/ha, `computePlotYield` saca kg/ha, y `pendienteDeLaParcela` deja de pedir el area en
+        // cuanto la columna no es nula — que era el unico aviso que llevaria a medir la de verdad.
+        // Medido el 2026-10-02 sobre una microparcela de una decima de una parcela de 2 ha con 1.000
+        // matas: su ficha afirmaba «1.000 plantas en 2 ha» y 500 plantas/ha cuando son 5.000.
+        //
+        // Con el area en nulo la microparcela vuelve a decir «no se», que es lo que §3 exige de un
+        // dato que falta: Missing se queda Missing y no se infiere para guardarlo como hecho. El
+        // formulario de alta no tiene campo de area —tres campos: nombre, motivo y nota— asi que el
+        // camino es el aviso `sin_area`, que enlaza a los ajustes de la propia microparcela.
+        //
+        // **Esto reabre una linea del diseño aprobado** (§4.4, que la nombra entre los nueve). La
+        // nota esta puesta alli tambien, porque una decision que contradice un documento normativo se
+        // anota en el documento y no solo en el codigo.
         // Y donde esta, que viene del input y no del padre.
         rangeRowFrom: input.rangeRowFrom ?? null,
         rangeRowTo: input.rangeRowTo ?? null,
@@ -757,7 +777,8 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
           sunExposure: microlot.sunExposure,
           aspect: microlot.aspect,
           plantSpacingMeters: microlot.plantSpacingMeters,
-          areaHectares: microlot.areaHectares,
+          // `areaHectares` no aparece porque ya no se copia: este evento registra lo COPIADO, y
+          // escribir un nulo aqui diria que se copio un nulo en vez de que no se copio nada.
         },
         sourceInterface: "traceability.service",
       },

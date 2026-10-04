@@ -146,12 +146,21 @@ const microlote = (name: string, extra: Record<string, unknown> = {}) =>
 
 describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
   /**
-   * **Los NUEVE, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
-   * los nueve es la forma de que el día que alguien añada un atributo a
+   * **Los OCHO, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
+   * los ocho es la forma de que el día que alguien añada un atributo a
    * `Location` y se olvide de copiarlo, la prueba siga verde. El `Decimal` va con
    * `Number()`, que es el idioma de la casa.
+   *
+   * **Eran nueve hasta el 2026-10-02, y el noveno era `areaHectares`.** Sale de la
+   * lista porque es la única EXTENSIVA: los ocho describen el sitio y valen igual en
+   * una parte que en el todo, mientras una microparcela es una PARTE, así que
+   * copiarle la superficie entera guarda un número que no puede ser suyo. Y no se
+   * queda en la ficha: `computePlotDensity` y `computePlotYield` dividen por esa
+   * columna, y `pendienteDeLaParcela` deja de pedir el área en cuanto no es nula —
+   * el único aviso que llevaría a medir la de verdad. La nota está en el §4.4 del
+   * diseño, que la nombraba entre los nueve.
    */
-  it("copia los nueve atributos, uno por uno", async () => {
+  it("copia los ocho atributos intensivos, uno por uno", async () => {
     const m = await microlote("Norte");
     locationIds.push(m.id);
     expect(m.altitudeMinM).toBe(1400);
@@ -162,7 +171,33 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(m.shadePercentage).toBe("pct_50");
     expect(m.aspect).toBe("north");
     expect(Number(m.plantSpacingMeters)).toBe(1.5);
-    expect(Number(m.areaHectares)).toBe(0.8);
+  });
+
+  /**
+   * **La que NO se copia.**
+   *
+   * **Recortada el 2026-10-04 al poner este PR al día, y es un recorte honesto, no una
+   * prueba debilitada por comodidad.** La versión anterior medía además la consecuencia
+   * —que el nulo hiciera saltar el aviso `sin_area`, el que llevaba a medir el área de
+   * verdad—, y eso era lo que la hacía un guardia y no un adorno. Ese aviso **ya no
+   * existe**: Daniel decidió el 2026-10-03 que la aplicación deja de pedir el área,
+   * porque el espacio de un lote sale de las plantas y la densidad y no del metraje, y
+   * `areaHectares` salió de `EntradaDePendiente` (su comentario lo explica, en
+   * `lib/traceability/pendienteDeLaParcela.ts`).
+   *
+   * O sea que la segunda columna no se quitó por pesar: desapareció el comportamiento
+   * que medía. Afirmar el nulo sigue cazando la regresión —volver a copiar el área hace
+   * caer esta prueba— y la procedencia la vigila la del libro de auditoría, aquí abajo.
+   * Lo que ya no hay es consecuencia que preguntar, y queda escrito para que nadie
+   * cuente esta prueba por dos.
+   */
+  it("NO copia el área: es extensiva, y una microparcela es una parte", async () => {
+    const m = await microlote("Este");
+    locationIds.push(m.id);
+    expect(m.areaHectares, "el área es extensiva: copiarla guarda un número que no puede ser suyo").toBeNull();
+    // El control de que esto mide algo: los intensivos SÍ llegaron en la misma creación.
+    // Sin esta línea, una `createMicrolot` que no copiara NADA pasaría igual de verde.
+    expect(m.soilType, "y los intensivos sí se copiaron, o esto no mediría nada").toBe(ATRIBUTOS.soilType);
   });
 
   /**
@@ -190,7 +225,7 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
       where: assertDefinedWhere({ entityId: m.id, operation: "location.copy_attributes_from_parent" }),
     });
     expect(ev, "sin el AuditEvent nadie distingue un valor copiado de uno medido").not.toBeNull();
-    // Y que diga DE DÓNDE y QUÉ — **los nueve, no una muestra**. Una revisión
+    // Y que diga DE DÓNDE y QUÉ — **los ocho, no una muestra**. Una revisión
     // independiente midió que comprobar sólo `soilType` dejaba sobrevivir la
     // mutación de quitar los otros ocho del `after`: el evento registraba que algo
     // se copió sin registrar qué, que para una auditoría es casi lo mismo que nada.
@@ -204,7 +239,9 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(despues?.shadePercentage).toBe("pct_50");
     expect(despues?.aspect).toBe("north");
     expect(Number(despues?.plantSpacingMeters)).toBe(1.5);
-    expect(Number(despues?.areaHectares)).toBe(0.8);
+    // Y el área **no** aparece, porque ya no se copia: este evento registra lo COPIADO,
+    // y un nulo aquí diría que se copió un nulo en vez de que no se copió nada.
+    expect(despues, "el evento sigue registrando un área que ya no se copia").not.toHaveProperty("areaHectares");
   });
 
   /** Y el evento de crear sigue estando: son dos actos, no uno. */
