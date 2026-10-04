@@ -4905,3 +4905,14 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 **CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
 El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas **181 y 282**, re-medidas el 2026-10-04— y usa `DEMO Rivera
 Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
+
+**Archivada el 2026-10-04**, por decisión de Daniel, para que el aviso del presupuesto —que ese día
+subió de 0,8 a 0,9— dejara de sonar: con el archivo en 360/400 el filtro `>=` lo disparaba en el 90 %
+exacto. **Sus TRES decisiones abiertas no se archivaron con ella:** están en §1 de
+`SESSION_STATE.md`, y la referencia de línea de una se re-midió al moverla —el rango de la
+microparcela es `schema.prisma:941`; la 923 que se citaba es el comentario del bloque—.
+
+### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
+
+**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
+**Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.

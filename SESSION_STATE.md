@@ -60,11 +60,15 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
    contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
 
-#### Dos preguntas que vienen de la entrega del 017 y el 015 (archivada el 2026-10-04)
+#### Preguntas tuyas rescatadas de entregas archivadas el 2026-10-04
 
 - **Si dos corridas abiertas en una CAMA son un conflicto de datos.** Para un tanque sí; con varias
   bandejas puede ser lo normal. Hoy el recuento por unidad las marca como conflicto en los dos casos.
 - **Si una receta de fermentación debe OBLIGAR a medir pH.** Hoy no obliga.
+- **Si la coordenada de un plantón exige tablero**, y los dos puntos del esquema que tu lego del
+  2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`.
+- **Si el rango de la microparcela sigue «opcional a propósito»** (`schema.prisma:941`, su comentario
+  en la 923) o pasa a obligatorio como pide el #621 §3.2.
 
 ## 2. Lo que se entregó — más nuevo primero
 
@@ -77,11 +81,6 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 **Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
 **Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
-### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
-
-**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
-**Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.
-
 ## 3. Bloqueado, y en qué
 
 > **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
@@ -138,9 +137,8 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
   ventana óptima** —antipatrón 8, un solo asunto visto de los dos lados—.
 - **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
   en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
-  incumplida a propósito**. El detalle está en `docs/SESSION_STATE_ARCHIVE.md`, en la entrada «Los
-  ejes de la curva, y una cita que sólo se hace cuando se sostiene» — archivada en este mismo commit,
-  así que la frase que decía «vive aquí hasta que se archive» se corrige al archivarla.
+  incumplida a propósito**. El detalle está en `docs/SESSION_STATE_ARCHIVE.md`,
+  en «Los ejes de la curva, y una cita que sólo se hace cuando se sostiene».
 
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
