@@ -1,121 +1,235 @@
 /**
- * El detector del inventario de acceso, **puro**: recibe las fuentes y la lista
- * de modelos, y devuelve una fila por operación que toca la base. Sin `fs`, sin
- * `process`, sin `RAIZ`.
+ * El detector del inventario de acceso, **puro** y sobre el AST: recibe las
+ * fuentes y la lista de modelos, y devuelve una fila por operación que toca la
+ * base. Sin `fs`, sin `process`, sin `RAIZ`.
  *
- * **Por qué está partido del CLI, que es lo único nuevo aquí.** El guardia que
- * importa es el que llama al detector con **entrada hostil** —un método de clase
- * inventado, un comentario que nombra un guardia— y hasta el 2026-10-04 eso era
- * imposible: el guion recorría `app/` y `lib/` del disco, así que lo único
- * comprobable era el árbol que ya existe. Un corpus prueba lo que contiene, no
- * lo que alguien escribirá mañana. El patrón ya es de la casa:
- * `tests/arquitectura/proceso-por-el-resolvedor.test.ts` alimenta a su detector
- * con fragmentos literales.
+ * **Por qué el AST y no texto.** `PENDING_IMPLEMENTATIONS/007`. El troceo por
+ * expresiones regulares reconocía *formas escritas*, y cada vez que falló, falló
+ * igual: **descarte silencioso** (la operación no existe) o **identidad falsa**
+ * (existe con el nombre de otra cosa, y cuadra en todos los recuentos). La
+ * enumeración no converge: el siguiente método, el siguiente alias del cliente,
+ * la siguiente forma de declarar vuelven a fallar del mismo modo. Un nodo no se
+ * enumera.
  *
- * **Lo que NO hace, y es el límite de siempre:** reconoce *formas escritas*, no
- * propiedades. Un guardia con el permiso equivocado se cuenta como guardia; un
- * acotado por construcción que filtre por asignaciones se ve como «sin guardia».
- * Por eso la salida separa lo que sabe de lo que no, en vez de dar un número.
+ * `ts.createSourceFile` es **sólo sintaxis** — sin `Program` ni comprobador de
+ * tipos, así que no hay coste de resolución y `typescript` ya es dependencia.
+ *
+ * **Lo que cierra, medido el 2026-10-04 contra `origin/main` = `966ada98d1`:**
+ * seis operaciones invisibles porque su cliente se llama `db`; tres promovidas
+ * a «guardia directo» por **un comentario**; y las formas que el troceo por
+ * `^` no podía ver (método de clase, declaración indentada, `export default`
+ * sin nombre), que hoy tienen cero apariciones y quedan como red.
+ *
+ * **Lo que NO arregla, y conviene no confundirlo.** Que el guardia sea el
+ * **debido**: un `requireLotAccess` con el permiso equivocado pasa con cualquier
+ * AST — es la ficha `005`. Y la **identidad del símbolo** del guardia:
+ * `require\w*(Access|Admin|Override)` sigue siendo una convención de nombres, y
+ * sólo la cierra el escalón 2 (comprobador de tipos), que es decisión del dueño
+ * por su coste en CI.
  */
+import ts from "typescript";
 
+/**
+ * Con `/g`: sirve para `match`/`matchAll`, **nunca** para `.test()`, que guarda
+ * estado en `lastIndex`. El CLI la usa sobre texto de archivo entero en
+ * `--llamadores`.
+ */
 export const GUARDIAS = /\b(require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)\s*\(/g;
 
-/**
- * Los métodos se enumeran, y por eso hay que enumerarlos **enteros**.
- *
- * La primera versión listaba `findUnique` con `\b` detrás, y `findUniqueOrThrow`
- * no tiene frontera de palabra ahí: 13 archivos usaban esa variante y sus
- * operaciones **desaparecían del inventario**, no quedaban «sin clasificar».
- * `app/actions/checkout.ts` y `app/actions/bookings.ts` salían con cero
- * operaciones teniendo una consulta cada uno. El sufijo va antes del `\b`.
- *
- * El SQL crudo no tiene modelo que capturar —`prisma.$queryRaw` no lleva
- * `.modelo.`— y es justo el que más importa ver, porque se salta la capa de
- * modelos entera. Se registra con el modelo `SQL-crudo` para que exista como
- * operación y haya que explicarla como cualquier otra.
- */
-const METODOS =
-  "findMany|findFirstOrThrow|findFirst|findUniqueOrThrow|findUnique|createManyAndReturn|createMany|create|updateManyAndReturn|updateMany|update|upsert|deleteMany|delete|count|aggregate|groupBy";
-const MODELOS = new RegExp(
-  // El cliente puede no ser un identificador. `lib/audit.ts` escribe
-  // `(tx ?? prisma).auditEvent.create(...)`, y un nombre suelto no lo ve: el
-  // archivo entero salía con cero operaciones. Se acepta también un `)`.
-  String.raw`(?:\b(?:prisma|aiPrisma|tx|client)|\))\.(\w+)\.(?:${METODOS})\b`,
-  "g"
-);
-const CRUDO = /\b(?:prisma|aiPrisma|tx|client)\.\$(?:query|execute)Raw(?:Unsafe)?\b/g;
+/** La misma convención, anclada al nombre: un nodo ya trae el nombre aislado. */
+const GUARDIA = /^(?:require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)$/;
+
+/** `resolveLotVisibility(userAccountId)` y familia: el `where` sale del alcance. */
+const RESOLUTOR = /^resolve\w*Visibility$/;
 
 /**
- * Trocea un archivo en funciones exportadas y su cuerpo.
- *
- * El corte va hasta la siguiente declaración de nivel superior — exportada o
- * no. Una primera versión cortaba en el siguiente `export`, y por eso atribuía
- * a `slugify()` las consultas del `uniqueSlug()` **no exportado** que vive
- * justo debajo.
- *
- * `export default async function` faltaba, y su omisión no dejaba un hueco:
- * dejaba una **identidad falsa**. En `app/my-nectar/page.tsx` la declaración
- * anterior es `export const dynamic = "force-dynamic"`, que absorbía el resto
- * del archivo, así que las tres consultas de `MyNectarPage()` se inventariaban
- * bajo el nombre `dynamic` — una constante de configuración.
+ * Los métodos de Prisma. Siguen enumerados —son una API cerrada y conocida— pero
+ * ahora son un `Set` sobre el nombre de un nodo, así que la trampa de
+ * `findUniqueOrThrow` contra `findUnique\b` **no puede repetirse**: un nombre de
+ * nodo casa entero o no casa.
  */
-function declaraciones(archivo, src) {
-  const decl = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
-  const todas = [...src.matchAll(decl)];
-  return todas.map((m, i) => ({
+const METODOS = new Set([
+  "findMany", "findFirstOrThrow", "findFirst", "findUniqueOrThrow", "findUnique",
+  "createManyAndReturn", "createMany", "create", "updateManyAndReturn", "updateMany",
+  "update", "upsert", "deleteMany", "delete", "count", "aggregate", "groupBy",
+]);
+
+/** El SQL crudo no tiene modelo que capturar, y es el que más importa ver. */
+const CRUDO = /^\$(?:query|execute)Raw(?:Unsafe)?$/;
+
+function arbol(archivo, texto) {
+  return ts.createSourceFile(
     archivo,
-    nombre: m[1],
-    exportada: /^export /.test(m[0]),
-    cuerpo: src.slice(m.index ?? 0, i + 1 < todas.length ? todas[i + 1].index : src.length),
-  }));
+    texto,
+    ts.ScriptTarget.Latest,
+    true,
+    archivo.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
 }
 
 /**
- * Una consulta delegada a un ayudante **no exportado** desaparecía entera.
+ * Las unidades de un archivo: `function`, `const`, **método de clase** y
+ * `export default` sin nombre.
  *
- * Lo encontró la revisión independiente del 2026-08-31 y se comprobó por
- * mutación. Ahora el cuerpo de una operación exportada **absorbe** el de los
- * ayudantes privados que llama, transitivamente. Y un ayudante privado con
- * acceso al que no llega ninguna exportada se emite como operación propia, para
- * que tampoco ése pueda esconderse.
+ * Ya no hay «corte hasta la siguiente declaración de nivel superior», y con él
+ * desaparecen las dos familias a la vez: el cuerpo de una unidad es su
+ * **subárbol**, no un fragmento de texto entre dos coincidencias. El troceo
+ * viejo usaba `^` con `m`, así que una declaración indentada no existía y una
+ * sin nombre dejaba sus consultas atribuidas a la constante de al lado.
+ *
+ * `ts.getCombinedModifierFlags` sobre una `VariableDeclaration` sube sola hasta
+ * su `VariableStatement` — eso es lo que significa «Combined»; no hay que buscar
+ * el padre a mano.
  */
-function operaciones(archivo, src) {
-  const todas = declaraciones(archivo, src);
-  const privadas = new Map(todas.filter((d) => !d.exportada).map((d) => [d.nombre, d]));
-
-  const absorber = (d) => {
-    let cuerpo = d.cuerpo;
-    const alcanza = new Set([d.nombre]);
-    for (let cambio = true; cambio; ) {
-      cambio = false;
-      for (const [nombre, ayudante] of privadas) {
-        if (alcanza.has(nombre)) continue;
-        if (!new RegExp(`\\b${nombre}\\s*\\(`).test(cuerpo)) continue;
-        cuerpo += "\n" + ayudante.cuerpo;
-        alcanza.add(nombre);
-        cambio = true;
+function unidades(sf) {
+  const out = [];
+  const exportada = (n) => (ts.getCombinedModifierFlags(n) & ts.ModifierFlags.Export) !== 0;
+  for (const st of sf.statements) {
+    if (ts.isFunctionDeclaration(st)) {
+      out.push({ nombre: st.name?.text ?? "default", exportada: exportada(st), nodo: st });
+    } else if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name)) out.push({ nombre: d.name.text, exportada: exportada(d), nodo: d });
+      }
+    } else if (ts.isClassDeclaration(st) && st.name) {
+      const exp = exportada(st);
+      for (const m of st.members) {
+        if ((ts.isMethodDeclaration(m) || ts.isPropertyDeclaration(m)) && m.name && ts.isIdentifier(m.name)) {
+          out.push({ nombre: `${st.name.text}.${m.name.text}`, exportada: exp, nodo: m });
+        }
       }
     }
-    return { archivo, nombre: d.nombre, cuerpo, alcanza };
-  };
-
-  const exportadas = todas.filter((d) => d.exportada).map(absorber);
-  const alcanzadas = new Set(exportadas.flatMap((o) => [...o.alcanza]));
-  const huerfanas = todas
-    .filter((d) => !d.exportada && !alcanzadas.has(d.nombre))
-    .map(absorber);
-
-  return [...exportadas, ...huerfanas].map(({ alcanza, ...o }) => o);
+  }
+  return out;
 }
 
-const CUALQUIER_FN = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
+/**
+ * Un acceso es `<cualquier receptor>.<modelo>.<método>(`, con el modelo en la
+ * lista que declara el esquema.
+ *
+ * Eso es lo que cierra el descarte silencioso: el receptor puede llamarse `db`,
+ * `cliente`, `this.db` o ser `(tx ?? prisma)` — da igual, porque lo que se
+ * reconoce es el **modelo**, que sí tiene una autoridad (`prisma/schema.prisma`)
+ * en vez de una lista escrita a mano. La enumeración `prisma|aiPrisma|tx|client`
+ * dejó seis operaciones fuera del inventario, entre ellas
+ * `ubicacionesEmparentadas`.
+ *
+ * **`$queryRaw` es casi siempre un tagged template, NO una llamada.** Medido el
+ * 2026-10-04: las **17** del árbol son tagged templates y **ninguna** es una
+ * `CallExpression`. Un recorrido que sólo mire `n.expression` las pierde todas,
+ * o sea comete el descarte silencioso que este archivo existe para cerrar. Por
+ * eso se mira también `n.tag`.
+ */
+function accesos(nodo, modelos) {
+  const vistos = new Set();
+  let crudo = false;
+  const mirar = (callee) => {
+    if (!callee || !ts.isPropertyAccessExpression(callee)) return;
+    const metodo = callee.name.text;
+    if (CRUDO.test(metodo)) { crudo = true; return; }
+    if (!METODOS.has(metodo)) return;
+    const recv = callee.expression;
+    if (ts.isPropertyAccessExpression(recv) && modelos.has(recv.name.text)) vistos.add(recv.name.text);
+  };
+  (function walk(n) {
+    if (ts.isCallExpression(n)) mirar(n.expression);
+    else if (ts.isTaggedTemplateExpression(n)) mirar(n.tag);
+    ts.forEachChild(n, walk);
+  })(nodo);
+  const lista = [...vistos];
+  // `SQL-crudo` va al final, como en la versión de texto.
+  if (crudo) lista.push("SQL-crudo");
+  return lista;
+}
+
+/** Los nombres que una unidad invoca. Un comentario no invoca nada. */
+function llamadas(nodo) {
+  const ns = new Set();
+  (function walk(n) {
+    const t = ts.isCallExpression(n) ? n.expression : ts.isTaggedTemplateExpression(n) ? n.tag : null;
+    if (t) {
+      if (ts.isIdentifier(t)) ns.add(t.text);
+      else if (ts.isPropertyAccessExpression(t)) ns.add(t.name.text);
+    }
+    ts.forEachChild(n, walk);
+  })(nodo);
+  return ns;
+}
 
 /**
- * Qué nombres entran en cada archivo por un `import`. Un guardia de otro
- * archivo cuenta **si está importado aquí**; si no, es una homonimia y no
- * guarda nada. Sin esto, limitarse al propio archivo degradaba a
- * `getLotReport()`, que delega en `getLotDetail()` importado de `./lots`.
+ * ¿Aparece ese identificador en el subárbol? Un comentario **no** es un
+ * identificador, y ahí está el quinto caso de la ficha:
+ * `irregularidadesOfrecidas()` no tiene un solo argumento y se clasificó
+ * «recibe principal» porque el comentario de la función de abajo decía «No
+ * recibe `userAccountId`». Con nodos, la prosa no puede votar.
  */
+function usa(nodo, nombre) {
+  let si = false;
+  (function walk(n) {
+    if (si) return;
+    if (ts.isIdentifier(n) && n.text === nombre) { si = true; return; }
+    ts.forEachChild(n, walk);
+  })(nodo);
+  return si;
+}
+
+/**
+ * Acotado por construcción: hay un `where` cuyo valor usa el principal, así que
+ * la consulta no puede devolver lo ajeno.
+ *
+ * El detector de texto usaba `/where:\s*\{[^}]*userAccountId/s`, y `[^}]*` **no
+ * puede cruzar una llave**: un `where: { assignment: { some: {…} }, userAccountId }`
+ * no casaba. Sobre el árbol la anidación deja de ser un problema.
+ *
+ * **Sólo cuenta dentro de un `where`.** Hubo una segunda regla que casaba
+ * cualquier línea terminada en `userAccountId,`, y eso son sobre todo **sellos
+ * de actor** (`createdBy: userAccountId`): firmar una escritura no es filtrar
+ * una lectura. Medido el 2026-09-21: 14 operaciones eran «acotadas» sólo por esa
+ * regla y **ninguna** filtraba por el principal.
+ */
+function acotadoPorElPrincipal(nodo) {
+  let si = false;
+  (function walk(n) {
+    if (si) return;
+    if (
+      ts.isPropertyAssignment(n) &&
+      ts.isIdentifier(n.name) &&
+      n.name.text === "where" &&
+      usa(n.initializer, "userAccountId")
+    ) { si = true; return; }
+    ts.forEachChild(n, walk);
+  })(nodo);
+  return si;
+}
+
+/**
+ * Qué nombres entran en un archivo por un `import`. Un guardia de otro archivo
+ * cuenta **si está importado aquí**; si no, es una homonimia y no guarda nada.
+ *
+ * Sustituye a `/import\s*\{([^}]+)\}\s*from\s*"([^"]+)"/g`, que exigía comillas
+ * dobles y una sola línea. Y **se salta `import type`**: un tipo no puede
+ * guardar nada, así que contarlo como guardia visible era un falso positivo que
+ * el texto no podía distinguir.
+ */
+function importsDe(sf, fuentes, archivo) {
+  const deDonde = new Map();
+  for (const st of sf.statements) {
+    if (!ts.isImportDeclaration(st) || !st.importClause) continue;
+    if (st.importClause.isTypeOnly) continue;
+    if (!ts.isStringLiteral(st.moduleSpecifier)) continue;
+    const destino = resolver(fuentes, archivo, st.moduleSpecifier.text);
+    if (!destino) continue;
+    const nb = st.importClause.namedBindings;
+    if (!nb || !ts.isNamedImports(nb)) continue;
+    for (const el of nb.elements) {
+      if (el.isTypeOnly) continue;
+      deDonde.set(el.name.text, destino);
+    }
+  }
+  return deDonde;
+}
+
+/** Resolución de rutas relativas contra el conjunto de fuentes. */
 function resolver(fuentes, archivoOrigen, especificador) {
   if (!especificador.startsWith(".")) return null;
   const partes = archivoOrigen.split("/").slice(0, -1);
@@ -132,50 +246,89 @@ function resolver(fuentes, archivoOrigen, especificador) {
 }
 
 /**
- * `fuentes` es un `Map<ruta, texto>`; `modelos` el `Set` que devuelve
+ * Una consulta delegada a un ayudante **no exportado** desaparecía entera: lo
+ * encontró la revisión independiente del 2026-08-31 y se comprobó por mutación.
+ * Una operación exportada **absorbe** a los ayudantes privados que llama,
+ * transitivamente; y un ayudante privado con acceso al que no llega ninguna
+ * exportada se emite como operación propia, para que tampoco ése se esconda.
+ *
+ * Sobre el árbol la absorción es una **unión de conjuntos**, no un pegado de
+ * texto: deja de depender de que el texto concatenado sea parseable.
+ */
+function absorber(h, privadas) {
+  const acc = new Set(h.accesos);
+  const lla = new Set(h.llamadas);
+  let usaPrincipal = h.usaPrincipal;
+  let acotado = h.acotado;
+  let resolutor = h.resolutor;
+  const alcanza = new Set([h.nombre]);
+  for (let cambio = true; cambio; ) {
+    cambio = false;
+    for (const [nombre, p] of privadas) {
+      if (alcanza.has(nombre)) continue;
+      if (!lla.has(nombre)) continue;
+      for (const a of p.accesos) acc.add(a);
+      for (const l of p.llamadas) lla.add(l);
+      usaPrincipal = usaPrincipal || p.usaPrincipal;
+      acotado = acotado || p.acotado;
+      resolutor = resolutor || p.resolutor;
+      alcanza.add(nombre);
+      cambio = true;
+    }
+  }
+  // `SQL-crudo` al final, como en la versión de texto.
+  const modelos = [...acc].filter((m) => m !== "SQL-crudo");
+  if (acc.has("SQL-crudo")) modelos.push("SQL-crudo");
+  return { ...h, accesos: modelos, llamadas: lla, usaPrincipal, acotado, resolutor, alcanza };
+}
+
+/**
+ * `fuentes` es un `Map<ruta, texto>`; `modelos`, lo que devuelve
  * `modelosDelEsquema`. Devuelve una fila por operación con acceso, con los ocho
  * campos que consume el resto del sistema — de los cuales las tres compuertas
  * leen cinco: `archivo`, `nombre`, `clase`, `acotado` y `guardias`.
  */
 export function analizar(fuentes, modelos) {
-  const TODOS = [...fuentes.keys()];
-  const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
+  const arboles = new Map();
+  for (const [archivo, texto] of fuentes) arboles.set(archivo, arbol(archivo, texto));
 
-  const importados = new Map();
-  for (const [archivo, src] of fuentes) {
-    const deDonde = new Map();
-    for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*"([^"]+)"/g)) {
-      const destino = resolver(fuentes, archivo, m[2]);
-      if (!destino) continue;
-      for (const parte of m[1].split(",")) {
-        const nombre = parte.trim().split(/\s+as\s+/).pop()?.trim();
-        if (nombre) deDonde.set(nombre, destino);
-      }
-    }
-    importados.set(archivo, deDonde);
+  const hechosPorArchivo = new Map();
+  for (const [archivo, sf] of arboles) {
+    const lista = unidades(sf).map((u) => {
+      const lla = llamadas(u.nodo);
+      return {
+        archivo,
+        nombre: u.nombre,
+        exportada: u.exportada,
+        accesos: accesos(u.nodo, modelos),
+        llamadas: lla,
+        usaPrincipal: usa(u.nodo, "userAccountId"),
+        acotado: acotadoPorElPrincipal(u.nodo),
+        resolutor: [...lla].some((n) => RESOLUTOR.test(n)),
+      };
+    });
+    hechosPorArchivo.set(archivo, lista);
   }
 
   /**
    * Qué funciones guardan de verdad — exportadas **o no**, y **por archivo, no
    * global**. Era un `Set` de nombres sueltos de todo el árbol, así que una
    * función llamada como un guardia de cualquier otro archivo promovía la
-   * operación a «guardia directo» sin que nada resolviera el símbolo. Un
-   * guardia local guarda en **su** archivo.
+   * operación a «guardia directo» sin que nada resolviera el símbolo. Lo señaló
+   * la revisión independiente del 2026-08-31. Un guardia local guarda en **su**
+   * archivo; los que cruzan archivos se reconocen por `import`.
    */
   const guardanPorArchivo = new Map();
-  for (const [archivo, src] of fuentes) {
-    const decl = [...src.matchAll(CUALQUIER_FN)];
-    const aqui = new Set();
-    guardanPorArchivo.set(archivo, aqui);
-    for (let i = 0; i < decl.length; i++) {
-      const ini = decl[i].index ?? 0;
-      const fin = i + 1 < decl.length ? decl[i + 1].index : src.length;
-      if (GUARDIAS.test(src.slice(ini, fin))) aqui.add(decl[i][1]);
-      GUARDIAS.lastIndex = 0;
-    }
+  for (const [archivo, lista] of hechosPorArchivo) {
+    guardanPorArchivo.set(
+      archivo,
+      new Set(lista.filter((h) => [...h.llamadas].some((n) => GUARDIA.test(n))).map((h) => h.nombre))
+    );
   }
 
-  /** Los guardias visibles desde un archivo: los que declara y los que importa. */
+  const importados = new Map();
+  for (const [archivo, sf] of arboles) importados.set(archivo, importsDe(sf, fuentes, archivo));
+
   const guardanVisiblesEn = (archivo) => {
     const propios = guardanPorArchivo.get(archivo) ?? new Set();
     // Un nombre importado cuenta sólo si guarda **en el archivo del que viene**.
@@ -185,67 +338,65 @@ export function analizar(fuentes, modelos) {
     return new Set([...propios, ...traidos]);
   };
 
-  return ops
-    .map((o) => {
-      // El filtro por `modelos` sustituye a «cualquier identificador detrás del
-      // cliente». Medido el 2026-10-04: de los 183 nombres que el inventario
-      // reporta, CERO faltan en los 205 del esquema, así que no quita nada hoy
-      // — y evita que mañana un `cache.user.create` cuente como acceso.
-      const modelosVistos = [
-        ...new Set([...o.cuerpo.matchAll(MODELOS)].map((m) => m[1]).filter((n) => modelos.has(n))),
-      ];
-      if (CRUDO.test(o.cuerpo)) modelosVistos.push("SQL-crudo");
-      CRUDO.lastIndex = 0;
-      if (modelosVistos.length === 0) return null;
-      const propios = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
-      const locales = [...guardanVisiblesEn(o.archivo)].filter(
-        (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
-      );
+  const filas = [];
+  for (const [archivo, lista] of hechosPorArchivo) {
+    const privadas = new Map(lista.filter((h) => !h.exportada).map((h) => [h.nombre, h]));
+    const exportadas = lista.filter((h) => h.exportada).map((h) => absorber(h, privadas));
+    const alcanzadas = new Set(exportadas.flatMap((o) => [...o.alcanza]));
+    const huerfanas = lista
+      .filter((h) => !h.exportada && !alcanzadas.has(h.nombre))
+      .map((h) => absorber(h, privadas));
+
+    for (const o of [...exportadas, ...huerfanas]) {
+      if (o.accesos.length === 0) continue;
+      const visibles = guardanVisiblesEn(archivo);
+      const propios = [...o.llamadas].filter((n) => GUARDIA.test(n));
+      const locales = [...visibles].filter((n) => n !== o.nombre && o.llamadas.has(n));
       const guardias = [...new Set([...propios, ...locales])];
-      const principal = /\buserAccountId\b/.test(o.cuerpo);
-      // Un salto: ¿llama a alguna función que sí guarda?
-      const transitivo = [...guardanVisiblesEn(o.archivo)].filter(
-        (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
-      );
-      /**
-       * Acotado por construcción: la consulta filtra por el propio principal.
-       * **Sólo cuenta dentro de un `where`.** Hubo una segunda regla que casaba
-       * cualquier línea terminada en `userAccountId,` — y eso son sobre todo
-       * **sellos de actor**. Firmar una escritura no es filtrar una lectura.
-       * Medido el 2026-09-21: 14 operaciones eran «acotadas» sólo por esa regla
-       * y **ninguna** filtraba por el principal.
-       */
-      const acotado = /where:\s*\{[^}]*userAccountId/s.test(o.cuerpo ?? "");
-      /** Resolutor de visibilidad: el `where` se construye desde el alcance. */
-      const resolutor = /\bresolve\w*Visibility\s*\(/.test(o.cuerpo ?? "");
-      /** Sin principal y sin guardia: la autorización, si existe, la hace quien llama. */
-      const dependeDelLlamador = !o.cuerpo?.includes("userAccountId");
-      const publica = /discover\/service/.test(o.archivo);
+      const transitivo = locales;
+      const publica = /discover\/service/.test(archivo);
       // `lib/auth/config.ts` es el flujo de autenticación en sí: corre **antes**
       // de que exista sesión, así que no hay principal contra el que autorizar.
-      const preSesion = /actions\/auth|lib\/auth\/config/.test(o.archivo);
-      const firma = /webhooks/.test(o.archivo);
+      const preSesion = /actions\/auth|lib\/auth\/config/.test(archivo);
+      const firma = /webhooks/.test(archivo);
+
+      /**
+       * **`SIN CLASIFICAR` queda inalcanzable, y se dice en vez de taparlo.** En
+       * la versión de texto `principal` usaba `\buserAccountId\b` y
+       * `dependeDelLlamador` usaba `.includes("userAccountId")` — dos pruebas
+       * **distintas**, y el hueco entre ellas era esta clase: una unidad con
+       * `actorUserAccountId` y sin `userAccountId` suelto caía aquí. Medido:
+       * **0 operaciones** en esa clase, así que el hueco estaba vacío. Con
+       * identificadores exactos las dos son complementarias y el hueco se cierra.
+       * La rama se conserva porque la Tarea 5 del plan trata justo las clases que
+       * no se asignan nunca, y ahí se decide qué hacer con las dos.
+       */
+      const principal = o.usaPrincipal;
+      const dependeDelLlamador = !o.usaPrincipal;
 
       let clase;
       if (guardias.length) clase = "guardia directo";
       else if (transitivo.length) clase = "guardia transitivo";
-      else if (acotado || resolutor) clase = "acotado por construcción";
+      else if (o.acotado || o.resolutor) clase = "acotado por construcción";
       else if (publica) clase = "público por diseño";
       else if (preSesion) clase = "previo a la sesión";
       else if (firma) clase = "firma";
       else if (principal) clase = "recibe principal, sin guardia visible";
       else if (dependeDelLlamador) clase = "depende del llamador (verificar a mano)";
       else clase = "SIN CLASIFICAR";
-      return {
-        ...o,
+
+      filas.push({
+        archivo,
+        nombre: o.nombre,
         cuerpo: undefined,
-        modelos: modelosVistos,
+        modelos: o.accesos,
         guardias,
         principal,
         transitivo,
-        acotado: acotado || resolutor,
+        acotado: o.acotado || o.resolutor,
         clase,
-      };
-    })
-    .filter(Boolean);
+      });
+    }
+  }
+  return filas;
 }

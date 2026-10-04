@@ -13,10 +13,12 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**618 operaciones** que tocan la base, en **168 archivos** — medido el 2026-10-03 con
-`node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
-`origin/main` (`193772c9`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
-rama de las lecturas de la clasificación de verde por malla):
+**624 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-04 con
+`node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
+`origin/main` (`966ada98d1`). La medición anterior, con el detector de texto, daba **618 en 168**:
+las seis que aparecen y las catorce que cambian de clase están explicadas en la nota de abajo, y
+**no hay ninguna baja** (el árbol fusionado del 2026-10-03 daba 618; el del 2026-09-26, sobre
+`origin/main` `326bd584`, otra cifra):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -25,12 +27,33 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **467** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **94** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **455** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
+| **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+| **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **El detector pasó a leer el AST (2026-10-04, `PENDING_IMPLEMENTATIONS/007`): 618→624, 168→170 archivos, cero bajas.**
+> Un acceso ya no es `prisma|aiPrisma|tx|client` seguido de un modelo: es **cualquier receptor** seguido de un modelo que
+> declare `prisma/schema.prisma`. Eso destapó **seis operaciones que no existían en el inventario** —no «sin clasificar»:
+> con cero modelos la fila se descartaba entera— sólo porque su cliente se llama `db`: `personasPermitidas`
+> (`quienLoHizo.ts`), `getGate0Status` (`amendments.ts`), `parcelaDeOrigen` (`entregasDeCosecha.ts`),
+> `intervencionesVigentes` (`intervenciones.ts`), `nombreLibreBajo` (`locations.ts`) y `ubicacionesEmparentadas`.
+> Cuatro de las seis caen en «depende del llamador» y tienen su entrada en el allowlist desde hoy.
+>
+> **Y las catorce que cambian de clase son correcciones, no movimientos.** Doce venían de **un comentario**:
+> `lib/traceability/lots.ts` línea 683 dice ``// … `can()` sube por los ancestros del recurso …``, y el detector de texto
+> contaba ese `can(` como una llamada. Con eso `resolveLotVisibility` pasaba por «guardia directo» y, al quedar
+> registrado como guardia visible de su archivo, **arrastraba a las once operaciones que lo llaman**. Ninguna de las doce
+> llama a ningún guardia: todas filtran por un `resolve*Visibility`, que es la fila «acotado por construcción» —la que
+> existe precisamente para ellas, y que el falso positivo tapaba—. La catorceava es `listScopeChoices`. **Un comentario
+> no es un nodo**, así que ninguna de las dos formas puede repetirse.
+>
+> Lo que **no** cambia: `require\w*(Access|Admin|Override)` sigue siendo una convención de **nombres** —una función que
+> no haga nada con ese nombre sigue contando como guardia—, y sigue sin decir si el guardia es el **debido**
+> (`PENDING_IMPLEMENTATIONS/005`). Lo primero sólo lo cierra el escalón 2 de la ficha 007, que es una decisión del dueño
+> por su coste en CI.
 
 > **`coberturaDelLote` autoriza cada lote dueño de un proceso (2026-10-03): ninguna cifra cambia.** Revisión final de la Parte 1,
 > ronda de arreglo 1 (Codex; registro, línea 205). Sigue en «guardia directo», en su fila: además de `requireLotAccess(view)`
