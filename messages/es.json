@@ -22,7 +22,9 @@
     "newSession": "Crear sesión de cata",
     "externalReport": "Informe externo",
     "beneficio": "Beneficio",
-    "finca": "Finca"
+    "finca": "Finca",
+    "accountMenuShort": "Cuenta",
+    "accountMenuLabel": "Idioma y sesión"
   },
   "Home": {
     "badge": "Slices 1–2 — Identidad y Descubrimiento",

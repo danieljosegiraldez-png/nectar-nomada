@@ -75,17 +75,37 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </nav>
               {/* S2 §4 — sign out does not compete for navigation space, and
                   neither does the locale switcher. Both are account controls,
-                  so they sit beside the destinations rather than among them. */}
-              <div className="nn-nav-account">
-                <LocaleSwitcher />
-                {user ? (
-                  <form action={logoutAction}>
-                    <BotonDeEnvio className="nn-link-button">
-                      {t("signOut")}
-                    </BotonDeEnvio>
-                  </form>
-                ) : null}
-              </div>
+                  so they sit beside the destinations rather than among them.
+                  **Y desde el 2026-10-04 van COLAPSADOS, decisión de Daniel.**
+                  Medido a 375 px: el ancho útil es 343 px, la marca pide 132 y
+                  este grupo 251 (la píldora ES/EN 99 + «Cerrar sesión» 136), así
+                  que marca + cuenta son 383 y desbordan por 40. El comentario del
+                  CSS ya lo había medido y por eso la cabecera se apilaba en tres
+                  filas: 138 px, el 17 % de la pantalla, en TODAS las pantallas.
+                  Una fila no se consigue recolocando — hay que encoger este
+                  grupo, que es lo que hace el `<details>`.
+
+                  `<details>` y no un desplegable con estado: es el patrón que la
+                  casa ya usa para colapsar (`app/components/apiary/Ayuda.tsx`), no
+                  necesita JavaScript, y el teclado y el lector de pantalla lo
+                  entienden sin que nadie escriba `aria-expanded`.
+
+                  El MISMO mecanismo en móvil y en escritorio, a propósito: dos
+                  caminos para lo mismo es la clase de cosa que se desincroniza el
+                  día que alguien toca uno. */}
+              <details className="nn-nav-cuenta">
+                <summary aria-label={t("accountMenuLabel")}>{t("accountMenuShort")}</summary>
+                <div className="nn-nav-cuenta-panel">
+                  <LocaleSwitcher />
+                  {user ? (
+                    <form action={logoutAction}>
+                      <BotonDeEnvio className="nn-link-button">
+                        {t("signOut")}
+                      </BotonDeEnvio>
+                    </form>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </header>
           {/* Anexo E §5 — «Una jornada abierta es visible en todas las pantallas hasta

@@ -22,7 +22,9 @@
     "newSession": "Create cupping session",
     "externalReport": "External report",
     "beneficio": "Mill",
-    "finca": "Farm"
+    "finca": "Farm",
+    "accountMenuShort": "Account",
+    "accountMenuLabel": "Language and session"
   },
   "Home": {
     "badge": "Slices 1–2 — Identity and Discovery",
