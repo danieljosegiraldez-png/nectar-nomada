@@ -1,15 +1,15 @@
 # Parte 2c — Equipos, instalaciones y capacidades
 
 **Fecha:** 2026-10-04 · **Estado:** decisiones de Daniel tomadas pregunta por pregunta (E1–E5 del
-2026-10-02 y C1–C6 de hoy); diseño aprobado en conversación; pendiente de revisión adversaria y de su
-lectura. **Medido en** `4ecdd36b` (rama `recetas-parte-2a`, con la Parte 1 fusionada; 22 commits por
-detrás de `origin/main`, ninguno toca equipos ni secado en `schema.prisma`).
+2026-10-02, C1–C10 de hoy); **corregido tras dos revisiones adversarias** (Codex, 12 hallazgos; dos
+revisores Claude con verificador, 24; §12); pendiente de su lectura. **Medido en** `009d9443` (rama
+`recetas-parte-2a`, con la Parte 1 fusionada; por detrás de `origin/main` en commits que no tocan
+equipos ni secado).
 
-**Depende de:** la **2a** (`2026-10-02-parte-2a-la-receta-con-pasos-design.md`: los pasos y su campo
-`capacidadesRequeridas`, el catálogo `capacidad`, el `modoSecado` como `DryingEnvironment`) y de la
-**2b** (`2026-10-02-parte-2b-lo-que-la-receta-vigila-design.md`: el Coffee Process Manager y su permiso
-de excepciones, V4 «ningún cambio de estado es automático»). Y de la **Parte 1** (R6: dividir con un
-proceso abierto).
+**Depende de:** la **2a** (pasos, `capacidadesRequeridas`, catálogo `capacidad`, `modoSecado` =
+`DryingEnvironment`, desviaciones), la **2b** (Coffee Process Manager y su permiso de excepciones, V4
+«ningún cambio de estado es automático», V10 «fuera de lo permitido decide quien aprueba», V14) y la
+**Parte 1** (R1 cadena, R2 un proceso abierto, R6 división bajo proceso).
 
 Criterio de Daniel: **«poder medir para poder reusar recetas y reproducir, replicar, ser consistente
 con los resultados»**. La regla de esta parte, suya: **una receta no se puede aplicar si el beneficio
@@ -19,63 +19,58 @@ no tiene con qué.**
 
 ## 1. Lo que hay hoy, medido
 
-Reconocimiento de sólo lectura del 2026-10-04: cuatro lectores y un verificador por lector; 363
-hallazgos verificados contra archivo y línea, 14 descartados.
+Reconocimiento de sólo lectura del 2026-10-04 (cuatro lectores con verificador; 363 hallazgos
+verificados, 14 descartados) y lo que las revisiones corrigieron.
 
 **Equipos**
-- Tanque, cooler, barrica, bandeja y saco son todos `Equipment` de `kind = vessel`
-  (`schema.prisma:5609`).
-- **La única capacidad guardada está en el MODELO** de equipo: `capacityValue` con `capacityUnit` en
-  texto libre (`schema.prisma:5693–5694`; `app/equipos/modelos/nuevo/page.tsx:133`). El equipo no
-  guarda litros, kg ni rasgos (sellable, válvula…): la búsqueda de `volume|litros|maxLoad|…` y de
-  `hermet|sell|anaer|refriger|…` en `schema.prisma:5585–6103` da 0 útiles (control: `capacity` da 2,
-  ambas en el modelo).
-- **Tres ejes de estado** (`schema.prisma:5634`): ciclo de vida (columna), asignación (derivada de la
-  corrida) y condición (último informe: `operational`, `needs_cleaning`, `needs_maintenance`, `faulty`,
-  `out_of_service`).
-- `clasificar` (`lib/equipos/disponibilidad.ts:62`) devuelve todos los motivos por los que un equipo
-  no está libre y sano; `disponibilidadDeRecipientes` (`lib/equipos/equipos.ts:872`) filtra por lo que
-  el usuario **puede ver**.
-- **Nadie escribe `FermentationRun.vesselEquipmentId`**: fermentar guarda sólo `vesselNote`
-  (`lib/traceability/fermentation.ts:86`), y el formulario pide el tanque como texto
-  (`FermentationForm.tsx:24`, «Tank 3»). Por eso **todo tanque sale libre** (`equipos.ts:904`).
-- El recuento de recipientes **no excluye bandejas** (`equipos.ts:874`): una bandeja cargada puede
-  salir libre. Las bandejas tienen su propio modelo de carga (una fila abierta por bandeja) y su
-  capacidad **se deriva de pesajes** (`lib/traceability/capacidadDeBandeja.ts:150`, ADR-179 punto 5).
-- **Nada retira un equipo**: `equipment.update` (`equipos.ts:313`) toca modelo, serie, código,
-  proveedor y garantía; el permiso `equipment:manage` promete «retirarlos» (`catalog.ts:85`).
-- Registran equipo `equipment:manage` (Farm Manager) o `location:edit_beneficio`; el Farm Operator sólo
-  ve e informa la condición (`catalog.ts:425`).
+- Tanque, cooler, barrica, bandeja y saco son `Equipment` `kind = vessel` (`schema.prisma:5609`);
+  `kind` tiene cuatro valores (vessel, instrument, tool, machine). `trayTypeId` sólo se llena en
+  bandejas.
+- **La única capacidad guardada está en el MODELO** (`capacityValue`, `capacityUnit` en texto libre,
+  `schema.prisma:5693–5694`). El equipo no guarda litros, kg ni rasgos (búsquedas en
+  `schema.prisma:5585–6103`: 0 útiles; control: `capacity` = 2, ambas del modelo).
+- Tres ejes de estado (`schema.prisma:5634`): ciclo de vida, asignación derivada, condición.
+  `clasificar` (`lib/equipos/disponibilidad.ts:62`) da todos los motivos; `disponibilidadDeRecipientes`
+  (`lib/equipos/equipos.ts:872`) filtra `kind: vessel` y lo que el usuario **puede ver**.
+- **Nadie escribe `FermentationRun.vesselEquipmentId`** (sólo `vesselNote`,
+  `lib/traceability/fermentation.ts:86`; el formulario pide «Tank 3», `FermentationForm.tsx:24`): todo
+  tanque sale libre (`equipos.ts:904`).
+- **Un `transfer` sólo guarda tipo, hora y nota** (`fermentation.ts:130–155`): no dice a qué equipo.
+- **La custodia** (cadena de traslados, `schema.prisma:6032`) se lee en `equipos.ts:69–73` ordenando
+  sólo por `occurredAt desc`, sin techo ni desempate; `bandejasDelSecado.ts:428–437` ya usa
+  `occurredAt <= ahora` y `createdAt desc`. Un equipo sin traslado no está en ningún sitio.
+- **Nada retira un equipo** (`equipos.ts:313`), aunque `equipment:manage` lo promete (`catalog.ts:85`).
+  `Equipment` no tiene fecha ni motivo de retiro. `resumir` contaría un retirado como «requiere
+  intervención» (`disponibilidad.ts:93–95`).
+- El tablero (`lib/beneficio/datosDelTablero.ts:447–449`) cuenta tanques filtrando sólo `kind`, así que
+  las bandejas cuentan como tanques.
 
-**Instalaciones**
-- Una instalación de secado es una `Location` `drying_facility` (`schema.prisma:728`) que cuelga del
-  **site**, no del beneficio (ADR-156, `DECISIONS.md:10953`).
-- La clasifica `DryingEnvironment` (`schema.prisma:757`): `solar_greenhouse`,
-  `dark_room_climate_controlled`, `open_patio`, `covered_patio`, `mechanical_dryer`,
-  `african_bed_outdoor`, `floor_tarp`. Hay además una columna `dryingRoomLightExposure`
-  (`schema.prisma:972`) que ninguna pantalla del beneficio escribe.
-- No existen techo, control de temperatura, cámara fría ni agua como atributo (búsqueda de
-  `roof|techo|thermal|cámara fría|cold room|…`: 0 útiles; control: `dark_room_climate_controlled` = 1).
-- **Abrir un secado no elige instalación**: la acción no pasa `locationId`
-  (`app/actions/traceability.ts:700`), aunque el servicio lo aceptaría (`drying.ts:41`). La cola de
-  secado nunca ofrece espacio libre (`colaDeSecado.ts:383`).
+**Instalaciones y lugares**
+- Tipos de lugar del beneficio: `beneficio`, `drying_facility`, `drying_rack`, `drying_bed`,
+  `storage_facility`. **No hay tipo para una cámara fría ni un cuarto de proceso.**
+- Una `drying_facility` cuelga del **site** (ADR-156), con `dryingEnvironment` **anulable** (el alta
+  admite «no declarado», `instalaciones.ts:139`). `dryingRoomLightExposure` la escribió el import de
+  Cafelino (`scripts/import-cafelino-pe.ts:90`); ninguna pantalla.
+- **Una corrida de secado no guarda instalación**: `DryingRun.locationId` es legado (no se rellena
+  hacia atrás) y `dryingBedLocationId` (`schema.prisma:4576`) **no lo escribe ninguna ruta** (el
+  `dryingBedLocationId` de `secadoForm.ts:36` es el de una inspección). La acción de empezar secado no
+  pasa lugar (`app/actions/traceability.ts:700`).
 
 **Abrir y dividir**
-- `LotProcess` no guarda equipo. El núcleo `abrirProcesoEnTx` (`procesoDelLinaje.ts:441`) lo usan
-  tres caminos: `abrirProceso`, la división y `devolverASecado`.
-- **El peso del lote no es una columna**: es el saldo del libro de masa, que puede faltar
-  (`procesoDelLinaje.ts:659`).
-- R6: dividir exige un proceso abierto, ninguna corrida abierta, y el lote entero
-  (`procesoDelLinaje.ts:610, 620`; P1 §R6). **No hay pantalla para dividir café**: la única de la ficha
-  es la de miel (`app/lots/[id]/page.tsx:688`).
+- `abrirProceso` (`lotProcess.ts:196–219`) abre su propia transacción y exige `lot:manage`
+  (`:154–158`). `AbrirProcesoInput` no trae beneficio, y `Lot.locationId` es la parcela en un lote de
+  cosecha (`harvest.ts:61`) y el beneficio sólo en uno nacido de recepción (`lotesDeBeneficio.ts:99`).
+- **R6 sólo actúa si hay un proceso abierto** (`procesoDelLinaje.ts:606–610`); **fuera de un proceso
+  las divisiones siguen como hoy** (P1 R6.6). Bajo proceso, R6 exige el lote entero con tolerancia de
+  masa, y acepta lotes sin libro de masa (`:650–666`).
+- El peso es el saldo del libro de masa: puede faltar, y con unidades mezcladas `sumQuantityEvents`
+  lanza `mixed_units` (`lib/traceability/quantity.ts:117–119`).
+- No hay pantalla para dividir café (`app/lots/[id]/page.tsx:688`, sólo miel).
 
-**Lo que la 2a ya fijó para esta parte**
-- El campo `capacidadesRequeridas` del paso, con su tabla (`stepId`, `capacidadValueId`).
-- El catálogo `capacidad` con cinco valores, en este orden: `sellable`, `valvula`, `puertos_de_gas`,
-  `control_temperatura`, `oscuridad` (plan de la 2a, T02), ampliable con su fuente.
-- El `modoSecado` del paso es el enum `DryingEnvironment`, el mismo de las instalaciones, «así receta e
-  instalación comparten vocabulario para la 2c» (registro del plan).
-- El paso **no** nombra equipo ni recipiente (decisión de Daniel, 2026-10-03).
+**Lo que la 2a fijó:** el campo `capacidadesRequeridas` del paso; el catálogo `capacidad` con
+`sellable`, `valvula`, `puertos_de_gas`, `control_temperatura`, `oscuridad` (plan, T02), ampliable; el
+`modoSecado` como `DryingEnvironment`; el paso no nombra equipo. **El Coffee Process Manager del plan
+no lleva `lot:manage`** (plan, T03).
 
 ---
 
@@ -83,172 +78,306 @@ hallazgos verificados contra archivo y línea, 14 descartados.
 
 | # | Fecha | Decisión |
 |---|---|---|
-| E1 | 2026-10-02 | Sin equipo o instalación **capaz**, no se abre el proceso. Si existe pero está **ocupado o en reparación**, se abre con **aviso de esperar** |
-| E2 | 2026-10-02 | El paso declara **capacidades**, no un equipo |
-| E3 | 2026-10-02 | Al abrir se ofrecen los equipos con **lo que les cabe**; si no cabe, se asigna lo que quepa y **el resto se divide** en otro lote (R6) |
-| E4 | 2026-10-02 | El equipo guarda **litros útiles** y **kg máximos** |
-| E5 | 2026-10-02 | Cuarto oscuro, cámara fría, secador techado y agua son **capacidades de la instalación** |
-| C1 | 2026-10-04 | **Se muestra al abrir, se elige al ejecutar.** Concilia E3 con su decisión del 2026-10-03 («el equipo concreto se elige al ejecutar, como hoy»): al abrir no se reserva nada |
-| C2 | 2026-10-04 | Sin equipo capaz **se bloquea, con excepción del Coffee Process Manager** con motivo, marcada |
-| C3 | 2026-10-04 | **Un equipo hereda las capacidades del lugar donde está** |
-| C4 | 2026-10-04 | **Kg máximos por lo que entra**: cereza entera y despulpado |
-| C5 | 2026-10-04 | **El modo de secado de la receta es requisito exacto**; cuarto oscuro y secador techado se leen del tipo de instalación |
-| C6 | 2026-10-04 | **Pantalla de dividir sólo el sobrante**, desde abrir, con códigos sugeridos |
+| E1 | 10-02 | Sin equipo o instalación **capaz**, no se abre. Si existe pero está **ocupado o en reparación**, se abre con **aviso de esperar** |
+| E2 | 10-02 | El paso declara **capacidades**, no un equipo |
+| E3 | 10-02 | Al abrir se muestra **lo que cabe**; si no cabe, **el resto se divide** en otro lote |
+| E4 | 10-02 | El equipo guarda **litros útiles** y **kg máximos** |
+| E5 | 10-02 | Cuarto oscuro, cámara fría, secador techado y agua son **capacidades del lugar** |
+| C1 | 10-04 | **Se muestra al abrir, se elige al ejecutar**: no se reserva nada |
+| C2 | 10-04 | Sin equipo capaz, **bloquea con excepción del Coffee Process Manager**, con motivo |
+| C3 | 10-04 | **Un equipo hereda las capacidades del lugar donde está** |
+| C4 | 10-04 | **Kg máximos por lo que entra** (cereza entera, despulpado) |
+| C5 | 10-04 | **El modo de secado de la receta es requisito exacto**; oscuro y techado se leen del tipo |
+| C6 | 10-04 | **Dividir sólo el sobrante**, desde abrir, con códigos sugeridos |
+| C7 | 10-04 | La excepción: **el operador abre y el proceso queda «pendiente de excepción»**; ninguna corrida empieza hasta que el Coffee Process Manager la apruebe con motivo |
+| C8 | 10-04 | **Bloquea desde el primer día** (no hay encendido por beneficio): mientras el inventario no esté declarado, toda apertura sin equipo capaz queda pendiente |
+| C9 | 10-04 | Si el lote no está en un beneficio, **quien abre elige el beneficio** |
+| C10 | 10-04 | Al ejecutar, **elegir un equipo sin las capacidades del paso se permite con motivo**; queda marcado y **cuenta como fuera de la receta** (V10: quien aprueba decide si el lote conserva el nombre) |
 
 ---
 
-## 3. Qué guarda cada equipo e instalación
+## 3. Qué guarda cada equipo y cada lugar
 
-### 3.1 El equipo
+### 3.1 El ámbito de cada capacidad
 
-- **Capacidades:** tabla nueva `EquipmentCapacity` (`equipmentId`, `capacidadValueId` → catálogo
-  `capacidad`). Las marca quien puede registrar equipo.
-- **Litros útiles:** `Equipment.litrosUtiles` (decimal, anulable).
-- **Kg máximos por lo que entra (C4):** tabla nueva `EquipmentLoadLimit` (`equipmentId`, `estado` →
-  catálogo `estado_cereza`, `kgMaximos`), única por equipo y estado. Hoy se piden dos: cereza entera y
-  despulpado; el catálogo permite más sin migración.
-- **El `capacityValue` del modelo** sirve sólo como sugerencia al dar de alta un equipo, y sólo si su
-  unidad dice litros. No se compara: su unidad es texto libre.
-- **Bandejas fuera:** todo lo de esta sección es para recipientes que no son bandeja
-  (`trayTypeId IS NULL`). Las bandejas siguen con su capacidad derivada de pesajes (ADR-179).
+Cada valor del catálogo `capacidad` declara **dónde vive** (columna de datos en el catálogo, o una
+constante junto a él):
 
-### 3.2 La instalación
+| Capacidad | Ámbito | Cómo se obtiene |
+|---|---|---|
+| `sellable`, `valvula`, `puertos_de_gas` | **equipo** | se marca en el equipo |
+| `control_temperatura` | **equipo o lugar** | se marca en el equipo (chaqueta) o en el lugar (cámara fría) |
+| `oscuridad` | **lugar** | en una `drying_facility`, se deriva de `dark_room_climate_controlled`; en otro lugar, se marca |
+| `agua` (valor nuevo) | **lugar** | se marca: el lugar tiene agua para lavar |
 
-- **Capacidades:** tabla nueva `LocationCapacity` (`locationId`, `capacidadValueId`). Para lo que no es
-  secado: cámara fría (`control_temperatura`), agua (valor nuevo `agua` del catálogo `capacidad`, con
-  su definición: el lugar tiene agua para lavar).
-- **Oscuridad y techo NO se marcan:** se leen del tipo (C5). `oscuridad` la tiene una
-  `drying_facility` con `dark_room_climate_controlled`; techado es cualquier `DryingEnvironment`
-  distinto de `open_patio`, `african_bed_outdoor` y `floor_tarp`. La columna `dryingRoomLightExposure`
-  no se usa para esto (nadie la escribe).
+El servicio **rechaza** marcar una capacidad fuera de su ámbito (`capacidad_fuera_de_ambito`).
+«Secador techado» no es capacidad: se lee del tipo de instalación (C5).
 
-### 3.3 Herencia del lugar (C3)
+### 3.2 El equipo
 
-Las capacidades **efectivas** de un equipo son las suyas **más** las de la instalación donde está
-**ahora** (el último traslado de su cadena de custodia, `schema.prisma:6032`). Se calculan al leer, no
-se copian: si el equipo se mueve, cambian con él.
+- **Candidatos a E1 (y sólo ellos llevan capacidades):** `kind = vessel`, `trayTypeId IS NULL`,
+  `lifecycleStatus = active`, de la organización del lote. Instrumentos, herramientas, máquinas y
+  bandejas no cuentan nunca, aunque estén en un lugar con capacidades. Un CHECK lo refuerza en la base.
+- **Capacidades:** `EquipmentCapacity` (`equipmentId`, `capacidadValueId`).
+- **Litros útiles:** `Equipment.litrosUtiles`.
+- **Kg máximos por lo que entra (C4):** `EquipmentLoadLimit` (`equipmentId`, `estado` → `estado_cereza`,
+  `kgMaximos`), único por equipo y estado.
+- El `capacityValue` del modelo sólo se ofrece como sugerencia de litros al dar de alta, si su unidad
+  dice litros.
+- Las bandejas siguen con su capacidad derivada de pesajes (ADR-179).
+
+### 3.3 El lugar
+
+- **`LocationCapacity`** (`locationId`, `capacidadValueId`) sobre el **`beneficio`** o cualquier lugar
+  dentro de él.
+- **Tipo nuevo `processing_room`** (cuarto de proceso: cámara fría, cuarto de fermentación), hijo del
+  beneficio — nombre nuevo para Daniel. Sin él, una cámara fría no tiene dónde existir.
+- Una `drying_facility` con `dryingEnvironment` **nulo** es «tipo sin declarar»: no satisface ningún
+  modo y sale en el inventario de huecos (§9).
+
+### 3.4 Quién las marca, y su historia
+
+- Equipo: `equipment:manage` o `edit_beneficio` en el lugar del equipo (`puedeConfigurar`,
+  `equipos.ts:79–91`). Lugar: `edit_beneficio` sobre ese lugar (como `actualizarUbicacionDeSecado`),
+  **nunca** `location:manage_attributes`, que el Farm Operator tiene.
+- **Cada cambio deja auditoría con antes y después.** Y como las marcas cambian, **al abrir y al empezar
+  se guarda qué se evaluó** (§5.4, §6): así se reproduce qué tenía un tanque cuando se usó.
+
+### 3.5 Dónde está un equipo, y qué hereda (C3)
+
+- **Ubicación vigente:** una función única compartida con `bandejasDelSecado` — el último traslado con
+  `occurredAt <= ahora`, desempatado por `createdAt desc`. **Sin traslado, el equipo no está en ningún
+  lugar** y no cuenta para E1 (sale como «sin ubicar» en el inventario de huecos).
+- **Herencia:** las capacidades efectivas de un equipo son las suyas **más** las de su lugar vigente y
+  las de sus ancestros **hasta el beneficio** (no el site). Se calculan al leer: si se mueve, cambian.
 
 ---
 
-## 4. Arreglos previos — sin ellos E1 no tiene contra qué comparar
+## 4. Arreglos previos
 
-1. **Fermentar elige el equipo.** El formulario ofrece los recipientes capaces del paso (o todos, sin
-   receta con pasos) y escribe `vesselEquipmentId`. `vesselNote` queda para notas. Sin esto, «ocupado»
-   es siempre falso.
-2. **Secar elige la instalación.** El formulario de empezar secado pide la `drying_facility` y la acción
-   pasa `locationId`.
-3. **Retirar un equipo.** Función `retirarEquipo` (ciclo de vida `retired`, con fecha y motivo,
-   auditada), con el permiso que ya lo promete (`equipment:manage`). Un equipo retirado no cuenta para
-   E1.
-4. **Las bandejas se cuentan aparte.** Los recuentos de recipientes de E1 y de disponibilidad filtran
-   `trayTypeId IS NULL`.
+1. **Fermentar elige el equipo.** El formulario lista **todos** los recipientes candidatos del beneficio
+   (§3.2), con los capaces del paso primero y marcados. El servicio valida (`kind`, sin bandeja,
+   organización, visible para quien opera) y escribe `vesselEquipmentId`. `vesselNote` queda como nota,
+   y como única vía para un tanque **no registrado** (que entonces no cuenta como ocupado, y el tablero lo
+   sigue mostrando como «unidad sin declarar»).
+2. **El recipiente vigente de una corrida** = el destino del último `transfer`, o `vesselEquipmentId`.
+   `FermentationIntervention` gana **`toEquipmentId`** (obligatorio en un `transfer`). La ocupación se
+   deriva del recipiente vigente: tras transferir A→B, A queda libre y B en uso.
+3. **Corridas abiertas sin tanque.** Acción auditada «vincular tanque» para las fermentaciones abiertas
+   con `vesselEquipmentId` nulo (escribe sólo la FK). Mientras quede alguna, el aviso de E1 dice «hay
+   corridas abiertas sin tanque vinculado: la ocupación puede ser falsa».
+4. **Secar elige el lugar.** Columna nueva `DryingRun.dryingFacilityLocationId` (la instalación, siempre)
+   y la cama en `dryingBedLocationId` cuando se elige. Las bandejas cargadas de la corrida tienen que
+   estar en esa instalación (aviso si no).
+5. **Retirar un equipo.** `Equipment.retiredAt` y `retiroMotivo`; `retirarEquipo` (`equipment:manage`,
+   auditado) **rechaza** un equipo en uso (recipiente vigente de una corrida abierta o bandeja con fila
+   abierta) con `equipo_en_uso`. `resumir` deja de contar retirados como intervención y la
+   disponibilidad los excluye.
+6. **Bandejas aparte en todas partes:** E1, `disponibilidadDeRecipientes`, `listarEquipos` y
+   `tanquesVisibles` del tablero filtran `trayTypeId IS NULL`.
 
 ---
 
 ## 5. Al abrir el proceso
 
-Vive en `abrirProceso`, **no** en `abrirProcesoEnTx`: la división y `devolverASecado` copian el proceso
-sin volver a comprobar (mismo criterio que la receta obligatoria, 2a §5.1).
+### 5.1 De qué beneficio se habla (C9)
 
-### 5.1 La comprobación (E1, C2)
+- **El beneficio del lote** = el `beneficio` igual a `lot.locationId` o ancestro suyo.
+- **Si no hay**, el formulario pide elegir uno de la organización (C9).
+- Se guarda en **`LotProcess.beneficioLocationId`**; R6 y R7 lo copian, y las corridas lo leen.
+- **Lugares del beneficio** = el beneficio y su subárbol, más las `drying_facility` de **su** site, de la
+  misma organización, no archivadas.
 
-Por cada paso de la versión con `capacidadesRequeridas` o con `modoSecado`:
+### 5.2 La comprobación (E1, C2, C5, C8)
 
-- **¿Existe en el beneficio** algún equipo **activo** (no retirado) cuyas capacidades efectivas (§3.3)
-  las incluyan **todas** — o, para un paso de secado, alguna instalación del tipo exacto del
-  `modoSecado` (C5)?
-  - **«El beneficio»** = la `Location` del beneficio y sus hijas, **más** las `drying_facility` del
-    mismo site (las instalaciones cuelgan del site, ADR-156).
-  - **Se juzga sobre el beneficio entero, no sobre lo que ve quien abre**: un operario que no ve un
-    tanque no recibe un falso «no existe».
-- **Si no existe → se rechaza** con `sin_equipo_capaz` (nombrando el paso y las capacidades que
-  faltan), **salvo excepción del Coffee Process Manager** (C2): su permiso de la 2b §12, motivo
-  obligatorio, fila `ExcepcionDeCapacidad` (proceso, paso, capacidades que faltaban, motivo, quién,
-  cuándo, `aprobadaPorQuienOpero` como en V14), auditada. La ficha del proceso la muestra.
-- **Si existe pero ninguno está libre y sano** (`clasificar`: en uso, `needs_cleaning`,
-  `needs_maintenance`, `faulty`, `out_of_service`) → **se abre con aviso** «hay que esperar: <equipos y
-  motivo>». No bloquea: puede liberarse antes de llegar a ese paso.
-- **Un paso `opcional`** que no tiene equipo capaz **avisa, no bloquea**: no hacerlo es una opción de la
-  receta.
+Por cada paso de la versión con `capacidadesRequeridas` o `modoSecado`, y según el **tipo** del paso:
 
-### 5.2 Lo que cabe (E3, C1)
+- **Paso que usa recipiente** (los que cumple una `FermentationRun`, 2a §4.1): hace falta **un mismo
+  recipiente candidato** (§3.2) cuyas capacidades **efectivas** (§3.5) incluyan **todas** las del paso.
+- **Paso que no usa recipiente** (lavado, despulpado…): hace falta **un lugar del beneficio** con todas
+  las capacidades del paso (marcadas o derivadas). Una capacidad de ámbito «equipo» en un paso así es un
+  error de la receta, que el editor de la 2a debe rechazar (`capacidad_sin_recipiente`).
+- **Paso `drying`:** hace falta **una `drying_facility` del tipo exacto del `modoSecado` (C5) Y con
+  todas las capacidades de lugar** del paso. Las dos condiciones a la vez.
 
-Para el **primer** paso que pide equipo:
-- Se lista cada equipo capaz con su `kgMaximos` del estado del lote (C4) y el peso del lote (saldo del
-  libro de masa): «Tanque II: hasta 400 kg de cereza · el lote pesa 520 kg».
-- **Sólo se muestra. No se reserva nada** (C1). El equipo lo elige quien empieza la corrida (§6).
-- **Sin peso registrado**, se dice «sin peso registrado» y no se compara. **Sin `kgMaximos`** para ese
-  estado, «capacidad sin declarar».
+Resultado:
+- **No existe** → el proceso se abre **«pendiente de excepción»** (C7, C8) y se escribe una
+  `ExcepcionDeCapacidad` sin aprobar (proceso, paso, lo que faltaba, quién abrió, cuándo). **Ninguna
+  corrida puede empezar** sobre un proceso pendiente (`proceso_pendiente_de_excepcion`, en las tres
+  puertas de empezar: fermentación, secado y cargar bandeja).
+- **Existe pero ninguno está libre y sano** (sólo para recipientes; `clasificar`) → abre con aviso de
+  esperar, nombrando lo que se ve (§5.5).
+- **Un paso `opcional`** sin nada capaz → aviso, no pendiente.
+- **Proceso sin pasos** (versión vieja) → no hay comprobación.
+- **La Libre** se comprueba igual: sobre los pasos que planeó y las capacidades que declaró. No se
+  infieren capacidades de su tipo de paso.
 
-### 5.3 Dividir el sobrante (E3, C6)
+### 5.3 Aprobar o rechazar la excepción (C7)
 
-Si el lote no cabe en ningún equipo capaz libre:
-- Se ofrece **dividir ahí mismo**: dos partes que suman el lote entero (R6), la primera con lo que cabe
-  en el equipo elegido para mirar y la segunda con el resto, con **códigos sugeridos** (`<código>-A`,
-  `<código>-B`; editables).
-- Dividir se hace **después de abrir** (R6 exige un proceso abierto): el formulario abre el proceso y,
-  en la misma acción, divide con el servicio de la Parte 1. Cada parte queda con su proceso, la misma
-  receta y su cadena (R6).
-- Dividir es una decisión de quien abre (Farm Operator, `lot:manage`): no requiere excepción.
+- **Aprobar:** el Coffee Process Manager (su permiso de la 2b §12, sin `lot:manage`), con motivo. La
+  `ExcepcionDeCapacidad` guarda quién, cuándo y por qué; el proceso deja de estar pendiente.
+  `aprobadaPorQuienOpero` (V14) = la persona que aprueba es la que abrió.
+- **Rechazar:** con motivo. El proceso se cierra con un tipo de cierre nuevo,
+  **`capacidad_rechazada`** (amplía `LotProcessClosure` de la Parte 1: sin corridas y sin medición,
+  CHECK), y el lote queda libre para abrir otro proceso con otra receta.
+- Es la **quinta excepción** del Coffee Process Manager: se añade a la 2b §12 y a su tabla de pruebas.
+
+### 5.4 Lo que se guarda al abrir
+
+Una foto `capacidadesAlAbrir` (JSON con forma fija, versionado) en el proceso: por paso, lo que pedía,
+qué candidatos había y con qué capacidades efectivas, y el resultado. Reproduce la decisión aunque las
+marcas cambien después.
+
+### 5.5 Lo que se ve, y lo que no
+
+La **existencia** se juzga sobre todo el beneficio (un operario que no ve un tanque no recibe un falso
+«no existe»). Pero **sólo se nombran** los equipos y lugares que quien abre **puede ver**; si lo que hace
+esperar es invisible, se dice «hay equipos que no ves», sin nombres.
+
+### 5.6 Lo que cabe (E3, C1, C4)
+
+Para el **primer paso que usa recipiente**:
+- Si es el **primer paso del proceso**, se compara el peso del lote con el `kgMaximos` del estado de
+  **ese paso** (su `estadoFruto`) en cada recipiente candidato: «Tanque II: hasta 400 kg de cereza · el
+  lote pesa 520 kg».
+- Si **hay pasos antes** (despulpar, lavar), la masa que llegará al tanque no se conoce: «no se compara:
+  hay pasos antes». No se infiere un peso.
+- **Sin peso comparable** (sin libro de masa, unidad distinta de kg, unidades mezcladas): «sin peso
+  comparable», y no se compara.
+- **Sólo se muestra. No se reserva nada** (C1).
+
+### 5.7 Dividir el sobrante (E3, C6)
+
+- Si el lote no cabe en ningún recipiente candidato libre, se ofrece **dividir antes de abrir**: sin
+  proceso, la división no pasa por R6 y sigue como hoy (P1 R6.6). Dos partes que suman el lote entero
+  (la pantalla lo exige con la tolerancia de masa de la organización), con **códigos sugeridos**
+  `<código>-A`, `<código>-B` (editables, sin chocar con los existentes).
+- Después se abre **cada parte por separado**, con su propia comprobación. La parte que no cabe se
+  puede volver a dividir antes de abrirla: así un lote de 1.000 kg con tanques de 400 se resuelve en
+  tres pasos, sin pantalla de N partes.
+- **Si la apertura de una parte falla, no queda nada a medias**: quedan lotes sin proceso, que se abren
+  cuando se pueda.
+- Dividir lo hace quien abre (`lot:manage`); no requiere excepción.
 
 ---
 
 ## 6. Al ejecutar
 
-- **Empezar una fermentación** elige el equipo real de la lista de capaces (§4.1): queda en
-  `vesselEquipmentId`. **Empezar un secado** elige la instalación (§4.2).
-- Si el equipo elegido está ocupado o no está sano (`clasificar`), **se avisa y no se impide**: es
-  quien está ahí quien sabe si el tanque está libre de verdad. Queda en la foto del doble indicador de la
-  2b (§4.3).
-- **Elegir un equipo sin las capacidades del paso** es una desviación (2a §4.4): pide motivo, no
-  bloquea.
-- Cambiar de equipo durante la corrida es el `transfer` de la 2b (§4.1), hecho por una persona.
+- **Empezar una fermentación** elige el recipiente (§4.1); **empezar un secado**, la instalación y, si
+  hay, la cama (§4.4).
+- **Recipiente ocupado o no sano** → aviso, no se impide. Se guarda en la corrida
+  `equipoAlEmpezar` (JSON: en uso, condición, capacidades efectivas evaluadas).
+- **Recipiente sin las capacidades del paso (C10)** → se permite con **`motivoEquipoSinCapacidad`**
+  obligatorio (columna propia en `FermentationRun` y `DryingRun`: **no** es la desviación de la 2a
+  §4.4, que es un registro sin paso). Queda marcado y **cuenta como fuera de lo permitido**: entra en la
+  decisión de V10 (2b §8.4), donde quien aprueba decide si el lote conserva el nombre de la receta.
+- **El `transfer`** pide el recipiente destino (§4.2) y repite la comprobación de capacidades del paso
+  vigente (aviso, o motivo si no las tiene).
+- **El cambio de fase de la 2b (V3b, misma corrida)** repite la comprobación con las capacidades del
+  paso nuevo sobre el recipiente vigente.
 
 ---
 
-## 7. Lo que la 2c no hace (propuestas para después)
+## 7. Lo que la 2c no hace
 
-- **La sobrepresión** (la única regla de bloqueo del paquete que toca un recipiente, 103 kPa): sólo
-  tendría sentido con la presión máxima declarada por equipo, que hoy ninguno tiene, y la cifra es de un
-  proveedor (`07…:184`, inferencia del autor). Queda fuera.
-- **El espacio libre del anaeróbico (headspace):** los litros quedan guardados, pero la fórmula del
-  paquete es ambigua (volumen nominal o útil; L contra m³, `07…:170–173`). Se calcula cuando Daniel fije
-  la definición.
-- **Reservar equipo al abrir** (C1 descartó la reserva).
-- **La pantalla general de dividir** (ensayos con variable y control, dividir un secado a mitad):
-  sigue pendiente, como en el diseño general.
-- **«Por limpiar» como estado propio** (diseño del tablero del 2026-09-29, sin construir): hoy cuenta
-  como `needs_cleaning`.
+- **La sobrepresión** (103 kPa del paquete, cifra de proveedor e inferencia del autor, `07…:184`): sin
+  presión máxima por equipo no hay contra qué comparar.
+- **El headspace del anaeróbico:** los litros quedan guardados; la fórmula del paquete es ambigua
+  (`07…:170–173`).
+- **Reservar equipo al abrir** (C1).
+- **La pantalla general de dividir** (ensayos, dividir un secado a mitad).
+- **«Por limpiar» como estado propio**: cuenta como `needs_cleaning`.
+- **Máquinas** (despulpadora, secadora mecánica) como candidatas de E1: la secadora es un tipo de
+  instalación; la despulpadora queda para cuando una receta la pida.
 
 ---
 
-## 8. Pruebas — cada guardián con su control y su flip-test
+## 8. Pruebas — cada guardián con su control y su mutación propia
 
-| Guardián | Prueba (con control) | Flip-test |
+| Guardián | Prueba (con control) | Mutación que debe hacerla caer |
 |---|---|---|
-| §5.1 existe | receta con paso `sellable`+`valvula`; beneficio sin equipo con las dos → `sin_equipo_capaz` nombrando el paso; con un GrainPro que las tiene → abre | quitar la comprobación → cae |
-| §5.1 herencia (C3) | paso `control_temperatura`; tanque sin ella **dentro** de la cámara fría → abre; el mismo tanque trasladado fuera → `sin_equipo_capaz` | copiar en vez de calcular la herencia → cae el segundo |
-| §5.1 modo exacto (C5) | receta `solar_greenhouse`; el beneficio sólo tiene `covered_patio` → rechazo; con un `solar_greenhouse` → abre | comparar por «techado» en vez de igualdad → cae |
-| §5.1 excepción (C2) | sin equipo capaz y con el Coffee Process Manager + motivo → abre, fila de excepción, marcada si operó el lote; sin motivo o con un Farm Operator → rechazo | no escribir la fila → cae |
-| §5.1 ocupado | el único tanque capaz con una fermentación abierta → abre **con aviso**; con `faulty` → abre con aviso; retirado → `sin_equipo_capaz` | tratar ocupado como inexistente → cae |
-| §5.1 opcional | paso opcional sin equipo capaz → abre con aviso | idem |
-| §5.1 visibilidad | el tanque capaz está en una ubicación que quien abre no ve → abre (existe) | filtrar por lo visible → cae |
-| §5.1 bandejas | paso `sellable`; sólo hay bandejas con esa capacidad marcada → `sin_equipo_capaz` | quitar el filtro `trayTypeId` → cae |
-| §5.2 cabe | lote 520 kg de cereza; tanque con 400 kg de cereza y 600 de despulpado → «hasta 400 kg de cereza»; lote sin libro de masa → «sin peso registrado» | comparar con el kg de otro estado → cae |
-| §5.3 dividir | abrir + dividir 400/120 → dos partes con proceso, misma receta, que suman 520, códigos `-A`/`-B`; partes que no suman → rechazo de R6 | idem |
-| §4.1 fermentar | empezar una fermentación escribe `vesselEquipmentId`; el tanque pasa a «en uso» | escribir sólo `vesselNote` → cae |
-| §4.3 retirar | retirar un equipo lo saca de E1 y de la disponibilidad, con auditoría | idem |
+| §5.2 existe | paso `sellable`+`valvula`; sólo hay un tanque con `sellable` → pendiente; con un GrainPro con las dos → abre **sin** aviso | cambiar «todas» por «alguna» |
+| §5.2 un mismo recipiente | un tanque con `sellable` y otro con `valvula` → pendiente | juntar capacidades de varios equipos |
+| §3.2 candidatos | paso `control_temperatura`; en la cámara fría hay un refractómetro y una bandeja → pendiente; con un tanque → abre | quitar el filtro de `kind` o de `trayTypeId` |
+| §3.5 herencia | tanque sin `control_temperatura` dentro de la cámara fría → abre; trasladado fuera → pendiente; traslado con fecha futura → no cuenta; dos traslados a la misma hora → gana el último creado; sin traslado → no cuenta | leer custodia sin techo o sin desempate; copiar la herencia |
+| §5.2 lugar | paso de lavado con `agua`; el beneficio la tiene marcada y ningún equipo → abre | exigir equipo en un paso sin recipiente |
+| §5.2 secado | receta `solar_greenhouse` + `oscuridad`; hay `solar_greenhouse` sin oscuridad → pendiente; `covered_patio` → pendiente; `dryingEnvironment` nulo → pendiente | aceptar el tipo sin las capacidades, o comparar por «techado» |
+| §5.3 pendiente | abrir sin capaz deja el proceso pendiente; empezar fermentación, secado o cargar bandeja → `proceso_pendiente_de_excepcion`; tras aprobar → empieza | no comprobar en una de las tres puertas |
+| §5.3 aprobar/rechazar | el Coffee Process Manager aprueba con motivo → fila completa; sin motivo o un Farm Operator → rechazo; rechazar cierra `capacidad_rechazada` y el lote admite otro proceso | no escribir la aprobación |
+| §5.2 ocupado | único tanque capaz con una fermentación abierta → abre con aviso; tras transferir esa fermentación a otro tanque → abre sin aviso | derivar ocupación de `vesselEquipmentId` ignorando el `transfer` |
+| §5.2 opcional | paso opcional sin capaz → abre sin pendiente, con aviso | bloquear también los opcionales |
+| §5.5 visibilidad | el único capaz es `confidential` y quien abre no lo ve → abre (existe) y el aviso no lo nombra | filtrar la existencia por lo visible, o nombrar lo invisible |
+| §5.6 cabe | lote 520 kg cereza, tanque 400/600 → «hasta 400 kg de cereza»; primer paso con pasos antes → «no se compara»; unidades mezcladas → «sin peso comparable» | comparar con el kg de otro estado; dejar escapar `mixed_units` |
+| §5.7 dividir | 520 → 400/120 sin proceso, códigos `-A`/`-B`; partes que no suman (fuera de tolerancia, con libro de masa) → rechazo y **ningún proceso abierto** | abrir antes de dividir |
+| §5.1 beneficio | lote de parcela sin beneficio → el formulario lo pide; se guarda y R6 lo copia | resolver por `lot.locationId` sin subir al ancestro |
+| §6 equipo incapaz | paso `sellable`, tanque abierto, sin motivo → rechazo; con motivo → guarda y aparece en la decisión de V10 | aceptar sin motivo |
+| §4.5 retirar | retirar un tanque en uso → `equipo_en_uso`; libre → retirado, fuera de E1 y de la disponibilidad, no cuenta como intervención | no filtrar `lifecycleStatus` |
+| §4.6 tablero | una bandeja vacía no cuenta como tanque libre en el tablero | quitar el filtro en `tanquesVisibles` |
+| §3.1 ámbito | marcar `sellable` en un lugar o `agua` en un equipo → `capacidad_fuera_de_ambito` | quitar la comprobación |
+| §3.4 permiso | un Farm Operator con `manage_attributes` marca `agua` → rechazo | usar `manage_attributes` |
 
-Si una tarea toca TypeScript, su plan manda `npm run build`. Los textos nuevos, en es y en.
+Si una tarea toca TypeScript, su plan manda `npm run build`. Textos en es y en.
 
 ---
 
-## 9. Dependencia y orden
+## 9. Despliegue
 
-Se construye **después de la 2a** (necesita los pasos, el catálogo `capacidad` y el campo
-`capacidadesRequeridas`) y **de la 2b** (el permiso del Coffee Process Manager). Los cuatro arreglos de
-§4 no dependen de la 2a y pueden ir antes, como PR propio, si conviene: son los que hacen verdadero el
-«ocupado» que ya pinta el tablero.
+C8: bloquea desde el primer día. Para que eso no deje el beneficio parado sin saber por qué:
+- **Inventario de huecos**, en la configuración del beneficio: equipos sin ubicar, recipientes sin
+  capacidades ni kg máximos, instalaciones sin tipo, corridas abiertas sin tanque vinculado.
+- Cada apertura pendiente nombra **qué faltaba**, para que la excepción se apruebe sabiendo por qué y
+  para que el inventario se complete por lo que de verdad se usa.
 
-**Al escribirse este diseño** hay que actualizar la frase del plan de la 2a (T15) que dice que la 2c no
-tiene diseño escrito.
+---
+
+## 10. Nombres nuevos para que Daniel los revise
+
+`EquipmentCapacity`, `EquipmentLoadLimit`, `litrosUtiles`, `kgMaximos`, `LocationCapacity`,
+`processing_room`, `agua` (valor de `capacidad`), `retiredAt`, `retiroMotivo`, `toEquipmentId`,
+`dryingFacilityLocationId`, `beneficioLocationId`, `ExcepcionDeCapacidad`, `capacidad_rechazada`,
+`capacidadesAlAbrir`, `equipoAlEmpezar`, `motivoEquipoSinCapacidad`, y los códigos
+`capacidad_fuera_de_ambito`, `capacidad_sin_recipiente`, `proceso_pendiente_de_excepcion`,
+`equipo_en_uso`.
+
+---
+
+## 11. Dependencia y orden
+
+- Después de la **2a** (pasos, catálogo, campo) y de la **2b** (permiso del Coffee Process Manager,
+  V10, la foto del doble indicador).
+- **Pueden ir antes, como PR propio,** los arreglos que no dependen de recetas: §4.1 (elegir tanque),
+  §4.2 (`toEquipmentId`), §4.3 (vincular tanque), §4.5 (retirar) y §4.6 (bandejas aparte). Son los que
+  hacen verdadero el «ocupado» que ya pinta el tablero. §4.4 (lugar del secado) también.
+- **Cambia otros diseños:** la 2b §12 gana la quinta excepción; la Parte 1 gana el cierre
+  `capacidad_rechazada` y la copia de `beneficioLocationId` en R6/R7; el plan de la 2a (T15) tiene dos
+  frases que dicen que la 2c no tiene diseño (sus líneas ~1329–1335 y ~1444).
+
+---
+
+## 12. Revisión adversaria del 2026-10-04
+
+Codex (12 hallazgos) y dos revisores Claude con lentes distintas —veracidad del código y huecos—, cada
+uno con un verificador escéptico (24 hallazgos, 24 confirmados). Los de Codex que dependían del código
+se comprobaron (`fermentation.ts:130–155`, `equipos.ts:69–73`, `bandejasDelSecado.ts:428–437`,
+`lotProcess.ts:196–219`, `procesoDelLinaje.ts:650–666`). Cuatro eran de Daniel y los decidió (C7–C10).
+
+| Hallazgo | Corrección |
+|---|---|
+| Instrumentos, herramientas y máquinas heredaban capacidades y satisfacían E1 | §3.2: candidatos = recipientes sin bandeja, activos |
+| Las capacidades de lugar sólo se satisfacían con un equipo dentro | §3.1 ámbitos y §5.2 por tipo de paso |
+| En secado, el modo exacto sustituía a las capacidades («o») | §5.2: las dos a la vez |
+| «El beneficio» del lote no se sabía resolver; varios sites; equipo sin ubicar | §5.1 y §3.5 (C9) |
+| Premisa falsa: R6 no exige proceso abierto; abrir y dividir no era atómico | §5.7: dividir antes de abrir |
+| El sobrante que tampoco cabe no se podía volver a dividir | §5.7: cada parte se divide antes de abrirla |
+| El `transfer` no dice a qué tanque; el cambio de fase no comprobaba | §4.2 y §6 |
+| Las fermentaciones abiertas con `vesselNote` seguían «libres» | §4.3 |
+| La excepción no tenía flujo: el Process Manager no tiene `lot:manage` | §5.3 (C7), con rechazo |
+| «Equipo incapaz» no cabía en la desviación de la 2a; la foto de la 2b no guarda equipo | §6: columna propia y `equipoAlEmpezar` (C10) |
+| Marcas mutables sin historia; permisos de lugar sin fijar | §3.4 y §5.4 |
+| Retirar sin columnas ni regla con equipo en uso; tablero con bandejas | §4.5 y §4.6 |
+| Custodia sin techo ni desempate | §3.5 |
+| Peso y estado comparados con lo que no entra al tanque; unidades | §5.6 |
+| Se nombraban equipos invisibles | §5.5 |
+| El arranque bloquearía todo sin explicar | §9 (C8) |
+| Pruebas con flip «idem» y sin controles | §8: mutación propia por fila |
+| Afirmaciones falsas: `dryingRoomLightExposure` «nadie la escribe»; «hace verdadero el ocupado» | §1 y §11 corregidos |

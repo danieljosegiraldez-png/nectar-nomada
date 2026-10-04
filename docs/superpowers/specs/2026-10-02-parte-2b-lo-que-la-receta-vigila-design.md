@@ -319,6 +319,7 @@ Es una lectura calculada. **Sólo el operario** registra el cambio de fase.
 | §12 roles | un Farm Operator pide la excepción → rechazo; un Farm Manager sin el perfil nuevo → rechazo; un Process Manager → pasa | dar el permiso al Farm Manager de serie → cae |
 | §12 misma persona | el Process Manager que registró una corrida del lote aprueba su excepción → pasa con `aprobadaPorQuienOpero = true`; otro Process Manager → `false` | no comprobar la cadena → cae |
 | V15 límites | un Farm Operator cambia días de reposo u objetivo de humedad → rechazo; el Process Manager sin motivo → rechazo; con motivo → pasa con rastro | volver a `lot:manage` → cae |
+| 2c §5.3 capacidad | aprobar la excepción de capacidad sin el permiso del Process Manager → rechazo; con él y motivo → el proceso deja de estar pendiente | idem |
 | V16 recetas | publicar o versionar sin el permiso del Process Manager → rechazo | idem |
 
 Si una tarea toca TypeScript, su plan manda `npm run build`.
@@ -358,6 +359,8 @@ y que el farm manager puede no ser «el del beneficio o el process manager»
   —nombre provisional `lot:approve_exception`— que cubre:
   - las cuatro excepciones: venta temprana (V1), reposo desconocido (V1b), sobresecado (V11) y
     conservar o no el nombre fuera de lo permitido (V10);
+  - **la quinta, de la 2c (C7):** aprobar o rechazar un proceso abierto «pendiente de excepción» por
+    falta de equipo o instalación capaz (`2026-10-04-parte-2c-equipos-y-capacidades-design.md` §5.3);
   - cambiar en un lote los días de reposo y el objetivo de humedad, con motivo obligatorio (V15);
   - **publicar y versionar recetas** (V16) — esto toca la 2a: su plan decía «publicar y convertir
     exigen `edit_beneficio`»; pasa a exigir el permiso del Process Manager. Anotado en su registro.
