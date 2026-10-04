@@ -627,11 +627,23 @@ async function curvaDeUnLote(
   // nada no se escribe qué pasa si espera. Y con una fase de secado también: la matriz es de fermentación.
   const perfilDelLote = perfilDeLaFaseAbierta(abierta);
 
+  // **¿Se supo qué receta aplicaba?** (`PENDING_IMPLEMENTATIONS/019`.) `objetivos` sale de
+  // `abierta?.lotProcess?.processRecipeVersion?.targets ?? []`, así que **sin corrida abierta está
+  // vacío porque no se consultó ninguna receta**, no porque la receta no declare rango. Las dos
+  // llegaban a la pantalla como una sola frase —«esta variable no tiene rango declarado en la
+  // receta»— que afirma sobre una receta que nadie miró. Es la misma forma que esta rama existe
+  // para impedir: una consulta que no recupera nada leída como un hecho.
+  //
+  // Resuelta = hay corrida abierta Y esa corrida tiene versión de receta. Con cualquiera de las dos
+  // ausentes no se afirma nada de la receta; se dice que no se pudo resolver.
+  const recetaResuelta = abierta?.lotProcess?.processRecipeVersion != null;
+
   const curva = curvaDeLote({
     lecturas: mediciones
       .filter((m) => !corregidas.has(m.id))
       .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
     objetivos,
+    recetaResuelta,
     ancho,
     alto,
   });

@@ -547,3 +547,23 @@ export function instrumentosQuePidenAtencion(
 ): readonly EquipoParaTablero[] {
   return equipos.filter((e) => e.kind === "instrument" && PIDEN_ATENCION.has(e.verificacion));
 }
+
+/**
+ * **Los instrumentos que esta cuenta VE**, pidan o no atención
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * Hace falta para distinguir «ninguno pide atención» de «no ves ninguno», que es el defecto de
+ * 019(a): la pantalla decía lo primero sobre una lista vacía, y lo vacío puede ser que no haya
+ * nada que mirar. `DatosDelTablero.instrumentos` lleva **todo el equipo visible** con su `kind`
+ * —`datosDelTablero.ts:516` no filtra—, así que contar esa lista haría decir «ninguno pide
+ * atención» a una cuenta que ve tanques y **cero instrumentos**: la misma mentira con otra cara.
+ * Yo escribí esa versión y una de mis propias pruebas la daba por buena.
+ *
+ * El filtro de `kind` vive aquí, al lado del otro, para que la regla de qué cuenta como
+ * instrumento esté en un solo sitio: duplicarla en la pantalla es cómo se pierde.
+ */
+export function instrumentosVisibles(
+  equipos: readonly EquipoParaTablero[],
+): readonly EquipoParaTablero[] {
+  return equipos.filter((e) => e.kind === "instrument");
+}

@@ -1309,3 +1309,90 @@ describe("la corrida que sale del tablero es la del aviso, y la curva abre ésa 
     ).toBe(1);
   });
 });
+
+/**
+ * **«No se pudo resolver la receta» NO es «la receta no declara rango»**
+ * (`PENDING_IMPLEMENTATIONS/019`).
+ *
+ * `objetivos` sale de `abierta?.lotProcess?.processRecipeVersion?.targets ?? []`, así que sin
+ * corrida abierta está vacío **porque no se consultó ninguna receta**. La pantalla lo decía como
+ * «esta variable no tiene rango declarado en la receta»: una afirmación sobre algo que nadie miró.
+ *
+ * Este guardia vive en el carril con base a propósito. `curvaDeLote` acepta `recetaResuelta`
+ * **opcional** —con `true` por omisión, para no reescribir 82 llamadas de prueba que hablan de
+ * bandas y ejes—, y ese valor por omisión es el riesgo: un sitio que lo olvide vuelve a afirmar
+ * sobre la receta. Lo que lo cubre es esta prueba, que no construye la curva a mano: pide el
+ * tablero de verdad y comprueba que el **único sitio de producción** lo pasa.
+ *
+ * Flip-test: quitar `recetaResuelta` de la llamada de `datosDelTablero.ts` hace caer las dos
+ * primeras y deja pasar el control.
+ */
+describe("sin corrida abierta la curva no afirma nada sobre la receta (019)", () => {
+  const LIENZO = { ancho: 300, alto: 100 };
+  let sinCorrida: string, sinReceta: string, conReceta: string;
+
+  beforeAll(async () => {
+    // (a) lecturas y NINGUNA corrida: nunca hubo de dónde sacar una receta.
+    sinCorrida = await loteSimple("L-019-SIN-CORRIDA", miSitio, miOrgId);
+    await medicionDe(sinCorrida, "ph", 4.2, haceHoras(5));
+
+    // (b) corrida abierta cuyo proceso NO apunta a ninguna versión de receta. Es la mitad que una
+    // condición escrita sólo sobre `abierta` se dejaría fuera: hay corrida, y receta no hay.
+    sinReceta = await loteSimple("L-019-SIN-RECETA", miSitio, miOrgId);
+    const procesoPelado = await procesoDe(sinReceta, { natural: true });
+    await fermentacionDe(sinReceta, { lotProcessId: procesoPelado, inicio: haceHoras(8) });
+    await medicionDe(sinReceta, "ph", 4.3, haceHoras(5));
+
+    // (c) **EL CONTROL**: corrida abierta con versión de receta que declara algo para OTRA
+    // variable. La receta SÍ se resolvió y de verdad no declara rango para pH, así que aquí la
+    // frase de siempre es cierta. Si este caso saliera igual que (a) y (b), el indicador no mide.
+    const receta = await prisma.processRecipe.create({
+      data: { name: nombre("receta sin ph"), organizationId: miOrgId, status: "approved" },
+    });
+    recetaIds.push(receta.id);
+    const version = await prisma.processRecipeVersion.create({
+      data: {
+        recipeId: receta.id,
+        version: 1,
+        status: "approved",
+        targets: {
+          create: [{
+            variable: "brix", moment: "during", phase: "fermentation",
+            minValue: 18, maxValue: 24, targetValue: 21, unit: "°Bx",
+          }],
+        },
+      },
+    });
+    versionIds.push(version.id);
+    conReceta = await loteSimple("L-019-CON-RECETA", miSitio, miOrgId);
+    const procesoConReceta = await procesoDe(conReceta, { versionId: version.id, natural: true });
+    await fermentacionDe(conReceta, { lotProcessId: procesoConReceta, inicio: haceHoras(8) });
+    await medicionDe(conReceta, "ph", 4.4, haceHoras(5));
+  });
+
+  const curvaPhDe = async (lotId: string) => {
+    const { curva } = await datosDelTablero(operario, ahora, { curva: { lotId, variable: "ph", ...LIENZO } });
+    // Sin esta fila, una curva nula haría pasar cualquier aserción sobre `eleccion` por accidente.
+    expect(curva, "la curva tiene que existir, o lo de abajo no mide nada").not.toBeNull();
+    return curva!;
+  };
+
+  it("sin ninguna corrida dice que no se pudo resolver, no que la receta no declare rango", async () => {
+    const c = await curvaPhDe(sinCorrida);
+    expect(c.eleccion).toEqual({ tipo: "receta_no_resuelta" });
+    // Control: las lecturas SÍ se traen. «Sin banda» no es «sin curva».
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.2]);
+  });
+
+  it("con corrida abierta pero SIN versión de receta, tampoco se resolvió", async () => {
+    const c = await curvaPhDe(sinReceta);
+    expect(c.eleccion).toEqual({ tipo: "receta_no_resuelta" });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.3]);
+  });
+
+  it("CONTROL: con versión de receta que no declara pH, sí se afirma que no declara rango", async () => {
+    const c = await curvaPhDe(conReceta);
+    expect(c.eleccion).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(c.lecturas.map((l) => l.value)).toEqual([4.4]);
+  });
+});

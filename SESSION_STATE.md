@@ -149,7 +149,8 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 
 - **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS/014`–`021`.**
+- **`PENDING_IMPLEMENTATIONS/014` y `021`: decisiones tuyas.** Las 015, 016, 017, 018 y 019 están
+  hechas (2026-10-03) y esperan tu fusión, encadenadas: #603 → #605 → #608 → #611 → #617.
 - **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
   en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
   incumplida a propósito**. El detalle está en la entrada «Los ejes de la curva, y una cita que sólo

@@ -437,27 +437,73 @@ describe("elegirObjetivo — nunca elige por ti entre dos momentos", () => {
   const o = (momento: "initial" | "during" | "final") =>
     ({ momento, minValue: 4.0, maxValue: 5.0, targetValue: 4.5 }) as const;
 
+  // El `true` de cada llamada dice «la receta SÍ se resolvió» (019): sin él no se distinguiría de
+  // «no se pudo saber qué receta aplicaba», que es el caso del bloque de más abajo.
   it("sin objetivos declarados no hay objetivo", () => {
-    expect(elegirObjetivo([])).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(elegirObjetivo([], true)).toEqual({ tipo: "sin_objetivo_declarado" });
   });
 
   it("`during` gana sobre los otros dos: es el único que describe una trayectoria", () => {
-    expect(elegirObjetivo([o("initial"), o("during"), o("final")])).toEqual({
+    expect(elegirObjetivo([o("initial"), o("during"), o("final")], true)).toEqual({
       tipo: "elegido", objetivo: o("during"),
     });
     // Control de orden: gana igual si llega al final de la lista.
-    expect(elegirObjetivo([o("final"), o("during")])).toEqual({ tipo: "elegido", objetivo: o("during") });
+    expect(elegirObjetivo([o("final"), o("during")], true)).toEqual({ tipo: "elegido", objetivo: o("during") });
   });
 
   it("un solo objetivo, sea `initial` o `final`, se elige", () => {
-    expect(elegirObjetivo([o("initial")])).toEqual({ tipo: "elegido", objetivo: o("initial") });
-    expect(elegirObjetivo([o("final")])).toEqual({ tipo: "elegido", objetivo: o("final") });
+    expect(elegirObjetivo([o("initial")], true)).toEqual({ tipo: "elegido", objetivo: o("initial") });
+    expect(elegirObjetivo([o("final")], true)).toEqual({ tipo: "elegido", objetivo: o("final") });
   });
 
   it("`initial` y `final` juntos sin `during`: NO elige, y nombra los momentos que había", () => {
-    expect(elegirObjetivo([o("final"), o("initial")])).toEqual({
+    expect(elegirObjetivo([o("final"), o("initial")], true)).toEqual({
       tipo: "varios_sin_trayectoria", momentos: ["initial", "final"],
     });
+  });
+});
+
+/**
+ * **«No se pudo resolver la receta» NO es «la receta no declara rango»** (`PENDING_IMPLEMENTATIONS/019`).
+ * Las dos llegan aquí como una lista vacía de objetivos, y hasta ahora las dos salían como
+ * `sin_objetivo_declarado`, que la pantalla pinta afirmando algo **sobre la receta**. Sin corrida
+ * abierta nadie consultó ninguna receta: lo único demostrado es que la consulta no recuperó nada.
+ *
+ * El indicador entra **obligatorio** porque el defecto es precisamente no haberlo dicho: con un valor
+ * por omisión, un sitio que lo olvide vuelve a afirmar sobre la receta sin haberla mirado.
+ */
+describe("elegirObjetivo — una lista vacía tiene DOS motivos y no dicen lo mismo (019)", () => {
+  const o = (momento: "initial" | "during" | "final") =>
+    ({ momento, minValue: 4.0, maxValue: 5.0, targetValue: 4.5 }) as const;
+
+  it("sin receta resuelta no se afirma nada sobre la receta", () => {
+    expect(elegirObjetivo([], false)).toEqual({ tipo: "receta_no_resuelta" });
+  });
+
+  // **El control que TIENE que salir distinto.** Si las dos filas dieran lo mismo, el indicador no
+  // mide nada y la prueba de arriba pasaría con el defecto puesto.
+  it("control: la MISMA lista vacía, con la receta resuelta, sigue diciendo que no declara rango", () => {
+    expect(elegirObjetivo([], true)).toEqual({ tipo: "sin_objetivo_declarado" });
+  });
+
+  // Un indicador en `false` no puede borrar un rango que la receta SÍ declara: si hay objetivos,
+  // la receta se resolvió, y quien llame mal no cambia eso.
+  it("con objetivos declarados el indicador no manda", () => {
+    expect(elegirObjetivo([o("during")], false)).toEqual({ tipo: "elegido", objetivo: o("during") });
+    expect(elegirObjetivo([o("initial"), o("final")], false)).toEqual({
+      tipo: "varios_sin_trayectoria", momentos: ["initial", "final"],
+    });
+  });
+
+  it("curvaDeLote lo propaga, y los puntos se siguen dibujando", () => {
+    const c = curvaDeLote({
+      lecturas: [{ occurredAt: t(10), value: 4.8 }, { occurredAt: t(14), value: 4.2 }],
+      objetivos: [], recetaResuelta: false, ancho: 300, alto: 120,
+    });
+    expect(c.eleccion).toEqual({ tipo: "receta_no_resuelta" });
+    // La banda es otra unión y no cambia: no hay banda en ninguno de los dos motivos.
+    expect(c.banda).toEqual({ tipo: "sin_objetivo_declarado" });
+    expect(c.puntos).toHaveLength(2);
   });
 });
 

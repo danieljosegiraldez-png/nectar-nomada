@@ -211,12 +211,30 @@ export function indiceDeLaUnicaEnElExtremo(
 export type EleccionDeObjetivo =
   | { readonly tipo: "elegido"; readonly objetivo: ObjetivoDeCurva }
   | { readonly tipo: "sin_objetivo_declarado" }
+  /**
+   * **No se pudo saber qué receta aplicaba** (`PENDING_IMPLEMENTATIONS/019`). Distinto de
+   * `sin_objetivo_declarado`, que afirma algo **sobre la receta**: aquí no se consultó ninguna.
+   * Sin corrida abierta —o con una corrida sin versión de receta— lo único demostrado es que la
+   * consulta no recuperó nada, y eso no autoriza a hablar de lo que la receta declara.
+   */
+  | { readonly tipo: "receta_no_resuelta" }
   | { readonly tipo: "varios_sin_trayectoria"; readonly momentos: readonly MomentoDeObjetivo[] };
 
 const ORDEN_DEL_TIEMPO: readonly MomentoDeObjetivo[] = ["initial", "during", "final"];
 
-export function elegirObjetivo(objetivos: readonly ObjetivoDeCurva[]): EleccionDeObjetivo {
-  if (objetivos.length === 0) return { tipo: "sin_objetivo_declarado" };
+/**
+ * `recetaResuelta` entra **obligatorio y sin valor por omisión**: el defecto de 019 era
+ * precisamente que nadie lo decía, y un valor por omisión deja que un sitio nuevo vuelva a
+ * afirmar sobre una receta que no miró. Con objetivos en la lista el indicador no manda —si hay
+ * objetivos, la receta se resolvió— así que no puede borrar un rango que de verdad existe.
+ */
+export function elegirObjetivo(
+  objetivos: readonly ObjetivoDeCurva[],
+  recetaResuelta: boolean,
+): EleccionDeObjetivo {
+  if (objetivos.length === 0) {
+    return recetaResuelta ? { tipo: "sin_objetivo_declarado" } : { tipo: "receta_no_resuelta" };
+  }
   const trayectoria = objetivos.find((o) => o.momento === "during");
   if (trayectoria) return { tipo: "elegido", objetivo: trayectoria };
   if (objetivos.length === 1) return { tipo: "elegido", objetivo: objetivos[0]! };
@@ -239,14 +257,29 @@ export function curvaDeLote(input: {
    * Cuál rige la curva lo decide `elegirObjetivo` aquí dentro, y la respuesta sale en
    * `Curva.eleccion`: quien llama no elige, y por tanto no puede elegir mal.
    *
-   * Vacío = la receta no declara nada para esta variable, que es un estado legítimo y frecuente.
+   * **Vacío tiene DOS motivos y no dicen lo mismo** (`PENDING_IMPLEMENTATIONS/019`): la receta se
+   * consultó y no declara nada para esta variable —legítimo y frecuente—, o **no se pudo saber qué
+   * receta aplicaba**. Los distingue `recetaResuelta`, no esta lista. Esta línea decía sólo lo
+   * primero, y por eso la pantalla afirmaba sobre la receta sin haberla mirado.
    */
   readonly objetivos: readonly ObjetivoDeCurva[];
+  /**
+   * **¿Se supo qué receta aplicaba?** `false` cuando no hay corrida abierta, o cuando la corrida
+   * no tiene versión de receta: entonces `objetivos` está vacío porque no se consultó nada.
+   *
+   * Opcional **sólo aquí**, con `true` por omisión, y el motivo es medido: 82 llamadas de prueba
+   * construyen curvas para medir bandas y ejes, donde la resolución de la receta no es el asunto,
+   * y obligarlas a repetirlo son 82 ediciones en los mismos archivos cuyos conflictos de
+   * encadenado ya costaron 59 errores de sintaxis. En `elegirObjetivo` —la casa de la regla— es
+   * obligatorio, y el único sitio de producción que llama aquí lo pasa siempre: lo exige el
+   * guardia de `datos-del-tablero.test.ts` en el carril con base.
+   */
+  readonly recetaResuelta?: boolean;
   readonly ancho: number;
   readonly alto: number;
 }): Curva {
   const { ancho, alto } = input;
-  const eleccion = elegirObjetivo(input.objetivos);
+  const eleccion = elegirObjetivo(input.objetivos, input.recetaResuelta ?? true);
   const objetivo = eleccion.tipo === "elegido" ? eleccion.objetivo : null;
   const lecturas = [...input.lecturas].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
