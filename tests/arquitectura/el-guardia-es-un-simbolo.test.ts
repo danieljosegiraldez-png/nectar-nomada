@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { analizar } from "../../scripts/inventario/analizar.mjs";
 import { modelosDelEsquema } from "../../scripts/inventario/esquema.mjs";
 import { autorizacionPorSimbolo, clave } from "../../scripts/inventario/simbolos.mjs";
+import declaracion from "../../docs/arquitectura/permiso-por-dominio.json";
 
 const RAIZ = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const IGNORA = /node_modules|\.next|generated|\.git/;
@@ -135,5 +136,98 @@ describe("el guardia se resuelve hasta su símbolo", () => {
     // como un guardia que discrimina.
     expect(conocidas.has(llave), `${llave} no existe en el grafo: la aserción no mide`).toBe(true);
     expect(S.autorizan.has(llave)).toBe(esperado);
+  });
+});
+
+
+/**
+ * **¿Es el guardia EL DEBIDO?** `PENDING_IMPLEMENTATIONS/005`, la propiedad que
+ * le quedaba — decisión de Daniel del 2026-10-04.
+ *
+ * El escalón 2 de la 007 cierra que **haya** un guardia de verdad. Esto cierra
+ * otra cosa: que el permiso que exige **corresponda al dato que toca**. La 005
+ * dice que eso *«no lo da ningún inventario, porque no es una forma que se pueda
+ * reconocer — hay que decir, por dominio, qué permiso corresponde a qué dato, y
+ * comprobarlo»*. La declaración está en
+ * `docs/arquitectura/permiso-por-dominio.json`; esto la comprueba.
+ *
+ * **Por qué vive en ESTE archivo y no en el suyo.** Un `ts.Program` cuesta ~1,8 GB
+ * y ~20 s, y esta máquina tiene un OOM registrado en `CLAUDE.md` de un día en que
+ * dos pasos cayeron con el mismo 134. Dos archivos de prueba serían dos Programs
+ * en dos trabajadores de vitest a la vez. Comparten el de arriba a propósito.
+ *
+ * **Y la 005 rechazó un token universal para todo Prisma** —el `AuthzContext`, en
+ * compuerta 2, «el coste no vale la garantía»—. Esto es la otra vía que ella misma
+ * sugiere: por dominio, empezando por el de más consecuencia, que es el lote.
+ */
+describe("el permiso que exige una operación corresponde al dato que toca", () => {
+  const dominio = declaracion.dominios[0]!;
+  const gobernados = new Set(dominio.gobierna);
+  const permiso = dominio.permiso;
+  const declaradas = new Map(
+    dominio.excepciones.map((e) => [clave(e.archivo, e.operacion), e] as const)
+  );
+  /** Las del dominio que llevan clase de guardia: las que tienen algo que verificar. */
+  const delDominio = filas.filter(
+    (f) => f.modelos.some((m) => gobernados.has(m)) && f.clase.startsWith("guardia")
+  );
+
+  it("la declaración nombra un dominio con modelos y el inventario lo alcanza", () => {
+    expect(gobernados.size, "un dominio sin modelos no verifica nada").toBeGreaterThan(5);
+    expect(delDominio.length, "si ninguna operación toca el dominio, el verde no mide").toBeGreaterThan(20);
+    /**
+     * **Cada modelo declarado tiene que EXISTIR en el esquema.** No es ceremonia:
+     * la primera versión de esta declaración traía `lotClassification`,
+     * `lotStorageMove` y `greenSample`, inventados leyendo la prosa de la ficha
+     * 005 — ninguno es un modelo de Prisma. Un nombre inventado no gobierna nada
+     * y el guardia pasaría en verde sobre un dominio vacío.
+     */
+    const delEsquema = modelosDelEsquema(readFileSync(join(RAIZ, "prisma/schema.prisma"), "utf8"));
+    const inventados = [...gobernados].filter((m) => !delEsquema.has(m));
+    expect(inventados, "no son modelos de prisma/schema.prisma: un nombre inventado no gobierna nada")
+      .toEqual([]);
+    const sinTocar = [...gobernados].filter((m) => !filas.some((f) => f.modelos.includes(m)));
+    expect(sinTocar.length, `declarados y sin una sola operación que los toque: ${sinTocar.join(", ")}`)
+      .toBeLessThan(gobernados.size / 2);
+  });
+
+  /**
+   * **El guardia.** Toda operación que toque un modelo del dominio tiene que
+   * exigir su permiso — o estar declarada con su razón. Medido el 2026-10-04:
+   * 83 con clase de guardia, 70 exigen `lot`, y las 13 restantes están
+   * declaradas una a una.
+   */
+  it("toda operación del dominio exige su permiso, o está declarada con su razón", () => {
+    const sinExplicar = delDominio
+      .filter((f) => !(S.recursos.get(k(f))?.has(permiso) ?? false))
+      .filter((f) => !declaradas.has(k(f)))
+      .map((f) => `${k(f)}  [${[...(S.recursos.get(k(f)) ?? [])].sort().join(", ") || "sin permiso resuelto"}]`);
+    expect(
+      sinExplicar,
+      `toca un modelo que gobierna «${permiso}» y no lo exige. Si el permiso correcto es otro, ` +
+        "decláralo en docs/arquitectura/permiso-por-dominio.json con su razón; si no, ponle el guardia debido."
+    ).toEqual([]);
+  });
+
+  /** Cada excepción dice por qué. Una sin razón es una bendición en blanco. */
+  it("cada excepción declarada tiene su razón escrita", () => {
+    for (const e of dominio.excepciones) {
+      expect(e.razon?.trim(), `${e.archivo}:${e.operacion} sin razón`).toBeTruthy();
+      expect(e.veredicto?.trim(), `${e.archivo}:${e.operacion} sin veredicto`).toBeTruthy();
+    }
+  });
+
+  /**
+   * **Detector de podredumbre**, el mismo que ya tiene la allowlist de acceso: una
+   * excepción que ya no aplica —porque la operación desapareció, o porque ya exige
+   * el permiso— se borra, no se queda bendiciendo algo que no existe.
+   */
+  it("ninguna excepción declarada sobra", () => {
+    const vivas = new Set(delDominio.map(k));
+    const fantasmas = [...declaradas.keys()].filter((llave) => !vivas.has(llave));
+    expect(fantasmas, "la operación ya no toca el dominio o ya no existe: bórralas de la declaración")
+      .toEqual([]);
+    const yaLoExigen = [...declaradas.keys()].filter((llave) => S.recursos.get(llave)?.has(permiso) ?? false);
+    expect(yaLoExigen, `ya exigen «${permiso}»: la excepción sobra`).toEqual([]);
   });
 });

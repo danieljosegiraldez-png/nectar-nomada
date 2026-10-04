@@ -50,7 +50,39 @@ const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")
 const modelos = modelosDelEsquema(readFileSync(join(RAIZ, "prisma/schema.prisma"), "utf8"));
 const filas = analizar(fuentes, modelos);
 
-if (process.argv.includes("--simbolos")) {
+if (process.argv.includes("--permiso-debido")) {
+  /**
+   * **`PENDING_IMPLEMENTATIONS/005`: ¿es el guardia EL DEBIDO?** Cruza el permiso
+   * que exige cada operación —el `resourceType` del tercer argumento de `can`,
+   * resuelto por símbolo y propagado desde el envoltorio— contra los modelos que
+   * toca, usando la declaración por dominio de
+   * `docs/arquitectura/permiso-por-dominio.json`.
+   */
+  const decl = JSON.parse(readFileSync(join(RAIZ, "docs/arquitectura/permiso-por-dominio.json"), "utf8"));
+  const S = autorizacionPorSimbolo({ raiz: RAIZ.replace(/\/$/, "") });
+  const k = (f) => clave(f.archivo, f.nombre);
+  for (const dom of decl.dominios) {
+    const gobernados = new Set(dom.gobierna);
+    const declaradas = new Set(dom.excepciones.map((e) => clave(e.archivo, e.operacion)));
+    const delDominio = filas.filter((f) => f.modelos.some((m) => gobernados.has(m)));
+    const conGuardia = delDominio.filter((f) => f.clase.startsWith("guardia"));
+    const exigen = conGuardia.filter((f) => S.recursos.get(k(f))?.has(dom.permiso) ?? false);
+    const no = conGuardia.filter((f) => !(S.recursos.get(k(f))?.has(dom.permiso) ?? false));
+    console.log(`── dominio «${dom.permiso}» · gobierna ${gobernados.size} modelos`);
+    console.log(`   operaciones que lo tocan: ${delDominio.length}   con clase de guardia: ${conGuardia.length}`);
+    console.log(`   ✓ exigen «${dom.permiso}»: ${exigen.length}`);
+    console.log(`   ? con OTRO permiso: ${no.length}  (declaradas: ${no.filter((f) => declaradas.has(k(f))).length})`);
+    for (const f of no) {
+      const ms = f.modelos.filter((m) => gobernados.has(m)).join(", ");
+      const ps = [...(S.recursos.get(k(f)) ?? [])].sort().join(", ") || "sin permiso resuelto";
+      console.log(`     ${declaradas.has(k(f)) ? "declarada" : "SIN DECLARAR"}  ${k(f)}`);
+      console.log(`        permisos: ${ps}   |   modelos: ${ms}`);
+    }
+    const sinConfirmar = dom.excepciones.filter((e) => !e.confirmado_por_daniel);
+    console.log(`\n   excepciones declaradas: ${dom.excepciones.length}, de ellas SIN CONFIRMAR por Daniel: ${sinConfirmar.length}`);
+    for (const e of sinConfirmar) console.log(`     [${e.veredicto}]  ${e.archivo}:${e.operacion}`);
+  }
+} else if (process.argv.includes("--simbolos")) {
   /**
    * **Escalón 2 de la ficha 007: el guardia como SÍMBOLO.** No sustituye la
    * clasificación —la allowlist y las tres compuertas se apoyan en ella— : la

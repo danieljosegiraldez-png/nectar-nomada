@@ -117,6 +117,15 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
   }
 
   const aristas = new Map();
+  /**
+   * **El tercer argumento de `can(…)`, que es el que dice QUÉ se autoriza.**
+   * `can(userAccountId, action, resourceType, target, classification)`. Medido el
+   * 2026-10-04: de las **109** llamadas al `can` real, **103 lo pasan literal**
+   * (94 %) y las 6 restantes son un acceso a propiedad. Esto es lo que convierte
+   * «¿es el guardia debido?» en algo medible: el permiso que se exige, contra el
+   * dato que se toca.
+   */
+  const recursoPropio = new Map();
   let llamadas = 0;
   let resueltas = 0;
   for (const f of propios) {
@@ -137,7 +146,15 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
             if (!d.archivo.includes("node_modules")) {
               const de = clave(rel, unidadDe(n));
               if (!aristas.has(de)) aristas.set(de, new Set());
-              aristas.get(de).add(clave(d.archivo.replace(prefijo, ""), d.nombre));
+              const hacia = clave(d.archivo.replace(prefijo, ""), d.nombre);
+              aristas.get(de).add(hacia);
+              if (hacia === clave(servicio, "can") && ts.isCallExpression(n)) {
+                const arg = n.arguments[2];
+                if (arg && ts.isStringLiteral(arg)) {
+                  if (!recursoPropio.has(de)) recursoPropio.set(de, new Set());
+                  recursoPropio.get(de).add(arg.text);
+                }
+              }
             }
           }
         }
@@ -158,5 +175,26 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
       }
     }
   }
-  return { aristas, puertas, autorizan, archivos: propios.length, llamadas, resueltas };
+  /**
+   * **El permiso se hereda del envoltorio.** Sólo 83 unidades llaman a `can`
+   * directamente, y hay 396 operaciones «guardia directo»: casi todas pasan por
+   * un `requireLotAccess` o un `exigePermiso`, que es quien pasa el literal. Sin
+   * propagar, el cruce sólo vería una quinta parte del árbol.
+   */
+  const recursos = new Map([...recursoPropio].map(([k, v]) => [k, new Set(v)]));
+  for (let cambio = true; cambio; ) {
+    cambio = false;
+    for (const [de, hacia] of aristas) {
+      for (const h of hacia) {
+        const t = recursos.get(h);
+        if (!t) continue;
+        if (!recursos.has(de)) recursos.set(de, new Set());
+        const antes = recursos.get(de).size;
+        for (const x of t) recursos.get(de).add(x);
+        if (recursos.get(de).size !== antes) cambio = true;
+      }
+    }
+  }
+
+  return { aristas, puertas, autorizan, recursos, archivos: propios.length, llamadas, resueltas };
 }

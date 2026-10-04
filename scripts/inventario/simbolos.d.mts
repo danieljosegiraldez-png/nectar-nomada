@@ -12,6 +12,11 @@ export interface Autorizacion {
   readonly puertas: Set<string>;
   /** cierre transitivo: quién alcanza una puerta, directa o por saltos. */
   readonly autorizan: Set<string>;
+  /**
+   * Qué permisos (`resourceType` del tercer argumento de `can`) exige cada
+   * unidad, propios o heredados del envoltorio que llama.
+   */
+  readonly recursos: Map<string, Set<string>>;
   readonly archivos: number;
   readonly llamadas: number;
   readonly resueltas: number;
