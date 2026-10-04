@@ -119,8 +119,8 @@ beforeAll(async () => {
     colonyId,
     occurredAt: new Date("2026-11-26"),
     outcome: "issue_observed",
-    broodPatternNote: "Patchy brood pattern in two frames",
-    queenSighted: true,
+    broodPattern: "salteado",
+    queenSighted: "vista",
     storesLevel: "moderate",
     pestDiseaseFlags: "Small hive beetle observed",
   });

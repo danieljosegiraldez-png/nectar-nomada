@@ -110,7 +110,7 @@ describe("recordInspection", () => {
     });
 
     expect(inspection.outcome).toBe("nothing_unusual");
-    expect(inspection.broodPatternNote).toBeNull();
+    expect(inspection.broodPattern).toBeNull();
     expect(inspection.queenSighted).toBeNull();
   });
 
@@ -118,15 +118,75 @@ describe("recordInspection", () => {
     const inspection = await recordInspection(authorizedUserAccountId, {
       colonyId,
       outcome: "issue_observed",
-      broodPatternNote: "Spotty pattern, several empty cells",
-      queenSighted: false,
+      // **Era texto libre** —«Spotty pattern, several empty cells»— y ahora es uno de los cinco
+      // valores del protocolo (`PENDING_IMPLEMENTATIONS/010`, requisito 4). «Salteado» es lo que
+      // ese texto describía, y a diferencia del texto se puede agrupar.
+      broodPattern: "salteado",
+      queenSighted: "no_vista",
       storesLevel: "low",
       pestDiseaseFlags: "possible varroa",
     });
 
     expect(inspection.outcome).toBe("issue_observed");
-    expect(inspection.broodPatternNote).toBe("Spotty pattern, several empty cells");
-    expect(inspection.queenSighted).toBe(false);
+    expect(inspection.broodPattern).toBe("salteado");
+    expect(inspection.queenSighted).toBe("no_vista");
+  });
+
+  /**
+   * **«No se buscó» es un hecho, y hasta hoy no se podía decir**
+   * (`PENDING_IMPLEMENTATIONS/010`, requisito 4).
+   *
+   * El protocolo del dueño pregunta la reina con TRES respuestas —`vista`, `no_vista`,
+   * `no_se_busco`— y la columna era `Boolean?`: dos estados más el nulo. Así que «miré la pregunta
+   * y decidí no buscarla» aterrizaba en el mismo `null` que «nadie contestó», y nada podía
+   * distinguirlas. Es la forma de `PENDING_IMPLEMENTATIONS/019` en otro sitio: una ausencia
+   * presentada como un hecho.
+   *
+   * **Las dos filas son el caso y su control, y tienen que salir distintas.** Con la columna
+   * booleana las dos daban `null`, así que una prueba que sólo afirmara la primera habría pasado
+   * con el defecto puesto.
+   */
+  it("«no se buscó» se guarda, y NO se confunde con «no se preguntó»", async () => {
+    const buscada = await recordInspection(authorizedUserAccountId, {
+      colonyId,
+      outcome: "nothing_unusual",
+      queenSighted: "no_se_busco",
+    });
+    const callada = await recordInspection(authorizedUserAccountId, {
+      colonyId,
+      outcome: "nothing_unusual",
+    });
+    expect(buscada.queenSighted).toBe("no_se_busco");
+    expect(callada.queenSighted).toBeNull();
+    expect(buscada.queenSighted).not.toBe(callada.queenSighted);
+  });
+
+  it("y los otros dos estados de la reina se guardan como el protocolo los nombra", async () => {
+    const vista = await recordInspection(authorizedUserAccountId, {
+      colonyId, outcome: "nothing_unusual", queenSighted: "vista",
+    });
+    const noVista = await recordInspection(authorizedUserAccountId, {
+      colonyId, outcome: "issue_observed", queenSighted: "no_vista",
+    });
+    expect([vista.queenSighted, noVista.queenSighted]).toEqual(["vista", "no_vista"]);
+  });
+
+  /**
+   * **Patrón de cría y temperamento dejan de ser texto libre.** Eran `String?`, así que cualquier
+   * grafía entraba —«Spotty pattern, several empty cells» era un valor legítimo— y nada las podía
+   * agrupar. El protocolo ya declaraba sus cinco y sus tres valores desde A9.4; lo que faltaba era
+   * que la columna los exigiera.
+   */
+  it("el patrón de cría y el temperamento sólo aceptan los valores del protocolo", async () => {
+    const i = await recordInspection(authorizedUserAccountId, {
+      colonyId, outcome: "issue_observed", broodPattern: "salteado", temperament: "defensiva",
+    });
+    expect([i.broodPattern, i.temperament]).toEqual(["salteado", "defensiva"]);
+    // Control: sin decirlos siguen siendo nulos — «no se preguntó» sigue existiendo.
+    const sinDecir = await recordInspection(authorizedUserAccountId, {
+      colonyId, outcome: "nothing_unusual",
+    });
+    expect([sinDecir.broodPattern, sinDecir.temperament]).toEqual([null, null]);
   });
 
   it("fixes provenanceClass to direct_observation at the action layer, not caller-supplied", async () => {

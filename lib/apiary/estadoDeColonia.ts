@@ -20,7 +20,15 @@
  * sus desplegables; importar el servicio traería `prisma` al paquete del
  * navegador.
  */
-import type { BroodStage, ColonyPopulation, QueenCellKind, StoresLevel } from "../../generated/prisma/client";
+import type {
+  BroodPattern,
+  BroodStage,
+  ColonyPopulation,
+  QueenCellKind,
+  QueenSighting,
+  StoresLevel,
+  Temperament,
+} from "../../generated/prisma/client";
 
 /** Una entrada que el servicio rechaza. La lanza `lib/apiary/inspections.ts`. */
 export class EstadoDeColoniaInvalido extends Error {}
@@ -35,6 +43,17 @@ export const POBLACIONES = ["baja", "normal", "apiñada"] as const satisfies rea
 export const ETAPAS_DE_CRIA = ["huevo", "larva", "operculada", "pupa"] as const satisfies readonly BroodStage[];
 export const CELDAS_REALES = ["no_hay", "emergencia", "enjambrazon", "reemplazo"] as const satisfies readonly QueenCellKind[];
 export const NIVELES_DE_RESERVA = ["alta", "media", "baja"] as const satisfies readonly StoresLevel[];
+
+/**
+ * **Las tres respuestas de la reina, y `no_se_busco` es una de ellas**
+ * (`PENDING_IMPLEMENTATIONS/010`, requisito 4). Hasta el 2026-10-03 la columna era `Boolean?`, así
+ * que «miré la pregunta y decidí no buscarla» se guardaba como `null` y no se distinguía de «no se
+ * contestó». El `null` sigue existiendo y ahora significa sólo lo segundo.
+ */
+export const REINA_VISTA = ["vista", "no_vista", "no_se_busco"] as const satisfies readonly QueenSighting[];
+/** `nulo` es un valor del dueño: una colonia sin cría es una observación, no un dato que falte. */
+export const PATRONES_DE_CRIA = ["compacto", "salteado", "apretado", "promedio", "nulo"] as const satisfies readonly BroodPattern[];
+export const TEMPERAMENTOS = ["mansa", "normal", "defensiva"] as const satisfies readonly Temperament[];
 
 /**
  * Las celdas que avisan de que la colonia se va a ir o ya perdió la reina.
@@ -53,6 +72,9 @@ function exige<T extends string>(lista: readonly T[], valor: unknown, campo: str
 export const exigePoblacion = (v: unknown) => exige(POBLACIONES, v, "poblacion");
 export const exigeCeldaReal = (v: unknown) => exige(CELDAS_REALES, v, "celda_real");
 export const exigeNivelDeReserva = (v: unknown) => exige(NIVELES_DE_RESERVA, v, "nivel_de_reserva");
+export const exigeReinaVista = (v: unknown) => exige(REINA_VISTA, v, "reina_vista");
+export const exigePatronDeCria = (v: unknown) => exige(PATRONES_DE_CRIA, v, "patron_de_cria");
+export const exigeTemperamento = (v: unknown) => exige(TEMPERAMENTOS, v, "temperamento");
 
 /**
  * Las etapas de cría presentes, limpias.

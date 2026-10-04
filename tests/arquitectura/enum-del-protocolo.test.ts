@@ -213,7 +213,13 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
     // **Y DIECISÉIS desde el 2026-10-03** (`PENDING_IMPLEMENTATIONS/010`, Parte A): entra
     // `feeder_type`, de los siete ítems de §2.4, y es la primera pregunta del protocolo que
     // aterriza en `Hive` y no en `Inspection` o `ColonyEvent`. Coincide con `FeedingMethod`.
+    // **Y DIECINUEVE con la Parte B** (`PENDING_IMPLEMENTATIONS/010`, requisito 4): entran
+    // `queen_sighted`, `brood_pattern` y `temperament`, porque sus columnas acaban de pasar de
+    // `Boolean?` y `String?` a enum. Es el premio del cambio: el protocolo declaraba sus tres y
+    // sus cinco y sus tres valores desde A9.4, y hasta hoy **nada los comparaba con el esquema**
+    // porque el destino no era un enum. Ahora sí, valor por valor.
     expect([...cubiertas].sort()).toEqual([
+      "brood_pattern",
       "brood_stages",
       "feeder_type",
       "honey_stores",
@@ -225,9 +231,11 @@ describe("el protocolo y el esquema declaran el mismo vocabulario", () => {
       "population",
       "purpose",
       "queen_cells",
+      "queen_sighted",
       "route",
       "site_condition",
       "target",
+      "temperament",
       "varroa_method",
       "weather_observed",
     ]);
