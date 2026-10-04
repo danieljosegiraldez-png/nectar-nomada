@@ -35,6 +35,24 @@ import {
 } from "../../generated/prisma/enums";
 
 /**
+ * **Una mutación vieja de la cola manda `true`/`false`; el servicio espera el vocabulario del
+ * protocolo** (`PENDING_IMPLEMENTATIONS/010`, requisito 4).
+ *
+ * No se puede migrar lo que ya está en la cola: vive en el IndexedDB del teléfono de quien capturó,
+ * sin red, y puede subir semanas después. Así que se traduce al leerla, con la MISMA
+ * correspondencia que la migración de la base —`true` era «vista», `false` era «no vista»— para que
+ * una inspección que subió antes y otra que sube después signifiquen lo mismo.
+ *
+ * **Un `undefined` o un `null` siguen siendo `null`**: «no se contestó». No se convierten a
+ * `no_se_busco`, que sería inventar que alguien miró la pregunta.
+ */
+export function reinaVistaDeLaCola(valor: boolean | string | null | undefined): string | null {
+  if (valor === true) return "vista";
+  if (valor === false) return "no_vista";
+  return valor == null || valor === "" ? null : valor;
+}
+
+/**
  * P4 §4 (46_P4_API_Y_SINCRONIZACION.md) — push por lotes con resultado **por
  * mutación**.
  *
@@ -117,10 +135,20 @@ export type MutacionDeInspeccion = {
   occurredAt: Date;
   outcome: string;
   operatorPersonId?: string | null;
-  broodPatternNote?: string | null;
-  queenSighted?: boolean | null;
+  /**
+   * **Los tres viajan como CADENA** (`PENDING_IMPLEMENTATIONS/010`, requisito 4). `queenSighted`
+   * era `boolean | null` y con eso «no se buscó» no cabía: el protocolo lo pregunta con tres
+   * respuestas y un booleano nulable tiene dos más el nulo. Los valida
+   * `lib/apiary/estadoDeColonia` en la frontera, como los otros siete campos de §2.2.
+   *
+   * **Una mutación vieja que siga en la cola de alguien manda `true`/`false`**, y eso lo traduce
+   * `reinaVistaDeLaCola`: no se puede migrar una cola que vive en el IndexedDB del teléfono de
+   * quien capturó, sin red y que puede subir semanas después. Se traduce al leerla.
+   */
+  broodPattern?: string | null;
+  queenSighted?: boolean | string | null;
   storesLevel?: string | null;
-  temperamentNote?: string | null;
+  temperament?: string | null;
   pestDiseaseFlags?: string | null;
   /**
    * Las banderas del catálogo, por id. Viajan en la mutación porque una
@@ -383,10 +411,10 @@ async function aplicarMutacionDeApiario(
             occurredAt: m.occurredAt,
             operatorPersonId: m.operatorPersonId ?? null,
             outcome: m.outcome as never,
-            broodPatternNote: m.broodPatternNote ?? null,
-            queenSighted: m.queenSighted ?? null,
+            broodPattern: m.broodPattern ?? null,
+            queenSighted: reinaVistaDeLaCola(m.queenSighted),
             storesLevel: m.storesLevel ?? null,
-            temperamentNote: m.temperamentNote ?? null,
+            temperament: m.temperament ?? null,
             pestDiseaseFlags: m.pestDiseaseFlags ?? null,
             irregularidades: m.irregularidades ?? [],
             cambiosDeConfiguracion: m.cambiosDeConfiguracion ?? null,

@@ -9,7 +9,10 @@ import {
   CELDAS_REALES,
   ETAPAS_DE_CRIA,
   NIVELES_DE_RESERVA,
+  PATRONES_DE_CRIA,
   POBLACIONES,
+  REINA_VISTA,
+  TEMPERAMENTOS,
 } from "../../../lib/apiary/estadoDeColonia";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
 import { Ayuda } from "./Ayuda";
@@ -132,11 +135,13 @@ export function InspectionForm({
         occurredAt: new Date(),
         operatorPersonId: selfPersonId,
         outcome: "issue_observed",
-        broodPatternNote: brood.trim() || null,
-        queenSighted: triEstado(queenSighted),
+        broodPattern: brood || null,
+        // **Ya NO pasa por `triEstado`**: ese colapsa tres estados en dos y es justo lo que
+        // impedía decir «no se buscó». Se queda para los cuatro booleanos de verdad.
+        queenSighted: queenSighted || null,
         // `storesLevel` ya NO se manda: la reemplazan las dos reservas de abajo.
         // La columna sigue en la base con lo que tuviera (ADR-117).
-        temperamentNote: temperament.trim() || null,
+        temperament: temperament || null,
         pestDiseaseFlags: pest.trim() || null,
         irregularidades: [...marcadas],
         note: note.trim() || null,
@@ -215,15 +220,36 @@ export function InspectionForm({
         <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <div className="nn-field">
             <label htmlFor={`insp-brood-${colonyId}`}>{t("broodPatternLabel")}</label>
-            <input id={`insp-brood-${colonyId}`} value={brood} onChange={(e) => setBrood(e.target.value)} />
+            {/* **Era un campo de texto libre** y ahora son los cinco valores del protocolo
+                (`PENDING_IMPLEMENTATIONS/010`). Con texto, cualquier grafía entraba y nada se
+                podía agrupar; «nulo» es uno de los cinco porque una colonia sin cría es una
+                observación, no un dato que falte. El vacío sigue siendo «no se contestó». */}
+            <select id={`insp-brood-${colonyId}`} value={brood} onChange={(e) => setBrood(e.target.value)}>
+              <option value="" />
+              {PATRONES_DE_CRIA.map((v) => (
+                <option key={v} value={v}>
+                  {t(`broodPattern_${v}`)}
+                </option>
+              ))}
+            </select>
           </div>
-          {/* Tres opciones y no una casilla: «no se buscó» tiene que poder decirse. */}
+          {/* **Las TRES respuestas del protocolo, y «no se buscó» es una de ellas.**
+              Este desplegable tenía `si`, `no` y el vacío — tres `<option>`, sí, pero una era la
+              vacía, que significa «no se contestó». Así que «miré la pregunta y decidí no buscar la
+              reina» no se podía decir: caía en el mismo `null`. El comentario que había aquí decía
+              «tres opciones y no una casilla: "no se buscó" tiene que poder decirse», y era la
+              mitad del camino (`PENDING_IMPLEMENTATIONS/010`, requisito 4).
+
+              El vacío se queda, y ahora significa SÓLO «no se contestó». */}
           <div className="nn-field">
             <label htmlFor={`insp-queen-${colonyId}`}>{t("queenSightedLabel")}</label>
             <select id={`insp-queen-${colonyId}`} value={queenSighted} onChange={(e) => setQueenSighted(e.target.value)}>
               <option value="" />
-              <option value="si">{t("triSi")}</option>
-              <option value="no">{t("triNo")}</option>
+              {REINA_VISTA.map((v) => (
+                <option key={v} value={v}>
+                  {t(`queenSighting_${v}`)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -373,7 +399,15 @@ export function InspectionForm({
           </div>
           <div className="nn-field">
             <label htmlFor={`insp-temperament-${colonyId}`}>{t("temperamentLabel")}</label>
-            <input id={`insp-temperament-${colonyId}`} value={temperament} onChange={(e) => setTemperament(e.target.value)} />
+            {/* Mismo caso que el patrón de cría: eran tres palabras del dueño en un campo libre. */}
+            <select id={`insp-temperament-${colonyId}`} value={temperament} onChange={(e) => setTemperament(e.target.value)}>
+              <option value="" />
+              {TEMPERAMENTOS.map((v) => (
+                <option key={v} value={v}>
+                  {t(`temperament_${v}`)}
+                </option>
+              ))}
+            </select>
           </div>
           {/* Las irregularidades, como CASILLAS y no como texto.
 

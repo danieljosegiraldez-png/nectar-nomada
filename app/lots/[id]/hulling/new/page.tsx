@@ -31,7 +31,7 @@ export default async function NewHullingPage({ params }: { params: Promise<{ id:
       {context.sinAmbito ? (
         <p className="nn-error" role="alert">{t("sinAmbitoGestionBody")}</p>
       ) : (
-        <HullingForm lotId={id} locations={context.locations} defaultLocationId={lot.locationId} />
+        <HullingForm lotId={lot.id} locations={context.locations} defaultLocationId={lot.locationId} />
       )}
     </div>
   );

@@ -3,10 +3,12 @@ const deps = vi.hoisted(() => ({ user: vi.fn(), registrar: vi.fn(), revalidate: 
 vi.mock("../../lib/auth/session", () => ({ getCurrentUser: deps.user }));
 vi.mock("../../lib/traceability/samplingEvents", () => ({ registrarInspeccion: deps.registrar }));
 vi.mock("../../lib/traceability/lots", () => ({ TraceabilityAccessError: class extends Error {} }));
+vi.mock("../../lib/traceability/samples", () => ({ SampleValidationError: class extends Error {} }));
 vi.mock("next/cache", () => ({ revalidatePath: deps.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { registrarInspeccionFormAction } from "../../app/actions/inspecciones";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { SampleValidationError } from "../../lib/traceability/samples";
 
 function form() {
   const data = new FormData();
@@ -33,6 +35,13 @@ describe("la acción de inspección delega un único envío al servicio atómico
     deps.registrar.mockRejectedValueOnce(new TraceabilityAccessError("no_sample_access"));
     expect(await registrarInspeccionFormAction({}, form())).toEqual({ error: "sin_acceso" });
     expect(deps.registrar).toHaveBeenCalledTimes(1);
+    expect(deps.revalidate).not.toHaveBeenCalled();
+  });
+  it("un lote dividido bajo un proceso llega como su error, no como un 500 ni como «sin acceso»", async () => {
+    // Parte 1, R6.6 (ronda de arreglo 1, 2026-10-01): `registrarInspeccion` rechaza el lote dividido con
+    // `SampleValidationError`, una clase que esta acción no traducía.
+    deps.registrar.mockRejectedValueOnce(new SampleValidationError("lote_dividido"));
+    expect(await registrarInspeccionFormAction({}, form())).toEqual({ error: "lote_dividido" });
     expect(deps.revalidate).not.toHaveBeenCalled();
   });
   it("un material ajeno a secado falla antes de llamar al servicio", async () => {

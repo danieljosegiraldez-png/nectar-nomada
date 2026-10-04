@@ -11,11 +11,12 @@ node scripts/inventario-de-acceso.mjs          # resumen
 node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 ```
 
-## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde
+## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**601 operaciones** que tocan la base, en **166 archivos** — medido con
-`node scripts/inventario-de-acceso.mjs` sobre el árbol que fusiona `origin/main`
-(`326bd584`) con la rama de las lecturas de la clasificación de verde por malla:
+**618 operaciones** que tocan la base, en **168 archivos** — medido el 2026-10-03 con
+`node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
+`origin/main` (`193772c9`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
+rama de las lecturas de la clasificación de verde por malla):
 
 <!-- Estas cifras las comprueba tests/arquitectura/cifras-del-inventario.test.ts
      contra la salida del script. Si cambian aquí sin cambiar allí —o al revés—
@@ -24,12 +25,116 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **461** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **467** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **85** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **94** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **21** | recibía principal sin guardia visible | Las dieciocho ya explicadas en el allowlist, más `cerrarCorridaEnTransaccion`, ayudante transaccional cuyo llamador autoriza antes de abrir la transacción |
+| **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, 23 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **`coberturaDelLote` autoriza cada lote dueño de un proceso (2026-10-03): ninguna cifra cambia.** Revisión final de la Parte 1,
+> ronda de arreglo 1 (Codex; registro, línea 205). Sigue en «guardia directo», en su fila: además de `requireLotAccess(view)`
+> sobre el lote mirado, llama a `requireLotAccess(view)` una vez por cada lote DONDE VIVE un proceso que devuelve —una por lote,
+> porque con varios candidatos autoriza si pasa cualquiera—, y un proceso cuyo lote no se ve sale `oculto`, sin sus datos. Es
+> el único lector de la Parte 1 que enseña procesos de otros lotes con su detalle; las compuertas y el grado de la lista de
+> catas y del tablero no cambian (pregunta abierta a Daniel).
+
+> **La garantía de R7, «una sola línea viva bajo un proceso» (2026-10-03): 614→615, 167 archivos y «guardia directo»
+> 464→465; «depende del llamador» sigue en 93, con una fila que cambia de nombre.** Revisión final de la Parte 1, ronda
+> de arreglo 1. `puedeEmpezarCorrida` (`lib/traceability/lotProcess.ts`) es nueva, con guardia directo
+> (`requireLotAccess(view)` sobre el lote): decide si la ficha y las dos páginas `/new` ofrecen empezar una corrida. Lo que
+> decide sale de `procesoAbiertoParaCorrida` a una función nueva sin bloqueo, `procesoParaUnaCorrida`, para que pantalla y
+> servicio pregunten lo mismo: `procesoAbiertoParaCorrida` ya no toca la base por sí misma (bloquea y delega) y sale del
+> inventario, y `procesoParaUnaCorrida` entra en «depende del llamador» con su fila en el allowlist. Los cambios de las
+> decisiones de Daniel del 2026-10-02 —`exigeSinOtroProcesoAbierto` mira la bodega de la descendencia; `loteDividido` recibe
+> la fecha del registro— cambian el cuerpo de operaciones que ya estaban, no su fila.
+
+> **Tercera unión con `origin/main` (2026-10-03, `193772c9`): 616→618, 167→168 archivos y «guardia directo»
+> 465→467.** Medido con `--json` sobre los dos árboles: las dos nuevas son de `main`, `declararTrozoDeForma` y
+> `quitarTrozoDeForma` de `lib/traceability/formaDeLaParcela.ts`, archivo nuevo, las dos con guardia directo.
+
+> **Segunda unión con `origin/main` (2026-10-03, `1d24c431`): 615→616 y «depende del llamador» 93→94.** Medido con
+> `--json` sobre los dos árboles: la única operación nueva es de `main`, `rejillaDelBloque` de
+> `lib/traceability/plotBlocks.ts`, que no recibe principal y está en el allowlist.
+
+> **Al juntar `origin/main` en la rama de la Parte 1 (2026-10-03): 609→614, 166→167 archivos, «guardia directo»
+> 461→464 y «depende del llamador» 91→93.** Medido con `--json` sobre los dos árboles, no sumado a mano: las cinco son de
+> `main`. `lib/traceability/floracion.ts` es el archivo nuevo —`registrarFloracion` con guardia directo; `enFloracion` y
+> `floracionesDeLaParcela` dependen del llamador y están en el allowlist—, y `anadirRangoAlBloque` y
+> `quitarRangoDelBloque` de `lib/traceability/plotBlocks.ts`, con guardia directo.
+
+> **Los formularios del proceso, según el lote donde vive (2026-10-02): 608→609, 166 archivos y «guardia directo»
+> 460→461.** Parte 1, tarea 9, ronda de arreglo 1. Una operación nueva en `lib/traceability/lotProcess.ts`,
+> `puedeGestionarProceso`, con guardia directo: pide `manage` sobre el lote DONDE VIVE el proceso por el mismo
+> `loteGestionable` que usan sus servicios (manejo, cierre, intención, objetivo), para que la página del proceso no
+> ofrezca esos formularios a quien sólo gestiona un hijo. `fraseDeNoAbrir` no toca la base y no es operación;
+> `procesosParaEntrada` gana un parámetro opcional (la cobertura ya resuelta) y sigue en su fila. Los tres lectores de
+> lista que atrapan `lineage_too_deep` fila a fila —`colaDeSecado`, `datosDelTablero` y la lista de catas— cambian su
+> cuerpo, no su fila.
+
+> **Los lectores leen el proceso que cubre al lote (2026-10-02): 605→608, 166 archivos y «guardia directo»
+> 457→460.** Parte 1, R7 (tarea 9). Tres operaciones nuevas en `lib/traceability/lotProcess.ts`, las tres con
+> guardia directo (`requireLotAccess(view)` sobre el lote, antes de leer ningún proceso): `coberturaDelLote`, lo que la ficha y
+> la página del proceso enseñan; `puedeAbrirProceso` y `puedeDevolverASecado`, que deciden si la pantalla OFRECE
+> abrir un proceso o devolver a secado preguntando lo mismo que el servicio. Los lectores que pasan a buscar el
+> proceso hacia arriba —`datosDelTablero`, `colaDeSecado`, la lista de catas, la ocupación de tanques, el reporte y la
+> muestra verde— cambian su consulta, no su fila: siguen siendo las mismas operaciones con su mismo guardia.
+
+> **La bodega mira el proceso que cubre al lote (2026-10-01): 605→605, 166 archivos y ninguna cifra de la tabla
+> cambia.** Parte 1, R7. `exigeSecadoTerminado` deja de leer con el cliente global y fuera de la transacción de
+> `moveLotToStorage`: recibe el `tx` y corre dentro de ella, con el linaje bloqueado. Sigue siendo **«depende del
+> llamador»** —no recibe principal, y su único llamador ya pidió `manage` sobre ese lote—, así que cambia su razón y
+> su fecha, no su fila. Lo que sí cambia es que `lib/traceability/lotProcess.ts` entra en `reciben_transaccion`:
+> recibe el cliente del llamador en esa operación, aunque el archivo siga importando el cliente global para el resto.
+
+> **Dividir bajo un proceso abierto (2026-10-01): 604→605, 166 archivos y «recibía principal sin guardia
+> visible» 22→23.** Parte 1, R6. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:
+> `dividirProcesoEnTx`, que **sí recibe el principal, pero sólo para firmar** el cierre `divided` y la
+> apertura de cada parte; entra en `operaciones_sin_patron`, porque su único llamador,
+> `recordTransformation`, pide `manage` sobre las entradas antes de abrir la transacción y bloquea sus
+> linajes al empezarla. La otra pieza de la división, `antesDeTransformar`, **no es operación** para el
+> script: sólo delega en otras exportadas (`bloquearLinajes`, `loteDividido`, `procesoQueCubre`,
+> `exigeSinCorridasAbiertas`), igual que `bloquearLinaje`, y fijarla haría caer «no quedan fijadas
+> operaciones que ya no dependen del llamador». `recordTransformation`, `recordMeasurement` y
+> `createSampleFromLot` siguen siendo las mismas operaciones, con guardia directo.
+
+> **No se cierra un proceso con corridas abiertas (2026-10-01): 603→604, 166 archivos y «depende del
+> llamador» 90→91.** Parte 1, R5. Una operación nueva en `lib/traceability/procesoDelLinaje.ts`:
+> `exigeSinCorridasAbiertas` es **«depende del llamador»**. No recibe principal, sólo cuenta las
+> fermentaciones y los secados abiertos del linaje que cubre el proceso y lanza `corridas_abiertas`.
+> Su único llamador, `cerrarProceso`, autoriza con `loteGestionable` y toma el linaje antes de llamarla.
+> `cerrarProceso` sigue siendo la misma operación, con guardia directo: ahora relee el proceso y cuenta las
+> corridas dentro de su transacción, con el linaje bloqueado.
+
+> **Empezar una corrida bajo el proceso que cubre al lote (2026-10-01): 603→603, 166 archivos,
+> «guardia directo» 458→457 y «depende del llamador» 89→90.** Parte 1, R3. Sale una operación y entra
+> otra, así que el total no cambia. Sale `colgarCorrida`, de `lotProcess.ts`, que era **guardia
+> directo** y autorizaba contra el lote del proceso. Entra `procesoAbiertoParaCorrida`, en
+> `procesoDelLinaje.ts`, que es **«depende del llamador»**: no recibe principal, bloquea el linaje,
+> lanza el motivo si el lote no admite una corrida y devuelve el proceso y su receta. Sus dos
+> llamadores, `startFermentationRun` y `startDryingRun`, piden el permiso sobre el lote de la corrida
+> antes de abrir la transacción.
+
+> **Abrir un proceso, un solo proceso abierto por café (2026-10-01): 601→603, 166 archivos,
+> «depende del llamador» 88→89 y «recibía principal sin guardia visible» 21→22.** Parte 1, R2. Dos
+> operaciones nuevas en `lib/traceability/procesoDelLinaje.ts`, que ya estaba en
+> `reciben_transaccion`. `exigeSinOtroProcesoAbierto` es **«depende del llamador»**: no recibe
+> principal, sólo lee y lanza el motivo por el que un lote no admite un proceso nuevo.
+> `abrirProcesoEnTx` **sí recibe el principal, pero sólo para firmar** `createdBy` y la auditoría, y
+> eso no cuenta como guardia: entra en `operaciones_sin_patron`, porque quien la llama autoriza el
+> lote antes de abrir su transacción (`abrirProceso`, por `loteGestionable`) y la comprobación de R2
+> va dentro, con el linaje bloqueado.
+
+> **El resolvedor del proceso que cubre a un lote (2026-10-01): 596→601, 165→166 archivos y
+> «depende del llamador» 83→88.** Parte 1, R1. `lib/traceability/procesoDelLinaje.ts` es archivo
+> nuevo, y entra en `reciben_transaccion`: recibe el cliente del llamador y no abre conexión. Seis
+> operaciones suyas son **«depende del llamador»** —`procesoQueCubre`, `idsDeAscendencia`,
+> `idsDeDescendencia`, `bloquearLinajes`, `loteDividido` y `procesosParaEntrada`— porque ninguna
+> recibe principal: sus llamadores autorizan el lote antes de invocarlas. `idsDeDescendencia` ya
+> estaba en esa fila con otro archivo (`lots.ts`); se mueve aquí, así que la fila suma seis y
+> resta una. `bloquearLinaje` y `gradoDelProcesoQueCubre` **no** entran: sólo delegan en otras
+> exportadas, y fijarlas haría caer «no quedan fijadas operaciones que ya no dependen del
+> llamador».
 
 > **La línea de etapas pierde dos consultas (2026-09-30, ADR-195): 596→596, 165 archivos, sin cambio.**
 > Decisión de Daniel: «recepción» y «selección» pasan a `sin_registro`, igual que la flotación,
@@ -905,6 +1010,33 @@ fusionado con `node scripts/inventario-de-acceso.mjs`, y cuadra fila por fila co
 > `tienePreparacionTostada` (`lib/sensory/sessions.ts`), la regla del tueste servido extraída para
 > que la usen los DOS escritores de sesiones de cata. Sólo leen; quien llama ya autorizó la muestra
 > y exige `sensory:manage_session`. Están en el allowlist con su razón.
+
+> **Y (601→602, «depende del llamador» 85→86), 2026-10-02:** `rejillaDelBloque`
+> (`lib/traceability/plotBlocks.ts`) se **exporta**, y por eso entra al inventario: ya existía,
+> privada. Resuelve la parcela que pone la numeración de un sitio y su rejilla (D3), y **su nombre
+> es más estrecho que la función** — toma un `locationId`, no un bloque—. Se exportó para que
+> `createSpecimen` no escribiera una segunda copia de la regla: en la base vive en una sola
+> función, `core.raiz_de_la_numeracion`, por lo mismo. `specimens.ts` la importa con alias
+> `rejillaDelSitio`, que es como se lee allí. Sus tres llamadores autorizan antes —
+> `requireLocationAttributeAccess` los dos de `plotBlocks.ts`, `requireSpecimenAccess(manage)` el
+> de `specimens.ts`— y eso se comprobó **leyendo los tres sitios**, no deduciéndolo.
+
+> **Y (602→604, «guardia directo» 461→463), 2026-10-03:** `declararTrozoDeForma` y
+> `quitarTrozoDeForma` (`lib/traceability/formaDeLaParcela.ts`), que es donde vive la FORMA
+> declarada de un lote. Las dos exigen `requireLocationAttributeAccess` **sobre la raíz de la
+> numeración**, no sobre el sitio que pase quien llama: con el permiso de una microparcela no se
+> cambia la forma de su madre (D3). Ese archivo ya existía con su mitad pura —`celdasDeLaForma`,
+> `celdasSinPlantar`, `tableroDe`, que no tocan la base— y entra al inventario el día que gana las
+> dos que escriben.
+>
+> **Lo cazó el guardia por segunda vez en dos días**, y por el mismo mecanismo que la vez
+> anterior: añadir acceso a datos a un archivo que no lo tenía no se siente como añadir acceso a
+> datos. La primera fue exportar una función privada; ésta, darle a un módulo puro sus dos
+> escrituras.
+>
+> **Lo cazó el guardia, no yo.** Al exportarla, `acceso-a-datos` falló con «Operación nueva sin
+> principal» nombrándola, y `cifras-del-inventario` con las dos filas descuadradas. Exportar una
+> función privada no se siente como añadir acceso a datos, y para este inventario lo es.
 
 - **`lib/auth/config.ts authConfig()`** — es la configuración de Auth.js: el
   propio flujo de autenticación, previo a que exista sesión.

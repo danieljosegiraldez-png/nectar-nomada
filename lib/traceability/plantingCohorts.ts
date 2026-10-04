@@ -19,6 +19,8 @@ import { recordAuditEvent } from "../audit";
 import { requireLocationAttributeAccess, LocationAccessError } from "./locations";
 import { resolveFarmSiteId } from "./fincas";
 import { celdasDelRango, type Rango } from "../territorio/rejilla";
+import { celdasDeLaForma, tableroDe } from "./formaDeLaParcela";
+import { densidadDelLote } from "./densidadPorMarco";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -39,11 +41,11 @@ export interface CreatePlantingCohortInput {
   plantedAt?: Date | null;
   plantedPrecision?: HarvestWindowPrecision | null;
   plantCount?: number | null;
-  // `densityPerHectare` NO se acepta aquí, a propósito. Es un derivado de
-  // conteo y área, los dos corregibles, y `computePlotDensity` lo calcula al
-  // leer. Aceptarlo dejaba que un llamador guardara un 400 que sobrevivía a la
-  // corrección de sus dos insumos — justo lo que el comentario de
-  // `computePlotDensity` decía que no pasaba. Lo señaló una revisión
+  // `densityPerHectare` NO se acepta aquí, a propósito. Es un derivado, y
+  // `densidadDelLote` (`densidadPorMarco.ts`) lo calcula al leer. Aceptarlo dejaba
+  // que un llamador guardara un 400 que sobrevivía a la corrección de sus insumos —
+  // justo lo que el comentario de la función de densidad decía que no pasaba. Lo
+  // señaló una revisión
   // independiente: el comentario era cierto para nuestros llamadores y no
   // estaba impuesto por el código.
   spacingMeters?: number | null;
@@ -388,59 +390,6 @@ export async function recordHarvestSources(
   };
 }
 
-/**
- * Plants per hectare for a block, **computed and never stored.**
- *
- * `PlantingCohort.densityPerHectare` exists as a column and stays null here on
- * purpose. Density is a quotient of two numbers that are still moving — the
- * owner has said the per-block counts will be revised, and no block has an
- * area yet — and a stored quotient of moving inputs is a derived value that
- * goes stale in silence every time either input is corrected. Storing it would
- * be the same failure the platform already avoids by keeping raw measurements
- * and calculated values apart (CLAUDE.md §49).
- *
- * Returns a reason rather than a number when it cannot divide, because the
- * three ways this fails are different facts and a page should say which one it
- * hit. `null` collapses them into "no data", and zero would be a claim
- * (ADR-080: never recorded and recorded-as-zero must stay distinguishable).
- */
-export type PlotDensity =
-  | { status: "ok"; plantsPerHectare: number; totalPlants: number; hectares: number }
-  | { status: "sin_area" }
-  | { status: "area_no_positiva"; hectares: number }
-  | { status: "sin_cohortes" }
-  | { status: "conteo_incompleto"; cohortesSinConteo: number; cohortesTotales: number };
-
-export function computePlotDensity(
-  cohorts: ReadonlyArray<{ plantCount: number | null; status: PlantingCohortStatus }>,
-  areaHectares: Prisma.Decimal | number | null,
-): PlotDensity {
-  // A removed block's trees are not standing in the field, so counting them
-  // would overstate what is planted. `renovatePlantingCohort` is what puts a
-  // cohort into a non-active status, and this is the read side of that.
-  const vivas = cohorts.filter((c) => c.status === "active");
-  if (vivas.length === 0) return { status: "sin_cohortes" };
-
-  const sinConteo = vivas.filter((c) => c.plantCount == null).length;
-  if (sinConteo > 0) {
-    return { status: "conteo_incompleto", cohortesSinConteo: sinConteo, cohortesTotales: vivas.length };
-  }
-
-  if (areaHectares == null) return { status: "sin_area" };
-  const hectares = Number(areaHectares);
-  // Guards the division and a nonsense area alike. An area recorded as 0 is a
-  // bad record, not an infinite density.
-  if (!Number.isFinite(hectares) || hectares <= 0) return { status: "area_no_positiva", hectares };
-
-  const totalPlants = vivas.reduce((sum, c) => sum + (c.plantCount ?? 0), 0);
-  return {
-    status: "ok",
-    totalPlants,
-    hectares,
-    plantsPerHectare: Number((totalPlants / hectares).toFixed(1)),
-  };
-}
-
 /** La rejilla tal como la parcela la declara, y el rango propio si lo tiene. */
 export interface RejillaDeclarada {
   readonly rowCount: number;
@@ -454,15 +403,24 @@ export interface RejillaDeclarada {
    * parcela entera. Sin rango declarado no hay con qué comparar.
    */
   readonly propia: boolean;
+  /**
+   * Los trozos que declaran **qué celdas del tablero están plantadas** (D9,
+   * 2026-10-02). Vacío significa **forma sin declarar**, no lote vacío (ADR-080).
+   *
+   * **No es opcional a propósito.** Con un `?`, los sitios de llamada existentes
+   * seguirían compilando con la conducta vieja —capacidad = filas × plantas— en
+   * silencio, que es justo la afirmación que este cambio viene a quitar.
+   */
+  readonly forma: readonly Rango[];
 }
 
 /**
  * Lo que la rejilla CABE contra lo que las siembras CUENTAN.
  *
- * Diseño §6. Vive aquí, pura y al lado de `computePlotDensity`, por el mismo
- * motivo que ella: un cociente —o una resta— guardado de dos entradas que se
- * mueven **se queda viejo en silencio** cada vez que alguien corrige una de las
- * dos. Se calcula al leer.
+ * Diseño §6. Pura y calculada al leer, por el mismo motivo que la densidad —que
+ * desde el 2026-10-03 vive en `densidadPorMarco.ts`—: un cociente, o una resta,
+ * guardado de dos entradas que se mueven **se queda viejo en silencio** cada vez que
+ * alguien corrige una de las dos.
  *
  * **Devuelve un MOTIVO y no un número cuando no puede comparar**, y usa los
  * mismos nombres de estado que su hermana (`status`, `sin_cohortes`,
@@ -494,6 +452,14 @@ export type ComparacionDeLaRejilla =
       cohortesSinConteo: number;
       cohortesTotales: number;
     }
+  /**
+   * **Hay tablero pero no forma declarada, así que no se afirma capacidad.**
+   *
+   * Lleva sólo el tamaño del tablero, y ningún conteo: un `contadas: 0` sobre un lote
+   * donde quizá nadie registró las siembras leería «hay 0 plantas» como un hecho
+   * medido (ADR-080), y el conteo ya está en la lista de siembras de esa pantalla.
+   */
+  | { status: "sin_forma"; filas: number; columnas: number }
   | { status: "ok"; capacidad: number; contadas: number; diferencia: number };
 
 export function compararConLaRejilla(
@@ -523,12 +489,21 @@ export function compararConLaRejilla(
   // La numeración es una sola, la de la parcela, así que una microparcela de la
   // hilera 1 a la 4 cabe 4 × 20, no las 200 de su madre. Compararla contra las
   // 200 diría que le faltan plantas por un suelo que no es suyo.
-  const capacidad = rejilla.rango
-    ? celdasDelRango(rejilla.rango)
-    : rejilla.rowCount * rejilla.plantsPerRow;
+  // **Sin forma declarada no se afirma capacidad** (D8, 2026-10-02). Antes esto caía
+  // en `ok` con `filas × plantas`, que en un lote irregular es falso: con una esquina
+  // cortada decía «caben 200 y hay 150: una diferencia de 50» donde la diferencia real
+  // es 20. Va ANTES de `sin_cohortes` porque ése también afirma una capacidad.
+  const ambito = rejilla.rango ?? tableroDe(rejilla);
+  if (rejilla.forma.length === 0) {
+    return { status: "sin_forma", filas: rejilla.rowCount, columnas: rejilla.plantsPerRow };
+  }
+
+  // **D3: la capacidad de una microparcela es su RANGO**, acotado además a lo que la
+  // forma dice que está plantado. La numeración es una sola, la de la parcela.
+  const capacidad = celdasDeLaForma(rejilla.forma, ambito);
 
   // Una siembra retirada no está en pie, así que no cuenta. Es la misma lectura
-  // que hace `computePlotDensity` del lado de la densidad.
+  // que hace `densidadDelLote` del lado de la densidad.
   const vivas = cohorts.filter((c) => c.status === "active");
   if (vivas.length === 0) return { status: "sin_cohortes", capacidad };
 
@@ -568,6 +543,7 @@ export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
     | "rejillaSinRango"
     | "rejillaSinSiembras"
     | "rejillaConteoIncompleto"
+    | "rejillaSinForma"
     | "rejillaComparada";
   params: Record<string, number>;
 } {
@@ -578,6 +554,10 @@ export function claveDeLaComparacion(c: ComparacionDeLaRejilla): {
       // Sin ningún número a propósito: pasar la capacidad de la madre es
       // exactamente el error que este estado existe para no cometer.
       return { clave: "rejillaSinRango", params: {} };
+    case "sin_forma":
+      // Sólo el tamaño del tablero. Ningún conteo y ninguna capacidad: es el estado
+      // que existe justo para no afirmarla.
+      return { clave: "rejillaSinForma", params: { filas: c.filas, columnas: c.columnas } };
     case "sin_cohortes":
       return { clave: "rejillaSinSiembras", params: { capacidad: c.capacidad } };
     case "conteo_incompleto":
@@ -645,7 +625,21 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       // (`specimen:view` sobre esta Location), no para mostrarla.
       classification: true,
       organization: { select: { name: true } },
-      parentLocation: { select: { id: true, name: true, organization: { select: { name: true } } } },
+      parentLocation: {
+        select: {
+          id: true,
+          name: true,
+          organization: { select: { name: true } },
+          // **La rejilla de la madre**, para que la pantalla de ajustes pueda ofrecer el
+          // rango de una microparcela y decir contra qué tablero se cuenta, sin que el
+          // operario tenga que irse a buscarlo (§6 del diseño del 2026-10-01).
+          rowCount: true,
+          plantsPerRow: true,
+        },
+      },
+      // La forma declarada de lo plantado (D9). Cuelga de quien pone la numeración, así
+      // que si esta Location no la tiene se lee la de la madre, unas líneas más abajo.
+      formaDeclarada: { select: { id: true, rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
     },
   });
   // `requireLocationAttributeAccess` already refuses a missing id, so reaching
@@ -864,14 +858,45 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
       ? null
       : await prisma.location.findUnique({
           where: { id: location.parentLocation.id },
-          select: { rowCount: true, plantsPerRow: true },
+          select: {
+            rowCount: true,
+            plantsPerRow: true,
+            formaDeclarada: { select: { id: true, rowFrom: true, rowTo: true, plantFrom: true, plantTo: true } },
+          },
         });
   const base =
     propia ??
     (madre?.rowCount != null && madre.plantsPerRow != null
       ? { rowCount: madre.rowCount, plantsPerRow: madre.plantsPerRow }
       : null);
-  const rejillaDeclarada: RejillaDeclarada | null = base ? { ...base, rango, propia: propia !== null } : null;
+  // **La forma es de quien pone la numeración**, igual que la rejilla: si esta
+  // Location la tiene, la suya; si la hereda, la de la madre. Vacía significa forma
+  // sin declarar, y entonces `compararConLaRejilla` devuelve `sin_forma` en vez de
+  // afirmar una capacidad (D8).
+  const forma = propia ? location.formaDeclarada : (madre?.formaDeclarada ?? []);
+  const rejillaDeclarada: RejillaDeclarada | null = base
+    ? { ...base, rango, propia: propia !== null, forma }
+    : null;
+
+  // **La densidad sale del MARCO de plantación, no del área del polígono** (D10,
+  // 2026-10-02): «la densidad se coloca por mts entre cada plantón, y hay tantos
+  // plantones». En un lote irregular el área del polígono incluye la roca y el camino.
+  //
+  // Los dos metros son de ESTA Location —D2: los atributos del terreno se copian al
+  // crear una microparcela y desde ahí son suyos— mientras las celdas salen de la forma
+  // de quien pone la numeración. No es una inconsistencia: son dos cosas distintas.
+  const vivas = cohorts.filter((c) => c.status === "active");
+  const densidad = densidadDelLote({
+    marco: {
+      plantSpacingMeters: location.plantSpacingMeters == null ? null : Number(location.plantSpacingMeters),
+      rowSpacingMeters: location.rowSpacingMeters == null ? null : Number(location.rowSpacingMeters),
+    },
+    celdasPlantadas: rejillaDeclarada
+      ? celdasDeLaForma(rejillaDeclarada.forma, rejillaDeclarada.rango ?? tableroDe(rejillaDeclarada))
+      : 0,
+    plantasContadas: vivas.reduce((suma, c) => suma + (c.plantCount ?? 0), 0),
+    cohortesSinConteo: vivas.filter((c) => c.plantCount == null).length,
+  });
 
   return {
     location,
@@ -884,7 +909,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
     // ver el comentario junto a `resolveFarmSiteId` arriba. El llamador no
     // debe recomponerla con `location.parentLocation`.
     farmLocationId,
-    density: computePlotDensity(cohorts, location.areaHectares),
+    densidad,
     // **La rejilla se resuelve en el padre cuando esta Location no la tiene**, que
     // es el caso de una microparcela: la numeración es UNA, la de la parcela (D3).
     // Leer sólo la propia diría `sin_rejilla` de una microparcela que sí está

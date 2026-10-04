@@ -14,6 +14,7 @@ import { puedeVerEquipo } from "../../lib/equipos/equipos";
 import { ocupacionDeBandejas } from "../../lib/beneficio/vistaDeBandejas";
 import { can } from "../../lib/rbac/service";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `bdj-${Date.now()}`;
@@ -72,6 +73,7 @@ async function posicion(nivel: number, puesto: number, organizationId = org, pad
 }
 async function secado(codigo: string) {
   const lot = await createLot(operador, { lotCode: `${RUN_ID}-${codigo}`, lotType: "drying", organizationId: org, locationId: sitio });
+  await abrirProcesoDePrueba(operador, lot.id);
   const { run } = await startDryingRun(operador, { lotId: lot.id, startedAt: new Date("2026-09-01T10:00:00Z"), provenanceClass: "original_record" });
   return run;
 }
@@ -106,6 +108,8 @@ afterAll(async () => {
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   await prisma.equipment.deleteMany({ where: assertDefinedWhere({ id: { in: equipos } }) });
   await prisma.dryingTrayType.deleteMany({ where: assertDefinedWhere({ id: { in: tipos } }) });

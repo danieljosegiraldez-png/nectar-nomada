@@ -3092,6 +3092,45 @@ Se anota aquí, y no en un log, por lo mismo que la de arriba: la entrada de est
 que lo contaba se archivó el 2026-09-29, y medido antes de moverla daba **cero**
 menciones en este archivo, en `DECISIONS.md` y en el archivo histórico.
 
+### Un formulario rechazado se vacía, y hay que teclearlo todo otra vez
+
+**2026-10-03, recorriendo la rejilla con una cuenta de operario.** Se escriben los cuatro
+campos de la rejilla menos uno, el servidor rechaza con su frase —correcta y clara— y **los
+cuatro campos quedan en blanco**. Lo mismo al dar un rango que no cabe en la rejilla: el
+mensaje dice «Ese rango no cabe en la rejilla de la parcela», y las cuatro cifras
+desaparecen.
+
+**No es de esos dos formularios.** Reproducido con dos componentes, dos servicios y dos
+validaciones distintas. La causa es el patrón, que es el de toda la casa: `useActionState`
+con `<form action={formAction}>` y campos no controlados cuyo `defaultValue` sale de **lo
+guardado**. React 19 reinicia los campos de un formulario al terminar su acción, así que al
+repintar vuelven al valor almacenado — que en un alta es vacío.
+
+Medido ese día, con su control:
+
+| | |
+|---|---|
+| componentes con `useActionState` | **70** |
+| de ellos, los que repintan lo ENVIADO | **0** |
+| React | 19.2.8 |
+
+**Por qué importa más de lo que parece.** La validación funciona y el mensaje es bueno: esto
+no es «la pantalla miente». Es peor en otro sentido — la pantalla dice la verdad y castiga
+por haberla escuchado. En un formulario de cuatro campos es molesto; en el de 134 campos que
+`CLAUDE.md` ya menciona, o en el campo con guantes y sol, es lo que hace abandonar un
+registro. Y no sale en ninguna prueba: las que hay afirman que el servicio rechaza, que es
+justo lo que sí ocurre.
+
+**Lo que NO se ha hecho, dicho para que nadie lo cuente por hecho.** Arreglarlo es devolver
+los valores enviados en el estado de la acción y usarlos como `defaultValue`, y eso toca los
+70 componentes: es un cambio de patrón y una decisión de Daniel, no una tarea. Queda escrito
+aquí para que la próxima sesión no lo redescubra recorriendo pantallas.
+
+**Y un falso positivo del mismo recorrido, porque distinguirlos cuesta una recarga.** Justo
+después de guardar bien, el selector de esquina de la rejilla aparece vacío. **No es un
+defecto**: es el repintado posterior al envío, y al recargar muestra el valor guardado. La
+diferencia entre eso y el vaciado de arriba no se ve mirando una vez — se ve recargando.
+
 ### Una prueba puede cerrarse sola por una errata
 
 **Síntoma.** `open-decisions.sh` trataba **cualquier** código distinto de 0 y 2
@@ -3468,6 +3507,62 @@ en `tests/beneficio/graficaDeSecado.test.ts`). Sin la segunda, devolver la serie
 rango que quepa dentro del de la principal pasa el guardia sin que nadie note el aplastamiento. La
 medición que lo motivó está en el comentario de `escalaDeAmbiente`, en
 `lib/beneficio/graficaDeSecado.ts`.
+
+### Y tres cosas más del carril con base, que se aprendieron por separado
+
+**2026-10-02/03.** La sección de abajo cubre el NOMBRE de la base desechable. Estas
+tres son del mismo carril y cada una costó una corrida o más.
+
+**1. El locale, que no es lo mismo que el nombre.** `CREATE DATABASE x;` a pelo hereda
+el de `template1`, que en este clúster es **`C` pelado**. Y la columna que se mira para
+comprobarlo **no discrimina**: `datcollate` dice `C` en las dos. Medido el 2026-10-03
+creando las dos y comparándolas:
+
+| base | `datcollate` | `datlocale` | `upper('ñ')` |
+|---|---|---|---|
+| creada a pelo | `C` | **nulo** | **`ñ`** — no la cambia |
+| con el locale builtin | `C` | `C.UTF-8` | `Ñ` |
+
+La tercera columna es el control que de verdad zanja: **en una base `C` pelada,
+`upper('ñ')` devuelve `ñ`**. Cualquier camino que ponga en mayúsculas texto acentuado
+se comporta distinto, y `nectar_test` —la compartida— tiene `datlocale = C.UTF-8`. Así
+que una base desechable se crea así, y se comprueba con `upper`, no con `datcollate`:
+
+```sql
+CREATE DATABASE "nectar_ci_algo" TEMPLATE template0 ENCODING 'UTF8'
+  LOCALE_PROVIDER builtin BUILTIN_LOCALE 'C.UTF-8';
+```
+
+**2. El grupo con base se corre ENTERO, no sólo el archivo que escribiste.** El
+2026-10-02 añadí un disparador sobre `traceability.specimen`, corrí el carril hermético
+completo y del grupo `base-sembrada` **sólo mis dos archivos nuevos**. Verde. El CI del
+PR salió en rojo: `tests/traceability/f1.test.ts` crea a propósito un plantón con
+coordenadas en una parcela sin numerar —el §3 de F1 lo permite— y mi guardia lo
+rechazaba. Era un **conflicto de diseño con una decisión anterior y deliberada**, no un
+descuido, y lo encontró el CI en vez de yo.
+
+**Y la razón por la que se salta es real, no pereza:** `ci-con-base.sh` **no es
+re-ejecutable sobre la misma base**. La semilla tiene su propio guardia de colisión de
+organización, así que la segunda vuelta muere **antes de correr una sola prueba** y sin
+línea `Test Files`. Hace falta una base nueva por corrida, y ese coste es justo lo que
+empuja a correr sólo tu archivo. La forma buena, con su base nueva:
+
+```bash
+# tras crearla con el locale de arriba
+TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55433/nectar_ci_algo \
+  bash scripts/ci-con-base.sh
+```
+
+Un cambio que toca un servicio compartido —`plantingCohorts.ts`, `locations.ts`,
+`specimens.ts`— tiene un radio de daño que **tu archivo de prueba no puede ver**.
+Medido ese día: la segunda corrida completa destapó 5 fallos en 2 archivos que mis
+propias pruebas daban en verde.
+
+**3. Editar una migración ya aplicada obliga a otra base nueva.** Prisma guarda un
+checksum, así que cambiar el `.sql` de una migración que la base ya aplicó hace que
+`migrate deploy` se niegue. Mientras la migración no esté fusionada, editarla es lo
+correcto —la historia del repositorio se queda limpia— pero la base local se vuelve
+inservible. Se tira y se crea otra; no se intenta arreglar `_prisma_migrations` a mano.
 
 ### El nombre de la base desechable decide si cuatro suites pasan
 

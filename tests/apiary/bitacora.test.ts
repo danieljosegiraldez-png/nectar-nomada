@@ -67,7 +67,7 @@ describe("A9.12 — las reglas de lo inmediato", () => {
     // pantalla. El enlace sí vuelve a pasar por la compuerta al abrirse.
     const e = enmienda({
       operation: "inspection.create",
-      after: { outcome: "issue_observed", note: "SECRETO QUE NO DEBE VIAJAR", broodPatternNote: "tampoco esto" },
+      after: { outcome: "issue_observed", note: "SECRETO QUE NO DEBE VIAJAR", broodPattern: "tampoco esto" },
     });
     const m = inmediatosDe([e], enlace)[0]!;
     expect(m.enlace).toBe("/apiaries/sitio");

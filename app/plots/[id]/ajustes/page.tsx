@@ -5,7 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../lib/traceability/plantingCohorts";
 import { getObserverCandidates } from "../../../../lib/traceability/lots";
-import { LocationAccessError } from "../../../../lib/traceability/locations";
+import { puedeGestionarAtributosDeUbicacion, LocationAccessError } from "../../../../lib/traceability/locations";
 import { listSoilProfilesForLocation } from "../../../../lib/traceability/soilProfiles";
 import { estadosPorCohorte } from "../../../../lib/traceability/estadoDeProduccion";
 import { recortarPorPrecision } from "../../../../lib/time/recortarPorPrecision";
@@ -13,6 +13,9 @@ import { PlantingCohortForm } from "../../../components/traceability/PlantingCoh
 import { PlotAttributesForm } from "../../../components/traceability/PlotAttributesForm";
 import { RejillaForm } from "../../../components/traceability/RejillaForm";
 import { RangosDeBloqueForm } from "../../../components/traceability/RangosDeBloqueForm";
+import { FormaDelLoteForm } from "../../../components/traceability/FormaDelLoteForm";
+import { RangoDeMicroparcelaForm } from "../../../components/traceability/RangoDeMicroparcelaForm";
+import { celdasDeLaForma, tableroDe } from "../../../../lib/traceability/formaDeLaParcela";
 import { SoilProfileForm } from "../../../components/traceability/SoilProfileForm";
 import { MarcarEnProduccionForm } from "../../../components/traceability/MarcarEnProduccionForm";
 import { listPlotBlocks, claveDeTituloDeBloque } from "../../../../lib/traceability/plotBlocks";
@@ -60,6 +63,21 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   // El MISMO predicado que la ficha de la parcela y que `createMicrolot`: antes bastaba con que el
   // lugar fuera una parcela, así que el botón aparecía también a quien el servidor iba a negar.
   const puedeSubdividir = await puedeSubdividirParcela(user.userAccountId, location.id);
+  // **La regla de trampas se comprueba sobre la FINCA, no sobre esta parcela**, y por eso necesita su
+  // propia bandera. `guardarReglaDeTrampas` llama a `requireLocationAttributeAccess` con
+  // `input.farmLocationId` (`lib/traceability/trapRules.ts`), así que quien tenga
+  // `location:manage_attributes` sobre la parcela y no sobre la finca —un operario asignado a una
+  // parcela suelta— veía el formulario, lo rellenaba y se lo rechazaba el servidor.
+  //
+  // Es la misma forma que esta página ya corrigió para `puedeSubdividir`, y su comentario lo dice:
+  // «antes bastaba con que el lugar fuera una parcela, así que el botón aparecía también a quien el
+  // servidor iba a negar». Aquí faltaba la mitad del objetivo: el permiso es el mismo, el SITIO no.
+  //
+  // La regla vigente se sigue mostrando: verla no exige nada que no exija entrar en esta página, y
+  // esconderla quitaría información que la persona sí puede leer. Lo que se oculta es el formulario.
+  const puedeEditarLaReglaDeTrampas = farmLocationId
+    ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, farmLocationId)
+    : false;
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
@@ -208,6 +226,54 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
             rowSpacingMeters: location.rowSpacingMeters?.toString() ?? null,
           }}
         />
+
+        {/* **La forma va junto al tablero y sólo cuando HAY tablero.** Sin rejilla el
+            disparador rechaza cualquier trozo, así que ofrecer el formulario sería
+            ofrecer algo que no puede funcionar. Y son las dos mitades de «qué hay en este
+            suelo»: el tablero dice cómo se numera, la forma qué celdas tienen planta
+            (D8/D9). */}
+        {location.rowCount != null && location.plantsPerRow != null ? (
+          <>
+            <h3>{t("formaSubtitulo")}</h3>
+            <FormaDelLoteForm
+              locationId={location.id}
+              trozos={location.formaDeclarada}
+              // La UNIÓN, calculada en el servidor: dos trozos que se pisan no cuentan
+              // dos veces, y el cliente no tiene por qué saber hacer esa cuenta.
+              celdasPlantadas={celdasDeLaForma(
+                location.formaDeclarada,
+                tableroDe({ rowCount: location.rowCount, plantsPerRow: location.plantsPerRow }),
+              )}
+                celdasDelTablero={location.rowCount * location.plantsPerRow}
+            />
+          </>
+        ) : null}
+
+        {/* **El rango de una microparcela: el §6 del diseño del 2026-10-01**, que lo pedía
+            y nunca se construyó. Aparece cuando esta ubicación NO tiene rejilla propia y
+            su madre SÍ — o sea, cuando es una microparcela de una parcela numerada. Sin
+            esto, la comparación devolvía `sin_rango` y ese estado no tenía salida: el
+            sistema pedía un dato que ninguna pantalla podía dar. */}
+        {location.rowCount == null &&
+        location.parentLocation?.rowCount != null &&
+        location.parentLocation.plantsPerRow != null ? (
+          <>
+            <h3>{t("rangoMicroSubtitulo")}</h3>
+            <RangoDeMicroparcelaForm
+              locationId={location.id}
+              rango={{
+                rangeRowFrom: location.rangeRowFrom,
+                rangeRowTo: location.rangeRowTo,
+                rangePlantFrom: location.rangePlantFrom,
+                rangePlantTo: location.rangePlantTo,
+              }}
+              rejillaDeLaMadre={{
+                rowCount: location.parentLocation.rowCount,
+                plantsPerRow: location.parentLocation.plantsPerRow,
+              }}
+            />
+          </>
+        ) : null}
       </section>
 
       <section className="nn-section" id="calicatas">
@@ -340,12 +406,14 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <p className="nn-muted">{t("trapRuleNone")}</p>
         )}
-        <ReglaDeTrampasForm
-          locationId={location.id}
-          farmLocationId={farmLocationId}
-          regla={reglaDeTrampas}
-          productos={productosDeLaFinca}
-        />
+        {puedeEditarLaReglaDeTrampas ? (
+          <ReglaDeTrampasForm
+            locationId={location.id}
+            farmLocationId={farmLocationId}
+            regla={reglaDeTrampas}
+            productos={productosDeLaFinca}
+          />
+        ) : null}
       </section>
     </div>
   );

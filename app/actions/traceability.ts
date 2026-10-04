@@ -39,6 +39,7 @@ import {
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { BandejaError } from "../../lib/traceability/bandejaError";
+import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
@@ -82,6 +83,7 @@ import {
   setPlotBlockType,
   PlotBlockValidationError,
 } from "../../lib/traceability/plotBlocks";
+import { declararTrozoDeForma, quitarTrozoDeForma } from "../../lib/traceability/formaDeLaParcela";
 import { createTrap, recordTrapCheck, TrapAccessError, TrapValidationError } from "../../lib/traceability/traps";
 import { saveTrapRule, TrapRuleValidationError } from "../../lib/traceability/trapRules";
 import {
@@ -190,6 +192,13 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
     return t(`error_${clave}` as "error_provenance_required", { value: resto.join(":") });
   }
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
+  // Parte 1 (tarea 12, 2026-10-03): un texto por código. El genérico de abajo sigue para los demás, con el código de detalle.
+  const claveDeProceso = claveDeErrorDeProceso(error);
+  if (claveDeProceso) return t(claveDeProceso as "error_proceso_sin_proceso_abierto");
+  // R6.6 lanza `lote_dividido` también desde las mediciones y las muestras, con sus propias clases.
+  if ((error instanceof MeasurementValidationError || error instanceof SampleFromLotValidationError) && error.message === "lote_dividido") {
+    return t("error_proceso_lote_dividido");
+  }
   if (error instanceof LotProcessError) return t("error_lot_process", { detail: error.message });
   if (error instanceof QuantityValidationError) return t("error_quantity", { detail: error.message });
   if (error instanceof MeasurementValidationError) return t("error_measurement", { detail: error.message });
@@ -552,7 +561,6 @@ export async function startFermentationAction(
       inoculationNote: emptyToNull(formData.get("inoculationNote")),
       quantity: emptyToNullNumber(formData.get("quantity")),
       unit: emptyToNull(formData.get("unit")),
-      processRecipeVersionId: emptyToNull(formData.get("processRecipeVersionId")),
       // T9.5 §3(b): starting a run is an action taken, not a measurement.
       provenanceClass: "original_record",
     });
@@ -2583,7 +2591,12 @@ export async function devolverASecadoAction(
 
   const lotId = String(formData.get("lotId") ?? "");
   try {
-    await devolverASecado(user.userAccountId, { lotId, motivo: String(formData.get("motivo") ?? "") });
+    await devolverASecado(user.userAccountId, {
+      lotId,
+      motivoValueId: String(formData.get("motivoValueId") ?? ""),
+      nota: emptyToNull(formData.get("nota")),
+      ocurrioEn: new Date(),
+    });
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }
@@ -2871,6 +2884,45 @@ export async function guardarRejillaAction(
 }
 
 /**
+ * El rango de una microparcela: **dónde está dentro de la numeración de su parcela** (D3).
+ *
+ * §6 del diseño del 2026-10-01, que lo pedía y nunca se construyó. Hasta hoy una
+ * microparcela no podía decir qué trozo ocupa desde la aplicación —medido el 2026-10-02:
+ * cero archivos de `app/` escribían `rangeRowFrom`— así que el estado `sin_rango` de la
+ * comparación **no tenía salida**: el sistema decía «declara el rango» y no había dónde.
+ *
+ * Misma familia que `guardarRejillaAction` y el mismo servicio: `undefined` no toca la
+ * columna, así que el formulario de la rejilla no borra este rango ni éste aquélla.
+ */
+export async function guardarRangoDeMicroparcelaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await updateLocationAttributes(user.userAccountId, {
+      locationId,
+      // Vacío es «sin rango», nunca cero: `Number("")` es 0, y una microparcela de la
+      // hilera 0 a la 0 no existe (ADR-080).
+      rangeRowFrom: emptyToNullNumber(formData.get("rangeRowFrom")),
+      rangeRowTo: emptyToNullNumber(formData.get("rangeRowTo")),
+      rangePlantFrom: emptyToNullNumber(formData.get("rangePlantFrom")),
+      rangePlantTo: emptyToNullNumber(formData.get("rangePlantTo")),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
  * Añadir un rango a un bloque, con los solapes que D7 permite **como aviso**.
  *
  * El servicio devuelve con quién se solapa y cuántas celdas comparte; aquí se
@@ -2886,6 +2938,7 @@ export async function anadirRangoAlBloqueAction(
 
   const locationId = String(formData.get("locationId") ?? "");
   let solapes: Array<{ bloque: string; celdas: number }> = [];
+  let sinPlantar = 0;
   try {
     const r = await anadirRangoAlBloque(user.userAccountId, {
       plotBlockId: String(formData.get("plotBlockId") ?? ""),
@@ -2895,15 +2948,84 @@ export async function anadirRangoAlBloqueAction(
       plantTo: Number(formData.get("plantTo") ?? Number.NaN),
     });
     solapes = [...r.solapesAvisados];
+    sinPlantar = r.celdasSinPlantar;
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/plots/${locationId}`);
   revalidatePath(`/plots/${locationId}/ajustes`);
-  return solapes.length
-    ? { avisos: solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })) }
-    : {};
+  // **Dos avisos distintos y que no se pisan** (D7 y D11): con quién se solapa, y
+  // cuántas de sus celdas la forma dice que no están plantadas. Los dos van por
+  // `avisos` y no por `error`, porque el rango SE GUARDÓ.
+  const avisos = [
+    ...solapes.map((s) => t("rejillaSolapeAviso", { bloque: s.bloque, celdas: s.celdas })),
+    ...(sinPlantar > 0 ? [t("rejillaFueraDeLaFormaAviso", { celdas: sinPlantar })] : []),
+  ];
+  return avisos.length ? { avisos } : {};
+}
+
+/**
+ * Declarar un trozo de la forma del lote: qué celdas del tablero están plantadas (D9).
+ *
+ * Misma familia que `guardarRejillaAction`: `useActionState`, un `error` traducido de
+ * vuelta y **sin `redirect`**. El servicio lo cuelga de la raíz de la numeración, así que
+ * esta acción no tiene que resolver nada.
+ */
+export async function declararTrozoDeFormaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  try {
+    await declararTrozoDeForma(user.userAccountId, {
+      locationId,
+      rowFrom: Number(formData.get("rowFrom") ?? Number.NaN),
+      rowTo: Number(formData.get("rowTo") ?? Number.NaN),
+      plantFrom: Number(formData.get("plantFrom") ?? Number.NaN),
+      plantTo: Number(formData.get("plantTo") ?? Number.NaN),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return {};
+}
+
+/**
+ * Quitar un trozo de la forma, **avisando de las plantas que deja fuera** (§7.4).
+ *
+ * El aviso va aquí y no al declarar: declarar sólo añade suelo plantado, y quitar es lo
+ * que puede dejar una planta situada donde la forma ya no llega. Vuelve en `avisos` y no
+ * en `error` porque **el trozo se quitó**: rechazar obligaría a declarar como plantado un
+ * terreno que no lo está, y el operario sabe algo que la base no.
+ */
+export async function quitarTrozoDeFormaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  let fuera = 0;
+  try {
+    const r = await quitarTrozoDeForma(user.userAccountId, String(formData.get("trozoId") ?? ""));
+    fuera = r.plantasQueQuedanFuera;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/plots/${locationId}`);
+  revalidatePath(`/plots/${locationId}/ajustes`);
+  return fuera > 0 ? { avisos: [t("rejillaFormaPlantasFueraAviso", { plantas: fuera })] } : {};
 }
 
 /** Quitar un rango. Es un acto y el servicio lo registra. */

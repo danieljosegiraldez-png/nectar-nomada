@@ -3,8 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import { coberturaDelLote, puedeAbrirProceso, puedeEmpezarCorrida, LotProcessError } from "../../../../../lib/traceability/lotProcess";
 import { FermentationForm } from "../../../../components/traceability/FermentationForm";
-import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +23,35 @@ export default async function NewFermentationPage({ params }: { params: Promise<
     throw error;
   }
 
-  // Already filtered to approved versions belonging to this batch's
-  // organization, or shared ones (ADR-099). An empty list hides the field
-  // rather than offering a question with no answers.
-  const recipeVersions = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
-    id: v.id,
-    label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
-  }));
+  // Parte 1, R4 (tarea 9, 2026-10-02): la receta de la corrida es la del proceso que CUBRE al lote, y el formulario la
+  // enseña sólo para leer. Antes se le pasaba siempre `null` y decía «el proceso de este lote no tiene receta» aunque la
+  // tuviera. Ahora sólo lo dice cuando el proceso abierto de verdad no la tiene.
+  //
+  // Sin proceso abierto no se ofrece el formulario (R3: el servicio rechazaría con `sin_proceso_abierto`), y se dice por
+  // qué, con las mismas frases que la ficha y la página del proceso. Un `LotProcessError` al cargar —un linaje de más de 64
+  // generaciones— se dice también: no es un 404 ni un 500.
+  //
+  // Revisión final (ronda de arreglo 1, 2026-10-03): la decisión es la de `puedeEmpezarCorrida`, la MISMA función que corre el
+  // servicio. Antes sólo miraba si el proceso que cubre al lote estaba abierto, y ofrecía el formulario en bodega, en un lote
+  // dividido, con otra corrida abierta o sobre la cereza ya consumida.
+  let aviso: string | null = null;
+  let recetaDelProceso: string | null = null;
+  try {
+    const empezar = await puedeEmpezarCorrida(user.userAccountId, lot.id);
+    if (empezar.puede) {
+      const cobertura = await coberturaDelLote(user.userAccountId, lot.id);
+      // Un vigente `oculto` vive en un lote que quien mira no puede ver: su receta no se enseña (revisión final, ronda de arreglo 1).
+      recetaDelProceso = cobertura.vigente?.oculto ? t("processRecipeHidden") : (cobertura.vigente?.recetaConVersion ?? null);
+    } else if (empezar.motivo === "sin_proceso_abierto") {
+      const puede = await puedeAbrirProceso(user.userAccountId, lot.id);
+      aviso = puede.puede ? t("startRunNeedsOpenProcess") : t(`processCannotOpen_${puede.motivo}`);
+    } else {
+      aviso = empezar.motivo === "lineage_too_deep" ? t("processLineageTooDeep") : t(`error_proceso_${empezar.motivo}`);
+    }
+  } catch (error) {
+    if (!(error instanceof LotProcessError)) throw error;
+    aviso = error.message === "lineage_too_deep" ? t("processLineageTooDeep") : t("processLoadFailed", { detail: error.message });
+  }
 
   return (
     <div>
@@ -37,7 +59,13 @@ export default async function NewFermentationPage({ params }: { params: Promise<
         {t("backToLot", { lotCode: lot.lotCode })}
       </Link>
       <h1>{t("startFermentationButton")}</h1>
-      <FermentationForm lotId={id} recipeVersions={recipeVersions} />
+      {aviso !== null ? (
+        <p className="nn-muted">
+          <Link href={`/lots/${id}/process`}>{aviso}</Link>
+        </p>
+      ) : (
+        <FermentationForm lotId={lot.id} recetaDelProceso={recetaDelProceso} />
+      )}
     </div>
   );
 }

@@ -29,6 +29,8 @@
  * que lo hace prescindible.
  */
 
+import { clasificar, type HechosDelEquipo } from "../equipos/disponibilidad";
+
 export type Liberacion =
   | { readonly tipo: "a_las"; readonly cuando: Date }
   | { readonly tipo: "sin_duracion_declarada" };
@@ -44,31 +46,86 @@ export interface CorridaConDuracion {
   readonly expectedHours: number | null;
 }
 
+/**
+ * La unidad tal como esta función la necesita: su id y lo que puede impedir que vuelva a estar
+ * libre. Es `HechosDelEquipo` sin `enUso` —el mismo tipo que usa el mapa del tablero— para que no
+ * haya dos definiciones de «qué se sabe de una unidad» que puedan derivar.
+ */
+export type UnidadParaLiberar = Omit<HechosDelEquipo, "enUso">;
+
 const MS_POR_HORA = 3_600_000;
 
-/** La PRÓXIMA en liberarse, o `null` si no hay ninguna corrida abierta. */
+/**
+ * **¿Esta unidad volverá a estar libre cuando acabe lo que tiene dentro?**
+ *
+ * Lo decide `clasificar`, el MISMO que usa la ocupación, no una regla paralela: se le pregunta por
+ * la unidad dándola por ocupada, y si el único problema que devuelve es `EN_USO`, entonces estar
+ * ocupada es todo lo que le pasa y acabará. Si trae `RETIRADO` o `CONDICION`, alguien tiene que ir
+ * antes de volver a llenarla, así que anunciar su hora es prometer una unidad que no va a servir.
+ */
+function volveraAEstarLibre(unidad: UnidadParaLiberar): boolean {
+  return clasificar({ ...unidad, enUso: true }).motivos.every((m) => m === "EN_USO");
+}
+
+/** `null`, no-finito (NaN, Infinity) y no positivo (0, negativo) cuentan igual: no declarada. */
+function finDeLaCorrida(c: CorridaConDuracion): number | null {
+  // NaN daría una fecha inválida que se pintaría como hora; 0 o un negativo darían el INICIO de
+  // la corrida, o una hora anterior a él, y se leería como «ya debía liberarse» de una duración
+  // que ninguna receta puede declarar. **Es la misma regla de los otros dos consumidores**: la
+  // escritura la rechaza (`validateExpectedHours`, `processTargets.ts`: `expected_hours_must_be_positive`)
+  // y la cola la declara inválida (`estadoDeRitmo`, `ritmo.ts`: `duracion_esperada_invalida_en_la_base`).
+  // Aquí no se lanza —la base puede traerlo corrupto y la pantalla no debe caer—, pero tampoco se
+  // trata como duración: en la misma pantalla la cola diría «inválida» y esta línea la citaría.
+  if (c.expectedHours === null || !Number.isFinite(c.expectedHours) || c.expectedHours <= 0) return null;
+  return c.iniciadaEn.getTime() + c.expectedHours * MS_POR_HORA;
+}
+
+/**
+ * La PRÓXIMA unidad en liberarse, o `null` si ninguna unidad conocida tiene nada dentro.
+ *
+ * **Se agrupa por UNIDAD, y dentro de cada unidad manda el fin MAYOR** — el defecto de
+ * `PENDING_IMPLEMENTATIONS/015`: antes se tomaba el mínimo global, así que dos corridas en el mismo
+ * tanque hacían anunciar la hora de la primera, a la que ese tanque **no** va a estar libre. Dos
+ * corridas en una unidad son un conflicto de datos que la ocupación ya cuenta aparte
+ * (`Ocupacion.conflictos`); lo que esta función no puede hacer es apoyarse en él para prometer una
+ * hora falsa. Entre unidades sí manda el fin menor: se pregunta por la próxima.
+ *
+ * **Una unidad con una sola corrida sin fin conocido no tiene hora**, aunque otra corrida de la
+ * MISMA unidad sí lo declare: no se libera hasta que acaben las dos. Es la misma forma del defecto,
+ * más pequeña.
+ *
+ * **Y una unidad que no volverá a estar libre no cuenta** (ver `volveraAEstarLibre`): su corrida
+ * acabará, pero la unidad seguirá sin servir. Como la corrida muda, no aporta hora — así que un
+ * tanque retirado con algo dentro deja `sin_duracion_declarada` y no `null`: hay algo ocupado y no
+ * se sabe cuándo habrá unidad, que es distinto de «no hay nada ocupado».
+ *
+ * **Una corrida de una unidad que no está en `unidades` queda fuera del alcance**, igual que
+ * `ocupacionDelSitio` la manda a `ajenas`: sus números no la incluyen, y esta hora tampoco debe.
+ */
 export function proximaLiberacion(input: {
   readonly corridas: readonly CorridaConDuracion[];
+  /** Las unidades VISIBLES para quien mira, con su estado. Obligatoria y sin valor por defecto. */
+  readonly unidades: readonly UnidadParaLiberar[];
   readonly ahora: Date;
 }): Liberacion | null {
-  if (input.corridas.length === 0) return null;
+  const porId = new Map(input.unidades.map((u) => [u.id, u] as const));
 
-  let proxima: number | null = null;
+  // Agrupado por unidad: `undefined` = no se ha visto; `null` = tiene algo cuyo fin no se sabe.
+  const finPorUnidad = new Map<string, number | null>();
   for (const c of input.corridas) {
-    // `null`, no-finito (NaN, Infinity) y no positivo (0, negativo) cuentan igual: no declarada.
-    // NaN daría una fecha inválida que se pintaría como hora; 0 o un negativo darían el INICIO de
-    // la corrida, o una hora anterior a él, y se leería como «ya debía liberarse» de una duración
-    // que ninguna receta puede declarar. **Es la misma regla de los otros dos consumidores**: la
-    // escritura la rechaza (`validateExpectedHours`, `processTargets.ts`: `expected_hours_must_be_positive`)
-    // y la cola la declara inválida (`estadoDeRitmo`, `ritmo.ts`: `duracion_esperada_invalida_en_la_base`).
-    // Aquí no se lanza —la base puede traerlo corrupto y la pantalla no debe caer—, pero tampoco se
-    // trata como duración: en la misma pantalla la cola diría «inválida» y esta línea la citaría.
-    if (c.expectedHours === null || !Number.isFinite(c.expectedHours) || c.expectedHours <= 0) continue;
-    const fin = c.iniciadaEn.getTime() + c.expectedHours * MS_POR_HORA;
-    if (proxima === null || fin < proxima) proxima = fin;
+    const id = c.equipmentId ?? c.bedLocationId;
+    if (id === null) continue;
+    const unidad = porId.get(id);
+    if (unidad === undefined) continue;
+    const previo = finPorUnidad.get(id);
+    if (previo === null) continue; // ya desconocida: no se recupera con otra corrida
+    const fin = volveraAEstarLibre(unidad) ? finDeLaCorrida(c) : null;
+    finPorUnidad.set(id, fin === null ? null : previo === undefined ? fin : Math.max(previo, fin));
   }
 
-  return proxima === null
+  if (finPorUnidad.size === 0) return null;
+  const conocidos = [...finPorUnidad.values()].filter((f): f is number => f !== null);
+  return conocidos.length === 0
     ? { tipo: "sin_duracion_declarada" }
-    : { tipo: "a_las", cuando: new Date(proxima) };
+    : { tipo: "a_las", cuando: new Date(Math.min(...conocidos)) };
 }
