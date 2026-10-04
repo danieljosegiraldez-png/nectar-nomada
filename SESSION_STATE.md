@@ -60,7 +60,18 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
    contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
 
+#### Dos preguntas que vienen de la entrega del 017 y el 015 (archivada el 2026-10-04)
+
+- **Si dos corridas abiertas en una CAMA son un conflicto de datos.** Para un tanque sí; con varias
+  bandejas puede ser lo normal. Hoy el recuento por unidad las marca como conflicto en los dos casos.
+- **Si una receta de fermentación debe OBLIGAR a medir pH.** Hoy no obliga.
+
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
+
+**618 → 624 operaciones en 170 archivos, cero bajas**, con el detector sobre el AST (ficha `007`, escalón 1). Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
+**Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
 
 ### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
 
@@ -70,30 +81,6 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 **Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
 **Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.
-
-### 2026-10-02 · Las dos pantallas que mentían: la banda de la curva y la capacidad del sitio (#603, #605)
-
-**017 — una meta `final` se usaba como banda de TODA la trayectoria**, así que un pH bajando de 6,5 a
-4,3 —el diseño de una fermentación— salía como «2 lecturas fuera del rango». Hoy el **momento** del
-objetivo decide a qué lecturas alcanza: `during` cubre el recorrido, `initial` y `final` se marcan en
-su extremo y juzgan **una**. Tu matiz era el caso que el código tiraba —en lavado y natural el Brix o
-el pH se miden **una vez**, antes de la cama— y medido, `initial` no aparecía **ni una vez** en el
-camino de la curva. Y la capa de base ya no elige en silencio entre dos objetivos declarados.
-
-**015 — una unidad ocupada por un lote que no ves salía «libre y sana»**: las corridas se consultan
-filtradas por lote visible y `enUso` salía de ellas. Hoy sale de un recuento por unidad **sin
-filtrar** —cuenta filas, no devuelve nada del lote—, de ahí salen también los conflictos, y la
-liberación **agrupa por unidad** tomando el fin mayor, sin las retiradas ni las averiadas.
-
-**Lo que enseñaron.** `readingsForMoment` no se podía reusar: no comprueba el empate de instante, el
-defecto que el #596 cerró con sus 7 de 10 lotes. El del 015 estaba **vivo dentro de un fixture, en
-verde** —dos secados en la misma cama—. `MapaDeUnidades` no tenía **ninguna** prueba de render, así
-que el campo nuevo habría muerto en la API. Y el arnés dio «exit 0» dos veces con código real **1**,
-porque un `echo` final convierte el fallo en éxito.
-
-**Qué queda tuyo:** si dos corridas abiertas en una **cama** son un conflicto de datos (para un
-tanque sí; con varias bandejas quizá sea lo normal), y si una receta de fermentación debe **obligar**
-a medir pH.
 
 ## 3. Bloqueado, y en qué
 
@@ -141,7 +128,7 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
 
 - **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas), 007 y 022 (sin empezar).** Fusionadas el
+- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
   2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 estaba HECHA desde A9.3 y su
   ficha no lo sabía. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
 - **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
@@ -340,11 +327,11 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
-- **El inventario de acceso lee texto, no programa** — no está bloqueado, está
-  *aplazado*: el detector actual no tiene ningún fallo conocido sin escribir, y
-  los que quedan están documentados con su mutación. La respuesta estructural
-  —un AST, con TypeScript que ya es dependencia— está en
-  `PENDING_IMPLEMENTATIONS/007`, con lo que arregla y lo que no.
+- **El inventario de acceso: el escalón 1 está HECHO** (#639, 2026-10-04) y lee
+  el AST. Lo que sigue abierto es **tuyo**: el escalón 2 —resolver el símbolo del
+  guardia con el comprobador de tipos, por su coste en CI— y qué subconjunto de
+  los **50** `exige*` cuenta como guardia, porque la mayoría son validadores y
+  meterlos movería «guardia directo» de 396 a 432. Ficha `007`, «Cómo quedó».
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver

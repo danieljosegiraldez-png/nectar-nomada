@@ -4804,3 +4804,33 @@ contra la literatura que el propio documento cita; que el bloque hable en la hor
 y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto de los dos lados); y
 `PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada puede sostener una
 afirmación.
+
+
+**Archivado el 2026-10-04**, con el estado en 398/400 líneas y el guardia pidiéndolo por su nombre.
+Sus **dos decisiones de Daniel** no se archivaron con ella: se rescataron a §1 de `SESSION_STATE.md`,
+porque una entrega archivada entierra las preguntas que lleva al final y así es como este archivo
+envejece sin avisar.
+
+### 2026-10-02 · Las dos pantallas que mentían: la banda de la curva y la capacidad del sitio (#603, #605)
+
+**017 — una meta `final` se usaba como banda de TODA la trayectoria**, así que un pH bajando de 6,5 a
+4,3 —el diseño de una fermentación— salía como «2 lecturas fuera del rango». Hoy el **momento** del
+objetivo decide a qué lecturas alcanza: `during` cubre el recorrido, `initial` y `final` se marcan en
+su extremo y juzgan **una**. Tu matiz era el caso que el código tiraba —en lavado y natural el Brix o
+el pH se miden **una vez**, antes de la cama— y medido, `initial` no aparecía **ni una vez** en el
+camino de la curva. Y la capa de base ya no elige en silencio entre dos objetivos declarados.
+
+**015 — una unidad ocupada por un lote que no ves salía «libre y sana»**: las corridas se consultan
+filtradas por lote visible y `enUso` salía de ellas. Hoy sale de un recuento por unidad **sin
+filtrar** —cuenta filas, no devuelve nada del lote—, de ahí salen también los conflictos, y la
+liberación **agrupa por unidad** tomando el fin mayor, sin las retiradas ni las averiadas.
+
+**Lo que enseñaron.** `readingsForMoment` no se podía reusar: no comprueba el empate de instante, el
+defecto que el #596 cerró con sus 7 de 10 lotes. El del 015 estaba **vivo dentro de un fixture, en
+verde** —dos secados en la misma cama—. `MapaDeUnidades` no tenía **ninguna** prueba de render, así
+que el campo nuevo habría muerto en la API. Y el arnés dio «exit 0» dos veces con código real **1**,
+porque un `echo` final convierte el fallo en éxito.
+
+**Qué queda tuyo:** si dos corridas abiertas en una **cama** son un conflicto de datos (para un
+tanque sí; con varias bandejas quizá sea lo normal), y si una receta de fermentación debe **obligar**
+a medir pH.
