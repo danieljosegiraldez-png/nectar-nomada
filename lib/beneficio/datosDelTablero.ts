@@ -21,6 +21,7 @@ import {
   type CorridaAbierta,
   type EntradaDeLoteParaTablero,
   type EquipoParaTablero,
+  type OcupacionDeUnidad,
   type UnidadDelSitio,
   type VeredictoParaCola,
 } from "./tablero";
@@ -46,6 +47,12 @@ export interface DatosDelTablero {
   readonly tanques: readonly UnidadDelSitio[];
   readonly camas: readonly UnidadDelSitio[];
   readonly corridas: readonly CorridaAbierta[];
+  /**
+   * Cuántas corridas abiertas tiene cada unidad visible, **sin filtrar por lote**. Ver
+   * `OcupacionDeUnidad`: es lo que impide que «no me llegó ninguna corrida» se lea como «la unidad
+   * está libre» cuando el lote que la ocupa no es visible (`PENDING_IMPLEMENTATIONS/015`).
+   */
+  readonly corridasPorUnidad: readonly OcupacionDeUnidad[];
   readonly instrumentos: readonly EquipoParaTablero[];
   readonly desviacionesAbiertasPorLote: ReadonlyMap<string, number>;
   /**
@@ -92,6 +99,7 @@ const VACIO: Omit<DatosDelTablero, "medidoEn"> = {
   tanques: [],
   camas: [],
   corridas: [],
+  corridasPorUnidad: [],
   instrumentos: [],
   desviacionesAbiertasPorLote: new Map(),
   sinAmbito: true,
@@ -382,6 +390,41 @@ export async function datosDelTablero(
     condicion: null,
   }));
   const idsVisibles = new Set([...tanquesVisibles, ...camasVisibles].map((u) => u.id));
+
+  // **Cuántas corridas abiertas tiene cada unidad visible, SIN filtrar por lote.** Es el arreglo de
+  // `PENDING_IMPLEMENTATIONS/015`: las dos consultas de arriba llevan `inputs.some.lot: lotWhere`,
+  // así que una corrida sobre un lote que quien mira no ve no llegaba, y la unidad salía «libre».
+  //
+  // **Es un `groupBy` con `_count`: no selecciona ni una columna del lote.** Dice cuántas filas hay
+  // sobre unidades que esta cuenta YA puede ver, así que no enseña nada que la visibilidad oculte —
+  // sólo deja de afirmar que un tanque ocupado está libre. Acotado a los ids visibles: una corrida
+  // sobre una unidad ajena no entra, igual que `ocupacionDelSitio` la manda a `ajenas`.
+  const idsDeTanquesVisibles = tanquesVisibles.map((u) => u.id);
+  const idsDeCamasVisibles = camasVisibles.map((u) => u.id);
+  const [ocupacionDeTanques, ocupacionDeCamas] = await Promise.all([
+    idsDeTanquesVisibles.length === 0
+      ? Promise.resolve([])
+      : prisma.fermentationRun.groupBy({
+          by: ["vesselEquipmentId"],
+          where: { endedAt: null, vesselEquipmentId: { in: idsDeTanquesVisibles } },
+          _count: { _all: true },
+        }),
+    idsDeCamasVisibles.length === 0
+      ? Promise.resolve([])
+      : prisma.dryingRun.groupBy({
+          by: ["dryingBedLocationId"],
+          where: { endedAt: null, dryingBedLocationId: { in: idsDeCamasVisibles } },
+          _count: { _all: true },
+        }),
+  ]);
+  const corridasPorUnidad: OcupacionDeUnidad[] = [
+    ...ocupacionDeTanques.flatMap((g) =>
+      g.vesselEquipmentId === null ? [] : [{ unidadId: g.vesselEquipmentId, corridas: g._count._all }],
+    ),
+    ...ocupacionDeCamas.flatMap((g) =>
+      g.dryingBedLocationId === null ? [] : [{ unidadId: g.dryingBedLocationId, corridas: g._count._all }],
+    ),
+  ];
   const corridasConDuracion: CorridaConDuracion[] = [
     ...fermentaciones.map((f) => ({
       equipmentId: f.vesselEquipmentId,
@@ -399,7 +442,13 @@ export async function datosDelTablero(
     const declarada = c.equipmentId ?? c.bedLocationId;
     return declarada !== null && idsVisibles.has(declarada);
   });
-  const liberacion = proximaLiberacion({ corridas: corridasConDuracion, ahora });
+  // Las unidades visibles con su estado: `proximaLiberacion` las necesita para no prometer la
+  // liberación de una unidad retirada o averiada, que no va a servir cuando se vacíe (015).
+  const liberacion = proximaLiberacion({
+    corridas: corridasConDuracion,
+    unidades: [...tanquesVisibles, ...camasVisibles],
+    ahora,
+  });
 
   const curva = opciones.curva ? await curvaDeUnLote(lotWhere, crudas, opciones.curva) : null;
 
@@ -408,6 +457,7 @@ export async function datosDelTablero(
     tanques: tanquesVisibles,
     camas: camasVisibles,
     corridas,
+    corridasPorUnidad,
     instrumentos: equipos.map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
     desviacionesAbiertasPorLote: porLote,
     sinAmbito: false,

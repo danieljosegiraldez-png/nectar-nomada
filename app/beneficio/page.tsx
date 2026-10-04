@@ -94,6 +94,8 @@ export default async function BeneficioPage({
     tanques: datos.tanques,
     camas: datos.camas,
     corridas: datos.corridas,
+    // Sin filtrar por lote: de aquí sale `enUso`. Ver `OcupacionDeUnidad` y la ficha 015.
+    corridasPorUnidad: datos.corridasPorUnidad,
   });
   const instrumentos = instrumentosQuePidenAtencion(datos.instrumentos);
 
