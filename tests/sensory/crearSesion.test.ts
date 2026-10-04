@@ -563,3 +563,77 @@ describe("buscarMuestrasParaCata", () => {
     await expect(buscarMuestrasParaCata(sinPermiso, RUN)).rejects.toBeInstanceOf(SesionDeCataError);
   });
 });
+
+/**
+ * Tarea 9, ronda de arreglo 1 (2026-10-02). Diseño R1: «las pantallas atrapan lineage_too_deep y lo dicen». La lista de catas
+ * pide el grado del proceso que cubre al lote de origen de cada muestra, fila por fila, y una sola muestra cuyo lote tenía más
+ * de 64 generaciones tumbaba la lista ENTERA (un 500 en «nueva cata» y en la búsqueda). Ahora esa fila sale marcada, sin grado,
+ * y las demás salen con el suyo.
+ *
+ * Las dos muestras llevan un código que sólo ellas casan (`${RUN}-LH-…`), para que la búsqueda devuelva exactamente esas dos.
+ */
+describe("la lista de catas con un lote de linaje demasiado hondo", () => {
+  const lotesHondos: string[] = [];
+  const enlaces: string[] = [];
+  const muestrasHondas: string[] = [];
+  let procesoNormal: string | undefined;
+
+  afterAll(async () => {
+    // Orden de FK: las muestras apuntan a sus lotes; el proceso, a su lote; las transformaciones, a los lotes que enlazan.
+    await prisma.sample.deleteMany({ where: assertDefinedWhere({ id: { in: muestrasHondas } }) });
+    if (procesoNormal) await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ id: procesoNormal }) });
+    await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: enlaces } }) });
+    await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: enlaces } }) });
+    await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: enlaces } }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotesHondos } }) });
+  }, 60000);
+
+  async function loteDeCata(codigo: string) {
+    const id = (await prisma.lot.create({ data: {
+      lotCode: `${codigo}-${RUN}`, lotType: "green", organizationId: orgId, locationId: plotId, status: "approved", classification: "internal", createdBy: gestor,
+    } })).id;
+    lotesHondos.push(id);
+    return id;
+  }
+  async function muestraDe(lotId: string, codigo: string) {
+    const id = (await prisma.sample.create({ data: {
+      sampleCode: `${RUN}-LH-${codigo}`, sampleType: "green", organizationId: orgId, locationId: plotId, sourceLotId: lotId,
+      status: "approved", classification: "internal", createdBy: gestor,
+    } })).id;
+    muestrasHondas.push(id);
+    return id;
+  }
+
+  it("la fila honda sale marcada y sin grado, y la normal sale con el suyo", async () => {
+    // La normal: un lote con su proceso abierto, para que su grado salga y se vea que la lista no lo pierde.
+    const normal = await loteDeCata("LH-NORMAL");
+    const [grado, cereza] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    procesoNormal = (await prisma.lotProcess.create({ data: {
+      lotId: normal, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11, startedAt: new Date("2026-03-01T12:00:00Z"),
+      provenanceClass: "original_record", processGradeValueId: grado.id, cherryStateValueId: cereza.id,
+    } })).id;
+    const deNormal = await muestraDe(normal, "NORMAL");
+    // La honda: 66 lotes, cada uno hijo del anterior y ninguno con proceso.
+    const ids: string[] = [];
+    for (let i = 0; i < 66; i++) ids.push(await loteDeCata(`LH${i}`));
+    for (let i = 1; i < ids.length; i++) {
+      enlaces.push((await prisma.lotTransformation.create({ data: {
+        transformationType: "stage_change", occurredAt: new Date("2026-03-05T12:00:00Z"), provenanceClass: "original_record", createdBy: gestor,
+        inputs: { create: [{ lotId: ids[i - 1]! }] }, outputs: { create: [{ lotId: ids[i]! }] },
+      } })).id);
+    }
+    const deHonda = await muestraDe(ids[ids.length - 1]!, "HONDA");
+
+    const r = await buscarMuestrasParaCata(gestor, `${RUN}-LH-`);
+    expect(r.muestras.map((m) => m.id).sort(), "la lista no salió entera").toEqual([deNormal, deHonda].sort());
+    const honda = r.muestras.find((m) => m.id === deHonda)!;
+    expect(honda.linajeDemasiadoHondo).toBe(true);
+    expect(honda.processGrade).toBeNull();
+    const conGrado = r.muestras.find((m) => m.id === deNormal)!;
+    expect(conGrado.linajeDemasiadoHondo).toBe(false);
+    expect(conGrado.processGrade).toBe("Washed");
+  }, 120000);
+});

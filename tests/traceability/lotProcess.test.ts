@@ -8,7 +8,7 @@
  * salta un importador, una reparación operativa o SQL directo, y en trazabilidad
  * eso es justo lo que no puede pasar.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import {
   abrirProceso,
@@ -17,18 +17,19 @@ import {
   exigeSecadoTerminado,
   cambiarObjetivoDeHumedad,
   cerrarProceso,
-  colgarCorrida,
   listarProcesosDeLote,
   opcionesParaProceso,
   registrarIntervencion,
   CATALOGO_ESTADO_CEREZA,
   CATALOGO_GRADO_PROCESO,
+  CATALOGO_MOTIVO_DEVOLUCION,
   CATALOGOS_DE_INTERVENCION,
   LotProcessError,
   SIN_RECETA,
 } from "../../lib/traceability/lotProcess";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 const RUN = `proc-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
@@ -37,6 +38,8 @@ let loteA: string, loteB: string, loteC: string, loteD: string, loteE: string;
 // Para el cierre con la humedad de un descendiente (2026-09-27): loteF tiene el proceso, loteG sale
 // de él por una transformación, y loteH es de otra rama.
 let loteF: string, loteG: string, loteH: string, transformacionId: string;
+// Para devolver a secado con un proceso de receta REAL y valores distinguibles (R7, ronda de arreglo 1, 2026-10-02).
+let loteI: string;
 let recetaVersionId: string, recetaId: string;
 let valorManejo: string, valorDeOtroCatalogo: string;
 let valorGrado: string, valorCereza: string;
@@ -169,6 +172,7 @@ beforeAll(async () => {
   loteF = await lote("LOTE-F");
   loteG = await lote("LOTE-G");
   loteH = await lote("LOTE-H");
+  loteI = await lote("LOTE-I");
   // loteG desciende de loteF. Es lo que hace la fermentación de verdad: un lote nuevo como salida,
   // con el de cereza como entrada.
   transformacionId = (
@@ -186,15 +190,19 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH];
-  // Las transformaciones primero: sus filas de entrada y salida apuntan a los lotes.
-  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
-  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
-  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: transformacionId }) });
+  const lotes = [loteA, loteB, loteC, loteD, loteE, loteF, loteG, loteH, loteI];
+  // Parte 1 (2026-10-01): los procesos van ANTES que la transformación, porque `divided_by_transformation_id`
+  // es RESTRICT: un proceso cerrado por esa división impediría borrarla.
   await prisma.lotProcessIntervention.deleteMany({
     where: assertDefinedWhere({ lotProcess: { lotId: { in: lotes } } }),
   });
-  await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  // Parte 1, R7 (tarea 8): este archivo crea ahora filas `lot_process_return`, y sus dos claves hacia `lot_process` son
+  // RESTRICT. El ayudante borra primero las devoluciones y la auditoría de los procesos, y después los procesos.
+  await borrarProcesosDeLotesDonde({ id: { in: lotes } });
+  // Las transformaciones: sus filas de entrada y salida apuntan a los lotes.
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: transformacionId }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: transformacionId }) });
   await prisma.storageAssignment.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.measurement.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
@@ -466,23 +474,6 @@ describe("cerrar el proceso con su medición de humedad", () => {
   });
 });
 
-describe("colgar del proceso las corridas que ya existían", () => {
-  it("una corrida de secado pasa a pertenecer al proceso", async () => {
-    const [p] = await listarProcesosDeLote(gestor, loteC);
-    const secado = await prisma.dryingRun.create({
-      data: { method: "raised_bed", startedAt: new Date("2026-03-03T12:00:00Z"), createdBy: gestor },
-    });
-
-    await colgarCorrida(gestor, { lotProcessId: p!.id, tipo: "drying", runId: secado.id });
-
-    const [leido] = await listarProcesosDeLote(gestor, loteC);
-    expect(leido!.dryingRuns.map((d) => d.id)).toContain(secado.id);
-
-    await prisma.dryingRun.delete({ where: { id: secado.id } });
-  });
-});
-
-
 /**
  * **La compuerta de bodega.** Regla del dueño, literal: «bloquear, alertar,
  * acción para regresar a secado; no debe salir de secado antes bajo ninguna
@@ -531,33 +522,43 @@ describe("un lote no sale de secado antes de su objetivo", () => {
       closingMoistureMeasurementId: alta.id,
     });
 
-    await expect(exigeSecadoTerminado(loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
+    await expect(exigeSecadoTerminado(prisma, loteA)).rejects.toThrow(new LotProcessError("moisture_above_target"));
   });
 
-  it("`devolverASecado` reabre el proceso y exige un motivo", async () => {
-    await expect(devolverASecado(gestor, { lotId: loteA, motivo: "  " })).rejects.toThrow(
-      new LotProcessError("motivo_required"),
-    );
-
-    const reabierto = await devolverASecado(gestor, { lotId: loteA, motivo: "11,2 % sobre 10,5 %: vuelve a cama" });
-    expect(reabierto.endedAt).toBeNull();
-    expect(reabierto.closingMoistureMeasurementId).toBeNull();
-
-    // Reabrir contradice «cerrado no se toca», así que el rastro dice qué se
-    // deshizo y por qué.
-    const evento = await prisma.auditEvent.findFirst({
-      where: assertDefinedWhere({ entityId: reabierto.id, operation: "lot_process.reopen_for_drying" }),
-      orderBy: { occurredAt: "desc" },
+  it("devolver a secado abre una continuación unida al proceso cerrado, que conserva su cierre", async () => {
+    const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "humedad_alta_por_error_de_manejo", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
     });
-    expect(JSON.stringify(evento!.before)).toContain("11.2");
+    // La devolución es POSTERIOR al cierre (2026-04-05) y anterior al siguiente cierre (2026-04-12): R7, ronda de arreglo 1.
+    const devuelto = new Date("2026-04-06T12:00:00Z");
+    await expect(devolverASecado(gestor, { lotId: loteA, motivoValueId: "", ocurrioEn: devuelto }))
+      .rejects.toThrow(new LotProcessError("motivo_required"));
+    const cerradoAntes = (await listarProcesosDeLote(gestor, loteA)).at(-1)!;
+    const { continuacion, devolucion } = await devolverASecado(gestor, {
+      lotId: loteA, motivoValueId: motivo.id, nota: "11,2 % sobre 10,5 %: vuelve a cama", ocurrioEn: devuelto,
+    });
+    expect(continuacion.endedAt).toBeNull();
+    expect(continuacion.derivedFromLotProcessId).toBe(cerradoAntes.id);
+    const cerrado = await prisma.lotProcess.findUniqueOrThrow({ where: { id: cerradoAntes.id } });
+    expect(cerrado.endedAt).not.toBeNull();
+    expect(cerrado.closingMoistureMeasurementId).toBe(cerradoAntes.closingMoistureMeasurementId);
+    expect(devolucion.reasonValueId).toBe(motivo.id);
+    // El «quién» que pide el diseño: la columna admite null, así que sin esta aserción una devolución anónima pasaría.
+    expect(devolucion.createdBy, "la devolución no dice quién la hizo").toBe(gestor);
+    // El evento cuelga de la DEVOLUCIÓN, no del proceso: de su `entityType` depende que el ayudante de limpieza lo encuentre
+    // (`borrarProcesosDeLotesDonde`). Se busca CON él, para que otro tipo deje de encontrarlo y la prueba caiga por su nombre.
+    const evento = await prisma.auditEvent.findFirst({
+      where: assertDefinedWhere({ entityType: "lot_process_return", entityId: devolucion.id, operation: "lot_process.return_to_drying" }),
+    });
+    expect(evento, "el evento de auditoría de la devolución no es de la entidad `lot_process_return`").not.toBeNull();
     expect(JSON.stringify(evento!.after)).toContain("vuelve a cama");
   });
 
-  it("y la medición descartada NO se borra: es un hecho medido", async () => {
+  it("y la medición de cierre del proceso devuelto NO se borra: es un hecho medido", async () => {
     const sigue = await prisma.measurement.findFirst({
       where: assertDefinedWhere({ lotId: loteA, variable: "moisture", value: 11.2 }),
     });
-    expect(sigue, "soltar el puntero no puede borrar la medición").not.toBeNull();
+    expect(sigue, "devolver a secado no puede borrar la medición").not.toBeNull();
   });
 
   it("cerrado POR DEBAJO del objetivo, bodega se abre", async () => {
@@ -586,6 +587,72 @@ describe("un lote no sale de secado antes de su objetivo", () => {
       startedAt: new Date("2026-04-13T12:00:00Z"),
     });
     expect(asignacion.lotId).toBe(loteA);
+  });
+});
+
+
+describe("devolver a secado: la continuación hereda lo que el proceso cerrado declaró (R7)", () => {
+  it("copia receta, intención, objetivo, grado, estado de la cereza, notas, procedencia y referencia", async () => {
+    // Ronda de arreglo 1 (2026-10-02). En los demás datos de prueba el proceso cerrado no tiene receta, así que
+    // `processRecipeVersionId: null` en la continuación era un mutante EQUIVALENTE: nada lo distinguía. Aquí el cerrado
+    // declara un valor distinguible en cada atributo que la continuación copia (una receta REAL, y una procedencia que
+    // no es la de los demás procesos de prueba), y cada uno se afirma por separado, con un mensaje que lo nombra.
+    const declarado = {
+      processRecipeVersionId: recetaVersionId,
+      intent: "TEST: 40 kg pergamino honey 48 h, secado en cama africana",
+      targetMoisturePct: 10.8,
+      processGradeValueId: valorGrado,
+      cherryStateValueId: valorCereza,
+      notes: "TEST: lleva lona los primeros dos días",
+      provenanceClass: "direct_observation" as const,
+      sourceReference: "TEST cuaderno de campo p. 14",
+    };
+    const abierto = await abrirProceso(gestor, abrir(loteI, { ...declarado, startedAt: new Date("2026-03-01T12:00:00Z") }));
+    await cerrarProceso(gestor, {
+      lotProcessId: abierto.id,
+      endedAt: new Date("2026-03-25T12:00:00Z"),
+      closingMoistureMeasurementId: await medicion(loteI, "moisture", 10.2),
+    });
+    // Controles de que el cerrado tiene lo que se quiere probar: receta real, y valores que la devolución no pondría por su cuenta.
+    const cerrado = await prisma.lotProcess.findUniqueOrThrow({ where: { id: abierto.id } });
+    expect(cerrado.processRecipeVersionId).toBe(recetaVersionId);
+    expect(cerrado.provenanceClass).toBe("direct_observation");
+    expect(cerrado.processGradeValueId).not.toBe(cerrado.cherryStateValueId);
+
+    const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
+    });
+    const { continuacion } = await devolverASecado(gestor, {
+      lotId: loteI, motivoValueId: motivo.id, ocurrioEn: new Date("2026-03-26T12:00:00Z"),
+    });
+    expect(continuacion.processRecipeVersionId, "la continuación no lleva la receta del proceso cerrado").toBe(declarado.processRecipeVersionId);
+    expect(continuacion.intent, "la continuación no lleva la intención del proceso cerrado").toBe(declarado.intent);
+    expect(continuacion.targetMoisturePct.toNumber(), "la continuación no lleva el objetivo del proceso cerrado").toBe(declarado.targetMoisturePct);
+    expect(continuacion.processGradeValueId, "la continuación no lleva el grado del proceso cerrado").toBe(declarado.processGradeValueId);
+    expect(continuacion.cherryStateValueId, "la continuación no lleva el estado de la cereza del proceso cerrado").toBe(declarado.cherryStateValueId);
+    expect(continuacion.notes, "la continuación no lleva las notas del proceso cerrado").toBe(declarado.notes);
+    expect(continuacion.provenanceClass, "la continuación no lleva la procedencia del proceso cerrado").toBe(declarado.provenanceClass);
+    expect(continuacion.sourceReference, "la continuación no lleva la referencia del proceso cerrado").toBe(declarado.sourceReference);
+    // Y lo que sí es suyo: es otro proceso, del mismo lote, abierto, que empieza el día de la devolución.
+    expect(continuacion.id).not.toBe(abierto.id);
+    expect(continuacion.lotId).toBe(loteI);
+    expect(continuacion.endedAt).toBeNull();
+    expect(continuacion.startedAt).toEqual(new Date("2026-03-26T12:00:00Z"));
+  });
+});
+
+describe("opcionesParaProceso: los motivos de devolver a secado salen del catálogo (R7)", () => {
+  it("ofrece exactamente los tres motivos del catálogo, cada uno con su id", async () => {
+    // Ronda de arreglo 1 (2026-10-02): es la ÚNICA fuente del `<select>` del formulario, y ninguna prueba la leía.
+    const delCatalogo = await prisma.variableCatalogValue.findMany({ where: { catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } } });
+    // Control: el catálogo sembrado trae los tres de la Parte 1, ni más ni menos; si no, la comparación de abajo no mide lo que dice.
+    expect(delCatalogo.map((v) => v.value).sort()).toEqual(["error_de_medicion", "humedad_alta_por_error_de_manejo", "otro"]);
+
+    const { motivosDeDevolucion } = await opcionesParaProceso(gestor, loteA);
+    expect(motivosDeDevolucion, "el formulario no ofrecería los tres motivos").toHaveLength(3);
+    expect(Object.fromEntries(motivosDeDevolucion.map((m) => [m.label, m.id]))).toEqual(
+      Object.fromEntries(delCatalogo.map((v) => [v.value, v.id])),
+    );
   });
 });
 
@@ -658,6 +725,16 @@ describe("los CHECK de `lot_process`", () => {
       } as never,
     });
 
+  /**
+   * Parte 1 (2026-10-01): la limpieza de lo que crea un `it` va en un `afterEach`, que corre falle o no
+   * la prueba, y no en la última línea del cuerpo: una aserción que falla se salta ese borrado, la fila
+   * (seq 99 de `crudo`, 97 de la prueba del índice) se queda, y la prueba siguiente cae por unicidad en
+   * vez de por lo suyo. Un guardia que falla tiene que fallar solo.
+   */
+  afterEach(async () => {
+    await prisma.lotProcess.deleteMany({ where: assertDefinedWhere({ lotId: loteB, sequenceOrder: { in: [97, 99] } }) });
+  });
+
   it("rechaza una humedad objetivo por encima de 100", async () => {
     await expect(crudo({ targetMoisturePct: 105 })).rejects.toThrow(/lot_process_humedad_es_porcentaje/);
   });
@@ -667,9 +744,12 @@ describe("los CHECK de `lot_process`", () => {
   });
 
   it("rechaza un proceso que termina antes de empezar", async () => {
-    await expect(crudo({ endedAt: new Date("2026-02-01T12:00:00Z") })).rejects.toThrow(
-      /lot_process_termina_despues_de_empezar/,
-    );
+    // Parte 1 (2026-10-01): con el CHECK del tipo de cierre, una fila con `endedAt` y sin `closureKind`
+    // violaría dos restricciones, y Postgres las comprueba en orden alfabético. Se le da el tipo y la
+    // medición para que sólo falle la fecha, que es lo que esta prueba dice vigilar.
+    await expect(
+      crudo({ endedAt: new Date("2026-02-01T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicionDeB }),
+    ).rejects.toThrow(/lot_process_termina_despues_de_empezar/);
   });
 
   it("rechaza una intención vacía, que `NOT NULL` sola dejaría pasar", async () => {
@@ -733,5 +813,54 @@ describe("los CHECK de `lot_process`", () => {
     const creado = await crudo({});
     expect(creado.sequenceOrder).toBe(99);
     await prisma.lotProcess.delete({ where: { id: creado.id } });
+  });
+
+  it("un proceso cerrado declara cómo se cerró (Parte 1, R5/R6)", async () => {
+    // Cerrado sin tipo: la base lo rechaza, no sólo el servicio.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closingMoistureMeasurementId: medicionDeB }),
+    ).rejects.toThrow(/lot_process_cierre_sii_tipo/);
+    // Por humedad sin medición: rechazado.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture" }),
+    ).rejects.toThrow(/lot_process_cierre_por_humedad_lleva_medicion/);
+    // Dividido con medición: rechazado.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "divided", closingMoistureMeasurementId: medicionDeB, dividedByTransformationId: transformacionId }),
+    ).rejects.toThrow(/lot_process_division_sin_medicion_y_con_transformacion/);
+    // Dividido sin medición pero SIN la transformación que lo dividió: rechazado. Es la otra mitad de la
+    // misma restricción; sin esta aserción, quitarle `AND divided_by_transformation_id IS NOT NULL` no
+    // hacía caer nada.
+    await expect(
+      crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "divided" }),
+    ).rejects.toThrow(/lot_process_division_sin_medicion_y_con_transformacion/);
+    // Un ABIERTO no lleva medición de cierre. `closure_kind` es nulo, y con `=` en vez de IS NOT DISTINCT
+    // FROM el CHECK valdría NULL —y un CHECK que da NULL pasa—, así que esta fila entraba.
+    await expect(crudo({ closingMoistureMeasurementId: medicionDeB })).rejects.toThrow(
+      /lot_process_medicion_solo_si_por_humedad/,
+    );
+    // Ni la transformación que lo dividió: eso sólo lo tiene un proceso cerrado como `divided`.
+    await expect(crudo({ dividedByTransformationId: transformacionId })).rejects.toThrow(
+      /lot_process_transformacion_solo_si_dividido/,
+    );
+    // Control positivo: el cierre bien formado SÍ entra, y se borra.
+    const bien = await crudo({ endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicionDeB });
+    await prisma.lotProcess.delete({ where: { id: bien.id } });
+  });
+
+  it("dos procesos abiertos en el mismo lote los rechaza la base (Parte 1, R2)", async () => {
+    const primero = await crudo({});
+    // El mensaje de Prisma NO trae el nombre del índice (está en `meta`): dice los campos. Medido el
+    // 2026-10-01: este índice da «(`lot_id`)» y `UNIQUE(lot_id, sequence_order)` da «(`lot_id`, `sequence_order`)».
+    // El regex casa sólo el primero, y además la secuencia es otra (97 contra 99), así que el segundo
+    // no puede ser el que rechaza.
+    await expect(
+      prisma.lotProcess.create({ data: {
+        lotId: loteB, sequenceOrder: 97, intent: "segundo abierto", targetMoisturePct: 10.5,
+        startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record",
+        processGradeValueId: valorGrado, cherryStateValueId: valorCereza,
+      } }),
+    ).rejects.toThrow(/Unique constraint failed on the fields: \(`lot_id`\)/);
+    await prisma.lotProcess.delete({ where: { id: primero.id } });
   });
 });

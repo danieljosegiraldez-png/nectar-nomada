@@ -5,7 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getPlotDetail } from "../../../../lib/traceability/plantingCohorts";
 import { getObserverCandidates } from "../../../../lib/traceability/lots";
-import { LocationAccessError } from "../../../../lib/traceability/locations";
+import { puedeGestionarAtributosDeUbicacion, LocationAccessError } from "../../../../lib/traceability/locations";
 import { listSoilProfilesForLocation } from "../../../../lib/traceability/soilProfiles";
 import { estadosPorCohorte } from "../../../../lib/traceability/estadoDeProduccion";
 import { recortarPorPrecision } from "../../../../lib/time/recortarPorPrecision";
@@ -68,6 +68,22 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
   // TIPO del padre, no si hay padre: una parcela de primer nivel también lo
   // tiene, y es el sitio.
   const esMicroparcela = location.parentLocation?.locationType === "plot";
+
+  // **La regla de trampas se comprueba sobre la FINCA, no sobre esta parcela**, y por eso necesita su
+  // propia bandera. `guardarReglaDeTrampas` llama a `requireLocationAttributeAccess` con
+  // `input.farmLocationId` (`lib/traceability/trapRules.ts`), así que quien tenga
+  // `location:manage_attributes` sobre la parcela y no sobre la finca —un operario asignado a una
+  // parcela suelta— veía el formulario, lo rellenaba y se lo rechazaba el servidor.
+  //
+  // Es la misma forma que esta página ya corrigió para `puedeSubdividir`, y su comentario lo dice:
+  // «antes bastaba con que el lugar fuera una parcela, así que el botón aparecía también a quien el
+  // servidor iba a negar». Aquí faltaba la mitad del objetivo: el permiso es el mismo, el SITIO no.
+  //
+  // La regla vigente se sigue mostrando: verla no exige nada que no exija entrar en esta página, y
+  // esconderla quitaría información que la persona sí puede leer. Lo que se oculta es el formulario.
+  const puedeEditarLaReglaDeTrampas = farmLocationId
+    ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, farmLocationId)
+    : false;
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   // Ronda 1: `location:manage_attributes` (lo que exige esta página) y
@@ -425,12 +441,14 @@ export default async function PlotSettingsPage({ params }: { params: Promise<{ i
         ) : (
           <p className="nn-muted">{t("trapRuleNone")}</p>
         )}
-        <ReglaDeTrampasForm
-          locationId={location.id}
-          farmLocationId={farmLocationId}
-          regla={reglaDeTrampas}
-          productos={productosDeLaFinca}
-        />
+        {puedeEditarLaReglaDeTrampas ? (
+          <ReglaDeTrampasForm
+            locationId={location.id}
+            farmLocationId={farmLocationId}
+            regla={reglaDeTrampas}
+            productos={productosDeLaFinca}
+          />
+        ) : null}
       </section>
     </div>
   );

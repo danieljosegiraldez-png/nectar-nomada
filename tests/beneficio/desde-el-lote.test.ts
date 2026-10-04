@@ -38,12 +38,14 @@ describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta,
     fase: "fermentation" | "drying" = "fermentation",
     /** `false` = el proceso no tiene versión de receta. */
     conReceta = true,
+    /** `null` = el proceso sigue abierto. */
+    endedAt: Date | null = null,
   ) => ({
     fase,
-    lotProcess:
+    proceso:
       grado === "sin-proceso"
         ? null
-        : { processGradeValue: grado === null ? null : { value: grado }, processRecipeVersion: conReceta ? { id: "receta" } : null },
+        : { processGradeValue: grado === null ? null : { value: grado }, processRecipeVersion: conReceta ? { id: "receta" } : null, endedAt },
   });
 
   it("Washed y Natural, con una fase abierta, tienen su perfil", () => {
@@ -75,7 +77,7 @@ describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta,
     expect(perfilDeLaFaseAbierta(abiertaCon("Washed", "fermentation"))).toBe("WASHED_STANDARD");
     expect(perfilDeLaFaseAbierta(abiertaCon("Natural", "fermentation"))).toBe("NATURAL");
     // Una fase que no es ninguna de las dos que existen hoy tampoco la tiene (la guarda es «es fermentación», no «no es secado»).
-    const rara = { fase: "reposo", lotProcess: { processGradeValue: { value: "Washed" } } } as unknown as Parameters<typeof perfilDeLaFaseAbierta>[0];
+    const rara = { fase: "reposo", proceso: { processGradeValue: { value: "Washed" } } } as unknown as Parameters<typeof perfilDeLaFaseAbierta>[0];
     expect(perfilDeLaFaseAbierta(rara)).toBeNull();
   });
 
@@ -87,6 +89,17 @@ describe("perfilDeLaFaseAbierta: el perfil que rige un lote por su fase abierta,
     // Control: los MISMOS grados y la MISMA fase con receta sí tienen perfil, así que el null de arriba es de la receta y no del grado ni de la fase.
     expect(perfilDeLaFaseAbierta(abiertaCon("Washed", "fermentation", true))).toBe("WASHED_STANDARD");
     expect(perfilDeLaFaseAbierta(abiertaCon("Natural", "fermentation", true))).toBe("NATURAL");
+  });
+
+  it("con el proceso CERRADO no hay perfil, aunque tenga receta y sea Washed (M10: el veredicto de la fila ya no lo toma)", () => {
+    // Revisión final de la Parte 1 (ronda de arreglo 1, 2026-10-03). Una fermentación vieja abierta bajo un proceso que ya se
+    // cerró: la fila decía «sin grado declarado» y la curva citaba la matriz del lavado.
+    const cerrado = new Date("2026-03-21T12:00:00Z");
+    for (const grado of ["Washed", "Natural"]) {
+      expect(perfilDeLaFaseAbierta(abiertaCon(grado, "fermentation", true, cerrado)), `${grado} cerrado`).toBeNull();
+    }
+    // Control: el MISMO proceso abierto sí tiene perfil, así que el null de arriba es del cierre.
+    expect(perfilDeLaFaseAbierta(abiertaCon("Washed", "fermentation", true, null))).toBe("WASHED_STANDARD");
   });
 
   it("un grado que es una propiedad heredada del objeto no es un perfil", () => {

@@ -8,6 +8,8 @@ import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import {
   colaDeAtencion,
   instrumentosQuePidenAtencion,
+  instrumentosVisibles,
+  LINAJE_DEMASIADO_HONDO,
   ocupacionDelSitio,
   type FilaDeAtencion,
   type GrupoDeAtencion,
@@ -94,8 +96,14 @@ export default async function BeneficioPage({
     tanques: datos.tanques,
     camas: datos.camas,
     corridas: datos.corridas,
+    // Sin filtrar por lote: de aquí sale `enUso`. Ver `OcupacionDeUnidad` y la ficha 015.
+    corridasPorUnidad: datos.corridasPorUnidad,
   });
   const instrumentos = instrumentosQuePidenAtencion(datos.instrumentos);
+  // **Los que esta cuenta VE**, para distinguir «ninguno pide atención» de «no ves ninguno» (019).
+  // No es `datos.instrumentos`: esa lista lleva TODO el equipo visible con su `kind`, así que una
+  // cuenta que ve tanques y cero instrumentos saldría como «ninguno pide atención».
+  const visibles = instrumentosVisibles(datos.instrumentos);
 
   // Los cinco grupos en su orden de gravedad, y sólo los que tienen filas: una sección vacía
   // llamada «Crítico» se lee como un problema que no existe.
@@ -171,7 +179,11 @@ export default async function BeneficioPage({
                             <Link href={`/beneficio?lote=${f.lotId}#curva-beneficio`}><strong>{f.lotCode}</strong></Link>
                             {/* TODOS los motivos, no el que ganó el grupo: un lote crítico Y listo
                                 para decidir tiene dos hechos, y esconder uno es esconder trabajo. */}
-                            <span className="nn-board-motivos">{f.motivos.join(" · ")}</span>
+                            {/* Tarea 9, ronda de arreglo 1: un linaje demasiado hondo se dice con su frase —hay que revisarlo a mano—,
+                                no con el código. */}
+                            <span className="nn-board-motivos">
+                              {f.motivos.map((m) => (m === LINAJE_DEMASIADO_HONDO ? t("motivoLinajeDemasiadoHondo") : m)).join(" · ")}
+                            </span>
                             <span className="nn-board-ritmo">{textoDeRitmo(f).join(" · ")}</span>
                             {f.ultimaLectura === null ? (
                               <span className="nn-board-sinlectura">{t("sinLectura")}</span>
@@ -256,13 +268,33 @@ export default async function BeneficioPage({
       {datos.sinAmbito ? null : (
         <section className="nn-mill-instruments" aria-labelledby="instrumentos-beneficio">
           <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
-          {instrumentos.length === 0 ? (
+          {/* **Dos motivos para una lista vacía, y no dicen lo mismo**
+              (`PENDING_IMPLEMENTATIONS/019`). `instrumentos` son los que PIDEN ATENCIÓN;
+              `datos.instrumentos` son los que esta cuenta VE. Con ámbito de lotes y cero equipos
+              visibles, los dos valen `[]` y la pantalla decía «Ningún instrumento pide atención»
+              —que se lee como «todos bien»— cuando lo cierto es «no veo ninguno». Es el mismo
+              fallo que `sinAmbito` ya guarda una línea más arriba, aplicado a un solo estado.
+              Las dos cuentas salen de la misma lista que ya tenía la página: no hace falta ninguna
+              consulta nueva. Y se cuenta `visibles`, NO `datos.instrumentos`, que lleva también el
+              equipo que no es instrumento — ver `instrumentosVisibles` en `tablero.ts`. */}
+          {visibles.length === 0 ? (
+            <p className="nn-empty">{t("instrumentosNingunoVisible")}</p>
+          ) : instrumentos.length === 0 ? (
             <p className="nn-empty">{t("instrumentosNinguno")}</p>
           ) : (
             <ul>
               {instrumentos.map((i) => (
                 <li key={i.id}>
-                  <Link href={`/equipos/${i.id}`}>{i.name}</Link> <span>{tEq(i.verificacion)}</span>
+                  {/* **La clave lleva el prefijo `verificacion_`.** Esta línea pasaba el estado
+                      pelado (`tEq("REVISION_VENCIDA")`) y esa clave no existe en `Equipos`: lo que
+                      salía junto al nombre del instrumento era el literal de la clave que falta.
+                      Las otras tres pantallas que pintan este mismo estado ya lo hacen así
+                      (`app/equipos/page.tsx:151` y `:184`, `app/equipos/[id]/page.tsx:367`).
+                      Defecto preexistente, encontrado por el guardia de `019`: ninguna prueba
+                      pintaba un instrumento que pidiera atención, así que el control existía y
+                      faltaba el caso. */}
+                  <Link href={`/equipos/${i.id}`}>{i.name}</Link>{" "}
+                  <span>{tEq(`verificacion_${i.verificacion}`)}</span>
                 </li>
               ))}
             </ul>

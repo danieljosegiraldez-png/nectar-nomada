@@ -1,5 +1,5 @@
 {
-  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta. `operaciones_sin_patron` inventaría las operaciones que ningún patrón de autorización explica: hoy DOS, `listScopeChoices` y `listBiocharBatches`. Eran tres hasta el 2026-08-31; `authConfig` pasó a reconocerse como previo a la sesión y `addToCart` como acotado por construcción, las dos por mejoras del detector, no por cambios en el código. Que aparezca una segunda es lo que el guardia quiere que se vea.",
+  "_nota": "Inventario versionado de quién puede tocar un cliente de base de datos. Lo comprueba tests/arquitectura/acceso-a-datos.test.ts. Añadir una entrada es un acto deliberado: exige una razón y se ve en el diff. Esto NO demuestra que la autorización sea correcta; demuestra que un camino de acceso crudo nuevo no aparece en silencio, ni por import de un cliente ni por recibir una transacción abierta. `operaciones_sin_patron` inventaría las operaciones que ningún patrón de autorización explica: exactamente el conjunto que el script clasifica como «recibe principal, sin guardia visible» (o «SIN CLASIFICAR»): acceso-a-datos.test.ts exige que no falte ninguna ni sobre ninguna, y su tamaño es la fila de ese nombre en docs/arquitectura/inventario-de-acceso.md (22 el 2026-10-01), que comprueba cifras-del-inventario.test.ts. El 2026-08-31 eran DOS, `listScopeChoices` y `listBiocharBatches`, y antes tres: `authConfig` pasó a reconocerse como previo a la sesión y `addToCart` como acotado por construcción, las dos por mejoras del detector, no por cambios en el código. Las demás entraron después, cada una con su razón: que aparezca una nueva es lo que el guardia quiere que se vea.",
   "clientes": [
     {
       "archivo": "lib/db.ts",
@@ -798,6 +798,14 @@
     {
       "archivo": "lib/traceability/floracion.ts",
       "razon": "Módulo de dominio: la floración de una parcela (decisión de Daniel 2026-10-01, «parcela, microparcela o bloque»). Existe para poder avisar cuando una aplicación cae en floración, que es cuando las fuentes de la región piden no asperjar por los polinizadores — y esta operación tiene apiarios y meliponarios. Escribe UNA tabla, `plot_bloom`, detrás de dos permisos reusados que corren ANTES de abrir la transacción: `requireLotAccess` con `lot:manage` sobre la parcela y `exigirPersonaPermitida` sobre el observador. Lee sólo para validar: que la ubicación sea `plot`/`micro_plot` y que el bloque sea de esa misma parcela."
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "razon": "Parte 1 (2026-09-30), R1: el resolvedor del proceso que cubre a un lote y el bloqueo del linaje; desde R2 (2026-10-01), también el núcleo con `tx` que abre un proceso, y desde R6 (2026-10-01) los dos de la división (`antesDeTransformar` y `dividirProcesoEnTx`), que corren en la transacción de `recordTransformation`. No abre conexión: recibe el cliente de la transacción del llamador, o el global si el llamador sólo lee. Nada de aquí autoriza; todos sus llamadores ya hicieron requireLotAccess sobre el lote."
+    },
+    {
+      "archivo": "lib/traceability/lotProcess.ts",
+      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -905,6 +913,18 @@
       "archivo": "lib/beneficio/fichaDeUnidad.ts",
       "operacion": "fichaDeUnidad",
       "razon": "Recibe el principal y no llama a ningún guardia por su cuenta: **lo llama por dentro**. Lo primero que hace es `colaDeSecado(userAccountId)`, que acota por `resolveLotVisibility` sobre los lotes; si la unidad pedida no aparece en esa cola, devuelve `null` y la pantalla da 404. Todo lo que consulta después va acotado al `dryingRunId` de una unidad que YA pasó esa comprobación. No es una superficie autorizable independiente: no hay forma de llegar a un dato sin que la cola lo haya autorizado antes. Verificado al escribir ficha-de-la-unidad el 2026-09-30."
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "abrirProcesoEnTx",
+      "razon": "Núcleo con `tx` que abre un proceso y escribe su auditoría en la misma transacción (R2): primero `exigeSinOtroProcesoAbierto`, luego el `sequenceOrder` siguiente y el `create`. Recibe el principal sólo para firmar `createdBy` y el evento, no para decidir nada: no autoriza. Lo llaman `abrirProceso`, después de `loteGestionable` (`requireLotAccess(\"manage\")` sobre el lote) y con el linaje ya bloqueado por `bloquearLinaje`; y desde R6 (2026-10-01) `dividirProcesoEnTx`, una vez por parte, dentro de la transacción de `recordTransformation`, que pidió `manage` sobre el lote que se divide y bloqueó su linaje en `antesDeTransformar`. Las partes son lotes que esa misma transacción acaba de crear. Quien lo llame debe haber hecho las dos cosas antes.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "dividirProcesoEnTx",
+      "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
+      "verificado": "2026-10-01"
     }
   ],
   "dependen_del_llamador": [
@@ -1097,8 +1117,8 @@
     {
       "archivo": "lib/traceability/lotProcess.ts",
       "operacion": "exigeSecadoTerminado",
-      "razon": "No recibe principal porque no expone nada: lee el proceso más reciente de un lote y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de invocarla — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
-      "verificado": "2026-09-07"
+      "razon": "No recibe principal porque no expone nada: lee el proceso que cubre al lote (Parte 1, R7) y LANZA o no lanza. Su único llamador es `moveLotToStorage`, que ya resolvió `requireLotAccess(userAccountId, \"manage\", [lot])` sobre ese mismo lote antes de abrir su transacción, y la llama DENTRO de ella, con el linaje bloqueado y el `tx` que ésta le pasa — darle un principal propio sería resolver dos veces la misma autorización, que es como se acaba con dos respuestas distintas. Si algún día se llama desde una pantalla para pintar «este lote todavía no puede almacenarse», deja de depender del llamador y necesita guardia propia.",
+      "verificado": "2026-10-01"
     },
     {
       "archivo": "lib/apiary/vitalesDelSitio.ts",
@@ -1401,12 +1421,6 @@
       "verificado": "2026-09-25"
     },
     {
-      "archivo": "lib/traceability/lots.ts",
-      "operacion": "idsDeDescendencia",
-      "razon": "Devuelve los ids de la descendencia de un lote con el MISMO SQL recursivo que `getLotLineage` ya usaba, extraído para que las dos preguntas no divergan. No recibe principal: sus dos llamadoras autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
-      "verificado": "2026-09-27"
-    },
-    {
       "archivo": "lib/traceability/floracion.ts",
       "operacion": "enFloracion",
       "razon": "Pregunta si una parcela estaba en floración en un instante. **No autoriza a propósito**: no recibe principal porque es una lectura de contexto para un aviso, y §32 sólo le permite proponer. Su llamadora prevista es el formulario de intervención, que ya pasó `requireLotAccess` sobre esa parcela antes de pintarse. **Desde el aviso de floración sí tiene llamadora**: `app/components/traceability/IntervencionForm.tsx` la usa a través de `hayFloracion`. La razón anterior decía que no tenía ninguna; se corrige en vez de dejarla envejecer. Devuelve las ventanas de floración de UNA parcela que la llamadora ya nombró, no una lista que se pueda recorrer para descubrir parcelas ajenas.",
@@ -1423,6 +1437,60 @@
       "operacion": "rejillaDelBloque",
       "razon": "Resuelve la parcela que pone la numeracion de un sitio y su rejilla: devuelve el propio sitio si tiene `rowCount`, y si no su madre (D3, una sola numeracion). El nombre es mas estrecho que la funcion — toma un `locationId`, no un bloque — y se exporto el 2026-10-02 para que `createSpecimen` no escribiera una segunda copia de la regla; en la base vive en una sola funcion, `core.raiz_de_la_numeracion`, por lo mismo. No recibe principal: sus tres llamadores autorizan la Location de origen antes de invocarla. `setPlotBlockType` y `anadirRangoAlBloque` (plotBlocks.ts) llaman a `requireLocationAttributeAccess` sobre `existing.locationId` y `bloque.locationId` respectivamente; `createSpecimen` (specimens.ts) llama a `requireSpecimenAccess(manage)` sobre `input.locationId`, que es el mismo sitio del que se resuelve la rejilla. Comprobado leyendo los tres sitios de llamada, no deducido.",
       "verificado": "2026-10-02"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesoQueCubre",
+      "razon": "Lee el linaje y los procesos de un lote para decidir cuál lo cubre (R1): sube por las ramas hasta el primer lote con proceso y devuelve el vigente, la cadena y, si las ramas no coinciden, la composición de la mezcla. No recibe principal: quien la llame debe haber autorizado el lote de partida antes. Devuelve ids y estado de los procesos, no filas de lote.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "idsDeAscendencia",
+      "razon": "Devuelve los ids de todos los ancestros de un lote, recorriendo el linaje hacia arriba hasta el tope de 64 generaciones (R1). No recibe principal: hoy su único llamador es `bloquearLinajes`, en el mismo archivo, que la usa para saber qué filas bloquear. Devuelve ids, no filas: el permiso de lo que se haga con ellos lo comprueba quien los use.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "idsDeDescendencia",
+      "razon": "Devuelve los ids de la descendencia de un lote (R1); es la que vivía en lots.ts, ahora con tx y el mismo tope de 64 generaciones. No recibe principal: sus llamadores autorizan el lote de partida antes de invocarla — `cerrarProceso` pasa por `loteGestionable` (lot:manage sobre el lote del proceso) y `opcionesParaProceso` por `requireLotAccess(view)` sobre el lote de la página. Devuelve ids, no filas. Añadida el 2026-09-27 para que un proceso abierto en cereza pueda cerrarse con la humedad medida sobre el pergamino que salió de él.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "bloquearLinajes",
+      "razon": "Bloquea con FOR UPDATE las filas de `lot` del lote y de sus ancestros (R2). No devuelve nada ni escribe: sólo serializa a quien opere sobre el mismo café, y por eso no recibe principal. Quien la llame debe haber autorizado el lote antes de abrir su transacción.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "loteDividido",
+      "razon": "Responde sí o no a «¿es la entrada de una división que cerró un proceso?» (R6.6), y con una fecha, a «¿lo es para un registro de ese instante?» (lo anterior a la división se admite, decisión de Daniel del 2026-10-02). No devuelve ningún dato de la fila y no recibe principal: quien la llame debe haber autorizado el lote.",
+      "verificado": "2026-10-03"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesosParaEntrada",
+      "razon": "Devuelve el cierre y el grado del proceso que cubre a un lote, con la misma forma para cualquier lector (R7). No recibe principal: quien la llame debe haber autorizado el lote que enseña. Devuelve el grado del proceso, nunca filas del lote.",
+      "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "exigeSinOtroProcesoAbierto",
+      "razon": "Comprueba, sin escribir, que un lote puede recibir un proceso nuevo (R2): que no sea de miel, ni dividido, ni mezcla, que ni él ni sus ancestros ni sus descendientes tengan otro proceso abierto, que ningún descendiente esté en bodega (`descendiente_en_bodega`, decisión de Daniel del 2026-10-02) y que él no esté en bodega. Lanza `LotProcessError` con el motivo. No recibe principal ni devuelve datos del lote. Hoy sólo la llama `abrirProcesoEnTx`, dentro de la transacción de `abrirProceso` o de la de `recordTransformation` al dividir (R6), que ya autorizaron el lote y bloquearon el linaje; quien la llame debe haber hecho lo mismo.",
+      "verificado": "2026-10-03"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "procesoParaUnaCorrida",
+      "razon": "Resuelve a qué proceso se une una corrida que empieza sobre un lote (R3/R4, y R7 desde la revisión final del 2026-10-03): lanza `LotProcessError` si el lote está dividido, en bodega, ya es la entrada de una corrida abierta (`corrida_ya_abierta`), ya lo consumió una transformación de consumo total con salida (`lote_consumido`) o es una mezcla, o si no lo cubre un proceso abierto; si lo hay, devuelve su id y su versión de receta. No escribe, no bloquea ni recibe principal. La llaman `procesoAbiertoParaCorrida` —que antes bloquea el linaje, dentro de la transacción de `startFermentationRun` y `startDryingRun`, después de `requireLotAccess(\"manage\")` sobre el lote de la corrida— y `puedeEmpezarCorrida` (`lotProcess.ts`), después de `requireLotAccess(\"view\")` sobre el mismo lote. Quien la llame debe haber autorizado el lote. (Sustituye a la fila de `procesoAbiertoParaCorrida`, que desde la revisión final ya no toca la base por sí misma: bloquea y delega aquí.)",
+      "verificado": "2026-10-03"
+    },
+    {
+      "archivo": "lib/traceability/procesoDelLinaje.ts",
+      "operacion": "exigeSinCorridasAbiertas",
+      "razon": "Comprueba, sin escribir, que ninguna fermentación ni secado abierto cuelgue del linaje que cubre un proceso (R5): las unidas por `lotProcessId` y las que empezaron sobre el lote del proceso o un descendiente sin quedar unidas. Lanza `LotProcessError` con `corridas_abiertas`. No recibe principal ni devuelve datos de las corridas. La llaman `cerrarProceso`, dentro de su transacción, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; y desde R6 (2026-10-01) `antesDeTransformar`, para no dividir con una corrida en curso, dentro de la transacción de `recordTransformation` (que pidió `manage` sobre las entradas) y después de bloquear sus linajes. Quien la llame debe haber hecho lo mismo.",
+      "verificado": "2026-10-01"
     }
   ]
 }

@@ -157,8 +157,12 @@ export async function personasPermitidas(
   ]);
 
   const selfPersonId = cuenta?.personId ?? null;
-  const deLaFinca = new Set([...miembros.map((m) => m.personId), ...asignadosFinca.map((a) => a.userAccount.personId)]);
-  const delEquipo = new Set([...equipoMiembros.map((m) => m.personId), ...equipoAsignados.map((a) => a.userAccount.personId)]);
+  // `userAccount` es una relación REQUERIDA y aun así puede venir `null`: Prisma resuelve el
+  // `select` anidado con DOS consultas y las cose en memoria, así que una cuenta borrada entre
+  // la primera y la segunda deja la fila huérfana. Pasó dos veces en el carril el 2026-10-03.
+  // Guardia: `tests/people/quienLoHizoCuentaBorrada.test.ts`.
+  const deLaFinca = new Set([...miembros.map((m) => m.personId), ...asignadosFinca.flatMap((a) => (a.userAccount ? [a.userAccount.personId] : []))]);
+  const delEquipo = new Set([...equipoMiembros.map((m) => m.personId), ...equipoAsignados.flatMap((a) => (a.userAccount ? [a.userAccount.personId] : []))]);
 
   const ids = new Set([...deLaFinca, ...delEquipo, ...(selfPersonId ? [selfPersonId] : [])]);
   const filas = await db.person.findMany({

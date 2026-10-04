@@ -11,7 +11,7 @@
  * Hermética: sin base, así que NO va a `scripts/pruebas-por-compuerta.txt`.
  */
 import { describe, expect, it } from "vitest";
-import { curvaDeLote } from "../../lib/beneficio/curvaDeLote";
+import { curvaDeLote, type ObjetivoDeCurva } from "../../lib/beneficio/curvaDeLote";
 import {
   colocarPuntos,
   juicioDeBanda,
@@ -20,7 +20,7 @@ import {
 } from "../../lib/beneficio/curvaEnPantalla";
 
 const t = (h: number) => new Date(`2026-03-10T${String(h).padStart(2, "0")}:00:00.000Z`);
-const BANDA = { minValue: 4.0, maxValue: 5.0, targetValue: 4.5 };
+const BANDA = { momento: "during", minValue: 4.0, maxValue: 5.0, targetValue: 4.5 } as const;
 const ID = "3f2b6c1e-8a44-4d0e-9b57-0c1d2e3f4a5b";
 
 describe("colocarPuntos", () => {
@@ -31,7 +31,7 @@ describe("colocarPuntos", () => {
         { occurredAt: t(12), value: 5.1 }, // apenas por encima
         { occurredAt: t(16), value: 3.9 }, // apenas por debajo
       ],
-      objetivo: BANDA, ancho: 480, alto: 200,
+      objetivos: [BANDA], ancho: 480, alto: 200,
     });
     const p = colocarPuntos(c);
     // Control: los tres puntos están. Sin él, «ninguno fuera» podría ser «no pinté nada».
@@ -52,7 +52,7 @@ describe("colocarPuntos", () => {
   it("una banda estrecha no ancla las desviaciones corrientes: 4,8 y 3,8 sobre 4,0–4,6 se dibujan en su sitio", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.3 }, { occurredAt: t(12), value: 4.8 }, { occurredAt: t(16), value: 3.8 }],
-      objetivo: { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }, ancho: 480, alto: 200,
+      objetivos: [{ momento: "during", minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }], ancho: 480, alto: 200,
     });
     // Control: de verdad quedan fuera del lienzo (`y < 0`, `y > alto`); si no, la prueba no dice nada.
     expect(c.puntos[1]!.y).toBeLessThan(0);
@@ -66,7 +66,7 @@ describe("colocarPuntos", () => {
   it("una lectura que no cabe ni en el margen se ancla en el borde y se marca, no desaparece", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 55 }, { occurredAt: t(16), value: -40 }],
-      objetivo: BANDA, ancho: 480, alto: 200,
+      objetivos: [BANDA], ancho: 480, alto: 200,
     });
     const m = margenVertical(200);
     const p = colocarPuntos(c);
@@ -82,7 +82,7 @@ describe("colocarPuntos", () => {
   it("sin banda no se juzga ninguna lectura: fueraDeBanda es null, no false", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 9 }],
-      objetivo: null, ancho: 480, alto: 200,
+      objetivos: [], ancho: 480, alto: 200,
     });
     expect(c.banda.tipo).toBe("sin_objetivo_declarado");
     const p = colocarPuntos(c);
@@ -94,7 +94,7 @@ describe("colocarPuntos", () => {
   it("con la receta al revés (min > max) no hay banda que juzgar: ninguna lectura se marca dentro ni fuera", () => {
     const c = curvaDeLote({
       lecturas: [{ occurredAt: t(8), value: 4.5 }, { occurredAt: t(12), value: 6 }],
-      objetivo: { minValue: 5.0, maxValue: 4.0, targetValue: null }, ancho: 480, alto: 200,
+      objetivos: [{ momento: "during", minValue: 5.0, maxValue: 4.0, targetValue: null }], ancho: 480, alto: 200,
     });
     expect(c.banda.tipo).toBe("banda_al_reves"); // control: es ESTE caso, no «sin objetivo»
     const p = colocarPuntos(c);
@@ -133,14 +133,16 @@ describe("leerCurvaPedida", () => {
 
 describe("juicioDeBanda: qué se puede afirmar", () => {
   const lec = (...v: number[]) => v.map((value, i) => ({ occurredAt: t(8 + i), value }));
-  const juzgar = (lecturas: ReturnType<typeof lec>, objetivo: Parameters<typeof curvaDeLote>[0]["objetivo"]) => {
-    const c = curvaDeLote({ lecturas, objetivo, ancho: 480, alto: 200 });
+  // Toma UN objetivo y lo envuelve: estas pruebas hablan de un solo objetivo cada una, y la lista
+  // la ejercita `elegirObjetivo` en `curva-de-lote.test.ts`. `null` = la receta no declara nada.
+  const juzgar = (lecturas: ReturnType<typeof lec>, objetivo: ObjetivoDeCurva | null) => {
+    const c = curvaDeLote({ lecturas, objetivos: objetivo === null ? [] : [objetivo], ancho: 480, alto: 200 });
     return juicioDeBanda(c, colocarPuntos(c));
   };
 
   it("con banda y lecturas, cuenta las de fuera (y 0 sí es un resultado)", () => {
-    expect(juzgar(lec(4.3, 5.1, 3.9), BANDA)).toEqual({ tipo: "juzgada", fuera: 2, total: 3 });
-    expect(juzgar(lec(4.2, 4.4), BANDA)).toEqual({ tipo: "juzgada", fuera: 0, total: 2 });
+    expect(juzgar(lec(4.3, 5.1, 3.9), BANDA)).toEqual({ tipo: "juzgada", alcance: "trayectoria", fuera: 2, total: 3 });
+    expect(juzgar(lec(4.2, 4.4), BANDA)).toEqual({ tipo: "juzgada", alcance: "trayectoria", fuera: 0, total: 2 });
   });
 
   it("con banda y CERO lecturas no hay juicio: un cero no es «todas dentro»", () => {
@@ -149,7 +151,7 @@ describe("juicioDeBanda: qué se puede afirmar", () => {
 
   it("con la banda de ancho cero no hay juicio, aunque la lectura sea 9,9 contra 4,5", () => {
     const c = curvaDeLote({
-      lecturas: lec(4.5, 9.9), objetivo: { minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }, ancho: 480, alto: 200,
+      lecturas: lec(4.5, 9.9), objetivos: [{ momento: "during", minValue: 4.5, maxValue: 4.5, targetValue: 4.5 }], ancho: 480, alto: 200,
     });
     // Control: la geometría YA NO es la que engañaba (todo a media altura): 4,5 abajo y 9,9 arriba, contra
     // sus datos. Por eso el juicio no puede venir de la `y` —aquí 9,9 estaría «arriba» del todo— sino del tipo de banda.
@@ -160,18 +162,97 @@ describe("juicioDeBanda: qué se puede afirmar", () => {
   });
 
   it("una banda al revés NO es de ancho cero y NO se juzga: se niega, con lecturas y sin ellas (hallazgo 2)", () => {
-    const alReves = { minValue: 5.0, maxValue: 4.0, targetValue: null };
+    const alReves = { momento: "during", minValue: 5.0, maxValue: 4.0, targetValue: null } as const;
     expect(juzgar(lec(4.5, 6), alReves)).toEqual({ tipo: "banda_al_reves" });
     expect(juzgar([], alReves)).toEqual({ tipo: "banda_al_reves" });
     // Control: la MISMA receta bien puesta (4,0–5,0) con las MISMAS lecturas sí se juzga. Sin esta
     // fila, «banda_al_reves» podría salir siempre y las dos de arriba también pasarían.
-    expect(juzgar(lec(4.5, 6), { minValue: 4.0, maxValue: 5.0, targetValue: null })).toEqual({
-      tipo: "juzgada", fuera: 1, total: 2,
+    expect(juzgar(lec(4.5, 6), { momento: "during", minValue: 4.0, maxValue: 5.0, targetValue: null })).toEqual({
+      tipo: "juzgada", alcance: "trayectoria", fuera: 1, total: 2,
     });
   });
 
   it("sin banda, ni con lecturas ni sin ellas, no se juzga", () => {
     expect(juzgar(lec(4.5, 9), null)).toEqual({ tipo: "sin_banda" });
     expect(juzgar([], null)).toEqual({ tipo: "sin_banda" });
+  });
+});
+
+/**
+ * **El guardia de `PENDING_IMPLEMENTATIONS/017`: un objetivo de un solo momento juzga UNA lectura.**
+ *
+ * El caso que lo motivó es el de la ficha, con números: una fermentación cuyo pH baja de 6,5 a 4,3
+ * **por diseño**, y una receta que declara sólo la meta FINAL (4,0–4,6). Antes la pantalla contaba
+ * «2 lecturas fuera del rango de la receta» sobre un lote que va exactamente como debe.
+ *
+ * **Cada caso lleva su control, y el control TIENE que salir distinto.** Las mismas tres lecturas
+ * con un objetivo `during` sí se juzgan las tres: si las dos cifras coincidieran, esta prueba no
+ * mediría nada — que es la forma en la que un control deja de serlo.
+ */
+describe("juicioDeBanda — el momento del objetivo decide a cuántas lecturas alcanza", () => {
+  const BAJANDO = [
+    { occurredAt: t(8), value: 6.5 },
+    { occurredAt: t(12), value: 5.0 },
+    { occurredAt: t(16), value: 4.3 },
+  ];
+  const META = { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 } as const;
+  const juzgar = (momento: "initial" | "during" | "final", lecturas = BAJANDO) => {
+    const c = curvaDeLote({ lecturas, objetivos: [{ momento, ...META }], ancho: 480, alto: 200 });
+    return { juicio: juicioDeBanda(c, colocarPuntos(c)), marcas: colocarPuntos(c).map((p) => p.fueraDeBanda) };
+  };
+
+  it("con meta FINAL sólo se juzga la última, y cumple: cero fuera de UNA juzgada", () => {
+    expect(juzgar("final").juicio).toEqual({ tipo: "juzgada", alcance: "al_final", fuera: 0, total: 1 });
+    // Las intermedias no se juzgan: `null`, no `false`. `false` diría «dentro» de una banda que no las mira.
+    expect(juzgar("final").marcas).toEqual([null, null, false]);
+  });
+
+  it("CONTROL: las MISMAS lecturas con meta `during` sí dan dos fuera de tres", () => {
+    expect(juzgar("during").juicio).toEqual({ tipo: "juzgada", alcance: "trayectoria", fuera: 2, total: 3 });
+    expect(juzgar("during").marcas).toEqual([true, true, false]);
+  });
+
+  it("con meta INICIAL sólo se juzga la primera —el caso de lavado y natural—, y ésa sí se salió", () => {
+    expect(juzgar("initial").juicio).toEqual({ tipo: "juzgada", alcance: "al_inicio", fuera: 1, total: 1 });
+    expect(juzgar("initial").marcas).toEqual([true, null, null]);
+  });
+
+  it("una ÚLTIMA lectura fuera de la meta final SÍ se marca: no juzgar a las intermedias no es callar", () => {
+    // El control que pide la ficha de 017. Sin él, «0 fuera» podría salir siempre y las pruebas de
+    // arriba pasarían con una implementación que no juzga nada.
+    const noLlega = [
+      { occurredAt: t(8), value: 6.5 },
+      { occurredAt: t(12), value: 5.0 },
+      { occurredAt: t(16), value: 4.9 }, // por encima del máximo 4,6
+    ];
+    expect(juzgar("final", noLlega).juicio).toEqual({ tipo: "juzgada", alcance: "al_final", fuera: 1, total: 1 });
+    expect(juzgar("final", noLlega).marcas).toEqual([null, null, true]);
+  });
+
+  it("una sola lectura contra una meta inicial se juzga entera: una lectura, una juzgada", () => {
+    const una = [{ occurredAt: t(8), value: 4.3 }];
+    expect(juzgar("initial", una).juicio).toEqual({ tipo: "juzgada", alcance: "al_inicio", fuera: 0, total: 1 });
+  });
+
+  it("un empate en el extremo no se juzga, y lo dice: no se inventa cuál era la última", () => {
+    const empatadas = [
+      { occurredAt: t(8), value: 6.5 },
+      { occurredAt: t(16), value: 4.3 },
+      { occurredAt: t(16), value: 9.9 },
+    ];
+    expect(juzgar("final", empatadas).juicio).toEqual({ tipo: "extremo_ambiguo", alcance: "al_final" });
+    expect(juzgar("final", empatadas).marcas).toEqual([null, null, null]);
+    // Control doble: con `initial` el mínimo de ESE MISMO conjunto no está empatado, así que sí se juzga;
+    // y con `during` también. Sin estas dos filas, «extremo_ambiguo» podría salir siempre.
+    expect(juzgar("initial", empatadas).juicio).toEqual({ tipo: "juzgada", alcance: "al_inicio", fuera: 1, total: 1 });
+    // 6,5 y 9,9 se salen; 4,3 cae dentro de [4,0 – 4,6]. Los tres números a mano, para que un
+    // error de banda se vea en vez de esconderse en un total.
+    expect(juzgar("during", empatadas).juicio).toEqual({ tipo: "juzgada", alcance: "trayectoria", fuera: 2, total: 3 });
+  });
+
+  it("sin lecturas no hay juicio en ningún momento: un cero no es «cumple»", () => {
+    for (const m of ["initial", "during", "final"] as const) {
+      expect(juzgar(m, []).juicio).toEqual({ tipo: "sin_lecturas" });
+    }
   });
 });

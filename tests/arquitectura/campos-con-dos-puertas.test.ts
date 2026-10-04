@@ -70,6 +70,47 @@ function bloqueDeCreacion(nombreFuncion: string): string {
   return src.slice(j, src.indexOf("displayOrder", j) + 40);
 }
 
+/** Los campos que `CreateRecipeInput` declara dentro de `fases` (R8, Parte 1, 2026-09-30). */
+function camposDeFase(): string[] {
+  const src = leer(SERVICIO);
+  const i = src.indexOf("export interface CreateRecipeInput");
+  if (i < 0) throw new Error(`No encuentro CreateRecipeInput en ${SERVICIO}`);
+  const desde = src.slice(src.indexOf("fases?: ReadonlyArray<{", i));
+  const cuerpo = desde.slice(0, desde.indexOf("}>;"));
+  return [...cuerpo.matchAll(/^\s{4}([a-zA-Z][a-zA-Z0-9]*)\??:/gm)].map((m) => m[1]!);
+}
+
+/**
+ * El bloque `fases:` que escribe filas de fase en cada función (R8, Parte 1). Se busca SÓLO dentro del
+ * `create` de la propia función: entre su `targets: {` y el `include:` que le sigue. Si el bloque no
+ * está ahí, devuelve vacío y el guardia cae con «no tiene bloque fases:».
+ *
+ * **Por qué ese tope y no sólo «hasta el siguiente `include:`» (ronda de arreglo 1, 2026-10-02).** El
+ * `include` de cada función contiene `fases: true`, así que sin el bloque la búsqueda aterrizaba ahí y
+ * seguía hasta el siguiente `include:` del archivo —o, en la última función, hasta el final—. Una
+ * lectura posterior que nombrara los cinco campos (`select: { phase: true, expectedHours: true, … }`)
+ * hacía pasar «LOS DOS servicios escriben todas las columnas de fase» **con el bloque perdido**, y la
+ * rama «no tiene bloque fases:» no se alcanzaba nunca. Medido con esa mutación: 7 de 7 en verde con el
+ * localizador viejo.
+ *
+ * Añadir `fases` a la lista de `bloqueDeCreacion` no habría bastado: esa función recorta el bloque en
+ * `displayOrder`, que va ANTES de `fases:`, así que nunca vería las filas de fase.
+ */
+function bloqueDeFases(nombreFuncion: string): string {
+  const src = leer(SERVICIO);
+  const i = src.indexOf(`export async function ${nombreFuncion}`);
+  if (i < 0) throw new Error(`No encuentro ${nombreFuncion} en ${SERVICIO}`);
+  const t = src.indexOf("targets: {", i);
+  if (t < 0) throw new Error(`${nombreFuncion} no construye targets`);
+  // El `create` de la versión acaba en el `include:` que devuelve la fila. Sin él no hay dónde acotar:
+  // el análisis está ciego, y eso se dice en vez de leer hasta el final del archivo.
+  const fin = src.indexOf("include:", t);
+  if (fin < 0) throw new Error(`${nombreFuncion} no tiene el include: que cierra su create`);
+  const j = src.indexOf("fases:", t);
+  if (j < 0 || j > fin) return "";
+  return src.slice(j, fin);
+}
+
 describe("un campo de receta llega por todas las puertas que lo escriben", () => {
   /**
    * **El control positivo del propio análisis.** Si el parseo se rompe, esta
@@ -124,5 +165,20 @@ describe("un campo de receta llega por todas las puertas que lo escriben", () =>
     ];
     const faltan = sitios.filter(([ruta]) => !leer(ruta).includes("expectedHours")).map(([, q]) => q);
     expect(faltan, `expectedHours no llega a: ${faltan.join(", ")}`).toEqual([]);
+  });
+});
+
+describe("R8 — las fases llegan por las dos puertas", () => {
+  it("el parseo encuentra los cinco campos de fase (control positivo)", () => {
+    expect(camposDeFase()).toEqual(["phase", "expectedHours", "turnEveryHours", "targetMoistureMinPct", "targetMoistureMaxPct"]);
+  });
+
+  it("LOS DOS servicios escriben todas las columnas de fase", () => {
+    for (const fn of ["createRecipeWithVersion", "createRecipeVersion"]) {
+      const bloque = bloqueDeFases(fn);
+      expect(bloque.length, `${fn} no tiene bloque fases:`).toBeGreaterThan(0);
+      const faltan = camposDeFase().filter((c) => !new RegExp(`\\b${c}:`).test(bloque));
+      expect(faltan, `${fn} no escribe: ${faltan.join(", ")}`).toEqual([]);
+    }
   });
 });

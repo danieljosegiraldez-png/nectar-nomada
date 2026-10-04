@@ -26,6 +26,7 @@ import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
+import { antesDeTransformar, dividirProcesoEnTx, TRANSACCION_DEL_LINAJE, type TipoConReglaDeProceso } from "./procesoDelLinaje";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
@@ -291,6 +292,9 @@ export function loteDeReferencia<T extends { id: string }>(
   return elegido;
 }
 
+/** Parte 1, R6: las transformaciones que tienen reglas cuando un proceso abierto cubre la entrada. */
+const TIPOS_CON_REGLA_DE_PROCESO = new Set<string>(["split", "selection", "merge", "blend"]);
+
 export async function recordTransformation(userAccountId: string, input: RecordTransformationInput) {
   if (input.inputs.length === 0) {
     throw new TraceabilityAccessError("inputs_required");
@@ -324,8 +328,21 @@ export async function recordTransformation(userAccountId: string, input: RecordT
   }
 
   const provenanceClass = input.provenanceClass;
+  // Parte 1, R6 (2026-10-01). La miel no tiene procesos —y divide en parcial a propósito
+  // (`dividirMiel` deja el remanente en el origen)—, así que queda fuera.
+  const tocaProceso =
+    TIPOS_CON_REGLA_DE_PROCESO.has(input.transformationType) && !inputLots.every((l) => l.lotType === "honey");
 
   const result = await prisma.$transaction(async (tx) => {
+    // Parte 1, R6: lo PRIMERO de la transacción, porque bloquea el linaje de las entradas y ese bloqueo tiene
+    // que ir antes que cualquier otra fila que se toque aquí (orden global por id, R2).
+    const division = tocaProceso
+      ? await antesDeTransformar(tx, {
+          tipo: input.transformationType as TipoConReglaDeProceso,
+          inputLotIds: input.inputs.map((i) => i.lotId),
+          numeroDePartes: input.outputs.length,
+        })
+      : null;
     const transformation = await tx.lotTransformation.create({
       data: {
         transformationType: input.transformationType,
@@ -463,6 +480,20 @@ export async function recordTransformation(userAccountId: string, input: RecordT
       acceptUnexplained: input.acceptUnexplained ?? null,
     });
 
+    // Parte 1, R6: con las partes creadas y la masa ya descontada, cierra el proceso como dividido y da a cada
+    // parte su copia. Después del balance, porque el remanente que mira es el saldo que queda tras descontar.
+    if (division) {
+      await dividirProcesoEnTx(tx, userAccountId, {
+        procesoId: division.procesoId,
+        transformationId: transformation.id,
+        occurredAt: input.occurredAt,
+        loteDividido: input.inputs[0]!.lotId,
+        cantidadDeEntrada: input.inputs[0]!.quantity ?? null,
+        partes: outputLots.map((l) => l.id),
+        organizationId: sourceLot.organizationId,
+      });
+    }
+
     // C1 §3: evidentiary write (LotTransformation carries provenanceClass).
     //
     // Va DENTRO de la transacción y con `tx`. Antes iba fuera, y su comentario
@@ -490,45 +521,9 @@ export async function recordTransformation(userAccountId: string, input: RecordT
     if (input.enLaMismaTransaccion) await input.enLaMismaTransaccion(tx, transformation.id);
 
     return { transformation, outputLots, reconciliation };
-  });
+  }, TRANSACCION_DEL_LINAJE);
 
   return result;
-}
-
-/**
- * Los ids de todo lo que este lote llegó a ser: su descendencia, bajando por las transformaciones.
- *
- * **Para qué existe (2026-09-27).** `cerrarProceso` exigía que la medición de humedad de cierre
- * fuera del MISMO lote del proceso, y la fermentación crea un lote nuevo de pergamino: la humedad
- * se mide ahí. Medido ese día sobre una copia de prueba, el lote de un proceso abierto en cereza
- * tenía **0** mediciones de humedad, así que el formulario de cierre no ofrecía ninguna opción y el
- * proceso no se podía cerrar nunca. Decisión de Daniel: el cierre acepta la humedad de un
- * descendiente, porque es el mismo café.
- *
- * **Es el mismo SQL que `getLotLineage` ya usaba** para su mitad descendente, extraído para que las
- * dos preguntas no puedan divergir. Con un tope de profundidad que aquélla no tiene: una
- * transformación no debería poder formar un ciclo, pero un recorrido sin tope confía en que nunca
- * lo haga, y aquí no hay razón para confiar.
- *
- * No comprueba permisos: quien llame ya resolvió el acceso al lote de partida.
- */
-export async function idsDeDescendencia(lotId: string, profundidad = 12): Promise<string[]> {
-  const filas = await prisma.$queryRaw<Array<{ lot_id: string }>>`
-    WITH RECURSIVE descent AS (
-      SELECT lti.lot_id AS input_lot_id, lto.lot_id AS output_lot_id, 0 AS depth
-      FROM traceability.lot_transformation_input lti
-      JOIN traceability.lot_transformation_output lto ON lto.transformation_id = lti.transformation_id
-      WHERE lti.lot_id = ${lotId}::uuid
-      UNION ALL
-      SELECT lti.lot_id, lto.lot_id, descent.depth + 1
-      FROM descent
-      JOIN traceability.lot_transformation_input lti ON lti.lot_id = descent.output_lot_id
-      JOIN traceability.lot_transformation_output lto ON lto.transformation_id = lti.transformation_id
-      WHERE descent.depth + 1 < ${profundidad}
-    )
-    SELECT DISTINCT output_lot_id AS lot_id FROM descent;
-  `;
-  return filas.map((f) => f.lot_id).filter((id) => id !== lotId);
 }
 
 /**
