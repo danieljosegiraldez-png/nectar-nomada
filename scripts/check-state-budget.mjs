@@ -163,7 +163,7 @@ console.log(
 );
 
 /**
- * Aviso al 80 %, sin fallar.
+ * Aviso al 90 %, sin fallar.
  *
  * El guardia sólo se quejaba al 100 %, y el 2026-08-31 hubo que archivar dos
  * veces en un día: con varias sesiones escribiendo, este archivo crece del
@@ -173,8 +173,17 @@ console.log(
  * **No falla a propósito.** Un aviso que rompe la compuerta a los pocos días de
  * cada archivado enseña a ignorar la compuerta entera, y entonces tampoco se
  * lee el fallo de verdad al 100 %.
+ *
+ * **SUBIDO DE 0,8 A 0,9 EL 2026-10-04, decisión de Daniel.** El 0,8 sonaba desde
+ * las 320 líneas, y una auditoría de §3 ese día dejó el archivo en 360 con
+ * ~230 líneas de estado **vivo**: el aviso era permanente, y un aviso que no se
+ * puede apagar es la misma cosa que ninguno — enseña a ignorarlo. El coste está
+ * medido y es real: el margen entre el aviso y el techo pasa de **80 líneas a
+ * 40**, o sea de un día de escritura de varias sesiones a medio. Si vuelve a
+ * sonar siempre, lo que toca no es subirlo otra vez: es que el techo de 400 ya
+ * no cabe el proyecto, y eso es otra decisión.
  */
-const AVISO = 0.8;
+const AVISO = 0.9;
 const cerca = [
   ["líneas", lineas, MAX_LINEAS],
   ["tokens", tokens, MAX_TOKENS],
