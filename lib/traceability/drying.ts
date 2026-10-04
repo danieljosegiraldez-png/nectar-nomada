@@ -21,6 +21,7 @@ import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { BandejaError } from "./bandejaError";
+import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import type { DryingOutcome, Lot, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
@@ -57,12 +58,15 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
 
   const result = await prisma.$transaction(async (tx) => {
+    // Parte 1, R3 (2026-10-01): ver `startFermentationRun`.
+    const proceso = await procesoAbiertoParaCorrida(tx, input.lotId);
     const run = await tx.dryingRun.create({
       data: {
         method: input.method ?? null,
         locationId: input.locationId ?? null,
         layerDepthCm: input.layerDepthCm ?? null,
         startedAt: input.startedAt,
+        lotProcessId: proceso.id,
         createdBy: userAccountId,
       },
     });
@@ -99,7 +103,7 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
     );
 
     return { run, transformation };
-  });
+  }, TRANSACCION_DEL_LINAJE);
 
   return result;
 }

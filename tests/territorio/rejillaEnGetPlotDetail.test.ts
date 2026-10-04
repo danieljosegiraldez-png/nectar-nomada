@@ -36,9 +36,23 @@ afterEach(async () => {
   cohorteIds = [];
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: microIds } }) });
   microIds = [];
+  // La forma se borra ANTES de anular la rejilla: un trozo que referencia un tablero
+  // que ya no existe no debería quedarse. (Que la base lo impida al encoger es el §7.4
+  // del diseño, y está sin hacer: va en el plan de las pantallas.)
+  await prisma.plotShapeRange.deleteMany({ where: assertDefinedWhere({ id: { in: formaIds } }) });
+  formaIds = [];
   await prisma.location.update({
     where: { id: parcela.id },
-    data: { gridOrigin: null, rowCount: null, plantsPerRow: null, rowSpacingMeters: null },
+    // `plantSpacingMeters` y `areaHectares` también: las pruebas de la densidad los
+    // ponen, y dejarlos puestos cambiaría el resultado de las que corren después.
+    data: {
+      gridOrigin: null,
+      rowCount: null,
+      plantsPerRow: null,
+      rowSpacingMeters: null,
+      plantSpacingMeters: null,
+      areaHectares: null,
+    },
   });
 });
 
@@ -58,6 +72,25 @@ afterAll(async () => {
     where: assertDefinedWhere({ id: parcela.organizationId ?? "" }),
   });
 });
+
+let formaIds: string[] = [];
+
+/**
+ * Declara una forma que cubre el tablero entero.
+ *
+ * **Hace falta desde D8 (2026-10-02):** sin forma declarada `compararConLaRejilla`
+ * devuelve `sin_forma` y no afirma ninguna capacidad, porque `filas × plantas` es falso
+ * en un lote irregular. Las pruebas de abajo siguen midiendo lo que medían —que el
+ * cableado expone la comparación, y que una microparcela usa su rango— y para eso
+ * necesitan una forma; la del tablero lleno deja sus cifras intactas.
+ */
+async function declararFormaLlena(locationId: string) {
+  const f = await prisma.plotShapeRange.create({
+    data: { locationId, rowFrom: 1, rowTo: 10, plantFrom: 1, plantTo: 20, createdBy: usuario.userAccountId },
+  });
+  formaIds.push(f.id);
+  return f;
+}
 
 async function siembra(locationId: string, plantCount: number | null) {
   const c = await prisma.plantingCohort.create({
@@ -80,15 +113,31 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
     expect(d.rejilla.status).toBe("sin_rejilla");
   });
 
+  /**
+   * **Con rejilla y SIN forma, el cableado dice `sin_forma`** (D8, 2026-10-02) — y esto
+   * es además el control de las cuatro pruebas de abajo: si declarar la forma no
+   * estuviera haciendo nada, ellas pasarían igual y esta fallaría.
+   */
+  it("con rejilla y sin forma declarada dice sin_forma, sin capacidad", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await siembra(parcela.id, 140);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.rejilla).toMatchObject({ status: "sin_forma", filas: 10, columnas: 20 });
+    expect(d.rejilla).not.toHaveProperty("capacidad");
+    expect(d.rejilla).not.toHaveProperty("diferencia");
+  });
+
   /** El control positivo del cableado: con rejilla y sin siembras, la capacidad. */
   it("con rejilla y sin siembras dice sin_cohortes con su capacidad", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
     expect(d.rejilla).toMatchObject({ status: "sin_cohortes", capacidad: 200 });
   });
 
   it("con todo contado compara", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     await siembra(parcela.id, 140);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
     expect(d.rejilla).toMatchObject({ status: "ok", capacidad: 200, contadas: 140, diferencia: 60 });
@@ -101,6 +150,7 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
    */
   it("con una siembra sin conteo dice conteo_incompleto y no compara", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
     await siembra(parcela.id, 140);
     await siembra(parcela.id, null);
     const d = await getPlotDetail(usuario.userAccountId, parcela.id);
@@ -123,6 +173,8 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
    */
   it("una microparcela con rango: la rejilla sale de la madre y la capacidad es su rango", async () => {
     await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    // La forma es de quien pone la numeración: la madre. La microparcela la hereda.
+    await declararFormaLlena(parcela.id);
     const m = await prisma.location.create({
       data: {
         name: `TEST Micro Alta ${Date.now()}`,
@@ -140,6 +192,82 @@ describe("getPlotDetail expone la comparación con la rejilla", () => {
     await siembra(m.id, 70);
     const d = await getPlotDetail(usuario.userAccountId, m.id);
     expect(d.rejilla).toMatchObject({ status: "ok", capacidad: 80, contadas: 70, diferencia: 10 });
+  });
+
+  /**
+   * **La densidad por marco, cableada** (D10, 2026-10-02). El cableado puede escribirse
+   * mal de dos maneras: pasar `areaHectares` en vez de las celdas de la forma —y entonces
+   * la densidad real sale baja en un lote irregular, por la roca y el camino—, o no pasar
+   * los dos metros y dejar `sin_marco` siempre.
+   *
+   * El fixture declara `rowSpacingMeters` pero **no** `plantSpacingMeters`, así que este
+   * primer caso es el de «falta un metro» — y es además el control del siguiente.
+   */
+  it("con la rejilla y la forma pero sin el metro entre plantas dice sin_marco", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad.status).toBe("sin_marco");
+  });
+
+  /**
+   * Con los dos metros, el marco de la Pink Bourbon —1,8 × 2,5— da **2.222 plantas/ha de
+   * diseño**, y el área sale de las 200 celdas del tablero lleno: 200 × 4,5 m² = 900 m² =
+   * 0,09 ha. Con 150 contadas, la real son 1.667.
+   */
+  it("con los dos metros da la diseñada, el área DERIVADA de la rejilla y la real", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({ where: { id: parcela.id }, data: { plantSpacingMeters: 1.8 } });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad).toMatchObject({ status: "ok", disenada: 2222, celdas: 200 });
+    if (d.densidad.status !== "ok") throw new Error("el status cambió: lo de abajo no mediría");
+    expect(d.densidad.areaHectareas).toBeCloseTo(0.09, 4);
+    expect(d.densidad.real).toBeCloseTo(1667, 0);
+  });
+
+  /**
+   * **La diseñada aisladas de las celdas, y esto lo pidió el flip-test.**
+   *
+   * Las dos pruebas de arriba afirman estado, diseñada, celdas y área a la vez, así que
+   * tres mutaciones distintas del cableado —no pasar las celdas, no pasar el metro entre
+   * plantas, o sacar el área del polígono— tumbaban **las mismas dos**. No distinguían
+   * qué mitad se rompió.
+   *
+   * El marco y las celdas son dos entradas distintas: ésta afirma **sólo la diseñada**,
+   * que depende del marco y NO de la forma. Así una mutación del marco cae aquí y una de
+   * las celdas no.
+   */
+  it("la diseñada sale del marco y no depende de la forma", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({ where: { id: parcela.id }, data: { plantSpacingMeters: 1.8 } });
+    // A propósito SIN declarar forma: la diseñada tiene que llegar igual.
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    expect(d.densidad.status, "sin forma no hay real, pero sí diseñada").toBe("sin_forma");
+    expect(d.densidad).toMatchObject({ disenada: 2222 });
+  });
+
+  /**
+   * **El control de que el área NO sale de `areaHectares`.** `crearParcela` no le pone
+   * área, así que si el cableado la usara este caso daría `sin_area` o un número distinto;
+   * con las celdas de la forma da 0,09 ha pase lo que pase con la columna del polígono.
+   */
+  it("el control: el área derivada no depende de areaHectares", async () => {
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    await prisma.location.update({
+      where: { id: parcela.id },
+      // Un área de polígono ABSURDA a propósito: si el cableado la usara, la real se iría.
+      data: { plantSpacingMeters: 1.8, areaHectares: 99 },
+    });
+    await declararFormaLlena(parcela.id);
+    await siembra(parcela.id, 150);
+    const d = await getPlotDetail(usuario.userAccountId, parcela.id);
+    if (d.densidad.status !== "ok") throw new Error("el status cambió: lo de abajo no mediría");
+    expect(d.densidad.areaHectareas, "0,09 ha de la rejilla, no 99 del poligono").toBeCloseTo(0.09, 4);
+    expect(d.densidad.real).toBeCloseTo(1667, 0);
   });
 
   /**

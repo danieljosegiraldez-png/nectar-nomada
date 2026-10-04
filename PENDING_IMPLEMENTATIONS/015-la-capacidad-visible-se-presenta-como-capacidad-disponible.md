@@ -1,4 +1,43 @@
-# 015 · La capacidad visible se presenta como capacidad disponible: un tanque ocupado por un lote que no ves sale «libre y sano»
+# 015 · La capacidad visible se presenta como capacidad DISPONIBLE: un tanque ocupado por un lote que no ves sale «libre»
+
+**Estado: hecho**, el 2026-10-02.
+
+**La causa se midió, no se dedujo.** `lib/beneficio/datosDelTablero.ts` consulta las fases abiertas
+con `transformations: { some: { inputs: { some: { lot: lotWhere } } } }` —filtradas por lote
+visible—, así que una corrida sobre un lote que quien mira no ve **no llega** a
+`ocupacionDelSitio`. Con `enUso` derivado sólo de ésas, «no me llegó ninguna corrida» se presentaba
+como «la unidad está libre». Es el mismo error caro que el de `vesselNote`, por otra puerta:
+alguien le echa cereza encima.
+
+**Lo que se hizo:**
+
+- Un recuento de corridas abiertas **por unidad y sin filtrar por lote**, acotado a las unidades ya
+  visibles (`groupBy` con `_count`, sin seleccionar ni una columna del lote). De ahí sale `enUso`, y
+  de ahí salen los **conflictos**: dos corridas en un tanque son un conflicto aunque ninguno de sus
+  dos lotes se vea, y contándolo sobre lo visible el conflicto desaparecía junto con sus lotes.
+- `proximaLiberacion` **agrupa por unidad** y dentro de cada una toma el fin **mayor** —se libera
+  cuando acaba la última—, y entre unidades el menor. Y deja fuera las retiradas y las que requieren
+  intervención, con el **mismo `clasificar`** que usa la ocupación, no una regla paralela.
+- Una unidad con una corrida sin duración declarada **no tiene hora conocida**, aunque otra corrida
+  de la misma unidad sí la declare. Era la misma forma del defecto, más pequeña: anunciar la hora de
+  la que habla es anunciar una hora a la que la unidad no va a estar libre.
+
+**Una corrección a la ficha, dicha porque cambia el nombre de un estado.** Pedía tres estados y
+llamaba al tercero «ocupación desconocida». Con el recuento sin filtrar **no es desconocida**: se
+sabe que la unidad está ocupada, y lo único que falta es de qué lote. Se llama
+`loteNoVisible` / `ocupadasSinLoteVisible`, que es lo que el dato sostiene; «desconocida» diría
+menos de lo que se sabe.
+
+**Lo que esto enseñó, y no está en el diff:** el defecto no estaba en cómo se clasifica una unidad
+sino en **qué llega a clasificarse**, así que **ninguna prueba de la función pura podía verlo** —
+`ocupacionDelSitio` clasificaba correctamente lo que recibía—. El guardia que lo caza vive en el
+carril con base (`datos-del-tablero.test.ts`), monta una cama visible con un secado abierto de un
+lote invisible, y afirma **las dos mitades**: que la corrida NO llega a `corridas` y que SÍ aparece
+en `corridasPorUnidad`. Sin la primera, la segunda no probaría nada.
+
+Lo que sigue abajo es el hallazgo tal como se midió.
+
+---
 
 **Estado: abierto.** Encontrado el 2026-10-01 por el CLI de Codex, auditando el diff del PR #573
 (el tablero del beneficio) antes de la fusión. **No está reproducido en el navegador**: es propagación

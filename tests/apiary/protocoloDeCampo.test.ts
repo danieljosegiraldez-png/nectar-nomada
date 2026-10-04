@@ -71,7 +71,20 @@ afterAll(async () => {
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
 });
 
-describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
+/**
+ * **Las cuatro cuentas a mano de este archivo se movieron el 2026-10-03** y se dejan a mano a
+ * propósito: son filas patrón, y su trabajo es que un ítem nuevo no entre sin que nadie lo cuente.
+ *
+ * `PENDING_IMPLEMENTATIONS/010`, Parte A, añadió **diez** ítems al protocolo —tres de §2.2 y los
+ * siete de §2.4, que es la sección que no tenía ninguno— así que **44 → 54**. Y los que declaran
+ * cubrir una columna pasan de **16 a 27**: los diez nuevos la declaran, y `pollen_stores` ganó la
+ * suya, que no tenía.
+ *
+ * La que dice «la v1 conserva sus variables intactas» también sube a 54, y no es una contradicción:
+ * su `raiz(v)` escribe el contenido REAL del protocolo con el número de versión cambiado, así que
+ * su «v1» y su «v2» son el mismo archivo de 54 ítems.
+ */
+describe("los 54 ítems del dueño caben en ProtocolVariable", () => {
   it("ninguno se queda fuera — la falsación de §8 del informe", () => {
     const protocolo = leerProtocoloDeCampo();
     const itemsEnElJson = protocolo.activities.reduce((n, a) => n + a.items.length, 0);
@@ -79,7 +92,7 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
 
     // Control positivo del análisis: si el JSON dejara de leerse, o las
     // actividades vinieran vacías, todo lo de abajo pasaría sin comprobar nada.
-    expect(itemsEnElJson, "el JSON no trae ítems: no se está midiendo nada").toBe(44);
+    expect(itemsEnElJson, "el JSON no trae ítems: no se está midiendo nada").toBe(54);
     expect(protocolo.activities.length).toBe(5);
 
     // La cuenta que pedía el informe: cuántos NO entran.
@@ -104,13 +117,13 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
     // Casi el 40 % de la lista ya es columna existente y el protocolo sólo
     // declara cómo se muestra. Es lo que evita duplicar el dato.
     const cubren = variablesDe(leerProtocoloDeCampo()).filter((v) => v.coversExistingColumn);
-    expect(cubren.length).toBe(16);
+    expect(cubren.length).toBe(27);
     for (const v of cubren) {
       expect(v.coversExistingColumn, `${v.key} declara una columna con forma rara`).toMatch(/^[A-Z]\w+\.\w+$/);
     }
   });
 
-  it("se carga como ProtocolVersion, con sus 44 variables y su AuditEvent", async () => {
+  it("se carga como ProtocolVersion, con sus 54 variables y su AuditEvent", async () => {
     const { version, creado, protocoloCreado } = await cargarProtocoloDeCampo(cuentaId);
     protocolIdCreado = version.protocolId;
     loCreoEstaPrueba = protocoloCreado;
@@ -131,9 +144,9 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
     expect(typeof creado).toBe("boolean");
 
     const guardadas = await prisma.protocolVariable.findMany({ where: { protocolVersionId: version.id } });
-    expect(guardadas.length).toBe(44);
-    expect(guardadas.filter((v) => v.stage === "field").length).toBe(34);
-    expect(guardadas.filter((v) => v.stage === "close").length).toBe(10);
+    expect(guardadas.length).toBe(54);
+    expect(guardadas.filter((v) => v.stage === "field").length).toBe(43);
+    expect(guardadas.filter((v) => v.stage === "close").length).toBe(11);
     // Cuatro desde la v2 (ADR-165): la condición del sitio dejó de ser texto libre.
     expect(guardadas.filter((v) => v.valueType === "multi_enum").length).toBe(4);
     expect(version.version).toBe(2);
@@ -182,6 +195,6 @@ describe("los 44 ítems del dueño caben en ProtocolVariable", () => {
     const versiones = await prisma.protocolVersion.findMany({ where: { protocolId: v1.version.protocolId }, orderBy: { version: "asc" } });
     expect(versiones.map((v) => [v.version, v.id])).toEqual([[1, v1.version.id], [2, v2.version.id]]);
     // La v1 conserva sus variables intactas.
-    expect(await prisma.protocolVariable.count({ where: { protocolVersionId: v1.version.id } })).toBe(44);
+    expect(await prisma.protocolVariable.count({ where: { protocolVersionId: v1.version.id } })).toBe(54);
   });
 });

@@ -443,7 +443,7 @@ describe("el consumidor: CurvaDeLote pinta queHaceElOperario cuando riesgoDeEspe
     const { CurvaDeLote } = await import("../../app/components/beneficio/CurvaDeLote");
     const curva = curvaDeLote({
       lecturas: [{ occurredAt: new Date("2026-03-10T10:00:00.000Z"), value: valor }],
-      objetivo: { minValue: 4.0, maxValue: 4.6, targetValue: 4.3 },
+      objetivos: [{ momento: "during", minValue: 4.0, maxValue: 4.6, targetValue: 4.3 }],
       ancho: 480,
       alto: 200,
     });

@@ -300,13 +300,11 @@ export function CambiarIntencionForm({
 }
 
 /**
- * Devolver el lote a secado.
- *
- * **El motivo es obligatorio y por eso es un campo, no un botón suelto.**
- * Reabrir un proceso cerrado contradice «cerrado no se toca»; sin motivo sería
- * indistinguible de un descuido, y el servidor lo rechaza igual.
+ * Devolver el lote a secado — Parte 1, R7. Sólo por un defecto de humedad: el motivo sale de una
+ * lista (para poder contar cuántas veces pasa y por qué), y «otro» exige nota. Abre una continuación
+ * del proceso cerrado; el cierre anterior queda como lo que fue.
  */
-export function DevolverASecadoForm({ lotId }: { lotId: string }) {
+export function DevolverASecadoForm({ lotId, motivos }: { lotId: string; motivos: OpcionSimple[] }) {
   const [estado, accion, pending] = useActionState(devolverASecadoAction, inicial);
   const t = useTranslations("Traceability");
 
@@ -315,7 +313,18 @@ export function DevolverASecadoForm({ lotId }: { lotId: string }) {
       <input type="hidden" name="lotId" value={lotId} />
       <div className="nn-field">
         <label htmlFor="s-reason">{t("processBackToDryingReasonLabel")}</label>
-        <input id="s-reason" name="motivo" type="text" required placeholder={t("processBackToDryingPlaceholder")} />
+        <select id="s-reason" name="motivoValueId" defaultValue="" required>
+          <option value="">{t("chooseOption")}</option>
+          {motivos.map((m) => (
+            <option key={m.id} value={m.id}>
+              {t(`motivoDevolucion_${m.label}` as "motivoDevolucion_otro")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="nn-field">
+        <label htmlFor="s-note">{t("processBackToDryingNoteLabel")}</label>
+        <input id="s-note" name="nota" type="text" placeholder={t("processBackToDryingPlaceholder")} />
       </div>
       {estado.error ? (
         <p className="nn-error" role="alert">

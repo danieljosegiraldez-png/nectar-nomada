@@ -19,10 +19,11 @@ import { claveDeLaComparacion } from "../../lib/traceability/plantingCohorts";
  */
 
 describe("claveDeLaComparacion", () => {
-  it("cada estado tiene SU clave, y las cuatro son distintas", () => {
+  it("cada estado tiene SU clave, y todas son distintas", () => {
     const claves = [
       claveDeLaComparacion({ status: "sin_rejilla" }).clave,
       claveDeLaComparacion({ status: "sin_rango" }).clave,
+      claveDeLaComparacion({ status: "sin_forma", filas: 10, columnas: 20 }).clave,
       claveDeLaComparacion({ status: "sin_cohortes", capacidad: 200 }).clave,
       claveDeLaComparacion({
         status: "conteo_incompleto",
@@ -33,7 +34,7 @@ describe("claveDeLaComparacion", () => {
       }).clave,
       claveDeLaComparacion({ status: "ok", capacidad: 200, contadas: 140, diferencia: 60 }).clave,
     ];
-    expect(new Set(claves).size, "dos estados con la misma frase son un estado perdido").toBe(5);
+    expect(new Set(claves).size, "dos estados con la misma frase son un estado perdido").toBe(6);
   });
 
   /**
@@ -55,6 +56,26 @@ describe("claveDeLaComparacion", () => {
    */
   it("sin_rango no pasa ningún número", () => {
     expect(claveDeLaComparacion({ status: "sin_rango" }).params).toEqual({});
+  });
+
+  /**
+   * **`sin_forma` pasa el tamaño del tablero y NADA más.** Ni capacidad —es el estado
+   * que existe justo para no afirmarla— ni conteo: un `contadas` aquí leería «hay N de
+   * ...» sobre un total que no se puede calcular, y el conteo ya está en la lista de
+   * siembras de esa pantalla.
+   *
+   * **Esta prueba existe porque una mutación sobrevivió.** El flip-test de la tarea 3
+   * quitó `columnas` de los parámetros y **ninguna prueba cayó**: la frase habría
+   * pintado `{columnas}` literal en pantalla. Las otras cinco claves sí estaban
+   * cubiertas en este archivo; la mía faltaba.
+   */
+  it("sin_forma pasa filas y columnas, y ningún otro número", () => {
+    const r = claveDeLaComparacion({ status: "sin_forma", filas: 10, columnas: 20 });
+    expect(r.clave).toBe("rejillaSinForma");
+    expect(r.params).toEqual({ filas: 10, columnas: 20 });
+    expect(r.params, "afirmar una capacidad es lo que este estado evita").not.toHaveProperty("capacidad");
+    expect(r.params).not.toHaveProperty("contadas");
+    expect(r.params).not.toHaveProperty("diferencia");
   });
 
   /** Sin rejilla no hay ningún número que pasar. */

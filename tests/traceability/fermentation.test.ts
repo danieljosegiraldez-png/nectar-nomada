@@ -10,6 +10,7 @@ import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceabil
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { endFermentationRun, recordFermentationIntervention, startFermentationRun } from "../../lib/traceability/fermentation";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t6-${Date.now()}`;
@@ -71,6 +72,8 @@ afterAll(async () => {
   await prisma.fermentationIntervention.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
@@ -104,6 +107,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       occurredAt: new Date("2026-01-01"),
     });
 
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run, transformation: startTransformation } = await startFermentationRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -196,6 +200,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),
@@ -218,6 +223,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),

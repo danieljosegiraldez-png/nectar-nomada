@@ -2,6 +2,8 @@ import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { loteDividido } from "./procesoDelLinaje";
+import { SampleValidationError } from "./samples";
 import type { ClassificationLevel } from "../rbac/types";
 import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import type { MaterialState, Prisma, SamplingEvent, SamplingRole, SamplingZone } from "../../generated/prisma/client";
@@ -157,6 +159,11 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }, ...contextos]);
 
   return prisma.$transaction(async (tx) => {
+    // Parte 1, R6.6 (ronda de arreglo 1, 2026-10-01): un lote dividido bajo un proceso no admite muestras, y las de
+    // una inspección lo son (`sourceLotId`). Era la tercera puerta, sin la regla de `createSampleFromLot`. La misma
+    // clase que allí, y antes de escribir nada. Con la fecha de la inspección: lo de antes de la división se admite (decisión
+    // de Daniel, 2026-10-02).
+    if (await loteDividido(tx, lot.id, input.occurredAt)) throw new SampleValidationError("lote_dividido");
     const event = await tx.samplingEvent.create({
       data: {
         dryingBedLocationId: input.dryingBedLocationId ?? null,
@@ -234,6 +241,9 @@ export async function opcionesParaInspeccion(userAccountId: string) {
   for (const lot of lots) {
     try {
       await requireSamplingAccess(userAccountId, lot);
+      // Parte 1, R6.6: un lote dividido SÍ se ofrece (revisión final, ronda de arreglo 1, 2026-10-03). El formulario deja
+      // elegir la hora de la inspección, y una anterior a la división se admite (decisión de Daniel, 2026-10-02): no se
+      // puede saber aquí, antes de que se elija, así que decide `registrarInspeccion` con la fecha.
       lotes.push({ id: lot.id, name: lot.lotCode });
       anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
     } catch (error) {

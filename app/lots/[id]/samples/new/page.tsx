@@ -29,7 +29,7 @@ export default async function NewSamplePage({ params }: { params: Promise<{ id: 
       </Link>
       <h1>{lot.lotType === "green" ? t("greenSampleTitle") : t("createSampleButton")}</h1>
       {lot.lotType === "green" ? <p className="nn-muted">{t("greenSampleIntro")}</p> : null}
-      <SampleForm lotId={id} greenCoffee={lot.lotType === "green"} />
+      <SampleForm lotId={lot.id} greenCoffee={lot.lotType === "green"} />
     </div>
   );
 }

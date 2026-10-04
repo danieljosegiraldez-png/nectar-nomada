@@ -4,6 +4,7 @@ import type { CeldaDelMapa } from "../../../lib/beneficio/tablero";
 interface Textos {
   readonly libre: string;
   readonly sinNombre: string;
+  readonly loteNoVisible: string;
   readonly motivos: Readonly<Record<string, string>>;
 }
 
@@ -36,6 +37,13 @@ function Grupo({
               <li key={c.id} className={clase}>
                 <strong>{c.nombre ?? textos.sinNombre}</strong>
                 <span>{c.libreYSano ? textos.libre : c.motivos.map((m) => textos.motivos[m]).join(" · ")}</span>
+                {/*
+                  **Ocupada, y su lote no es visible para quien mira.** Va además de los motivos y no
+                  en lugar de ellos: `EN_USO` es verdad y es el motivo; esto dice por qué no va a
+                  encontrar el lote si lo busca. Sin esta línea el campo existiría en la API y no
+                  llegaría al operario, que es el defecto que Codex encontró en la curva el 2026-10-01.
+                */}
+                {c.loteNoVisible ? <span className="nn-celda-lote-ajeno">{textos.loteNoVisible}</span> : null}
               </li>
             );
           })}
@@ -67,6 +75,7 @@ export async function MapaDeUnidades({
   const textos: Textos = {
     libre: t("unidadLibre"),
     sinNombre: t("unidadSinNombre"),
+    loteNoVisible: t("unidadLoteNoVisible"),
     motivos: {
       EN_USO: t("unidadMotivo_EN_USO"),
       RETIRADO: t("unidadMotivo_RETIRADO"),

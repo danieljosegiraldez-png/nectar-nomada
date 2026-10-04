@@ -17,6 +17,8 @@
 tests/territorio/rejillaEnLaBase.test.ts
 tests/territorio/microparcelaConRango.test.ts
 tests/territorio/rangosDeBloque.test.ts
+tests/territorio/plantonEnLaRejilla.test.ts
+tests/territorio/formaDelLote.test.ts
 tests/territorio/rejillaEnGetPlotDetail.test.ts
 tests/arquitectura/colacion-de-la-base.test.ts
 # Necesitan base, y les basta `migrate deploy` + `db:seed` con las banderas
@@ -175,6 +177,11 @@ tests/traceability/formularioSinAmbito.test.ts
 tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts
 tests/traceability/lotProcess.test.ts
+tests/traceability/procesoDelLinaje.test.ts
+tests/traceability/aperturaDeProceso.test.ts
+tests/traceability/corridaConProceso.test.ts
+tests/traceability/divisionBajoProceso.test.ts
+tests/traceability/bodegaConProceso.test.ts
 tests/traceability/manejoEsquema.test.ts
 tests/traceability/manejoPrB.test.ts
 tests/traceability/reporteDeProceso.test.ts

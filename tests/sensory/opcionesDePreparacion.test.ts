@@ -4,6 +4,7 @@ import { opcionesDePreparacion } from "../../lib/sensory/opcionesDePreparacion";
 const textos = {
   sinPerfil: "sin perfil",
   sinEquipo: "sin equipo",
+  linajeDemasiadoHondo: "linaje demasiado hondo",
   describirTueste: ({ date, profile, equipment }: { date: string; profile: string; equipment: string }) =>
     `${date} · ${profile} · ${equipment}`,
 };
@@ -38,5 +39,19 @@ describe("opciones de preparación para cata", () => {
     ]);
     expect(opciones[0]?.label).toContain("Ikawa");
     expect(opciones[1]?.label).toContain("Claro v2");
+  });
+
+  /**
+   * Tarea 9, ronda de arreglo 1 (2026-10-02): una muestra cuyo lote tiene más de 64 generaciones no tiene grado que leer (R1
+   * lanza `lineage_too_deep`), y la etiqueta lo DICE en el sitio del grado. Sin esto la fila saldría sin grado, igual que una
+   * muestra cuyo café de verdad no lo tiene.
+   */
+  it("una muestra de linaje demasiado hondo lo dice en el sitio del grado", () => {
+    const tueste = [{ id: "roast-a", startedAt: new Date("2026-09-20T12:00:00Z"), equipment: null, recipeVersion: null }];
+    const [honda] = opcionesDePreparacion({ ...muestra, linajeDemasiadoHondo: true, roastSessions: tueste }, textos);
+    expect(honda?.label).toContain("L-1 · Las Nubes · linaje demasiado hondo · green_coffee");
+    // Control: sin la marca, ese texto no sale.
+    const [normal] = opcionesDePreparacion({ ...muestra, linajeDemasiadoHondo: false, roastSessions: tueste }, textos);
+    expect(normal?.label).not.toContain("linaje demasiado hondo");
   });
 });

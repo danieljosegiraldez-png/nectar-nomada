@@ -62,9 +62,39 @@ export interface PuntoDeCurva {
  * `yMin` es la coordenada del **valor** mínimo de la banda (`minValue`) y `yMax` la del valor
  * máximo: por la Y hacia abajo, `yMin >= yMax`. Son coordenadas de valores, no «la menor Y».
  */
+/** Los tres momentos de `ProcessTargetMoment`, tal cual los nombra el esquema. */
+export type MomentoDeObjetivo = "initial" | "during" | "final";
+
+/**
+ * **A qué lecturas se aplica la banda**, derivado del momento del objetivo y de nada más.
+ *
+ * `during` es el único momento que describe una trayectoria, y el esquema ya lo dice al hablar de
+ * `everyHours`: «un objetivo inicial o final ocurre una vez; pedirle un ritmo es una
+ * contradicción». `initial` y `final` son eventos de un instante, así que su banda **no cubre el
+ * recorrido**: se marca en su extremo del eje y juzga una sola lectura.
+ *
+ * El defecto que esto cierra (`PENDING_IMPLEMENTATIONS/017`): una meta `final` se usaba como banda
+ * de TODA la trayectoria, así que un pH que baja de 6,5 a 4,0 **por diseño** salía como «2 lecturas
+ * fuera del rango de la receta» durante todo el descenso. Daniel lo describió al revés y es la
+ * misma cosa: en lavado y natural el Brix o el pH se miden **una vez**, en la cereza o el mosto
+ * antes de la cama, y después sólo humedad; en fermentación el pH se mide a lo largo y baja con el
+ * tiempo. Un solo campo distingue los dos mundos.
+ */
+export type AlcanceDeLaBanda = "trayectoria" | "al_inicio" | "al_final";
+
+/** Un `ProcessTarget` tal como lo necesita la curva. Los tres valores son anulables en el esquema; `momento` no. */
+export interface ObjetivoDeCurva {
+  readonly momento: MomentoDeObjetivo;
+  readonly minValue: number | null;
+  readonly maxValue: number | null;
+  readonly targetValue: number | null;
+}
+
 export type Banda =
   | {
       readonly tipo: "banda";
+      /** Ver `AlcanceDeLaBanda`: sale del momento del objetivo, no de la geometría. */
+      readonly alcance: AlcanceDeLaBanda;
       readonly yMin: number;
       readonly yMax: number;
       readonly yObjetivo: number | null;
@@ -102,6 +132,17 @@ export interface Curva {
    * declaró, y quien rotula decide qué hacer con ellos en vez de adivinar por qué falta.
    */
   readonly rango: { readonly min: number; readonly max: number } | null;
+  /**
+   * **Qué objetivo de los declarados rige esta curva, y cuándo no se eligió ninguno.** Lo decide
+   * `elegirObjetivo` con los objetivos que entraron, y viaja DENTRO de la curva a propósito: como
+   * campo aparte, una pantalla podía recibir una banda dibujada y una elección que la contradijera,
+   * y nada lo habría cazado.
+   *
+   * Hace falta además de `banda` porque `banda` no distingue dos silencios muy distintos: «la
+   * receta no declara rango» y «declara dos, de instantes distintos, y no se elige por ti». Los dos
+   * dan `sin_objetivo_declarado` en `banda`.
+   */
+  readonly eleccion: EleccionDeObjetivo;
 }
 
 /**
@@ -120,11 +161,87 @@ export interface Curva {
  * Un instante que no es un número (`Invalid Date`) tampoco tiene última: `null`.
  */
 export function ultimaLectura(lecturas: readonly LecturaDeCurva[]): LecturaDeCurva | null {
+  const i = indiceDeLaUnicaEnElExtremo(lecturas, "ultima");
+  return i === null ? null : lecturas[i]!;
+}
+
+/**
+ * El **índice** de la única lectura en un extremo del tiempo, o `null` si no hay UNA.
+ *
+ * Es la regla de `ultimaLectura` —que se niega a desempatar— puesta en un solo sitio y abierta por
+ * los dos lados, porque un objetivo `initial` necesita lo simétrico de un `final`. Duplicar la
+ * regla es cómo se pierde: la versión de `readingsForMoment`
+ * (`lib/traceability/processTargets.ts`) toma `ordered[0]` y `ordered[last]` **sin** comprobar el
+ * empate, y ésa es exactamente la forma del defecto que se cerró al medir que **7 de 10 lotes**
+ * reales tienen TODAS sus lecturas en el mismo instante.
+ *
+ * Devuelve el índice y no la lectura porque quien juzga necesita casar con `puntos`, que va en el
+ * mismo orden. Un instante que no es un número (`Invalid Date`) no tiene extremo: `NaN` no es igual
+ * a nada, ni a sí mismo, así que el filtro sale vacío y la respuesta es `null`.
+ */
+export function indiceDeLaUnicaEnElExtremo(
+  lecturas: readonly LecturaDeCurva[],
+  extremo: "primera" | "ultima",
+): number | null {
   if (lecturas.length === 0) return null;
   const instantes = lecturas.map((l) => l.occurredAt.getTime());
-  const ultimo = Math.max(...instantes);
-  const enElUltimo = lecturas.filter((_, i) => instantes[i] === ultimo);
-  return enElUltimo.length === 1 ? enElUltimo[0]! : null;
+  const buscado = extremo === "ultima" ? Math.max(...instantes) : Math.min(...instantes);
+  const enElExtremo = instantes.reduce<number[]>((is, v, i) => (v === buscado ? [...is, i] : is), []);
+  return enElExtremo.length === 1 ? enElExtremo[0]! : null;
+}
+
+/**
+ * **Cuál de los objetivos declarados rige la curva — y cuándo NO se elige.**
+ *
+ * El defecto de `PENDING_IMPLEMENTATIONS/017` no era sólo el alcance de la banda: era que
+ * `datosDelTablero` hacía `find(during) ?? find(final)` y por tanto **elegía en silencio** entre lo
+ * que la receta declaraba. La regla, dicha:
+ *
+ * - `during` manda, porque es el único momento que describe una trayectoria y por tanto el único
+ *   que puede juzgar una serie de lecturas.
+ * - Con un solo objetivo, ése. Es el caso que Daniel describe para lavado y natural: Brix o pH
+ *   medidos **una vez** en la cereza o el mosto, y después sólo humedad.
+ * - Con `initial` y `final` a la vez y sin `during`, **no se elige**: los dos son legítimos, hablan
+ *   de instantes distintos, y preferir uno sería inventar cuál le importa al operario. Se nombran
+ *   los momentos que había para que la pantalla lo diga en vez de dibujar la mitad de la verdad.
+ *
+ * Los momentos se devuelven en el orden del tiempo (`initial` antes de `final`), no en el de
+ * llegada: el orden de las filas de la base es arbitrario y la frase no debe cambiar con él.
+ */
+export type EleccionDeObjetivo =
+  | { readonly tipo: "elegido"; readonly objetivo: ObjetivoDeCurva }
+  | { readonly tipo: "sin_objetivo_declarado" }
+  /**
+   * **No se pudo saber qué receta aplicaba** (`PENDING_IMPLEMENTATIONS/019`). Distinto de
+   * `sin_objetivo_declarado`, que afirma algo **sobre la receta**: aquí no se consultó ninguna.
+   * Sin corrida abierta —o con una corrida sin versión de receta— lo único demostrado es que la
+   * consulta no recuperó nada, y eso no autoriza a hablar de lo que la receta declara.
+   */
+  | { readonly tipo: "receta_no_resuelta" }
+  | { readonly tipo: "varios_sin_trayectoria"; readonly momentos: readonly MomentoDeObjetivo[] };
+
+const ORDEN_DEL_TIEMPO: readonly MomentoDeObjetivo[] = ["initial", "during", "final"];
+
+/**
+ * `recetaResuelta` entra **obligatorio y sin valor por omisión**: el defecto de 019 era
+ * precisamente que nadie lo decía, y un valor por omisión deja que un sitio nuevo vuelva a
+ * afirmar sobre una receta que no miró. Con objetivos en la lista el indicador no manda —si hay
+ * objetivos, la receta se resolvió— así que no puede borrar un rango que de verdad existe.
+ */
+export function elegirObjetivo(
+  objetivos: readonly ObjetivoDeCurva[],
+  recetaResuelta: boolean,
+): EleccionDeObjetivo {
+  if (objetivos.length === 0) {
+    return recetaResuelta ? { tipo: "sin_objetivo_declarado" } : { tipo: "receta_no_resuelta" };
+  }
+  const trayectoria = objetivos.find((o) => o.momento === "during");
+  if (trayectoria) return { tipo: "elegido", objetivo: trayectoria };
+  if (objetivos.length === 1) return { tipo: "elegido", objetivo: objetivos[0]! };
+  return {
+    tipo: "varios_sin_trayectoria",
+    momentos: ORDEN_DEL_TIEMPO.filter((m) => objetivos.some((o) => o.momento === m)),
+  };
 }
 
 /** Posición de `v` entre `min` y `max` en un eje de `tamano`, con el máximo en 0. Rango cero: mitad. */
@@ -135,16 +252,35 @@ function escalaY(v: number, min: number, max: number, tamano: number): number {
 
 export function curvaDeLote(input: {
   readonly lecturas: readonly LecturaDeCurva[];
-  /** De `ProcessTarget`. Los tres son anulables en el esquema. */
-  readonly objetivo: {
-    readonly minValue: number | null;
-    readonly maxValue: number | null;
-    readonly targetValue: number | null;
-  } | null;
+  /**
+   * **TODOS los objetivos que la receta declara** para esta variable y esta fase, con su momento.
+   * Cuál rige la curva lo decide `elegirObjetivo` aquí dentro, y la respuesta sale en
+   * `Curva.eleccion`: quien llama no elige, y por tanto no puede elegir mal.
+   *
+   * **Vacío tiene DOS motivos y no dicen lo mismo** (`PENDING_IMPLEMENTATIONS/019`): la receta se
+   * consultó y no declara nada para esta variable —legítimo y frecuente—, o **no se pudo saber qué
+   * receta aplicaba**. Los distingue `recetaResuelta`, no esta lista. Esta línea decía sólo lo
+   * primero, y por eso la pantalla afirmaba sobre la receta sin haberla mirado.
+   */
+  readonly objetivos: readonly ObjetivoDeCurva[];
+  /**
+   * **¿Se supo qué receta aplicaba?** `false` cuando no hay corrida abierta, o cuando la corrida
+   * no tiene versión de receta: entonces `objetivos` está vacío porque no se consultó nada.
+   *
+   * Opcional **sólo aquí**, con `true` por omisión, y el motivo es medido: 82 llamadas de prueba
+   * construyen curvas para medir bandas y ejes, donde la resolución de la receta no es el asunto,
+   * y obligarlas a repetirlo son 82 ediciones en los mismos archivos cuyos conflictos de
+   * encadenado ya costaron 59 errores de sintaxis. En `elegirObjetivo` —la casa de la regla— es
+   * obligatorio, y el único sitio de producción que llama aquí lo pasa siempre: lo exige el
+   * guardia de `datos-del-tablero.test.ts` en el carril con base.
+   */
+  readonly recetaResuelta?: boolean;
   readonly ancho: number;
   readonly alto: number;
 }): Curva {
-  const { ancho, alto, objetivo } = input;
+  const { ancho, alto } = input;
+  const eleccion = elegirObjetivo(input.objetivos, input.recetaResuelta ?? true);
+  const objetivo = eleccion.tipo === "elegido" ? eleccion.objetivo : null;
   const lecturas = [...input.lecturas].sort(
     (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime(),
   );
@@ -159,9 +295,9 @@ export function curvaDeLote(input: {
     ? { tipo: "banda_al_reves" }
     : anchoCero
       ? { tipo: "banda_de_ancho_cero" }
-      : bandaDe(minValue, maxValue, objetivo?.targetValue ?? null, alto);
+      : bandaDe(objetivo, alto);
   const rango = minValue !== null && maxValue !== null ? { min: minValue, max: maxValue } : null;
-  if (lecturas.length === 0) return { puntos: [], banda, ancho, alto, lecturas, rango };
+  if (lecturas.length === 0) return { puntos: [], banda, ancho, alto, lecturas, rango, eleccion };
 
   const valores = lecturas.map((l) => l.value);
   const escalaMin = hayBanda ? minValue : Math.min(...valores);
@@ -175,18 +311,24 @@ export function curvaDeLote(input: {
     y: escalaY(l.value, escalaMin, escalaMax, alto),
   }));
 
-  return { puntos, banda, ancho, alto, lecturas, rango };
+  return { puntos, banda, ancho, alto, lecturas, rango, eleccion };
 }
 
-function bandaDe(
-  minValue: number | null,
-  maxValue: number | null,
-  targetValue: number | null,
-  alto: number,
-): Banda {
-  if (minValue === null || maxValue === null) return { tipo: "sin_objetivo_declarado" };
+/** `during` cubre el recorrido; `initial` y `final` son eventos de un instante. Ver `AlcanceDeLaBanda`. */
+const ALCANCE_DEL_MOMENTO: Readonly<Record<MomentoDeObjetivo, AlcanceDeLaBanda>> = {
+  initial: "al_inicio",
+  during: "trayectoria",
+  final: "al_final",
+};
+
+function bandaDe(objetivo: ObjetivoDeCurva | null, alto: number): Banda {
+  const minValue = objetivo?.minValue ?? null;
+  const maxValue = objetivo?.maxValue ?? null;
+  if (objetivo === null || minValue === null || maxValue === null) return { tipo: "sin_objetivo_declarado" };
+  const { targetValue } = objetivo;
   return {
     tipo: "banda",
+    alcance: ALCANCE_DEL_MOMENTO[objetivo.momento],
     yMin: escalaY(minValue, minValue, maxValue, alto),
     yMax: escalaY(maxValue, minValue, maxValue, alto),
     yObjetivo: targetValue === null ? null : escalaY(targetValue, minValue, maxValue, alto),

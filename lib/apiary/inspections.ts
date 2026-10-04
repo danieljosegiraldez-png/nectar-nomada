@@ -16,14 +16,26 @@ import { recordAuditEvent } from "../audit";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import { abrirIntervaloEn, ArtefactoInvalido, cerrarAbiertosEn, exigeTipoDeArtefacto, validarArtefacto } from "./artefactos";
 import { CATALOGO_DE_IRREGULARIDAD } from "./irregularidades";
-import { exigeCeldasReales, exigeEnteroContado, exigeEtapasDeCria, exigeNivelDeReserva, exigePoblacion } from "./estadoDeColonia";
+import {
+  exigeCeldasReales,
+  exigeEnteroContado,
+  exigeEtapasDeCria,
+  exigeNivelDeReserva,
+  exigePatronDeCria,
+  exigePoblacion,
+  exigeReinaVista,
+  exigeTemperamento,
+} from "./estadoDeColonia";
 import type {
+  BroodPattern,
   BroodStage,
   ColonyPopulation,
   InspectionOutcome,
   ProvenanceClass,
   QueenCellKind,
+  QueenSighting,
   StoresLevel,
+  Temperament,
 } from "../../generated/prisma/client";
 
 /**
@@ -58,11 +70,19 @@ export interface RecordInspectionInput {
   occurredAt?: Date;
   operatorPersonId?: string | null;
   outcome: InspectionOutcome;
-  broodPatternNote?: string | null;
-  queenSighted?: boolean | null;
+  /**
+   * **Los tres llegan como CADENA y los valida `./estadoDeColonia` en la frontera**, igual que los
+   * otros siete de §2.2 y por el mismo motivo: un tipo no viaja por HTTP, y tanto el formulario
+   * como la cola offline mandan cadenas (ADR-112).
+   *
+   * Eran `broodPatternNote` y `temperamentNote`, de texto libre, y `queenSighted`, booleano. El
+   * cambio es de `PENDING_IMPLEMENTATIONS/010`, requisito 4.
+   */
+  broodPattern?: BroodPattern | string | null;
+  queenSighted?: QueenSighting | string | null;
+  temperament?: Temperament | string | null;
   /** @deprecated Anexo B §2.2 — lo reemplazan `honeyStoresLevel` y `honeyNextToBrood`. */
   storesLevel?: string | null;
-  temperamentNote?: string | null;
 
   // --- Anexo B §2.2, estado de la colonia. Los siete campos llegan como los
   // escribe el protocolo del dueño, y los valida `./estadoDeColonia` en la
@@ -151,6 +171,14 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
     input.honeyStoresLevel == null || input.honeyStoresLevel === "" ? null : exigeNivelDeReserva(input.honeyStoresLevel);
   const pollenStoresLevel =
     input.pollenStoresLevel == null || input.pollenStoresLevel === "" ? null : exigeNivelDeReserva(input.pollenStoresLevel);
+  // **Vacío sigue siendo `null`, y `null` significa «no se contestó».** Lo que ya no cabe aquí es
+  // «no se buscó» disfrazado de nulo: es un valor con nombre (`PENDING_IMPLEMENTATIONS/010`).
+  const queenSighted =
+    input.queenSighted == null || input.queenSighted === "" ? null : exigeReinaVista(input.queenSighted);
+  const broodPattern =
+    input.broodPattern == null || input.broodPattern === "" ? null : exigePatronDeCria(input.broodPattern);
+  const temperament =
+    input.temperament == null || input.temperament === "" ? null : exigeTemperamento(input.temperament);
 
   // Los cambios de la caja se validan ANTES de la transacción: un cambio inválido rechaza la
   // inspección entera en vez de guardarla a medias.
@@ -174,10 +202,10 @@ export async function recordInspection(userAccountId: string, input: RecordInspe
         occurredAt: input.occurredAt ?? new Date(),
         operatorPersonId: input.operatorPersonId ?? null,
         outcome: input.outcome,
-        broodPatternNote: input.broodPatternNote ?? null,
-        queenSighted: input.queenSighted ?? null,
+        broodPattern,
+        queenSighted,
         storesLevel: input.storesLevel ?? null,
-        temperamentNote: input.temperamentNote ?? null,
+        temperament,
         population,
         beeCoveredFrames,
         darkFrames,
