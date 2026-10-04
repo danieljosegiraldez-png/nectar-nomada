@@ -78,7 +78,7 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // --- inspection: la inspeccion de colonia ---------------------------------------------
   outcome: { clase: "campo", modelo: "Inspection", campo: "outcome" },
   queen_sighted: { clase: "campo", modelo: "Inspection", campo: "queenSighted" },
-  brood_pattern: { clase: "campo", modelo: "Inspection", campo: "broodPatternNote" },
+  brood_pattern: { clase: "campo", modelo: "Inspection", campo: "broodPattern" },
   brood_stages: { clase: "campo", modelo: "Inspection", campo: "broodStages" },
   population: { clase: "campo", modelo: "Inspection", campo: "population" },
   frames_covered: { clase: "campo", modelo: "Inspection", campo: "beeCoveredFrames" },
@@ -95,7 +95,7 @@ export const MAPA_DEL_PROTOCOLO: Record<string, DestinoDelItem> = {
   // Anexo B §2.2, con su motivo escrito: «señal de obrera ponedora si aparece sin reina». El JSON
   // tenía los otros seis campos de esa sección y no ésta, y la columna llevaba ahí sin escritor.
   drone_brood_present: { clase: "campo", modelo: "Inspection", campo: "droneBroodPresent" },
-  temperament: { clase: "campo", modelo: "Inspection", campo: "temperamentNote" },
+  temperament: { clase: "campo", modelo: "Inspection", campo: "temperament" },
   irregularities: { clase: "tabla", modelo: "InspectionIrregularity", nota: "Una fila por irregularidad observada: son varias a la vez y por eso no es una columna." },
   // **Anexo B §2.4, y aterrizan en `Hive` y no en `Inspection`** porque lo dice el propio Anexo:
   // «cambia poco entre visitas, así que se guarda EN LA COLMENA y en la inspección sólo se
