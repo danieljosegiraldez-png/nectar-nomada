@@ -1490,7 +1490,7 @@
     {
       "archivo": "lib/rbac/admin.ts",
       "operacion": "listScopeChoices",
-      "razon": "Estaba en `operaciones_sin_patron` como «recibe principal, sin guardia visible», y eso era falso: el AST dice que su cuerpo NO menciona `userAccountId` -- ni como identificador ni como texto. El troceo por expresiones regulares lo leia de la funcion de al lado, porque cortaba hasta la siguiente declaracion de nivel superior. Su UNICO llamador, medido sobre el AST el 2026-10-04, es `app/admin/users/page.tsx`, que antes hace `requirePermissionAdmin`. El modo `--llamadores`, que casa texto sobre el archivo entero, le atribuia cuatro: `lib/apiary/hives.ts`, `lib/research/access.ts` y su propio archivo eran coincidencias de texto, no llamadas. Verificado el 2026-08-31, re-medido el 2026-10-04.",
+      "razon": "Estaba en `operaciones_sin_patron` como «recibe principal, sin guardia visible», y eso era falso: el AST dice que su cuerpo NO menciona `userAccountId` -- ni como identificador ni como texto. El troceo por expresiones regulares lo leia de la funcion de al lado, porque cortaba hasta la siguiente declaracion de nivel superior. Su UNICO llamador, medido sobre el AST el 2026-10-04, es `app/admin/users/page.tsx`, que antes hace `requirePermissionAdmin`. Verificado el 2026-08-31, re-medido el 2026-10-04 sobre el AST, que da el mismo llamador unico que daba el modo de texto.",
       "verificado": "2026-10-04"
     },
     {

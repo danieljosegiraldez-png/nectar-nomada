@@ -28,6 +28,7 @@ const DOC = "docs/arquitectura/inventario-de-acceso.md";
  */
 const ETIQUETAS: Record<string, string> = {
   "guardia directo": "guardia directo",
+  "guardia transitivo": "guardia transitivo",
   "acotado por construcción": "acotado por construcción",
   "depende del llamador": "depende del llamador (verificar a mano)",
   "público por diseño": "público por diseño",

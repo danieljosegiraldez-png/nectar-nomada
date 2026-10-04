@@ -30,11 +30,23 @@
 import ts from "typescript";
 
 /**
- * Con `/g`: sirve para `match`/`matchAll`, **nunca** para `.test()`, que guarda
- * estado en `lastIndex`. El CLI la usa sobre texto de archivo entero en
- * `--llamadores`.
+ * **Ya no se exporta ninguna expresión regular con `/g`, y es deliberado.** El
+ * CLI preguntaba «¿este archivo autoriza?» con `GUARDIAS.test(texto)`, y eso
+ * tenía dos defectos medidos el 2026-10-04:
+ *
+ * - **`lastIndex`.** Un `/g` guarda estado, y el `filter` de `--llamadores`
+ *   reponía el `lastIndex` **después** del recorrido entero, así que a partir
+ *   del segundo llamador la búsqueda arrancaba a mitad del archivo: **46 → 42**
+ *   operaciones «necesitan juicio humano», y las cuatro que cambiaban imprimían
+ *   `MIRAR` encima de una lista de llamadores **todos en ✓**. Reponer el
+ *   `lastIndex` a mano deja la trampa armada para el siguiente `.test()`; lo que
+ *   se arregla es no exponer la regex.
+ * - **El texto.** `app/lots/[id]/page.tsx` salía «autoriza» por un **comentario**
+ *   de su línea 520 que nombra `requireLotAccess("view", …)`. Un comentario no
+ *   es una llamada.
+ *
+ * En su lugar se exportan las dos preguntas ya resueltas sobre el árbol.
  */
-export const GUARDIAS = /\b(require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)\s*\(/g;
 
 /** La misma convención, anclada al nombre: un nodo ya trae el nombre aislado. */
 const GUARDIA = /^(?:require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)$/;
@@ -288,6 +300,38 @@ function absorber(h, privadas) {
  * campos que consume el resto del sistema — de los cuales las tres compuertas
  * leen cinco: `archivo`, `nombre`, `clase`, `acotado` y `guardias`.
  */
+/**
+ * Qué nombres invoca cada archivo, **como nodos**. Sustituye a buscar
+ * `\bnombre\s*\(` en el texto, que contaba comentarios y cadenas: medido el
+ * 2026-10-04, el texto atribuía **cuatro** llamadores a `listScopeChoices`
+ * —`lib/apiary/hives.ts`, `lib/research/access.ts` y su propio archivo— cuando
+ * el AST dice que tiene **uno**.
+ */
+export function invocacionesPorArchivo(fuentes) {
+  const out = new Map();
+  for (const [archivo, texto] of fuentes) out.set(archivo, llamadas(arbol(archivo, texto)));
+  return out;
+}
+
+/**
+ * Qué archivos autorizan: alguno de sus nodos **llama** al servicio de
+ * autorización o a un guardia por convención de nombre.
+ *
+ * **Lo que esto NO puede ver, y hay que decirlo donde se usa:** una página que
+ * autoriza llamando a un servicio que **lanza** un error de acceso y lo
+ * convierte en `notFound()`. Medido el 2026-10-04: `app/plots/[id]/page.tsx`,
+ * `app/field-sessions/[id]/page.tsx` y `app/lots/[id]/page.tsx` autorizan así y
+ * aquí salen como que no. Resolverlo exige seguir la llamada hasta el servicio,
+ * o sea el escalón 2 de `PENDING_IMPLEMENTATIONS/007`.
+ */
+export function archivosQueGuardan(fuentes) {
+  const out = new Set();
+  for (const [archivo, nombres] of invocacionesPorArchivo(fuentes)) {
+    if ([...nombres].some((n) => GUARDIA.test(n))) out.add(archivo);
+  }
+  return out;
+}
+
 export function analizar(fuentes, modelos) {
   const arboles = new Map();
   for (const [archivo, texto] of fuentes) arboles.set(archivo, arbol(archivo, texto));
@@ -353,7 +397,19 @@ export function analizar(fuentes, modelos) {
       const propios = [...o.llamadas].filter((n) => GUARDIA.test(n));
       const locales = [...visibles].filter((n) => n !== o.nombre && o.llamadas.has(n));
       const guardias = [...new Set([...propios, ...locales])];
-      const transitivo = locales;
+      /**
+       * **`transitivo` son los que guardan SIN tener forma de guardia.** Hasta el
+       * 2026-10-04 `locales` y `transitivo` eran la misma expresión y `guardias`
+       * su unión, así que `transitivo.length > 0` implicaba `guardias.length > 0`
+       * y la rama «guardia transitivo» era **inalcanzable por construcción**:
+       * medido, 0 operaciones de 618, y el flip la llevaba a 66. Se reportaban
+       * «guardia directo», que dice algo distinto de lo que ocurre — ahí nadie
+       * llama a un guardia, se llama a algo que guarda. `guardias` sigue siendo
+       * la unión porque es el campo que consume
+       * `tests/arquitectura/acotado-por-construccion.test.ts`; lo que cambia es
+       * cuál de las dos listas decide la clase.
+       */
+      const transitivo = locales.filter((n) => !GUARDIA.test(n));
       const publica = /discover\/service/.test(archivo);
       // `lib/auth/config.ts` es el flujo de autenticación en sí: corre **antes**
       // de que exista sesión, así que no hay principal contra el que autorizar.
@@ -375,7 +431,7 @@ export function analizar(fuentes, modelos) {
       const dependeDelLlamador = !o.usaPrincipal;
 
       let clase;
-      if (guardias.length) clase = "guardia directo";
+      if (propios.length) clase = "guardia directo";
       else if (transitivo.length) clase = "guardia transitivo";
       else if (o.acotado || o.resolutor) clase = "acotado por construcción";
       else if (publica) clase = "público por diseño";

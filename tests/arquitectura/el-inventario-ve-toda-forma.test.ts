@@ -27,7 +27,12 @@
  * Hermético: funciones puras sobre cadenas, sin base y sin red.
  */
 import { describe, expect, it } from "vitest";
-import { analizar, type Fila } from "../../scripts/inventario/analizar.mjs";
+import {
+  analizar,
+  archivosQueGuardan,
+  invocacionesPorArchivo,
+  type Fila,
+} from "../../scripts/inventario/analizar.mjs";
 
 /** Lista corta y a mano: lo que se prueba es el detector, no el esquema. */
 const MODELOS = new Set(["location", "auditEvent", "userAccount", "lot"]);
@@ -156,6 +161,106 @@ describe("RED PARA MAÑANA · formas con cero apariciones hoy, medidas", () => {
         "export default async function () { return prisma.lot.findMany({}); }\n"
     ).map((x) => x.nombre);
     expect(nombres).not.toContain("dynamic");
+  });
+});
+
+describe("y distingue guardar de llamar a quien guarda", () => {
+  /** Dos unidades en el mismo archivo: una guarda, la otra la llama. */
+  const ARCHIVO = `export async function guardaAqui(userAccountId: string) {
+      await can(userAccountId, "view", "lot", "x");
+    }
+    export async function listar(userAccountId: string, db: Cliente) {
+      await guardaAqui(userAccountId);
+      return db.lot.findMany({});
+    }
+    export async function guardaEllaMisma(userAccountId: string, db: Cliente) {
+      await can(userAccountId, "view", "lot", "x");
+      return db.lot.findMany({});
+    }`;
+
+  const clase = (nombre: string) =>
+    analizar(new Map([["lib/y.ts", ARCHIVO]]), MODELOS).find((f) => f.nombre === nombre)?.clase;
+
+  /**
+   * **La clase existía y no se asignaba NUNCA.** `locales` y `transitivo` eran la
+   * misma expresión y `guardias` su unión, así que `transitivo.length > 0`
+   * implicaba `guardias.length > 0` y la rama era inalcanzable **por
+   * construcción**. Medido el 2026-10-04: `clase === "guardia transitivo"` salía
+   * **0** de 618, y el flip —hacer la rama alcanzable— la llevaba a **66**. Esas
+   * decenas de operaciones se reportaban «guardia directo», que dice algo
+   * distinto de lo que ocurre: nadie llama ahí a un guardia.
+   */
+  it("llamar a quien guarda es «guardia transitivo», no «guardia directo»", () => {
+    expect(clase("listar")).toBe("guardia transitivo");
+  });
+
+  /**
+   * El control, y hace falta: un arreglo que mueva TODO a transitivo vaciaría
+   * «guardia directo», y las dos lecturas se parecen en el recuento.
+   */
+  it("y llamar al servicio de autorización sigue siendo «guardia directo»", () => {
+    expect(clase("guardaEllaMisma")).toBe("guardia directo");
+  });
+});
+
+describe("y «este archivo autoriza» también se pregunta al árbol", () => {
+  /**
+   * **El defecto que esto cierra, medido el 2026-10-04.** `--llamadores`
+   * preguntaba con `GUARDIAS.test(textoDelArchivo)`, y `app/lots/[id]/page.tsx`
+   * salía «autoriza» por un **comentario** de su línea 520 que nombra
+   * `requireLotAccess("view", …)`. Al pasar la pregunta al árbol, **14 marcas**
+   * pasan de ✓ a ✗ y **ninguna** al revés, sobre 247 comunes; **diez** de las
+   * catorce son ese archivo.
+   */
+  it("un archivo cuyo único guardia vive en un comentario NO autoriza", () => {
+    const fuentes = new Map([
+      ["app/p.tsx", `export default async function P(id: string) {
+        // La autoriza requireLotAccess("view", id) en el servicio de abajo.
+        return prisma.lot.findMany({ where: { id } });
+      }`],
+    ]);
+    expect([...archivosQueGuardan(fuentes)]).toEqual([]);
+  });
+
+  it("y uno que lo llama de verdad, sí", () => {
+    const fuentes = new Map([
+      ["app/q.tsx", `export default async function Q(userAccountId: string, id: string) {
+        await requireLotAccess(userAccountId, "view", id);
+        return prisma.lot.findMany({ where: { id } });
+      }`],
+    ]);
+    expect([...archivosQueGuardan(fuentes)]).toEqual(["app/q.tsx"]);
+  });
+
+  /**
+   * **La prueba del `lastIndex`.** `GUARDIAS` llevaba `/g`, y el `filter` de
+   * `--llamadores` reponía su `lastIndex` **después** del recorrido entero: a
+   * partir del segundo archivo la búsqueda arrancaba a mitad de lectura. Medido:
+   * **46 → 42** operaciones «necesitan juicio humano», y las cuatro que
+   * cambiaban imprimían `MIRAR` encima de llamadores **todos en ✓**. Con tres
+   * archivos que guardan, la respuesta tiene que ser **tres**, no uno.
+   */
+  it("tres archivos que autorizan son tres, no el primero", () => {
+    const uno = `export async function f(userAccountId: string, id: string) {
+      await requireLotAccess(userAccountId, "view", id);
+      return prisma.lot.findMany({ where: { id } });
+    }`;
+    const fuentes = new Map([["lib/a.ts", uno], ["lib/b.ts", uno], ["lib/c.ts", uno]]);
+    expect([...archivosQueGuardan(fuentes)].sort()).toEqual(["lib/a.ts", "lib/b.ts", "lib/c.ts"]);
+  });
+
+  /**
+   * Buscar `\bnombre\s*\(` en el texto cuenta comentarios y cadenas como
+   * llamadas, y de ahí salían llamadores que no llaman.
+   */
+  it("un nombre que sólo aparece en un comentario no es una invocación", () => {
+    const fuentes = new Map([
+      ["lib/d.ts", `export function g() {
+        // antes esto hacía ubicacionesEmparentadas(id)
+        return 1;
+      }`],
+    ]);
+    expect(invocacionesPorArchivo(fuentes).get("lib/d.ts")?.has("ubicacionesEmparentadas")).toBe(false);
   });
 });
 

@@ -28,7 +28,7 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { analizar, GUARDIAS } from "./inventario/analizar.mjs";
+import { analizar, archivosQueGuardan, invocacionesPorArchivo } from "./inventario/analizar.mjs";
 import { modelosDelEsquema } from "./inventario/esquema.mjs";
 
 const RAIZ = new URL("..", import.meta.url).pathname;
@@ -51,27 +51,35 @@ const filas = analizar(fuentes, modelos);
 
 if (process.argv.includes("--llamadores")) {
   const objetivo = filas.filter((f) => f.clase === "depende del llamador (verificar a mano)");
+  // Las dos preguntas resueltas sobre el AST. Antes se hacían con una expresión
+  // regular sobre el texto del archivo entero, y mentían en LAS DOS direcciones:
+  // un comentario que nombra un guardia salía «autoriza», y un `/g` con
+  // `lastIndex` sucio dentro de un `filter` hacía que el segundo llamador y los
+  // siguientes se midieran a partir de media lectura.
+  const invocaciones = invocacionesPorArchivo(fuentes);
+  const guardan = archivosQueGuardan(fuentes);
   console.log(`${objetivo.length} operaciones que dependen del llamador\n`);
   let pendientes = 0;
   for (const op of objetivo) {
     const llamadores = TODOS.filter(
-      (f) => f !== op.archivo && new RegExp(`\\b${op.nombre}\\s*\\(`).test(fuentes.get(f) ?? "")
+      (f) => f !== op.archivo && (invocaciones.get(f)?.has(op.nombre) ?? false)
     );
-    const guardados = llamadores.filter((f) => GUARDIAS.test(fuentes.get(f) ?? ""));
-    GUARDIAS.lastIndex = 0;
+    const guardados = llamadores.filter((f) => guardan.has(f));
     const ok = llamadores.length > 0 && guardados.length === llamadores.length;
     if (!ok) pendientes++;
     console.log(`  ${ok ? "OK   " : "MIRAR"} ${op.archivo} ${op.nombre}()`);
-    for (const f of llamadores) {
-      const g = GUARDIAS.test(fuentes.get(f) ?? "");
-      GUARDIAS.lastIndex = 0;
-      console.log(`         ${g ? "✓" : "✗"} ${f}`);
-    }
+    for (const f of llamadores) console.log(`         ${guardan.has(f) ? "✓" : "✗"} ${f}`);
     if (!llamadores.length) console.log(`         (ningún llamador fuera de su propio archivo)`);
   }
   console.log(`\n  ${pendientes} necesitan juicio humano. Las conclusiones del 2026-08-31 están`);
   console.log(`  en docs/arquitectura/inventario-de-acceso.md — este modo dice a quién mirar,`);
   console.log(`  no si está bien.`);
+  console.log(`\n  Y un ✗ NO significa «no autoriza»: significa «no llama a un guardia».`);
+  console.log(`  Una página que llama a un servicio que LANZA un error de acceso y lo`);
+  console.log(`  convierte en notFound() autoriza, y aquí sale ✗. Medido el 2026-10-04 en`);
+  console.log(`  app/plots/[id]/page.tsx, app/field-sessions/[id]/page.tsx y`);
+  console.log(`  app/lots/[id]/page.tsx. Seguir la llamada hasta el servicio es el escalón 2`);
+  console.log(`  de PENDING_IMPLEMENTATIONS/007, que no está hecho.`);
 } else if (process.argv.includes("--json")) {
   console.log(JSON.stringify(filas, null, 2));
 } else {
