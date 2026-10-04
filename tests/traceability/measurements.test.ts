@@ -12,6 +12,7 @@ import { startFermentationRun } from "../../lib/traceability/fermentation";
 import { startDryingRun } from "../../lib/traceability/drying";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 const RUN_ID = `t3-${Date.now()}`;
 
@@ -90,6 +91,8 @@ afterAll(async () => {
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: dryingRunIds } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: fermentationRunIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: dryingRunIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
@@ -399,6 +402,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -429,6 +433,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -455,6 +460,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -497,6 +503,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -539,6 +546,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -605,6 +613,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -703,6 +712,7 @@ describe("el verde en una cama de secado avisa, y NO impide guardar", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,

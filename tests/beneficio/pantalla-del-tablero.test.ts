@@ -810,9 +810,10 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
           ? undefined
           : {
               fase,
-              lotProcess: {
+              proceso: {
                 processGradeValue: grado === null ? null : { value: grado },
                 processRecipeVersion: conReceta ? { id: "receta" } : null,
+                endedAt: null,
               },
             },
       );
@@ -897,7 +898,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
       const conReceta = perfilDe("Washed", "fermentation", true);
       expect(conReceta).toBe("WASHED_STANDARD");
       expect(aTexto(bloqueDeRiesgo(await pintarConPerfil(conReceta, 3.4))!)).toContain("Degradación ácida");
-      // MUTACIÓN: quitar `if (!abierta.lotProcess?.processRecipeVersion) return null;` de `perfilDeLaFaseAbierta` → cita sin receta y cae.
+      // MUTACIÓN: quitar `if (!abierta.proceso?.processRecipeVersion) return null;` de `perfilDeLaFaseAbierta` → cita sin receta y cae.
     });
 
     it("la fuente NOMBRA el perfil de la matriz, detrás del toque, en los dos idiomas", async () => {

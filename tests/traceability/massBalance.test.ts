@@ -15,6 +15,7 @@ import { computeCurrentQuantity, recordQuantityEvent } from "../../lib/traceabil
 import { startFermentationRun, endFermentationRun } from "../../lib/traceability/fermentation";
 import { MassBalanceError, movesMaterial, conservesMass } from "../../lib/traceability/balance";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 
 const RUN_ID = `p0-${Date.now()}`;
 
@@ -118,6 +119,8 @@ afterAll(async () => {
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformationIds } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ transformations: { some: { id: { in: transformationIds } } } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformationIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [operatorUserAccountId, adminUserAccountId] } }) });
@@ -236,6 +239,7 @@ describe("the run-opening transformation writes no decrement", () => {
   it("leaves the lot's quantity untouched for the duration of a fermentation, then decrements exactly once", async () => {
     const source = await lotWithQuantity("ferm", 50);
 
+    await abrirProcesoDePrueba(operatorUserAccountId, source.id);
     await startFermentationRun(operatorUserAccountId, {
       lotId: source.id,
       startedAt: new Date(),

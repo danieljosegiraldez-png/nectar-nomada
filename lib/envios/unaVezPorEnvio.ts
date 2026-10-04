@@ -49,9 +49,15 @@ export async function unaVezPorEnvio<T extends { id: string }>(
     tipo: string;
     crear: (tx: Prisma.TransactionClient) => Promise<T>;
     recuperar: (id: string) => Promise<T>;
+    /**
+     * Las opciones de la transacción interactiva (`timeout`, `maxWait`), para quien bloquea filas dentro de `crear` y no
+     * cabe en los 5 s por defecto de Prisma: `moveLotToStorage`, que bloquea el linaje (Parte 1, revisión final, ronda de
+     * arreglo 1, 2026-10-03). Sin ellas, las de Prisma, como siempre.
+     */
+    transaccion?: { timeout?: number; maxWait?: number };
   },
 ): Promise<T> {
-  if (!clave) return prisma.$transaction((tx) => opciones.crear(tx));
+  if (!clave) return prisma.$transaction((tx) => opciones.crear(tx), opciones.transaccion);
 
   const limite = limiteDeCaducidad();
   const yaAtendido = await prisma.submissionKey.findUnique({ where: { key: clave } });
@@ -80,7 +86,7 @@ export async function unaVezPorEnvio<T extends { id: string }>(
       // mientras todo parecía correcto.
       await tx.submissionKey.deleteMany({ where: { userAccountId, createdAt: { lt: limite } } });
       return fila;
-    });
+    }, opciones.transaccion);
   } catch (error) {
     // P2002 = la clave única saltó, así que otro envío idéntico ganó la carrera
     // entre el `findUnique` de arriba y este `create`. La transacción entera se

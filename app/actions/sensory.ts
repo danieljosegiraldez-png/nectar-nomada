@@ -158,6 +158,7 @@ function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Senso
   return {
     sinPerfil: t("sampleRoastNoProfile"),
     sinEquipo: t("sampleRoastNoEquipment"),
+    linajeDemasiadoHondo: t("sampleLineageTooDeep"),
     describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),
   };
 }

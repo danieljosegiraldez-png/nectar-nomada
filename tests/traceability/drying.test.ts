@@ -15,6 +15,7 @@ import {
   startDryingRun,
 } from "../../lib/traceability/drying";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN_ID = `t7-${Date.now()}`;
@@ -86,6 +87,8 @@ afterAll(async () => {
   await prisma.dryingTurnBatch.deleteMany({ where: assertDefinedWhere({ id: { in: tandaIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ dryingRunId: { in: runIds } }) });
   await prisma.dryingRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });
+  // Parte 1, R3: el proceso va antes que sus lotes (`lot_process.lot_id` es RESTRICT).
+  await borrarProcesosDeLotesDonde({ id: { in: lotIds } });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
 
   await prisma.assignment.deleteMany({
@@ -119,6 +122,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       occurredAt: new Date("2026-01-04"),
     });
 
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run, transformation: startTransformation } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -197,6 +201,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),
@@ -219,6 +224,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),
@@ -251,6 +257,7 @@ describe("Drying — full start/turn/measure/end cycle", () => {
       organizationId,
       projectId: projectAId,
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       lotId: lot.id,
       startedAt: new Date(),
@@ -293,6 +300,7 @@ describe("Secado — el desenlace, no solo la fecha", () => {
       unit: "kg",
       occurredAt: new Date("2026-02-01"),
     });
+    await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startDryingRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
@@ -373,6 +381,7 @@ describe("Drying — turning several units as one batch", () => {
       organizationId,
       projectId,
     });
+    await abrirProcesoDePrueba(userAccountId, lot.id);
     const { run } = await startDryingRun(userAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,

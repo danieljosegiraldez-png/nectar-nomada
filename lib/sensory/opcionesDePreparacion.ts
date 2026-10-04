@@ -15,6 +15,8 @@ interface MuestraConPreparaciones {
   lotCode: string | null;
   organizationName: string | null;
   processGrade: string | null;
+  /** Tarea 9, ronda de arreglo 1: el linaje del lote de origen pasa del tope de R1 y no se sabe su grado. */
+  linajeDemasiadoHondo?: boolean;
   roastSessions: Preparacion[];
 }
 
@@ -30,10 +32,16 @@ export function opcionesDePreparacion(
   textos: {
     sinPerfil: string;
     sinEquipo: string;
+    /** Lo que va en el sitio del grado cuando el linaje es demasiado hondo para saberlo. */
+    linajeDemasiadoHondo: string;
     describirTueste: (datos: { date: string; profile: string; equipment: string }) => string;
   },
 ): OpcionDePreparacion[] {
-  const base = etiquetaDeMuestra(muestra);
+  // Tarea 9, ronda de arreglo 1 (2026-10-02): sin grado porque no se pudo saber no es sin grado porque no lo tiene. Se dice
+  // en el sitio del grado.
+  const base = etiquetaDeMuestra(
+    muestra.linajeDemasiadoHondo ? { ...muestra, processGrade: textos.linajeDemasiadoHondo } : muestra,
+  );
   if (muestra.roastSessions.length === 0) {
     return [];
   }

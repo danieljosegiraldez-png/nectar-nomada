@@ -7,7 +7,7 @@ import { startFermentationAction, type TraceabilityActionState } from "../../act
 
 const initialState: TraceabilityActionState = {};
 
-export function FermentationForm({ lotId , recipeVersions = [] }: { lotId: string ; recipeVersions?: { id: string; label: string }[] }) {
+export function FermentationForm({ lotId, recetaDelProceso }: { lotId: string; recetaDelProceso: string | null }) {
   const [state, formAction, pending] = useActionState(startFermentationAction, initialState);
   const t = useTranslations("Traceability");
 
@@ -15,20 +15,10 @@ export function FermentationForm({ lotId , recipeVersions = [] }: { lotId: strin
     <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
       <input type="hidden" name="lotId" value={lotId} />
 
-      {/* ADR-099. Offered only when approved recipes exist for this batch's
-          organization — an empty select is a question with no answers. */}
-      {recipeVersions.length > 0 ? (
-        <div className="nn-field">
-          <label htmlFor="f-recipe">{t("recipeLabel")}</label>
-          <select id="f-recipe" name="processRecipeVersionId" defaultValue="">
-            <option value="">{t("recipeNoneOption")}</option>
-            {recipeVersions.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
-            ))}
-          </select>
-          <p className="nn-muted" style={{ fontSize: "0.85em", margin: "0.25rem 0 0" }}>{t("recipeHint")}</p>
-        </div>
-      ) : null}
+      {/* Parte 1, R4: la receta es la del proceso que cubre al lote; aquí sólo se lee. */}
+      <p className="nn-muted">
+        {recetaDelProceso ? t("fermentationRecipeFromProcess", { recipe: recetaDelProceso }) : t("fermentationNoRecipeInProcess")}
+      </p>
       <div className="nn-field">
         <label htmlFor="f-vesselNote">{t("vesselLabel")}</label>
         <input id="f-vesselNote" name="vesselNote" type="text" placeholder="Tank 3" />

@@ -875,12 +875,14 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
     include: {
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
-      // Sin `lotId`: `FermentationRun` no lo tiene. Se ata al lote por
-      // `lotProcess`, y es anulable —todo lo anterior a `LotProcess` no cuelga de
-      // ninguno—, así que el código del lote puede faltar legítimamente.
+      // Sin `lotId`: `FermentationRun` no lo tiene. Se ata al lote por la transformación que la ABRIÓ, cuya
+      // entrada es el lote que fermenta. Puede faltar en una corrida mal armada, así que el lote puede faltar
+      // legítimamente.
       fermentationRuns: {
         where: { endedAt: null },
-        select: { id: true, startedAt: true, lotProcess: { select: { lotId: true } } },
+        // Parte 1, R7 (tarea 9, 2026-10-02): el lote que ocupa el tanque es el que FERMENTA —la entrada de la transformación
+        // que abrió la corrida—, no el lote donde vive el proceso (que con R3 es la cereza). Antes se leía por `lotProcess`.
+        select: { id: true, startedAt: true, transformations: { orderBy: { occurredAt: "asc" }, take: 1, select: { inputs: { select: { lotId: true } } } } },
       },
     },
     orderBy: { name: "asc" },
@@ -903,7 +905,7 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
       }),
       condicion: e.conditionReports[0]?.condition ?? null,
       ocupadoDesde: corrida?.startedAt ?? null,
-      lotId: corrida?.lotProcess?.lotId ?? null,
+      lotId: corrida?.transformations[0]?.inputs[0]?.lotId ?? null,
     });
   }
   return { filas, resumen: resumir(filas.map((f) => f.clasificacion)) };
