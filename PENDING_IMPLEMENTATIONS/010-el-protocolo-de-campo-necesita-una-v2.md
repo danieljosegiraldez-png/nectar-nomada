@@ -1,6 +1,12 @@
 # 010 · El protocolo de campo necesita una v2, y no se puede editar la v1
 
-**Estado: no empezado.** No es una deuda técnica: es una **divergencia medida**
+**Estado: la PARTE A está hecha (2026-10-03); queda la PARTE B.** Lo hecho: los diez ítems que
+faltaban —las reservas partidas en nivel y sitio, la cría de zángano, y los siete de §2.4— más el
+mapa, los guardias y la cabecera. **Lo que queda es el requisito 4**: las tres columnas a `enum`
+(`queenSighted` de `Boolean?`, `broodPatternNote` y `temperamentNote` de `String?`), con su
+migración. Sus dos planes están en `docs/superpowers/plans/2026-10-03-*`.
+
+No es una deuda técnica: es una **divergencia medida**
 entre dos documentos del dueño y el esquema que acaba de construirse.
 
 ## Qué pasó
