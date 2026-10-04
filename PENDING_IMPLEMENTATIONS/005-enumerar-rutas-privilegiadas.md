@@ -244,6 +244,55 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 - **Los otros dominios.** Hoy hay uno. Añadir el siguiente es un bloque más en el
   mismo archivo y **no toca la compuerta**. Los candidatos por volumen, medidos:
   `location` (34 llamadas a `can`), `equipment` (20), `specimen` (7), `sample` (4).
-- **Lo que ningún mecanismo de éstos cierra:** que el `action` sea el debido, no
-  sólo el `resourceType`. Pedir `view` donde correspondía `manage` pasa esta
-  compuerta. Es la misma clase de pregunta, un nivel más fino, y hoy no está medida.
+- **El `action`: medido el 2026-10-04, y NO hay defecto vivo.** Esta viñeta decía
+  «hoy no está medida»; ya lo está, y el resultado es un cero con su flip detrás.
+
+  La forma medible del permiso equivocado es **escribir un modelo del dominio
+  exigiendo sólo `view`**: `view` es inequívocamente un permiso de lectura, así
+  que no hace falta discutir el vocabulario para que el cruce signifique algo. La
+  sonda cruza, por unidad, el `action` que exige —2.º argumento de `can`,
+  propagado desde el envoltorio igual que el `resourceType`— contra los métodos
+  de Prisma que la unidad llama sobre los 15 modelos que el dominio gobierna
+  (`create|createMany|createManyAndReturn|update|updateMany|updateManyAndReturn|upsert|delete|deleteMany`).
+
+  Lo medido, sobre 591 archivos y **19.997 llamadas con el 100 % resueltas**:
+
+  | | |
+  |---|---|
+  | unidades que escriben un modelo del dominio | **23** |
+  | de ellas, exigen una acción de escritura | **19** |
+  | **exigen sólo `view` y escriben** | **0** ← el defecto, ausente |
+  | sin acción medible (auxiliares de transacción) | 4 |
+  | subiendo a las **raíces** de esas 23 escrituras | **28**, y las **28** exigen una acción de escritura |
+
+  **El flip dice que ese cero mide.** Mutando una sola línea —`drying.ts:57`,
+  `requireLotAccess(userAccountId, "manage", …)` → `"view"`, con el sha del
+  archivo distinto antes y después y el archivo compilando— el cruce pasa de
+  **0 a 1** y **nombra la unidad** (`startDryingRun`), y la columna de al lado
+  cae de 19 a 18 y las raíces buenas de 27 a 26. Restaurado al sha original.
+
+  **Y destapó un punto ciego del instrumento que hay que llevar dentro si esto
+  se convierte en compuerta: el valor por omisión de un parámetro.** Sin
+  resolverlo, la medición da **una** raíz sin acción de escritura —
+  `app/actions/bandejasDelSecado.ts:bajarBandejaAction`— que **no es un defecto**:
+  autoriza por `corridaConPermiso`, cuya firma es
+  `(userAccountId, dryingRunId, accion: "manage" | "view" = "manage")`, y
+  `bajarBandeja` la llama con dos argumentos. El literal vive en la firma, no en
+  la llamada. Resolviéndolo —símbolo del `Identifier` → declaración de parámetro
+  → `initializer` literal— el falso positivo se cierra **exacto**: raíces sin
+  acción de escritura **1 → 0**, y lo único que se mueve es un sitio de guardia
+  (315 → 316). Es decir: el mecanismo es limpio y **no necesita lista de
+  excepciones**, pero sólo si resuelve omisiones. Sin eso nace con un falso
+  positivo, que es como se enseña a ignorar una línea roja.
+
+  **Lo que sigue sin medir, y es el nivel siguiente:** que la acción de escritura
+  sea *la* debida — `edit` donde correspondía `manage`, `submit_data` donde
+  correspondía `manage`. El cruce de arriba sólo distingue permiso-de-lectura
+  contra operación-de-escritura. Y la partición lectura = {`view`, `export`} del
+  vocabulario de 35 acciones del catálogo es **mía, no tuya**.
+
+  **No está construido como compuerta**, y es decisión tuya: hoy pasaría en verde
+  con 0, igual que la de los 396 nombres, y su flip la salva de ser un adorno.
+  Si se construye, los tres cambios son en `scripts/inventario/simbolos.mjs`:
+  recoger el argumento 1 además del 2, resolver omisiones de parámetro, y
+  devolver un mapa `acciones` propagado como el de `recursos`.
