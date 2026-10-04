@@ -4122,7 +4122,14 @@
     "error_fecha_antes_del_ultimo_traslado": "That time is before the tray's last move.",
     "error_cantidad_invalida": "That quantity is not a number.",
     "error_estado_salida_invalido": "Drying can only end as dry parchment or dry cherry. Choose the state that matches the process.",
-    "error_desconocido": "The action could not be completed. Please try again."
+    "error_desconocido": "The action could not be completed. Please try again.",
+    "desenlace": "How did drying end?",
+    "elegirDesenlace": "Choose how it ended",
+    "desenlace_target_reached": "Reached target moisture",
+    "desenlace_interrupted": "Stopped by an outside cause (rain, pests, breakdown)",
+    "desenlace_abandoned": "Left unfinished: did not reach target",
+    "desenlaceAyuda": "Only “Reached target moisture” starts the resting clock and allows a green sample.",
+    "error_desenlace_requerido": "Say how drying ended before closing it."
   },
   "QuienLoHizo": {
     "yo": "Me ({name})",

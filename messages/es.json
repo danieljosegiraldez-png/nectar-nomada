@@ -4122,7 +4122,14 @@
     "error_fecha_antes_del_ultimo_traslado": "Esa hora es anterior al último movimiento de la bandeja.",
     "error_cantidad_invalida": "Esa cantidad no es un número.",
     "error_estado_salida_invalido": "El secado sólo puede terminar en pergamino seco o cereza seca. Elige el estado que corresponde al proceso.",
-    "error_desconocido": "No se pudo completar la acción. Vuelve a intentarlo."
+    "error_desconocido": "No se pudo completar la acción. Vuelve a intentarlo.",
+    "desenlace": "¿Cómo terminó el secado?",
+    "elegirDesenlace": "Elige cómo terminó",
+    "desenlace_target_reached": "Llegó a la humedad objetivo",
+    "desenlace_interrupted": "Se cortó por una causa externa (lluvia, plaga, avería)",
+    "desenlace_abandoned": "Se dejó a medias: no llegó al objetivo",
+    "desenlaceAyuda": "Sólo «Llegó a la humedad objetivo» arranca el reposo y deja tomar la muestra verde.",
+    "error_desenlace_requerido": "Di cómo terminó el secado antes de cerrarlo."
   },
   "QuienLoHizo": {
     "yo": "Yo ({name})",
