@@ -1,0 +1,903 @@
+{
+ "_meta": {
+  "source": "R7_mill_infrastructure.md §2 and §4 (2026-10-02)",
+  "evidence_tags": "[S:id] source read; [T] trade knowledge unverified; [I] inference",
+  "attribute_schemas": "see 07_MILL_INFRASTRUCTURE_AND_MASTER_DATA.md §5 / R7 §5.3"
+ },
+ "asset_catalog": [
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-SCL",
+   "asset": "Reception scale · báscula · balança",
+   "function_subtypes": "Weighs each delivery: platform, hanging or truck scale [T]",
+   "design_reference": "Volume units (lata, cajuela) are farm-specific, so record kg [S:R3]",
+   "failure_modes_hygiene_maintenance": "Drift: check with test weights [T]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-HOP",
+   "asset": "Hopper · tolva (seca/húmeda), recibidor · moega",
+   "function_subtypes": "Buffer before pulping; **dry** (gravity) or **wet** (water-fed) [T]",
+   "design_reference": "45° walls; treated dry wood; sized on 2 % of annual production as daily peak; cherry 610 kg/m³ [S:AT058] (621.6 [S:AT370]); < 500 @/yr: the pulper's own hopper suffices [S:AT058]",
+   "failure_modes_hygiene_maintenance": "Clean daily [S:ANA18]. Greased gauge-6 plastic covers caught 7,714 borers/m²; regrease each harvest [S:AT297]. Self-heating [S:AT589]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-HLD",
+   "asset": "Holding area · reserva, estopas, canastillas · área de espera",
+   "function_subtypes": "Pre-pulping hold; deliberate cherry rest (R6 FFFD, CryoBloom)",
+   "design_reference": "Trial containers: burlap sacks; also bags, crates, hoppers, hermetic containers [S:AT589]",
+   "failure_modes_hygiene_maintenance": "Mass 38–41 °C after 48 h in sacks [S:AT589]; a rest batch rising 8.8 °C to 34.2 °C cupped \"sucio\" [S:AT554]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-PCL",
+   "asset": "Air pre-cleaner · prelimpiador neumático · pré-limpeza",
+   "function_subtypes": "Removes leaves, sticks, soil",
+   "design_reference": "Penagos AP-20: 20,000 L cherry/h, 5 HP, 520 kg [S:PEN-AP20]",
+   "failure_modes_hygiene_maintenance": "Replaceable wear parts [S:PEN-AP20]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-SIF",
+   "asset": "Siphon / flotation tank · tanque sifón, criba de flotes · separador hidráulico",
+   "function_subtypes": "Separates floaters (dry, empty, borer-damaged) from sinkers",
+   "design_reference": "Penagos: up to 1,500–32,000 kg/h; float strainer; 3–8\" outlets; CR or stainless [S:PEN-SIF]. Water 1.6 L/kg cherry, clean, not recirculated [S:AT454]",
+   "failure_modes_hygiene_maintenance": "Clean daily [S:ANA18]; dirty water favours OTA [S:CX69]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-DST",
+   "asset": "Wet destoner · despedregador · despedregador",
+   "function_subtypes": "Stone trap before the pulper",
+   "design_reference": "Stainless 304 + PVC, 500 × 2,880 mm [S:PEN-DST]",
+   "failure_modes_hygiene_maintenance": "Stones damage pulpers [S:PEN-DST]"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "REC-SRT",
+   "asset": "Cherry sorting · selección manual u óptica · catação",
+   "function_subtypes": "Hand table or optical sorter [T]",
+   "design_reference": "For modified fermentations: ≥ 80 % ripe, < 2.5 % unripe, no overripe [S:AT554]",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Reception & cherry handling",
+   "code": "TRN-*",
+   "asset": "Transport · transporte hidráulico, sinfín, elevador, gravedad · transporte",
+   "function_subtypes": "Channel/fruit pump, screw, bucket elevator, gravity",
+   "design_reference": "Gravity, screw or cable-disc conveying saves > 50 % of water [S:AT187]. Screw capacity m = 15π(Di² − d²)·p·ρ·N·fc, cherry ρ 616.5 kg/m³; dosing screws 2–4\" at 84–172 rpm [S:AT405]. Upper floor above 500 @/yr [S:AT058]",
+   "failure_modes_hygiene_maintenance": "Water transport of pulp contaminates water [S:AT187]"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-DRM",
+   "asset": "Horizontal drum pulper · despulpadora de cilindro horizontal · despolpador horizontal",
+   "function_subtypes": "Pressure and friction of cylinder against breast (*pechero*) and jacket (*camisa*) [S:HUI7]; manual or motor; 1–6 jets (*chorros*)",
+   "design_reference": "Works without water [S:AT164, PEN-DH4]. Cenicafé-INGESEC 300: 300 kg/h, Ø 14 × 22 cm cylinder at 232 rpm, gap set with galvanised shims [S:AT294]. Penagos DH-4: 400–450 kg/h, 0.75 HP [S:PEN-DH4]. No. 3 machine: 1 HP at 150–180 rpm [S:AT058]",
+   "failure_modes_hygiene_maintenance": "Damage, unpulped fruit, pulp in coffee, coffee in pulp (V-PUL) [S:AT294]; \"guayaba\" defect from maladjustment or poor floater removal [S:HUI7]. Sample coffee and pulp, recalibrate as needed, respect capacity; clean after each shift [S:ANA18]"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-VRT",
+   "asset": "Vertical pulper · despulpadora vertical · despolpador vertical",
+   "function_subtypes": "Higher capacity, waterless",
+   "design_reference": "Penagos DV-255: 2,000–2,500 kg/h, 2 HP, stainless jacket, grey-iron breasts; claims < 2 % damage/\"cascareo\" [S:PEN-DV255]",
+   "failure_modes_hygiene_maintenance": "As PUL-DRM"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-DSC",
+   "asset": "Disc pulper · despulpadora de discos · despolpador de disco",
+   "function_subtypes": "East African stations [T] (R6 W04)",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "[T]"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-REP",
+   "asset": "Re-passer · repasadora · repassador",
+   "function_subtypes": "Second pass for unpulped/green cherries [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Green fruit adds bitterness [T]"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-SCR",
+   "asset": "Screen · zaranda/criba · peneira rotativa",
+   "function_subtypes": "Separates pulped coffee from unpulped fruit and pulp",
+   "design_reference": "Rotary 60 cm Ø × 2 m at 30 rpm serves four No. 3 pulpers [S:AT058]; built into Penagos UDC units (1,000–1,200 kg/h, zero water) [S:PEN-UDC]",
+   "failure_modes_hygiene_maintenance": "Overload sends first-quality coffee to seconds [S:ANA18]"
+  },
+  {
+   "area": "Pulping",
+   "code": "PUL-PCV",
+   "asset": "Pulp conveyor · transporte de pulpa · transporte de polpa",
+   "function_subtypes": "Screw or gravity, no water",
+   "design_reference": "Screw conveying [S:AT187]; Becolsub screw mixes pulp and mucilage [S:AT405]",
+   "failure_modes_hygiene_maintenance": "Pulping + water transport of pulp = 82,080 mg COD/kg cherry, 72 % of load [S:CEN66]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "DEM-UPF",
+   "asset": "Upflow demucilager · desmucilaginador (Deslim, DELVA) · desmucilador",
+   "function_subtypes": "Removes mucilage without fermentation",
+   "design_reference": "Granjerito: 744 kg cherry/h, 0.89 kW, 870 rpm, 1.09 L/kg cps, 0.68 % damage; Granjero: 2,400 kg/h, 4.85 kW, 0.6 L/kg cps, 0.8 % [S:AT217]. DELVA 1,000–10,000 kg/h [S:PEN-DELVA]",
+   "failure_modes_hygiene_maintenance": "Residual mucilage ferments in the dryer [S:HUI7]. Rest 24 h in clean water changed every 6–8 h; ripe fruit only [S:ANA18]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "DEM-BCS",
+   "asset": "Becolsub · Becolsub · —",
+   "function_subtypes": "Waterless pulper + Deslim + screw mixing pulp and mucilage",
+   "design_reference": "300–2,500 kg cherry/h; 0.7–1.0 L/kg cps; flow set by orifice plate (1/8\" at 200 mm head → 0.87 ± 0.16 L/kg cps), rotameter (1.5–15 L/min) or 4.5–8 W pump [S:AT405]; avoids ≈ 90 % of pollution [S:CEN66]",
+   "failure_modes_hygiene_maintenance": "Leachate ≈ 110,000 ppm COD [S:CEN66]; re-*aforo* (timed volume) on drift [S:AT405]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "DEM-ECM",
+   "asset": "Ecomill · Ecomill® · —",
+   "function_subtypes": "Natural fermentation in a 60° cone tank, then mechanical washing",
+   "design_reference": "Models 500/1,500/3,000: 435–2,817 kg/h; 0.32–0.53 L/kg cps; 1.6–4.0 hp; damage 0.10–0.56 %; removal > 95 %; 16–20 h fermentation or 2–3 h with pectinase; daily full wash of stainless parts [S:AT432]",
+   "failure_modes_hygiene_maintenance": "Washwater COD 130,000–165,000 mg/L [S:AT538]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "DEM-ENZ",
+   "asset": "Enzyme dosing · dosificación de enzimas · —",
+   "function_subtypes": "Pectinase processing aid (R6 W08)",
+   "design_reference": "2–3 h fermentation [S:AT432]; SM-1 bioreactor accepts enzymes [S:PEN-SM1]",
+   "failure_modes_hygiene_maintenance": "Disclose as processing aid [I] (R6 W08)"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "WSH-TINA",
+   "asset": "Tanque tina · tanque tina · —",
+   "function_subtypes": "Ferment-and-wash tank, rounded corners",
+   "design_reference": "120.5 × 92.5 cm top, 104 × 72 cm bottom, 85 cm deep ≈ 600 L for a 600 kg-cherry peak; two tanks; 30 % free volume; V_baba (L) = 0.666 × kg cherry; central drain, 1½\" ball valve, 3/16\" holes at 1 cm; light colours; 4 rinses 5–10 cm above mass; 4.1 L/kg cps vs 25 traditional [S:AT408]",
+   "failure_modes_hygiene_maintenance": "Residues to anaerobic treatment [S:AT408]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "WSH-CHN",
+   "asset": "Washing channel · canal de correteo / semisumergido · canal de lavagem",
+   "function_subtypes": "Washing + density grading",
+   "design_reference": "30 × 30 cm, tiled, 0.5 % slope, 5–20 m [S:AT058]. Running: 18.7 L/kg, 450 kg/h, 18.9 % good beans lost; semi-submerged 3.2 L/kg [S:AT241]",
+   "failure_modes_hygiene_maintenance": "Highest water use [S:AT241]"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "WSH-HCY",
+   "asset": "Hydrocyclone · hidrociclón · hidrociclone",
+   "function_subtypes": "Pump-fed density separation",
+   "design_reference": "Ø 35 cm, 73° cone, inlet 13.8–34.5 kPa, 1,640 kg/h, 1.9 L/kg, 71.6 % impurities removed, 12.4 % good beans lost [S:AT241]",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Mucilage removal, washing & classification",
+   "code": "WSH-WSR",
+   "asset": "Mechanical washer · lavador (Ecowasher) · lavador",
+   "function_subtypes": "Washes fermented coffee",
+   "design_reference": "Ecowasher 1500: 1,000–1,500 kg/h, 1 HP, 0.5 L/kg cps [S:PEN-EW1500]",
+   "failure_modes_hygiene_maintenance": "Drain and spread at once; piled washed coffee gives post-fermentation and \"cebolla\" [S:ANA18]; reused water stains beans [S:HUI7]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-OPN",
+   "asset": "Open tank · tanque/pila de fermentación · tanque de fermentação",
+   "function_subtypes": "Dry or underwater; concrete, tiled, epoxy, stainless-lined or plastic [S:HUI7, AT422]",
+   "design_reference": "1 m³ per 24 @ cps at 12 h; floor 8 % to outlet; knife gate with grille [S:AT058]. Mass 50 cm–1 m with good drainage; underwater: change standing water every 10–12 h, pool ≤ 72 h [S:ANA18]",
+   "failure_modes_hygiene_maintenance": "No wood, corroding metal or flaking paint [S:AT422]; clean daily [S:ANA18]; shade and ventilate [S:AT554]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-CON",
+   "asset": "Conical tank · tanque cónico · tanque cônico",
+   "function_subtypes": "Self-emptying (Ecomill type)",
+   "design_reference": "FDA-approved MDPE, cylinder Ø 1.22 × 1.50 m (1.75 m³) + 0.80 m cone at 60° (0.38 m³), 0.23 m outlet, ≈ 1.45 t coffee; dry discharge 41.8 t/h (63.4 stainless 430); > 20 yr; 63 % cheaper than AISI 304; same cup [S:AT496]",
+   "failure_modes_hygiene_maintenance": "Weak-acid resistant, less so to strong acids [S:AT496]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-SLD",
+   "asset": "Sealed tank / bioreactor · biorreactor hermético · biorreator",
+   "function_subtypes": "Anaerobic, SIAF, CO₂/N₂-flushed, carbonic (R6 axis B)",
+   "design_reference": "Penagos SM-1: 300–5,000 L, hermetic wafer valves, CO₂/N₂ quick connector, **0–15 psi (0–103 kPa) adjustable**, 71–132 L leachate tank, manhole [S:PEN-SM1]. BioMáster PRO adds logged pH, soluble-solids and temperature sensors and yeast/bacteria dosing [S:PEN-BM]. Sealable drains; insulated, refrigerated jackets [S:AT454]",
+   "failure_modes_hygiene_maintenance": "Warm closed systems: phenolic/earthy taints [S:AT454]; O₂-restricted runs: herbal notes, excess acetic/butyric/propionic risk [S:AT554]. CO₂ asphyxiation in rooms and pits [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-DRM",
+   "asset": "Drums & barrels · bidones, canecas, barricas · bombonas, barris",
+   "function_subtypes": "HDPE, stainless, wood",
+   "design_reference": "Food-contact polyolefins: 21 CFR 177.1520 (extractables, density classes) [S:CFR]",
+   "failure_modes_hygiene_maintenance": "Wood not recommended [S:AT422]; check prior contents [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-BAG",
+   "asset": "Bags · bolsas herméticas / de ensilaje · sacos herméticos",
+   "function_subtypes": "Sealed whole-cherry and river-flow ferments [S:R6 A07]",
+   "design_reference": "GrainPro sells hermetic storage bags, no fermentation specs [S:GP]",
+   "failure_modes_hygiene_maintenance": "Punctures, uneven temperature [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-IBC",
+   "asset": "IBC tote · IBC · contentor IBC",
+   "function_subtypes": "1,000 L HDPE in cage [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Never ex-chemical totes [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-ACC",
+   "asset": "Fittings · válvula de alivio, airlock, muestreo, termopozo · válvulas",
+   "function_subtypes": "One-way CO₂ release, relief, gas inlet, sampling, probe wells",
+   "design_reference": "One-way valves in tropical carbonic maceration [S:R6 C03]; 0–15 psi [S:PEN-SM1]",
+   "failure_modes_hygiene_maintenance": "Stuck valve: over-pressure or air ingress; inspect gaskets each run [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "THM-JKT",
+   "asset": "Jacket + chiller · chaqueta, chiller de glicol · camisa",
+   "function_subtypes": "Mass temperature control",
+   "design_reference": "Insulated, refrigerated jackets; trials at 15 ± 1 °C [S:AT454]",
+   "failure_modes_hygiene_maintenance": "Glycol leaks [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "THM-CR",
+   "asset": "Cold room · cuarto frío · câmara fria",
+   "function_subtypes": "Cherry cold hold (CryoBloom 9–12 °C [S:R6]); baba < 8 °C [S:AT422]; green at 10–12 °C [S:AT590]",
+   "design_reference": "Cenicafé room: 10.3–12.2 °C, 60–90 % RH [S:AT590]",
+   "failure_modes_hygiene_maintenance": "Condensation on removal; seals, defrost, alarms [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "THM-FRZ",
+   "asset": "Freezer · congelador · freezer",
+   "function_subtypes": "Frozen-cherry protocols (R6 T03)",
+   "design_reference": "Borer kill: ≤ −15 °C for ≥ 48 h [S:R2]",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "THM-BTH",
+   "asset": "Immersion bath · tanque de choque térmico · banho",
+   "function_subtypes": "Thermal shock (R6 T04)",
+   "design_reference": "No published temperatures [S:R6]",
+   "failure_modes_hygiene_maintenance": "Uneven contact [T]"
+  },
+  {
+   "area": "Fermentation vessels & thermal control",
+   "code": "FER-YST",
+   "asset": "Yeast fridge & rehydration vessel · nevera · —",
+   "function_subtypes": "SafCoffee storage and starter",
+   "design_reference": "Storage and rehydration values in V-FER-14–17; rehydrate in clean, ideally sanitised equipment; submerged ferments ≤ 1 cm water above mass; dry ferments sprayed evenly [S:FER-CB, FER-CBT, FER-DA]",
+   "failure_modes_hygiene_maintenance": "Clumping if stirred roughly [S:FER-DA]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-PAT",
+   "asset": "Patio · patio (cemento, ladrillo, asfalto, tierra, lona) · terreiro",
+   "function_subtypes": "Open sun drying",
+   "design_reference": "Cement, ≥ 1 % slope; 1 m² per 5 @ cps/yr at 3.5 cm loads [S:AT058]; 27 m²/t cps [S:AT281]. Acceptable: cement, brick, tarpaulin, bamboo/sisal mats, raised mesh tables [S:CX69]",
+   "failure_modes_hygiene_maintenance": "Bare soil unsuitable in rainy areas; plastic canvas stays humid underneath; surface must be cleanable [S:CX69]. Not on a hot patio (parchment cracks), avoid > 40 °C, don't mix days [S:ANA18]. Treading, dirt, ash [S:AT371]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-BED",
+   "asset": "Raised bed / tray · cama africana, pasera · terreiro suspenso",
+   "function_subtypes": "Mesh beds, airflow underneath",
+   "design_reference": "Cenicafé pasera: 150 × 100 cm, 65 cm high, black PE 4 × 4 or Red 5000 mesh, 3 cm, 90 kg cherry (18.75 kg cps), stackable at 30 cm, gauge-6 cover vented both faces [S:AT345]. East-African beds ≈ 0.8–1 m high, ≤ 1.2 m reach [T]",
+   "failure_modes_hygiene_maintenance": "Lower stacked tray dries slower (142 vs 79 h) [S:AT345]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-CBD",
+   "asset": "Covered/shaded bed · cama cubierta, polisombra · terreiro coberto",
+   "function_subtypes": "Slow/shade dry (R6 G03)",
+   "design_reference": "80 % shade mesh added 4.6–6.3 d (up to +72 %), no cup gain [S:AT577]",
+   "failure_modes_hygiene_maintenance": "Mould at high humidity [T]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-PAR",
+   "asset": "Parabolic / tunnel / marquesina · secador parabólico, túnel · secador solar",
+   "function_subtypes": "Plastic greenhouse dryer",
+   "design_reference": "Parabolic: 6.5 × 4.0 × 2.10 m, 50 cm side openings, N–S axis, ≤ 3 cm, 19.5 kg wet/m², 260 kg cps, 7–15 d, cover 3–5 yr [S:AT305]. Doors open early, ~20 % mid-drying, closed at night/rain; river stones under floor; perimeter drain; away from odours [S:AT577]",
+   "failure_modes_hygiene_maintenance": "Night rewetting below 20 % moisture [S:AT577]. Clean covers with water, no detergent; paint frames white [S:AT305, AT577]. Coloured covers slow drying [S:AT577]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-MOD",
+   "asset": "Modular polycarbonate dryer · secador solar modular · —",
+   "function_subtypes": "Automated solar dryer",
+   "design_reference": "2 × 2 m modules; solid 3 mm PC 96 → 90 % transmission, > 8 yr vs PE film every 2–3 yr; 40–47 % faster; inside 17–45 °C, 70–79 % RH; solar extractor on hygrostat at > 95 % RH inside (off if > 95 % outside), 0.072 kWh/cycle [S:AT575]",
+   "failure_modes_hygiene_maintenance": "Lower sheet at night [S:AT575]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-ELB",
+   "asset": "Rolling roof / carts · casa elba, carros · —",
+   "function_subtypes": "Movable cover or rolling trays",
+   "design_reference": "Carts ≤ 3 cm; parabolic dries 23.5 % faster than carts [S:AT281]. Casa elba geometry not found [T]",
+   "failure_modes_hygiene_maintenance": "Late covering in rain [T]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-DRK",
+   "asset": "Dark/controlled room · cuarto oscuro deshumidificado · sala climatizada",
+   "function_subtypes": "Dark, cool, dehumidified (R6 N04, G06)",
+   "design_reference": "Large dehumidifier + fans, total darkness; Panama example at 18 °C [S:R6]",
+   "failure_modes_hygiene_maintenance": "Dehumidifier sizing not sourced; condensate drainage [T]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-SIL",
+   "asset": "Static-layer silo · silo secador (1–3 niveles) · secador de camada fixa",
+   "function_subtypes": "Batch drying through a fixed layer",
+   "design_reference": "≤ 40 cm [S:AT282, HUI7]; < 35 cm, stacked ≤ 75 cm [S:AT576]. Cenicafé 2-chamber silo 60–500 @; 3-level 12–500 @, 0.1–0.3 m/level, 20–24 h, batch out every 8 h; fans 2–5 HP for 80–160 m³/min at 6.2 cm H₂O [S:AT282]. Penagos SC: 10–20 @ cps, 0.75–1 HP, 2 lb gas per 12.5 kg cps [S:PEN-SC]",
+   "failure_modes_hygiene_maintenance": "Damp coffee left in a stopped silo: dirty, mouldy, earthy, phenolic, smoky [S:AT371]. Remove Gravimet before stirring blades run [S:AT580]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-ROT",
+   "asset": "Rotary drum · guardiola · secador rotativo",
+   "function_subtypes": "Perforated rotating drum",
+   "design_reference": "Pre-dry 8–10 h; fill Pinhalense-type drums 100 % (+10–12 % batch, no stripping or shine) [S:ANA18]. Penagos SG-7/9: 7–9 m³, 2,625–3,775 kg cps, 5–7 HP + 5 HP fan, multi-fuel [S:PEN-SG]; QDryer 900 L, 4 rpm, LPG 1 kg/@ [S:PEN-QD]",
+   "failure_modes_hygiene_maintenance": "Part-filled drums strip/polish parchment [S:ANA18]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-VRT",
+   "asset": "Vertical dryer · secadora vertical · secador vertical",
+   "function_subtypes": "Column dryer",
+   "design_reference": "Penagos Ecodryer: 5,000–15,000 L wet parchment/day, stainless exchanger, automatic fuel feed, 75–90 kg cisco/m³, 15–35 HP [S:PEN-ED]",
+   "failure_modes_hygiene_maintenance": "[T]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-FUR",
+   "asset": "Furnace / heat exchanger · hornilla, intercambiador, quemador · fornalha",
+   "function_subtypes": "Cisco, pulp, wood, coal, LPG, diesel, electric, solar",
+   "design_reference": "kJ/kg: cisco 17,936; coal 33,440; wood (20 % m.c.) 15,412 [S:AT380]; dried pulp 16.5 MJ/kg, 3.5 % ash [S:AT591]. Exchanger target > 50 % efficiency and < 50 % of the grain layer's air resistance (tested 45–52 %); thermostat 48–52 °C [S:AT380]",
+   "failure_modes_hygiene_maintenance": "Combustion gases, stored fuels, direct firing → discoloured, crystallised, smoky beans [S:AT371]; coal sulphur forms acid [S:AT282]"
+  },
+  {
+   "area": "Drying installations",
+   "code": "DRY-COV",
+   "asset": "Covers & tools · carpas, rastrillo · lonas, rodo",
+   "function_subtypes": "Night/rain protection, turning",
+   "design_reference": "Rake: 8 × 4 cm teeth, 105°, 3 m handle [S:AT281]; cuts drying time 25 % [S:AT577]",
+   "failure_modes_hygiene_maintenance": "Ventilate wet coffee at night; heap and cover after 1 d (parchment) / 3 d (cherry) [S:CX69]"
+  },
+  {
+   "area": "Conditioning, storage, packaging & transport",
+   "code": "STO-BIN",
+   "asset": "Rest bins · reposo, cajones de madera · tulhas",
+   "function_subtypes": "Moisture equalisation",
+   "design_reference": "Cool 8–10 h under sacks, never bag hot; rest ≥ 3–4 weeks [S:ANA18]",
+   "failure_modes_hygiene_maintenance": "Bin design not sourced [T]"
+  },
+  {
+   "area": "Conditioning, storage, packaging & transport",
+   "code": "STO-WHS",
+   "asset": "Warehouse · bodega · armazém",
+   "function_subtypes": "Parchment/green storage",
+   "design_reference": "ISO: ≈ 22 °C, RH ≤ 60 %, > 0.8 m from walls, ≥ 2 m to ridge, insulated roof, waterproof walls and foundations, insulated pipes, rodent/bird-proof, dark with aisle-only lights, short wall to the sun [S:ISO8455]. Codex: damp-proof cement floor, no flooding, pipes away from coffee, high ceiling, no sun or heat sources [S:CX69]. Anacafé: wooden pallets, 50 cm from walls, 20 °C / 65 % RH [S:ANA18]",
+   "failure_modes_hygiene_maintenance": "Segregate odorous, chemical, dusty goods and rejects; organic apart from fumigated lots [S:ISO8455]; no non-food materials [S:CX69]. Broom-clean; pest programme by a recognised agency [S:ISO8455]"
+  },
+  {
+   "area": "Conditioning, storage, packaging & transport",
+   "code": "STO-CLD",
+   "asset": "Cold store (green) · cuarto frío · câmara fria",
+   "function_subtypes": "Long-term quality",
+   "design_reference": "10–12 °C held quality 240 d; low T with 69–77 % RH reached one year [S:AT590]",
+   "failure_modes_hygiene_maintenance": "Condensation when warmed [T]"
+  },
+  {
+   "area": "Conditioning, storage, packaging & transport",
+   "code": "STO-PKG",
+   "asset": "Packaging · fique, yute, bolsa hermética, vacío · juta, big bag",
+   "function_subtypes": "Bags and liners",
+   "design_reference": "From 11.8 %: fique/paper ≈ 15 % after 365 d; PE-EVOH, vacuum PE-PAV, PE-doble, PP-PVC, PE-Multi, PE-Max ≤ 12.34 %; fibre bags 7.6–9.0 % discoloured after 240 d; weevil *Araecerus fasciculatus* in fique; high-barrier beyond 60 d [S:AT590]. Clean jute sacks [S:ANA18]",
+   "failure_modes_hygiene_maintenance": "Rehumidification [S:AT590]"
+  },
+  {
+   "area": "Conditioning, storage, packaging & transport",
+   "code": "TRN-CTR",
+   "asset": "Containers & trucks · contenedor · contêiner",
+   "function_subtypes": "Shipping",
+   "design_reference": "Clean, dry, undamaged; cross-stacked bags; absorbent top/side cover; liners off the roof; vents free; ≤ 12.5 % throughout [S:CX69]. Port ≤ 72 h; moisture before loading and on arrival [S:ISO8455]",
+   "failure_modes_hygiene_maintenance": "Condensation in non-breathing sealed containers [S:ISO8455]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "BYP-PIT",
+   "asset": "Pulp pit / covered compost · fosa de pulpa techada · fossa de compostagem",
+   "function_subtypes": "Pulp → humus",
+   "design_reference": "Volume (m³) = 0.002 × annual kg cps (500 @ → 2 × 2 × 3 m); zinc lean-to roof; cement floor 2 % outwards; concave drain floor with central grate; compartments turned; 4–6 months [S:AT068]. Ecomill structure ≈ 4 × 2 m, plastic-lined walls, impermeable 2 % floor, ≥ 500 L leachate tank [S:AT538]",
+   "failure_modes_hygiene_maintenance": "Borer emergence: greased covers [S:AT297]; leachate runoff [S:AT068]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "BYP-WAB",
+   "asset": "Washwater into pulp · aguas mieles sobre pulpa · —",
+   "function_subtypes": "Zero discharge for low-water mills",
+   "design_reference": "2–3 kg pulp per L retains 83–89 % in 24 h; recycled leachate 100 % by 35 h; spray daily by 2\" hose or pump [S:AT538]. Becolsub retains ≈ 66 % of mucilage in pulp [S:AT405]",
+   "failure_modes_hygiene_maintenance": "Overloading yields leachate [S:AT538]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "BYP-VRM",
+   "asset": "Vermicompost · lombricompost · vermicompostagem",
+   "function_subtypes": "*Eisenia foetida* on pulp",
+   "design_reference": "5 kg worms decomposed 1 m³ fresh pulp in 80 d; humus showed reversible nursery toxicity [S:AT161]",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "BYP-FUEL",
+   "asset": "Dried pulp fuel · pulpa seca combustible · —",
+   "function_subtypes": "Replaces cisco",
+   "design_reference": "78.2 % → 8 % moisture in a 3 mm-polycarbonate solar tunnel; 19.2 % yield; 0.39–0.45 kg/kg cps; S 0.10 %, Cl 0.05 %; store in sealed clean plastic bags [S:AT591]",
+   "failure_modes_hygiene_maintenance": "Rewets in jute [S:AT591]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "BYP-CSC",
+   "asset": "Cascara drying · secado de cáscara · casca",
+   "function_subtypes": "Food-grade cascara",
+   "design_reference": "Off-ground, food-contact surfaces, food-safety plan [T]",
+   "failure_modes_hygiene_maintenance": "Mould, OTA [T]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "WW-SET",
+   "asset": "Lime + settling · tratamiento con cal, sedimentador · decantador",
+   "function_subtypes": "Primary treatment",
+   "design_reference": "Raw tina washwater pH 3–4, COD 25,000, TSS 2,700 mg/L; Ca(OH)₂ 4.0–5.2 g/L → pH 7.9–8.1, TSS −75–81 %, COD −37–49 %; jar test 120 rpm 5 min + 60 rpm 25 min, settle 24 h; then Fe/Al coagulants (pH 5–11) [S:AT537]",
+   "failure_modes_hygiene_maintenance": "Lime burns: eye/skin PPE [T]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "WW-STLB",
+   "asset": "Primary leachate system · STLB · —",
+   "function_subtypes": "Becolsub leachate",
+   "design_reference": "Solids tank (UCI) 2 × 1 × 1 m, flooded, packed with 15 cm guadua pieces (48.2 m²/m³, 77.8 % porosity) behind 3 mosquito-mesh layers; drying bed 2 × 1 × 0.5 m on 30 cm gravel; pre-acidifying filter 5.5 × 1 × 1 m of hand stone + 5 cm limestone (4 : 1), 85 cm level. COD 110,000 → 36,200 ppm (−67 %), BOD −73 %, outlet pH > 5; 1 labour-day/yr; re-plaster UCI every 2 yr [S:AT280]",
+   "failure_modes_hygiene_maintenance": "Sludge 74 L (50 g TSS/L) per 33.5 t cherry [S:AT280]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "WW-SMTA",
+   "asset": "Anaerobic reactors · SMTA, biodigestor, UASB · reator anaeróbio",
+   "function_subtypes": "Secondary treatment, biogas",
+   "design_reference": "Tina residues go to SMTA [S:AT408]; biodigesters for washwater [S:AT187]. Retention/loading not found [T]",
+   "failure_modes_hygiene_maintenance": "Raise pH first [S:AT537]"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "WW-GRF",
+   "asset": "Green filter · filtro verde · fertirrigação",
+   "function_subtypes": "Zero discharge by evapotranspiration",
+   "design_reference": "Pretreated water on fast-growing trees/grasses tolerant of partial saturation [S:AT548]",
+   "failure_modes_hygiene_maintenance": "Loading rates not extracted"
+  },
+  {
+   "area": "Byproducts & wastewater",
+   "code": "WW-EVP",
+   "asset": "Leachate evaporation · evaporación en secador · —",
+   "function_subtypes": "Leachate → fertiliser",
+   "design_reference": "Dried product N 2.87 %, K 4.24 %, pH 5.6, EC 8.36 mS/cm [S:CEN66]; Ecomill dried \"honey\" 26.5 kg/t cherry [S:AT432]",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-PCL",
+   "asset": "Pre-cleaner · prelimpiadora · pré-limpeza",
+   "function_subtypes": "Screens + aspiration for dust, sticks, stones [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Dust; partitions or extractor fans where cleaning shares a store [S:CX69]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-DST",
+   "asset": "Destoner · despedregadora · despedregador",
+   "function_subtypes": "Density/air stone removal [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Huller damage [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-HPG",
+   "asset": "Parchment huller · trilladora, morteadora · descascador",
+   "function_subtypes": "Friction or impact hulling [T]",
+   "design_reference": "Washed hulling loss 17.75–18.40 % [S:AT370]; cps : green 1.25 [S:R3]",
+   "failure_modes_hygiene_maintenance": "Breakage from wrong gap or moist coffee; heat [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-HCH",
+   "asset": "Dry-cherry huller · descascadora de natural · descascador de coco",
+   "function_subtypes": "Removes dried skin, pulp, parchment",
+   "design_reference": "Husk 54.6 % of dry-cherry mass, green 45.4 % [S:AT557]",
+   "failure_modes_hygiene_maintenance": "Husk at 16.8 % moisture vs whole cherry 10–12 % [S:AT557]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-POL",
+   "asset": "Polisher · pulidora · polidor/brunidor",
+   "function_subtypes": "Removes silverskin [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Heat [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-CAT",
+   "asset": "Pneumatic separator · catadora · catador",
+   "function_subtypes": "Removes light beans by air [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "—"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-SCR",
+   "asset": "Screen grader · clasificadora por zarandas · classificador de peneiras",
+   "function_subtypes": "Round holes in 1/64\" steps; oval slots for peaberries",
+   "design_reference": "Multi-tier sloped vibrating screens; European Prep ≤ 5 % below screen 15 [S:RC2]",
+   "failure_modes_hygiene_maintenance": "Wear, blinding [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-GRV",
+   "asset": "Gravity table · mesa densimétrica · mesa densimétrica",
+   "function_subtypes": "Removes light, chipped, hollow beans and foreign matter by angle and vibration [S:RC3, RC4]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Good-bean loss if mis-set [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-OPT",
+   "asset": "Optical sorter · seleccionadora electrónica · selecionadora óptica",
+   "function_subtypes": "Removes discoloured, immature, insect-damaged beans; glass, stones, plastic, sticks",
+   "design_reference": "RGB and infrared (SORTEX A LumoVision), paired with mechanical cleaning [S:BUH]; > US$100,000, hundreds of bags/day [S:RC3]; UV for stinkers [T]",
+   "failure_modes_hygiene_maintenance": "Reject-stream losses; calibration [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-HND",
+   "asset": "Hand sorting · escogida manual · catação manual",
+   "function_subtypes": "Final visual sort",
+   "design_reference": "≈ one 60 kg bag per sorter per day [S:RC3]; light ≥ 4000 K/1,200 lx [S:R3]",
+   "failure_modes_hygiene_maintenance": "Fatigue, lighting [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-MAG/MTD",
+   "asset": "Magnet, metal detector · imán, detector · ímã, detector",
+   "function_subtypes": "Tramp metal [T]",
+   "design_reference": "—",
+   "failure_modes_hygiene_maintenance": "Test pieces [T]"
+  },
+  {
+   "area": "Dry mill",
+   "code": "DML-BAG",
+   "asset": "Bagging scale · báscula ensacadora · ensacadeira",
+   "function_subtypes": "Net weight",
+   "design_reference": "Quintal 46 kg (CR); export sack 69 kg [S:R3]",
+   "failure_modes_hygiene_maintenance": "Verification [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-MMC",
+   "asset": "Capacitance moisture meter · determinador de humedad · medidor de umidade",
+   "design_reference_method": "Senses capacitance, temperature, bulk density; repeatability is the real accuracy [S:CTAHR]. Under-reads warm coffee: equilibrate ≥ 30 min [S:AT580]. Cenicafé MH-2 used for washed coffee [S:AT481]",
+   "calibration_maintenance": "ISO 24115: ≥ 5 reference samples 8.5–13.5 %, 0.7–1.3 points apart, conditioned 72 h airtight, ≥ 3 readings each, k = 2 [S:ISO24115]. Annual pre-harvest cross-check vs ISO 6673 [S:CX69]; measure at room temperature [S:AT371]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-OVN",
+   "asset": "Oven · estufa",
+   "design_reference_method": "ISO 6673 105 °C/16 h (R3); farm method 105 °C ± 5 °F, 24 h, 100 g, scale 1:1,000 [S:CTAHR]",
+   "calibration_maintenance": "Method needs no calibration [S:CTAHR]; verify oven temperature [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-GRV",
+   "asset": "Gravimet / GravimetSM2",
+   "design_reference_method": "Solar: 4 × 100 g baskets pooled to 400 g → 210.1–212.4 g at 10–12 %, ± 0.57 % [S:AT577]. Silo: 200 g → 104–105 g [S:HUI7]. SM2: 700 g drained (52–53 %) → 370–375 g; Ø 15.7 cm, 43.5 % perforated, mid-layer; ± 0.5 % [S:AT580]",
+   "calibration_maintenance": "Scale check [T]; start from drained coffee [S:AT580]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-AW",
+   "asset": "aw meter · medidor de aw",
+   "design_reference_method": "AquaLab named [S:RC1]. At 10–12 %: parchment 0.618, green 0.6175; 0.606 at 15 °C → 0.625 at 25 °C [S:AT583]",
+   "calibration_maintenance": "Salt standards [T]; log sample temperature [I]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-DEN",
+   "asset": "Densimeter (free-settled) · densímetro",
+   "design_reference_method": "Fill marked volume, weigh, divide [S:RC4]; ISO 6669 (R3)",
+   "calibration_maintenance": "Fixed cylinder and funnel [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-REF/PH/TA",
+   "asset": "Refractometer, pH meter/strips, titration kit",
+   "design_reference_method": "Strips ± 0.2–0.3 pH; TA in mg CaCO₃/L [S:AT422]",
+   "calibration_maintenance": "Daily 2-point pH and refractometer zero [S:R3]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-FMT",
+   "asset": "Fermaestro®",
+   "design_reference_method": "500 mL truncated cone, d 14/88 mm, h 206 mm, holes < 6 mm, ≥ 55 % open; fill flush with fresh baba (≤ 10 % pulp), narrow end up; drop 3× from 3 cm before reading; endpoint void > 85 mm (−11.9 to −13.1 % volume, > 96 % mucilage removed) [S:AT431]",
+   "calibration_maintenance": "Replace if deformed [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-CRP",
+   "asset": "CERPER-2 kit",
+   "design_reference_method": "2–3 kg composite (top/middle/bottom); 1 kg after float removal; lab pulper (no water), lab demucilager, MH-2; 20–30 min; Rf floats 9.0; reference factor 92.8 [S:AT481]",
+   "calibration_maintenance": "—"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-THM/LOG",
+   "asset": "Probes, data loggers",
+   "design_reference_method": "Mass core, plenum, ambient positions [I]; inside/outside T/RH in solar dryers [S:AT575]",
+   "calibration_maintenance": "Reference check [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-GAS/PRS/DO/EC",
+   "asset": "CO₂/O₂ meter, pressure gauge, DO meter, EC/TDS meter",
+   "design_reference_method": "Vessels to 15 psi [S:PEN-SM1]; leachate EC 8.36 mS/cm [S:CEN66]",
+   "calibration_maintenance": "NDIR zero/span; gauge check [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-FLW",
+   "asset": "Flow meters · rotámetro, medidor de agua",
+   "design_reference_method": "Rotameter 1.5–15 L/min, orifice, timed volume [S:AT405]; built-in meter on ECOLINE [S:PEN-ECO]",
+   "calibration_maintenance": "Re-*aforo* each season [I]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-WX",
+   "asset": "Weather station · estación meteorológica",
+   "design_reference_method": "Annual sunshine 1,061–1,399 h → 15.5 d solar drying; 1,400–1,800 h → 10.6 d [S:AT577]; PCE-SPM1 meter for cover transmission [S:AT575]",
+   "calibration_maintenance": "Pyranometer cleaning [T]"
+  },
+  {
+   "area": "Lab & instruments",
+   "code": "LAB-RST/GRD/AGT/SCS/UV/CUP",
+   "asset": "Roaster, grinder, Agtron, screens, UV lamp, cupping room",
+   "design_reference_method": "Protocol values in R3 [S:R3]; screens n/64\" [S:RC2]",
+   "calibration_maintenance": "Agtron tile; screen wear [T]"
+  },
+  {
+   "area": "Utilities & site",
+   "code": "UTL-WSRC",
+   "asset": "Water source & treatment",
+   "design_reference": "Potable: no enterobacteria or heavy metals, no dissolved solids, colourless, odourless, pH 6–8 [S:AT454]; clean water for processing [S:CX69, ANA18]",
+   "notes": "Test log per source and season [I]"
+  },
+  {
+   "area": "Utilities & site",
+   "code": "UTL-WST",
+   "asset": "Water storage",
+   "design_reference": "Daily peak = 2 % of annual production; at the old 20 L/kg cps that was 2,500–25,000 L/day for 500–5,000 @/yr [S:AT058]",
+   "notes": "Size on measured L/kg cps [I]"
+  },
+  {
+   "area": "Utilities & site",
+   "code": "UTL-PWR/FUEL",
+   "asset": "Power, fuel store",
+   "design_reference": "Costa Rican mills: 14.44 kWh, 0.080 m³ firewood, 0.416 m³ water per 46 kg unit [S:ICF]; label and segregate fuels [S:AT371]",
+   "notes": "—"
+  },
+  {
+   "area": "Utilities & site",
+   "code": "UTL-SAN",
+   "asset": "Sanitation (POES)",
+   "design_reference": "Sanitation SOPs, hygiene, pest control, records [S:AT351]; daily cleaning and daily checks of fluids, bolts, lubrication [S:ANA18]",
+   "notes": "Agents/concentrations not sourced [T]"
+  },
+  {
+   "area": "Utilities & site",
+   "code": "UTL-SAF",
+   "asset": "Safety",
+   "design_reference": "Protective measures and industrial safety required [S:AT351]; guards, lockout, PPE for lime/acids, CO₂ monitors in fermentation and cold rooms [T]",
+   "notes": "Closed tanks = confined spaces [T]"
+  }
+ ],
+ "equipment_master": [
+  {
+   "code": "REC-SCL",
+   "type": "Reception scale",
+   "subtypes": "platform, hanging, truck",
+   "attributes_to_store": "capacity_kg, readability_g, legal class",
+   "maintenance_calibration": "Weekly test-weight check; legal verification [T]"
+  },
+  {
+   "code": "REC-HOP",
+   "type": "Hopper",
+   "subtypes": "dry, wet; wood, steel, concrete",
+   "attributes_to_store": "volume_m3, wall_angle_deg, material, water_fed, cover",
+   "maintenance_calibration": "Clean daily [S:ANA18]; regrease cover each harvest [S:AT297]"
+  },
+  {
+   "code": "REC-HLD",
+   "type": "Holding area",
+   "subtypes": "shade, sacks, crates, bins, hermetic",
+   "attributes_to_store": "capacity_kg, container_type, shaded, ventilated",
+   "maintenance_calibration": "Wash crates [T]"
+  },
+  {
+   "code": "REC-SIF",
+   "type": "Siphon / flotation",
+   "subtypes": "tank, floater screen, with drainer",
+   "attributes_to_store": "capacity_kg_h, dims, material, outlet_in, recirculation",
+   "maintenance_calibration": "Clean daily [S:ANA18]"
+  },
+  {
+   "code": "REC-PCL / REC-DST",
+   "type": "Pre-cleaner, wet destoner",
+   "subtypes": "air, water",
+   "attributes_to_store": "capacity, power_kw, dims",
+   "maintenance_calibration": "Replace wear parts [S:PEN-AP20]"
+  },
+  {
+   "code": "TRN-*",
+   "type": "Conveyors",
+   "subtypes": "channel, fruit pump, screw, bucket elevator, gravity",
+   "attributes_to_store": "capacity_kg_h, diameter_mm, pitch_mm, rpm, water_l_min",
+   "maintenance_calibration": "Daily lubrication and bolt check [S:ANA18]"
+  },
+  {
+   "code": "PUL-*",
+   "type": "Pulper",
+   "subtypes": "horizontal drum, vertical, disc; manual or motor",
+   "attributes_to_store": "capacity_kg_h, chorros, motor_kw, rpm, water_free, jacket/breast material, gap_mm",
+   "maintenance_calibration": "Daily inspection; recalibrate with shims based on sampling [S:AT294, ANA18]"
+  },
+  {
+   "code": "PUL-SCR",
+   "type": "Screen",
+   "subtypes": "rotary, reciprocating",
+   "attributes_to_store": "diameter_m, length_m, rpm, aperture_mm",
+   "maintenance_calibration": "Check apertures for wear [T]"
+  },
+  {
+   "code": "DEM-*",
+   "type": "Demucilager / washer",
+   "subtypes": "upflow (Deslim, DELVA), Becolsub, Ecomill, Ecowasher, enzyme doser",
+   "attributes_to_store": "capacity_kg_h + basis, motor_kw, rotor_rpm, water_l_kg_cps, flow_control",
+   "maintenance_calibration": "Flow *aforo* each season; daily wash [S:AT405, AT432]"
+  },
+  {
+   "code": "WSH-*",
+   "type": "Tanque tina, channel, hydrocyclone",
+   "subtypes": "—",
+   "attributes_to_store": "volume_l, dims, slope_pct, drain_in, finish/colour, hydrocyclone geometry, inlet_kpa",
+   "maintenance_calibration": "Clean daily [S:ANA18]"
+  },
+  {
+   "code": "FER-OPN / FER-CON",
+   "type": "Open / conical tank",
+   "subtypes": "tiled or epoxy concrete, stainless 304/430, MDPE/HDPE",
+   "attributes_to_store": "material, food_contact_ref, volume_l, geometry, cone_deg, floor_slope_pct, outlet_d, insulation, shade, location",
+   "maintenance_calibration": "Clean daily [S:ANA18]; inspect lining for cracks [T]"
+  },
+  {
+   "code": "FER-SLD (+ DRM, BAG, IBC)",
+   "type": "Sealed vessel",
+   "subtypes": "tank, bioreactor, drum, barrel, bag, IBC",
+   "attributes_to_store": "As above, plus pressure_rating_kpa, relief_set_kpa, one_way_valve, gas_ports, sample/probe ports, manway, leachate_tank_l, jacket, agitation, sensors",
+   "maintenance_calibration": "Check valves and gaskets each run; test relief valve [T]"
+  },
+  {
+   "code": "THM-*",
+   "type": "Thermal",
+   "subtypes": "jacket + chiller, cold room, freezer, bath, yeast fridge",
+   "attributes_to_store": "setpoint_range_c, capacity_kw, refrigerant, volume_m3, alarm",
+   "maintenance_calibration": "Probe check; defrost; seals [T]"
+  },
+  {
+   "code": "DRY-PAT",
+   "type": "Patio",
+   "subtypes": "concrete, brick, asphalt, earth, tarp",
+   "attributes_to_store": "area_m2, slope_pct, surface, drainage, covers available",
+   "maintenance_calibration": "Clean daily [S:ANA18]"
+  },
+  {
+   "code": "DRY-BED / DRY-CBD",
+   "type": "Raised or covered bed",
+   "subtypes": "PE mesh, shade cloth, metal mesh; stacked trays",
+   "attributes_to_store": "area_m2, height_cm, width_m, mesh_material, mesh_opening_mm, shade_pct, cover, tiers",
+   "maintenance_calibration": "Replace mesh [T]; clean covers [S:AT577]"
+  },
+  {
+   "code": "DRY-PAR / MOD / ELB",
+   "type": "Solar dryer",
+   "subtypes": "parabolic, tunnel, marquesina, modular PC, casa elba, carts",
+   "attributes_to_store": "area_m2, dims, orientation, cover material + thickness/gauge, transmission_new_pct, install_date, vents, extractor + RH setpoint, floor, river stones",
+   "maintenance_calibration": "Replace cover (PE 2–5 yr; PC > 8 yr) [S:AT575, AT305, AT281]; clean with water, never detergent [S:AT577]"
+  },
+  {
+   "code": "DRY-DRK",
+   "type": "Dark / controlled room",
+   "subtypes": "dehumidified, HVAC",
+   "attributes_to_store": "volume_m3, dehumidifier_l_day, fans, light_exclusion, setpoints",
+   "maintenance_calibration": "Clean filters and coils [T]"
+  },
+  {
+   "code": "DRY-SIL / ROT / VRT",
+   "type": "Mechanical dryer",
+   "subtypes": "static (1–3 levels), guardiola, vertical",
+   "attributes_to_store": "capacity_kg_cps, layer_max_cm, chambers, airflow_m3_min, fan_kw, static_pressure, drum_rpm, air_reversal, control",
+   "maintenance_calibration": "Clean daily [S:ANA18]; yearly airflow check [I]; verify thermostat [T]"
+  },
+  {
+   "code": "DRY-FUR",
+   "type": "Furnace / heat exchanger",
+   "subtypes": "indirect exchanger, direct burner; cisco, pulp, wood, coal, LPG, diesel",
+   "attributes_to_store": "fuel, firing, efficiency_pct, hopper_kg, autonomy_h, thermostat band",
+   "maintenance_calibration": "Operate per design [S:AT371]; leak-test exchanger for smoke entering the air stream; remove ash [T]"
+  },
+  {
+   "code": "STO-BIN",
+   "type": "Rest bins",
+   "subtypes": "wood, ventilated",
+   "attributes_to_store": "capacity_kg, material",
+   "maintenance_calibration": "Clean between lots [T]"
+  },
+  {
+   "code": "STO-WHS / STO-CLD",
+   "type": "Warehouse, cold store",
+   "subtypes": "ventilated, insulated, refrigerated",
+   "attributes_to_store": "area_m2, roof_insulated, ridge_clearance_m, floor_dpc, pallets, lighting, zones (organic, rejects), pest contract",
+   "maintenance_calibration": "Broom-clean; pest programme [S:ISO8455]"
+  },
+  {
+   "code": "STO-PKG",
+   "type": "Packaging",
+   "subtypes": "fique/jute/sisal; hermetic multilayer (PE-EVOH, PE-PAV, PE-doble, PP-PVC); vacuum",
+   "attributes_to_store": "type, barrier class, capacity_kg, reuse_count",
+   "maintenance_calibration": "Inspect for punctures [T]"
+  },
+  {
+   "code": "BYP-*",
+   "type": "Byproduct units",
+   "subtypes": "pit, washwater absorption, worms, fuel store, cascara beds",
+   "attributes_to_store": "volume_m3, roof, floor_slope_pct, leachate_tank_l, cover",
+   "maintenance_calibration": "Regrease covers [S:AT297]; turn pulp [S:AT068]"
+  },
+  {
+   "code": "WW-*",
+   "type": "Wastewater units",
+   "subtypes": "lime + settling, STLB, SMTA/UASB, lagoon, green filter, drying bed",
+   "attributes_to_store": "volume_m3, dims, packing, design HRT_d, design_flow_l_d, discharge point, permit ref",
+   "maintenance_calibration": "STLB: 1 labour-day a year; re-plaster UCI every 2 years [S:AT280]; remove sludge [T]"
+  },
+  {
+   "code": "DML-*",
+   "type": "Dry-mill machines",
+   "subtypes": "pre-cleaner, destoner, parchment or cherry huller, polisher, catador, screen grader, gravity table, optical sorter (RGB/IR/UV), hand belt, magnet, metal detector, bagging scale",
+   "attributes_to_store": "capacity_kg_h, power_kw, screens installed, camera types, reject settings",
+   "maintenance_calibration": "Wear parts, screen checks, sorter calibration, metal test pieces [T]"
+  },
+  {
+   "code": "LAB-*",
+   "type": "Instruments",
+   "subtypes": "see §2.9",
+   "attributes_to_store": "make, model, serial, range, resolution, accuracy, calibration policy",
+   "maintenance_calibration": "Per §2.9"
+  }
+ ]
+}

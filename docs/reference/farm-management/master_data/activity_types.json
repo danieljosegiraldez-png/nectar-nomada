@@ -1,0 +1,408 @@
+{
+ "_meta": {
+  "source": "02_ACTIVITY_TAXONOMY.md (ACT-INV-2026 + NN codes)",
+  "count": 40
+ },
+ "activity_types": [
+  {
+   "code": "AGR.NUR.01",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.NUR",
+   "type_name": "Propagation & nursery (pre-planting)",
+   "name_en": "Substrate preparation",
+   "data_to_capture": "Mix ratio (soil:compost/manure), sanitation method (solarization), date",
+   "defaults_notes": "Sun exposure to kill soil-borne pathogens"
+  },
+  {
+   "code": "AGR.NUR.02",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.NUR",
+   "type_name": "Propagation & nursery (pre-planting)",
+   "name_en": "Seed-bed sowing",
+   "data_to_capture": "Seed lot, variety, certification ref, qty, bed ID",
+   "defaults_notes": "Certified seed"
+  },
+  {
+   "code": "AGR.NUR.03",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.NUR",
+   "type_name": "Propagation & nursery (pre-planting)",
+   "name_en": "Transplant to bags",
+   "data_to_capture": "Stage (*soldadito*/\"soldier\" or *mariposa*/\"butterfly\"), count, bag size",
+   "defaults_notes": ""
+  },
+  {
+   "code": "AGR.NUR.04",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.NUR",
+   "type_name": "Propagation & nursery (pre-planting)",
+   "name_en": "Nursery maintenance",
+   "data_to_capture": "Watering, weeding, shade checks",
+   "defaults_notes": "Duration **6–9 months**"
+  },
+  {
+   "code": "AGR.NUR.05",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.NUR",
+   "type_name": "Propagation & nursery (pre-planting)",
+   "name_en": "Culling / selection",
+   "data_to_capture": "Count discarded, reason (weak, root deformity e.g. bent taproot)",
+   "defaults_notes": "Before field transport"
+  },
+  {
+   "code": "AGR.EST.01",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.EST",
+   "type_name": "Plantation establishment & renewal",
+   "name_en": "Site selection & mapping",
+   "data_to_capture": "Altitude, soil pH, slope %, polygon",
+   "defaults_notes": "pH 5.5–6.5"
+  },
+  {
+   "code": "AGR.EST.02",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.EST",
+   "type_name": "Plantation establishment & renewal",
+   "name_en": "Holing / pit digging",
+   "data_to_capture": "Hole count, dimensions, spacing",
+   "defaults_notes": "Spacing ~**2.5 m Arabica**, ~**3 m Robusta**; dig **months before rains** for aeration"
+  },
+  {
+   "code": "AGR.EST.03",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.EST",
+   "type_name": "Plantation establishment & renewal",
+   "name_en": "Transplanting",
+   "data_to_capture": "Plants, variety, block, date",
+   "defaults_notes": "At onset of rainy season"
+  },
+  {
+   "code": "AGR.EST.04",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.EST",
+   "type_name": "Plantation establishment & renewal",
+   "name_en": "Infilling (replanting)",
+   "data_to_capture": "Replaced count, cause (dead / diseased / stunted)",
+   "defaults_notes": "Feeds survival-rate KPI"
+  },
+  {
+   "code": "AGR.CAN.01",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.CAN",
+   "type_name": "Canopy & architecture (post-harvest phase)",
+   "name_en": "Pruning & stumping",
+   "data_to_capture": "Trees treated, type (selective / stump), block %",
+   "defaults_notes": "VNT: stump every 5–7 yr; renovate 20–25 %/yr"
+  },
+  {
+   "code": "AGR.CAN.02",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.CAN",
+   "type_name": "Canopy & architecture (post-harvest phase)",
+   "name_en": "Desuckering / thinning",
+   "data_to_capture": "Trees, frequency",
+   "defaults_notes": "Remove water shoots (*chupones*)"
+  },
+  {
+   "code": "AGR.CAN.03",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.CAN",
+   "type_name": "Canopy & architecture (post-harvest phase)",
+   "name_en": "Shade-tree regulation",
+   "data_to_capture": "Shade % before/after, species",
+   "defaults_notes": "**40–50 %** here vs **25–30 %** in VNT — see §6"
+  },
+  {
+   "code": "AGR.CAN.04",
+   "class_code": "AGR",
+   "class_name": "Agronomy & Crop Management",
+   "type_code": "AGR.CAN",
+   "type_name": "Canopy & architecture (post-harvest phase)",
+   "name_en": "Branch bending / training",
+   "data_to_capture": "Trees, method",
+   "defaults_notes": "Source term \"Agrobiolo guiding\" is unclear — treat as *agobio* (bending the main stem/verticals to force lateral/multi-stem growth); confirm with user"
+  },
+  {
+   "code": "SOI.NUT.01",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.NUT",
+   "type_name": "Nutrition & amendments",
+   "name_en": "Soil sampling",
+   "data_to_capture": "Zone/block, depth, lab, sample ID, results",
+   "defaults_notes": "VNT: annual basic, full every 2–3 yr"
+  },
+  {
+   "code": "SOI.NUT.02",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.NUT",
+   "type_name": "Nutrition & amendments",
+   "name_en": "Macronutrient application",
+   "data_to_capture": "Product, formula, rate kg/ha, method, phenological window",
+   "defaults_notes": "Windows: **pre-flowering, fruit-set**"
+  },
+  {
+   "code": "SOI.NUT.03",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.NUT",
+   "type_name": "Nutrition & amendments",
+   "name_en": "Foliar feeding",
+   "data_to_capture": "Product, Zn/B content, rate, stage",
+   "defaults_notes": "For flowering + fruit development"
+  },
+  {
+   "code": "SOI.NUT.04",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.NUT",
+   "type_name": "Nutrition & amendments",
+   "name_en": "Liming",
+   "data_to_capture": "Product (calcitic / dolomitic), rate, target pH",
+   "defaults_notes": "Calibrated to analysis"
+  },
+  {
+   "code": "SOI.ECO.01",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.ECO",
+   "type_name": "Weed & ecosystem",
+   "name_en": "Manual weeding / slashing",
+   "data_to_capture": "Area, tool, labor days",
+   "defaults_notes": "Around tree base (*plateo*)"
+  },
+  {
+   "code": "SOI.ECO.02",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.ECO",
+   "type_name": "Weed & ecosystem",
+   "name_en": "Mulching",
+   "data_to_capture": "Material (prunings, organic matter, **coffee pulp**), area",
+   "defaults_notes": "Links to pulp-recycling byproduct flow"
+  },
+  {
+   "code": "SOI.ECO.03",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.ECO",
+   "type_name": "Weed & ecosystem",
+   "name_en": "Terracing & cover cropping",
+   "data_to_capture": "Type (contour ridge, grass strip, terrace, cover species), length/area",
+   "defaults_notes": "VNT: terrace on slopes > 15 %"
+  },
+  {
+   "code": "SOI.IPM.01",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.IPM",
+   "type_name": "Disease & pest control",
+   "name_en": "Phytosanitary scouting",
+   "data_to_capture": "Organism (CBB/broca, CLR/roya, CBD…), sampling method, incidence %, severity, GPS",
+   "defaults_notes": "Action thresholds = user/authority config"
+  },
+  {
+   "code": "SOI.IPM.02",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.IPM",
+   "type_name": "Disease & pest control",
+   "name_en": "Fungicide / insecticide application",
+   "data_to_capture": "Product, active ingredient, organic/synthetic, rate, PHI/REI, operator, PPE",
+   "defaults_notes": "Before & during fruit development; certification-relevant"
+  },
+  {
+   "code": "SOI.IPM.03",
+   "class_code": "SOI",
+   "class_name": "Soil Health & IPM",
+   "type_code": "SOI.IPM",
+   "type_name": "Disease & pest control",
+   "name_en": "Trapping & cultural control",
+   "data_to_capture": "Trap count, lure (alcohol), catches; fallen/mummified fruit collected (*repela/pepena*)",
+   "defaults_notes": "Breaks borer life cycle"
+  },
+  {
+   "code": "HAR.PCK.01",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PCK",
+   "type_name": "Harvesting",
+   "name_en": "Pre-harvest prep",
+   "data_to_capture": "Paths cleared, containers cleaned",
+   "defaults_notes": ""
+  },
+  {
+   "code": "HAR.PCK.02",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PCK",
+   "type_name": "Harvesting",
+   "name_en": "Selective picking",
+   "data_to_capture": "Picker, block, pass #, kg cherry, ripeness sample",
+   "defaults_notes": "Multiple rounds over a **2–4 month** window"
+  },
+  {
+   "code": "HAR.PCK.03",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PCK",
+   "type_name": "Harvesting",
+   "name_en": "Strip picking (final pass)",
+   "data_to_capture": "kg, ripeness mix",
+   "defaults_notes": "Last pass; segregate from specialty lots"
+  },
+  {
+   "code": "HAR.PRI.01",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PRI",
+   "type_name": "Wet/dry primary processing",
+   "name_en": "Flotation sorting",
+   "data_to_capture": "Floaters kg / %, sinkers kg",
+   "defaults_notes": "VNT: < 5 % floaters"
+  },
+  {
+   "code": "HAR.PRI.02",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PRI",
+   "type_name": "Wet/dry primary processing",
+   "name_en": "De-pulping",
+   "data_to_capture": "Time from harvest, pulper ID, kg in/out",
+   "defaults_notes": "**≤ 24 h after harvest** (outer limit; specialty practice is usually same-day — NN note)"
+  },
+  {
+   "code": "HAR.PRI.03",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PRI",
+   "type_name": "Wet/dry primary processing",
+   "name_en": "Fermentation",
+   "data_to_capture": "Protocol ID, tank, time, pH, temp, Brix",
+   "defaults_notes": "Source: **12–36 h** — generic washed default only; app protocols override"
+  },
+  {
+   "code": "HAR.PRI.04",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PRI",
+   "type_name": "Wet/dry primary processing",
+   "name_en": "Washing & soaking",
+   "data_to_capture": "Water volume, soak time",
+   "defaults_notes": "VNT: 10–20 L/kg cherry (washed)"
+  },
+  {
+   "code": "HAR.PRI.05",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.PRI",
+   "type_name": "Wet/dry primary processing",
+   "name_en": "Pulp recycling",
+   "data_to_capture": "kg pulp, destination (compost pit), date",
+   "defaults_notes": "Feeds mass balance + SOI.ECO.02"
+  },
+  {
+   "code": "HAR.DRY.01",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.DRY",
+   "type_name": "Drying & conditioning",
+   "name_en": "Spreading on patio / raised beds",
+   "data_to_capture": "Surface type, layer depth, area",
+   "defaults_notes": "Raised \"African\" beds or concrete patio"
+  },
+  {
+   "code": "HAR.DRY.02",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.DRY",
+   "type_name": "Drying & conditioning",
+   "name_en": "Turning",
+   "data_to_capture": "Turn log",
+   "defaults_notes": "Source: **~hourly** — treat as guideline, configurable"
+  },
+  {
+   "code": "HAR.DRY.03",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.DRY",
+   "type_name": "Drying & conditioning",
+   "name_en": "Moisture testing",
+   "data_to_capture": "Meter ID, reading, time",
+   "defaults_notes": "Endpoint **10–12 %** stabilized"
+  },
+  {
+   "code": "HAR.DRY.04",
+   "class_code": "HAR",
+   "class_name": "Harvest & Post-Harvest",
+   "type_code": "HAR.DRY",
+   "type_name": "Drying & conditioning",
+   "name_en": "Bagging & conditioning (*reposo*)",
+   "data_to_capture": "Bag type (jute/sisal/hermetic), warehouse, rest days",
+   "defaults_notes": "Ventilated storage"
+  },
+  {
+   "code": "OPS.AST.01",
+   "class_code": "OPS",
+   "class_name": "Infrastructure & Business",
+   "type_code": "OPS.AST",
+   "type_name": "Assets & infrastructure",
+   "name_en": "Equipment servicing & calibration",
+   "data_to_capture": "Asset, task, calibration result, next due",
+   "defaults_notes": "Pulpers, demucilagers, dryers, **moisture meters** — before harvest"
+  },
+  {
+   "code": "OPS.AST.02",
+   "class_code": "OPS",
+   "class_name": "Infrastructure & Business",
+   "type_code": "OPS.AST",
+   "type_name": "Assets & infrastructure",
+   "name_en": "Water-system management",
+   "data_to_capture": "Drainage, sediment ponds, wastewater filtration; checks + readings",
+   "defaults_notes": "Environmental compliance"
+  },
+  {
+   "code": "OPS.ADM.01",
+   "class_code": "OPS",
+   "class_name": "Infrastructure & Business",
+   "type_code": "OPS.ADM",
+   "type_name": "Administration & finance",
+   "name_en": "Labor management",
+   "data_to_capture": "Recruitment, onboarding, housing, payroll, attendance",
+   "defaults_notes": "Seasonal pickers"
+  },
+  {
+   "code": "OPS.ADM.02",
+   "class_code": "OPS",
+   "class_name": "Infrastructure & Business",
+   "type_code": "OPS.ADM",
+   "type_name": "Administration & finance",
+   "name_en": "Traceability & records",
+   "data_to_capture": "Harvest volumes, lot codes, chemical records, co-op transactions",
+   "defaults_notes": "Single source of truth"
+  },
+  {
+   "code": "OPS.ADM.03",
+   "class_code": "OPS",
+   "class_name": "Infrastructure & Business",
+   "type_code": "OPS.ADM",
+   "type_name": "Administration & finance",
+   "name_en": "Financial planning",
+   "data_to_capture": "Cash flow, credit lines, input costs vs sales",
+   "defaults_notes": "Seasonal budget"
+  }
+ ]
+}
