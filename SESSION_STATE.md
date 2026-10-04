@@ -64,14 +64,8 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
 
-**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima doce PR de hoy. Lo que cambió es el
-concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión;
-la **forma** del lote es opcional y se declara como **varios rectángulos**, porque un lote no siempre es
-rectangular; la **densidad sale del marco de plantación** (metros entre plantones) y el área se **deriva de la
-rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**, no bloquea. Se retiraron
-`computePlotDensity` y los dos pendientes de área, que medían otra cosa. **Decisiones suyas abiertas**, con su
-sitio: si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03
-deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`.
+**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
+**Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.
 
 ### 2026-10-02 · Los ejes de la curva, y una cita que sólo se hace cuando se sostiene (plan del #577)
 
