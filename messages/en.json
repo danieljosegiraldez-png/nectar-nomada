@@ -3718,7 +3718,12 @@
     "fincaTrapsLinkAyuda": "How many there are, their status, and when they're due.",
     "jornadas": "Harvest days",
     "jornadasAyuda": "Which plots are ready, who goes to each, and what each picker delivers to the mill.",
-    "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back."
+    "proximamente": "Coming next: yield and efficiency, and harvest quality with what the mill's selection sends back.",
+    "atencionTitulo": "What needs attention",
+    "atencionAyuda": "What your people reported from the field on the harvest days that are still open. Closing the day takes it off this list.",
+    "atencionVacio": "Nobody has reported anything on the open harvest days.",
+    "atencionConFoto": "with photo",
+    "atencionVerJornada": "Open the harvest day"
   },
   "Recepcion": {
     "procesarEntrega": "Receive or reject delivery",

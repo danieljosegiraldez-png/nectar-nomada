@@ -8,13 +8,14 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
-import { abrirJornada, agregarRecolector } from "../../lib/traceability/jornadasDeCosecha";
+import { abrirJornada, agregarRecolector, cerrarJornada } from "../../lib/traceability/jornadasDeCosecha";
 import {
   confirmarFotoDeSituacion,
   pedirSubidaDeFotoDeSituacion,
   reportarCondicionDelDia,
   reportarSituacion,
   situacionesDeJornada,
+  situacionesDeLaFinca,
 } from "../../lib/traceability/situacionesDeCampo";
 import { requireLocationAttributeAccess } from "../../lib/traceability/locations";
 
@@ -214,5 +215,95 @@ describe("la foto de una situación", () => {
     );
     // El Farm Manager ve las situaciones pero no reporta como recolector: no tiene field_report:create_own.
     await expect(pedirSubidaDeFotoDeSituacion(manager, { jornadaId: jornada, originalFilename: "x.jpg", contentType: "image/jpeg" })).rejects.toThrow(/sin_permiso/);
+  }, 20000);
+});
+
+/**
+ * **Lo que el recolector reporta tiene que llegar a alguien sin ir a buscarlo.**
+ *
+ * Decisión de Daniel, 2026-10-04. El spec del 2026-09-18 ya decía QUIÉN lo ve (§3.5) y el §6 ya
+ * exigía estas pruebas de permiso — que existen y pasan, arriba—, pero su §3.6 «Pantallas»
+ * enumeró tres pantallas y se olvidó de ésta. Resultado medido el 2026-10-04:
+ * `situacionesDeJornada` aparece en **0** archivos de `app/` (control: `detalleDeJornada`, que la
+ * pantalla sí usa, aparece en 1), así que diez pruebas en verde cubrían una función que ninguna
+ * pantalla llamaba. Gente metiendo datos en un agujero.
+ *
+ * Este lector es el de la banda de `/finca`: por FINCA y no por jornada, porque el punto es
+ * enterarse sin abrir nada.
+ */
+describe("situacionesDeLaFinca — lo que pide atención hoy", () => {
+  let jornadaCerrada: string;
+
+  it("una situación de una jornada ABIERTA aparece", async () => {
+    const { filas } = await situacionesDeLaFinca(manager, finca);
+    expect(filas.some((e) => e.notes === "broca en el bloque")).toBe(true);
+  }, 20000);
+
+  /**
+   * **El control que hace que el caso de arriba signifique algo.** Si el lector devolviera
+   * siempre todo, la primera aserción pasaría igual. Se cierra una jornada con su propia
+   * situación dentro y se comprueba que la de la abierta sigue, y la de la cerrada no.
+   */
+  it("la de una jornada CERRADA no aparece, y la abierta sigue apareciendo", async () => {
+    const otra = await abrirJornada(manager, {
+      fincaSiteId: finca,
+      // Hoy, no anteayer: A es recolector activo «desde ayer», y una jornada anterior a eso la
+      // rechaza `abrirJornada` con `no_es_recolector`. Lo que esta prueba mide es el cierre, no la fecha.
+      fecha: hoy,
+      asignaciones: [{ locationId: otraParcela, personId: (await prisma.userAccount.findUniqueOrThrow({ where: { id: cuentaA }, select: { personId: true } })).personId }],
+    });
+    jornadaCerrada = otra.id;
+    await reportarSituacion(cuentaA, {
+      jornadaId: otra.id,
+      sobre: { locationId: otraParcela },
+      tipoValueId: incidencia,
+      nota: "esto se reportó y luego se cerró la jornada",
+      ocurridaAt: new Date(),
+    });
+    const { filas: antesDeCerrar } = await situacionesDeLaFinca(manager, finca);
+    expect(antesDeCerrar.some((e) => e.notes === "esto se reportó y luego se cerró la jornada"), "con la jornada abierta SÍ se ve, o la prueba no mide el cierre").toBe(true);
+
+    await cerrarJornada(manager, otra.id);
+
+    const { filas: despues } = await situacionesDeLaFinca(manager, finca);
+    expect(despues.some((e) => e.notes === "esto se reportó y luego se cerró la jornada"), "cerrada, deja de pedir atención").toBe(false);
+    expect(despues.some((e) => e.notes === "broca en el bloque"), "y la de la jornada abierta sigue: el lector no se vació entero").toBe(true);
+  }, 30000);
+
+  /**
+   * **Mismo permiso que `situacionesDeJornada`, comprobado sobre ESTE lector.** Se levanta una
+   * cuenta nueva a propósito: a `cuentaC` le concedieron `field_report:view` en la prueba de
+   * arriba y no se lo quitan, así que apoyarse en ella haría que el resultado dependiera del
+   * orden de las pruebas.
+   */
+  it("un recolector sin field_report:view no ve lo ajeno; su superior sí", async () => {
+    const d = await persona("Recolector D");
+    const cuentaD = (await cuenta(d, "Recolector")).id;
+    const { filas: suyas } = await situacionesDeLaFinca(cuentaD, finca);
+    expect(suyas.some((e) => e.notes === "broca en el bloque"), "D no reportó eso y no tiene el permiso").toBe(false);
+    const { filas: delManager } = await situacionesDeLaFinca(manager, finca);
+    expect(delManager.some((e) => e.notes === "broca en el bloque"), "el control: su superior sí la ve").toBe(true);
+  }, 20000);
+
+  /** Sin nada que atender se devuelve vacío, para que la pantalla diga «no hay» en vez de pintar un cero. */
+  it("una finca sin jornadas abiertas devuelve vacío", async () => {
+    const vacia = await prisma.location.create({
+      data: { name: `TEST Finca vacía (${RUN})`, locationType: "site", organizationId: orgId, classification: "internal" },
+    });
+    try {
+      const vista = await situacionesDeLaFinca(manager, vacia.id);
+      expect(vista.filas).toEqual([]);
+      expect(vista.zona, "y la zona viaja aunque no haya filas, para que la pantalla sepa formatear").not.toBeUndefined();
+    } finally {
+      await prisma.location.delete({ where: { id: vacia.id } });
+    }
+  }, 20000);
+
+  afterAll(async () => {
+    if (jornadaCerrada) {
+      const sesiones = (await prisma.fieldSession.findMany({ where: { jornadaDeCosechaId: jornadaCerrada }, select: { id: true } })).map((s) => s.id);
+      await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesiones } }) });
+      await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones } }) });
+    }
   }, 20000);
 });
