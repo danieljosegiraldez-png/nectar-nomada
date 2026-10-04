@@ -3,7 +3,8 @@
 **Fecha:** 2026-10-02 · **Estado:** diseño aprobado por Daniel en conversación, sección por sección;
 **corregido tras dos revisiones adversarias** (Codex y un revisor Claude, §11); pendiente de su
 lectura del spec escrito. **Base:** escrito sobre `origin/main` `85eab6da`; **vuelto a medir el
-2026-10-03 sobre la Parte 1 ya construida** (§12), con tres decisiones nuevas de Daniel. Depende de la Parte 1,
+2026-10-03 sobre la Parte 1 ya construida** (§12), con tres decisiones nuevas de Daniel; **el 2026-10-04,
+la escala del mucílago (lo que QUEDA) y la autoría por el Coffee Process Manager** (§12). Depende de la Parte 1,
 que vive en la rama `recetas-base` (sin fusionar al escribir esto), y de su diseño general, en la
 misma rama:
 
@@ -112,7 +113,7 @@ Tabla nueva `ProcessRecipeStep`, hija de `ProcessRecipeVersion`:
 | Grupo | Campos |
 |---|---|
 | Identidad | `seq` (único por versión), `stepType` (catálogo nuevo `tipo_paso`), `intencion` (texto corto), `opcional` |
-| Ejes — **vocabulario existente** | A `estadoFruto` → `estado_cereza`, y `mucilagoQuitadoPct` (**% quitado**, la base de la casa: ADR-181 #12; lavado = 100, honey = 0); B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; G `modoSecado` → el enum **`DryingEnvironment`** que ya usan las instalaciones (corregido el 2026-10-03: no es un catálogo nuevo) |
+| Ejes — **vocabulario existente** | A `estadoFruto` → `estado_cereza`, y `mucilagoObjetivo` (lo que **QUEDA**, en tramos 0 / 10 / 25 / 50 / 75 / 100; Lavado = 0, Honey = 100 — decisión de Daniel del 2026-10-03, que corrige ADR-181 #12; el mismo campo que la 2b §8.2); B `oxigeno` → `condicion_oxigeno`; C `temperatura` → `manejo_temperatura`, y `temperaturaMinC`/`MaxC`; D `fuenteMicrobiana` → `fuente_microbiana`; medio → `medio_lavado`; G `modoSecado` → el enum **`DryingEnvironment`** que ya usan las instalaciones (corregido el 2026-10-03: no es un catálogo nuevo) |
 | Ejes — catálogo nuevo | F `fisico`, **sólo** con lo que no existe en otro sitio: ninguno, agitación, presión, ultrasonido, ozono/UV. El frío va por `manejo_temperatura`; congelar y las inmersiones son tipos de paso |
 | Adiciones (E) | filas hijas con la **categoría** (`sustrato_anadido`; en una inoculación, la cepa de `levadura_cultivo`), cantidad, unidad y `momento: pre_verde | post_verde`. **El material concreto se anota al ejecutar**, como consumo de la corrida (`MaterialConsumptionEntry`, que ya existe): un material es de una organización y una plantilla sirve en cualquiera (decisión de Daniel, 2026-10-03) |
 | Requisitos (para la 2c) | `capacidadesRequeridas`: lista de valores del catálogo nuevo `capacidad` (sellable, válvula, control de temperatura, oscuridad…). La 2a lo guarda; la comprobación es de la 2c. **El paso no nombra ningún equipo ni recipiente** (decisión de Daniel, 2026-10-03): el catálogo `recipiente` son equipos concretos (Tanque I, Cooler I…), y el equipo se elige al ejecutar, como hoy |
@@ -229,8 +230,8 @@ y ninguna receta declara.
 
 ### 4.5 Recepción y clasificación
 
-Ocurren antes de abrir el proceso, que se abre sobre el lote aceptado. No se unen por paso: al abrir
-el proceso, el servicio busca en la ascendencia del lote **todas** sus recepciones
+Ocurren antes de abrir el proceso, que se abre sobre el lote aceptado. No se unen por paso: al leer
+la ficha del lote o la del proceso, el servicio busca en la ascendencia del lote **todas** sus recepciones
 (`LoteDesdeRecepcion`, puede haber varias) y las compara **una por una** con el paso `reception` de la
 receta, si lo declara (por ejemplo Brix 18–24). Una recepción fuera de rango → aviso con esa
 recepción nombrada; **ninguna recepción en la ascendencia** → aviso propio. Avisa, no bloquea.
@@ -280,7 +281,7 @@ Daniel: «puedo escoger un proceso o inventar un proceso, pero debo mantenerlo d
   y ejes esenciales) con las recetas publicadas que la organización puede usar. Si coincide con una,
   lo dice («estos pasos son la receta Lavado») y hay que **usar esa receta** o escribir **por qué**
   es distinta (`motivoDeLibre`, obligatorio en ese caso). La comparación y su resultado se guardan.
-- **No exige `edit_beneficio`**: quien puede abrir procesos puede abrir una Libre. Una receta propia
+- **No exige el permiso de autoría de recetas**: quien puede abrir procesos (`lot:manage`; 2b V13) puede abrir una Libre. Una receta propia
   llamada «Libre» no choca, porque la marca es la columna, no el nombre.
 
 ### 5.3 Convertirla en receta
@@ -321,7 +322,9 @@ Daniel: «puedo escoger un proceso o inventar un proceso, pero debo mantenerlo d
   (sólo lo que no está en otro sitio, §3) y `capacidad` (para la 2c). **`modo_secado` no:** ya
   existe como el enum `DryingEnvironment` (corregido el 2026-10-03).
 - **Valores nuevos en catálogos existentes:**
-  - `fuente_microbiana`: bioprotección y atomizado, si el plan los mide ausentes. «Mosto propio» ya
+  - `fuente_microbiana`: bioprotección (medida ausente). «Atomizado» **no** entra: es un método de
+    inoculación (`metodo_inoculacion`, `docs/arquitectura/cryobloom-contra-el-esquema.md:72`), no una
+    fuente (medido en el plan, 2026-10-04). «Mosto propio» ya
     es `mosto_propio` de `medio_lavado`, y «mosto de otro fermento» es `mosto_de_otro_lote` del mismo
     catálogo: **un alias no cruza catálogos** (la semilla y el servicio lo rechazan), así que esos
     sinónimos van al archivo de referencias del paquete, sólo para mostrar.
@@ -421,7 +424,9 @@ lo esencial; sus números de línea se movieron y el plan cita los de hoy. Lo qu
 | El catálogo `recipiente` son equipos concretos | §3: el paso declara capacidades, no un equipo | **Daniel** |
 | `modo_secado` ya existe como enum `DryingEnvironment` | §3 y §7: se usa ése | controlador |
 | El eje F se solapa con `manejo_temperatura` y con tipos de paso | §3: `fisico` sólo con lo que no existe en otro sitio | controlador |
-| La casa mide el mucílago **quitado** (ADR-181 #12); el paquete, el retenido | §3: `mucilagoQuitadoPct` | controlador |
+| ~~La casa mide el mucílago quitado (ADR-181 #12)~~ — **corregido el 2026-10-04**: Daniel, el 2026-10-03, dos veces: «Semi Wash 75 %» = le **queda** el 75 %; 0 % = Lavado, 100 % = Honey, en tramos | §3: `mucilagoObjetivo`, sólo los seis tramos; ADR-181 #12 gana nota | **Daniel** |
+| Publicar y versionar recetas es del **Coffee Process Manager**, un perfil nuevo con un permiso nuevo (2b §12, V16, 2026-10-04) | toda la autoría de recetas pasa por una sola regla; `edit_beneficio` deja de bastar | **Daniel** |
+| `process_recipe.organization_id` es `ON DELETE SET NULL`: borrar una organización convertía sus recetas en plantillas de todas | la FK pasa a `RESTRICT` | controlador |
 | Un alias no cruza catálogos | §7: esos sinónimos van al archivo de referencias | controlador |
 | La receta obligatoria rompe ~160 aperturas de prueba y la demo de la semilla | el plan da a las pruebas una receta de fixture y abre la demo con receta | controlador |
 | Un reproceso con la misma receta heredaría lo ejecutado arriba si el avance sólo mira la versión | §4.3: el avance sigue `derivedFromLotProcessId` mientras el origen no sea `original` | controlador |
@@ -429,13 +434,14 @@ lo esencial; sus números de línea se movieron y el plan cita los de hoy. Lo qu
 | `registrarIntervencion` y `recordFermentationIntervention` deciden fuera de una transacción | pasan a decidir dentro, con el linaje bloqueado; la segunda gana auditoría | controlador |
 | Una corrida termina por **tres** puertas (las dos `end…` y bajar la última bandeja) | las lecturas de cierre entran por las tres | controlador |
 
-Las demás decisiones técnicas del plan (nombres de la Libre, filtro de Libres en los selectores, permiso
-para publicar y convertir, plantillas, orden de bloqueos, textos de los errores de receta, referencias
-con todas sus autoridades) están escritas con su porqué en el plan.
+Las demás decisiones técnicas del plan (nombres de la Libre, filtro de Libres en los selectores,
+plantillas, orden de bloqueos, textos de los errores de receta, referencias con todas sus autoridades,
+publicar exige al menos un paso) están escritas con su porqué en el plan.
 
 **Nombres nuevos para que Daniel los revise:** `ProcessRecipeStep`, `stepType`, `recipeStepId`,
 `motivoDesviacion`, `esLibre`, `motivoDeLibre`, `origenDeRecetaVersionId`, `lecturasDeCierre`,
-`derivadaDeVersionId`, `capacidadesRequeridas`, `mucilagoQuitadoPct`, los catálogos `tipo_paso`,
+`derivadaDeVersionId`, `capacidadesRequeridas`, `mucilagoObjetivo`, `exigeAutoriaDeReceta`, el perfil
+«Coffee Process Manager» con su permiso (provisional `lot:approve_exception`), los catálogos `tipo_paso`,
 `fisico` y `capacidad`, y los códigos `sin_receta`, `paso_de_otra_receta`, `paso_no_corresponde`,
 `desviacion_sin_motivo` y `paso_de_otra_version`. Ninguno está en `03_public_api.md`, que no cubre las
 recetas; siguen el estilo de la Parte 1, que nombró en español con el visto bueno de Daniel
