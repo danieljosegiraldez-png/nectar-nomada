@@ -29,6 +29,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { analizar, unidadesQueLlaman } from "./inventario/analizar.mjs";
+import { autorizacionPorSimbolo, clave } from "./inventario/simbolos.mjs";
 import { modelosDelEsquema } from "./inventario/esquema.mjs";
 
 const RAIZ = new URL("..", import.meta.url).pathname;
@@ -49,7 +50,44 @@ const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")
 const modelos = modelosDelEsquema(readFileSync(join(RAIZ, "prisma/schema.prisma"), "utf8"));
 const filas = analizar(fuentes, modelos);
 
-if (process.argv.includes("--llamadores")) {
+if (process.argv.includes("--simbolos")) {
+  /**
+   * **Escalón 2 de la ficha 007: el guardia como SÍMBOLO.** No sustituye la
+   * clasificación —la allowlist y las tres compuertas se apoyan en ella— : la
+   * **verifica**. Cuesta ~16-23 s y ~1,8 GB, medido el 2026-10-04, y por eso
+   * vive detrás de esta bandera y de su propia compuerta.
+   */
+  const S = autorizacionPorSimbolo({ raiz: RAIZ.replace(/\/$/, "") });
+  const k = (f) => clave(f.archivo, f.nombre);
+  // La fila patrón va PRIMERO: si las claves de los dos lados no casan,
+  // cualquier cero de abajo significa «no miré», no «no hay».
+  const casan = filas.filter((f) => S.aristas.has(k(f))).length;
+  console.log(`${S.archivos} archivos · ${S.llamadas} llamadas resueltas: ${S.resueltas} (${Math.round((100 * S.resueltas) / S.llamadas)} %)`);
+  console.log(`${S.aristas.size} funciones con llamadas · ${S.autorizan.size} alcanzan el servicio de autorización\n`);
+  console.log(`CONTROL · claves del inventario que existen en el grafo: ${casan} de ${filas.length}`);
+  if (casan < filas.length / 2) {
+    console.error("\n✗ ABORTA: las claves de los dos lados no casan. Nada de lo de abajo mide.");
+    process.exit(1);
+  }
+
+  const directas = filas.filter((f) => f.clase === "guardia directo");
+  const miente = directas.filter((f) => !S.autorizan.has(k(f)));
+  console.log(`\n«guardia directo» por NOMBRE: ${directas.length}`);
+  console.log(`  de ellas, las que por SÍMBOLO no alcanzan autorización: ${miente.length}`);
+  for (const f of miente) console.log(`    ✗ ${k(f)}   por nombre: ${JSON.stringify(f.guardias)}`);
+  if (miente.length === 0) console.log(`    (ninguna: hoy la convención de nombres no miente en esta dirección)`);
+
+  // La inversa es informativa, no un fallo: el nombre se pierde guardias reales.
+  // Las tres raíces se excluyen porque "alcanzan" es trivial para ellas.
+  const sinClase = filas.filter((f) => !f.clase.startsWith("guardia"));
+  const calla = sinClase.filter((f) => S.autorizan.has(k(f)) && !S.puertas.has(k(f)));
+  console.log(`\noperaciones sin clase de guardia: ${sinClase.length}`);
+  console.log(`  de ellas, las que por SÍMBOLO SÍ autorizan: ${calla.length}`);
+  for (const f of calla) console.log(`    + ${k(f)}   por nombre: «${f.clase}»`);
+  console.log(`\nUn «+» no es un defecto: es una operación cuya autorización hay que justificar A MANO`);
+  console.log(`en la allowlist porque la convención de nombres no la ve, y que el comprobador de tipos`);
+  console.log(`sí puede sostener. Los «✗» sí son defectos: un nombre de guardia que no guarda nada.`);
+} else if (process.argv.includes("--llamadores")) {
   const objetivo = filas.filter((f) => f.clase === "depende del llamador (verificar a mano)");
   // **Responde por UNIDAD, no por archivo.** Antes la pregunta era «¿este
   // archivo autoriza?», con una expresión regular sobre su texto entero, y eso
