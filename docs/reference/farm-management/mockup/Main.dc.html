@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cockpit de beneficio — Inicio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9ECE7}
+a{color:#1F5FA8}a:hover{color:#174A85}
+</style>
+</helmet>
+<div style="width: 390px; height: 3260px; box-sizing: border-box; background: #E9ECE7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #16201A; display: flex; flex-direction: column">
+
+<header style="background: #16201A; color: #F3F5F1; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #A9B3AC">Beneficio · Finca [NOMBRE]</span>
+<span style="font-size: 18px; font-weight: 600">Inicio</span>
+</div>
+<div style="display: flex; gap: 8px; align-items: center">
+<button type="button" aria-label="Cambiar idioma" style="height: 44px; min-width: 64px; border-radius: 22px; border: 1px solid #4A564E; background: transparent; color: #F3F5F1; font: 600 13px 'IBM Plex Mono', monospace">ES | EN</button>
+<button type="button" aria-label="Alertas" style="height: 44px; width: 44px; border-radius: 22px; border: 1px solid #4A564E; background: transparent; color: #F3F5F1; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button>
+</div>
+</div>
+<span style="font: 500 12px 'IBM Plex Mono', monospace; color: #A9B3AC">mar 12 ene 2027 · 13:40 · Boquete 1.650 m · en línea</span>
+</header>
+
+<section style="margin: 12px 12px 0; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: {{strip.bg}}; color: {{strip.fg}}">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font: 700 12px 'IBM Plex Mono', monospace; letter-spacing: 0.08em; padding: 4px 8px; border-radius: 6px; background: {{strip.badgeBg}}; color: {{strip.badgeFg}}">{{strip.label}}</span>
+<span style="font-size: 12px; opacity: 0.85">Estado del beneficio</span>
+</div>
+<p style="margin: 0; font-size: 17px; line-height: 1.35; font-weight: 600">{{strip.text}}</p>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font: 600 20px 'IBM Plex Mono', monospace">2</span><span style="font-size: 11px">rojo</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font: 600 20px 'IBM Plex Mono', monospace">5</span><span style="font-size: 11px">ámbar</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font: 600 20px 'IBM Plex Mono', monospace">23</span><span style="font-size: 11px">lotes activos</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font: 600 20px 'IBM Plex Mono', monospace">$3,8k</span><span style="font-size: 11px">en riesgo hoy</span></div>
+</div>
+</section>
+
+<section style="margin: 16px 12px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Ahora</h2>
+<span style="font-size: 12px; color: #59625C">tiempo hasta la próxima acción</span>
+</div>
+<sc-for list="{{clocks}}" as="c" hint-placeholder-count="6">
+<a href="{{c.href}}" style="text-decoration: none; color: #16201A; background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid {{c.border}}">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+<div style="display: flex; align-items: center; gap: 6px; min-width: 0">
+<span style="font: 700 11px 'IBM Plex Mono', monospace; padding: 3px 6px; border-radius: 5px; background: {{c.tierBg}}; color: {{c.tierFg}}">{{c.tier}}</span>
+<span style="font: 700 11px 'IBM Plex Mono', monospace; padding: 3px 6px; border-radius: 5px; color: #FFFFFF; background: {{c.procColor}}">{{c.proc}}</span>
+<span style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.title}}</span>
+</div>
+<span style="font: 600 15px 'IBM Plex Mono', monospace; white-space: nowrap; color: {{c.timeColor}}">{{c.time}}</span>
+</div>
+<div style="height: 6px; border-radius: 3px; background: #E4E8E3; position: relative; overflow: hidden">
+<div style="{{c.barStyle}}"></div>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #59625C">
+<span>{{c.detail}}</span>
+<span style="font-weight: 600; color: #16201A; white-space: nowrap">{{c.action}}</span>
+</div>
+</a>
+</sc-for>
+</section>
+
+<section style="margin: 20px 12px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Por decidir · ruteo</h2>
+<a href="Ruteo.dc.html" style="font-size: 13px; font-weight: 600; min-height: 44px; display: flex; align-items: center">Ver detalle</a>
+</div>
+<sc-for list="{{proposals}}" as="p" hint-placeholder-count="2">
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font: 600 14px 'IBM Plex Mono', monospace">{{p.id}} · {{p.kg}}</span>
+<span style="font-size: 12px; color: #59625C">{{p.origin}}</span>
+</div>
+<span style="font: 600 12px 'IBM Plex Mono', monospace; color: #B54708; white-space: nowrap">espera {{p.wait}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 11px; color: #59625C">
+<div style="background: #F3F5F1; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px"><span>Madurez</span><span style="font: 600 14px 'IBM Plex Mono', monospace; color: #16201A">{{p.ripe}}</span></div>
+<div style="background: #F3F5F1; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px"><span>°Brix</span><span style="font: 600 14px 'IBM Plex Mono', monospace; color: #16201A">{{p.brix}}</span></div>
+<div style="background: #F3F5F1; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px"><span>Flotes</span><span style="font: 600 14px 'IBM Plex Mono', monospace; color: #16201A">{{p.float}}</span></div>
+</div>
+<div style="border-left: 0; border-radius: 10px; background: #F1EDF8; padding: 10px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 6px">
+<span style="font: 700 11px 'IBM Plex Mono', monospace; padding: 3px 6px; border-radius: 5px; color: #FFFFFF; background: {{p.procColor}}">{{p.proc}}</span>
+<span style="font-size: 14px; font-weight: 600">{{p.proposal}}</span>
+</div>
+<sc-for list="{{p.reasons}}" as="r" hint-placeholder-count="3">
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">· {{r}}</span>
+</sc-for>
+</div>
+<sc-if value="{{p.approved}}" hint-placeholder-val="{{false}}">
+<div style="min-height: 44px; border-radius: 10px; background: #E6F4EC; color: #1E7B4A; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Aprobado · capacidad y mezcla actualizadas</div>
+</sc-if>
+<sc-if value="{{p.pending}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 6px">
+<button type="button" onClick="{{p.approve}}" style="min-height: 44px; border-radius: 10px; border: 0; background: #16201A; color: #FFFFFF; font: 600 14px 'IBM Plex Sans', sans-serif">Aprobar</button>
+<button type="button" style="min-height: 44px; border-radius: 10px; border: 1px solid #C9CFC8; background: #FFFFFF; color: #16201A; font: 600 13px 'IBM Plex Sans', sans-serif">Dividir</button>
+<button type="button" style="min-height: 44px; border-radius: 10px; border: 1px solid #C9CFC8; background: #FFFFFF; color: #16201A; font: 600 13px 'IBM Plex Sans', sans-serif">Cambiar</button>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</section>
+
+<section style="margin: 20px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Pipeline</h2>
+<span style="font-size: 12px; color: #59625C">kg · edad del WIP</span>
+</div>
+<sc-for list="{{pipeline}}" as="s" hint-placeholder-count="8">
+<div style="display: grid; grid-template-columns: 112px minmax(0, 1fr) 76px; gap: 8px; align-items: center">
+<span style="font-size: 12px; color: #3E4741">{{s.stage}}</span>
+<div style="height: 18px; background: #F0F2EE; border-radius: 4px; position: relative; overflow: hidden"><div style="{{s.barStyle}}"></div></div>
+<div style="display: flex; flex-direction: column; align-items: flex-end"><span style="font: 600 13px 'IBM Plex Mono', monospace">{{s.kg}}</span><span style="font: 400 11px 'IBM Plex Mono', monospace; color: {{s.ageColor}}">{{s.age}}</span></div>
+</div>
+</sc-for>
+<div style="border-top: 1px dashed #C9CFC8; padding-top: 8px; display: grid; grid-template-columns: 112px minmax(0, 1fr) 76px; gap: 8px; align-items: center">
+<span style="font-size: 12px; color: #59625C">2ª calidad</span>
+<div style="height: 10px; background: #F0F2EE; border-radius: 4px; position: relative; overflow: hidden"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: 14%; background: #8A8F8B"></div></div>
+<span style="font: 600 13px 'IBM Plex Mono', monospace; text-align: right">0,9 t</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #59625C">
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #C27C0E"></span>Miel</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #7A1F3D"></span>Natural</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #1F5FA8"></span>Lavado</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #5B3FA0"></span>Especial</span>
+</div>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Capacidad · 14 días</h2>
+<span style="font: 600 12px 'IBM Plex Mono', monospace; color: #B42318">crunch: camas jue 14</span>
+</div>
+<div style="display: grid; grid-template-columns: 74px repeat(14, minmax(0, 1fr)); gap: 2px; align-items: center">
+<span></span>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="14">
+<span style="font: 500 9px 'IBM Plex Mono', monospace; color: {{d.color}}; text-align: center">{{d.label}}</span>
+</sc-for>
+</div>
+<sc-for list="{{capacity}}" as="row" hint-placeholder-count="9">
+<div style="display: grid; grid-template-columns: 74px repeat(14, minmax(0, 1fr)); gap: 2px; align-items: center">
+<span style="font-size: 11px; color: #3E4741; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{row.name}}</span>
+<sc-for list="{{row.cells}}" as="cell" hint-placeholder-count="14">
+<span style="height: 18px; border-radius: 3px; background: {{cell.bg}}"></span>
+</sc-for>
+</div>
+</sc-for>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #59625C">
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 12px; border-radius: 2px; background: #DDEFE3"></span>&lt; 60 %</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 12px; border-radius: 2px; background: #9FD1B3"></span>60–80</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 12px; border-radius: 2px; background: #F2B54E"></span>80–95</span>
+<span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 12px; border-radius: 2px; background: #9E1C14"></span>&gt; 95 %</span>
+</div>
+<p style="margin: 0; font-size: 12px; line-height: 1.4; color: #3E4741">Camas al 96–100 % del jue 14 al lun 18 por 3 naturales (L-0389, L-0394, L-0402). Opciones: terminar L-0389 en secadora el miércoles, o rutear lo de mañana a lavado.</p>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Mezcla vs meta</h2>
+<span style="font-size: 12px; color: #59625C">kg verde-equivalente · temporada</span>
+</div>
+<sc-for list="{{mix}}" as="m" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; font-size: 12px">
+<span style="font-weight: 600">{{m.name}} <span style="font-weight: 400; color: #59625C">meta {{m.target}} %</span></span>
+<span style="font: 600 12px 'IBM Plex Mono', monospace; color: {{m.flagColor}}">proy. {{m.proj}} % {{m.flag}}</span>
+</div>
+<div style="height: 16px; border-radius: 4px; background: #F0F2EE; position: relative; overflow: hidden">
+<div style="{{m.projStyle}}"></div>
+<div style="{{m.commitStyle}}"></div>
+<div style="{{m.actualStyle}}"></div>
+<div style="{{m.targetStyle}}"></div>
+</div>
+<span style="font: 400 11px 'IBM Plex Mono', monospace; color: #59625C">real {{m.actual}} % · comprometido {{m.commit}} % · {{m.kg}}</span>
+</div>
+</sc-for>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #59625C">
+<span>Sólido = real</span><span>Medio = comprometido</span><span>Claro = proyectado</span><span>Línea = meta</span>
+</div>
+<p style="margin: 0; padding: 10px; border-radius: 8px; background: #FEF3E2; color: #8A3A05; font-size: 12px; line-height: 1.4">Para llegar al 10 % especial faltan ≈ 420 kg verde-eq. Priorizar lotes &gt; 90 % maduros de bloques 3 y 5 esta semana; hoy califica L-0416.</p>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Cosecha próxima · 7 días</h2>
+<span style="font-size: 12px; color: #59625C">t cereza vs absorbible</span>
+</div>
+<div style="height: 140px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; position: relative; border-bottom: 1px solid #C9CFC8">
+<div style="position: absolute; left: 0; right: 0; bottom: 90px; border-top: 2px dashed #16201A"></div>
+<sc-for list="{{harvest}}" as="h" hint-placeholder-count="7">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px; justify-content: flex-end; height: 100%">
+<span style="font: 600 11px 'IBM Plex Mono', monospace; color: {{h.labelColor}}">{{h.t}}</span>
+<div style="{{h.barStyle}}"></div>
+</div>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{harvest}}" as="h" hint-placeholder-count="7">
+<span style="font: 500 11px 'IBM Plex Mono', monospace; color: #59625C; text-align: center">{{h.day}}</span>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 12px; line-height: 1.4; color: #3E4741">Línea punteada = 3,0 t/día absorbibles con la capacidad comprometida. Vie y lun exceden: 2 cuadrillas en bloques 3–5 (Geisha 1.750 m) + entregas de Proveedor A.</p>
+</section>
+
+<section style="margin: 12px 12px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">Clima 48 h</h2>
+<span style="font: 600 22px 'IBM Plex Mono', monospace; color: #B42318">15:00</span>
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">Lluvia 6 mm · 6 lotes en camas &gt; 20 % humedad expuestos</span>
+<span style="font-size: 12px; color: #59625C">Mié: sol 7 h · HR 68 %</span>
+</div>
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 700">Seco &amp; bodega</h2>
+<span style="font: 600 22px 'IBM Plex Mono', monospace">4,0 t</span>
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">Pergamino en reposo ≥ 21 d, listo para trilla (6 lotes)</span>
+<span style="font-size: 12px; color: #59625C">Trilla vie 15 · 38 sacos en bodega · 5 muestras pendientes</span>
+</div>
+</section>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Experimentos</h2>
+<span style="font-size: 12px; color: #59625C">curva vs banda del protocolo</span>
+</div>
+<sc-for list="{{experiments}}" as="e" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 10px; background: #F6F4FA">
+<div style="display: flex; justify-content: space-between; gap: 8px">
+<span style="font-size: 13px; font-weight: 600">{{e.name}}</span>
+<span style="font: 600 11px 'IBM Plex Mono', monospace; padding: 2px 6px; border-radius: 5px; background: {{e.stateBg}}; color: {{e.stateFg}}">{{e.state}}</span>
+</div>
+<span style="font-size: 12px; color: #3E4741">{{e.detail}}</span>
+<span style="font: 400 11px 'IBM Plex Mono', monospace; color: #59625C">{{e.next}}</span>
+</div>
+</sc-for>
+</section>
+
+<div style="flex-grow: 1"></div>
+
+<nav aria-label="Navegación principal" style="position: sticky; bottom: 0; background: #FFFFFF; border-top: 1px solid #D9DDD7; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px 4px 10px">
+<a href="Main.dc.html" style="min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #16201A; font-size: 11px; font-weight: 700"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Inicio</a>
+<a href="Lote.dc.html" style="min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #59625C; font-size: 11px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 10h18M9 4v16"></path></svg>Lotes</a>
+<a href="Ruteo.dc.html" style="min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #59625C; font-size: 11px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 18h10M18 4l3 2-3 2M18 16l3 2-3 2M4 12h16"></path></svg>Ruteo</a>
+<a href="#capacidad" style="min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #59625C; font-size: 11px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>Capacidad</a>
+<a href="#mas" style="min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #59625C; font-size: 11px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>Más</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"status":{"editor":"enum","options":["verde","ambar","rojo"],"default":"rojo"},"$preview":{"width":390,"height":3260}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { approved: {} }; }
+  renderVals() {
+    var P = { M: '#C27C0E', N: '#7A1F3D', L: '#1F5FA8', E: '#5B3FA0' };
+    var status = this.props.status ?? 'rojo';
+    var strips = {
+      verde: { label: 'VERDE', bg: '#1E7B4A', fg: '#FFFFFF', badgeBg: '#FFFFFF', badgeFg: '#1E7B4A', text: 'En plan. Sin relojes vencidos; capacidad bajo 80 % los próximos 5 días.' },
+      ambar: { label: 'ÁMBAR', bg: '#FCE7C4', fg: '#3D1D02', badgeBg: '#B54708', badgeFg: '#FFFFFF', text: 'Camas al 96 % desde el jueves; lluvia a las 15:00 con 6 lotes expuestos en camas.' },
+      rojo: { label: 'ROJO', bg: '#9E1C14', fg: '#FFFFFF', badgeBg: '#FFFFFF', badgeFg: '#9E1C14', text: 'T3 pasa su punto de lavado en 50 min y nadie está asignado. Cereza de L-0415 a 2 h 40 del límite.' }
+    };
+    var tier = function (t) {
+      if (t === 'ROJO') return { bg: '#9E1C14', fg: '#FFFFFF', border: '#E8A29C', time: '#9E1C14', bar: '#9E1C14' };
+      if (t === 'ÁMBAR') return { bg: '#FCE7C4', fg: '#7A3005', border: '#F2C98A', time: '#8A3A05', bar: '#D97706' };
+      return { bg: '#E6F4EC', fg: '#1E7B4A', border: '#D9DDD7', time: '#16201A', bar: '#1E7B4A' };
+    };
+    var rawClocks = [
+      { tier: 'ROJO', proc: 'L', title: 'T3 · L-0407 Caturra · fin de fermentación', time: '0 h 50', pct: 94, detail: 'pH 4,9 ↓ · 31 h · endpoint 14:30 ± 40 min', action: 'Asignar lavado', href: 'Lote.dc.html' },
+      { tier: 'ROJO', proc: 'N', title: 'Camas B1–B6 · lluvia 15:00', time: '1 h 20', pct: 82, detail: '6 lotes > 20 % humedad · naturales y miel', action: 'Cubrir 14:45', href: '#clima' },
+      { tier: 'ÁMBAR', proc: 'L', title: 'Tolva · L-0415 cereza en espera', time: '2 h 40', pct: 73, detail: '1.240 kg · 7 h 20 de 10 h · núcleo 27 °C ↑', action: 'Despulpar', href: '#l0415' },
+      { tier: 'ÁMBAR', proc: 'M', title: 'L-0398 miel roja · fase pegajosa', time: '−1 h 05', pct: 100, detail: '36 de 72 h · volteo atrasado · 48 % mucílago', action: 'Voltear ahora', href: '#l0398' },
+      { tier: 'OK', proc: 'E', title: 'SM-1 #2 · L-0402 anaeróbico Geisha', time: '42 h', pct: 65, detail: '78 de 120 h · 41 kPa (40 % de capacidad) · 18 °C', action: 'Muestra 18:00', href: '#l0402' },
+      { tier: 'OK', proc: 'N', title: 'L-0389 natural Pacamara · secado', time: '20 h', pct: 88, detail: '14,2 % → 11 % mañana 10:00 · aw 0,71', action: 'Preparar reposo', href: '#l0389' }
+    ];
+    var clocks = rawClocks.map(function (c) {
+      var t = tier(c.tier);
+      return Object.assign({}, c, {
+        tierBg: t.bg, tierFg: t.fg, border: t.border, timeColor: t.time, procColor: P[c.proc],
+        barStyle: 'position: absolute; left: 0; top: 0; bottom: 0; width: ' + c.pct + '%; background: ' + t.bar + '; border-radius: 3px'
+      });
+    });
+    var self = this;
+    var ap = this.state.approved;
+    var rawProps = [
+      { id: 'L-0416', kg: '640 kg', origin: 'Propio · Bloque 3 · Geisha · 1.750 m · pasada 2', wait: '1 h 10', ripe: '92 %', brix: '22,1', float: '2,8 %', proc: 'E', proposal: 'Natural anaeróbico · SM-1 #3 · 120 h', reasons: ['Especial va 5 % comprometido vs 10 % meta', 'SM-1 #3 libre 120 h; camas libres desde lun 19', 'Califica: ≥ 90 % maduro, < 2,5 % verde'] },
+      { id: 'L-0417', kg: '1.800 kg', origin: 'Comprado · Proveedor A · Catuaí · 1.400 m', wait: '0 h 35', ripe: '78 %', brix: '19,4', float: '6,1 %', proc: 'L', proposal: 'Lavado · tanques T5 + T6 · 24–36 h', reasons: ['No califica para natural ni especial (< 80 % maduro)', 'Tanques libres hoy; camas saturadas jue–lun', 'Alternativa: miel amarilla en patio P2'] }
+    ];
+    var proposals = rawProps.map(function (p) {
+      var done = !!ap[p.id];
+      return Object.assign({}, p, {
+        procColor: P[p.proc], approved: done, pending: !done,
+        approve: function () { var n = Object.assign({}, self.state.approved); n[p.id] = true; self.setState({ approved: n }); }
+      });
+    });
+    var rawPipe = [
+      { stage: 'Pronóstico 7 d', kg: '19,7 t', pct: 100, color: '#AEB5AF', age: 'cereza', ageColor: '#59625C' },
+      { stage: 'Recepción / selección', kg: '2,4 t', pct: 13, color: '#16201A', age: '1 h 10', ageColor: '#59625C' },
+      { stage: 'Espera despulpado', kg: '1,2 t', pct: 7, color: '#B54708', age: '7 h 20', ageColor: '#8A3A05' },
+      { stage: 'Fermentación', kg: '3,8 t', pct: 20, color: '#1F5FA8', age: '31 h máx', ageColor: '#59625C' },
+      { stage: 'Lavado / remojo', kg: '0,6 t', pct: 4, color: '#1F5FA8', age: '2 h', ageColor: '#59625C' },
+      { stage: 'Secado', kg: '18,4 t', pct: 96, color: '#C27C0E', age: '9 d prom.', ageColor: '#59625C' },
+      { stage: 'Reposo', kg: '6,1 t', pct: 32, color: '#7A1F3D', age: '17 d prom.', ageColor: '#59625C' },
+      { stage: 'Listo trilla / sacos', kg: '4,0 t', pct: 21, color: '#3E4741', age: '≥ 21 d', ageColor: '#1E7B4A' }
+    ];
+    var pipeline = rawPipe.map(function (s) {
+      return Object.assign({}, s, { barStyle: 'position: absolute; left: 0; top: 0; bottom: 0; width: ' + s.pct + '%; background: ' + s.color });
+    });
+    var dl = ['M12', 'X13', 'J14', 'V15', 'S16', 'D17', 'L18', 'M19', 'X20', 'J21', 'V22', 'S23', 'D24', 'L25'];
+    var days = dl.map(function (d, i) { return { label: d, color: i === 2 ? '#9E1C14' : '#59625C' }; });
+    var lv = ['#DDEFE3', '#9FD1B3', '#F2B54E', '#9E1C14'];
+    var rows = [
+      ['Tanques', [2, 2, 1, 1, 0, 0, 1, 2, 2, 1, 1, 0, 0, 1]],
+      ['Sellados', [2, 2, 2, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1]],
+      ['Cuarto frío', [1, 2, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]],
+      ['Camas', [2, 2, 3, 3, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1]],
+      ['Patio', [1, 1, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0]],
+      ['Solar', [2, 2, 2, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1]],
+      ['Secadora', [1, 1, 1, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0]],
+      ['Cuarto oscuro', [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1]],
+      ['Cuadrilla', [2, 2, 2, 3, 1, 0, 3, 2, 2, 2, 1, 0, 2, 2]]
+    ];
+    var capacity = rows.map(function (r) { return { name: r[0], cells: r[1].map(function (v) { return { bg: lv[v] }; }) }; });
+    var rawMix = [
+      { name: 'Miel', target: 40, actual: 18, commit: 31, proj: 37, kg: '1.240 kg verde-eq', c: '#C27C0E' },
+      { name: 'Natural', target: 25, actual: 9, commit: 21, proj: 27, kg: '860 kg', c: '#7A1F3D' },
+      { name: 'Lavado', target: 25, actual: 14, commit: 29, proj: 28, kg: '1.010 kg', c: '#1F5FA8' },
+      { name: 'Especial', target: 10, actual: 2, commit: 5, proj: 8, kg: '170 kg', c: '#5B3FA0' }
+    ];
+    var mix = rawMix.map(function (m) {
+      var diff = m.proj - m.target;
+      var flag = diff <= -2 ? '▼' : (diff >= 2 ? '▲' : '');
+      var flagColor = diff <= -2 ? '#9E1C14' : (diff >= 2 ? '#8A3A05' : '#1E7B4A');
+      var scale = 2.2;
+      return Object.assign({}, m, {
+        flag: flag, flagColor: flagColor,
+        projStyle: 'position: absolute; left: 0; top: 0; bottom: 0; width: ' + (m.proj * scale) + '%; background: ' + m.c + '; opacity: 0.25',
+        commitStyle: 'position: absolute; left: 0; top: 0; bottom: 0; width: ' + (m.commit * scale) + '%; background: ' + m.c + '; opacity: 0.55',
+        actualStyle: 'position: absolute; left: 0; top: 0; bottom: 0; width: ' + (m.actual * scale) + '%; background: ' + m.c,
+        targetStyle: 'position: absolute; top: -2px; bottom: -2px; width: 3px; background: #16201A; left: calc(' + (m.target * scale) + '% - 1px)'
+      });
+    });
+    var rawH = [['mié', 2.6], ['jue', 2.9], ['vie', 3.6], ['sáb', 2.8], ['dom', 0.8], ['lun', 3.9], ['mar', 3.1]];
+    var harvest = rawH.map(function (h) {
+      var over = h[1] > 3.0;
+      var px = Math.round(h[1] / 3.0 * 90);
+      return { day: h[0], t: String(h[1]).replace('.', ','), labelColor: over ? '#9E1C14' : '#16201A',
+        barStyle: 'width: 100%; border-radius: 4px 4px 0 0; height: ' + px + 'px; background: ' + (over ? '#9E1C14' : '#6E7A72') };
+    });
+    var experiments = [
+      { name: 'CryoBloom B · L-0401 · brazo B', state: 'EN BANDA', stateBg: '#E6F4EC', stateFg: '#1E7B4A', detail: 'Cama desnuda 24 h + Sunrise Orange · 18 de 24 h · pH 5,1', next: 'Próxima lectura 15:00 · luego lavado 100 %' },
+      { name: 'Cool Blue · L-0399 · tanque frío', state: 'DESVÍO', stateBg: '#FCE7C4', stateFg: '#7A3005', detail: 'Masa 19,4 °C (protocolo ≤ 18 °C) · día 4 de 7', next: 'Revisar chiller · desvío registrado' },
+      { name: 'Fermentación en río · L-0405 · bolsas', state: 'EN BANDA', stateBg: '#E6F4EC', stateFg: '#1E7B4A', detail: 'Agua 12,3 °C · 52 de 96 h · bolsas íntegras', next: 'Muestra mañana 07:00' }
+    ];
+    return { strip: strips[status] || strips.ambar, clocks: clocks, proposals: proposals, pipeline: pipeline, days: days, capacity: capacity, mix: mix, harvest: harvest, experiments: experiments };
+  }
+}
+</script>
+</body>
+</html>
