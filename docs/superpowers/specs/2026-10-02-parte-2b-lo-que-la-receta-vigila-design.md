@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-10-02, rehecho el 2026-10-03 · **Estado:** decisiones de Daniel tomadas pregunta por
 pregunta; **dos revisiones adversarias** aplicadas (Codex, 11 hallazgos; Claude, 12; §13); pendiente
-de su lectura y de **una** decisión abierta (§12). **Base:** `origin/main` `85eab6da`. Depende de la
+de su lectura; los roles se decidieron el 2026-10-04 (§12). **Base:** `origin/main` `85eab6da`. Depende de la
 **2a** (`2026-10-02-parte-2a-la-receta-con-pasos-design.md`, misma rama) y de la **Parte 1** (rama
 `recetas-base`: cobertura R1 con su `cadena`, compuerta de bodega R7, cierres `moisture`/`divided`).
 
@@ -80,7 +80,10 @@ con los resultados»**, con un sistema **funcional, inteligente y trazable**.
 | V11 | Sobresecado (bajo la banda) | **Entra a bodega con excepción autorizada**, marcado «sobresecado» |
 | V12 | Receta Libre | El operario **declara el grado** al abrir; umbrales y reposo salen de su perfil (2a §5.2) |
 | — | Bodega (propuesto y no contradicho) | Entrar exige una **lectura** en banda; volver a secado, la **lectura** fuera de banda |
-| **abierta** | Quién aprueba las excepciones | §12 |
+| V13 | Los roles (2026-10-04) | **El operador es el Farm Operator** de hoy, sin cambios. **El Coffee Process Manager es un perfil nuevo** (§12) |
+| V14 | ¿La misma persona opera y aprueba? | **Sí, pero queda marcado** «aprobada por quien lo operó» |
+| V15 | Quién cambia en un lote los días de reposo o el objetivo de humedad | **Sólo el Process Manager, con motivo**: mover los límites es otra forma de no necesitar excepción |
+| V16 | Qué más le toca al Process Manager | **Publicar y versionar recetas.** Liberar un lote con el reposo cumplido sigue siendo de `lot:release` |
 
 ---
 
@@ -89,7 +92,8 @@ con los resultados»**, con un sistema **funcional, inteligente y trazable**.
 ### 3.1 Los dos tiempos
 
 - La receta los declara en su paso `reposo` (`diasParaMuestra`, `diasParaVenta`); el lote los puede
-  cambiar con rastro. Orden: lote → receta → perfil → ninguno (`umbralPara`, §7).
+  cambiar **sólo el Process Manager, con motivo obligatorio** (V15; permiso de §12), con rastro. Orden:
+  lote → receta → perfil → ninguno (`umbralPara`, §7).
 - **El reloj** arranca con el secado que sostiene el cierre (§6), sólo con `target_reached`.
 
 ### 3.2 Cinco estados
@@ -213,7 +217,9 @@ Es una lectura calculada. **Sólo el operario** registra el cambio de fase.
 - **El secado que manda:** la última `DryingRun` terminada con `target_reached` en la cadena del
   proceso vigente, cuya medición de cierre usa R7.
 - **Banda:** la de su paso (`humedadMinPct`–`humedadMaxPct`). Si el lote cambió el objetivo
-  (`targetMoisturePct`, un solo número), ese número es el **máximo** y el mínimo sigue siendo el del
+  (`targetMoisturePct`, un solo número; **desde la 2b sólo lo cambia el Process Manager con motivo
+  obligatorio**, V15 — hoy `cambiarObjetivoDeHumedad` pide `lot:manage` y el motivo es opcional,
+  `lotProcess.ts:238–248`), ese número es el **máximo** y el mínimo sigue siendo el del
   paso. Sin paso (proceso viejo, desviación): rige R7 tal cual.
 - **Por encima:** R7 lo rechaza como hoy. **Por debajo** (sobresecado): se rechaza con
   `humedad_bajo_banda`, salvo **excepción autorizada** (V11): permiso de §12, motivo, y el lote entra
@@ -310,6 +316,10 @@ Es una lectura calculada. **Sólo el operario** registra el cambio de fase.
 | 8.1 grado | abrir con receta Lavado y grado Natural → `grado_distinto_de_la_receta`; Libre con grado declarado → pasa | idem |
 | 8.3 último lavado | receta 50 %: último lavado 25 → aviso y decisión; 75 → aviso sin decisión; 50 → silencio; un lavado a 25 **antes** y el último a 50 → silencio; Honey 100 sin lavado → silencio | mirar el primer lavado → cae; **invertir la escala → cae** (fixture con la tabla 0 = Lavado, 100 = Honey fijada) |
 | 8.4 decisión | sin decisión → no se libera; «no conserva» → el proceso pasa a Libre con su intención | idem |
+| §12 roles | un Farm Operator pide la excepción → rechazo; un Farm Manager sin el perfil nuevo → rechazo; un Process Manager → pasa | dar el permiso al Farm Manager de serie → cae |
+| §12 misma persona | el Process Manager que registró una corrida del lote aprueba su excepción → pasa con `aprobadaPorQuienOpero = true`; otro Process Manager → `false` | no comprobar la cadena → cae |
+| V15 límites | un Farm Operator cambia días de reposo u objetivo de humedad → rechazo; el Process Manager sin motivo → rechazo; con motivo → pasa con rastro | volver a `lot:manage` → cae |
+| V16 recetas | publicar o versionar sin el permiso del Process Manager → rechazo | idem |
 
 Si una tarea toca TypeScript, su plan manda `npm run build`.
 
@@ -321,7 +331,7 @@ Si una tarea toca TypeScript, su plan manda `npm run build`.
 `lib/rbac/catalog.ts:78`, `docs/superpowers/specs/2026-09-16-reposo-trilla-y-subproductos-design.md`,
 `docs/superpowers/specs/2026-09-18-muestra-verde-tras-proceso-design.md`,
 `docs/arquitectura/BRECHAS_PAQUETE_VS_REPOSITORIO.md`, el diseño de la Parte 1 (R7 y §5, «los días de
-reposo siguen avisando»), ADR-181 punto 12 y la revisión de literatura del 2026-09-19 (escala). Cada
+reposo siguen avisando»), ADR-181 punto 12 y la revisión de literatura del 2026-09-19 (escala), y `docs/beneficio/20_modelo_ciclo_completo.md:78` (muestra verde). Cada
 uno con la fecha y la decisión que lo cambia; ninguno se borra en silencio.
 
 ## 11. Lo que la 2b no hace
@@ -333,12 +343,37 @@ uno con la fecha y la decisión que lo cambia; ninguno se borra en silencio.
 - El desenlace «salida a tratamiento»: **Parte 1**, por la coordinadora.
 - Notificaciones fuera de la aplicación.
 
-## 12. Decisión abierta
+## 12. Quién opera y quién aprueba — decisiones de Daniel, 2026-10-04
 
-**Quién aprueba las excepciones** (venta temprana, reposo desconocido, sobresecado, conservar el
-nombre). Daniel cerró la pregunta sin responder el 2026-10-03. Opciones planteadas: un permiso nuevo
-aparte de liberar (recomendado), el mismo `lot:release`, o sólo administración de plataforma. **El
-plan no empieza sin esta respuesta.**
+Daniel respondió «beneficio operator coffee process manager»; una investigación de sólo lectura
+(nueve agentes, 233 hallazgos verificados contra su archivo y línea) reunió lo que ya había dicho y lo
+que existe, y él decidió V13–V16. Lo que ya estaba escrito por él: «manager doesnt edit the SOP
+itself, manager can override and give a reason observation» (`09-DISCOVERY-SOURCE-TRANSCRIPT.md:962`)
+y que el farm manager puede no ser «el del beneficio o el process manager»
+(`2026-09-18-seccion-finca-design.md:11`).
+
+- **Beneficio Operator = el perfil `Farm Operator` de hoy**, sin cambios: todo lo que las Partes 1, 2a y
+  2b piden al operario ya lo cubre `lot:manage` / `sample:manage`.
+- **Coffee Process Manager: perfil nuevo** en `lib/rbac/catalog.ts`, con un permiso nuevo
+  —nombre provisional `lot:approve_exception`— que cubre:
+  - las cuatro excepciones: venta temprana (V1), reposo desconocido (V1b), sobresecado (V11) y
+    conservar o no el nombre fuera de lo permitido (V10);
+  - cambiar en un lote los días de reposo y el objetivo de humedad, con motivo obligatorio (V15);
+  - **publicar y versionar recetas** (V16) — esto toca la 2a: su plan decía «publicar y convertir
+    exigen `edit_beneficio`»; pasa a exigir el permiso del Process Manager. Anotado en su registro.
+- **El Farm Manager no recibe ese permiso de serie.** Liberar con el reposo cumplido sigue siendo
+  `lot:release`, decisión comercial (`catalog.ts:78`). Quien tenga los dos perfiles hace las dos cosas.
+- **La misma persona puede operar y aprobar (V14), pero queda marcado.** Al registrar una excepción, el
+  servicio comprueba si la persona que aprueba aparece como operador o autor de algún registro de la
+  cadena del proceso; si aparece, la excepción guarda `aprobadaPorQuienOpero = true` y la ficha lo
+  muestra.
+- **Regla de ADR-091:** el permiso nuevo nace con el código que lo comprueba (`DECISIONS.md:6355`), en la
+  misma tarea que `liberarLoteConExcepcion` y las otras puertas.
+- **Pendiente de medir en el plan:** `resolveLotVisibility` no tiene en cuenta permisos añadidos a una
+  persona (`lib/traceability/lots.ts:660`, leído y no ejecutado): por eso el Process Manager es un
+  **perfil**, no un permiso suelto añadido a alguien.
+- **Desfase a corregir:** `docs/beneficio/20_modelo_ciclo_completo.md:78` dice que la muestra verde se
+  bloquea «sin permiso de anulación»; con V2 pasa marcada. Va a la lista del §10.
 
 ## 13. Revisiones adversarias
 
@@ -357,7 +392,7 @@ sobresecado, Libre).
 | Banda de bodega sin secado que mande; sobresecado sin salida; lote bloqueado sin poder volver | §6, V11 |
 | Umbral sin reloj, histórico sin desenlace, mezclas, carrera al liberar, liberados viejos | §3.2, §3.3 |
 | La muestra temprana chocaba con `green_sample_before_reposo` | §3.4 |
-| Permiso de aprobar no existe | §12, abierta |
+| Permiso de aprobar no existe | §12: perfil y permiso nuevos (V13) |
 | «Los medidores no guardan exactitud» era falso | §1, §5 |
 | Selección de lecturas distinta del motor; columnas sin declarar | §4.3, §5 |
 | `umbralPara` sin paso ni momento; volteo; guardia imposible | §7 |
