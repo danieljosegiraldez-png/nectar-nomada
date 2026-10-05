@@ -3728,3 +3728,73 @@ un cuarto requisito que faltaba: **que el mundo contra el que se mide exista**.
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
 `SESSION_STATE.md`: **es el entregable, no el diff.** Ninguna lección se escribe
 solo en un log de sesión — nada los lee.
+
+<!-- Añadido 2026-10-05, AL FINAL por lo que dice el comentario del principio:
+     `scripts/check-claude-md-intact.mjs` exige que lo anterior aparezca verbatim
+     y contiguo, así que lo nuevo va al principio o al final, nunca en medio. -->
+
+### Una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo
+
+**2026-10-05.** `PENDING_IMPLEMENTATIONS/009` se declaró **HECHO** el 2026-10-03 tras
+comprobar las tres mitades que la propia ficha pedía, **y las tres eran ciertas**:
+
+| lo que la ficha pedía | lo que se comprobó | ¿cierto? |
+|---|---|---|
+| «arreglar la consulta» | existe `lib/traceability/enmiendas.ts`, que lee por entidad y sus hechos | **sí** |
+| «borrar el comentario que certificaba el vacío» | 0 ocurrencias, con control positivo al lado | **sí** |
+| «un guardia» | existe `tests/arquitectura/vocabulario-de-audit.test.ts` | **sí** |
+
+Con las tres en verde, el panel «Historial» de la ficha del lote renderizaba vacío en
+**los 108 lotes**. Medido: de **1.792** filas de `core.audit_event` de los cinco
+`entity_type` que la consulta pedía, las que podía encontrar eran **0**. El arreglo de
+A9.3 había cambiado el **vocabulario** y dejado el **`entityId`**: pedía `lotId` para
+cinco tipos cuyas escrituras guardan el id del propio evento.
+
+**Las tres comprobaciones miran ARTEFACTOS** —que exista un archivo, que no exista una
+frase, que exista un test— **y ninguna mira la CONDUCTA.** Es la familia que este archivo
+ya tiene escrita como «un veredicto que comprueba todo menos la propiedad que importaba»,
+con una cara nueva: aplicada a una **ficha de trabajo pendiente**, donde el veredicto no
+lo da una compuerta sino una sesión leyendo la lista de la ficha y tachando.
+
+**La regla: cuando una ficha pide «arreglar la lectura X», su comprobación es LLAMARLA y
+contar lo que devuelve.** Que exista el archivo que la contiene no es la propiedad. El
+control que faltaba cuesta una prueba —`tests/traceability/historialDelLote.test.ts`— y es
+la única de las cuatro que cae con el defecto puesto.
+
+**Y la mitad que lo hacía invisible desde el otro lado:** el guardia que sí existía
+comprueba que todo `entityType` **leído** lo escriba alguien, y pasaba **con razón** —los
+cinco se escriben—. Un guardia de vocabulario no puede ver un id equivocado, y su nombre
+no lo dice. **Al cerrar una ficha, preguntar qué propiedad NO puede ver su guardia**, que
+es distinto de comprobar que el guardia existe.
+
+### Un detector con ventana fija pierde el sujeto número seis, y lo cuenta del otro lado
+
+**El mismo día, de camino.** La clasificación de `vocabulario-de-audit.test.ts` decidía si
+un `entityType: "x"` era lectura o escritura mirando **400 caracteres hacia atrás**. Al
+pasar `getLotDetail` a seis sujetos, el sexto quedó a más de 400 del `leerEnmiendas(` y se
+clasificó como **escritura**: dejó de estar vigilado *y* además metió su valor en el
+conjunto de «escritos», volviendo el guardia más permisivo con los demás. Su control
+positivo era «más de 0 lecturas» y se cumplía con **5 de 6**.
+
+Medido sobre el mismo árbol, con los tres métodos:
+
+| método | lecturas | en `lots.ts` | su fallo |
+|---|---|---|---|
+| ventana de 400 | **8** | 5 de 6 | falso negativo: pierde el sujeto lejano |
+| gana el marcador más cercano | **10** | 6 de 6 | **falso positivo**: cuenta un `tx.auditEvent.create` como lectura |
+| contar paréntesis desde el `(` | **9** | 6 de 6 | ninguno de los dos |
+
+**Es la misma respuesta que ya costó un guardia aquí** —el de la indentación en
+`plantingCohorts.ts`—: contar paréntesis no depende del formato ni del tamaño de la
+llamada. Y la lección que se añade es sobre el **control**, no sobre el detector: «más de
+0» no mide un detector que pierde uno de seis. El control que discrimina es uno que
+**tiene que salir distinto** — aquí, que un archivo que sólo escribe (`quantity.ts`) dé
+**cero** lecturas, porque un detector que marcara todo como lectura pasaría el primero y
+caería en ése.
+
+**Y el control que se descartó, dicho para que nadie lo reponga:** «cada archivo que llama
+a un lector aporta al menos una lectura» marcaba **tres archivos correctos** —`enmiendas.ts`,
+`lib/apiary/bitacora.ts` y `scripts/limpiar-audit-de-pruebas.ts`—, que son lectores que
+reciben el tipo por parámetro o por constante. Abortar sobre código correcto enseña a
+ignorar el guardia, y además ese control **tampoco habría cazado el 5 de 6**: `lots.ts`
+seguía aportando lecturas.

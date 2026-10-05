@@ -125,19 +125,27 @@ describe("la ficha del lote: el trabajo primero", () => {
   });
 
   /**
-   * Plegar sin pista es esconder. Cada rótulo plegado lleva su cifra, con UNA excepción nombrada:
-   * el historial, porque la cifra que habría sería falsa — ver el comentario de esa sección.
+   * Plegar sin pista es esconder. Cada rótulo plegado lleva su cifra, **y desde el 2026-10-05 no
+   * hay excepción**.
+   *
+   * **Esta aserción decía `toEqual(["historyHeading"])` y exigía además el comentario «Sin cifra, a
+   * propósito».** La excepción existía porque la cifra del historial habría sido falsa:
+   * `getLotDetail` buscaba la auditoría por `entityId = lotId` y las escrituras guardan el id del
+   * propio evento, así que el panel podía encontrar **0** de 1.792 filas. Arreglada la lectura, la
+   * cifra es verdadera y la excepción sobra.
+   *
+   * **Y la lista vacía aquí no es un guardia más flojo, es más estricto:** antes toleraba una
+   * sección sin cifra, y lo que toleraba era justo donde estaba el defecto. Una excepción nombrada
+   * en un guardia es una deuda con fecha de caducidad; al cerrarse el defecto se cierra la
+   * excepción, o el guardia protege un agujero que ya no existe y deja entrar el siguiente.
    */
-  it("cada rótulo plegado lleva su cifra, salvo la excepción nombrada del historial", () => {
+  it("cada rótulo plegado lleva su cifra, sin excepciones", () => {
     const sinCifra = PLEGADAS.filter((k) => {
       const i = donde(k);
       const resumen = ficha.slice(i, ficha.indexOf("</summary>", i));
       return !resumen.includes("nn-resumen-cifra");
     });
-    expect(sinCifra, "la única sin cifra es el historial, y su comentario dice por qué").toEqual(["historyHeading"]);
-    // Y que la excepción siga explicada: si alguien borra el comentario, esto cae.
-    const iHist = donde("historyHeading");
-    expect(ficha.slice(iHist, ficha.indexOf("</summary>", iHist))).toContain("Sin cifra, a propósito");
+    expect(sinCifra, "toda sección plegada lleva su cifra en el rótulo").toEqual([]);
   });
 
   it("el CSS que hace falta para que el `<h2>` quepa en el `<summary>` está escrito", () => {
@@ -150,8 +158,11 @@ describe("la ficha del lote: el trabajo primero", () => {
 });
 
 describe("las cifras de los rótulos usan plural ICU, en los dos idiomas", () => {
-  /** Las siete claves nuevas. `resumenTope` no es plural: no cuenta, dice «N o más». */
-  const CON_PLURAL = ["resumenRecepciones", "resumenCuajado", "resumenCronologia", "resumenSensorial", "resumenFotos", "resumenTareas"] as const;
+  /**
+   * Las claves con plural. `resumenTope` no es plural: no cuenta, dice «N o más».
+   * `resumenHistorial` entró el 2026-10-05, al dejar de ser falsa la cifra del historial.
+   */
+  const CON_PLURAL = ["resumenRecepciones", "resumenCuajado", "resumenCronologia", "resumenSensorial", "resumenFotos", "resumenTareas", "resumenHistorial"] as const;
 
   const leer = (idioma: "es" | "en") =>
     JSON.parse(readFileSync(`messages/${idioma}.json`, "utf8")).Traceability as Record<string, string>;

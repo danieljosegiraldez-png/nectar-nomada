@@ -907,10 +907,33 @@ export async function getActiveOperations(userAccountId: string) {
  * afirmaba «sin historial» con una pregunta que no podía acertar
  * (`PENDING_IMPLEMENTATIONS/009`).
  *
- * Ahora lee por `leerEnmiendas` sobre los CINCO tipos bajo los que se auditan
- * los hechos de un lote. Preguntar por uno solo enseñaría un quinto de su
- * historia pareciendo completo, que es peor que enseñar cero.
- * `tests/arquitectura/vocabulario-de-audit.test.ts` impide que vuelva a pasar.
+ * **CORREGIDO EL 2026-10-05, y lo que había aquí volvía a certificar lo que no
+ * era.** Decía que «ahora lee por `leerEnmiendas` sobre los CINCO tipos», y era
+ * verdad a medias: los tipos sí eran los buenos y **el `entityId` no**. Las
+ * cinco escrituras guardan el id del PROPIO evento —`transformation.id`,
+ * `creada.id`, `elegido.id`, `quantityEvent.id`, `harvestEvent.id`— y la
+ * consulta preguntaba por `lotId`. Medido sobre una copia desechable de la base
+ * compartida: de 1.792 filas de esos cinco tipos, las que esta función podía
+ * encontrar eran **0**, en los 108 lotes. El arreglo del 2026-09-07 cambió el
+ * vocabulario y dejó el id, así que el panel siguió diciendo «este lote no
+ * tiene historial» con una pregunta que seguía sin poder acertar.
+ *
+ * **Y faltaba un sexto tipo, que es el único con el id bueno.** `"lot"` —
+ * `lot.release`, `lot.assembled_from_receptions`,
+ * `lot.flag_conflicting_quantity`— se escribe con el id del lote y **no se
+ * consultaba**. O sea que la liberación, que `liberarLote` llama «una
+ * autorización comercial sin rastro de quién la dio», tampoco salía.
+ *
+ * Hoy la consulta vive en el SEGUNDO lote de consultas, porque los ids de los
+ * hechos no existen hasta que el primero vuelve. Eso es la forma del arreglo,
+ * no un detalle de estilo.
+ *
+ * **Por qué el guardia que había no lo vio, dicho para no contarlo dos veces.**
+ * `tests/arquitectura/vocabulario-de-audit.test.ts` comprueba que todo
+ * `entityType` leído lo escriba alguien, y pasaba con razón: los cinco se
+ * escriben. No mira el `entityId`, y no puede. El que mide la conducta es
+ * `tests/traceability/historialDelLote.test.ts`, que llama a esta función y
+ * cuenta lo que devuelve para un lote real.
  */
 export async function getLotDetail(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({
@@ -932,7 +955,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     samples,
     storageAssignments,
     tasks,
-    auditEvents,
+    perfilDeTueste,
     harvestEvent,
     receivingEvent,
     apiaryHarvestEvent,
@@ -950,13 +973,10 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     lot.projectId
       ? prisma.task.findMany({ where: { projectId: lot.projectId }, orderBy: { createdAt: "desc" }, take: 20 })
       : Promise.resolve([]),
-    leerEnmiendas([
-      { entityType: "lot_transformation", entityId: lotId },
-      { entityType: "lot_roast_profile", entityId: lotId },
-      { entityType: "quantity_event", entityId: lotId },
-      { entityType: "measurement", entityId: lotId },
-      { entityType: "harvest_event", entityId: lotId },
-    ]),
+    // Sólo su id, y sólo para poder preguntar por su auditoría más abajo: el
+    // perfil en sí lo trae la página por `getPerfilDeTuesteElegido`. Es
+    // `findUnique` porque `lot_roast_profile` es único por lote.
+    prisma.lotRoastProfile.findUnique({ where: { lotId }, select: { id: true } }),
     // T12.5: the originating HarvestEvent, if this lot came from one.
     // Tarea 8 fitosanitaria (spec §3.4) añade `marcasDeCarencia`: la foto de
     // qué intervenciones seguían en carencia al cosechar, con lo mínimo de
@@ -988,7 +1008,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
-  const [fermentationRuns, dryingRuns, sensoryLinkage, assets, labourEntries, materialConsumptionEntries] = await Promise.all([
+  const [fermentationRuns, dryingRuns, sensoryLinkage, assets, labourEntries, materialConsumptionEntries, auditEvents] = await Promise.all([
     fermentationRunIds.length
       ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
       : Promise.resolve([]),
@@ -1033,6 +1053,23 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       where: { OR: [{ fermentationRunId: { in: fermentationRunIds } }, { dryingRunId: { in: dryingRunIds } }] },
       orderBy: { occurredAt: "desc" },
     }),
+    // El «Historial» del lote. Vive en ESTE lote de consultas y no en el
+    // primero por una razón que es el defecto que arregla: los `entityId` que
+    // hay que preguntar son los ids de los HECHOS, y en el primer lote todavía
+    // no existen. Preguntados allí sólo se tenía `lotId`, que es lo que ninguna
+    // escritura guarda — ver la cabecera de la función.
+    //
+    // El sujeto por `lotId` es uno solo y es `"lot"`: la auditoría del lote en
+    // sí (`lot.release`, `lot.assembled_from_receptions`,
+    // `lot.flag_conflicting_quantity`). Los demás van por el id de su hecho.
+    leerEnmiendas([
+      { entityType: "lot", entityId: lotId },
+      ...transformations.map((t) => ({ entityType: "lot_transformation", entityId: t.id })),
+      ...measurements.map((m) => ({ entityType: "measurement", entityId: m.id })),
+      ...quantityEvents.map((q) => ({ entityType: "quantity_event", entityId: q.id })),
+      ...(harvestEvent ? [{ entityType: "harvest_event", entityId: harvestEvent.id }] : []),
+      ...(perfilDeTueste ? [{ entityType: "lot_roast_profile", entityId: perfilDeTueste.id }] : []),
+    ]),
   ]);
 
   // ADR-161 — de qué cosechas viene una MIEL, subiendo por la genealogía. Un frasco envasado
