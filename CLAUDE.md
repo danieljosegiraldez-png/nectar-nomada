@@ -3728,3 +3728,126 @@ un cuarto requisito que faltaba: **que el mundo contra el que se mide exista**.
 Los ocho pasos están en `SESSION_STATE.md` §5. El primero es actualizar
 `SESSION_STATE.md`: **es el entregable, no el diff.** Ninguna lección se escribe
 solo en un log de sesión — nada los lee.
+
+<!-- Añadido 2026-10-05, AL FINAL por lo que dice el comentario del principio:
+     `scripts/check-claude-md-intact.mjs` exige que lo anterior aparezca verbatim
+     y contiguo, así que lo nuevo va al principio o al final, nunca en medio. -->
+
+### Una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo
+
+**2026-10-05.** `PENDING_IMPLEMENTATIONS/009` se declaró **HECHO** el 2026-10-03 tras
+comprobar las tres mitades que la propia ficha pedía, **y las tres eran ciertas**:
+
+| lo que la ficha pedía | lo que se comprobó | ¿cierto? |
+|---|---|---|
+| «arreglar la consulta» | existe `lib/traceability/enmiendas.ts`, que lee por entidad y sus hechos | **sí** |
+| «borrar el comentario que certificaba el vacío» | 0 ocurrencias, con control positivo al lado | **sí** |
+| «un guardia» | existe `tests/arquitectura/vocabulario-de-audit.test.ts` | **sí** |
+
+Con las tres en verde, el panel «Historial» de la ficha del lote renderizaba vacío en
+**los 108 lotes**. Medido: de **1.792** filas de `core.audit_event` de los cinco
+`entity_type` que la consulta pedía, las que podía encontrar eran **0**. El arreglo de
+A9.3 había cambiado el **vocabulario** y dejado el **`entityId`**: pedía `lotId` para
+cinco tipos cuyas escrituras guardan el id del propio evento.
+
+**Las tres comprobaciones miran ARTEFACTOS** —que exista un archivo, que no exista una
+frase, que exista un test— **y ninguna mira la CONDUCTA.** Es la familia que este archivo
+ya tiene escrita como «un veredicto que comprueba todo menos la propiedad que importaba»,
+con una cara nueva: aplicada a una **ficha de trabajo pendiente**, donde el veredicto no
+lo da una compuerta sino una sesión leyendo la lista de la ficha y tachando.
+
+**La regla: cuando una ficha pide «arreglar la lectura X», su comprobación es LLAMARLA y
+contar lo que devuelve.** Que exista el archivo que la contiene no es la propiedad. El
+control que faltaba cuesta una prueba —`tests/traceability/historialDelLote.test.ts`— y es
+la única de las cuatro que cae con el defecto puesto.
+
+**Y la mitad que lo hacía invisible desde el otro lado:** el guardia que sí existía
+comprueba que todo `entityType` **leído** lo escriba alguien, y pasaba **con razón** —los
+cinco se escriben—. Un guardia de vocabulario no puede ver un id equivocado, y su nombre
+no lo dice. **Al cerrar una ficha, preguntar qué propiedad NO puede ver su guardia**, que
+es distinto de comprobar que el guardia existe.
+
+### Un detector con ventana fija pierde el sujeto número seis, y lo cuenta del otro lado
+
+**El mismo día, de camino.** La clasificación de `vocabulario-de-audit.test.ts` decidía si
+un `entityType: "x"` era lectura o escritura mirando **400 caracteres hacia atrás**. Al
+pasar `getLotDetail` a seis sujetos, el sexto quedó a más de 400 del `leerEnmiendas(` y se
+clasificó como **escritura**: dejó de estar vigilado *y* además metió su valor en el
+conjunto de «escritos», volviendo el guardia más permisivo con los demás. Su control
+positivo era «más de 0 lecturas» y se cumplía con **5 de 6**.
+
+Medido sobre el mismo árbol, con los tres métodos:
+
+| método | lecturas | en `lots.ts` | su fallo |
+|---|---|---|---|
+| ventana de 400 | **8** | 5 de 6 | falso negativo: pierde el sujeto lejano |
+| gana el marcador más cercano | **10** | 6 de 6 | **falso positivo**: cuenta un `tx.auditEvent.create` como lectura |
+| contar paréntesis desde el `(` | **9** | 6 de 6 | ninguno de los dos |
+
+**Es la misma respuesta que ya costó un guardia aquí** —el de la indentación en
+`plantingCohorts.ts`—: contar paréntesis no depende del formato ni del tamaño de la
+llamada. Y la lección que se añade es sobre el **control**, no sobre el detector: «más de
+0» no mide un detector que pierde uno de seis. El control que discrimina es uno que
+**tiene que salir distinto** — aquí, que un archivo que sólo escribe (`quantity.ts`) dé
+**cero** lecturas, porque un detector que marcara todo como lectura pasaría el primero y
+caería en ése.
+
+**Y el control que se descartó, dicho para que nadie lo reponga:** «cada archivo que llama
+a un lector aporta al menos una lectura» marcaba **tres archivos correctos** —`enmiendas.ts`,
+`lib/apiary/bitacora.ts` y `scripts/limpiar-audit-de-pruebas.ts`—, que son lectores que
+reciben el tipo por parámetro o por constante. Abortar sobre código correcto enseña a
+ignorar el guardia, y además ese control **tampoco habría cazado el 5 de 6**: `lots.ts`
+seguía aportando lecturas.
+
+#### Y el arreglo de ese detector reincidió en la regla de al lado, el mismo día
+
+**Lo encontró Codex, leyendo, sin ejecutar nada.** El contador de paréntesis que sustituyó
+a la ventana **no distinguía código de cadenas**, así que un `reason: ")"` dentro de un
+lector cerraba el tramo antes de su `entityType` y la lectura pasaba al lado de las
+escrituras: el guardia dejaba de denunciar esa lectura huérfana **y seguía verde**. Y un
+`"("` alarga el tramo y se traga la escritura siguiente. Dos fallos, uno en cada
+dirección, en código escrito para arreglar un fallo de la misma forma.
+
+**Ningún control sobre el árbol podía verlo, y eso es la parte que ya estaba escrita aquí:**
+«una prueba que recorre datos reales no vale como guardia de una transformación que esos
+datos no disparan». `lib`, `app` y `scripts` no contienen ni un `")"` dentro de un lector,
+así que los tres controles —tramos > 0, lecturas > 0, `quantity.ts` da 0— seguían en verde
+con el detector roto. Reincidí teniendo el archivo cargado, y además acababa de escribir
+dos secciones más arriba que el control tiene que **salir distinto**.
+
+**La regla, y es la que faltaba en las dos versiones anteriores de este detector: a un
+analizador se le dan entradas HOSTILES escritas a mano, no sólo el árbol.** Eso obliga a
+exportar la clasificación —lo que `CLAUDE.md` ya llama «el guardia es el que llama a la
+función con la entrada hostil, lo que suele obligar a exportarla»— y entonces los casos se
+escriben en dos líneas cada uno. Los cinco de `vocabulario-de-audit.test.ts` cubren el `)`
+en cadena, el `(` en cadena, la plantilla, la regex y la prosa de un comentario. Flip: al
+volver a contar sobre la vista con cadenas caen **tres**, por su nombre.
+
+**Y una afirmación mía de ese mismo día que era demasiado fuerte y está corregida:** la
+cabecera decía que contar paréntesis «no tiene falsos positivos ni negativos». Distinguir
+una expresión regular de una división es una heurística y no hay forma léxica de acertar
+siempre. Lo que se puede afirmar es qué casos están cubiertos **y tienen prueba**; lo demás
+se dice como límite.
+
+#### Una limpieza que se apoya en una variable del fixture no corre si el `beforeAll` muere antes
+
+**El mismo día, y también lo encontró Codex antes de que ocurriera — y después ocurrió.**
+El `afterAll` de la prueba nueva borraba la auditoría con `entityId: eventoDeCantidadId`.
+Si el `beforeAll` moría **antes** de asignar esa variable, `assertDefinedWhere` lanzaba y
+abandonaba las ocho líneas siguientes.
+
+Pasó de verdad una hora después, por una errata distinta —`userAccounts` en vez de
+`userAccount`, que el esquema declara en singular porque `personId` es `@unique`— y dejó en
+la base **3 lotes, 1 organización, 1 proyecto, 1 persona, 1 cuenta, 1 ámbito, 2 eventos de
+cantidad y 3 filas de auditoría**. Exactamente lo que Codex había enumerado.
+
+**La forma que lo esconde:** la corrida dijo `Test Files 1 failed` y **`Tests 4 passed
+(4)`**. Las cuatro pruebas pasan y el archivo falla, así que quien lea la segunda línea ve
+un verde. Es la regla del nombre de la base desechable otra vez —**el veredicto está en
+`Test Files`**— con otra causa.
+
+**La regla: la limpieza descubre lo que tiene que borrar, no lo hereda.** Se consulta por
+el `RUN_ID` dentro del propio `afterAll` —`lotCode: { startsWith: RUN_ID }`, `displayName:
+{ contains: RUN_ID }`— y así una corrida que murió a mitad se limpia igual. Y se comprueba
+**contando filas del propio `RUN_ID` después**, que es lo único que distingue «limpió» de
+«pasó»: aquí las de la corrida buena daban 0 y las de la corrida muerta seguían las diez.

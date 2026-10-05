@@ -1564,14 +1564,21 @@ export default async function LotDetailPage({
         <details>
           <summary>
             <h2>{t("historyHeading")}</h2>
-            {/* **Sin cifra, a propósito, y es lo único de esta pantalla que se queda sin ella.**
-                `getLotDetail` busca la auditoría con `entityId = lotId` (lots.ts) y las escrituras la
-                guardan con el id del PROPIO evento (`transformation.id`, `creada.id`, `quantityEvent.id`…),
-                así que esta sección está vacía casi siempre. Medido el 2026-10-04 sobre la copia restaurada,
-                108 lotes: **3 filas** con `entity_id` = el id de un lote, contra 38 con el de una medición,
-                31 con el de una transformación y 18 con el de un evento de cantidad —1.792 filas de esos cinco
-                tipos en total—. Un «sin cambios» aquí anunciaría el defecto como si fuera un dato.
-                Es un fallo ANTERIOR a este cambio y se señala, no se arregla aquí. */}
+            {/* **Ya lleva cifra: el defecto que la impedía se arregló el 2026-10-05.** Hasta entonces
+                esta era la única sección plegada sin ella, porque la cifra habría sido falsa —
+                `getLotDetail` buscaba la auditoría con `entityId = lotId` y las escrituras guardan el id
+                del PROPIO evento, así que de las 1.792 filas de esos cinco tipos esta pantalla podía
+                encontrar **0**, en los 108 lotes. Hoy la lectura resuelve los ids de los hechos y además
+                pregunta por el tipo `lot`, que es el único que sí lleva el id del lote. Ver la cabecera de
+                `getLotDetail`.
+                **Y el tope se dice, no se esconde:** `leerEnmiendas` corta en 50, así que con 50 filas la
+                cifra sería un suelo y no un total — se rotula «50 o más», igual que las tareas con su 20.
+                Medido el 2026-10-05: el lote con más historia tenía 9 filas y ninguno de los 108 pasaba
+                de 50, así que hoy esa rama no se pinta nunca; está porque el día que se pase, la pantalla
+                no debe afirmar un total que no sabe. */}
+            <span className="nn-resumen-cifra">
+              {auditEvents.length === 50 ? t("resumenTope", { count: 50 }) : t("resumenHistorial", { count: auditEvents.length })}
+            </span>
           </summary>
           {auditEvents.length === 0 ? (
             <p className="nn-muted">{t("noHistory")}</p>
