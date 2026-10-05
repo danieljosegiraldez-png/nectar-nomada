@@ -7674,6 +7674,17 @@ correctly to nobody since they were created.
 
 ## ADR-107 — Los correos de las personas se dan por función, no por jerarquía
 
+> **Comparte número con otro ADR-107.** El de «Nadie asignó nunca una tarea, así
+> que la Fase 2 se cierra sin extender `Task`» —más abajo en este mismo archivo;
+> `grep -n '^## ADR-107' docs/architecture/DECISIONS.md` los da los dos— lleva el
+> mismo número. Los dos se escribieron el **2026-09-04**, en sesiones distintas, y
+> cada una tomó el 107. **No se renumera**, y la razón se midió el 2026-10-05
+> sobre `origin/main` `7dd95ab8`: de las catorce citas de `ADR-107` que hay en el
+> repositorio, repartidas en ocho archivos, **ninguna se refiere a este ADR** —
+> todas hablan del otro—. La excepción está declarada con su razón en
+> `tests/arquitectura/numeros-de-adr-unicos.test.ts`, cuyo tercer caso se pone en
+> rojo si alguien los renumera y no la saca de la lista.
+
 **Contexto.** Sin correo no hay contraseña, así que la lista de quién tiene
 correo *es* la lista de quién puede entrar. Hasta hoy eran dos personas. P-C
 llevaba abierta desde el 2026-08-28 porque quién recibe la llave no lo decide
@@ -7723,6 +7734,14 @@ pendientes»— habría cerrado la decisión sin que nadie la tomara.
 ---
 
 ## ADR-107 — Nadie asignó nunca una tarea, así que la Fase 2 se cierra sin extender `Task`
+
+> **Comparte número con otro ADR-107.** El de «Los correos de las personas se dan
+> por función, no por jerarquía» —más arriba en este mismo archivo— lleva el mismo
+> número; los dos son del **2026-09-04**, de sesiones distintas. **Cuando algo cita
+> «ADR-107» se refiere a este:** medido el 2026-10-05 sobre `origin/main`
+> `7dd95ab8`, las catorce citas del repositorio —en ocho archivos, cuatro de ellos
+> docs de implementación— apuntan todas aquí, y ninguna al otro. La excepción está
+> declarada en `tests/arquitectura/numeros-de-adr-unicos.test.ts`.
 
 **Contexto.** `docs/implementation/43_P2_OPERATOR_CORE.md` §0 midió el
 2026-08-28 que `partner.task` y `partner.field_submission` tenían **0 filas
