@@ -112,9 +112,14 @@ describe("la ficha del lote: el trabajo primero", () => {
     const rotas = anclas.filter((ancla) => {
       const i = ficha.indexOf(`id="${ancla}"`);
       if (i < 0) return false; // el id vive en otra página: no es cosa de este guardia
-      // ¿Hay un <details> abierto por encima de ese id, sin su cierre entre medias?
-      const antes = ficha.slice(0, i);
-      return antes.lastIndexOf("<details>") > antes.lastIndexOf("</details>");
+      // **Dónde mirar, y la primera versión miraba mal.** El `id` va en la `<section>` y el
+      // `<details>` DENTRO de ella, así que buscar un `<details>` abierto ANTES del id no
+      // encuentra nada: lo midió el flip-test, envolviendo Mediciones en un `<details>` y viendo
+      // que esta aserción seguía verde. Lo que delata el plegado es que entre el `id` y el
+      // siguiente `<h2>` aparezca un `<details>`, que es exactamente la forma que tiene plegar
+      // una sección: `<details><summary><h2>`.
+      const tramo = ficha.slice(i, ficha.indexOf("<h2", i));
+      return tramo.includes("<details>");
     });
     expect(rotas, `miradas ${anclas.length} anclas`).toEqual([]);
   });
@@ -221,8 +226,15 @@ describe("la ficha no llama a un lector que lanza sin preguntar primero", () => 
   it("`getHarvestSourceContext` sólo se llama si `puedeEditarFuentes`", () => {
     const i = ficha.indexOf("getHarvestSourceContext(user.userAccountId");
     expect(i, "la llamada tiene que estar; si no, este guardia no mide nada").toBeGreaterThan(0);
-    // La guarda va en la misma expresión, inmediatamente encima.
-    expect(ficha.slice(Math.max(0, i - 220), i)).toContain("puedeEditarFuentes");
+    // **La guarda tiene que estar en LA CONDICIÓN, no cerca.** La primera versión miraba los 220
+    // caracteres anteriores y pasaba igual con la guarda quitada: la declaración del predicado
+    // seguía ahí arriba, así que comprobaba el token y no la conducta. Lo midió el flip-test.
+    // Esto lee la condición del ternario que decide si se llama.
+    const decl = ficha.indexOf("const harvestSources");
+    expect(decl, "la declaración tiene que estar").toBeGreaterThan(0);
+    expect(decl, "y venir antes de la llamada").toBeLessThan(i);
+    const condicion = ficha.slice(decl, i);
+    expect(condicion, "la llamada va condicionada al predicado, no sólo precedida por él").toContain("puedeEditarFuentes");
   });
 
   it("CONTROL: el predicado se calcula ANTES de la llamada, y sólo una vez", () => {
