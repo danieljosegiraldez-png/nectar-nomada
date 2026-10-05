@@ -4128,7 +4128,7 @@
     "desenlace_target_reached": "Llegó a la humedad objetivo",
     "desenlace_interrupted": "Se cortó por una causa externa (lluvia, plaga, avería)",
     "desenlace_abandoned": "Se dejó a medias: no llegó al objetivo",
-    "desenlaceAyuda": "Sólo «Llegó a la humedad objetivo» arranca el reposo y deja tomar la muestra verde.",
+    "desenlaceAyuda": "Sólo «Llegó a la humedad objetivo» arranca el reposo; sin él, el lote no puede dar muestra verde.",
     "error_desenlace_requerido": "Di cómo terminó el secado antes de cerrarlo."
   },
   "QuienLoHizo": {

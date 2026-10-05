@@ -24,7 +24,9 @@ describe("cierre de secado — opciones honestas y consistentes", () => {
   // lo vigila esta prueba; que la acción lo entregue al servicio, `desenlaceDelSecado.test.ts`.
   it("los dos formularios piden el desenlace, sin preseleccionar ninguno", () => {
     for (const ruta of ["app/lots/[id]/page.tsx", "app/components/traceability/BandejasDelSecado.tsx"]) {
-      const fuente = leer(ruta);
+      // Sin comentarios: un bloque JSX comentado conserva sus cadenas y dejaría esta prueba verde
+      // con el campo quitado (revisión de Codex, 2026-10-04).
+      const fuente = leer(ruta).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
       expect(fuente).toContain('name="endedOutcome" defaultValue="" required');
       expect(fuente).toContain("DESENLACES_DEL_SECADO.map(");
     }
@@ -32,7 +34,13 @@ describe("cierre de secado — opciones honestas y consistentes", () => {
 
   it.each(["es", "en"])("%s explica que sólo el objetivo alcanzado arranca el reposo", (idioma) => {
     const ayuda = JSON.parse(leer(`messages/${idioma}.json`)).BandejasDelSecado.desenlaceAyuda as string;
-    expect(ayuda.toLowerCase()).toMatch(idioma === "es" ? /humedad objetivo.*reposo/ : /target moisture.*resting/);
+    // La exclusividad («sólo») es lo que importa; y la muestra verde se nombra como requisito, no
+    // como lo único que la habilita (la muestra pide además el proceso cerrado por humedad).
+    expect(ayuda.toLowerCase()).toMatch(
+      idioma === "es"
+        ? /^sólo «llegó a la humedad objetivo» arranca el reposo; sin él, el lote no puede dar muestra verde\.$/
+        : /^only “reached target moisture” starts the resting clock; without it, the lot cannot give a green sample\.$/,
+    );
   });
 
   it.each(["es", "en"])("%s explica que el verde requiere trilla", (idioma) => {

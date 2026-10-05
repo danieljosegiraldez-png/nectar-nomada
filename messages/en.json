@@ -4128,7 +4128,7 @@
     "desenlace_target_reached": "Reached target moisture",
     "desenlace_interrupted": "Stopped by an outside cause (rain, pests, breakdown)",
     "desenlace_abandoned": "Left unfinished: did not reach target",
-    "desenlaceAyuda": "Only “Reached target moisture” starts the resting clock and allows a green sample.",
+    "desenlaceAyuda": "Only “Reached target moisture” starts the resting clock; without it, the lot cannot give a green sample.",
     "error_desenlace_requerido": "Say how drying ended before closing it."
   },
   "QuienLoHizo": {
