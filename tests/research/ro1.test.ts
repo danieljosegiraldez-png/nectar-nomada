@@ -30,6 +30,7 @@ import {
 import {
   createTreatmentBatch,
   addProcessingStage,
+  recordWashMedium,
   completeProcessingStage,
   compareTreatmentBatchesByVariable,
   hasProcessingStage,
@@ -44,6 +45,7 @@ import { recordMeasurement } from "../../lib/traceability/measurements";
 import { createSampleFromLot } from "../../lib/traceability/samples";
 import { submitAssessment } from "../../lib/sensory/service";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { ResearchAccessError } from "../../lib/research/access";
 
 const RUN_ID = `ro1-${Date.now()}`;
 
@@ -924,5 +926,89 @@ describe("§9.15 — A7/F1/S1/R1 real data intact", () => {
     // files in parallel and tests/traceability/roasting.test.ts creates and
     // deletes sessions throughout, so any global count of that table measures
     // another file's progress rather than this one's damage.
+  });
+});
+
+/**
+ * **El lote que `recordWashMedium` CITA tiene que estar en el proyecto ya
+ * autorizado.** `PENDING_IMPLEMENTATIONS/005` — defecto confirmado por Daniel el
+ * 2026-10-04, la hermana exacta del de `completeExternalCoffeeOrigin`.
+ *
+ * Autoriza `research:execute_protocol` sobre el proyecto del lote de tratamiento
+ * y después leía el lote de `washMediumSourceLotId` **sólo para comprobar que
+ * existe** —el valor se descartaba—. Con eso se podía citar **cualquier lote de la
+ * base** como medio de lavado y escribir ese enlace en la etapa.
+ *
+ * **Por qué la regla es «el mismo proyecto» y no `lot:view`.** Medido el
+ * 2026-10-04: el perfil `Research Lead` **no tiene ningún permiso de `lot`** —sólo
+ * `research:*` y `classification:*`—, así que exigir `lot:view` rompería
+ * `mosto_de_otro_lote`, que es una función deliberada, y obligaría a conceder un
+ * permiso nuevo a los perfiles de investigación: eso es una decisión de Daniel,
+ * no un arreglo. La regla del proyecto cierra «cualquier lote de la base» sin
+ * tocar el modelo de permisos: la cita se queda dentro del ámbito sobre el que ya
+ * te autorizaron.
+ */
+describe("RO1.2 — el medio de lavado no puede citar un lote de otro proyecto", () => {
+  it("rechaza un lote fuente fuera del proyecto del lote de tratamiento", async () => {
+    const version = await prisma.protocolVersion.findFirstOrThrow({ where: { protocolId, version: 1 } });
+    const catalogo = await prisma.variableCatalog.findFirstOrThrow({ where: { key: "medio_lavado" } });
+    const mostoDeOtro = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { catalogId: catalogo.id, value: "mosto_de_otro_lote" },
+    });
+
+    const batch = await createTreatmentBatch(researchLeadUserAccountId, {
+      protocolVersionId: version.id,
+      lotId: sourceLotId,
+      batchLabel: `TEST mosto ajeno (${RUN_ID})`,
+      startedAt: new Date("2027-03-01T08:00:00Z"),
+      provenanceClass: "measured_fact",
+      variableValues: [],
+    });
+    treatmentBatchIds.push(batch.id);
+    const stage = await addProcessingStage(researchLeadUserAccountId, {
+      treatmentBatchId: batch.id,
+      name: "lavado",
+      sequenceOrder: 1,
+      startedAt: new Date("2027-03-01T09:00:00Z"),
+    });
+
+    // Un lote de OTRO proyecto, que la cita no debe alcanzar.
+    const otroProyecto = await prisma.project.create({
+      data: { name: `TEST RO1 Otro Proyecto (${RUN_ID})`, status: "approved", classification: "internal" },
+    });
+    const ajeno = await prisma.lot.create({
+      data: { lotCode: `${RUN_ID}-mosto-ajeno`, lotType: "processing", organizationId, projectId: otroProyecto.id },
+    });
+
+    await expect(
+      recordWashMedium(researchLeadUserAccountId, {
+        processingStageId: stage.id,
+        washMediumCatalogValueId: mostoDeOtro.id,
+        washMediumSourceLotId: ajeno.id,
+      }),
+    ).rejects.toThrow(ResearchAccessError);
+
+    // No basta con que lance: el enlace no puede haber quedado escrito.
+    const intacta = await prisma.processingStage.findUniqueOrThrow({ where: { id: stage.id } });
+    expect(intacta.washMediumSourceLotId, "la etapa no puede quedar citando el lote ajeno").toBeNull();
+
+    /**
+     * **El control, y sin él lo de arriba no mide nada:** un rechazo podría venir
+     * de que el investigador no pueda citar NINGÚN lote. Con uno de su propio
+     * proyecto la cita tiene que funcionar.
+     */
+    const propio = await prisma.lot.create({
+      data: { lotCode: `${RUN_ID}-mosto-propio-ctl`, lotType: "processing", organizationId, projectId },
+    });
+    const ok = await recordWashMedium(researchLeadUserAccountId, {
+      processingStageId: stage.id,
+      washMediumCatalogValueId: mostoDeOtro.id,
+      washMediumSourceLotId: propio.id,
+    });
+    expect(ok.washMediumSourceLotId).toBe(propio.id);
+
+    await prisma.processingStage.update({ where: { id: stage.id }, data: { washMediumSourceLotId: null } });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [ajeno.id, propio.id] } }) });
+    await prisma.project.deleteMany({ where: assertDefinedWhere({ id: otroProyecto.id }) });
   });
 });

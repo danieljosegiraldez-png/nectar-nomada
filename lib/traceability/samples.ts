@@ -25,7 +25,12 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { scopeTargetsFor, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import {
+  scopeTargetsFor,
+  requireLotAccess,
+  TraceabilityAccessError,
+  DEFAULT_NEW_RECORD_CLASSIFICATION,
+} from "./lots";
 import { faseDelLote } from "../beneficio/reposo";
 import type { ClassificationLevel } from "../rbac/types";
 import type { DataQuality, HarvestWindowPrecision, ProvenanceClass, MaterialState, SamplingRole, SamplingZone, SampleKind } from "../../generated/prisma/client";
@@ -567,6 +572,21 @@ export async function completeExternalCoffeeOrigin(userAccountId: string, input:
   if (input.linkToLotId) {
     const lot = await prisma.lot.findUnique({ where: { id: input.linkToLotId } });
     if (!lot) throw new TraceabilityAccessError("lot_not_found");
+    /**
+     * **Citar un lote exige poder verlo** — `PENDING_IMPLEMENTATIONS/005`, defecto
+     * confirmado por Daniel el 2026-10-04.
+     *
+     * Hasta hoy esta lectura sólo comprobaba que el lote EXISTE y descartaba el
+     * valor, así que no filtraba sus datos. Lo que sí hacía era **escribir el
+     * enlace**: con `sample:manage` sobre tu propia muestra podías atarla a
+     * cualquier lote de la base, incluido uno de otro proyecto, y la trazabilidad
+     * de ese lote quedaba con una muestra colgada que su dueño no autorizó.
+     *
+     * `view` y no `manage` a propósito: el defecto medido era «un lote que no
+     * puedes ver», y exigir `manage` impediría citar un lote que legítimamente ves
+     * sin gestionarlo.
+     */
+    await requireLotAccess(userAccountId, "view", [lot]);
   }
 
   const now = new Date();
