@@ -77,6 +77,7 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
                   <th>{t("colEstado")}</th>
                   <th>{t("colVence")}</th>
                   <th>{t("colCustodia")}</th>
+                  <th>{t("colAcciones")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,6 +111,11 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
                           ? t("custodiaConResponsable", { sitio: l.custodia.sitio, responsable: l.custodia.responsable })
                           : l.custodia.sitio
                         : t("custodiaDondeSeRecibio")}
+                    </td>
+                    {/* El enlace, no el formulario: la lista se queda lista.
+                        Decisión 5 de Daniel, 2026-09-18. */}
+                    <td>
+                      <Link href={`/inventario/lotes/${l.id}`}>{t("verLote")}</Link>
                     </td>
                   </tr>
                 ))}
