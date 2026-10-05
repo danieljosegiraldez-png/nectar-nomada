@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**618 operaciones** que tocan la base, en **168 archivos** — medido el 2026-10-03 con
+**619 operaciones** que tocan la base, en **168 archivos** — medido el 2026-10-04 con
 `node scripts/inventario-de-acceso.mjs` sobre la rama `recetas-base` de la Parte 1 ya juntada con
 `origin/main` (`193772c9`), con la ronda de arreglo 1 de su revisión final (el 2026-09-26 se midió sobre el árbol que fusiona `origin/main` (`326bd584`) con la
 rama de las lecturas de la clasificación de verde por malla):
@@ -25,7 +25,7 @@ rama de las lecturas de la clasificación de verde por malla):
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **467** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **468** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **20** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **94** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -48,6 +48,11 @@ rama de las lecturas de la clasificación de verde por malla):
 > inventario, y `procesoParaUnaCorrida` entra en «depende del llamador» con su fila en el allowlist. Los cambios de las
 > decisiones de Daniel del 2026-10-02 —`exigeSinOtroProcesoAbierto` mira la bodega de la descendencia; `loteDividido` recibe
 > la fecha del registro— cambian el cuerpo de operaciones que ya estaban, no su fila.
+
+> **La banda de atención de `/finca` (2026-10-04): 618→619, 168 archivos y «guardia directo» 467→468.**
+> La nueva es `situacionesDeLaFinca` (`lib/traceability/situacionesDeCampo.ts`), hermana de
+> `situacionesDeJornada`: llama a `can(…, "view", "field_report", …)` sobre la finca antes de leer, y sin
+> ese permiso acota por `operatorPersonId`. Entra como guardia directo por lo mismo que su hermana.
 
 > **Tercera unión con `origin/main` (2026-10-03, `193772c9`): 616→618, 167→168 archivos y «guardia directo»
 > 465→467.** Medido con `--json` sobre los dos árboles: las dos nuevas son de `main`, `declararTrozoDeForma` y

@@ -32,6 +32,8 @@ flip-test el 2026-08-28, en ambas direcciones.
 | P-I | Cómo se da de alta un proveedor de equipos (PR #435) | Sólo se eligen organizaciones `supplier` aprobadas, dadas de alta por la vía de organizaciones | `! grep -qiE "^## ADR-[0-9]+.*alta de proveedores"` |
 | P-E | Destino de backup fuera de la máquina | *Cerrada hoy* — `NN_BACKUP_DIR` está en `~/.zshrc`. Se deja en la tabla porque vuelve a abrirse sola si alguien lo quita, y porque una tabla donde todo dice «abierta» no demuestra que el mecanismo discrimine | `! grep -q "NN_BACKUP_DIR" "$HOME/.zshrc"` |
 
+**Heredadas de dos entregas archivadas el 2026-10-05**, que seguían abiertas y el histórico no dirige trabajo: si **dos corridas abiertas en una cama** son conflicto de datos y si una receta de fermentación debe **obligar** a medir pH (#603/#605); si la **coordenada de un plantón** exige tablero, los dos puntos sin resolver de tu lego del 2026-10-03 (`docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`), y si el rango de la microparcela sigue «opcional a propósito» o pasa a obligatorio como pide #621 §3.2.
+
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
 en un ADR de `docs/architecture/DECISIONS.md` que contenga literalmente la frase
 de su prueba. Sin ese sitio nombrado, ninguna búsqueda distinguiría «sin hacer»
@@ -62,38 +64,16 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
+
+**Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
+**Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» está vacío en 105 de 108 lotes** porque la auditoría se busca por el id del lote y se guarda por el id del evento (3 filas contra 1.792); ése tiene sesión propia.
+**Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
+
 ### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
 
 **Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
 **Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
-### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
-
-**Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
-**Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.
-
-### 2026-10-02 · Las dos pantallas que mentían: la banda de la curva y la capacidad del sitio (#603, #605)
-
-**017 — una meta `final` se usaba como banda de TODA la trayectoria**, así que un pH bajando de 6,5 a
-4,3 —el diseño de una fermentación— salía como «2 lecturas fuera del rango». Hoy el **momento** del
-objetivo decide a qué lecturas alcanza: `during` cubre el recorrido, `initial` y `final` se marcan en
-su extremo y juzgan **una**. Tu matiz era el caso que el código tiraba —en lavado y natural el Brix o
-el pH se miden **una vez**, antes de la cama— y medido, `initial` no aparecía **ni una vez** en el
-camino de la curva. Y la capa de base ya no elige en silencio entre dos objetivos declarados.
-
-**015 — una unidad ocupada por un lote que no ves salía «libre y sana»**: las corridas se consultan
-filtradas por lote visible y `enUso` salía de ellas. Hoy sale de un recuento por unidad **sin
-filtrar** —cuenta filas, no devuelve nada del lote—, de ahí salen también los conflictos, y la
-liberación **agrupa por unidad** tomando el fin mayor, sin las retiradas ni las averiadas.
-
-**Lo que enseñaron.** `readingsForMoment` no se podía reusar: no comprueba el empate de instante, el
-defecto que el #596 cerró con sus 7 de 10 lotes. El del 015 estaba **vivo dentro de un fixture, en
-verde** —dos secados en la misma cama—. `MapaDeUnidades` no tenía **ninguna** prueba de render, así
-que el campo nuevo habría muerto en la API. Y el arnés dio «exit 0» dos veces con código real **1**,
-porque un `echo` final convierte el fallo en éxito.
-
-**Qué queda tuyo:** si dos corridas abiertas en una **cama** son un conflicto de datos (para un
-tanque sí; con varias bandejas quizá sea lo normal), y si una receta de fermentación debe **obligar**
-a medir pH.
 
 ## 3. Bloqueado, y en qué
 
