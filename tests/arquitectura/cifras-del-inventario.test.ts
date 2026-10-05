@@ -28,6 +28,7 @@ const DOC = "docs/arquitectura/inventario-de-acceso.md";
  */
 const ETIQUETAS: Record<string, string> = {
   "guardia directo": "guardia directo",
+  "guardia transitivo": "guardia transitivo",
   "acotado por construcción": "acotado por construcción",
   "depende del llamador": "depende del llamador (verificar a mano)",
   "público por diseño": "público por diseño",
@@ -55,6 +56,27 @@ describe("el documento del inventario dice lo que mide el script", () => {
     expect(Number(m![2]), `${DOC}: el número de archivos escrito no es el medido`).toBe(
       new Set(ops.map((o) => o.archivo)).size
     );
+  });
+
+  /**
+   * **La dirección que faltaba, y la encontró un flip-test el 2026-10-04.**
+   * `cada fila de la tabla` sólo comprueba las filas que **existen**: quitando
+   * del documento la fila de una clase, la compuerta seguía **en verde** —medido:
+   * borré la fila «guardia transitivo» y salió `Tests 3 passed`—. O sea que una
+   * clase podía dejar de estar vigilada sin que nada lo dijera, y el comentario
+   * de arriba («si cambian aquí sin cambiar allí la compuerta falla») era falso
+   * en ese sentido.
+   */
+  it("cada clase medida tiene su fila en el documento", () => {
+    const etiquetas = [...doc.matchAll(/^\| \*\*\d+\*\* \| ([^|]+?) \|/gm)].map((m) =>
+      (m[1] ?? "").trim()
+    );
+    const conFila = new Set(etiquetas.map((e) => ETIQUETAS[e]).filter(Boolean));
+    const sinFila = [...porClase.keys()].filter((c) => !conFila.has(c)).sort();
+    expect(
+      sinFila,
+      `${DOC}: estas clases se miden y no tienen fila, así que nadie comprueba su cifra`
+    ).toEqual([]);
   });
 
   it("cada fila de la tabla de patrones", () => {

@@ -187,6 +187,7 @@ tests/traceability/manejoPrB.test.ts
 tests/traceability/reporteDeProceso.test.ts
 tests/traceability/coordenadasDelSitio.test.ts
 tests/traceability/lots.test.ts
+tests/traceability/loteCitadoExigeSuPermiso.test.ts
 tests/traceability/massBalance.test.ts
 tests/traceability/measurements.test.ts
 tests/traceability/media.test.ts

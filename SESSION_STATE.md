@@ -4,7 +4,7 @@ Dónde está el proyecto. Cómo se construye está en `CLAUDE.md`; son archivos
 distintos a propósito. El registro largo de decisiones es
 `docs/architecture/DECISIONS.md` (ADR-001 … ADR-103) y **no** se duplica aquí.
 
-**Presupuesto: ≤400 líneas y <20.000 tokens.** Lo hace cumplir
+**Presupuesto: ≤450 líneas y <20.000 tokens.** Lo hace cumplir
 `npm run check:state` y el test `tests/session-state-budget.test.ts`, no esta
 frase. Pasado ese punto una lectura devuelve solo el principio **y reporta
 éxito**. Lo viejo se va a `docs/SESSION_STATE_ARCHIVE.md`, lo más viejo primero.
@@ -62,6 +62,16 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
    contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
 
+#### Preguntas tuyas rescatadas de entregas archivadas el 2026-10-04
+
+- **Si dos corridas abiertas en una CAMA son un conflicto de datos.** Para un tanque sí; con varias
+  bandejas puede ser lo normal. Hoy el recuento por unidad las marca como conflicto en los dos casos.
+- **Si una receta de fermentación debe OBLIGAR a medir pH.** Hoy no obliga.
+- **Si la coordenada de un plantón exige tablero**, y los dos puntos del esquema que tu lego del
+  2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`.
+- **Si el rango de la microparcela sigue «opcional a propósito»** (`schema.prisma:941`, su comentario
+  en la 923) o pasa a obligatorio como pide el #621 §3.2.
+
 ## 2. Lo que se entregó — más nuevo primero
 
 ### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
@@ -69,6 +79,10 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 **Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
 **Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» está vacío en 105 de 108 lotes** porque la auditoría se busca por el id del lote y se guarda por el id del evento (3 filas contra 1.792); ése tiene sesión propia.
 **Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
+### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
+
+**Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
+**Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
 
 ### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
 
@@ -76,6 +90,10 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 **Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
 
 ## 3. Bloqueado, y en qué
+
+> **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
+> `docs/SESSION_STATE_ARCHIVE.md`, «Auditoría de §3»), una falsa —archivada— y ocho con cifras rancias, corregidas aquí con su fecha.
+
 
 #### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
 
@@ -101,7 +119,7 @@ así que puede avisar por un bloque que esas plantas no tocan — de más, nunca
 
 Bioestimulante, fertilizante, insecticida, fungicida — no sólo fitosanitario. **No es quitar un
 filtro.** Medido: el acto ya admite `aplicacion`/`liberacion`/`manejo_cultural` y el encierro son dos
-líneas de `lib/traceability/intervenciones.ts` (834 filtra por `isPlantProtection`, 199 rechaza); pero
+líneas de `lib/traceability/intervenciones.ts` (193 filtra por `isPlantProtection`, 199 rechaza; re-medido el 2026-10-04 — decía 834, y el archivo tiene 896 líneas); pero
 el objetivo es una lista cerrada de **13 plagas y enfermedades** sin ningún valor de nutrición, así que
 un fertilizante no tendría cómo decir para qué se aplicó. **Y los nombres NO los fija el contrato:**
 `docs/beneficio/03_public_api.md` no menciona ninguno de los ocho términos —control positivo, «enum»
@@ -110,18 +128,15 @@ con su propio objetivo, o si «objetivo» pasa a ser «propósito» y las plagas
 
 #### El tablero del beneficio: el paso 1 y las tres piezas de §4.5 están en `main`
 
-**Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
-«la vista no existe», falso desde el #545. Medido contra `origin/main` `7bc07339` el 2026-10-01, con
-control negativo en 0: `lineaDeEtapas.ts`, `liberacionDeUnidad.ts` y `curvaDeLote.ts` existen los
-tres, con su `CurvaDeLote.tsx`. La ruta la fijó **ADR-193**; el diseño sigue en
-`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. Y la decisión que esta entrada
-pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
+Las tres piezas están en `main` (re-verificado el 2026-10-04) y la ruta la fijó **ADR-193**; el
+diseño sigue en `docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. La decisión que
+esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
 
 **Lo que SIGUE abierto, medido el 2026-10-01:**
 
-- **El paso 2, capacidad con migración: sin plan escrito** (0 de 39 planes lo nombran).
+- **El paso 2, capacidad con migración: sin plan propio** — re-medido el 2026-10-04: hay **47** planes (decía 39) y **ninguno se llama** «capacidad», aunque **5** mencionan «paso 2» y «capacidad» de pasada.
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas), 007 y 022 (sin empezar).** Fusionadas el
+- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
   2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 estaba HECHA desde A9.3 y su
   ficha no lo sabía. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
 - **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
@@ -130,19 +145,12 @@ pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero �
   ventana óptima** —antipatrón 8, un solo asunto visto de los dos lados—.
 - **Y de §4.5 queda «qué hacer», que no existe en ninguna fuente:** la columna está abierta y vacía
   en `docs/beneficio/10_ph_fermentation.md` §1, con su guardia, y **la rúbrica 22 §1 queda
-  incumplida a propósito**. El detalle está en `docs/SESSION_STATE_ARCHIVE.md`, en la entrada «Los
-  ejes de la curva, y una cita que sólo se hace cuando se sostiene» — archivada en este mismo commit,
-  así que la frase que decía «vive aquí hasta que se archive» se corrige al archivarla.
+  incumplida a propósito**. El detalle está en `docs/SESSION_STATE_ARCHIVE.md`,
+  en «Los ejes de la curva, y una cita que sólo se hace cuando se sostiene».
 
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
-
-#### Deuda de filas en `nectar_test` (PR #488, #498)
-
-Rescatado de la misma: ~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
-`ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado:** barrer por patrón en una base
-compartida es tocar trabajo ajeno.
 
 #### Recolectores: darles su perfil (de Daniel)
 
@@ -154,9 +162,6 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
 Estate** desde `/fincas` → «sin terreno».
 
-**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
-El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas 180-184 y 274— y usa `DEMO Rivera
-Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
 
 **Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
 `data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
@@ -178,34 +183,21 @@ Movido aquí al archivar la entrada de artefactos (PR #405), porque sigue dirigi
 Notecard — registrar y calibrar **no tienen pantalla**. `POST /api/v1/ingest/notehub` sigue
 **cerrada por defecto** hasta entonces.
 
-#### Lo que se vio al recorrer las pantallas en un móvil de verdad
+#### Las pantallas en un móvil: dos decisiones de producto, y lo que sigue sin probarse
 
-**2026-09-05, primera vez que alguien las usa** — hasta hoy todo lo que se sabía
-de ellas venía de tests. Sesión con sesión iniciada, 375×812, datos de la copia
-local. Se arregló lo objetivo (PR #166, la tabla que desplazaba la página); lo
-de abajo **queda abierto porque es decisión de producto, no arreglo mecánico**.
+Del recorrido del 2026-09-05 (375×812, sesión iniciada). Lo mecánico se arregló y lo cerrado está en
+`docs/SESSION_STATE_ARCHIVE.md`; **comprimido el 2026-10-04 porque dos de sus cuatro viñetas decían
+ellas mismas que estaban cerradas y archivadas.** Queda, y es decisión tuya:
 
-- **El menú tiene 10 entradas y el objetivo del móvil son 8.** El guardia que
-  afirmaba lo contrario **se arregló** el 2026-09-08 —su entrada está en
-  `docs/SESSION_STATE_ARCHIVE.md`—: ahora mide al
-  visor más privilegiado de verdad y fija el 10, así que el hueco está a la
-  vista en vez de escondido tras un verde. Lo que sigue abierto es la decisión:
-  **acortar el menú o mover el objetivo**. En el teléfono son 234 px de
-  cabecera en tres filas, el 29 % de la pantalla antes de ver nada.
+- **El menú tiene 10 entradas y el objetivo del móvil son 8** — acortar el menú o mover el objetivo.
+  En el teléfono son 234 px de cabecera en tres filas, el 29 % de la pantalla antes de ver nada. **No
+  re-medido el 2026-10-04:** no se encontró el archivo que declara las entradas.
+- **`/plots` no ofrece nada que pulsar** — las ocho acciones existen un nivel abajo, en `/plots/[id]`;
+  subir alguna a la lista es decisión de producto.
 
-- ~~«Batches» en una interfaz en español.~~ **Cerrado el 2026-09-08** — su
-  entrada está en `docs/SESSION_STATE_ARCHIVE.md`. El café es «Lote»/«Lot» y
-  el terreno es «Parcela».
-- **`/plots` no ofrece nada que pulsar.** Las acciones existen —ocho
-  formularios— pero **un nivel abajo**, en `/plots/[id]`; subir alguna a la
-  lista es decisión de producto. La repetición **sí se arregló** el 2026-09-08:
-  lo que falta se cuenta una vez arriba en vez de recitarse por tarjeta.
-- **Lo que sí aguantó:** cero objetivos de toque por debajo de 44 px en un
-  formulario de 134 campos.
-
-**Y lo que esto no prueba.** Fue un ratón sobre una pantalla de 375 px: ni
-guantes, ni sol, ni una conexión que se cae a mitad de un formulario. Sigue
-faltando que una persona registre un dato real en el campo.
+**Y lo que el recorrido no prueba:** fue un ratón sobre 375 px — ni guantes, ni sol, ni una conexión
+que se cae a mitad de un formulario. Sigue faltando que una persona registre un dato real en el campo.
+Lo que sí aguantó: cero objetivos de toque por debajo de 44 px en un formulario de 134 campos.
 
 #### Pendientes sueltos, sin sección propia
 
@@ -213,12 +205,12 @@ Una veintena de pendientes distintos colgaba de un encabezado que sólo nombraba
 al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 
 - **Un vocabulario de procedencia por formulario — declarado el 2026-09-08.**
-  Los ocho subconjuntos viven en `lib/traceability/procedencia.ts`, tipados
+  Los **cinco** subconjuntos viven en `lib/traceability/procedencia.ts` —decía ocho—, tipados
   contra el enum, y el servidor ya no acepta más de lo que la pantalla pinta
   —su entrada está en `docs/SESSION_STATE_ARCHIVE.md`—. **Sigue abierto cuál
   debe ofrecer cada una**: que una medición pueda declararse `interpretation` y
-  una calicata no, que el enum tenga diez valores y las pantallas ofrezcan
-  cinco, y si `manufacturer_specification` debería estar en alguna. Decisión de
+  una calicata no, que `MeasurementSourceType` tenga **siete** valores —decía diez, re-medido el
+  2026-10-04— y los **cinco** subconjuntos de `procedencia.ts` ofrezcan menos, y si `manufacturer_specification` debería estar en alguna. Decisión de
   diseño, sin tomar.
 - **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
   dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
@@ -227,18 +219,14 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
   Daniel que corra algo, buscarlo aquí.**
-- **Medir la cosecha de febrero, no solo registrarla** — bloqueado en el dueño,
-  y **ya no en construir nada**. Los seis lotes tienen `areaHectares` nulo. La
-  densidad **ya no depende de eso** —desde hoy sale del marco—, pero el
-  rendimiento por hectárea sí. Desde el 2026-08-31 el dueño puede cargarlas él
-  mismo en la página de cada lote; cada página dice en pantalla que faltan. **La
-  cosecha llega en febrero**; después, el dato ya no sirve para esa cosecha.
-- **Que el rendimiento se pueda calcular con datos reales** — bloqueado en el
-  dueño, y ya no en construir nada. La cadena entera (siembra → hectáreas →
-  cosecha → bloques → kg/ha) está en pantalla desde el 2026-08-31. Faltan las
-  dos entradas: **0 de 8 lotes tienen área** y **0 cosechas están atribuidas a
-  bloques**, aunque 15 de las 33 ya tienen peso declarado. Las dos las carga él
-  ahora sin ayuda.
+- **Área y rendimiento: bloqueado en el dueño, no en construir nada** (dos viñetas fundidas y
+  **re-medidas el 2026-10-04** contra la base compartida; las cifras viejas decían «seis lotes» y
+  «0 de 8», y ninguna de las dos era la cuenta). `area_hectares` vive en `core.location`, y **de
+  las 38 parcelas, 16 sitios y 6 microparcelas, CERO tienen área**. De 35 eventos de cosecha, **17
+  llevan `cherry_weight_kg` y 0 declaran su origen** (`harvest_event_source` está vacía). La
+  densidad ya no depende del área —sale del marco— pero el rendimiento por hectárea sí. La cadena
+  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **La cosecha llega
+  en febrero**; después, el dato ya no sirve para esa cosecha.
 - **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — lo que la
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
@@ -320,11 +308,27 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
-- **El inventario de acceso lee texto, no programa** — no está bloqueado, está
-  *aplazado*: el detector actual no tiene ningún fallo conocido sin escribir, y
-  los que quedan están documentados con su mutación. La respuesta estructural
-  —un AST, con TypeScript que ya es dependencia— está en
-  `PENDING_IMPLEMENTATIONS/007`, con lo que arregla y lo que no.
+- **El inventario de acceso: ficha `007` CERRADA, los dos escalones** (#639,
+  2026-10-04). El detector lee el AST y una compuerta nueva resuelve el guardia
+  hasta su **símbolo**: de las 396 «guardia directo» por nombre, **0 mienten**. La
+  pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
+- **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
+  por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
+  del **lote**: 15 modelos gobernados y **13 excepciones** declaradas con su razón.
+  **Los dos defectos están arreglados** (2026-10-04, cada uno con su prueba en rojo
+  primero y su control positivo, en el grupo `base-sembrada`):
+  `completeExternalCoffeeOrigin` exige ahora `lot:view` sobre el lote que cita, y
+  `recordWashMedium` exige mismo proyecto —su actor, `Research Lead`, **no tiene**
+  permiso de `lot`, y exigírselo habría roto `mosto_de_otro_lote` y forzado una
+  concesión de RBAC que es tuya—.
+  **El `action` también está medido** y no hay defecto vivo: de 23 unidades que
+  escriben un modelo del dominio, **0 exigen sólo `view`**, y las 28 raíces exigen
+  todas una acción de escritura; el flip lo confirma mutando una línea. Si se
+  convierte en compuerta tiene que resolver **valores por omisión de parámetro** o
+  nace con un falso positivo —`bajarBandejaAction`, que autoriza bien—.
+  **Queda tuyo:** los **12 veredictos** sin confirmar, si se construye esa compuerta
+  del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
+  `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver

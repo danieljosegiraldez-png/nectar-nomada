@@ -421,6 +421,27 @@ export async function recordWashMedium(userAccountId: string, input: RecordWashM
   if (input.washMediumSourceLotId) {
     const sourceLot = await prisma.lot.findUnique({ where: { id: input.washMediumSourceLotId } });
     if (!sourceLot) throw new ResearchAccessError("wash_medium_source_lot_not_found");
+    /**
+     * **El lote citado tiene que estar en el proyecto ya autorizado** —
+     * `PENDING_IMPLEMENTATIONS/005`, defecto confirmado por Daniel el 2026-10-04.
+     *
+     * Hasta hoy esta lectura sólo comprobaba que el lote EXISTE y descartaba el
+     * valor, así que no filtraba sus datos. Lo que sí hacía era **escribir la
+     * cita**: con `research:execute_protocol` sobre tu lote de tratamiento podías
+     * nombrar **cualquier lote de la base** como medio de lavado.
+     *
+     * **Por qué la regla es el proyecto y no `lot:view`.** Medido el 2026-10-04:
+     * el perfil `Research Lead` **no tiene ningún permiso de `lot`** —sólo
+     * `research:*` y `classification:*`—, así que exigir `lot:view` rompería
+     * `mosto_de_otro_lote`, que es una función deliberada, y obligaría a conceder
+     * un permiso nuevo a los perfiles de investigación: eso es una decisión del
+     * dueño, no un arreglo. La línea 403 ya autorizó
+     * `execute_protocol` **sobre este proyecto**; exigir que la cita se quede
+     * dentro cierra «cualquier lote de la base» sin tocar el modelo de permisos.
+     */
+    if (sourceLot.projectId !== stage.treatmentBatch.projectId) {
+      throw new ResearchAccessError("wash_medium_source_lot_outside_project");
+    }
   }
 
   const updated = await prisma.$transaction(async (tx) => {

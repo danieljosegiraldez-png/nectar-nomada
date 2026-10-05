@@ -15,7 +15,21 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-const MAX_LINEAS = 400;
+// **SUBIDO DE 400 A 450 EL 2026-10-04, decisión de Daniel.** El 400 no salía de
+// una medida: era el presupuesto de líneas al lado de los de tokens y bytes. Ese
+// día §3 quedó, ya auditada bloque por bloque, en 231 líneas de estado VIVO, y el
+// archivado llegó a su suelo —§2 con dos entradas y el guardia negándose a bajar
+// de una—, así que 400 ya no cabía el proyecto sin borrar cosas ciertas.
+//
+// **Y 450 sigue cabiendo en los otros dos topes, medido el 2026-10-04** sobre el
+// archivo real (358 líneas, 27.758 bytes, ~9.044 tokens): la densidad es 77,5
+// bytes y 25,3 tokens por línea, así que 450 líneas son ~34.900 bytes y ~11.400
+// tokens. El tope de BYTES ataría a las ~580 líneas y el de TOKENS a las ~791, o
+// sea que el de líneas sigue siendo el que manda — que es lo que se quiere, porque
+// es el que el dueño puede leer de un vistazo. Si alguna vez el de bytes empieza a
+// atar antes, es que la prosa se densificó y entonces la cuenta de líneas dejó de
+// ser el proxy bueno.
+const MAX_LINEAS = 450;
 const MAX_TOKENS = 20000;
 
 // `caracteres / 3` es una ESTIMACIÓN, no una cota. En español con markdown la
@@ -163,7 +177,7 @@ console.log(
 );
 
 /**
- * Aviso al 80 %, sin fallar.
+ * Aviso al 90 %, sin fallar.
  *
  * El guardia sólo se quejaba al 100 %, y el 2026-08-31 hubo que archivar dos
  * veces en un día: con varias sesiones escribiendo, este archivo crece del
@@ -173,8 +187,17 @@ console.log(
  * **No falla a propósito.** Un aviso que rompe la compuerta a los pocos días de
  * cada archivado enseña a ignorar la compuerta entera, y entonces tampoco se
  * lee el fallo de verdad al 100 %.
+ *
+ * **SUBIDO DE 0,8 A 0,9 EL 2026-10-04, decisión de Daniel.** El 0,8 sonaba desde
+ * las 320 líneas, y una auditoría de §3 ese día dejó el archivo en 360 con
+ * ~230 líneas de estado **vivo**: el aviso era permanente, y un aviso que no se
+ * puede apagar es la misma cosa que ninguno — enseña a ignorarlo. El coste está
+ * medido y es real: el margen entre el aviso y el techo pasa de **80 líneas a
+ * 40**, o sea de un día de escritura de varias sesiones a medio. Si vuelve a
+ * sonar siempre, lo que toca no es subirlo otra vez: es que el techo de 400 ya
+ * no cabe el proyecto, y eso es otra decisión.
  */
-const AVISO = 0.8;
+const AVISO = 0.9;
 const cerca = [
   ["líneas", lineas, MAX_LINEAS],
   ["tokens", tokens, MAX_TOKENS],

@@ -4,18 +4,21 @@
  *
  * Lo pidió la revisión que rechazó el plan del `AuthzContext`: «sustituir la
  * unidad *archivo* por *operación/camino de acceso*». 51 archivos no son 51
- * decisiones de acceso — hay 375 expresiones `prisma.*` repartidas entre ellos.
+ * decisiones de acceso.
  *
  * Para cada función exportada que alcanza la base, registra: qué modelos toca,
  * si recibe un principal, qué guardia invoca, y si delega en otra función que
  * guarda. Con eso se puede decidir —con datos, no con impresiones— si hace
  * falta algo más fuerte que la convención actual.
  *
+ * **Esto es sólo el CLI.** El detector vive en `scripts/inventario/analizar.mjs`,
+ * puro y sin `fs`, para que un guardia pueda llamarlo con entrada hostil; la
+ * lista de modelos sale de `scripts/inventario/esquema.mjs`. La razón está en la
+ * cabecera de `analizar.mjs`.
+ *
  * **Lo que NO hace, y es el límite de siempre:** reconoce *formas escritas*, no
- * propiedades. Un guardia con el permiso equivocado se cuenta como guardia; un
- * acotado por construcción que filtre por asignaciones se ve como «sin
- * guardia». Por eso la salida separa lo que sabe de lo que no, en vez de dar un
- * número único.
+ * propiedades. Por eso la salida separa lo que sabe de lo que no, en vez de dar
+ * un número único.
  *
  * Uso: node scripts/inventario-de-acceso.mjs [--json] [--llamadores]
  *
@@ -25,6 +28,9 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { analizar, unidadesQueLlaman } from "./inventario/analizar.mjs";
+import { autorizacionPorSimbolo, clave } from "./inventario/simbolos.mjs";
+import { modelosDelEsquema } from "./inventario/esquema.mjs";
 
 const RAIZ = new URL("..", import.meta.url).pathname;
 const IGNORA = /node_modules|\.next|generated|\.git/;
@@ -39,294 +45,121 @@ function archivos(dir, out = []) {
   return out;
 }
 
-const GUARDIAS = /\b(require[A-Z]\w*(?:Access|Admin|Override)|can|resolvedPermissionKeys|permissionKeysAnywhere)\s*\(/g;
-/**
- * Los métodos se enumeran, y por eso hay que enumerarlos **enteros**.
- *
- * La primera versión listaba `findUnique` con `\b` detrás, y `findUniqueOrThrow`
- * no tiene frontera de palabra ahí: 13 archivos usaban esa variante y sus
- * operaciones **desaparecían del inventario**, no quedaban «sin clasificar».
- * `app/actions/checkout.ts` y `app/actions/bookings.ts` salían con cero
- * operaciones teniendo una consulta cada uno. El sufijo va antes del `\b`.
- *
- * El SQL crudo no tiene modelo que capturar —`prisma.$queryRaw` no lleva
- * `.modelo.`— y es justo el que más importa ver, porque se salta la capa de
- * modelos entera. Se registra con el modelo `SQL-crudo` para que exista como
- * operación y haya que explicarla como cualquier otra.
- */
-const METODOS =
-  "findMany|findFirstOrThrow|findFirst|findUniqueOrThrow|findUnique|createManyAndReturn|createMany|create|updateManyAndReturn|updateMany|update|upsert|deleteMany|delete|count|aggregate|groupBy";
-const MODELOS = new RegExp(
-  // El cliente puede no ser un identificador. `lib/audit.ts` escribe
-  // `(tx ?? prisma).auditEvent.create(...)`, y un nombre suelto no lo ve: el
-  // archivo entero salía con cero operaciones. Se acepta también un `)`.
-  // Medido: en todo el árbol hay **una** coincidencia de `).modelo.metodo(`,
-  // y es justo esa. Un falso positivo aquí sólo obliga a explicar de más;
-  // un falso negativo es silencio, que es la dirección peligrosa.
-  String.raw`(?:\b(?:prisma|aiPrisma|tx|client)|\))\.(\w+)\.(?:${METODOS})\b`,
-  "g"
-);
-const CRUDO = /\b(?:prisma|aiPrisma|tx|client)\.\$(?:query|execute)Raw(?:Unsafe)?\b/g;
-
 const TODOS = [...archivos("app"), ...archivos("lib")];
 const fuentes = new Map(TODOS.map((f) => [f, readFileSync(join(RAIZ, f), "utf8")]));
+const modelos = modelosDelEsquema(readFileSync(join(RAIZ, "prisma/schema.prisma"), "utf8"));
+const filas = analizar(fuentes, modelos);
 
-/**
- * Trocea un archivo en funciones exportadas y su cuerpo.
- *
- * El corte va hasta la siguiente declaración de nivel superior — exportada o
- * no. Una primera versión cortaba en el siguiente `export`, y por eso atribuía
- * a `slugify()` las consultas del `uniqueSlug()` **no exportado** que vive
- * justo debajo: la función es pura y aparecía tocando la base. Reconocer la
- * forma «siguiente export» en vez del final real de la función es el mismo
- * error que este inventario existe para no cometer.
- */
-function declaraciones(archivo, src) {
-  // `export default async function` faltaba, y su omisión no dejaba un hueco:
-  // dejaba una **identidad falsa**. En `app/my-nectar/page.tsx` la declaración
-  // anterior es `export const dynamic = "force-dynamic"`, que absorbía el resto
-  // del archivo, así que las tres consultas de `MyNectarPage()` se inventariaban
-  // bajo el nombre `dynamic` — una constante de configuración. Fijar
-  // `archivo:operacion` sobre eso es fijar un fragmento de texto, no un camino.
-  const decl = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
-  const todas = [...src.matchAll(decl)];
-  return todas.map((m, i) => ({
-    archivo,
-    nombre: m[1],
-    exportada: /^export /.test(m[0]),
-    cuerpo: src.slice(m.index ?? 0, i + 1 < todas.length ? todas[i + 1].index : src.length),
-  }));
-}
-
-/**
- * Una consulta delegada a un ayudante **no exportado** desaparecía entera.
- *
- * Lo encontró la revisión independiente del 2026-08-31 y se comprobó por
- * mutación: una función exportada que delega toda su consulta en un ayudante
- * privado del mismo archivo no aparecía en el inventario —ni ella ni el
- * ayudante—, `modelos.length === 0`, y la compuerta seguía en verde. Es el
- * mismo modo de fallo que `findUniqueOrThrow`, que se creía cerrado: descartar
- * en silencio.
- *
- * Ahora el cuerpo de una operación exportada **absorbe** el de los ayudantes
- * privados que llama, transitivamente. Y un ayudante privado con acceso al que
- * no llega ninguna exportada se emite como operación propia, para que tampoco
- * ése pueda esconderse.
- */
-function operaciones(archivo, src) {
-  const todas = declaraciones(archivo, src);
-  const privadas = new Map(todas.filter((d) => !d.exportada).map((d) => [d.nombre, d]));
-
-  const absorber = (d) => {
-    let cuerpo = d.cuerpo;
-    const alcanza = new Set([d.nombre]);
-    for (let cambio = true; cambio; ) {
-      cambio = false;
-      for (const [nombre, ayudante] of privadas) {
-        if (alcanza.has(nombre)) continue;
-        if (!new RegExp(`\\b${nombre}\\s*\\(`).test(cuerpo)) continue;
-        cuerpo += "\n" + ayudante.cuerpo;
-        alcanza.add(nombre);
-        cambio = true;
-      }
+if (process.argv.includes("--permiso-debido")) {
+  /**
+   * **`PENDING_IMPLEMENTATIONS/005`: ¿es el guardia EL DEBIDO?** Cruza el permiso
+   * que exige cada operación —el `resourceType` del tercer argumento de `can`,
+   * resuelto por símbolo y propagado desde el envoltorio— contra los modelos que
+   * toca, usando la declaración por dominio de
+   * `docs/arquitectura/permiso-por-dominio.json`.
+   */
+  const decl = JSON.parse(readFileSync(join(RAIZ, "docs/arquitectura/permiso-por-dominio.json"), "utf8"));
+  const S = autorizacionPorSimbolo({ raiz: RAIZ.replace(/\/$/, "") });
+  const k = (f) => clave(f.archivo, f.nombre);
+  for (const dom of decl.dominios) {
+    const gobernados = new Set(dom.gobierna);
+    const declaradas = new Set(dom.excepciones.map((e) => clave(e.archivo, e.operacion)));
+    const delDominio = filas.filter((f) => f.modelos.some((m) => gobernados.has(m)));
+    const conGuardia = delDominio.filter((f) => f.clase.startsWith("guardia"));
+    const exigen = conGuardia.filter((f) => S.recursos.get(k(f))?.has(dom.permiso) ?? false);
+    const no = conGuardia.filter((f) => !(S.recursos.get(k(f))?.has(dom.permiso) ?? false));
+    console.log(`── dominio «${dom.permiso}» · gobierna ${gobernados.size} modelos`);
+    console.log(`   operaciones que lo tocan: ${delDominio.length}   con clase de guardia: ${conGuardia.length}`);
+    console.log(`   ✓ exigen «${dom.permiso}»: ${exigen.length}`);
+    console.log(`   ? con OTRO permiso: ${no.length}  (declaradas: ${no.filter((f) => declaradas.has(k(f))).length})`);
+    for (const f of no) {
+      const ms = f.modelos.filter((m) => gobernados.has(m)).join(", ");
+      const ps = [...(S.recursos.get(k(f)) ?? [])].sort().join(", ") || "sin permiso resuelto";
+      console.log(`     ${declaradas.has(k(f)) ? "declarada" : "SIN DECLARAR"}  ${k(f)}`);
+      console.log(`        permisos: ${ps}   |   modelos: ${ms}`);
     }
-    return { archivo, nombre: d.nombre, cuerpo, alcanza };
-  };
-
-  const exportadas = todas.filter((d) => d.exportada).map(absorber);
-  const alcanzadas = new Set(exportadas.flatMap((o) => [...o.alcanza]));
-  const huerfanas = todas
-    .filter((d) => !d.exportada && !alcanzadas.has(d.nombre))
-    .map(absorber);
-
-  return [...exportadas, ...huerfanas].map(({ alcanza, ...o }) => o);
-}
-
-const ops = TODOS.flatMap((f) => operaciones(f, fuentes.get(f) ?? ""));
-
-/**
- * Qué funciones guardan de verdad — exportadas **o no**.
- *
- * Una versión anterior reconocía `require\w*(Access|Admin|Override)` por el
- * nombre, y se perdía `requireManagePermission()`: un guardia local, no
- * exportado, que llama a `can()` y protege las siete operaciones de
- * `lib/sensory/calibration.ts`. Las daba por «sin guardia visible».
- *
- * Ahora se resuelve la propiedad: se recogen **todas** las funciones de cada
- * archivo cuyo cuerpo invoque el servicio de autorización, y llamar a una de
- * ellas cuenta como guardar. Reconocer un nombre no es reconocer un guardia.
- */
-/**
- * **Por archivo, no global.** Era un `Set` de nombres sueltos de todo el árbol,
- * así que una función llamada como un guardia de cualquier otro archivo
- * promovía la operación a «guardia directo» sin que nada resolviera el símbolo.
- * Lo señaló la revisión independiente del 2026-08-31: es justo la transición
- * —salir del cajón revisado— que el detector de podredumbre da por buena.
- *
- * Un guardia local guarda en **su** archivo. Los que cruzan archivos siguen
- * reconociéndose por `GUARDIAS`, que es una convención de nombres deliberada y
- * documentada abajo, no una resolución de símbolos.
- */
-const CUALQUIER_FN = /^(?:export )?(?:default )?(?:async )?(?:function|const) (\w+)/gm;
-
-/**
- * Qué nombres entran en cada archivo por un `import`. Un guardia de otro
- * archivo cuenta **si está importado aquí**; si no, es una homonimia y no
- * guarda nada. Sin esto, limitarse al propio archivo degradaba a
- * `getLotReport()`, que delega en `getLotDetail()` importado de `./lots`.
- */
-function resolver(archivoOrigen, especificador) {
-  if (!especificador.startsWith(".")) return null;
-  const partes = archivoOrigen.split("/").slice(0, -1);
-  for (const seg of especificador.split("/")) {
-    if (seg === "." || seg === "") continue;
-    if (seg === "..") partes.pop();
-    else partes.push(seg);
+    const sinConfirmar = dom.excepciones.filter((e) => !e.confirmado_por_daniel);
+    console.log(`\n   excepciones declaradas: ${dom.excepciones.length}, de ellas SIN CONFIRMAR por Daniel: ${sinConfirmar.length}`);
+    for (const e of sinConfirmar) console.log(`     [${e.veredicto}]  ${e.archivo}:${e.operacion}`);
   }
-  const base = partes.join("/");
-  for (const cand of [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
-    if (fuentes.has(cand)) return cand;
+} else if (process.argv.includes("--simbolos")) {
+  /**
+   * **Escalón 2 de la ficha 007: el guardia como SÍMBOLO.** No sustituye la
+   * clasificación —la allowlist y las tres compuertas se apoyan en ella— : la
+   * **verifica**. Cuesta ~16-23 s y ~1,8 GB, medido el 2026-10-04, y por eso
+   * vive detrás de esta bandera y de su propia compuerta.
+   */
+  const S = autorizacionPorSimbolo({ raiz: RAIZ.replace(/\/$/, "") });
+  const k = (f) => clave(f.archivo, f.nombre);
+  // La fila patrón va PRIMERO: si las claves de los dos lados no casan,
+  // cualquier cero de abajo significa «no miré», no «no hay».
+  const casan = filas.filter((f) => S.aristas.has(k(f))).length;
+  console.log(`${S.archivos} archivos · ${S.llamadas} llamadas resueltas: ${S.resueltas} (${Math.round((100 * S.resueltas) / S.llamadas)} %)`);
+  console.log(`${S.aristas.size} funciones con llamadas · ${S.autorizan.size} alcanzan el servicio de autorización\n`);
+  console.log(`CONTROL · claves del inventario que existen en el grafo: ${casan} de ${filas.length}`);
+  if (casan < filas.length / 2) {
+    console.error("\n✗ ABORTA: las claves de los dos lados no casan. Nada de lo de abajo mide.");
+    process.exit(1);
   }
-  return null;
-}
 
-const importados = new Map();
-for (const [archivo, src] of fuentes) {
-  const deDonde = new Map();
-  for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*"([^"]+)"/g)) {
-    const destino = resolver(archivo, m[2]);
-    if (!destino) continue;
-    for (const parte of m[1].split(",")) {
-      const nombre = parte.trim().split(/\s+as\s+/).pop()?.trim();
-      if (nombre) deDonde.set(nombre, destino);
-    }
-  }
-  importados.set(archivo, deDonde);
-}
+  const directas = filas.filter((f) => f.clase === "guardia directo");
+  const miente = directas.filter((f) => !S.autorizan.has(k(f)));
+  console.log(`\n«guardia directo» por NOMBRE: ${directas.length}`);
+  console.log(`  de ellas, las que por SÍMBOLO no alcanzan autorización: ${miente.length}`);
+  for (const f of miente) console.log(`    ✗ ${k(f)}   por nombre: ${JSON.stringify(f.guardias)}`);
+  if (miente.length === 0) console.log(`    (ninguna: hoy la convención de nombres no miente en esta dirección)`);
 
-const guardanPorArchivo = new Map();
-for (const [archivo, src] of fuentes) {
-  const decl = [...src.matchAll(CUALQUIER_FN)];
-  const aqui = new Set();
-  guardanPorArchivo.set(archivo, aqui);
-  for (let i = 0; i < decl.length; i++) {
-    const ini = decl[i].index ?? 0;
-    const fin = i + 1 < decl.length ? decl[i + 1].index : src.length;
-    if (GUARDIAS.test(src.slice(ini, fin))) aqui.add(decl[i][1]);
-    GUARDIAS.lastIndex = 0;
-  }
-}
-
-/**
- * Los guardias visibles desde un archivo: los que declara y los que importa.
- * Nunca los homónimos de un archivo con el que no tiene relación.
- */
-function guardanVisiblesEn(archivo) {
-  const propios = guardanPorArchivo.get(archivo) ?? new Set();
-  // Un nombre importado cuenta sólo si guarda **en el archivo del que viene**.
-  // Antes bastaba con que guardara en cualquier sitio del árbol: eso reconocía
-  // la presencia del import, no la identidad de su destino, y dos dominios
-  // pueden exportar legítimamente el mismo nombre.
-  const traidos = [...(importados.get(archivo) ?? new Map())]
-    .filter(([nombre, destino]) => (guardanPorArchivo.get(destino) ?? new Set()).has(nombre))
-    .map(([nombre]) => nombre);
-  return new Set([...propios, ...traidos]);
-}
-
-const filas = ops
-  .map((o) => {
-    const modelos = [...new Set([...o.cuerpo.matchAll(MODELOS)].map((m) => m[1]))];
-    if (CRUDO.test(o.cuerpo)) modelos.push("SQL-crudo");
-    CRUDO.lastIndex = 0;
-    if (modelos.length === 0) return null;
-    const propios = [...new Set((o.cuerpo.match(GUARDIAS) ?? []).map((g) => g.replace(/\s*\($/, "")))];
-    const locales = [...guardanVisiblesEn(o.archivo)].filter(
-      (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
-    );
-    const guardias = [...new Set([...propios, ...locales])];
-    const principal = /\buserAccountId\b/.test(o.cuerpo);
-    // Un salto: ¿llama a alguna función que sí guarda?
-    const transitivo = [...guardanVisiblesEn(o.archivo)].filter(
-      (n) => n !== o.nombre && new RegExp(`\\b${n}\\s*\\(`).test(o.cuerpo)
-    );
-    /**
-     * Acotado por construcción: la consulta filtra por el propio principal, así
-     * que no puede devolver lo ajeno. Es autorización, y de la más fuerte —
-     * no hay puerta que saltarse porque no hay puerta. `getPartnerProjects`
-     * filtra `assignment` por `userAccountId` y luego pide sólo esos ids.
-     *
-     * **Sólo cuenta dentro de un `where`.** Hubo una segunda regla,
-     * `/userAccountId,\s*$/m`, que casaba cualquier línea terminada así — y eso
-     * son sobre todo **sellos de actor**: `createdBy: userAccountId,`,
-     * `actorUserAccountId: userAccountId,` en `recordAuditEvent`. Firmar una
-     * escritura no es filtrar una lectura. Medido el 2026-09-21: 14 operaciones
-     * eran «acotadas» sólo por esa regla y **ninguna** filtraba por el
-     * principal; una, `declararCanal`, no tenía autorización alguna (PR #464).
-     * Sin ella caen en «recibe principal, sin guardia visible», que obliga a
-     * justificarlas una a una en la allowlist — que es donde deben estar.
-     */
-    const acotado = /where:\s*\{[^}]*userAccountId/s.test(o.cuerpo ?? "");
-    /**
-     * Resolutor de visibilidad: `resolveLotVisibility(userAccountId)` calcula
-     * el alcance a partir de las asignaciones y el `where` se construye desde
-     * él, así que la consulta no puede devolver filas de fuera. Es acotado por
-     * construcción, sólo que a través de un resolutor — invisible tanto al
-     * detector de guardias como al de `where: { userAccountId }`.
-     */
-    const resolutor = /\bresolve\w*Visibility\s*\(/.test(o.cuerpo ?? "");
-    /**
-     * Sin principal y sin guardia: la autorización, si existe, la hace quien
-     * la llama. `listPeopleForAdmin()` no recibe usuario, y su única página
-     * llama antes a `requirePermissionAdmin`. Verificarlas exige mirar a los
-     * llamadores, cosa que este script no hace: los separa para que alguien lo
-     * haga, en vez de mezclarlas con las de verdad desconocidas.
-     */
-    const dependeDelLlamador = !o.cuerpo?.includes("userAccountId");
-    const publica = /discover\/service/.test(o.archivo);
-    // `lib/auth/config.ts` es el flujo de autenticación en sí: `authConfig` y
-    // `providers` corren **antes** de que exista sesión, así que no hay
-    // principal contra el que autorizar. Estaba escrito a mano en el
-    // inventario de excepciones; reconocer la propiedad es mejor que anotarla.
-    const preSesion = /actions\/auth|lib\/auth\/config/.test(o.archivo);
-    const firma = /webhooks/.test(o.archivo);
-
-    let clase;
-    if (guardias.length) clase = "guardia directo";
-    else if (transitivo.length) clase = "guardia transitivo";
-    else if (acotado || resolutor) clase = "acotado por construcción";
-    else if (publica) clase = "público por diseño";
-    else if (preSesion) clase = "previo a la sesión";
-    else if (firma) clase = "firma";
-    else if (principal) clase = "recibe principal, sin guardia visible";
-    else if (dependeDelLlamador) clase = "depende del llamador (verificar a mano)";
-    else clase = "SIN CLASIFICAR";
-    return { ...o, cuerpo: undefined, modelos, guardias, principal, transitivo, acotado: acotado || resolutor, clase };
-  })
-  .filter(Boolean);
-
-if (process.argv.includes("--llamadores")) {
+  // La inversa es informativa, no un fallo: el nombre se pierde guardias reales.
+  // Las tres raíces se excluyen porque "alcanzan" es trivial para ellas.
+  const sinClase = filas.filter((f) => !f.clase.startsWith("guardia"));
+  const calla = sinClase.filter((f) => S.autorizan.has(k(f)) && !S.puertas.has(k(f)));
+  console.log(`\noperaciones sin clase de guardia: ${sinClase.length}`);
+  console.log(`  de ellas, las que por SÍMBOLO SÍ autorizan: ${calla.length}`);
+  for (const f of calla) console.log(`    + ${k(f)}   por nombre: «${f.clase}»`);
+  console.log(`\nUn «+» no es un defecto: es una operación cuya autorización hay que justificar A MANO`);
+  console.log(`en la allowlist porque la convención de nombres no la ve, y que el comprobador de tipos`);
+  console.log(`sí puede sostener. Los «✗» sí son defectos: un nombre de guardia que no guarda nada.`);
+} else if (process.argv.includes("--llamadores")) {
   const objetivo = filas.filter((f) => f.clase === "depende del llamador (verificar a mano)");
+  // **Responde por UNIDAD, no por archivo.** Antes la pregunta era «¿este
+  // archivo autoriza?», con una expresión regular sobre su texto entero, y eso
+  // mentía en LAS DOS direcciones: un comentario que nombra un guardia salía
+  // «autoriza», y un `/g` con `lastIndex` sucio dentro de un `filter` medía el
+  // segundo llamador a partir de media lectura. Pero el defecto de fondo era
+  // otro: que el archivo tenga un guardia **no** significa que lo tenga el
+  // camino. Medido el 2026-10-04, me hizo escribir dos razones falsas en la
+  // allowlist: `floracion.ts` llama a `ubicacionesEmparentadas` desde
+  // `floracionesDeLaParcela`, que no autoriza — su `requireLotAccess` vive en
+  // `registrarFloracion`, otro camino.
   console.log(`${objetivo.length} operaciones que dependen del llamador\n`);
   let pendientes = 0;
   for (const op of objetivo) {
-    const llamadores = TODOS.filter(
-      (f) => f !== op.archivo && new RegExp(`\\b${op.nombre}\\s*\\(`).test(fuentes.get(f) ?? "")
+    const caminos = unidadesQueLlaman(fuentes, op.nombre).filter(
+      (c) => !(c.archivo === op.archivo && c.unidad === op.nombre)
     );
-    const guardados = llamadores.filter((f) => GUARDIAS.test(fuentes.get(f) ?? ""));
-    GUARDIAS.lastIndex = 0;
-    const ok = llamadores.length > 0 && guardados.length === llamadores.length;
+    const ok = caminos.length > 0 && caminos.every((c) => c.guarda);
     if (!ok) pendientes++;
     console.log(`  ${ok ? "OK   " : "MIRAR"} ${op.archivo} ${op.nombre}()`);
-    for (const f of llamadores) {
-      const g = GUARDIAS.test(fuentes.get(f) ?? "");
-      GUARDIAS.lastIndex = 0;
-      console.log(`         ${g ? "✓" : "✗"} ${f}`);
-    }
-    if (!llamadores.length) console.log(`         (ningún llamador fuera de su propio archivo)`);
+    for (const c of caminos) console.log(`         ${c.guarda ? "✓" : "✗"} ${c.archivo}  →  ${c.unidad}()`);
+    if (!caminos.length) console.log(`         (ninguna unidad la llama)`);
   }
   console.log(`\n  ${pendientes} necesitan juicio humano. Las conclusiones del 2026-08-31 están`);
   console.log(`  en docs/arquitectura/inventario-de-acceso.md — este modo dice a quién mirar,`);
   console.log(`  no si está bien.`);
+  console.log(`\n  Un ✗ NO significa «no autoriza»: significa «esa unidad no llama a un`);
+  console.log(`  guardia de la convención». Hay DOS mecanismos que esto no ve, los dos`);
+  console.log(`  medidos el 2026-10-04:`);
+  console.log(`   · una página que llama a un servicio que LANZA un error de acceso y lo`);
+  console.log(`     convierte en notFound() — app/plots/[id]/page.tsx,`);
+  console.log(`     app/field-sessions/[id]/page.tsx, app/plots/[id]/manejo/*;`);
+  console.log(`   · un guardia en español: exigePoderAnotar, exigeReportarEnJornada y`);
+  console.log(`     compañía. Hay 50 funciones «exige*» contra 18 «require*(Access|...)»,`);
+  console.log(`     pero la mayoría de las 50 son VALIDADORES (exigeFecha, exigeNombre),`);
+  console.log(`     así que meterlas en la convención marcaría «guardia directo» de 396 a`);
+  console.log(`     432 por la fuerza de un validador de fechas. Es una decisión, no una`);
+  console.log(`     tarea.`);
+  console.log(`  Y un ✗ tampoco cierra el camino: puede que lo autorice el llamador DEL`);
+  console.log(`  llamador. Seguir la cadena es el escalón 2 de PENDING_IMPLEMENTATIONS/007.`);
 } else if (process.argv.includes("--json")) {
   console.log(JSON.stringify(filas, null, 2));
 } else {

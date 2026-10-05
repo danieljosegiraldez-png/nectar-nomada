@@ -4805,6 +4805,11 @@ y **calle en la ventana óptima** (antipatrón 8 de la 22, un solo asunto visto 
 `PENDING_IMPLEMENTATIONS/021`, que es si una lectura sin procedencia verificada puede sostener una
 afirmación.
 
+
+**Archivado el 2026-10-04**, con el estado en 398/400 líneas y el guardia pidiéndolo por su nombre.
+Sus **dos decisiones de Daniel** no se archivaron con ella: se rescataron a §1 de `SESSION_STATE.md`,
+porque una entrega archivada entierra las preguntas que lleva al final y así es como este archivo
+envejece sin avisar.
 **Archivados: 2026-10-05**, con el estado en 397/400 líneas — al 100 %, que es lo que su
 propio guardia pedía arreglar «sin prisa, en vez de al chocar con el techo». Se movieron las dos
 entregas más viejas de §2, las dos ya fusionadas. **Lo que dejaban abierto se rescató a §1 antes de
@@ -4834,6 +4839,83 @@ porque un `echo` final convierte el fallo en éxito.
 **Qué queda tuyo:** si dos corridas abiertas en una **cama** son un conflicto de datos (para un
 tanque sí; con varias bandejas quizá sea lo normal), y si una receta de fermentación debe **obligar**
 a medir pH.
+
+### 2026-10-04 · Archivado: la deuda de filas en `nectar_test` ya no existe
+
+La entrada decía «~405 filas de 27 corridas en `ambiente`, `intervenciones`, `samples`,
+`ceraDeExtraccion` y `landMedia`. **Nadie la ha limpiado**». Medido el 2026-10-04 sobre la base
+compartida del 55433, de sólo lectura: `traceability.drying_ambient_reading` **0**,
+`traceability.plot_intervention` **0**, `core.sample` **1**, `core.asset` **0**. Control positivo:
+`core.location` da **71**, así que la base está poblada y la cuenta mide donde debe.
+
+**Lo más probable es que se fuera en un `test:db -- reset`, no en una limpieza** — esa base se
+restaura de un backup y el reset no conserva lo acumulado. Se dice así en vez de afirmar que alguien
+la limpió. Lo que queda cierto de la entrada es su razón: barrer por patrón en una base compartida
+sigue siendo tocar trabajo ajeno.
+
+### 2026-10-04 · Auditoría de §3, bloque por bloque
+
+Daniel pidió auditarla. Lo que sigue es lo que se **midió cierto** contra el árbol y la base
+compartida, con su control, para que ninguna sesión lo vuelva a medir sin motivo. Lo que salió
+rancio se corrigió en `SESSION_STATE.md` con la fecha dentro; lo falso se archivó arriba.
+
+| afirmación de §3 | medición | el control |
+|---|---|---|
+| el aviso de floración no se puede alcanzar | `registrarFloracion` lo llaman **0** unidades; el único escritor de `plotBloom` es `floracion.ts` | un nombre inventado da 0 llamadores |
+| el objetivo de la intervención es una lista cerrada de 13 plagas sin nutrición | `PlotInterventionTarget` tiene **13** valores, todos plaga/enfermedad más `otro` | los valores impresos uno a uno |
+| `03_public_api.md` no menciona ninguno de los ocho términos | **0** de los ocho; y «enum» sale **15**, exactamente lo que la entrada citaba | el 15 es el control que la propia entrada dejó |
+| el tablero: las tres piezas están en `main` | `lineaDeEtapas.ts`, `liberacionDeUnidad.ts`, `curvaDeLote.ts` y `CurvaDeLote.tsx` existen | — |
+| una propuesta con presupuesto no cabe en ningún sitio | `budget`, `presupuesto` y `proposal` dan **0** en el esquema | `model Project` da 1 |
+| humedad post-secado: cuatro huecos | `model Lot` no tiene campo de variedad (**0** de 44), no hay campo de método de proceso (**0**), `moveLotToStorage` no lee ninguna medición (**0**), y `cultivarValueId` sí existe (**3**) | las cuatro en la misma fila |
+| «Mis pedidos»: el dato se guarda, falta la pantalla | `OrderItemLot` sale **8** veces en el esquema y **0** en `app/` | — |
+| la ruta de Notehub está cerrada por defecto | su propio código: «Sin `NOTEHUB_ROUTE_SECRET` configurado, la ruta responde 401 a todo» | — |
+| clasificar por malla: decidido y sin construir | `SampleKind` tiene **5** valores y ninguno es `SCREEN`; `GreenScreenFraction` no existe; **0** migraciones la nombran | las 5 columnas `greenScreen*` de `Lot` sí existen — el corte de hoy, que la viñeta dice no tocar |
+| `core.asset` sigue vacía (R2) | **0** filas | `core.location` da 71 |
+| `computePlotDensity` se retiró (entrega del 2026-10-03) | las **2** apariciones en `lib/`+`app/` son **comentarios**; `densidadPorMarco.ts` dice que la sustituye | `procesoQueCubre` da 18 apariciones vivas |
+
+**Dos conclusiones mías quedaron corregidas por medir una vez más, y van aquí porque la forma
+reincide.** Primero di por desaparecido el campo de área, porque lo busqué en `traceability.lot`:
+vive en **`core.location.area_hectares`**, y `areaHectares` sale 25 veces en `lib/`+`app/` y 21 en
+tests. Un «lote» del lego es una `core.location`, no la tabla que lleva ese nombre. Y luego di
+`computePlotDensity` por vivo contando 2 apariciones que eran comentarios. Las dos veces la
+diferencia la hizo medir el sitio correcto, no releer el resultado.
+
+**Lo que NO se midió, dicho para que nadie lo cuente por hecho:** el menú de 10 entradas contra el
+objetivo de 8 —no se encontró el archivo que declara las entradas—, y todo lo que está bloqueado en
+Daniel o vive en producción de Neon, que desde aquí no se lee.
+
+**Y del mismo día, comprimido:** el bloque «Lo que se vio al recorrer las pantallas en un móvil de
+verdad» (2026-09-05) pasó de 29 a 14 líneas. Se quitaron las dos viñetas que **ya declaraban estar
+cerradas y archivadas** —«Batches» en una interfaz en español, y la repetición por tarjeta de
+`/plots`, las dos del 2026-09-08— y la prosa de cómo se midió. Lo que quedó son las dos decisiones de
+producto, la advertencia de que aquello fue un ratón sobre 375 px, y el dato que aguantó. Una viñeta
+tachada que dice «cerrado, ver el archivo» es peso puro en un archivo que se lee en cada sesión.
+
+**Y dos párrafos de corrección, archivados el 2026-10-04.** Son registro de lo que
+`SESSION_STATE.md` decía mal, y este archivo dice que eso es exactamente lo que le pertenece: «nada
+de aquí se carga en una sesión; es registro, no control». Los dos se quedaban en un archivo que se
+lee en cada sesión contando una historia ya cerrada.
+
+*De el bloque del tablero del beneficio:*
+
+**Decía «faltan las piezas visuales» y lleva rancia desde el PR #573**, que las fusionó; antes decía
+«la vista no existe», falso desde el #545. Medido contra `origin/main` `7bc07339` el 2026-10-01, con
+control negativo en 0: `lineaDeEtapas.ts`, `liberacionDeUnidad.ts` y `curvaDeLote.ts` existen los
+tres, con su `CurvaDeLote.tsx`. La ruta la fijó **ADR-193**; el diseño sigue en
+`docs/superpowers/specs/2026-09-16-tablero-del-beneficio-design.md`. Y la decisión que esta entrada
+pedía ya la tomaste: recepción y selección dicen `sin_registro`, no un cero — **ADR-195**.
+
+*De el bloque de Kiva Estate:*
+
+**CORREGIDO EL 2026-09-30: decía que «el seed dice que es un nombre ficticio (`seed.ts:168`)». Ya no.**
+El PR #551 lo dio la vuelta: hoy el seed dice lo contrario —líneas **181 y 282**, re-medidas el 2026-10-04— y usa `DEMO Rivera
+Estate`. La línea 168 que se citaba es otra cosa, así que mandaba a mirar donde no hay nada.
+
+**Archivada el 2026-10-04**, por decisión de Daniel, para que el aviso del presupuesto —que ese día
+subió de 0,8 a 0,9— dejara de sonar: con el archivo en 360/400 el filtro `>=` lo disparaba en el 90 %
+exacto. **Sus TRES decisiones abiertas no se archivaron con ella:** están en §1 de
+`SESSION_STATE.md`, y la referencia de línea de una se re-midió al moverla —el rango de la
+microparcela es `schema.prisma:941`; la 923 que se citaba es el comentario del bloque—.
 
 ### 2026-10-03 · La rejilla entera, la forma del lote y la densidad por marco
 
