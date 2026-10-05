@@ -490,57 +490,147 @@ git commit -F /tmp/msg-cohortes.txt
 
 **Interfaces:**
 - Consumes: `emparentadas` de la Tarea 3, ya calculado en la misma función.
-- Produces: en el objeto que devuelve `getPlotDetail`, el rendimiento pasa de un número a
-  `{ propio, porSeleccion: Array<{ locationId, nombre, cherryWeightKg }> }`. La pantalla
-  (`app/plots/[id]`) lo consume; este plan **no** cambia la pantalla, sólo deja el dato desarmable.
+- Produces: `desgloseDeRendimiento(contribuciones, locationIdPropio): { propio: number; porSeleccion: Array<{ locationId: string; nombre: string; cherryWeightKg: number }> }`,
+  exportada de `plantingCohorts.ts`, y un campo nuevo `rendimientoPorSeleccion` **hermano** de
+  `yield` en lo que devuelve `getPlotDetail`.
 
-Esta es la tarea con más riesgo de las cinco, por §2.1: el divisor del rendimiento por hectárea
-**sigue siendo el área de la madre**, así que lo único que crece es el numerador.
+> **CORREGIDO EL 2026-10-05, antes de ejecutar nada.** La primera versión de esta tarea afirmaba
+> campos que **no existen**: decía `ficha.rendimiento.propio` y `ficha.rendimientoPorHectarea`.
+> Medido sobre `main`: el campo se llama **`yield`** y lo produce
+> `computePlotYield(contributions, areaHectares): PlotYield`, con
+> `PlotYield = { status: "ok"; hectares: number | null; years: PlotYearYield[] } | { status: "sin_cosechas" }`.
+> Esa función es **pura**, recibe sólo `{ harvestedAt, cherryWeightKg }` —**sin `locationId`**— y
+> tiene sus propias pruebas. Y la consume **un solo sitio**: `app/plots/[id]/page.tsx:83`, como
+> `const rendimiento = detail.yield;` (control de que ese grep mide: `trampas` sale en 9 sitios).
+>
+> Así que el desglose **no va dentro de `computePlotYield`**: va en una función pura nueva al lado,
+> y el campo es hermano de `yield`. Dos ventajas medidas: `computePlotYield` y sus pruebas quedan
+> intactas, y el desglose se prueba **en el carril hermético**, sin base de datos.
 
-- [ ] **Step 1: escribir los dos guardias que faltan**
+Esta es la tarea con más riesgo de las cinco, por §2.1: el divisor del rendimiento
+**sigue siendo el área de la madre** —`location.areaHectares`, pasado tal cual a `computePlotYield`
+en la línea 928 del `main` del 2026-10-05— así que lo único que crece es el numerador.
+
+- [ ] **Step 1a: el guardia del desglose, SIN base de datos**
+
+Crear `tests/territorio/desglose-del-rendimiento.test.ts` — hermético, porque la función es pura.
+**No se añade a `scripts/pruebas-por-compuerta.txt`**: ahí van sólo las que necesitan base.
+
+```typescript
+import { describe, expect, it } from "vitest";
+import { desgloseDeRendimiento } from "../../lib/traceability/plantingCohorts";
+
+const madre = "11111111-1111-1111-1111-111111111111";
+const hija = "22222222-2222-2222-2222-222222222222";
+
+describe("desgloseDeRendimiento (ADR-NNN §4: un total que no se puede desarmar no es una medicion)", () => {
+  it("separa lo propio de lo de cada seleccion, con nombre", () => {
+    const d = desgloseDeRendimiento([
+      { locationId: madre, cherryWeightKg: 100, location: { name: "La madre" } },
+      { locationId: hija, cherryWeightKg: 40, location: { name: "La hija" } },
+      { locationId: hija, cherryWeightKg: 2, location: { name: "La hija" } },
+    ], madre);
+
+    expect(d.propio).toBe(100);
+    expect(d.porSeleccion).toEqual([{ locationId: hija, nombre: "La hija", cherryWeightKg: 42 }]);
+  });
+
+  it("un peso sin pesar (null) no se cuenta como cero silencioso en el desglose", () => {
+    const d = desgloseDeRendimiento([
+      { locationId: hija, cherryWeightKg: null, location: { name: "La hija" } },
+    ], madre);
+
+    // CONTROL POSITIVO: la seleccion SI aparece, con 0 kg pesados — que es distinto
+    // de no aparecer. Sin esta mitad, un desglose que filtrara los nulos pasaria.
+    expect(d.porSeleccion).toEqual([{ locationId: hija, nombre: "La hija", cherryWeightKg: 0 }]);
+    expect(d.propio).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 1b: el guardia del divisor, con base**
 
 Añadir a `tests/territorio/la-seleccion-no-resta.test.ts`:
 
 ```typescript
 describe("el rendimiento (ADR-NNN §2.1: las areas no se suman)", () => {
-  it("una cosecha de la microparcela cuenta en el rendimiento de su madre, y se distingue", async () => {
-    const { usuario, madre, hija } = await montarMadreEHija();
-    await crearCosechaCon({ locationId: madre.id, cherryWeightKg: 100 });
-    await crearCosechaCon({ locationId: hija.id, cherryWeightKg: 40 });
+  it("una cosecha de la microparcela cuenta en el rendimiento de su madre", async () => {
+    const { usuario, madre, hija } = await montarMadreEHija({ areaMadre: 2, areaHija: 1 });
+    await crearCosechaCon({ locationId: hija.id, cherryWeightKg: 40, harvestedAt: new Date("2026-08-01") });
 
     const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
-    expect(ficha.rendimiento.propio).toBe(100);
-    expect(ficha.rendimiento.porSeleccion).toEqual([
+    if (ficha.yield.status !== "ok") throw new Error("se esperaba status ok, salio " + ficha.yield.status);
+
+    // El divisor es el area de la MADRE: 2, no 2+1. `hectares` sale de
+    // `location.areaHectares` y §2.1 dice que asi se queda.
+    expect(ficha.yield.hectares).toBe(2);
+    expect(ficha.yield.years.find((y) => y.year === 2026)?.weighedKg).toBe(40);
+    expect(ficha.rendimientoPorSeleccion.porSeleccion).toEqual([
       { locationId: hija.id, nombre: hija.name, cherryWeightKg: 40 },
     ]);
-  });
-
-  it("el divisor es el area de la MADRE, no la suma de las dos", async () => {
-    const { usuario, madre, hija } = await montarMadreEHija({ areaMadre: 2, areaHija: 1 });
-    await crearCosechaCon({ locationId: hija.id, cherryWeightKg: 40 });
-
-    const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
-    // 40 / 2 = 20. Si alguien sumara las areas seria 40 / 3 = 13.33.
-    expect(ficha.rendimientoPorHectarea).toBeCloseTo(20, 2);
   });
 });
 ```
 
 `crearCosechaCon` crea un `HarvestEvent` y su `HarvestEventSource`; copiar el ayudante de
-`tests/traceability/plantingCohorts.test.ts`, que ya lo tiene.
+`tests/traceability/plantingCohorts.test.ts`, que ya lo tiene. Si `PlotYearYield` no tiene
+`weighedKg` ni `year` con esos nombres, **mirar el tipo y usar los reales** — está en
+`plantingCohorts.ts`, unas líneas sobre `computePlotYield`.
 
 - [ ] **Step 2: correr y ver que fallan**
 
 ```bash
-npx vitest run tests/territorio/la-seleccion-no-resta.test.ts -t "rendimiento"
+npx vitest run tests/territorio/desglose-del-rendimiento.test.ts tests/territorio/la-seleccion-no-resta.test.ts
 echo "$?"
 ```
 
-Esperado: **2 fallidas**, la primera porque `rendimiento` no es un objeto. **Si `beforeAll` no corre
-con `-t`**, correr el archivo entero sin el filtro: ya pasó en esta casa que `-t` se saltó el
-montaje y un id quedó `undefined`.
+Esperado: las dos del desglose fallan **al cargar** —`desgloseDeRendimiento` no existe todavía— y la
+del divisor falla porque `rendimientoPorSeleccion` no existe. **Correr los archivos enteros, sin
+`-t`**: en esta casa `-t` se saltó un `beforeAll` y un id quedó `undefined`, y una prueba que no
+llega a ejecutarse se lee igual que una que no caza nada.
 
-- [ ] **Step 3: enrollar la consulta y desarmar el resultado**
+- [ ] **Step 3: la función pura, la consulta enrollada, y el campo hermano**
+
+Primero la función pura, junto a `computePlotYield` en `plantingCohorts.ts`:
+
+```typescript
+/**
+ * El mismo total, desarmable por origen — ADR-NNN §4: «un total no es una
+ * medicion si no se puede desarmar». Va aparte de `computePlotYield` a
+ * proposito: esa funcion es pura, no recibe `locationId` y tiene sus pruebas;
+ * meterle el origen seria cambiarla para dos cosas a la vez.
+ *
+ * Un peso sin pesar cuenta como 0 kg **en una seleccion que SI aparece**, que
+ * es distinto de no aparecer: una seleccion con cosechas sin pesar existe.
+ */
+export function desgloseDeRendimiento(
+  contribuciones: ReadonlyArray<{
+    locationId: string;
+    cherryWeightKg: Prisma.Decimal | number | null;
+    location: { name: string };
+  }>,
+  locationIdPropio: string,
+): { propio: number; porSeleccion: Array<{ locationId: string; nombre: string; cherryWeightKg: number }> } {
+  let propio = 0;
+  const porOrigen = new Map<string, { locationId: string; nombre: string; cherryWeightKg: number }>();
+
+  for (const c of contribuciones) {
+    const kg = c.cherryWeightKg == null ? 0 : Number(c.cherryWeightKg);
+    if (c.locationId === locationIdPropio) {
+      propio += kg;
+      continue;
+    }
+    const acc = porOrigen.get(c.locationId)
+      ?? { locationId: c.locationId, nombre: c.location.name, cherryWeightKg: 0 };
+    acc.cherryWeightKg += kg;
+    porOrigen.set(c.locationId, acc);
+  }
+
+  return { propio, porSeleccion: [...porOrigen.values()] };
+}
+```
+
+Después la consulta, que gana dos columnas:
 
 ```typescript
   const harvestContributions = await prisma.harvestEventSource.findMany({
@@ -554,34 +644,21 @@ montaje y un id quedó `undefined`.
   });
 ```
 
-y construir el desglose:
+Y el campo hermano, en el `return` de `getPlotDetail`. **La llamada a `computePlotYield` no se
+toca**: sigue recibiendo `location.areaHectares`, que es el área de ESTA `Location`.
 
 ```typescript
-  // §4 del diseno: un total que no se puede desarmar no es una medicion. Lo
-  // propio del lote y lo de cada seleccion van por separado, con nombre.
-  const propio = harvestContributions
-    .filter((h) => h.locationId === locationId)
-    .reduce((s, h) => s + Number(h.cherryWeightKg ?? 0), 0);
-  const porSeleccion = [...new Map(
-    harvestContributions
-      .filter((h) => h.locationId !== locationId)
-      .map((h) => [h.locationId, { locationId: h.locationId, nombre: h.location.name, cherryWeightKg: 0 }]),
-  ).values()].map((s) => ({
-    ...s,
-    cherryWeightKg: harvestContributions
-      .filter((h) => h.locationId === s.locationId)
-      .reduce((t, h) => t + Number(h.cherryWeightKg ?? 0), 0),
-  }));
-```
-
-**El divisor no se toca.** Donde hoy se pasa `location.areaHectares` al cálculo del rendimiento por
-hectárea, se sigue pasando exactamente eso: es el área de la madre y §2.1 dice que así se queda.
-Añadir ahí este comentario, porque es el fallo que un lector apresurado introduce:
-
-```typescript
-  // ADR-NNN §2.1 — el divisor es el area de ESTA Location, nunca la suma con la
-  // de sus selecciones: la microparcela esta DENTRO, no al lado. Sumarlas seria
-  // tratarla como una parte, que es el error que la regla existe para impedir.
+    yield: computePlotYield(
+      harvestContributions.map((c) => ({
+        harvestedAt: c.harvestEvent.harvestedAt,
+        cherryWeightKg: c.cherryWeightKg,
+      })),
+      // ADR-NNN §2.1 — el divisor es el area de ESTA Location, nunca la suma con
+      // la de sus selecciones: la microparcela esta DENTRO, no al lado. Sumarlas
+      // seria tratarla como una parte, que es el error que la regla impide.
+      location.areaHectares,
+    ),
+    rendimientoPorSeleccion: desgloseDeRendimiento(harvestContributions, locationId),
 ```
 
 - [ ] **Step 4: correr y ver que pasan**
@@ -593,9 +670,11 @@ NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit
 echo "$?"
 ```
 
-Esperado: 5 en verde (las 3 de la Tarea 3 más estas 2), los dos códigos 0. Si `tsc` se queja de la
-pantalla, es que `app/plots/[id]` consumía el rendimiento como número: **ese arreglo entra en esta
-tarea**, con el desglose pintado al lado y no fundido en un total.
+Esperado: las 2 del desglose y la del divisor en verde, más las 3 de la Tarea 3, y los dos códigos
+0. `app/plots/[id]/page.tsx:83` hace `const rendimiento = detail.yield;` y **añadir un campo no lo
+rompe**, así que `tsc` debería pasar sin tocar la pantalla. Pintar el desglose es trabajo de
+pantalla y **no entra en este plan**: lo que este plan garantiza es que el dato existe y se puede
+desarmar.
 
 - [ ] **Step 5: el flip-test del guardia del área, que es el que más fácil se vuelve adorno**
 
@@ -758,77 +837,171 @@ git commit -F /tmp/msg-esp.txt
 ### Task 6: El guardia de lo que NO enrolla, con el control que lo hace medir
 
 **Files:**
-- Modify: `tests/territorio/la-seleccion-no-resta.test.ts`
+- Create: `tests/territorio/lo-que-no-enrolla.test.ts`
+- Modify: `scripts/pruebas-por-compuerta.txt`
 
 **Interfaces:**
-- Consumes: todo lo anterior.
+- Consumes: nada de las tareas anteriores. **Esta tarea no cambia una línea de producción.**
 - Produces: nada.
 
-Sin esta tarea el plan deja la mitad de §2.2 sin guardia: la frontera tiene dos lados, y el lado de
-«no enrolla» es el que una sesión futura rompe por simetría, creyendo que completa el trabajo.
+> **CORREGIDO EL 2026-10-05, antes de ejecutar nada.** La primera versión de esta tarea escribía el
+> guardia contra `getPlotDetail`, afirmando `ficha.calicatas` y `ficha.bloques`. **Medido: esa
+> función no devuelve nada de eso** — cero ocurrencias de `calicata`, `soilPit`, `muestra`, `sample`
+> ni `photo` en `plantingCohorts.ts`, con «trampas» a 15 como control de que el grep mide. O sea que
+> el guardia **no se podía escribir** y su control positivo no tenía dónde vivir.
+>
+> Los cuatro hechos viven en cuatro funciones de lectura propias, y las cuatro tienen la **misma
+> firma** `(userAccountId: string, locationId: string)` y el mismo `where: { locationId }` pelado —
+> que para ellas es lo CORRECTO:
+>
+> | hecho | función | archivo |
+> |---|---|---|
+> | calicatas | `listSoilProfilesForLocation` | `lib/traceability/soilProfiles.ts:292` |
+> | fotos | `listLandAssets` | `lib/traceability/landMedia.ts:454` |
+> | muestras | `listSamplesForLocation` | `lib/traceability/soilSamples.ts:190` |
+> | jornadas de campo | `listFieldSessions` | `lib/traceability/fieldSessions.ts:642` |
+>
+> **Y corrige también una estimación mía:** dije que esta tarea se partiría en cuatro. No: como no
+> hay cambio de producción, es **una** tarea con cuatro aserciones y sus cuatro controles. El plan
+> se queda en seis tareas.
 
-- [ ] **Step 1: el guardia, con su control positivo pegado**
+Sin esta tarea el plan deja la mitad de §2.2 sin guardia: la frontera tiene dos lados, y el lado de
+«no enrolla» es el que una sesión futura rompe **por simetría**, creyendo que completa el trabajo.
+
+- [ ] **Step 1: el guardia, con un control positivo por cada aserción**
+
+Crear `tests/territorio/lo-que-no-enrolla.test.ts`:
 
 ```typescript
-describe("lo que NO enrolla (ADR-NNN): se toma en un punto y es de ese punto", () => {
-  it("una calicata, una foto y una muestra de la microparcela NO aparecen en su madre", async () => {
+import { describe, expect, it } from "vitest";
+import { listSoilProfilesForLocation } from "../../lib/traceability/soilProfiles";
+import { listLandAssets } from "../../lib/traceability/landMedia";
+import { listSamplesForLocation } from "../../lib/traceability/soilSamples";
+import { listFieldSessions } from "../../lib/traceability/fieldSessions";
+
+/**
+ * ADR-NNN §2.2 — el lado de «NO enrolla». Una muestra, una calicata, una foto y
+ * una jornada «se toman en un punto y son de ese punto».
+ *
+ * **ESTAS CUATRO PASAN DESDE EL PRIMER DIA, Y ES A PROPOSITO: SON UNA RED PARA
+ * MANANA, NO UN DEFECTO DE HOY.** Hoy las cuatro funciones ya filtran por
+ * `locationId` pelado, que es lo correcto para ellas. Lo que la red atrapa es a
+ * la sesion que enrolle estas cuatro por simetria con las cinco de §3.1. No
+ * contarlas como guardia de un camino vivo: el Step 3 tiene el flip que
+ * demuestra que la red esta armada.
+ */
+describe("lo que NO enrolla (ADR-NNN §2.2): se toma en un punto y es de ese punto", () => {
+  it("una calicata de la microparcela NO sale al pedir las de su madre", async () => {
     const { usuario, madre, hija } = await montarMadreEHija();
     await crearCalicataEn(hija.id);
 
-    const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
-    expect(ficha.calicatas).toHaveLength(0);
+    expect(await listSoilProfilesForLocation(usuario.userAccountId, madre.id)).toHaveLength(0);
 
     // **ESTE CONTROL ES LO QUE HACE QUE LA ASERCION DE ARRIBA MIDA.** Una prueba
-    // que solo comprueba que algo NO aparece pasa igual si la madre no pinta
-    // calicatas en absoluto. Tiene que haber una de la MADRE que si aparezca.
+    // que solo comprueba que algo NO aparece pasa igual si la funcion devuelve
+    // siempre []. Tiene que haber una de la MADRE que si aparezca.
     await crearCalicataEn(madre.id);
-    const otraVez = await getPlotDetail(usuario.userAccountId, madre.id);
-    expect(otraVez.calicatas).toHaveLength(1);
+    expect(await listSoilProfilesForLocation(usuario.userAccountId, madre.id)).toHaveLength(1);
   });
 
-  it("un bloque de la microparcela NO se lista en su madre", async () => {
+  it("una foto de la microparcela NO sale al pedir las de su madre", async () => {
     const { usuario, madre, hija } = await montarMadreEHija();
-    await crearBloqueEn(hija.id);
+    await crearFotoEn(hija.id);
 
-    const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
-    expect(ficha.bloques).toHaveLength(0);
+    expect(await listLandAssets(usuario.userAccountId, madre.id)).toHaveLength(0);
 
-    await crearBloqueEn(madre.id);
-    expect((await getPlotDetail(usuario.userAccountId, madre.id)).bloques).toHaveLength(1);
+    await crearFotoEn(madre.id);
+    expect(await listLandAssets(usuario.userAccountId, madre.id)).toHaveLength(1);
+  });
+
+  it("una muestra de la microparcela NO sale al pedir las de su madre", async () => {
+    const { usuario, madre, hija } = await montarMadreEHija();
+    await crearMuestraEn(hija.id);
+
+    expect(await listSamplesForLocation(usuario.userAccountId, madre.id)).toHaveLength(0);
+
+    await crearMuestraEn(madre.id);
+    expect(await listSamplesForLocation(usuario.userAccountId, madre.id)).toHaveLength(1);
+  });
+
+  it("una jornada de la microparcela NO sale al pedir las de su madre", async () => {
+    const { usuario, madre, hija } = await montarMadreEHija();
+    await crearJornadaEn(hija.id);
+
+    expect(await listFieldSessions(usuario.userAccountId, madre.id)).toHaveLength(0);
+
+    await crearJornadaEn(madre.id);
+    expect(await listFieldSessions(usuario.userAccountId, madre.id)).toHaveLength(1);
   });
 });
 ```
 
-Si `getPlotDetail` no devuelve hoy `calicatas` o `bloques` con esos nombres, **mirar cómo se llaman
-en el objeto que devuelve y usar ésos** — no añadir campos para poder escribir la prueba.
+Los cuatro ayudantes `crear*En(locationId)` se copian de las pruebas que ya cubren cada función —
+buscarlas con `grep -rl listSoilProfilesForLocation tests/` y las tres equivalentes— y
+`montarMadreEHija` es el mismo de la Tarea 3. **No escribir montajes nuevos**, y que ninguno deje el
+fixture compartido en un estado que no pueda revertir: eso tumba pruebas sin relación tres
+`describe` más abajo.
 
-- [ ] **Step 2: correr y ver que pasan sin tocar código**
+**Si alguna de las cuatro funciones exige un permiso que `montarMadreEHija` no concede**, ampliar
+ese montaje con el permiso que falte y **decirlo en el comentario**; no bajar la aserción a no
+llamar a la función.
+
+- [ ] **Step 2: declarar que necesitan base, y correr**
+
+Añadir a `scripts/pruebas-por-compuerta.txt`, junto a la de la Tarea 3:
+
+```
+tests/territorio/lo-que-no-enrolla.test.ts
+```
 
 ```bash
-npx vitest run tests/territorio/la-seleccion-no-resta.test.ts
+export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
+npx vitest run tests/territorio/lo-que-no-enrolla.test.ts
 echo "$?"
 ```
 
-Esperado: **9 en verde, salida 0, sin cambiar una línea de producción.** Estas dos pasan desde el
-principio a propósito: son una red para mañana, no un defecto de hoy. **Escribirlo así en el
-comentario del `describe`**, o la siguiente sesión las contará como guardias de un camino vivo.
+Esperado: **4 en verde, salida 0, sin cambiar una línea de producción.** Leer las dos líneas,
+`Test Files` **y** `Tests`. Si alguna cae, no es que la red funcione: es que el montaje o un permiso
+está mal, y hay que arreglarlo antes de seguir.
 
 - [ ] **Step 3: el flip que demuestra que la red está armada**
 
-Mutar a mano una de las cuatro consultas que NO deben enrollar —la de calicatas— para que use
-`{ in: emparentadas }`, y comprobar:
-
 ```bash
-shasum -a 256 lib/traceability/plantingCohorts.ts | cut -c1-12
-NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit
-echo "$?"
-npx vitest run tests/territorio/la-seleccion-no-resta.test.ts
-echo "$?"
-git checkout -- lib/traceability/plantingCohorts.ts
+git status --porcelain
 ```
 
-Esperado: cae **la prueba de la calicata, por su nombre**. Si no cae, el guardia no está midiendo lo
-que dice y hay que arreglarlo antes de cerrar la tarea.
+Vacío, o commitear primero: el restaurado sale de `HEAD`.
+
+```bash
+shasum -a 256 lib/traceability/soilProfiles.ts | cut -c1-12
+```
+
+Mutar **sólo** `listSoilProfilesForLocation` para que enrolle, igual que las cinco de §3.1:
+
+```typescript
+  const emparentadas = await ubicacionesEmparentadas(locationId, prisma, { soloDescendientes: true });
+  return prisma.soilProfile.findMany({ where: { locationId: { in: emparentadas } }, /* …el resto igual… */ });
+```
+
+Las tres cosas que el flip tiene que imprimir antes del veredicto:
+
+```bash
+shasum -a 256 lib/traceability/soilProfiles.ts | cut -c1-12   # distinto del anterior, o abortar
+NODE_OPTIONS="--max-old-space-size=6144" npx tsc --noEmit     # tiene que COMPILAR
+echo "$?"
+npx vitest run tests/territorio/lo-que-no-enrolla.test.ts
+echo "$?"
+```
+
+Esperado: **cae exactamente «una calicata de la microparcela NO sale…», por su nombre**, y las otras
+tres siguen verdes. Si no cae ninguna, el guardia es un adorno y hay que arreglarlo. Si caen las
+cuatro, la mutación rompió algo más. Restaurar y comprobar que volvió:
+
+```bash
+git checkout -- lib/traceability/soilProfiles.ts
+shasum -a 256 lib/traceability/soilProfiles.ts | cut -c1-12   # igual al primero
+git status --porcelain                                        # vacio
+```
 
 - [ ] **Step 4: la compuerta completa, antes del PR**
 
@@ -848,9 +1021,9 @@ dicen las restricciones globales; **no** se usa `nectar_test` y **no** se le apl
 - [ ] **Step 5: commit y PR**
 
 ```bash
-git add tests/territorio/la-seleccion-no-resta.test.ts
+git add tests/territorio/lo-que-no-enrolla.test.ts scripts/pruebas-por-compuerta.txt
 git diff --cached --stat
-printf 'El guardia de lo que NO enrolla, con el control que lo hace medir\n\nADR-NNN. La frontera de §2.2 tiene dos lados y el de «no enrolla» es el\nque una sesion futura rompe por simetria. Las dos pruebas pasan desde el\nprincipio a proposito: son red para manana, y lo dice su comentario para\nque nadie las cuente como guardia de un camino vivo. El flip lo\ndemuestra: enrollar la consulta de calicatas tumba su prueba por nombre.\n' > /tmp/msg-red.txt
+printf 'El guardia de lo que NO enrolla, con el control que lo hace medir\n\nADR-NNN §2.2. La frontera tiene dos lados y el de «no enrolla» es el que\nuna sesion futura rompe por simetria. Las cuatro funciones reales:\nlistSoilProfilesForLocation, listLandAssets, listSamplesForLocation y\nlistFieldSessions. Las cuatro pruebas pasan desde el primer dia a\nproposito y su comentario lo dice, para que nadie las cuente como\nguardia de un camino vivo. El flip lo demuestra: enrollar la de\ncalicatas tumba su prueba por nombre y ninguna otra.\n' > /tmp/msg-red.txt
 git commit -F /tmp/msg-red.txt
 ```
 
@@ -861,9 +1034,10 @@ git log origin/main..HEAD --oneline        # DOS puntos: mis commits
 git diff --name-only origin/main...HEAD    # TRES puntos: mis archivos
 ```
 
-Esperado: **6 commits y 7 archivos** — u **8** si la Tarea 4 tuvo que tocar
-`app/plots/[id]/page.tsx` porque consumía el rendimiento como número. Cualquier otra cifra, parar:
-la rama nació encima de trabajo ajeno, y es lo que costó el PR #126.
+Esperado: **6 commits y 9 archivos**: `DECISIONS.md`, `ubicacionesEmparentadas.ts` y su prueba,
+`plantingCohorts.ts`, `specimens.ts`, `pruebas-por-compuerta.txt`, y las tres pruebas nuevas
+(`la-seleccion-no-resta`, `desglose-del-rendimiento`, `lo-que-no-enrolla`). Cualquier otra cifra,
+parar: la rama nació encima de trabajo ajeno, y es lo que costó el PR #126.
 
 ```bash
 gh pr create -R danieljosegiraldez-png/nectar-nomada --base main --body-file /tmp/cuerpo-pr.md \
@@ -878,9 +1052,19 @@ gh pr create -R danieljosegiraldez-png/nectar-nomada --base main --body-file /tm
 
 **1. Cobertura del spec.** §2 → Tarea 1 (el ADR). §2.1 → Tarea 4, con guardia y flip. §2.2 → Tarea 1
 (la tabla) y Tarea 6 (el lado de «no enrolla»). §3.1, las cinco consultas → Tareas 3 (dos), 4 (una) y
-5 (dos). §4 → Tarea 4, el desglose por origen. §5, los ocho guardias → repartidos: cosecha aparece y
-se distingue (4), áreas no se suman (4), trampa y planta aparecen (5), lo que no enrolla con su
-control positivo (6). **Dos guardias de §5 NO están en este plan y es a propósito:** los dos de
+5 (dos). §4 → Tarea 4, el desglose por origen, en una función pura con su prueba hermética. §5, los
+ocho guardias → repartidos: cosecha cuenta en su madre y el divisor no cambia (4), el desglose se
+separa por origen (4, hermético), trampa y planta aparecen (5), y las cuatro de «no enrolla» con un
+control positivo cada una (6).
+
+**1b. Lo que esta autorevisión NO vio la primera vez, y lo encontró la revisión crítica de
+`executing-plans` antes de ejecutar nada.** Dos tareas afirmaban campos que no existen:
+`ficha.rendimiento.propio` (el campo se llama `yield` y lo hace una función pura sin `locationId`) y
+`ficha.calicatas` (`getPlotDetail` no devuelve nada de calicatas: viven en cuatro funciones de
+lectura propias). Las dos están corregidas arriba, con su nota `CORREGIDO EL 2026-10-05` y la
+medición que lo destapó. **La lección para el ejecutor: en este plan los nombres de campo salen de
+leer el código, no de leer el plan** — y donde el plan nombra uno, lleva al lado el archivo y la
+línea donde comprobarlo. **Dos guardias de §5 NO están en este plan y es a propósito:** los dos de
 `createMicrolot` pertenecen a §3.2 y ya existen en `main`. El de «el comentario del bloque cita el
 ADR» pertenece a §3.3 y va en su plan.
 
