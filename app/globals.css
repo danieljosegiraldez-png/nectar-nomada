@@ -367,6 +367,18 @@ form.nn-form {
 /* A section heading is a signpost, not a headline. Demoting it to a small
    tracked label lets the batch codes beneath it be the largest thing in
    their own area. */
+/* **Las secciones de consulta de la ficha del lote se plegan**, y el `<h2>` va dentro del
+   `<summary>`. `.nn-section h2` es un selector DESCENDIENTE, así que ese h2 sigue recibiendo el
+   estilo de etiqueta pequeña —que es lo que se quiere— pero también `display: block`, que lo
+   empujaría debajo del triángulo. Esto es una regla en vez de los `style={{ display: "inline" }}`
+   en línea que la ficha de colmena repite seis veces (app/apiaries/[id]/hives/[hiveId]/page.tsx).
+   El alto táctil es el mismo `--nn-tap` que usa `.nn-disclosure > summary`: un rótulo que hay que
+   tocar con guantes no puede medir 16 px. */
+.nn-section > details > summary { min-height: var(--nn-tap); cursor: pointer; }
+.nn-section > details > summary > h2 { display: inline; margin-bottom: 0; }
+.nn-resumen-cifra { margin-left: 0.4rem; color: var(--nn-ink-muted); font-size: 0.8rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+
 .nn-section h2 {
   font-size: 0.8rem;
   font-weight: 700;
@@ -710,16 +722,34 @@ a.nn-card-link:active {
     padding: 0 1rem;
   }
 
-  /* Wordmark, then destinations, then account controls. Tried fitting the
-     account cluster beside the wordmark; "Cerrar sesión" plus the locale pill
-     overflows 343px and wraps anyway, which only pushed the destinations into
-     third place. Keeping the stack costs the same height and puts navigation
-     where it belongs. */
+  /* **Una sola fila desde el 2026-10-04 — decisión de Daniel**, y la medición
+     que lo hace posible es la que el comentario anterior daba por imposible.
+     Decía, con razón: «probé meter el grupo de cuenta al lado de la marca;
+     "Cerrar sesión" más la píldora de idioma desborda los 343 px». Reproducido
+     ese día en un teléfono de 375: útil 343, marca 132, grupo de cuenta 251 →
+     383, desborda por 40.
+
+     Lo que cambia no es la colocación: es que el grupo de cuenta ahora va
+     COLAPSADO en un `<details>` (ver `app/layout.tsx`), así que pide ~44 px en
+     vez de 251 y los tres caben. La fila apilada costaba 138 px de cabecera, el
+     17 % de la pantalla, en todas las pantallas. */
   .nn-nav-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.25rem;
-    padding-block: 0.5rem 0.25rem;
+    gap: 0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  /* **La marca no va en el teléfono — decisión de Daniel, 2026-10-04.**
+     Medido ese día a 375 px con sesión de operario: el ancho útil es 343, y
+     «Néctar Nómada» pedía 132 — MÁS que el menú entero, que se quedaba con una
+     franja de 126 px para 297 px de enlaces. Resultado: de las cuatro entradas
+     sólo se veía una sin deslizar, y la de la sección en la que estabas podía ser
+     una de las que no.
+
+     Se quita en vez de encogerla porque además es el enlace que lleva a `/` —la
+     portada pública—, que para alguien con sesión es un callejón sin salida. En
+     escritorio se queda: allí sobra sitio y la marca hace su trabajo. */
+  .nn-wordmark {
+    display: none;
   }
 
   /* The ES/EN switcher is a control an operator uses one-handed, so it
@@ -737,6 +767,15 @@ a.nn-card-link:active {
 
   .nn-nav-links {
     gap: 0.25rem;
+    /* **`nowrap`, y es lo que hace que la fila sea UNA.** La regla base pone
+       `flex-wrap: wrap` —puesta para que un rótulo largo no se partiera a mitad
+       de palabra— y vencía al `overflow-x` de aquí abajo: los enlaces se
+       repartían en dos líneas en vez de deslizarse. Medido el 2026-10-04 a 375
+       px con sesión de operario: la fila ya cabía (marca 80 + menú 179 + cuenta
+       68 = 327 de 343) y aun así la cabecera medía 109 px, porque los cuatro
+       enlaces —285 px— se rompían dentro de su franja de 179. Con `nowrap` se
+       deslizan, que es lo que `overflow-x: auto` quería decir. */
+    flex-wrap: nowrap;
     /* A flex item defaults to min-width:auto, which resolves to its
        min-content size — here the sum of all ten nav links. That makes the
        nav wider than the viewport and scrolls the whole PAGE sideways
@@ -2293,4 +2332,48 @@ a.nn-card-link:active {
   .nn-curva-reposo {
     display: block;
   }
+}
+
+
+/* ── El grupo de cuenta, colapsado (2026-10-04) ──────────────────────────────
+   Idioma y «cerrar sesión» detrás de un `<summary>`. El panel se posiciona
+   ABSOLUTO a propósito: en el flujo empujaría la fila al abrirse, que es
+   exactamente lo que esta cabecera dejó de hacer. */
+.nn-nav-cuenta {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nn-nav-cuenta > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* El mismo suelo de toque que el resto de controles. */
+  min-height: var(--nn-tap);
+  min-width: var(--nn-tap);
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+}
+
+.nn-nav-cuenta > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nn-nav-cuenta-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--nn-surface, #fff);
+  border: 1px solid var(--nn-border, rgba(0, 0, 0, 0.12));
+  border-radius: 0.5rem;
+  white-space: nowrap;
 }

@@ -1,3 +1,50 @@
+<!-- Añadido 2026-10-04, al principio para no partir el texto anterior: el guardia
+     `scripts/check-claude-md-intact.mjs` exige que lo de antes siga apareciendo
+     VERBATIM Y CONTIGUO, así que insertar en medio lo rompe aunque no se modifique
+     ni una línea. Me pasó ese día: 36 líneas añadidas, 0 borradas, y el guardia
+     falló igual. Por eso lo de este archivo va al principio o al final, nunca en
+     medio. -->
+
+> **Quién fusiona: la sesión que lleva el turno, y Daniel lo reparte.** Todo merge
+> a `main` y **toda edición de `SESSION_STATE.md`** pasan por ella (decisiones de
+> Daniel del 2026-09-21 y del 2026-09-30). Si no sabes si lo tienes, preguntárselo
+> **antes** de fusionar: varias sesiones trabajan este repositorio a la vez y el
+> 2026-10-04 hubo treinta y cinco merges en una jornada, con dos sesiones pidiendo
+> turno por mensaje.
+>
+> **Esto no estaba escrito en ninguna parte hasta el 2026-10-04**, y por eso se
+> escribe aquí. Medido ese día: `coordinador`, `turno` y `quién fusiona` daban
+> **cero** menciones en `SESSION_STATE.md` (397 líneas, con 28 de «Daniel» como
+> control) y **cero** en este archivo (3.683 líneas, con 8 de `SESSION_STATE`). El
+> turno existía de hecho y no de derecho, así que una sesión nueva no podía saber
+> si lo tenía.
+
+> **`SESSION_STATE.md` vive al borde de su techo, y lo que lo rompe no es escribir
+> de más: es un verde que habla de otra base.** El 2026-10-04 quedó en **401/400**
+> y estuvo **71 minutos** así —de `00:31:42Z` a `01:42:07Z`—, tumbando `npm run
+> verify` y `tests/session-state-budget.test.ts` **en cualquier PR juntado con
+> `main`**, o sea el CI de todas las sesiones. Lo encontró otra sesión al unir el
+> suyo, no quien lo causó.
+>
+> El PR culpable añadía **una línea** y estaba verde. La causa: al bajar una torre
+> de PR apilados, cada uno se reapunta con `gh pr edit --base main`, y **eso no
+> re-ejecuta sus compuertas** —GitHub re-dispara en `synchronize`, no en un cambio
+> de base—. Su verde se había medido contra su base vieja, donde esa línea cabía.
+> Y las tres señales que se miraban eran ciertas a la vez: `MERGEABLE/CLEAN`, las
+> cuatro compuertas en `SUCCESS`, y `ahead_by=0` tras el merge. Ninguna dice que el
+> verde hable de otra base.
+>
+> **La regla, y vale para cualquier archivo con techo o con cuentas** —el estado,
+> `docs/arquitectura/inventario-de-acceso.md`, la allowlist—: si un PR reapuntado
+> lo toca, **medir el archivo resultante después de fusionar**, no antes y no en el
+> PR. Juntar `main` con su head en local y correr el guardia allí cuesta un minuto
+> y es la única comprobación que mira el mundo en el que el cambio va a vivir. Y un
+> **re-run no sirve**: reutiliza el `GITHUB_SHA` del evento original, que para un
+> `pull_request` es el commit de fusión de entonces. Lo que da un verde válido es
+> un push o volver a juntar.
+
+---
+
 <!-- Añadido 2026-08-28. Nada del documento original se modificó: solo este
      bloque al principio y las secciones al final. -->
 

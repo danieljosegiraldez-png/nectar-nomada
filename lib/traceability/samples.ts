@@ -186,6 +186,30 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
 
   const provenanceClass = input.provenanceClass;
 
+  // **La masa extraída se congela en la fila de la muestra** (2026-10-04). El formulario ya pregunta
+  // cuánto se sacó —`quantityGrams`, que `createSampleAction` convierte a kg y manda como `quantity`—
+  // y eso iba sólo al libro del lote y al `LotTransformationInput`. El tueste de muestra, en cambio, lee
+  // `massAtExtraction` / `massUnitAtExtraction` de la fila, que quedaban nulas: toda muestra creada por
+  // la pantalla fallaba con `sample_mass_in_kg_required`. Se escribía en un sitio y se leía de otro.
+  //
+  // Tres decisiones, y las tres tienen prueba:
+  //
+  // - **Lo declarado manda.** Las dos columnas viajan juntas, no por separado: una masa explícita puede
+  //   venir en otra unidad —300 g, no 0,3 kg— y derivar media pareja daría la cifra de un sitio con la
+  //   unidad del otro.
+  // - **No depende del libro.** Lo que se sacó se sacó, lo registre el saldo o no; un lote sin libro no
+  //   escribe `QuantityEvent` y aun así su muestra tiene masa.
+  // - **Sin cantidad, NULL y no cero.** Un cero diría «se sacó nada», que no es «no se pesó».
+  //
+  // Sin pérdida de precisión: `quantity` es `Decimal(10,3)` y arriba se rechaza un cuarto decimal; la
+  // columna es `Decimal(12,4)`.
+  const declaraMasa = input.massAtExtraction != null || input.massUnitAtExtraction != null;
+  // La misma condición que usa la validación del saldo de abajo, deliberadamente: con `!= null` una
+  // unidad vacía congelaría una masa sin unidad, que es un número que nadie puede leer.
+  const hayCantidad = input.quantity != null && Boolean(input.unit);
+  const masaCongelada = declaraMasa ? input.massAtExtraction ?? null : hayCantidad ? input.quantity : null;
+  const unidadCongelada = declaraMasa ? input.massUnitAtExtraction ?? null : hayCantidad ? input.unit : null;
+
   return prisma.$transaction(async (tx) => {
     // El saldo, con el mismo criterio que `applyInputDecrements` usa para toda transformación
     // parcial (`input_exceeds_available`). Aquí faltaba, y la revisión adversarial del 2026-09-25 lo
@@ -246,8 +270,8 @@ export async function createSampleFromLot(userAccountId: string, input: CreateSa
         samplingZoneNote: input.samplingZoneNote,
         sampleKind: input.sampleKind,
         stageAtExtraction: input.stageAtExtraction,
-        massAtExtraction: input.massAtExtraction,
-        massUnitAtExtraction: input.massUnitAtExtraction,
+        massAtExtraction: masaCongelada,
+        massUnitAtExtraction: unidadCongelada,
         moisturePctAtExtraction: input.moisturePctAtExtraction,
         description: input.description ?? null,
         projectId: sourceLot.projectId,
