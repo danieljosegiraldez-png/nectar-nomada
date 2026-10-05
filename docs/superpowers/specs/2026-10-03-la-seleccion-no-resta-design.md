@@ -163,6 +163,23 @@ Las cinco pasan a `{ in: await ubicacionesEmparentadas(locationId) }` — el mis
 usan intervenciones (`intervenciones.ts:226`), floración (`floracion.ts:179`) y cosecha
 (`harvest.ts:163`). No se escribe un segundo mecanismo: duplicar la regla es cómo se pierde.
 
+> **La DIRECCIÓN, decidida por Daniel el 2026-10-05: sólo hacia los descendientes.** Esta línea
+> decía «el mismo conector» sin más, y ese conector devuelve también **ascendientes** — a propósito,
+> porque la carencia los necesita: «una cosecha de la parcela madre puede llevar café de la
+> microparcela tratada, y al revés». Para estas cinco eso sería al contrario de lo que la regla
+> pide: la ficha de una microparcela mostraría las cosechas y las cohortes de **su madre**, que es
+> doble conteo y va contra §2.1.
+>
+> Se resuelve con **un argumento en la misma función** —`ubicacionesEmparentadas(id, db,
+> { soloDescendientes: true })`— y no con una función nueva, que sería justo el segundo mecanismo
+> que esta sección prohíbe. El comportamiento por omisión no cambia y los cuatro llamadores de hoy
+> no se tocan.
+>
+> **El dato que hizo la decisión barata:** con 0 microparcelas en la base, ninguna de las dos
+> lecturas toca un solo dato existente. Y si se reabre, lo que habría que volver a medir es
+> justamente eso. Queda escrito aquí porque la letra de arriba, leída sola, invita a proponer las
+> dos direcciones otra vez.
+
 **El rendimiento ya está medio preparado para esto y conviene no romperlo.** Se lee por
 `HarvestEventSource` y no por `HarvestEvent.locationId`, con su motivo escrito en el código: «el
 segundo es el lote principal de la cosecha, y una cosecha de varios bloques sólo nombra uno ahí».
