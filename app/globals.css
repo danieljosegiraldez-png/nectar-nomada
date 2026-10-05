@@ -367,6 +367,18 @@ form.nn-form {
 /* A section heading is a signpost, not a headline. Demoting it to a small
    tracked label lets the batch codes beneath it be the largest thing in
    their own area. */
+/* **Las secciones de consulta de la ficha del lote se plegan**, y el `<h2>` va dentro del
+   `<summary>`. `.nn-section h2` es un selector DESCENDIENTE, así que ese h2 sigue recibiendo el
+   estilo de etiqueta pequeña —que es lo que se quiere— pero también `display: block`, que lo
+   empujaría debajo del triángulo. Esto es una regla en vez de los `style={{ display: "inline" }}`
+   en línea que la ficha de colmena repite seis veces (app/apiaries/[id]/hives/[hiveId]/page.tsx).
+   El alto táctil es el mismo `--nn-tap` que usa `.nn-disclosure > summary`: un rótulo que hay que
+   tocar con guantes no puede medir 16 px. */
+.nn-section > details > summary { min-height: var(--nn-tap); cursor: pointer; }
+.nn-section > details > summary > h2 { display: inline; margin-bottom: 0; }
+.nn-resumen-cifra { margin-left: 0.4rem; color: var(--nn-ink-muted); font-size: 0.8rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+
 .nn-section h2 {
   font-size: 0.8rem;
   font-weight: 700;
