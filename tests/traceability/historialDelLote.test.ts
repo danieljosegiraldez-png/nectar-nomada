@@ -71,6 +71,19 @@ let gerenteId: string;
 let loteConHechos: string;
 /** Su hermano, en el mismo proyecto y sin un solo hecho. */
 let loteSinHechos: string;
+/**
+ * Un TERCER lote, con su propio hecho, y existe por una objeción de la revisión
+ * de Codex del 2026-10-05.
+ *
+ * El control negativo del aislamiento exigía que la base tuviera filas de esos
+ * tipos que la consulta hubiera descartado, y lo medía con `> 2` sobre la tabla
+ * entera — pero el fixture sólo garantizaba **dos**, las del lote con hechos.
+ * O sea que en una base limpia **esa aserción caía sobre código correcto**, que
+ * es peor que no tenerla: enseña a ignorar el guardia. Con este tercer lote la
+ * fila descartada la fabrica el fixture, así que el control vale en cualquier
+ * base.
+ */
+let loteAjeno: string;
 /** El id del evento de cantidad — el que la escritura guarda como `entityId`. */
 let eventoDeCantidadId: string;
 
@@ -100,6 +113,9 @@ beforeAll(async () => {
   loteSinHechos = (
     await createLot(gerenteId, { lotCode: `${RUN_ID}-sin`, lotType: "green", organizationId, projectId })
   ).id;
+  loteAjeno = (
+    await createLot(gerenteId, { lotCode: `${RUN_ID}-ajeno`, lotType: "green", organizationId, projectId })
+  ).id;
 
   // Hecho 1 — la clase «tipo bueno, id del evento».
   eventoDeCantidadId = (
@@ -115,23 +131,78 @@ beforeAll(async () => {
 
   // Hecho 2 — la clase «id del lote, tipo que no se preguntaba».
   await liberarLote(gerenteId, loteConHechos);
+
+  // Y el hecho del lote AJENO: la fila que la consulta del lote con hechos
+  // tiene que descartar. Sin ella, el control negativo mediría la basura que
+  // otras suites hayan dejado en la base compartida en ese instante.
+  await recordQuantityEvent(gerenteId, {
+    provenanceClass: "measured_fact",
+    lotId: loteAjeno,
+    eventType: "received",
+    quantity: 10,
+    unit: "kg",
+    occurredAt: new Date("2026-03-02"),
+  });
 }, 30000);
 
+/**
+ * **La limpieza no depende de hasta dónde llegó el `beforeAll`**, y esto también
+ * lo pidió la revisión de Codex del 2026-10-05.
+ *
+ * La versión anterior borraba la auditoría del evento de cantidad con
+ * `entityId: eventoDeCantidadId`. Si el `beforeAll` moría **antes** de asignar
+ * esa variable —al crear la organización, el perfil o un lote—,
+ * `assertDefinedWhere` lanzaba y **abandonaba las ocho líneas siguientes**,
+ * dejando organización, proyecto, persona, cuenta, ámbito y lotes en la base
+ * compartida. Es exactamente la cadena que `CLAUDE.md` describe: «un `afterAll`
+ * es una cadena: la primera FK que se queja tira el resto», y la que dejó 284
+ * `Scope` huérfanos acumulados.
+ *
+ * Hoy todo se descubre por el `RUN_ID`, no por las variables del fixture, y los
+ * ids se consultan aquí. Así una corrida que murió a mitad se limpia igual.
+ */
 afterAll(async () => {
-  const ids = [loteConHechos, loteSinHechos].filter(Boolean);
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "lot", entityId: { in: ids } }) });
-  await prisma.auditEvent.deleteMany({
-    where: assertDefinedWhere({ entityType: "quantity_event", entityId: eventoDeCantidadId }),
+  // Descubiertos, no heredados: si el `beforeAll` no llegó a crearlos, salen listas vacías.
+  const lotes = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } }, select: { id: true } });
+  const idsDeLotes = lotes.map((l) => l.id);
+  const cantidades = idsDeLotes.length
+    ? await prisma.quantityEvent.findMany({ where: { lotId: { in: idsDeLotes } }, select: { id: true } })
+    : [];
+  // `userAccount` en singular: `UserAccount.personId` es `@unique`, así que la
+  // relación es uno a uno y no una lista. Lo dice el esquema, no el nombre.
+  const personas = await prisma.person.findMany({
+    where: { displayName: { contains: RUN_ID } },
+    select: { userAccount: { select: { id: true } } },
   });
-  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: ids } }) });
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: ids } }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: gerenteId }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: gerenteId }) });
+  const idsDeCuentas = personas.flatMap((p) => (p.userAccount ? [p.userAccount.id] : []));
+
+  if (cantidades.length) {
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ entityType: "quantity_event", entityId: { in: cantidades.map((q) => q.id) } }),
+    });
+  }
+  if (idsDeLotes.length) {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "lot", entityId: { in: idsDeLotes } }) });
+    await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: idsDeLotes } }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeLotes } }) });
+  }
+  if (idsDeCuentas.length) {
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: idsDeCuentas } }) });
+  }
+  // El `Scope` se borra DESPUÉS del `Assignment`, que lo referencia con RESTRICT.
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [projectId].filter(Boolean) } }) });
+  if (idsDeCuentas.length) {
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeCuentas } }) });
+  }
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
-  await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
+  await prisma.project.deleteMany({ where: assertDefinedWhere({ name: { contains: RUN_ID } }) });
   await deleteTestOrganizations(RUN_ID);
 }, 30000);
+
+/** Los eventos de cantidad de un lote, para medir sobre la tabla sin pasar por la lectura bajo prueba. */
+async function eventosDe(lotId: string): Promise<Array<{ id: string }>> {
+  return prisma.quantityEvent.findMany({ where: { lotId }, select: { id: true } });
+}
 
 /** Las operaciones que `getLotDetail` devuelve para un lote, ordenadas. */
 async function operacionesDelHistorial(lotId: string): Promise<string[]> {
@@ -183,17 +254,31 @@ describe("el Historial de la ficha del lote", () => {
   }, 20000);
 
   /**
-   * CONTROL NEGATIVO del aislamiento. El `[]` de arriba sólo significa algo si
-   * la base tiene filas de esos mismos tipos que la consulta tuvo que
-   * descartar. Sin esta línea, un `[]` se leería igual con una tabla vacía.
+   * CONTROL NEGATIVO del aislamiento, y **lo fabrica el fixture**. El `[]` del
+   * hermano sólo significa algo si existe una fila de ese mismo tipo que la
+   * consulta tuvo que descartar: la del lote ajeno.
+   *
+   * **La versión anterior medía `> 2` sobre la tabla entera y podía caer sobre
+   * código correcto** en una base sin auditoría previa de esos tipos — lo
+   * señaló la revisión de Codex. Un control que depende de la basura que otras
+   * suites hayan dejado no es un control: es una moneda al aire que además
+   * puede marcar como roto algo que funciona.
    */
-  it("control negativo: la base sí tiene filas de esos tipos que la consulta descartó", async () => {
-    const delMismoTipo = await prisma.auditEvent.count({
-      where: { entityType: { in: ["lot", "quantity_event"] } },
+  it("control negativo: existe la fila de otro lote que la consulta tuvo que descartar", async () => {
+    const delLoteAjeno = await prisma.auditEvent.count({
+      where: { entityType: "quantity_event", entityId: { in: (await eventosDe(loteAjeno)).map((q) => q.id) } },
     });
     expect(
-      delMismoTipo,
-      "sin filas de esos tipos en la base, el `[]` del hermano no demuestra aislamiento",
-    ).toBeGreaterThan(2);
+      delLoteAjeno,
+      "el fixture no creó el hecho del lote ajeno, así que el `[]` del hermano no demuestra aislamiento",
+    ).toBe(1);
+
+    // Y que ESA fila no aparece en el historial del lote con hechos: es la
+    // mitad que convierte la existencia de la fila en una prueba de descarte.
+    const operaciones = await operacionesDelHistorial(loteConHechos);
+    expect(operaciones, "el historial trae exactamente sus dos hechos, ni el del lote ajeno").toEqual([
+      "lot.release",
+      "quantity_event.create",
+    ]);
   }, 20000);
 });

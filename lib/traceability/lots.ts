@@ -928,6 +928,16 @@ export async function getActiveOperations(userAccountId: string) {
  * hechos no existen hasta que el primero vuelve. Eso es la forma del arreglo,
  * no un detalle de estilo.
  *
+ * **Y son NUEVE sujetos, no seis, por una objeción de la revisión de Codex que
+ * era justa:** con seis, esto seguía siendo una omisión callada. Entraron los
+ * tres que esta función ya consultaba y nadie leía —`sample`,
+ * `receiving_event`, `apiary_harvest_event`—, así que un lote nacido de una
+ * recepción o de una cosecha de miel ya no enseña esas secciones con el
+ * historial en blanco. **Lo que queda fuera está nombrado con su cifra en el
+ * propio bloque de sujetos**, abajo, y medido en
+ * `PENDING_IMPLEMENTATIONS/023`: lo peor que puede pasarle a esta función es
+ * volver a parecer completa.
+ *
  * **Por qué el guardia que había no lo vio, dicho para no contarlo dos veces.**
  * `tests/arquitectura/vocabulario-de-audit.test.ts` comprueba que todo
  * `entityType` leído lo escriba alguien, y pasaba con razón: los cinco se
@@ -1062,13 +1072,43 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     // El sujeto por `lotId` es uno solo y es `"lot"`: la auditoría del lote en
     // sí (`lot.release`, `lot.assembled_from_receptions`,
     // `lot.flag_conflicting_quantity`). Los demás van por el id de su hecho.
+    //
+    // **Todos los sujetos salen de algo que esta función YA consultó.** Eso no
+    // es casualidad ni pereza: es el límite declarado. Lo que queda fuera está
+    // nombrado abajo, porque una omisión callada se lee como cobertura.
     leerEnmiendas([
       { entityType: "lot", entityId: lotId },
       ...transformations.map((t) => ({ entityType: "lot_transformation", entityId: t.id })),
       ...measurements.map((m) => ({ entityType: "measurement", entityId: m.id })),
       ...quantityEvents.map((q) => ({ entityType: "quantity_event", entityId: q.id })),
+      ...samples.map((s) => ({ entityType: "sample", entityId: s.id })),
       ...(harvestEvent ? [{ entityType: "harvest_event", entityId: harvestEvent.id }] : []),
+      ...(receivingEvent ? [{ entityType: "receiving_event", entityId: receivingEvent.id }] : []),
+      ...(apiaryHarvestEvent ? [{ entityType: "apiary_harvest_event", entityId: apiaryHarvestEvent.id }] : []),
       ...(perfilDeTueste ? [{ entityType: "lot_roast_profile", entityId: perfilDeTueste.id }] : []),
+      // **Lo que NO entra, con su cifra, medido el 2026-10-05 sobre una copia
+      // desechable de la base compartida (filas de auditoría que apuntan a una
+      // entidad VIVA ligada a un lote). Lo encontró la revisión de Codex, no
+      // una lectura nuestra — y su objeción era justa: presentar esto como «el
+      // historial del lote» sin nombrar lo que falta es la omisión de siempre.**
+      //
+      // - `lot_process` (0 vivas aquí, 62 filas de audit). **No es un añadido
+      //   libre y por eso no se hace de pasada:** leer el proceso por `lotId`
+      //   lo rechaza `tests/arquitectura/proceso-por-el-resolvedor.test.ts`, y
+      //   con razón — el proceso se abre sobre la cereza y cubre a sus
+      //   descendientes, así que preguntarlo por el lote pierde la primera
+      //   generación. Entrar aquí obliga a pasar por `procesoQueCubre`, y
+      //   entonces la pregunta es otra: ¿el historial de un lote incluye el de
+      //   sus ancestros? Eso es diseño, no una línea.
+      // - `treatment_batch` (**44 vivas**, la mayor de todas): es el módulo de
+      //   investigación y exige protocolo. Mezclar la historia de un ensayo con
+      //   la del lote es una decisión de producto.
+      // - `asset` (0 vivas, 108 de audit): adjuntar evidencia no es un hecho
+      //   del proceso. La ficha ya tiene su sección de medios.
+      // - `store_allocation` y `drying_tray_weighing`: **0 filas de auditoría**
+      //   de cualquier clase hoy, así que no hay nada que mostrar todavía.
+      //
+      // Las cuatro, con su medición, en `PENDING_IMPLEMENTATIONS/023`.
     ]),
   ]);
 
