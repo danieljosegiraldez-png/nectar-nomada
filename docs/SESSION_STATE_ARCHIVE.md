@@ -4810,6 +4810,11 @@ afirmación.
 Sus **dos decisiones de Daniel** no se archivaron con ella: se rescataron a §1 de `SESSION_STATE.md`,
 porque una entrega archivada entierra las preguntas que lleva al final y así es como este archivo
 envejece sin avisar.
+**Archivados: 2026-10-05**, con el estado en 397/400 líneas — al 100 %, que es lo que su
+propio guardia pedía arreglar «sin prisa, en vez de al chocar con el techo». Se movieron las dos
+entregas más viejas de §2, las dos ya fusionadas. **Lo que dejaban abierto se rescató a §1 antes de
+mover nada**, que es lo que la cabecera de este archivo exige: aquí no vive nada que todavía dirija
+el trabajo.
 
 ### 2026-10-02 · Las dos pantallas que mentían: la banda de la curva y la capacidad del sitio (#603, #605)
 
