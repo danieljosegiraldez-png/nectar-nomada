@@ -36,6 +36,28 @@ import type { Prisma, ProvenanceClass, RoastPurpose } from "../../generated/pris
 
 export class RoastSessionValidationError extends Error {}
 
+/**
+ * Los códigos de tueste que tienen frase propia en `messages/*.json`, como
+ * `error_roast_<código>`. El resto sale envuelto en `error_roast`, que dice «No se pudo guardar el
+ * tueste: <código>» — en español con el código en inglés dentro.
+ *
+ * Vive aquí, al lado de los `throw`, y no en la acción: `app/actions/traceability.ts` lleva
+ * `"use server"` y de ahí sólo se pueden exportar funciones `async` (ver CLAUDE.md). Y al lado de
+ * los `throw` se ve: quien añada un código ve esta lista en la misma pantalla.
+ *
+ * Son los seis del camino de la muestra (2026-10-04). Los otros siete siguen con el envoltorio.
+ * `tests/traceability/frasesDeTueste.test.ts` exige que cada uno de éstos sea un código que de
+ * verdad se lanza y que tenga su frase en los DOS idiomas.
+ */
+export const CODIGOS_DE_TUESTE_CON_FRASE = [
+  "sample_must_be_green",
+  "sample_charge_weight_required",
+  "sample_mass_in_kg_required",
+  "sample_mass_exceeded",
+  "sample_source_lot_mismatch",
+  "sample_source_requires_sample_purpose",
+] as const;
+
 export async function listGreenSamplesForRoast(userAccountId: string, lotId: string) {
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
