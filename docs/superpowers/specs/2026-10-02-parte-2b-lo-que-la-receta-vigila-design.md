@@ -102,7 +102,7 @@ con los resultados»**, con un sistema **funcional, inteligente y trazable**.
 |---|---|---|---|
 | `EN_PLAZO` | días ≥ umbral | pasa | pasa |
 | `TEMPRANA` | días < umbral | **bloquea** (excepción) | pasa marcada |
-| `SIN_DESENLACE` | hay secado terminado, pero **sin `endedOutcome`** (todo lo anterior al 2026-09-16) | **bloquea** (excepción) | pasa marcada |
+| `SIN_DESENLACE` | hay secado terminado, pero **sin `endedOutcome`** (lo anterior al 2026-09-16 **y todo lo cerrado desde la app hasta #646**, ver abajo) | **bloquea** (excepción) | pasa marcada |
 | `SIN_SECADO` | hay umbral y **ningún secado terminado** que lo sostenga | **bloquea** (excepción) | no aplica: la muestra verde ya exige secado |
 | `SIN_UMBRAL` | ningún nivel declara umbral | pasa, con aviso «falta el umbral» | pasa |
 
@@ -110,6 +110,14 @@ con los resultados»**, con un sistema **funcional, inteligente y trazable**.
 pantalla diga cuál es. **Tras el reimport (R9)**, los lotes históricos saldrán `SIN_DESENLACE`: el
 reimport puede registrar el desenlace cuando la fuente lo diga; si no lo dice, quedan para excepción,
 y el plan cuenta cuántos son antes de fusionar.
+
+**Depende de #646 (danieljosegiraldez-png/nectar-nomada#646).** Medido por la sesión de la 2a sobre
+`main` `50cbfda3`: **ninguna pantalla guardaba `DryingRun.endedOutcome`**, así que todo secado cerrado
+desde la aplicación queda en `SIN_DESENLACE`, no sólo lo anterior al 2026-09-16. Sin ese arreglo, la venta
+bloqueada en `SIN_DESENLACE` bloquearía **todos** los lotes nuevos. Daniel decidió arreglarlo aparte: en
+#646 las dos puertas de cierre piden el desenlace, obligatorio y sin valor por omisión. **La 2b no se
+construye antes de que #646 esté en `main`.** Los secados ya cerrados siguen sin desenlace y caen en la
+excepción (o el reimport lo registra si la fuente lo dice).
 
 - **Mezclas:** el reposo de una mezcla es el **peor** de sus ramas; si alguna no tiene reloj, la mezcla
   tampoco. Una mezcla no escapa por `SIN_UMBRAL`.
