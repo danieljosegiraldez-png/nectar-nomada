@@ -156,20 +156,6 @@ a {
   color: var(--nn-ink);
 }
 
-/* S2 §4 — sign out and the locale switcher are account controls, not
-   destinations. They sit in their own cluster rather than competing with
-   navigation for the scarce horizontal space on a phone. */
-.nn-nav-account {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  /* Account controls are a fixed pair, not content that should give way. Left
-     to shrink they wrapped "Cerrar sesión" onto two lines and clipped the
-     locale switcher's second option. */
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
 .nn-nav-links {
   display: flex;
   /* wrap whole items, never mid-phrase: with eight destinations the row does
@@ -715,8 +701,10 @@ a.nn-card-link:active {
 /* --- navigation --------------------------------------------------------
    The signed-in nav is ten links plus a locale switcher in a single flex
    row. At 375px that overflows the viewport and the last items are
-   simply unreachable. Stack the row and let the links scroll sideways,
-   which keeps every destination reachable without a drawer. */
+   simply unreachable. **Desde el PR #643 la fila NO se apila**: la marca se
+   oculta, el grupo de cuenta se pliega en un `<details>` y los enlaces corren
+   de lado, lo que baja la cabecera de 234 px en tres filas a 61 en una. El
+   comentario anterior decía «Stack the row», que llevaba un día siendo falso. */
 @media (max-width: 48rem) {
   .nn-shell {
     padding: 0 1rem;
@@ -794,13 +782,6 @@ a.nn-card-link:active {
 
   .nn-nav-links > * {
     flex: 0 0 auto;
-  }
-
-  /* A row, not the block it defaults to — stacked, these two controls cost
-     92px instead of 46. */
-  .nn-nav-account {
-    justify-content: flex-start;
-    gap: 1rem;
   }
 
   .nn-nav-links a,
