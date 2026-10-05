@@ -3718,7 +3718,12 @@
     "fincaTrapsLinkAyuda": "Cuántas hay, cómo están y cuándo tocan revisar.",
     "jornadas": "Jornadas de cosecha",
     "jornadasAyuda": "Qué parcelas están listas, quién va a cada una, y lo que cada recolector entrega al beneficio.",
-    "proximamente": "Llegan después: rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio."
+    "proximamente": "Llegan después: rendimiento y eficiencia, y la calidad de la cosecha con lo que devuelve la selección del beneficio.",
+    "atencionTitulo": "Lo que pide atención",
+    "atencionAyuda": "Lo que tu gente reportó desde el campo en las jornadas que siguen abiertas. Al cerrar la jornada deja de aparecer aquí.",
+    "atencionVacio": "Nadie ha reportado nada en las jornadas abiertas.",
+    "atencionConFoto": "con foto",
+    "atencionVerJornada": "Ver la jornada"
   },
   "Recepcion": {
     "procesarEntrega": "Recibir o rechazar entrega",
