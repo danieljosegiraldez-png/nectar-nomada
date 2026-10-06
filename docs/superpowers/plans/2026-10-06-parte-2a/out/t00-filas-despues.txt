@@ -1,0 +1,13 @@
+process_recipe | 0
+process_recipe_version | 0
+process_recipe_phase | 0
+process_target | 0
+lot_process | 0
+lot_process_return | 0
+lot_process_intervention | 0
+fermentation_run | 1
+fermentation_intervention | 0
+drying_run | 0
+measurement | 38
+lot | 108
+audit_event | 6702

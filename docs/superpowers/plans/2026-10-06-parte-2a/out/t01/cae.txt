@@ -1,0 +1,618 @@
+
+ RUN  v4.1.10 /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a
+
+ × tests/recetas/esquemaDePasos.test.ts > el instrumento: una transacción que se deshace, con SAVEPOINT dentro > un rechazo dentro de un SAVEPOINT deshace sólo lo suyo, la transacción sigue viva, y al terminar no queda nada 465ms
+   → expected 'Cannot read properties of undefined (…' to match /process_recipe_step_step_type_value_i…/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > el mucílago que QUEDA va en uno de los seis tramos: 33, 110 y −1 no entran; 0 (Lavado), 100 (Honey) y los otros cuatro sí 24ms
+   → 33: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_mucilago_en_tramos/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > las horas van en orden —mínimo ≤ sugeridas ≤ máximo—, también sin la sugerida 84ms
+   → {"horasMin":24,"horasSugeridas":12}: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_horas_en_orden/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la humedad mínima no pasa de la máxima; igual, o con un solo extremo, entra 29ms
+   → expected 'Cannot read properties of undefined (…' to match /process_recipe_step_humedad_en_orden/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la temperatura mínima no pasa de la máxima; igual, o con un solo extremo, entra 32ms
+   → expected 'Cannot read properties of undefined (…' to match /process_recipe_step_temperatura_en_or…/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > seq es único dentro de la versión; el mismo seq en otra versión entra 19ms
+   → expected 'Cannot read properties of undefined (…' to be null
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe_step_addition (§3, E) > cantidad y unidad van juntas: una sin la otra no entra; las dos, o ninguna, sí 37ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > una marca de cierre es de exactamente un registro: ninguno o dos no entran; cualquiera de los tres, sí 51ms
+   → {}: expected 'Cannot read properties of undefined (…' to match /process_step_closing_reading_un_regis…/
+ × tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > la misma lectura no se marca dos veces para el mismo registro; para otro registro, sí 23ms
+   → expected 'Cannot read properties of undefined (…' to be null
+ × tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > una meta no cuelga de un paso de OTRA versión: la clave ajena compuesta lo rechaza; de su versión, entra 29ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > la misma variable y momento en dos pasos de la misma versión entran; repetida en el mismo paso, no 20ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > las metas sin paso siguen únicas por versión, fase, variable y momento, y no chocan con las de un paso 13ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > con paso y sin tipo no entra ninguno de los cuatro; con paso y tipo, o sólo con tipo, sí 20ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > un paso que algún registro cumple no se borra —RESTRICT, no SET NULL—; uno que nadie cumple, sí 24ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > lot_process_intervention: el acto es el tipo de paso (decisión de Daniel, 2026-10-03) > sin valor de catálogo y sin tipo no entra; con cualquiera de los dos, o con los dos, sí 30ms
+   → expected '\nInvalid `sp.lotProcessIntervention.…' to match /lot_process_intervention_catalogo_o_t…/
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe: la Libre y su control de parecido (§5.2) > un parecido sin motivo no entra, ni parecido o motivo fuera de una Libre; lo bien formado sí 24ms
+   → expected '\nInvalid `sp.processRecipe.create()`…' to match /process_recipe_parecida_exige_motivo/
+ × tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una versión de la que salió una receta, con la que se comparó una Libre o de la que nació un proceso no se borra; una sin nada, sí 23ms
+   → 
+Invalid `tx.processRecipe.create()` invocation in
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/tests/recetas/esquemaDePasos.test.ts:520:30
+
+  517 const parecida = await version(4);
+  518 const origen = await version(5);
+  519 const suelta = await version(6);
+→ 520 await tx.processRecipe.create({
+        data: {
+          name: "TEST derivada pasos-1791266712936",
+          organizationId: "5c625581-e0ed-4302-88b8-ef2ba6bdceaf",
+          ~~~~~~~~~~~~~~
+          derivadaDeVersionId: "be9fe74a-46dd-4a8a-a98d-e215e6904cd3",
+      ?   id?: String,
+      ?   description?: String | Null,
+      ?   status?: RecordStatus,
+      ?   classification?: ClassificationLevel,
+      ?   createdAt?: DateTime,
+      ?   updatedAt?: DateTime,
+      ?   organization?: OrganizationCreateNestedOneWithoutProcessRecipesInput,
+      ?   creator?: UserAccountCreateNestedOneWithoutProcessRecipesCreatedInput,
+      ?   versions?: ProcessRecipeVersionCreateNestedManyWithoutRecipeInput
+        }
+      })
+
+Unknown argument `organizationId`. Did you mean `organization`? Available options are marked with ?.
+ × tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una lectura marcada como de cierre, o de la que salió un fin de paso, no se borra; una sin marcar, sí 71ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > borrar una versión se lleva sus pasos —con sus adiciones, fines, requisitos y metas— y sus metas sin paso 24ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > quitar un paso se lleva sus metas, adiciones, fines y requisitos; los otros pasos y las metas de la versión se quedan 29ms
+   → Cannot read properties of undefined (reading 'create')
+ × tests/recetas/esquemaDePasos.test.ts > process_recipe.organization_id es RESTRICT: borrar una organización no convierte sus recetas en plantillas (Ruling FK-ORG) > una organización con una receta no se borra —y la receta conserva su organización—; una sin recetas, sí 100ms
+   → .toMatch() expects to receive a string, but got object
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts [ tests/recetas/esquemaDePasos.test.ts ]
+PrismaClientValidationError: 
+Invalid `prisma.processRecipe.deleteMany()` invocation in
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/tests/recetas/esquemaDePasos.test.ts:206:30
+
+  203 await borrarProcesosDeLotesDonde({ id: { in: lotes } });
+  204 // Las recetas que apuntan a una versión (derivada o parecida, RESTRICT) antes que las demás. Borrar una receta se
+  205 // lleva sus versiones, y éstas sus pasos —con adiciones, fines, requisitos y metas del paso— y sus metas.
+→ 206 await prisma.processRecipe.deleteMany({
+        where: {
+          id: {
+            in: []
+          },
+          OR: [
+            {
+              derivadaDeVersionId: {
+                not: null
+              }
+            },
+            {
+              parecidaAVersionId: {
+                not: null
+              }
+            }
+          ]
+        }
+      })
+
+Unknown argument `derivadaDeVersionId`. Available options are marked with ?.
+ ❯ ar node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:8
+ ❯ throwValidationException node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:6
+ ❯ Jr.handleAndLogRequestError node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:11
+ ❯ Jr.request node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:11
+ ❯ a node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:23
+ ❯ tests/recetas/esquemaDePasos.test.ts:206:3
+    204|   // Las recetas que apuntan a una versión (derivada o parecida, RESTR…
+    205|   // lleva sus versiones, y éstas sus pasos —con adiciones, fines, req…
+    206|   await prisma.processRecipe.deleteMany({
+       |   ^
+    207|     where: assertDefinedWhere({
+    208|       id: { in: recetas },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { clientVersion: '7.9.1' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > el instrumento: una transacción que se deshace, con SAVEPOINT dentro > un rechazo dentro de un SAVEPOINT deshace sólo lo suyo, la transacción sigue viva, y al terminar no queda nada
+AssertionError: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_step_type_value_i…/
+
+- Expected:
+/process_recipe_step_step_type_value_id_fkey/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:232:116
+    230|       versionId = m.v1;
+    231|       // Un rechazo de verdad de la base: un tipo de paso que no exist…
+    232|       expect(await intentar(tx, (sp) => paso(sp, m, { stepTypeValueId:…
+       |                                                                                                                    ^
+    233|         /process_recipe_step_step_type_value_id_fkey/,
+    234|       );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:229:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > el mucílago que QUEDA va en uno de los seis tramos: 33, 110 y −1 no entran; 0 (Lavado), 100 (Honey) y los otros cuatro sí
+AssertionError: 33: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_mucilago_en_tramos/
+
+- Expected:
+/process_recipe_step_mucilago_en_tramos/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:265:99
+    263|       // 33 está entre 0 y 100 y no es un tramo: es el caso que distin…
+    264|       for (const malo of [33, 110, -1]) {
+    265|         expect(await intentar(tx, (sp) => paso(sp, m, { mucilagoObjeti…
+       |                                                                                                   ^
+    266|           /process_recipe_step_mucilago_en_tramos/,
+    267|         );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:262:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > las horas van en orden —mínimo ≤ sugeridas ≤ máximo—, también sin la sugerida
+AssertionError: {"horasMin":24,"horasSugeridas":12}: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_horas_en_orden/
+
+- Expected:
+/process_recipe_step_horas_en_orden/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:286:79
+    284|       ];
+    285|       for (const h of malos) {
+    286|         expect(await intentar(tx, (sp) => paso(sp, m, h)), JSON.string…
+       |                                                                               ^
+    287|       }
+    288|       const buenos = [
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:278:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la humedad mínima no pasa de la máxima; igual, o con un solo extremo, entra
+AssertionError: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_humedad_en_orden/
+
+- Expected:
+/process_recipe_step_humedad_en_orden/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:302:97
+    300|   it("la humedad mínima no pasa de la máxima; igual, o con un solo ext…
+    301|     await enTransaccionQueSeDeshace(async (tx, m) => {
+    302|       expect(await intentar(tx, (sp) => paso(sp, m, { humedadMinPct: 1…
+       |                                                                                                 ^
+    303|         /process_recipe_step_humedad_en_orden/,
+    304|       );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:301:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la temperatura mínima no pasa de la máxima; igual, o con un solo extremo, entra
+AssertionError: expected 'Cannot read properties of undefined (…' to match /process_recipe_step_temperatura_en_or…/
+
+- Expected:
+/process_recipe_step_temperatura_en_orden/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:313:101
+    311|   it("la temperatura mínima no pasa de la máxima; igual, o con un solo…
+    312|     await enTransaccionQueSeDeshace(async (tx, m) => {
+    313|       expect(await intentar(tx, (sp) => paso(sp, m, { temperaturaMinC:…
+       |                                                                                                     ^
+    314|         /process_recipe_step_temperatura_en_orden/,
+    315|       );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:312:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > seq es único dentro de la versión; el mismo seq en otra versión entra
+AssertionError: expected 'Cannot read properties of undefined (…' to be null
+
+- Expected:
+null
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:324:67
+    322|   it("seq es único dentro de la versión; el mismo seq en otra versión …
+    323|     await enTransaccionQueSeDeshace(async (tx, m) => {
+    324|       expect(await intentar(tx, (sp) => paso(sp, m, { seq: 1 }))).toBe…
+       |                                                                   ^
+    325|       expect(await intentar(tx, (sp) => paso(sp, m, { seq: 1 }))).toMa…
+    326|         /Unique constraint failed on the fields: \(`recipe_version_id`…
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:323:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe_step_addition (§3, E) > cantidad y unidad van juntas: una sin la otra no entra; las dos, o ninguna, sí
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:336:23
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:335:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > una marca de cierre es de exactamente un registro: ninguno o dos no entran; cualquiera de los tres, sí
+AssertionError: {}: expected 'Cannot read properties of undefined (…' to match /process_step_closing_reading_un_regis…/
+
+- Expected:
+/process_step_closing_reading_un_registro/
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:362:83
+    360|         sp.processStepClosingReading.create({ data: { measurementId: m…
+    361|       for (const mala of [{}, { fermentationRunId: corrida.id, dryingR…
+    362|         expect(await intentar(tx, (sp) => marca(sp, mala)), JSON.strin…
+       |                                                                                   ^
+    363|           /process_step_closing_reading_un_registro/,
+    364|         );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:353:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > la misma lectura no se marca dos veces para el mismo registro; para otro registro, sí
+AssertionError: expected 'Cannot read properties of undefined (…' to be null
+
+- Expected:
+null
+
++ Received:
+"Cannot read properties of undefined (reading 'create')"
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:378:65
+    376|       const marca = (sp: Tx, fermentationRunId: string) =>
+    377|         sp.processStepClosingReading.create({ data: { measurementId: m…
+    378|       expect(await intentar(tx, (sp) => marca(sp, corrida.id))).toBeNu…
+       |                                                                 ^
+    379|       expect(await intentar(tx, (sp) => marca(sp, corrida.id))).toMatc…
+    380|         /Unique constraint failed on the fields: \(`measurement_id`, `…
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:373:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > una meta no cuelga de un paso de OTRA versión: la clave ajena compuesta lo rechaza; de su versión, entra
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:390:30
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:389:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > la misma variable y momento en dos pasos de la misma versión entran; repetida en el mismo paso, no
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:403:28
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:400:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > las metas sin paso siguen únicas por versión, fase, variable y momento, y no chocan con las de un paso
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:417:23
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:416:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > con paso y sin tipo no entra ninguno de los cuatro; con paso y tipo, o sólo con tipo, sí
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:433:23
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:432:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > un paso que algún registro cumple no se borra —RESTRICT, no SET NULL—; uno que nadie cumple, sí
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:454:32
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:451:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > lot_process_intervention: el acto es el tipo de paso (decisión de Daniel, 2026-10-03) > sin valor de catálogo y sin tipo no entra; con cualquiera de los dos, o con los dos, sí
+AssertionError: expected '\nInvalid `sp.lotProcessIntervention.…' to match /lot_process_intervention_catalogo_o_t…/
+
+- Expected:
+/lot_process_intervention_catalogo_o_tipo/
+
++ Received:
+"
+Invalid `sp.lotProcessIntervention.create()` invocation in
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/tests/recetas/esquemaDePasos.test.ts:471:35
+
+  468 it(\"sin valor de catálogo y sin tipo no entra; con cualquiera de los dos, o con los dos, sí\", async () => {
+  469   await enTransaccionQueSeDeshace(async (tx, m) => {
+  470     const manejo = (sp: Tx, extra: { catalogValueId?: string; stepTypeValueId?: string }) =>
+→ 471       sp.lotProcessIntervention.create({
+              data: {
+                lotProcessId: \"8f93de71-8bc3-407c-9a4b-7af878bfa260\",
+                occurredAt: new Date(\"2026-03-02T12:00:00.000Z\"),
+            +   lotProcess: {
+            +     create: LotProcessCreateWithoutInterventionsInput | LotProcessUncheckedCreateWithoutInterventionsInput,
+            +     connectOrCreate: LotProcessCreateOrConnectWithoutInterventionsInput,
+            +     connect: LotProcessWhereUniqueInput
+            +   }
+              }
+            })
+
+Argument `lotProcess` is missing."
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:472:58
+    470|       const manejo = (sp: Tx, extra: { catalogValueId?: string; stepTy…
+    471|         sp.lotProcessIntervention.create({ data: { lotProcessId: m.pro…
+    472|       expect(await intentar(tx, (sp) => manejo(sp, {}))).toMatch(/lot_…
+       |                                                          ^
+    473|       for (const bueno of [
+    474|         { stepTypeValueId: m.tipo.washing },
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:469:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe: la Libre y su control de parecido (§5.2) > un parecido sin motivo no entra, ni parecido o motivo fuera de una Libre; lo bien formado sí
+AssertionError: expected '\nInvalid `sp.processRecipe.create()`…' to match /process_recipe_parecida_exige_motivo/
+
+- Expected:
+/process_recipe_parecida_exige_motivo/
+
++ Received:
+"
+Invalid `sp.processRecipe.create()` invocation in
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/tests/recetas/esquemaDePasos.test.ts:489:26
+
+  486 await enTransaccionQueSeDeshace(async (tx, m) => {
+  487   let n = 0;
+  488   const receta = (sp: Tx, extra: { esLibre?: boolean; parecidaAVersionId?: string; motivoDeLibre?: string }) =>
+→ 489     sp.processRecipe.create({
+            data: {
+              name: \"TEST Libre 1 pasos-1791266712936\",
+              organizationId: \"f1711538-203a-462f-bbba-ec7f44df3f0f\",
+              ~~~~~~~~~~~~~~
+              esLibre: true,
+              parecidaAVersionId: \"f7f816fa-1b93-4e7c-bc5d-66f96cc8e512\",
+          ?   id?: String,
+          ?   description?: String | Null,
+          ?   status?: RecordStatus,
+          ?   classification?: ClassificationLevel,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   organization?: OrganizationCreateNestedOneWithoutProcessRecipesInput,
+          ?   creator?: UserAccountCreateNestedOneWithoutProcessRecipesCreatedInput,
+          ?   versions?: ProcessRecipeVersionCreateNestedManyWithoutRecipeInput
+            }
+          })
+
+Unknown argument `organizationId`. Did you mean `organization`? Available options are marked with ?."
+
+ ❯ tests/recetas/esquemaDePasos.test.ts:491:99
+    489|         sp.processRecipe.create({ data: { name: `TEST Libre ${++n} ${R…
+    490|       // Cada caso malo viola UNA sola de las dos restricciones: el no…
+    491|       expect(await intentar(tx, (sp) => receta(sp, { esLibre: true, pa…
+       |                                                                                                   ^
+    492|         /process_recipe_parecida_exige_motivo/,
+    493|       );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:486:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una versión de la que salió una receta, con la que se comparó una Libre o de la que nació un proceso no se borra; una sin nada, sí
+PrismaClientValidationError: 
+Invalid `tx.processRecipe.create()` invocation in
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/tests/recetas/esquemaDePasos.test.ts:520:30
+
+  517 const parecida = await version(4);
+  518 const origen = await version(5);
+  519 const suelta = await version(6);
+→ 520 await tx.processRecipe.create({
+        data: {
+          name: "TEST derivada pasos-1791266712936",
+          organizationId: "5c625581-e0ed-4302-88b8-ef2ba6bdceaf",
+          ~~~~~~~~~~~~~~
+          derivadaDeVersionId: "be9fe74a-46dd-4a8a-a98d-e215e6904cd3",
+      ?   id?: String,
+      ?   description?: String | Null,
+      ?   status?: RecordStatus,
+      ?   classification?: ClassificationLevel,
+      ?   createdAt?: DateTime,
+      ?   updatedAt?: DateTime,
+      ?   organization?: OrganizationCreateNestedOneWithoutProcessRecipesInput,
+      ?   creator?: UserAccountCreateNestedOneWithoutProcessRecipesCreatedInput,
+      ?   versions?: ProcessRecipeVersionCreateNestedManyWithoutRecipeInput
+        }
+      })
+
+Unknown argument `organizationId`. Did you mean `organization`? Available options are marked with ?.
+ ❯ ar node_modules/@prisma/client/src/runtime/core/errorRendering/throwValidationException.ts:46:8
+ ❯ throwValidationException node_modules/@prisma/client/src/runtime/RequestHandler.ts:211:6
+ ❯ Jr.handleAndLogRequestError node_modules/@prisma/client/src/runtime/RequestHandler.ts:183:11
+ ❯ Jr.request node_modules/@prisma/client/src/runtime/RequestHandler.ts:152:11
+ ❯ a node_modules/@prisma/client/src/runtime/getPrismaClient.ts:1014:23
+ ❯ tests/recetas/esquemaDePasos.test.ts:520:7
+    518|       const origen = await version(5);
+    519|       const suelta = await version(6);
+    520|       await tx.processRecipe.create({ data: { name: `TEST derivada ${R…
+       |       ^
+    521|       await tx.processRecipe.create({
+    522|         data: { name: `TEST Libre parecida ${RUN}`, organizationId: m.…
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { clientVersion: '7.9.1' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una lectura marcada como de cierre, o de la que salió un fin de paso, no se borra; una sin marcar, sí
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ tests/recetas/esquemaDePasos.test.ts:540:42
+    538|     await enTransaccionQueSeDeshace(async (tx, m) => {
+    539|       const corrida = await tx.fermentationRun.create({ data: { starte…
+    540|       await tx.processStepClosingReading.create({ data: { measurementI…
+       |                                          ^
+    541|       const deUnFin = await lectura(tx, m.lotId);
+    542|       const p = await paso(tx, m);
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:538:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > borrar una versión se lleva sus pasos —con sus adiciones, fines, requisitos y metas— y sus metas sin paso
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:561:23
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:560:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > quitar un paso se lleva sus metas, adiciones, fines y requisitos; los otros pasos y las metas de la versión se quedan
+TypeError: Cannot read properties of undefined (reading 'create')
+ ❯ paso tests/recetas/esquemaDePasos.test.ts:143:31
+    141|     ...extra,
+    142|   };
+    143|   return tx.processRecipeStep.create({ data });
+       |                               ^
+    144| }
+    145|
+ ❯ tests/recetas/esquemaDePasos.test.ts:581:29
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:15
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:580:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ FAIL  tests/recetas/esquemaDePasos.test.ts > process_recipe.organization_id es RESTRICT: borrar una organización no convierte sus recetas en plantillas (Ruling FK-ORG) > una organización con una receta no se borra —y la receta conserva su organización—; una sin recetas, sí
+TypeError: .toMatch() expects to receive a string, but got object
+ ❯ tests/recetas/esquemaDePasos.test.ts:615:96
+    613|       const sinReceta = await organizacion("sin receta");
+    614|       const receta = await tx.processRecipe.create({ data: { name: `TE…
+    615|       expect(await intentar(tx, (sp) => sp.organization.delete({ where…
+       |                                                                                                ^
+    616|         /process_recipe_organization_id_fkey/,
+    617|       );
+ ❯ prisma.$transaction.timeout tests/recetas/esquemaDePasos.test.ts:108:9
+ ❯ Proxy._transactionWithCallback node_modules/@prisma/client/src/runtime/getPrismaClient.ts:861:17
+ ❯ enTransaccionQueSeDeshace tests/recetas/esquemaDePasos.test.ts:106:5
+ ❯ tests/recetas/esquemaDePasos.test.ts:604:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  21 failed (21)
+   Start at  01:05:10
+   Duration  3.97s (transform 1.54s, setup 84ms, import 2.05s, tests 1.26s, environment 0ms)
+

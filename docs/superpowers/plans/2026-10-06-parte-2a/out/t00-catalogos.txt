@@ -1,0 +1,9 @@
+condicion_oxigeno | 4 | 0
+estado_cereza | 2 | 0
+fuente_microbiana | 5 | 0
+grado_proceso | 5 | 0
+levadura_cultivo | 8 | 0
+manejo_temperatura | 5 | 0
+medio_lavado | 4 | 0
+recipiente | 6 | 0
+sustrato_anadido | 3 | 0

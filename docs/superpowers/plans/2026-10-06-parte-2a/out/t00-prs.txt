@@ -1,0 +1,17 @@
+PRS: TOCAN · 5 de 18 fusiones desde 50cbfda3 tocan archivos de ancla (A) · 4 sólo archivos de final (B) · 2c: tanques=NO_ESTA traslado=NO_ESTA secado=NO_ESTA
+control del método (ventana de #626, 1a1e8a73): archivos de la lista que toca=38 (5 o más) · lotProcess.ts por #626=1 (1)
+base 50cbfda3 (2026-10-04) → origin/main 4893ff40 (2026-10-06) · HEAD 81587948 · origin/main dentro de la rama: sí
+lista: 56 archivos de ancla y 10 de final, ausentes en 50cbfda3: 0 (0) · títulos de gh: 400 PR (gh=0, con #626: 1)
+nombrados en las secciones «Archivos» de las tareas (189, de /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/.superpowers/plan-2a/tareas) que existían en 50cbfda3 y NO están en la lista: docs/reference/farm-management/04_reference_parameters.json eslint.config.mjs  (sólo los que la 2a LEE, como el paquete de referencia)
+--- los tres PR previos de la 2c, por contenido (control: vesselEquipmentId en el esquema=5, tiene que ser más de 0)
+tanques  — vesselEquipmentId escrito en lib/traceability/fermentation.ts: 0 → NO_ESTA
+traslado — toEquipmentId en prisma/schema.prisma: 0 → NO_ESTA
+secado   — dryingFacilityLocationId en prisma/schema.prisma: 0 → NO_ESTA
+pista por título o rama, sólo entre esas fusiones (no decide): 
+--- fusiones que tocan archivos de ancla (la tarea que edita uno de esos archivos reancla por TEXTO; el paso 1 de cada tarea comprueba sus anclas):
+#642 El inventario deja de pedir lo que no ofrece [inventario-con-puertas] 2026-10-05T14:32:06Z · ancla (A): scripts/rutas-declaradas.mjs tests/inventario-de-rutas.test.ts · al final (B): 2 archivos
+#644 Congelar la masa extraída en la muestra, y dar frase a los seis códigos del tueste de muestra [tueste-desde-muestra] 2026-10-05T14:32:38Z · ancla (A): app/actions/traceability.ts lib/traceability/roasting.ts · al final (B): 2 archivos
+#645 La ficha del lote: el trabajo arriba, lo que se consulta plegado, y el 500 que la tumbaba para un operario [ficha-del-lote] 2026-10-05T14:32:55Z · ancla (A): app/lots/[id]/page.tsx · al final (B): 2 archivos
+#648 El Historial del lote estaba vacío en los 108 lotes: la lectura buscaba por el id del lote y las escrituras guardan el del evento [historial-del-lote] 2026-10-05T16:47:22Z · ancla (A): app/lots/[id]/page.tsx · al final (B): 3 archivos
+#646 Cerrar un secado pide cómo terminó, y el reposo vuelve a arrancar [desenlace-del-secado] 2026-10-06T02:59:47Z · ancla (A): app/actions/bandejasDelSecado.ts app/actions/traceability.ts app/beneficio/bandejas/errorDeSecado.ts app/components/traceability/BandejasDelSecado.tsx app/lots/[id]/page.tsx lib/traceability/drying.ts · al final (B): 2 archivos
+(fin; 5 fusiones)

@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a
+
+
+ Test Files  21 passed (21)
+      Tests  898 passed (898)
+   Start at  01:14:29
+   Duration  45.30s (transform 24.15s, setup 1.89s, import 70.77s, tests 205.25s, environment 8ms)
+

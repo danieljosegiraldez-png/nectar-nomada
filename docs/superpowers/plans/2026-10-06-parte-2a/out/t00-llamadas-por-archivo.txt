@@ -1,0 +1,14 @@
+tests/traceability/aperturaDeProceso.test.ts:17
+tests/traceability/bandejasDelSecado.test.ts:1
+tests/traceability/bodegaConProceso.test.ts:38
+tests/traceability/corridaConProceso.test.ts:44
+tests/traceability/divisionBajoProceso.test.ts:22
+tests/traceability/drying.test.ts:6
+tests/traceability/e2e.test.ts:1
+tests/traceability/fermentation.test.ts:3
+tests/traceability/massBalance.test.ts:1
+tests/traceability/measurements.test.ts:7
+tests/traceability/operations.test.ts:2
+tests/traceability/reports.test.ts:1
+tests/traceability/samples.test.ts:4
+tests/traceability/venta-temprana.test.ts:1

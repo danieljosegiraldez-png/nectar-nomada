@@ -1,0 +1,12 @@
+tests/beneficio/colaDeSecado.test.ts
+tests/beneficio/datos-del-tablero.test.ts
+tests/traceability/bodegaConProceso.test.ts
+tests/traceability/corridaConProceso.test.ts
+tests/traceability/divisionBajoProceso.test.ts
+tests/traceability/editarBeneficio.test.ts
+tests/traceability/lotProcess.test.ts
+tests/traceability/perfilDeTueste.test.ts
+tests/traceability/processTargets.test.ts
+tests/traceability/recipeAuthoring.test.ts
+tests/traceability/recipeVersions.test.ts
+tests/traceability/reporteDeProceso.test.ts

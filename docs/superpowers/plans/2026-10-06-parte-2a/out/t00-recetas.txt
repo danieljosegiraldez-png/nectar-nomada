@@ -1,0 +1,6 @@
+proceso TOTAL | 0
+proceso abierto con receta | 0
+proceso abierto sin receta | 0
+proceso cerrado sin receta | 0
+receta plantilla (organization_id nulo) | 0
+version TOTAL | 0

@@ -1,0 +1,98 @@
+T00 — 2026-10-06 00:54:47
+HEAD 81587948 · origin/main 4893ff40 · rama recetas-parte-2a
+fuente de la base: pg_dump de nectar_test (o el respaldo nombrado en el paso 5, si hubo migraciones ajenas)
+base propia: nectar_test_recetas_2a (y su sombra)
+marca para la tarea 1: 20261006004230
+migraciones: en disco 203, aplicadas en la propia 203
+--- recetas y procesos en la base propia
+proceso TOTAL | 0
+proceso abierto con receta | 0
+proceso abierto sin receta | 0
+proceso cerrado sin receta | 0
+receta plantilla (organization_id nulo) | 0
+version TOTAL | 0
+--- catálogos
+condicion_oxigeno | 4 | 0
+estado_cereza | 2 | 0
+fuente_microbiana | 5 | 0
+grado_proceso | 5 | 0
+levadura_cultivo | 8 | 0
+manejo_temperatura | 5 | 0
+medio_lavado | 4 | 0
+recipiente | 6 | 0
+sustrato_anadido | 3 | 0
+--- anclas sin acierto: 0
+--- abrirProcesoDePrueba por archivo
+tests/traceability/aperturaDeProceso.test.ts:17
+tests/traceability/bandejasDelSecado.test.ts:1
+tests/traceability/bodegaConProceso.test.ts:38
+tests/traceability/corridaConProceso.test.ts:44
+tests/traceability/divisionBajoProceso.test.ts:22
+tests/traceability/drying.test.ts:6
+tests/traceability/e2e.test.ts:1
+tests/traceability/fermentation.test.ts:3
+tests/traceability/massBalance.test.ts:1
+tests/traceability/measurements.test.ts:7
+tests/traceability/operations.test.ts:2
+tests/traceability/reports.test.ts:1
+tests/traceability/samples.test.ts:4
+tests/traceability/venta-temprana.test.ts:1
+--- inventario
+Inventario de acceso — 625 operaciones que tocan la base, en 170 archivos
+99 operaciones que dependen del llamador
+--- FK-ORG: pruebas existentes que crean una receta con organización y después la borran
+tests/beneficio/colaDeSecado.test.ts                 borra-receta=221      borra-org=229      receta antes de organización
+tests/beneficio/datos-del-tablero.test.ts            borra-receta=228      borra-org=237      receta antes de organización
+tests/traceability/bodegaConProceso.test.ts          borra-receta=206      borra-org=223      receta antes de organización
+tests/traceability/corridaConProceso.test.ts         borra-receta=181      borra-org=190      receta antes de organización
+tests/traceability/divisionBajoProceso.test.ts       borra-receta=183      borra-org=189      receta antes de organización
+tests/traceability/editarBeneficio.test.ts           borra-receta=305      borra-org=309      receta antes de organización
+tests/traceability/lotProcess.test.ts                borra-receta=210      borra-org=220      receta antes de organización
+tests/traceability/perfilDeTueste.test.ts            borra-receta=70       borra-org=76       receta antes de organización
+tests/traceability/processTargets.test.ts            borra-receta=137      borra-org=139      receta antes de organización
+tests/traceability/recipeAuthoring.test.ts           borra-receta=66       borra-org=70       receta antes de organización
+tests/traceability/recipeVersions.test.ts            borra-receta=120      borra-org=124      receta antes de organización
+tests/traceability/reporteDeProceso.test.ts          borra-receta=301      borra-org=307      receta antes de organización
+--- línea base (113 archivos)
+ Test Files  113 passed (113)
+      Tests  2055 passed (2055)
+fallos:
+--- filas antes/después
+13c13
+< audit_event | 6484
+---
+> audit_event | 6702
+--- carril hermético
+── CI correrá 209 archivos de prueba; 214 los corre otra compuerta o ninguna
+ Test Files  209 passed (209)
+--- build
+▲ local build — skipping migrate and seed (no production database here)
+--- flip de colación
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/.superpowers/plan-2a/out/t00-flip-colacion.txt: Test Files  1 failed (1)
+/Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/.superpowers/plan-2a/out/t00-control-colacion.txt: Test Files  1 passed (1)
+--- unión con main y publicación (R1)
+main unido: 4893ff40 · HEAD de antes: 06b2e2e9 · uniones de la rama: 81587948 · remoto: 81587948 · seguimiento: origin/recetas-parte-2a
+--- el paquete de referencia en el árbol (R2)
+archivos: 29 · 04: 3779d9d7 · ejes: c1e9c6c5
+--- #646, el desenlace del secado (R19)
+646: EN_ARBOL · desenlaceDelSecado=6 endedOutcome(acciones)=7 name=endedOutcome=2 · lectores(reposo.ts)=3
+control: la rama origin/desenlace-del-secado (becfe806): desenlaceDelSecado=6 endedOutcome(acciones)=7 name=endedOutcome=2 (el control exige los tres en más de 0)
+HEAD 81587948 · #646 state=MERGED mergedAt=2026-10-06T02:59:47Z
+--- PR de main que tocan archivos de la 2a, y los tres de la 2c (R27)
+PRS: TOCAN · 5 de 18 fusiones desde 50cbfda3 tocan archivos de ancla (A) · 4 sólo archivos de final (B) · 2c: tanques=NO_ESTA traslado=NO_ESTA secado=NO_ESTA
+control del método (ventana de #626, 1a1e8a73): archivos de la lista que toca=38 (5 o más) · lotProcess.ts por #626=1 (1)
+base 50cbfda3 (2026-10-04) → origin/main 4893ff40 (2026-10-06) · HEAD 81587948 · origin/main dentro de la rama: sí
+lista: 56 archivos de ancla y 10 de final, ausentes en 50cbfda3: 0 (0) · títulos de gh: 400 PR (gh=0, con #626: 1)
+nombrados en las secciones «Archivos» de las tareas (189, de /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a/.superpowers/plan-2a/tareas) que existían en 50cbfda3 y NO están en la lista: docs/reference/farm-management/04_reference_parameters.json eslint.config.mjs  (sólo los que la 2a LEE, como el paquete de referencia)
+--- los tres PR previos de la 2c, por contenido (control: vesselEquipmentId en el esquema=5, tiene que ser más de 0)
+tanques  — vesselEquipmentId escrito en lib/traceability/fermentation.ts: 0 → NO_ESTA
+traslado — toEquipmentId en prisma/schema.prisma: 0 → NO_ESTA
+secado   — dryingFacilityLocationId en prisma/schema.prisma: 0 → NO_ESTA
+pista por título o rama, sólo entre esas fusiones (no decide): 
+--- fusiones que tocan archivos de ancla (la tarea que edita uno de esos archivos reancla por TEXTO; el paso 1 de cada tarea comprueba sus anclas):
+#642 El inventario deja de pedir lo que no ofrece [inventario-con-puertas] 2026-10-05T14:32:06Z · ancla (A): scripts/rutas-declaradas.mjs tests/inventario-de-rutas.test.ts · al final (B): 2 archivos
+#644 Congelar la masa extraída en la muestra, y dar frase a los seis códigos del tueste de muestra [tueste-desde-muestra] 2026-10-05T14:32:38Z · ancla (A): app/actions/traceability.ts lib/traceability/roasting.ts · al final (B): 2 archivos
+#645 La ficha del lote: el trabajo arriba, lo que se consulta plegado, y el 500 que la tumbaba para un operario [ficha-del-lote] 2026-10-05T14:32:55Z · ancla (A): app/lots/[id]/page.tsx · al final (B): 2 archivos
+#648 El Historial del lote estaba vacío en los 108 lotes: la lectura buscaba por el id del lote y las escrituras guardan el del evento [historial-del-lote] 2026-10-05T16:47:22Z · ancla (A): app/lots/[id]/page.tsx · al final (B): 3 archivos
+#646 Cerrar un secado pide cómo terminó, y el reposo vuelve a arrancar [desenlace-del-secado] 2026-10-06T02:59:47Z · ancla (A): app/actions/bandejasDelSecado.ts app/actions/traceability.ts app/beneficio/bandejas/errorDeSecado.ts app/components/traceability/BandejasDelSecado.tsx app/lots/[id]/page.tsx lib/traceability/drying.ts · al final (B): 2 archivos
+(fin; 5 fusiones)

@@ -1,0 +1,30 @@
+
+ RUN  v4.1.10 /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a
+
+ ✓ tests/recetas/esquemaDePasos.test.ts > el instrumento: una transacción que se deshace, con SAVEPOINT dentro > un rechazo dentro de un SAVEPOINT deshace sólo lo suyo, la transacción sigue viva, y al terminar no queda nada 319ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > el mucílago que QUEDA va en uno de los seis tramos: 33, 110 y −1 no entran; 0 (Lavado), 100 (Honey) y los otros cuatro sí 38ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > las horas van en orden —mínimo ≤ sugeridas ≤ máximo—, también sin la sugerida 30ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la humedad mínima no pasa de la máxima; igual, o con un solo extremo, entra 20ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > la temperatura mínima no pasa de la máxima; igual, o con un solo extremo, entra 19ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step: los rangos y el orden los exige la base (§3) > seq es único dentro de la versión; el mismo seq en otra versión entra 14ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe_step_addition (§3, E) > cantidad y unidad van juntas: una sin la otra no entra; las dos, o ninguna, sí 21ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > una marca de cierre es de exactamente un registro: ninguno o dos no entran; cualquiera de los tres, sí 60ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_step_closing_reading (§5.3) > la misma lectura no se marca dos veces para el mismo registro; para otro registro, sí 14ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > una meta no cuelga de un paso de OTRA versión: la clave ajena compuesta lo rechaza; de su versión, entra 15ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > la misma variable y momento en dos pasos de la misma versión entran; repetida en el mismo paso, no 17ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_target con paso (§3.2) > las metas sin paso siguen únicas por versión, fase, variable y momento, y no chocan con las de un paso 18ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > con paso y sin tipo no entra ninguno de los cuatro; con paso y tipo, o sólo con tipo, sí 35ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > los cuatro registros que cumplen un paso (§4.1) > un paso que algún registro cumple no se borra —RESTRICT, no SET NULL—; uno que nadie cumple, sí 40ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > lot_process_intervention: el acto es el tipo de paso (decisión de Daniel, 2026-10-03) > sin valor de catálogo y sin tipo no entra; con cualquiera de los dos, o con los dos, sí 16ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe: la Libre y su control de parecido (§5.2) > un parecido sin motivo no entra, ni parecido o motivo fuera de una Libre; lo bien formado sí 21ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una versión de la que salió una receta, con la que se comparó una Libre o de la que nació un proceso no se borra; una sin nada, sí 39ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > lo que apunta a una versión o a una lectura es RESTRICT, no SET NULL > una lectura marcada como de cierre, o de la que salió un fin de paso, no se borra; una sin marcar, sí 41ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > borrar una versión se lleva sus pasos —con sus adiciones, fines, requisitos y metas— y sus metas sin paso 27ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > lo que cuelga de una versión y de un paso se va con ellos (CASCADE) > quitar un paso se lleva sus metas, adiciones, fines y requisitos; los otros pasos y las metas de la versión se quedan 19ms
+ ✓ tests/recetas/esquemaDePasos.test.ts > process_recipe.organization_id es RESTRICT: borrar una organización no convierte sus recetas en plantillas (Ruling FK-ORG) > una organización con una receta no se borra —y la receta conserva su organización—; una sin recetas, sí 54ms
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  01:14:03
+   Duration  2.37s (transform 931ms, setup 40ms, import 1.30s, tests 904ms, environment 0ms)
+

@@ -1,0 +1,32 @@
+Parte 2a, tarea 1: el esquema de la receta con pasos
+
+Tablas nuevas en traceability: process_recipe_step, process_recipe_step_addition,
+process_recipe_step_end, process_recipe_step_requirement y process_step_closing_reading; enums
+StepEndRule, StepEndOperator y AdditionMoment. Las cuatro tablas de registro ganan el tipo de paso,
+el paso (RESTRICT) y el motivo de desviación; la receta gana esLibre, derivadaDeVersionId,
+parecidaAVersionId y motivoDeLibre; el proceso, origenDeRecetaVersionId; y la meta, recipeStepId
+con clave ajena COMPUESTA (la meta y su paso, de la misma versión). La unicidad de las metas pasa a
+dos índices únicos parciales. LotProcessIntervention.catalogValueId pasa a anulable: el acto es el
+tipo de paso (decisión de Daniel, 2026-10-03).
+
+El eje del mucílago es mucilagoObjetivo, un entero con lo que QUEDA (0 = Lavado, 100 = Honey) en uno de
+seis tramos (0, 10, 25, 50, 75, 100), con el CHECK process_recipe_step_mucilago_en_tramos (decisión de
+Daniel, 2026-10-03, que corrige ADR-181 #12). process_recipe.organization_id pasa de ON DELETE SET NULL
+a RESTRICT: borrar una organización convertía en silencio sus recetas en plantillas de todas.
+
+Trece CHECK y los dos índices parciales viven sólo en la migración; schema.prisma los nombra.
+Prisma 7.9.1 acepta la FK compuesta sobre una columna que ya está en otra relación (medido con
+prisma validate; precedente SensoryWheelNode.parent).
+
+Los dos lectores que el catálogo anulable rompía en tsc (la página del proceso y el reporte)
+nombran el acto cuando no hay valor de catálogo; la base exige uno de los dos.
+
+Pruebas: tests/recetas/esquemaDePasos.test.ts, 21, contra la base, cada una en una transacción que
+se deshace y con SAVEPOINT por intento, cada rechazo con su control. Grupo base-sembrada.
+
+Medido: deriva=0 (migración y esquema dicen lo mismo); restricciones 13/2/0/1/1/1 (antes de
+migrar, 0/0/1/0/0/1); esquemaDePasos 21/21; filas antes = después (18 tablas); las doce suites que
+crean una receta con organización limpian la receta antes que la organización; vecinas 21 archivos
+y 898 pruebas sin fallos; ci.sh=0 con 209 archivos y sin la prueba nueva; tsc=0; build=0.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

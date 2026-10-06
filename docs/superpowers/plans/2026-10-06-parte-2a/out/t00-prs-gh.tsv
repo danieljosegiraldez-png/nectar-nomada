@@ -1,0 +1,400 @@
+659	2026-10-06T05:23:05Z	cierre-empujado-no-es-fusionado	El cierre decía «SIN EMPUJAR» de una rama empujada, y sus tres banderas rojas eran todas ajenas o falsas
+658	2026-10-06T05:20:17Z	respuestas-de-daniel	Las cuatro respuestas de Daniel, y una nota de §3 que decía 200+200 y era falsa
+656	2026-10-06T03:58:20Z	limpiar-seccion-3	§3 llevaba 22 líneas de cosas hechas, y una era un duplicado puro de §4
+655	2026-10-06T03:13:26Z	archivar-parte-1	Archivada la entrega de la Parte 1 de recetas — y archivarla cuesta 4 líneas en vez de liberarlas
+653	2026-10-06T02:31:45Z	frase-febrero	La frase de febrero decía que el dato caduca, y lo que caduca es pesar en el campo
+652	2026-10-06T02:29:19Z	adr-107-duplicado	docs: decir en los dos ADR-107 que comparten número, sin renumerar
+651	2026-10-06T03:03:48Z	estado-del-historial	El estado decía «Historial vacío en 105 de 108» y eran los 108; y la ficha 009 no estaba hecha
+649	2026-10-05T22:36:42Z	revisar-s3	§3 rehecha sobre el main nuevo: las 10 que otra sesión no había corregido ya
+648	2026-10-05T16:47:22Z	historial-del-lote	El Historial del lote estaba vacío en los 108 lotes: la lectura buscaba por el id del lote y las escrituras guardan el del evento
+647	2026-10-05T14:48:31Z	estado-del-5	El estado recupera margen: dos entregas al histórico, y lo abierto rescatado antes de moverlas
+646	2026-10-06T02:59:47Z	desenlace-del-secado	Cerrar un secado pide cómo terminó, y el reposo vuelve a arrancar
+645	2026-10-05T14:32:55Z	ficha-del-lote	La ficha del lote: el trabajo arriba, lo que se consulta plegado, y el 500 que la tumbaba para un operario
+644	2026-10-05T14:32:38Z	tueste-desde-muestra	Congelar la masa extraída en la muestra, y dar frase a los seis códigos del tueste de muestra
+643	2026-10-05T14:32:18Z	cabecera-de-una-fila	La cabecera cabe en una fila, y el menú recupera 141 px
+642	2026-10-05T14:32:06Z	inventario-con-puertas	El inventario deja de pedir lo que no ofrece
+641	2026-10-05T14:31:29Z	situaciones-que-se-ven	Lo que reporta el recolector deja de caer en un agujero
+640	2026-10-04T20:26:33Z	registrar-el-turno	docs: quién fusiona, y por qué el estado vive al borde de su techo
+639	2026-10-05T15:52:01Z	inventario-ast-impl	007 (los dos escalones) y el primer dominio de la 005: el guardia existe, es un símbolo, y es el debido
+638	2026-10-04T19:41:14Z	docs/paquete-finca-beneficio	docs: paquete de referencia finca y beneficio (v2.1) para el módulo de café
+637	2026-10-04T19:11:05Z	inventario-con-ast	007: el plan del inventario de acceso con AST, con cuatro defectos medidos
+636	2026-10-04T07:20:52Z	decision-del-rango	docs(esquema): el rango de la microparcela sigue opcional, y quién lo decidió
+635	2026-10-04T07:21:37Z	estado-parte-1	Estado: entrada de la Parte 1 de las recetas (#626)
+634	2026-10-04T01:42:07Z	estado-tras-la-cola	docs(estado): devolver SESSION_STATE.md al presupuesto (main estaba en rojo)
+633	2026-10-04T01:57:34Z	tres-columnas-a-enum	010 Parte B: «no se buscó» deja de ser un nulo, y tres columnas dejan de ser texto
+632	2026-10-03T22:26:00Z	estado-de-la-rejilla	docs(estado): la rejilla entera, la forma del lote y la densidad por marco
+631	2026-10-03T21:52:52Z	densidad-en-la-ficha	feat(territorio): la ficha de la parcela muestra la densidad por marco
+630	2026-10-04T00:28:28Z	protocolo-los-nueve-items	protocolo de campo: los diez ítems que faltaban, y el guardia que faltaba más (ficha 010, Parte A)
+629	2026-10-04T18:38:22Z	rejilla-solo-parcela	D3: una microparcela no declara rejilla propia
+628	2026-10-04T00:25:33Z	quien-lo-hizo-null	quienLoHizo: no reventar cuando una cuenta desaparece a mitad de la lectura
+627	2026-10-04T00:28:56Z	plan-protocolo-de-campo	planes: el protocolo de campo, en dos partes separables (ficha 010)
+626	2026-10-04T07:09:26Z	recetas-base	Parte 1: el proceso cubre al lote (recetas del beneficio)
+625	2026-10-03T21:54:18Z	rango-de-microparcela	feat(territorio): la microparcela ya puede decir dónde está (§6)
+624	2026-10-03T21:54:03Z	pantalla-de-la-forma	feat(territorio): la pantalla para declarar qué celdas están plantadas
+623	2026-10-04T00:29:23Z	fichas-que-mienten	fichas: la 009 estaba hecha y no lo sabía; la 010 tiene tres hechos ya falsos
+622	2026-10-03T21:53:49Z	forma-declarada-en-pantalla	feat(territorio): declarar y quitar trozos de la forma, con el aviso del §7.4
+621	2026-10-05T15:59:10Z	la-seleccion-no-resta	diseño: una selección no resta — lo fino nombra parte de la rejilla de su lote
+620	2026-10-04T00:29:50Z	formularios-se-vacian	Un formulario rechazado se vacía, y hay que teclearlo todo otra vez
+619	2026-10-03T21:53:35Z	sin-pedir-metraje	feat(territorio): la aplicación deja de pedirle al operario un metraje
+618	2026-10-03T21:53:22Z	retirar-densidad-por-area	refactor(territorio): retirar la densidad por área, que ya no la llamaba nadie
+617	2026-10-04T00:31:42Z	dos-mensajes-sin-medir	019: dos mensajes convertían un límite de observación en un hecho
+615	2026-10-04T00:30:17Z	traducir-disparadores	La regla de trampas no se ofrece a quien el servidor va a negar
+614	2026-10-03T21:45:01Z	densidad-por-marco	feat(territorio): la densidad por marco de plantación, con su procedencia
+613	2026-10-03T21:44:43Z	avisos-fuera-de-la-forma	feat(territorio): marcar sobre celdas sin plantar se guarda y se avisa (tarea 4)
+612	2026-10-03T21:42:17Z	reglas-del-carril-con-base	docs: tres reglas del carril con base, cada una pagada con una corrida
+611	2026-10-04T00:31:28Z	cola-sobre-todas-las-corridas	cola: la corrida que sale del tablero es la del aviso, no la que empezó antes (cierra 016)
+610	2026-10-03T21:44:24Z	forma-del-lote	feat(territorio): la forma del lote y la capacidad honesta (tareas 1-3)
+609	2026-10-04T19:14:59Z	area-no-se-hereda	La microparcela no hereda el área de su parcela madre
+608	2026-10-04T00:31:14Z	correccion-no-resucita	vigencia: una corrección fuera de la ventana también oculta su original (cierra 018)
+607	2026-10-03T21:43:42Z	planton-en-la-rejilla	feat(territorio): el tablero limita dónde se sitúa un plantón
+606	2026-10-04T18:46:04Z	estado-017-015	estado: la entrega del 017 y el 015, y la entrada del #577 al archivo histórico
+605	2026-10-04T00:30:59Z	ocupacion-comprobada	tablero: la ocupación se cuenta sin filtrar por lote, y la liberación se agrupa por unidad (cierra 015)
+604	2026-10-03T21:42:20Z	rejilla-forma-del-lote	docs(territorio): la forma del lote y la densidad por marco — diseño (D8-D11)
+603	2026-10-04T00:30:44Z	curva-por-momento	curva: el momento del objetivo decide a qué lecturas se aplica la banda (cierra 017)
+602	2026-10-02T16:01:40Z	estado-fusion	Rescatar lo vivo de los PR #574 y #591, midiéndolo antes
+601	2026-10-02T16:14:41Z	rejilla-tarea-8	feat(territorio): las tres reglas de la rejilla que la base no garantizaba (tarea 8)
+600	2026-10-02T16:14:21Z	rejilla-tarea-7	feat(territorio): las pantallas de la rejilla y de los rangos (tarea 7)
+599	2026-10-02T16:14:00Z	rejilla-tarea-6	feat(territorio): getPlotDetail compara la rejilla con lo sembrado (tarea 6)
+598	2026-10-02T16:13:06Z	rejilla-tarea-5	feat(territorio): los rangos de un bloque, con su informe de solape (tarea 5)
+597	2026-10-02T16:12:29Z	rejilla-tarea-4	feat(territorio): el rango y la copia de atributos en createMicrolot (tarea 4)
+596	2026-10-02T15:07:06Z	ejes-curva	feat(beneficio): los ejes de la curva, y una cita que sólo se hace cuando se sostiene
+595	2026-10-02T15:35:59Z	arreglar-postcondicion-consolidar	Siete defectos de consolidar, y seis de sus propios arreglos
+594	2026-10-02T05:40:07Z	guardia-del-ambito-de-plataforma	grant-admin cuenta en SU ámbito, no en todos
+593	2026-10-02T05:41:04Z	consolidar-personas-duplicadas	Consolidar dos fichas de la misma persona en una
+592	2026-10-02T15:47:03Z	guardia-del-numero-congelado	Un guardia para que grant-admin no vuelva a congelar un número
+590	2026-10-02T15:36:02Z	docstring-de-hayfloracion	El docstring de hayFloracion vuelve a estar pegado a su función
+589	2026-10-02T15:35:57Z	rejilla-tarea-3	feat(territorio): la rejilla en updateLocationAttributes, con su mensaje (tarea 3)
+588	2026-10-02T00:14:57Z	guardia-de-grant-admin	El guardia de grant-admin compara antes/después, no contra un 89 congelado
+587	2026-10-02T00:12:53Z	aviso-de-floracion	El aviso de floración: lo dispara el producto, no la floración
+586	2026-10-02T00:08:15Z	rejilla-tarea-2	feat(territorio): la rejilla de la parcela y los rangos del bloque, en la base (tarea 2)
+585	2026-10-01T23:14:49Z	cerrar-020	docs: cerrar el 020, y la entrega del ambiente pasa de §3 a §2
+584	2026-10-01T23:15:27Z	rejilla-tarea-1	Tarea 1: la aritmética de la rejilla, pura y sin base
+583	2026-10-01T22:48:34Z	corregir-ambiente	feat(ambiente): corregir una lectura de secado desde la pantalla
+582	2026-10-01T22:38:14Z	spec-rejilla-aprobado	El plan de la rejilla y los rangos: siete tareas contra el main de hoy
+581	2026-10-01T22:36:52Z	trampa-nombre-de-base-desechable	El nombre de la base desechable decide si cuatro suites pasan
+580	2026-10-01T20:53:52Z	spec-rejilla-aprobado	El diseño de la rejilla y los bloques por rango, aprobado el 2026-10-01
+579	2026-10-01T22:39:20Z	ambiente-correccion	docs: el ambiente del secado, recorrido en navegador; falta la pantalla de corregir
+578	2026-10-01T20:26:07Z	floracion-de-parcela	Dónde se anota la floración de una parcela
+577	2026-10-01T17:27:02Z	ejes-y-rubrica-45	Plan: los ejes de la curva y la rúbrica 22 (§4.5)
+576	2026-10-01T20:00:45Z	dana-polinizadores	El producto declara si daña polinizadores, y el aviso depende de eso
+575	2026-10-02T15:47:41Z	recomendaciones-broca	Recomendaciones para broca en café: la ventana importa más que la dosis
+573	2026-10-01T16:53:03Z	piezas-del-tablero-45	Las tres piezas visuales del tablero (§4.5)
+572	2026-10-01T14:30:07Z	fichas-de-productos	Las etiquetas de los fitosanitarios llegaron, y ninguna registra café
+571	2026-10-01T13:50:18Z	archivar-564	Archiva la entrada de la gráfica (PR #564), y su lección pasa a las Trampas de CLAUDE.md
+570	2026-10-01T03:25:34Z	archivar-556	Archiva la entrada del destino de la cereza (PR #556): 99 % → 94 % del presupuesto
+569	2026-10-01T03:05:43Z	cierre-del-2026-09-30	Cierre del 2026-09-30: el #568 en el estado, y dos lecciones donde sí se cargan
+568	2026-10-01T02:34:13Z	propuesta-de-dosis	Al registrar una aplicación, la etiqueta del producto se propone en pantalla
+567	2026-10-01T02:02:40Z	limpiar-estado-medido	§3 dirigía trabajo hacia cosas ya hechas: cinco afirmaciones medidas falsas
+566	2026-10-01T01:12:58Z	desfase-en-bandejas	El pesaje de bandejas perdía la hora al re-renderizar, y el guardia miraba un archivo
+565	2026-10-01T01:01:59Z	respaldo-restore-no-miente	El verificador de respaldos ya no dice PASS sobre una restauración con errores
+564	2026-09-30T22:47:59Z	escala-del-ambiente	El aire del cuarto sale del eje del grano: la curva pasa del 44 % al 93 % del lienzo
+563	2026-09-30T20:13:07Z	piezas-del-tablero-45	Plan: las tres piezas visuales del tablero (§4.5)
+562	2026-09-30T20:19:07Z	grafica-de-la-unidad	La gráfica de la unidad: cinco series, cada una con la forma que su dato merece
+561	2026-09-30T19:47:24Z	archivar-tablero-paso-1	Archivado el tablero paso 1 — medido, y esta vez sin nada que rescatar
+560	2026-09-30T19:34:51Z	tablero-al-dia	El estado dice del tablero lo que hay, no lo que había
+559	2026-09-30T19:02:41Z	archivar-credencial	Archivada la credencial rotada, rescatando los seis productos de Finca Rosina
+558	2026-09-30T19:41:09Z	ficha-de-la-unidad	La ficha de una unidad de secado: sus cifras, sus actos, y la autorización que hereda de la cola
+557	2026-09-30T18:46:50Z	arreglar-numero-de-pr	El estado dice el PR del destino, no «#NNN»
+556	2026-09-30T18:41:21Z	destino-por-finca-t1	El destino de la cereza lo lleva la finca, no cada jornada (ADR-194)
+555	2026-09-30T18:27:43Z	ocupacion-de-bandejas	La lista de bandejas dice qué tiene encima cada una, sin filtrar lotes ajenos
+554	2026-09-30T20:43:47Z	dosis-y-uso-del-producto	Dosis y uso del producto fitosanitario, y dos listas en un solo sitio
+553	2026-09-30T18:03:42Z	boton-de-la-tanda	«Revolví éstas»: la tanda por fin tiene botón, y el guardia que no la vio
+552	2026-09-30T16:38:51Z	plan-destino-por-finca	plan: el destino de la cereza por finca — cinco tareas ejecutables
+551	2026-09-30T16:37:42Z	comentario-del-seed	El comentario del seed describía el mundo de hace veinte minutos
+550	2026-09-30T16:38:28Z	jornada-sin-beneficio	diseño: el destino de la cereza lo declara la finca, no el cosechador
+549	2026-09-30T16:10:19Z	kiva-ya-no-es-demo	Kiva Estate ya no es DEMO, y el guardia que no lo habría visto
+548	2026-09-30T14:25:19Z	adr-cosechador	ADR-194: el cosechador entrega y pesa; el beneficio recibe, y ahí se juzga el permiso
+547	2026-09-30T14:28:12Z	confirmaciones-que-faltaban	Las cinco confirmaciones mudas, y ninguna queda
+546	2026-09-30T13:20:14Z	anotar-tablero-paso-1	estado: anotar el tablero paso 1, y el rescate que su archivado exigía
+545	2026-09-30T12:25:17Z	tablero-paso-1	tablero del beneficio, paso 1: la cola, la capacidad y los instrumentos en /beneficio
+544	2026-09-30T12:56:25Z	estado-del-29	Estado: el secado tiene cola, la tanda es un acto, y medir cabe en un campo
+543	2026-09-30T11:52:31Z	cierre-del-29	Estado: la credencial rotada, y una confirmación que nadie leía
+542	2026-09-30T03:21:59Z	unificar-planes-del-tablero	Unificar los dos planes del tablero, y anular la tarea que contradice la decisión del 29
+541	2026-09-30T02:50:31Z	plan-del-tablero	plan: el tablero del beneficio, paso 1 — seis tareas ejecutables
+540	2026-09-30T02:12:19Z	ruta-del-tablero	ADR-193: el tablero del beneficio ES /beneficio, arriba; el índice pasa a ser su mitad de abajo
+539	2026-09-30T02:50:26Z	tablero-del-beneficio	El tablero del beneficio: diseño y plan, y quién dice que una unidad está libre
+538	2026-09-30T02:01:06Z	archivar-recorrido	estado: archivar «El recorrido de granja a beneficio» después de darle casa a lo suyo
+537	2026-09-30T01:56:11Z	adr-192-sin-pedido	ADR-192: un pedido de cereza restringe cuando existe, no es requisito para recibir
+536	2026-09-30T00:56:50Z	anotar-tablero	estado: anotar el tablero del beneficio, diseñado y aprobado hace tres semanas
+535	2026-09-30T00:22:25Z	adr-191-nombre-malla	ADR-191: la malla no es una variable de medición, es SampleKind.SCREEN y su fracción
+534	2026-09-29T23:57:21Z	adr-gramaje-de-muestra	ADR-190: clasificar por malla son dos operaciones, y el gramaje vive en la muestra
+533	2026-09-29T23:58:05Z	regent-no-regin	El producto se llama Regent, no «Regin»
+532	2026-09-29T23:42:14Z	mirar-gramos	estado: «muestras en gramos» es el tamaño de la muestra, y no tiene dónde ir
+531	2026-09-30T04:20:24Z	medir-en-cascada	Medir en cascada: el número arriba, el detalle plegado, y la zona sin pedir una inspección
+530	2026-09-29T22:39:46Z	archivar-flujo-verde	estado: archivar «Flujo verde, tueste y cata», midiendo antes qué se pierde
+529	2026-09-29T22:21:18Z	trampa-del-detector	Trampa: un guardia que lee la fuente lo satisface la declaración
+528	2026-09-29T21:54:47Z	estado-permisos	estado: el permiso se juzga donde ocurre el acto (#525), y §3 deja de mentir
+527	2026-09-29T21:13:25Z	confirmacion-de-inspeccion	La confirmación de una inspección ya se ve, y un guardia para la clase
+526	2026-09-30T00:47:05Z	tanda-de-volteo	La tanda de volteo: un acto sobre varias unidades, y el O que parecía un Y
+525	2026-09-29T19:18:14Z	acotar-permisos	El permiso se juzga donde ocurre el acto, no «en cualquier ámbito»
+524	2026-09-29T18:56:00Z	estado-del-29	Estado: Kiva Estate tiene dos fincas (#519, #521, #522)
+523	2026-09-29T23:48:44Z	cola-de-secado	La cola de secado: qué le toca a cada unidad, y ritmo.ts por fin con quien lo lea
+522	2026-09-29T18:28:23Z	rotulos-del-lote	Una sola regla de mayúsculas en los rótulos del lote, con su guardia
+521	2026-09-29T18:07:38Z	gestores-de-finca	Guión para dar de alta a un gestor de finca y beneficio
+520	2026-09-29T18:06:14Z	estado-respaldos	Estado: ~/nectar-backups ya no existe
+519	2026-09-29T17:36:16Z	varias-fincas-por-organizacion	ADR-189: una organización de finca puede tener varias fincas
+518	2026-09-29T16:29:20Z	estado-guardias	Estado: los cuatro caminos que escriben ya tienen guardia
+517	2026-09-29T01:38:34Z	ritmo-por-fase	El ritmo por fase: los objetivos de receta dicen de qué fase hablan
+516	2026-09-29T16:04:03Z	estado-del-28	Estado: el recorrido de granja a beneficio (#509, #512, #514)
+515	2026-09-29T01:27:12Z	backup-colacion	El verificador de respaldos crea la copia con la colación de producción, y lo comprueba
+514	2026-09-28T12:33:40Z	saltar-al-lote	Armar un lote lleva a su ficha, donde sigue la selección
+513	2026-09-28T11:39:42Z	guardia-seed	La siembra también se niega a escribir en una base remota
+512	2026-09-28T02:24:40Z	pedidos-dentro-de-recepcion	Los pedidos se consultan donde se recibe, y salen del índice
+511	2026-09-28T02:15:30Z	estado-locale	Estado: la colación cerrada, y el guardia de la CLI de Prisma
+510	2026-09-28T01:31:11Z	guardia-migrate	Un guardia para la CLI de Prisma: no migrar contra una base remota
+509	2026-09-28T02:15:28Z	informe-de-proceso	Los rótulos del recorrido de finca a beneficio dicen lo mismo en los dos sitios
+508	2026-09-28T01:36:13Z	spec-cola-secado	Diseño de la cola de secado, y el cierre del proceso con la humedad de un descendiente
+507	2026-09-28T01:16:52Z	comentario-productores	El comentario del índice de productores decía algo falso
+506	2026-09-28T00:22:13Z	locale-pruebas	La base de pruebas se crea con la colación de producción
+505	2026-09-27T23:21:19Z	estado-adr188	Estado: ADR-188 fusionado, y la colación de producción medida
+504	2026-09-28T00:20:43Z	ambitos-que-apuntan-a-nada	Fuera los ámbitos que apuntan a algo que ya no existe
+503	2026-09-27T22:50:16Z	proveedores-equipos	ADR-188: dar de alta un proveedor de equipos
+502	2026-09-28T00:18:00Z	ambito-unico	Un solo ámbito por tipo sin referente, y la regla vive en la base
+501	2026-09-28T01:02:32Z	ocultar-sin-permiso	Lo que no puedes hacer no se ofrece, y tampoco se explica
+500	2026-09-27T19:02:43Z	estado-del-27	estado: la jornada del 27, y tres secciones del 19 al archivo
+499	2026-09-27T18:57:26Z	pf-cerrada	P-F decidida: Varroa en dos mitades, Meliponini a referencia externa
+498	2026-09-27T18:38:55Z	ambiente-corrida-medible	ambiente: cada fila de prueba dice de qué corrida es
+497	2026-09-27T16:56:07Z	before-cierto	El «before» de editarModelo describe un estado que existió
+496	2026-09-27T18:00:23Z	filtro-solo-cafe	Lotes es operación: fuera instalaciones, ajustes y los tipos que no son café
+495	2026-09-27T16:31:39Z	carrera-spec	La tercera carrera, en retirarEspecificacion
+494	2026-09-27T16:15:16Z	carrera-retirar	La misma carrera en retirarModelo, cerrada
+493	2026-09-27T15:29:05Z	des-retirar	Des-retirar un modelo de equipo (ADR-187)
+492	2026-09-27T07:21:30Z	adr-ph-pi	ADR-187 y ADR-188: P-H y P-I, decididas
+491	2026-09-27T05:54:08Z	trampa-compuertas	Trampas: un PR en conflicto no tiene las compuertas en rojo, no las tiene
+490	2026-09-27T05:43:25Z	arreglar-unificacion	Revoca los permisos del duplicado y deja la unificación idempotente
+489	2026-09-27T05:20:23Z	sin-columna-dato	Fuera la columna «Dato» de las dos pantallas de clasificación por malla
+488	2026-09-27T16:33:04Z	limpiar-vitales	vitalesEnSitio: el afterAll borra todo lo que la corrida deja
+487	2026-09-26T18:46:27Z	cuenta-borrada	Estado: la cuenta de verificación local ya no existe; se dice cómo hacerse una
+486	2026-09-26T16:50:54Z	nota-verificacion-local	Estado: cómo se verifica en local la clasificación de verde, y una frase que dejó de ser cierta
+485	2026-09-26T16:32:32Z	unificar-las-nubes	Unifica los dos «Las Nubes» y ordena el cuarto de secado
+484	2026-09-26T14:24:23Z	clasificacion-verde	Las tres lecturas de la clasificación de café verde por malla
+483	2026-09-26T14:12:58Z	trampa-vitest-consola	Trampas: vitest esconde los console.log de un test que pasa
+482	2026-09-26T13:06:59Z	baja-de-recolector	Dar de baja a un recolector: el inverso que faltaba
+481	2026-09-26T14:18:22Z	auth-lotes-clasificacion	Corregir dos textos caducados sobre la compuerta de clasificación
+480	2026-09-26T15:22:15Z	guardia-clasificacion	Guardia: quien puede listar lotes limpia la clasificación con la que nacen
+479	2026-09-26T03:09:58Z	ambito-desciende	Un ámbito de lugar alcanza lo que cuelga de él, también en las listas (ADR-144)
+478	2026-09-26T01:11:34Z	camino-de-la-microparcela	Subdividir una parcela: el botón donde está la parcela, y con su permiso
+477	2026-09-26T00:35:33Z	spec-operacion-beneficio-2027	Selección de verde, muestra en gramos y tueste antes de catar, con la revisión adversarial atendida
+476	2026-09-25T21:14:24Z	doc-usuarios-por-operacion	Una cuenta por operación: qué perfil y qué ámbito dar
+475	2026-09-25T15:31:03Z	pf-guia-ph	Rescata la revisión de Daniel de la guía de pH (P-F)
+474	2026-09-24T01:19:44Z	ux-apiarios	Apiarios: flujo operativo más claro para visitas y faenas
+473	2026-09-23T23:40:26Z	ux-beneficio	Beneficio: flujo operativo claro y formularios bajo demanda
+472	2026-09-23T20:14:47Z	ux-instalacion	Instalaciones: flujo operativo claro y formularios bajo demanda
+471	2026-09-23T18:45:00Z	herramientas-rueda	Sensorial: base segura para ruedas interactivas
+470	2026-09-23T05:49:10Z	plan-ambiente-a-mano	Secado: registro manual del ambiente de la instalacion
+469	2026-09-23T03:54:33Z	quien-lo-hizo-acotado	Quién lo hizo: personas acotadas por finca y validación al guardar
+468	2026-09-23T02:19:56Z	secado-2b	Secado por bandeja: carga, movimiento y cierre del lote
+467	2026-09-23T00:45:43Z	rutinas-por-estante	Rutinas de lugar: operar también por estante
+466	2026-09-22T20:02:56Z	acotado-por-construccion	Inventario: un sello de actor no es acotado por construcción
+465	2026-09-22T20:50:47Z	finca-botones-y-parcela	finca: botones de finca con logotipo, y «Crear parcela nueva» completa
+464	2026-09-22T19:33:35Z	canal-autorizacion	declararCanal exige permiso: la persona, un admin o quien coordina su finca (ADR-184)
+463	2026-09-21T20:15:34Z	apiario-org-heredada	Apiario: la finca se hereda del padre (500 en producción)
+461	2026-09-21T16:38:48Z	fincas-sin-sitios-anidados	fincas: un sitio colgado de otro sitio no es otra finca
+460	2026-09-21T16:22:12Z	landmedia-firmador	test(landMedia): espiar el firmador en vez de depender de que falten credenciales de R2
+459	2026-09-21T15:08:11Z	trampas-de-su-finca	finca: las trampas son de la finca elegida, por parcela y bloque
+458	2026-09-21T14:22:25Z	huecos-menores	Manejo fitosanitario: la regla exige ver el catálogo, y el orden de errores de la jornada vuelve a ser el de antes
+457	2026-09-21T16:00:45Z	reposo-en-la-receta	ADR-181 §20: el reposo lo define la receta; y el 013 queda cerrado
+456	2026-09-21T17:42:58Z	spec/instalaciones-rutinas	Rutinas de limpieza y fumigación en lugares, y la bodega (ADR-180)
+455	2026-09-21T14:22:09Z	secado-2a	Secado 2a: estantes con posiciones, bandejas numeradas y la capacidad que se mide
+454	2026-09-21T15:48:44Z	hueco-carril-ligero	ci: el carril de sólo-documentación corre los guardias que leen documentación
+453	2026-09-21T14:38:30Z	spec/recepcion-a-lotes	De la recepción a los lotes (pieza 3 de 3)
+452	2026-09-21T11:49:39Z	arreglo-estado-reemplazado	main en rojo: el guardia de docs/dominio admite «reemplazado», que ADR-181 usó
+450	2026-09-21T13:51:07Z	friendly-error	Las clases que friendlyError relanzaba eran 500: 22 mensajes y un guardia que las cuenta
+449	2026-09-20T00:03:24Z	wt-cera-subproducto	apiario: la cera de la miel es subproducto, no merma (Q28, ADR-178)
+448	2026-09-19T23:24:43Z	fitosanitarios-pr-b	Manejo fitosanitario de la parcela (PR B): bloques, regla con producto y aviso atendido
+447	2026-09-19T21:49:43Z	wt-cera-de-extraccion	apiario: la miel se pesa por recipiente (Q28, ADR-177)
+446	2026-09-20T02:35:54Z	pf-literatura-y-decisiones	P-F para el café: los umbrales salen de la receta (ADR-177) y la literatura que lo sostiene
+445	2026-09-21T12:10:35Z	vistas-finca-parcela	Parcela en pestañas y ronda de trampas de la finca (con cola sin señal)
+444	2026-09-19T22:28:24Z	spec/recepcion-en-beneficio	Recepción de cereza en el beneficio (pieza 2): spec, plan y código
+443	2026-09-19T19:11:12Z	wt-marcos-negros	Los marcos negros se cuentan en la inspección, y el apiario avisa (ADR-176)
+442	2026-09-19T18:42:23Z	finca-sin-cosecha	Finca: quitar «Registrar una cosecha»
+441	2026-09-19T18:32:36Z	wt-reinas-con-ano	La reina guarda el año en que nació; su color es un apodo, no una marca (ADR-175)
+440	2026-09-21T15:19:18Z	estado-catalogos	estado: catálogos (#435), rueda (#418) y decisiones P-G/P-H/P-I
+438	2026-09-19T17:50:13Z	fitosanitarios-pr-a	Manejo fitosanitario de la parcela (PR A): registrar, carencia, reentrada y marca en la cosecha
+437	2026-09-19T16:45:19Z	wt-cera-por-ano	La cera nueva lleva el color de su año, y el color no se guarda (ADR-173)
+436	2026-09-19T04:22:40Z	wt-alzas-y-marcos	Un alza con marca se sigue de colmena en colmena; las sin marca se siguen contando (ADR-171)
+435	2026-09-19T16:23:32Z	catalogos-equipos	Catálogos de referencia, rutinas periódicas y modelos de equipo (ADR-171)
+434	2026-09-19T03:49:14Z	estado-jornada-proposito	Estado: la jornada sin propósito ya no da un 500 (PR #433)
+433	2026-09-19T03:05:21Z	jornada-proposito	Abrir una jornada sin propósito da un mensaje, no un 500
+432	2026-09-19T02:56:36Z	plan-bandejas	docs(secado): spec en tres rondas y los planes 2a (estantes y bandejas) y 2b (el lote en sus bandejas)
+431	2026-09-19T17:11:04Z	spec/entrega-de-cosecha	Jornada de cosecha y entrega al beneficio (pieza 1), y dos specs aprobados
+430	2026-09-19T01:46:46Z	wt-anular-asignacion	Una asignación a tienda que no va a llegar se anula, no se borra (ADR-170)
+429	2026-09-18T23:29:18Z	secado-decisiones	docs(secado): decisiones de Daniel sobre el final del secado, posiciones y catálogos
+428	2026-09-18T22:31:55Z	archivar-estado	SESSION_STATE: archivar las siete entradas más viejas de §2
+427	2026-09-19T00:18:49Z	wt-claude-redeploy	CLAUDE.md: el Redeploy del panel no arregla la comprobación de Vercel del PR
+426	2026-09-18T21:54:59Z	estado-muestra-verde	SESSION_STATE: la muestra verde sólo en almacenamiento, y la 111 retirada
+425	2026-09-19T01:04:10Z	spec/fincas-y-parcelas	Fincas y parcelas: elegir la finca, y crear fincas, parcelas y microparcelas
+424	2026-09-18T22:00:41Z	fix/limpiar-audit	limpiarAuditDePruebas: la transacción aguanta la espera de bloqueos
+423	2026-09-18T23:14:14Z	conceder-beneficio	Conceder «editar beneficio» desde ajustes, y no ofrecer lo que no se puede guardar — plan 3
+422	2026-09-18T20:28:28Z	wt-cargador-vista-previa	La vista previa del cargador de protocolo dice la verdad sobre la v2
+421	2026-09-18T23:52:41Z	wt-venta-del-lote	El despacho dice de qué lote sale cada frasco, y la venta baja el libro del lote (ADR-167)
+420	2026-09-18T17:13:02Z	wt-cosechas-sin-saldo	Las cosechas pesadas sin saldo se asientan desde la ficha del apiario (ADR-166)
+419	2026-09-18T19:52:58Z	muestra-verde-tras-proceso	Muestra de café verde tras proceso: guardia, retiro y exclusión en cata
+418	2026-09-18T20:28:34Z	rueda-numericos	La rueda del ratón ya no cambia un campo numérico (ADR-080)
+417	2026-09-18T21:55:01Z	editar-beneficio-2	Configurar el beneficio (instalaciones, recetas, equipos) exige edit_beneficio — plan 2
+416	2026-09-18T16:52:30Z	wt-condicion-sitio-v2	La condición del sitio: lista fija, en la versión 2 del protocolo (ADR-164)
+414	2026-09-18T08:37:54Z	plan/muestra-verde-tras-proceso	Plan: guardia de muestra verde tras proceso
+413	2026-09-18T17:48:31Z	trampas-broca	Trampas de broca: bloques, revisiones, regla por finca y avisos
+412	2026-09-18T20:28:42Z	enlace-recetas	fix(beneficio): el enlace a Recetas sólo para quien gestiona lotes
+411	2026-09-18T08:22:55Z	wt-traduccion-trilla	La trilla tiene su etiqueta, y un guardia para el próximo tipo
+410	2026-09-18T09:03:41Z	editar-beneficio	El capataz no edita un beneficio salvo que se le conceda (location:edit_beneficio)
+409	2026-09-18T07:57:41Z	wt-producto-de-miel	De la miel envasada a la tienda: asignar y recibir (ADR-163)
+408	2026-09-18T08:13:35Z	spec/muestra-verde-tras-proceso	Spec: muestra de café verde sólo tras terminar proceso
+407	2026-09-18T08:13:41Z	spec/faena-division-reinas	Spec: las faenas con nombres estándar, la división y las reinas
+406	2026-09-18T08:13:47Z	fitosanitarios	Spec: manejo fitosanitario de la parcela (pieza 3)
+405	2026-09-18T17:22:43Z	artefactos/colmena	Artefactos de colmena y el nodo de sensores: qué lleva puesto, desde cuándo, y lo que mide
+404	2026-09-18T07:12:39Z	buscador-muestras-cata	Nueva cata: buscar y combinar muestras; la comprobación deja de usar la lista cortada
+403	2026-09-18T06:52:51Z	wt-dividir-miel	Dividir un lote de miel desde su ficha (ADR-162)
+402	2026-09-18T06:33:31Z	pendiente-012	Pruebas de apiario: limpiezaDeCaja deja de ensuciar, meliponario deja de ver toda la base
+401	2026-09-18T06:38:39Z	empaquetador-comillas	fix(tools): pack-for-review lee rutas con tildes sin comillas de git
+400	2026-09-18T06:35:38Z	wt-lote-de-miel	Procesar y envasar miel: dos pasos del lote, con sus nombres (ADR-161)
+399	2026-09-18T06:50:34Z	spec/secado-por-bandeja	Spec: el secado por bandeja, su ambiente y su receta
+398	2026-09-18T06:21:01Z	leccion-admin-ve-todo	Lección: un admin de plataforma ve la base compartida entera
+397	2026-09-18T19:42:43Z	faena/colmena	Faenas de la colmena con nombres de manual, división de colonias y registro de reinas
+395	2026-09-18T05:27:00Z	aislar-reporte-proceso	reporteDeProceso: aislar la prueba — el gestor ve sólo su plot
+394	2026-09-18T05:26:02Z	botiquin/tarea-1	El botiquín del apiario: vencimiento, custodia, descuento y aviso
+392	2026-09-18T04:58:07Z	wt-refractometro-de-miel	El refractómetro de miel: la lectura va sobre el LOTE, y el aparato dice qué lee (ADR-160)
+391	2026-09-18T06:19:30Z	empaquetador-punta	fix(tools): pack-for-review lee el texto completo de la punta del rango
+390	2026-09-18T04:25:04Z	empaquetador-bash32	fix(tools): pack-for-review sin rutas ya no dice que el rango está vacío
+389	2026-09-18T04:03:58Z	wt-limpieza-de-caja	La limpieza se registra sobre la caja, no sobre la colonia (ADR-159)
+388	2026-09-18T03:57:44Z	seccion-finca	El menú dice Finca: las parcelas y la cosecha cuelgan de ahí
+387	2026-09-18T06:50:30Z	spec/seccion-finca	Spec: la sección Finca, y lo que la selección del beneficio le devuelve
+386	2026-09-18T02:53:46Z	plan/botiquin	Plan: el botiquin del apiario
+385	2026-09-18T03:57:55Z	comentario-ajustes	El enlace a ajustes decía «es la misma regla», y no lo es
+384	2026-09-18T02:36:28Z	wt-fuentes-completas	El material de soporte, guardado entero y verificable (ADR-158)
+383	2026-09-18T02:18:48Z	seccion-beneficio	El menú dice Beneficio: lotes, recetas, instalaciones y equipos cuelgan de ahí
+382	2026-09-18T02:47:46Z	inventario/existencias	Inventario con existencias: el saldo se deriva, y nunca contado no es cero
+381	2026-09-18T01:53:32Z	wt-condicion-sitio-2	Los vitales de campo se anotan en el sitio, y queda dicho que fue allí (ADR-157)
+379	2026-09-17T23:23:27Z	sitio-en-existencias	El libro mayor de existencias dice dónde pasó (locationId anulable)
+378	2026-09-17T23:18:52Z	wt-codex-hallazgos	Los tres hallazgos de Codex: guardias que pasaban por razones equivocadas
+377	2026-09-17T23:56:53Z	alta-de-beneficio	El beneficio se da de alta desde pantalla (no fusionar hasta el recorrido)
+376	2026-09-17T22:00:55Z	spec/artefactos-de-colmena	Artefactos de colmena, nodo de sensores y el contrato de investigacion
+375	2026-09-17T21:59:48Z	spec/inventario-existencias	Inventario con existencias: spec y plan
+374	2026-09-17T21:39:40Z	wt-valoracion-inspeccion	La valoración del técnico, por el cierre de la visita y no por uno nuevo
+373	2026-09-17T20:59:15Z	wt-vocabulario-completo	Las dos divergencias del dueño, resueltas: la eñe y el vocabulario completo
+372	2026-09-17T20:01:09Z	apiario/consumos-de-jornada	Lo gastado en una visita cuelga de la visita
+371	2026-09-17T19:35:13Z	ux/permisos-de-colmena	Los formularios de la colmena respetan el permiso de quien mira
+370	2026-09-18T06:50:25Z	spec/ajustes-del-beneficio	Spec: ajustes del beneficio
+369	2026-09-18T06:50:39Z	trampas-broca	Diseño: monitoreo de trampas de broca
+368	2026-09-17T19:07:27Z	ux/apiario-navegacion	La inspeccion de colmena estaba construida y no se veia
+367	2026-09-17T19:07:04Z	wt-valoracion	Clima observado, y el guardia que ata el protocolo al esquema
+366	2026-09-17T17:42:08Z	spec/reposo-trilla	Reposo, trilla y subproductos: del secado a la venta
+365	2026-09-18T06:50:20Z	spec/insumos	Spec: insumos, reconciliado con el inventario con existencias
+364	2026-09-17T10:40:41Z	wt-aviso-de-cajas	La divergencia de cajas se ve: alerta de sitio, nivel aviso
+363	2026-09-18T06:50:15Z	spec/tablero-del-beneficio	Spec: tablero del beneficio
+362	2026-09-17T10:33:59Z	tablero-parcela	La parcela pasa a ser un tablero
+361	2026-09-17T04:25:24Z	wt-cajas-presentes	Cajas presentes: lo que alguien contó contra lo que el sistema tiene colocado
+360	2026-09-17T00:55:55Z	wip-alta-en-lote	Alta de colmenas en lote: cinco de una vez, con prefijo, vista previa y todo-o-nada
+359	2026-09-16T22:46:34Z	wt-vocabulario-alimentacion	Con qué se alimentó deja de ser texto libre: el vocabulario del dueño, y «otro» tiene que decir cuál
+358	2026-09-16T18:36:30Z	wt-protocolo-cargado	El protocolo de campo ya está cargado en producción, y queda anotado
+357	2026-09-16T18:27:31Z	perfiles/permisos	Ajustes de permiso por asignacion, perfil Farm Manager y su pantalla
+356	2026-09-16T23:24:06Z	tablero-parcela	Spec y plan: la parcela pasa a ser un tablero
+355	2026-09-16T18:16:52Z	wt-minuta-vigente	ADR-147: entre dos versiones de una minuta manda la última revisada, y la superada se queda
+354	2026-09-16T17:38:07Z	wt-fuentes-cerro-azul	Las fuentes de Cerro Azul entran al repositorio, y con ellas un plan que mandaba leer un documento ausente
+353	2026-09-16T15:44:14Z	wt-adr145	ADR-144 estaba duplicado: el meliponario pasa a ADR-145, y un guardia que lo impide
+352	2026-09-16T15:12:25Z	wt-meliponario	El meliponario como tipo de sitio propio, y diez comparaciones de cadena pasan a ser una
+351	2026-09-16T17:25:20Z	analisis/brechas-del-paquete	El paquete de descubrimiento contra el repositorio que existe, medido
+350	2026-09-16T13:42:44Z	secado/muestra-y-topologia	La muestra y la topología de secado: dos alertas muertas vuelven a la vida, y un agujero de permisos que sólo se ve construyendo
+349	2026-09-16T06:38:55Z	wt-crosswalk-a9	Correspondencia A9: el paquete de descubrimiento contra el apiario que ya existe
+348	2026-09-16T05:23:17Z	wt-las-seis-que-faltan	Un «sin sitio» del mapa no lo verificaba nada, y una de las mías era falsa
+347	2026-09-16T04:10:21Z	wt-cuenta-del-mapa	Tres conteos equivocados en mi propia prosa, y el código estaba bien
+346	2026-09-16T04:03:55Z	wt-cierre-del-informe	Las tres preguntas que convierten una visita en un informe técnico
+345	2026-09-16T16:00:40Z	cola-offline-parcela	La captura de parcela sobrevive sin señal
+344	2026-09-16T02:56:39Z	anotar-a90	Lo que la persecución de la fuga descartó, para no repetirla
+343	2026-09-16T03:23:28Z	wt-proposito-de-visita	El propósito de la visita: la única pregunta obligatoria de patio que no tenía dónde guardarse
+342	2026-09-16T02:55:25Z	auditoria-apiario-parcela	La captura de suelo y foliar se pierde sin señal, igual que la de café
+341	2026-09-16T02:31:18Z	cierre-15sep	El entregable: dos pruebas que mentían de formas distintas
+340	2026-09-16T02:25:08Z	wt-protocolo-medido	Las 44 preguntas del protocolo, y las 10 que no tienen dónde guardarse
+339	2026-09-16T01:49:46Z	jornada-limpia	Una prueba que borraba los informes de todo el mundo
+338	2026-09-16T01:28:38Z	wt-pdf-del-reporte	El informe al cliente ya dice de qué colmena habla y qué se le hizo
+337	2026-09-16T01:20:30Z	fuga-de-locations	Mi propia prueba comparaba un número que otras sesiones mueven
+336	2026-09-16T00:43:28Z	wt-pendiente-de-jornada	Las dos mitades del cierre de jornada: lo registrado y lo que quedó por tocar
+335	2026-09-16T00:04:23Z	wt-vista-por-niveles	La lista de apiarios deja de ser plana: cada uno bajo el lugar que lo contiene
+334	2026-09-15T23:37:42Z	janitor/publicacion-y-puertos	El janitor deja de gritar en falso, y empieza a mirar donde no miraba
+333	2026-09-15T23:15:59Z	plan/muestra-y-topologia	Plan: nueve tareas para que dos alertas muertas puedan salir
+332	2026-09-15T23:16:06Z	finca/espaciado-y-planificado	El marco de siembra son dos números, y una siembra puede no existir todavía
+331	2026-09-15T23:15:52Z	spec/green-avisa-no-bloquea	La única puerta dura del spec se cierra en el otro sentido, y eso destapa un hueco
+330	2026-09-15T23:25:55Z	wt-lote-y-vista	El mismo manejo a varias colmenas de una vez, y la línea la traza el esquema
+329	2026-09-15T20:26:31Z	spec/muestra-y-topologia-secado	Spec — la muestra y la topología de secado: cerrar el patrón que la auditoría encontró cuatro veces
+328	2026-09-15T20:46:28Z	wt-pendiente-al-cierre	Una colmena nace con su colocación: diez de las veintinueve reales no la tenían
+327	2026-09-15T20:26:23Z	auditoria/fase-3	Auditoría fase 3 — secado y muestreo: cinco hallazgos, y el mismo patrón por cuarta vez
+326	2026-09-15T17:17:11Z	auditoria/arreglos	El origen deja de decidirlo un índice, y tres alertas dicen qué mirar
+325	2026-09-15T16:33:25Z	wt-inventario-primero	El inventario del sitio dice de dónde vino cada colmena y cuándo se abrió, y va primero
+324	2026-09-15T08:12:05Z	auditoria/eje-pedagogico	Eje pedagógico, fases 1 y 2 — tres huecos, y una corrección mía
+323	2026-09-15T07:32:23Z	wt-lista-urgencia	La lista de apiarios se ordena por urgencia de verdad, y con un solo apiario se entra en él
+322	2026-09-15T07:39:49Z	auditoria/eje-veraz	Eje veraz, fases 1 y 2 juntas — un hallazgo, y llega a una pantalla
+321	2026-09-15T05:50:14Z	auditoria/fase-1	Auditoría fase 1 — cosecha y selección: tres hallazgos, y una contradicción que hay que pararte a preguntar
+320	2026-09-15T03:01:29Z	wt-estado-toques	Estado: el camino de entrada del §1, con su mitad pendiente nombrada
+319	2026-09-15T03:01:25Z	auditoria/inventario	Inventario del ciclo — el paso 1 del prompt maestro
+318	2026-09-15T01:35:40Z	wt-dos-toques	La app entra en la jornada abierta, y la vuelta ya no manda al apiario a la pantalla de parcelas
+317	2026-09-15T01:28:23Z	auditoria/fase-2	Auditoría fase 2 — genealogía: cuatro hallazgos, y el peor está donde el kit decía
+316	2026-09-15T00:06:13Z	wt-cierre-de-jornada	La jornada abierta se ve en todas las pantallas, y se reclama al día y no a los tres
+315	2026-09-14T23:31:44Z	wt-indice	El índice normativo del beneficio, que CLAUDE.md no tenía
+314	2026-09-14T23:10:47Z	wt-protocolo-de-campo	La prueba del protocolo borraba lo que no era suyo, y por eso no se podía encender
+313	2026-09-14T21:25:18Z	wt-cierre	Cierre de sesión: el estado, y la trampa del presupuesto de Actions
+312	2026-09-14T21:13:04Z	wt-toabre	Toabré: dos sitios, quince colmenas y dieciséis evasiones, con su causa
+311	2026-09-14T18:48:10Z	wt-emplazamiento	El emplazamiento temporal: la primera pregunta histórica que el módulo puede contestar
+310	2026-09-14T20:31:07Z	wt-equipos	Equipos e instrumentos: la verificación es por contraste, no por calendario
+309	2026-09-14T18:25:31Z	wt-procedencias	Un valor de catálogo se declara en la semilla, no se inserta: lo dijo el guardia
+308	2026-09-14T17:42:48Z	wt-levadura	La cepa de levadura ya estaba en el sistema; faltaba una línea y un guardia
+307	2026-09-14T17:01:15Z	wt-apiario-las-nubes	Los dos apiarios reales: una colonia equivocada se borra, una que murió se cierra
+306	2026-09-14T16:48:44Z	wt-cryobloom	CryoBloom contra el esquema: la maquinaria ya estaba, y yo medí la lista equivocada
+305	2026-09-14T16:32:09Z	wt-consulta-a-vecinos	La consulta a vecinos: el sistema sabía registrar la colonia muerta y no el aviso
+304	2026-09-14T16:30:46Z	wt-conectar	Los motores de beneficio llegan a la pantalla del lote
+303	2026-09-14T15:46:52Z	wt-traslado-de-colmenas	El traslado de colmenas: la primera rebanada de A9 cuyo hueco era de esquema
+302	2026-09-14T15:25:48Z	wt-secado	El motor de secado: los 47 criterios del beneficio quedan en verde
+301	2026-09-14T04:56:31Z	wt-masas	El balance de masas: tres etapas, no una, y el doble conteo de pulpa
+300	2026-09-14T04:02:01Z	wt-anexos	La v3.1 del beneficio y los anexos de A9 que faltaban
+299	2026-09-14T04:28:57Z	wt-vocabulario-del-vacio	El vacío deja de ser una opción que se elige — y dos de los nueve no eran vacío
+298	2026-09-14T04:01:34Z	wt-brix	El motor de Brix: la alerta que estaba documentada y no existía
+297	2026-09-14T03:28:12Z	wt-ph	El motor de pH: 13 de los 47 criterios pasan de pendientes a verdes
+296	2026-09-14T03:22:27Z	wt-anexo-pantallas	Entra el Anexo E de A9, y el cruce dice que el traslado de colmenas es esquema y no pantalla
+295	2026-09-14T02:55:07Z	wt-tipo-de-miel	El tipo de miel existe, y la humedad resultó no estar «parcial» sino escondida
+294	2026-09-14T02:43:28Z	wt-beneficio	La especificación v3.0 del beneficio entra, y su contrato empieza a contar
+293	2026-09-14T02:23:27Z	wt-configuracion-de-caja	La configuración de la caja existe, y con ella «cuadros cubiertos» ya se puede comparar
+292	2026-09-14T02:02:27Z	wt-dominio	Tres guías de proceso entran como fuente, rotuladas como lo que son
+291	2026-09-14T01:49:03Z	wt-cierre-de-evento	Completar no es corregir: un evento de colonia ya se puede cerrar
+289	2026-09-13T19:30:24Z	wt-cerrar-la-deriva	La deriva entre esquema y migraciones se cierra declarando lo que la base ya hace
+288	2026-09-13T17:54:38Z	wt-objetivo-del-tratamiento	Un tratamiento dice contra qué, y por fin se puede agrupar por objetivo
+287	2026-09-13T20:06:30Z	ritmo-de-receta	Una receta ya puede decir cada cuánto medir y cuánto debe durar
+286	2026-09-13T16:18:27Z	wt-alcanza-hasta	«Alcanza hasta» pasa a tener manija, y el aviso deja de taparse por sitio
+285	2026-09-16T00:52:07Z	ux-campo-auditoria	Auditoría y propuesta UX de la pantalla de Lotes para uso en campo
+284	2026-09-13T15:14:25Z	wt-estado-colonia	El estado de la colonia existe, y un aviso de enjambrazón no se apaga porque nadie mirase
+283	2026-09-12T04:37:23Z	wt-varroa	El conteo de varroa existe, se anota sin señal, y su serie dice si el tratamiento sirvió
+282	2026-09-13T14:32:16Z	cereza-como-dato	La cereza cosechada deja de ser una caja de texto
+281	2026-09-11T23:49:17Z	cierre-de-jornada	El entregable de la jornada: lo que la base de pruebas acumulaba
+280	2026-09-12T04:23:46Z	medicion-mas-corta	La medición pedía escribir a mano lo que ya sabía
+279	2026-09-12T04:16:13Z	codigos-y-parcelas	Los códigos de las corrientes se derivan, y un bloque es una parcela
+278	2026-09-11T23:09:04Z	trampa-cancelled	`cancelled` no es `failure`, y se cuela en un vistazo
+277	2026-09-11T22:22:50Z	wt-fecha-de-colmena	Crear una colmena con fecha reventaba la página: el parser no era el del campo
+276	2026-09-11T22:19:46Z	cerrar-scope-huerfano	El Scope del segundo proyecto, que nadie borraba
+275	2026-09-11T22:20:06Z	parcelas-y-microparcelas	Una parcela no es un lote, y existen las microparcelas
+274	2026-09-11T22:29:10Z	wt-carencia	Una cosecha ya no puede violar la carencia sin que el sistema lo sepa
+273	2026-09-11T23:00:35Z	muestra-desde-batch	La lista de muestras dice de qué café es cada una
+272	2026-09-11T21:49:34Z	limpiar-audit-event	Una escoba para el rastro de auditoría de la base local
+271	2026-09-11T21:44:37Z	wt-pantalla-irregularidades	El reporte de irregularidades ya tiene pantalla
+270	2026-09-11T21:27:30Z	wt-irregularidades	«Todas las colonias con varroa esta temporada» ya es una consulta
+269	2026-09-11T21:06:33Z	auth-deduce-su-direccion	La aplicación deduce su dirección en vez de llevarla clavada
+268	2026-09-11T20:40:47Z	guardia-referencias	El puntero que muere en silencio cuando se archiva una entrada
+267	2026-09-12T03:55:03Z	protocolo-de-campo	Una puerta para el protocolo de campo del apiario
+266	2026-09-11T05:18:44Z	referencia-batches	Las dos referencias de §3 que apuntaban a entradas archivadas
+265	2026-09-11T01:45:46Z	wt-fin-offline	La pérdida de una colonia ya se puede anotar sin señal
+264	2026-09-11T01:30:56Z	entrada-de-estado	El entregable de la sesión: la entrada de estado, y sitio para ella
+263	2026-09-11T01:25:39Z	completar-visita	«Cierra la visita» justo después de cerrarla
+262	2026-09-10T17:58:03Z	archivar-entrada-vieja	La referencia que quedó apuntando a una entrada archivada
+261	2026-09-10T17:46:17Z	informe-de-visita	El informe de la visita existía y no había puerta
+260	2026-09-10T16:57:44Z	limpieza-tests-apiario	La limpieza que no corre cuando la aserción falla
+259	2026-09-10T17:35:18Z	wt-vocabulario	Un formulario enseñaba «measured_fact» a un apicultor
+258	2026-09-10T17:27:31Z	wt-causas	Por qué se perdió una colonia: quince causas, ninguna inventada
+257	2026-09-09T21:08:20Z	crear-apiario	Se podía todo del apiario menos crear el apiario
+256	2026-09-09T17:37:44Z	wt-mapa	El mapa de sitios, y la coordenada que nadie podía teclear
+255	2026-09-10T16:27:04Z	vocabulario-procedencia	El servidor aceptaba procedencias que la pantalla no ofrece
+254	2026-09-09T04:59:04Z	leer-json	Un 2xx que no es JSON dice qué llegó, en vez de reventar el parseo
+253	2026-09-09T17:26:30Z	guardia-del-menu	El guardia del menú medía a un visor que no era el más privilegiado
+252	2026-09-09T03:33:59Z	metodo-declarado	El manifiesto declara el método, y el comprobador deja de alarmar en falso
+251	2026-09-09T03:38:57Z	parcelas-acciones	/plots deja de recitar lo que falta ocho veces
+250	2026-09-09T03:24:02Z	wt-perdida	Una colonia se puede dar por perdida, que hasta hoy no se podía
+249	2026-09-09T03:06:53Z	browser-check-muerto	El CLAUDE.md manda correr un archivo que se borró hace once días
+248	2026-09-09T03:27:29Z	vocabulario-lotes	«Batches» contra «Lotes»: el menú mandaba a la pantalla ajena
+247	2026-09-09T03:16:06Z	wt-estado-a9	El estado dice que A9 está hecho, y qué destapó medirlo
+246	2026-09-09T01:01:21Z	cert-kurt	La fecha de una credencial pasa a ser opcional

@@ -1,0 +1,10 @@
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                3910.
+System-wide memory free percentage: 31%
+ci=0
+── Tests herméticos ────────────────────────────────────────────────────
+── CI correrá 209 archivos de prueba; 214 los corre otra compuerta o ninguna
+ Test Files  209 passed (209)
+      Tests  2863 passed (2863)
+── Todo verde ──────────────────────────────────────────────────────────
+paso12-script-exit=0

@@ -1,0 +1,3 @@
+To https://github.com/danieljosegiraldez-png/nectar-nomada.git
+   06b2e2e9..81587948  recetas-parte-2a -> recetas-parte-2a
+branch 'recetas-parte-2a' set up to track 'origin/recetas-parte-2a'.

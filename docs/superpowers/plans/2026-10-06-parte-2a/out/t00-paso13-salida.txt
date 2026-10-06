@@ -1,0 +1,7 @@
+DATABASE_URL del build: postgresql://postgres@127.0.0.1:55433/nectar_test_recetas_2a
+antes del build: 2026-10-06 00:52:36
+build=0
+✓ Compiled successfully in 16.9s
+▲ local build — skipping migrate and seed (no production database here)
+BUILD_ID escrito: 2026-10-06 00:54:17
+paso13-script-exit=0

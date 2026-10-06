@@ -1,0 +1,118 @@
+# La Parte 2a en dos PR — el corte del 2026-10-06
+
+> **Decisión de Daniel, 2026-10-06: «para de revisar y parte la 2a en dos PR».** Es una reorganización del plan, no una revisión: no se buscaron defectos nuevos y no se reescribió lo que no hacía falta para el corte. Este archivo dice qué entra en cada PR, qué se movió y de dónde a dónde, en qué orden se construye y qué cambia en producción cuando entra el primero. Las tareas viven en `.superpowers/plan-2a/tareas/`; los números `T03.md:102` son archivo y línea de HOY.
+
+## Los dos PR
+
+- **PR-A «La receta con pasos: esquema, vocabulario, autoría y editor».** Tareas 0, 1, 2, 3, 4, 5a, 9a, 14 y 15a. **Lleva la única migración.** Entrega el esquema, el vocabulario, quién puede escribir recetas (el Coffee Process Manager), el borrador con sus pasos, la copia de versiones, que los lectores de metas (cola de secado, tablero, «objetivo contra real» y perfil de tueste) no lean la meta de un paso como de la versión (9a) y el editor. **No** hace obligatoria la receta al abrir un proceso, ni toca la operación del lote.
+- **PR-B «La receta en la operación».** Tareas 0 (otra vez, sobre el `main` que ya trae el PR-A), 5b, 6 a 13 y 15b. **Sin migración: es código.** Entrega la receta obligatoria al abrir, el avance, el guardián y la desviación, los lectores por paso, la receta Libre y convertirla, los avisos de recepción y las pantallas operativas.
+
+## Tabla de tareas por PR
+
+| Tarea | PR | Qué entrega | Archivo | Consume |
+|---|---|---|---|---|
+| 0 | A y B | Preparación: unir `main` con merge, base propia, línea base. **Se corre al empezar CADA PR**; la del PR-B une el `main` que ya trae el PR-A (la caja de `T00.md:8`) | `T00.md` | — |
+| 1 | A | Esquema y migración (la única) | `T01.md` | — |
+| 2 | A | Vocabulario, referencias del paquete y catálogos (llegan por la semilla) | `T02.md` | 1 |
+| 3 | A | Autoría (Coffee Process Manager), borrador, pasos, publicar | `T03.md` | 1, 2 |
+| 4 | A | Versiones y plantillas: copia con ids nuevos, derivar | `T04.md` | 3 |
+| 5a | A | Lo que se exige de la versión que se pasa a `abrirProceso` y al tueste (la receta sigue siendo opcional) | `T05a.md` | 1, 3 |
+| 9a | A | Las metas de la versión son las que no tienen paso: la cola de secado, el tablero, `compareRunToTargets` y el perfil de tueste no leen la meta de un paso como de la versión (§3.2) | `T09a.md` | 1, 2, 3 |
+| 14 | A | Editor de recetas por pasos (sin la redirección de convertir una Libre) | `T14.md` | 2–4, 5a |
+| 15a | A | Cierre del PR-A: compuerta entera, diseño al día, «Retroceso», SQL de producción, nombres, PR | `T15.md` (corte `a`) | 0–4, 5a, 9a, 14 |
+| 5b | B | Receta obligatoria (`sin_receta`), `recetaDePrueba`, semilla con receta, prueba invertida | `T05b.md` | 5a |
+| 6 | B | Avance sobre la cadena | `T06.md` | 1, 3, 5b |
+| 7 | B | Guardián en corridas y manejos de fermentación | `T07.md` | 1, 2, 6 |
+| 8 | B | Guardián en las intervenciones del proceso (y los cuatro alias de `doble_mosto`, que siembra aquí) | `T08.md` | 7 |
+| 9 | B | Lectores por paso: la cola de secado, el tablero y `compareRunToTargets` leen el paso de la corrida (el filtro de las metas sin paso es de la 9a) | `T09.md` | 1, 3, 7, 9a |
+| 10 | B | Receta Libre | `T10.md` | 3, 5b |
+| 11 | B | Lecturas de cierre y convertir la Libre | `T11.md` | 4, 10 |
+| 12 | B | Avisos de recepción | `T12.md` | 3, 6 |
+| 13 | B | Acciones y pantallas operativas (incluida la redirección de convertir) | `T13.md` | 5b–12 |
+| 15b | B | Cierre del PR-B: compuerta, diseño al día, nombres, PR | `T15.md` (corte `b`) | 0, 5b–13 |
+
+El mismo cuadro, con su columna PR, está en `esqueleto.md:204–224`. **El corte no cambia el contenido de las tareas 1 a 4 ni de la 6 a la 12** salvo lo que dice la sección siguiente; **las tareas 2, 8 y 9 cambian además con la mudanza del 2026-10-06** (los alias de `doble_mosto` y el filtro de las metas sin paso) y nace la 9a: ver sus filas en «Qué se movió».
+
+## Qué se movió (tarea:línea de origen → destino)
+
+Los orígenes son de los archivos como estaban antes del corte (copias en el scratchpad de la sesión que lo hizo); los destinos, de hoy.
+
+| Qué | Origen | Destino |
+|---|---|---|
+| La tarea 5 se parte en dos | `T05.md:120–2448` (los 20 pasos) | `T05a.md` (PR-A, pasos 1, 7, 9–12, 14, 15, 17–20) y `T05b.md` (PR-B, pasos 1–11 y 13–20); **los pasos conservan el número de la tarea entera**; `T05.md` queda en 35 líneas, sólo el mapa |
+| …lo que se exige de la versión (`exigeRecetaParaAbrir`, cuatro códigos, `FOR SHARE`, selectores, tueste, frases) | `T05.md:682–1464` (paso 7) y `:1508–2284` | `T05a.md:147` (paso 7), `:881` (9), `:916` (10), `:1156` (11), `:1235` (12), `:1291` (14), `:1321` (15), `:1383–1515` (17–20) |
+| …la obligatoriedad (`sin_receta`), `recetaDePrueba` y las aperturas de prueba, la semilla con receta, la prueba invertida «se puede abrir SIN receta» | `T05.md:163–681` (pasos 2–6), `:682–1464` (paso 7, su mitad) y `:1465–1507` (paso 8) | `T05b.md:131` (paso 2), `:362`, `:498`, `:516`, `:558` (3–6), `:649` (7), `:821` (8), `:864–1295` (9–20, menos el 12) |
+| La redirección de `convertirLibreAction` a `/recipes/<id>?ok=convertida`, su prueba y su fila de flip | `T14.md:5376` (la acción), `:5379–5388` (la línea de `accionesDePaso.test.ts`), `:60`, `:70`, `:87`, `:199–201` y `:215` (paso 1 y su control) | `T13.md:8485` (la acción), `:8027` (la prueba), `:8839–8892` (fila 2 del flip), `:9113` (duda 13), caja en `:8`; `T14.md` se queda con el **lector** (`:4407`) y la nota (`:5369`), y su caja en `:26–29` |
+| La edición (e) de la Parte E de T14: el ayudante `receta()` de `libre.test.ts` nace con `crearRecetaEnBorrador` | `T14.md:7414–7531` y `:7864` | `T10.md:16–17` (caja) y su paso 9 (`:1007`, `:1102`) |
+| `recipeAuthoring` y `recipeVersions`, que la 14 borra, fuera de las listas de pruebas de regresión del PR-B | `T09.md:79, :2098`; `T10.md:64, :2846`; `T11.md:102, :3947` | `T09.md:79`, `T10.md:67`, `T11.md:102` (y sus comandos) |
+| La 14 deja de consumir la 13 y la 10 | `T14.md:70, :87` | `T14.md:26–29` (caja) y su Consume (`:93`) |
+| La duda de los alias de la 2: reescrita por el primer corte y **resuelta** por la mudanza de los alias (ya no hay ventana) | `T02.md:2391` | `T02.md:2342–2346` (antes `:2391–2396`) |
+| T15 se corre dos veces (`CORTE=a|b`) | `T15.md:1–3023` | `T15.md` (3354 líneas en el primer corte; 3352 tras la mudanza del 2026-10-06, con los mismos pasos en las mismas líneas): la caja `:1–22`; el corte en el paso 1 (`:108`); el paso 2 con su control de «ninguno del PR-B» (`:184`); los pasos 6 (`:556`) y 16 (`:1137`) **sólo en la 15a**; las afirmaciones, las correcciones y la §13 por corte (pasos 17–19: `:1217`, `:1615`, `:1775`); los flips (22 y 23: `:2071`, `:2443`); los cuerpos de los dos PR (25: `:2930`) |
+| T00 se corre dos veces | `T00.md:1–1251` | `T00.md:8–22` (la caja) y los parches de los pasos 1, 2, 4, 8 y 9 |
+| El esqueleto | `esqueleto.md:39`, `:48–49`, `:181–182`, `:201–218`, `:223–224` | `esqueleto.md:28–29` (el corte), `:41` (regla 2), `:50–51` (regla 4: se empuja al final de T00, T05a y T15a en el PR-A, y de T00, T10 y T15b en el PR-B), `:183–185` (firmas), `:204–224` (la tabla con su columna PR, con la fila 9a en `:217`), `:229–230` (guardianes) |
+| Los cuatro alias de `doble_mosto` en `sustrato_anadido` (la entrada de `catalogs.ts`: `mosto`, `mossto`, `lixiviado`, «previous-batch starter») | `T02.md:1225–1247` (su paso 7e) y `:1259–1260` (219 valores, 267 inserciones) | `T08.md:1324` (paso 5d, **en el mismo commit** que `aliasOfId: null` en `opcionesParaProceso` y `aliasOfId ?? id` en `registrarIntervencion`); `T02.md:1198–1199` remite la 7e a la 8 y `:1211` dice 215 valores y 259 inserciones |
+| Las tres pruebas de los alias: la hermética del vocabulario, la de «sembrados» y la D7 con siete valores | `T02.md:350–361`, `:826–841`, `:454–455` y `:470` | `T08.md:857` (paso 2b; cómo caen, `:963`; resembrar la base, `:1496`); la 2 queda con la D7 en tres valores, 19 pruebas en el vocabulario y 10 en la de base |
+| Las cifras de la 2 que contaban los alias | `T02.md:99–101`, `:881–890`, `:1959` y `:1993–1999` | `T02.md:102–104` (215 valores), `:853–863` (`6 failed \| 16 passed (22)`), `:1912` (79 herméticas) y `:1945–1953` (`9 failed \| 1 passed (10)`, +42 valores); `T08.md:1496` cuenta los +4 (219) |
+| Las filas 20 y 21 del flip y la duda 3 (el quinto nombre del paquete, «must re-use») | `T02.md:2337–2338` y `:2397–2401` | `T08.md:1726–1727` (con un arnés de `vitest` hermético) y `:1776` (duda 4); `T02.md:2288–2289` y `:2347` las marcan como movidas |
+| El filtro «las metas de la versión son las que no tienen paso» (`recipeStepId: null`) en la cola, el tablero, `compareRunToTargets` y `getPerfilDeTuesteElegido` | `T09.md:894–952` (cola), `:1452–1521` (tablero), `:2018–2034` (`compareRunToTargets`) y `:2055–2076` (perfil, **entera**) | `T09a.md:623–762` (cinco ediciones, un solo commit); `T09.md` parte de ese texto: `:895` (cola), `:1448` (tablero) y `:1914` (`compareRunToTargets`) |
+| Las pruebas de ese filtro: «una corrida sin paso se compara contra las metas de la versión…», todo el `describe` del perfil de tueste y —como control, se queda en la 9— la mitad «sin paso» de la prueba de las metas de la cola | `T09.md:1888–1901`, `:1904–1961` y `:727–744` | `T09a.md:118–581` (8 pruebas en 3 `describe`, cada una con su control); `T09.md` baja a 14 pruebas (6 + 6 + 2) |
+| Sus filas de flip: la 5 de la cola, la 4 del tablero, y la 2 y la 3 del commit 3 | `T09.md:1162`, `:1782` y `:2197–2198` | `T09a.md:915–957` (paso 9: las cuatro del filtro y sus cuatro inversas); `T09.md:1161`, `:1759` y `:2062–2063` conservan su número y dicen «movida a la 9a» |
+| T15: la afirmación del perfil de tueste (de dueño B a A), el flip I10 (de b a a), la fila §7 de los alias (13.1 de la 15a y `viejo` de D7), los cuerpos de los dos PR, el aviso de las dos ventanas y la duda 7 | `T15.md:1458`, `:2459`, `:2619–2630`, `:1706`, `:1806`, `:2973–2978`, `:3025`, `:3047–3052`, `:3158`, `:3240`, `:3255` y `:3354` | `T15.md:1457` (114 afirmaciones en el corte a, 73 omitidas), `:2459` y `:2510` (I10 en a; seis flips en la 15a y diez en la 15b), `:1627`, `:1706` y `:1806` (la fila §7 en su forma del PR-A; la final entra con D7), `:2953` y `:2974–2977` (cuerpo del PR-A), `:3024`, `:3047` y `:3050–3051` (cuerpo del PR-B), `:3157`, `:3253` y `:3352` (duda 7: ya no queda ninguna dependencia) |
+
+**Las ocho últimas filas son de la mudanza del 2026-10-06** (controlador): sus orígenes son de los archivos tal como los dejó el primer corte (`T02.md` 2416 líneas, `T08.md` 1589, `T09.md` 2284, `T15.md` 3354) y sus destinos, de hoy (`T02.md` 2362, `T08.md` 1780, `T09.md` 2146, `T15.md` 3352 y `T09a.md` 993). En la tarea 4 una sola palabra pasó de «la tarea 9» a «la tarea 9a» (`T04.md:1526`), y las cajas de `T00.md:9`, `T10.md:16` y `T13.md:8–9` y las listas de `T15.md` (`:4`, `:27`, `:76`, `:184`, `:233`) ganaron la 9a entre las tareas del PR-A.
+
+## Orden de construcción
+
+**PR-A**, en la rama `recetas-parte-2a` (los números de tarea son el orden): **0** (une `main`, empuja con `-u`) → **1 → 2 → 3 → 4** → **5a** (empuja) → **9a** (los cuatro lectores filtran las metas sin paso; no empuja y no espera a nada del PR-B) → **14** (después de la 5a: su paso 1 la comprueba; no espera a la 10 ni a la 13) → **15a** (empuja, abre el PR-A). La revisión final del PR-A la hace el controlador **antes** de la 15a. **Fusiona la coordinadora**, y antes Daniel decide lo que dice la sección de producción.
+
+**PR-B**, después de fusionado el PR-A, en la misma rama (si GitHub la borró al fusionar, el primer empuje la recrea): **0** otra vez (copia las salidas del PR-A a `$OUT/pr-a/`, une el `main` que ya trae el PR-A, elige la base `_b`) → **5b** → **6 → 7 → 8 → 9 → 10** (empuja) → **11 → 12 → 13** → **15b** (empuja, abre el PR-B). El orden numérico respeta todos los «Consume» de la tabla. La revisión final del PR-B es también anterior a su cierre.
+
+**Las pruebas y las ediciones por texto no cambian de dueño:** cada flip de las tareas movidas sigue anclando en texto que existe en su PR (comprobado: ver «Lo medido»).
+
+## Qué cambia en producción cuando entra el PR-A
+
+**Esta sección es la que Daniel tiene que leer antes de fusionar el PR-A.** Está medida contra el texto de las tareas (cada punto cita su tarea y su línea en `.superpowers/plan-2a/tareas/`) y es la misma que el cuerpo del PR-A repite en «Qué cambia en producción». Nada de esto se ha ejecutado contra producción: el SQL que lo cuenta está en el cuerpo del PR-A, y lo corre Daniel en el SQL Editor de Neon.
+
+### 1. Quién puede publicar recetas — lo primero que se nota
+
+- **Deja de poder: un Farm Manager con `edit_beneficio`.** Ya no crea una receta, ni hace una versión nueva, ni agrega, actualiza, quita o mueve un paso, ni **publica** (V16, Daniel, 2026-10-04). `edit_beneficio` sigue valiendo para lo que no es receta (un beneficio, una instalación, un equipo). Un Farm Operator sigue abriendo procesos (`lot:manage`). [T03.md:35, :102–106; T15.md paso 23, fila I14: el Farm Manager no recibe el permiso nuevo]
+- **Puede: el Coffee Process Manager** —un perfil nuevo con un permiso nuevo, de nombre provisional `lot:approve_exception`— **y el Platform Admin**, que lo recibe por llevar el catálogo entero de permisos. La autoría pasa toda por una sola regla (`exigeAutoriaDeReceta`), con un alcance que llegue a la organización de la receta (de plataforma, si es una plantilla). [T03.md:102–106, :1217]
+- **Hoy nadie tiene asignado el perfil en producción.** El perfil y el permiso llegan por la semilla (`vercel-build` la corre tras `migrate deploy`), pero ninguna persona lo trae: **hasta que Daniel se lo asigne a alguien, sólo un Platform Admin publica recetas.** Eso es una decisión suya antes o justo después de fusionar. [T15.md paso 25, «Para quien fusiona»]
+- El perfil **no lleva `lot:manage` ni `lot:view`**: escribe y publica recetas pero no opera lotes. Las pantallas de recetas (`/recipes` y el editor) se le abren por la autoría de recetas. La misma persona que opera y aprueba lleva los dos perfiles (V14). [T03.md:118–121; T14.md:4–5]
+
+### 2. Lo que pasa con las versiones y con las recetas de hoy
+
+- **Las versiones nuevas nacen en borrador, y publicar exige al menos un paso** (`version_sin_pasos`): el editor guarda el borrador y la publicación es un acto aparte. [T03.md:122–123]
+- **Las versiones `approved` de hoy siguen publicadas**: ninguna se reabre ni se modifica. [T03.md:122–123; T05a.md:5–8]
+- **Las recetas de fases de antes siguen sirviendo.** Los lectores que leen fases —la cola de secado y el tablero del beneficio— las siguen leyendo como hoy; y publicar una versión nueva **deriva** sus fases de sus pasos (una por fase, desde el primer paso de esa fase), para esos mismos lectores. [T03.md:124–125; T09.md:25–29: son los lectores que el PR-B cambia]
+- **Una meta de un paso no se lee como meta de la versión.** Desde el PR-A el editor escribe metas por paso, y la cola de secado, el tablero, la tabla «objetivo contra real» (`compareRunToTargets`) y el perfil de tueste elegido leen de la versión **sólo las metas que no cuelgan de un paso**. Las recetas de hoy no tienen metas por paso: no cambian. Que esos lectores lean las metas **del paso de la corrida** es del PR-B. [T09a.md:3–13, :623–762]
+- **Las metas de versión de antes se enseñan de sólo lectura** en el editor, y para tocarlas se hace una versión nueva por el editor; los dos formularios viejos (`RecipeForm` y `RecipeVersionForm`) y sus dos servicios sin llamador se retiran. [T14.md:16–17, :40, :68]
+
+### 3. Abrir un proceso — sigue sin exigir receta hasta el PR-B
+
+- **Abrir un proceso sigue funcionando sin receta**, como hoy. La obligatoriedad (`sin_receta`), la receta «Libre» y el ayudante de las pruebas son del PR-B. [T05a.md:5–8, :177, :1002]
+- Lo único nuevo al abrir **con** una versión: tiene que estar **publicada**, de una receta no archivada y de la organización del lote o compartida (plantilla); los selectores ya no ofrecen borradores, recetas Libres ni archivadas; y el tueste rechaza una versión no publicada o Libre. Los procesos abiertos sin receta siguen abiertos y se cierran como hoy. [T05a.md:62–75]
+- **Antes de fusionar, la primera cuenta del SQL del PR-A dice cuántas versiones hay por estado:** si aparece alguna que no sea `approved`, avisar antes de fusionar, porque abrir con ella pasa a rechazarse. [T15.md paso 16]
+
+### 4. Esquema y datos (lo que corre el despliegue)
+
+- **La migración sólo añade, salvo tres cosas:** quita el `NOT NULL` de `lot_process_intervention.catalog_value_id`; sustituye el único total de `process_target` por dos únicos parciales (que para las filas de hoy, todas sin paso, piden lo mismo); y cambia la clave foránea de `process_recipe.organization_id` de `SET NULL` a `RESTRICT` (borrar una organización con recetas ya no las vuelve plantillas de todas en silencio: falla). No toca datos. [T01.md:93–94, :1487, :1505]
+- **Los catálogos nuevos llegan por la semilla, no por la migración:** 29 → 32 catálogos y 173 → 215 valores (`tipo_paso` 24, `fisico` 5, `capacidad` 5; `estado_cereza` de 2 a 9; `fuente_microbiana` de 5 a 6; `sustrato_anadido` se queda en 3: sus cuatro alias de `doble_mosto` llegan con el PR-B, junto con el filtro que los oculta; `Washed`, `Honey` y los dos `Semi Wash` ganan definición). [T02.md:102–104, :1211]
+- **La escala del mucílago es lo que QUEDA** (0 = Lavado, 100 = Honey, en seis tramos: 0, 10, 25, 50, 75 y 100). `Semi Wash 50%` y `Semi Wash 75%` ya existen en `grado_proceso` **con otra lectura** (la de «quitado»): el segundo SQL del PR-A cuenta los lotes y procesos que los llevan, para que Daniel decida cómo se leen los ya registrados antes del reimport. [T02.md:69, :102–104; T15.md paso 16]
+- **Volver atrás:** no hay migración inversa; se vuelve el código, y hasta la primera intervención registrada sólo con tipo de paso es seguro volver al de la Parte 1 (con este PR solo, nada la escribe: la cuarta cuenta del primer SQL da 0). [T01.md:1948–1990 guarda los dos lectores; T15.md paso 25, «Retroceso»]
+
+### 5. Lo que este corte deja a medias hasta el PR-B
+
+**Nada** (desde el 2026-10-06). Las dos cosas que el primer corte dejaba a medias —los alias de `sustrato_anadido` y las metas por paso— se resolvieron moviendo los alias a la tarea 8 (PR-B), donde nace el filtro que los oculta, y el filtro de las metas sin paso a la tarea 9a (PR-A): **ninguna fusión intermedia deja un hueco**. Lo que sí hay que saber de la tarea 8: al fusionar el PR-B, el despliegue siembra cuatro valores más en `sustrato_anadido` (215 → 219) y nacen ya ocultos. [T08.md:3, :1324; T09a.md:3–13]
+
+## Lo que el corte no pudo romper
+
+**Ninguna dependencia del PR-A sobre el PR-B.** Las dos que dejó el primer corte (los alias y el filtro de las metas por paso) se resolvieron el 2026-10-06 (controlador) y ya no están dichas como pendientes en el cuerpo del PR-A ni en la duda 7 de `T15.md` (`:3352`). **Lo que queda es al revés, y es deliberado: dependencias del PR-B sobre texto del PR-A.** La tarea 9 sustituye el texto que deja la 9a (`T09.md:895`, `:1448`, `:1914`), y la 8 el de la 2 (`T08.md:857`, `:1324`); por eso el PR-B se construye con el PR-A ya en `main`.
+
+## Lo medido al hacer el corte
+
+- **Barrido de símbolos del PR-B sobre los archivos del PR-A.** Con la lista de lo que sólo crean T05b y T06 a T13 (códigos, funciones, constantes, archivos), sobre `T00`, `T01` a `T04`, `T05a` y `T14`: **0 usos**; 53 menciones, **todas en prosa** que explica que algo «es del PR-B» o en un control que comprueba su ausencia (`T00.md:747`, `T02.md:1420`, `T03.md:18, :25, :142, :149, :3649, :4802–4810`, `T05a.md` —`sin_receta` y `recetaDePrueba`—, `T14.md` —`convertirLibreAction`, `accionesDePaso`, `receta_libre_no_se_elige`, `lib/recetas/convertir`—). Control positivo: el mismo barrido sobre `T05b` y `T06` a `T13` da **2419** apariciones. Sobre las filas del PR-A de `T15` (la §13.1 de la 15a, sus ediciones, sus flips y las filas de afirmaciones de dueño A): **0**.
+- **T15, los dos cortes, sobre copias de los dos diseños** (antes y después de las ediciones de cada corte; no sobre un árbol construido): `T15_PR=a` da 114 filas desde que la afirmación del perfil de tueste pasó al PR-A (eran 113; 15 `FALLA` en B antes de editar, 0 después), `T15_PR=b` da 185 (5 antes, 0 después); la sección C da 6 `ok` en los dos; las mutaciones de B dan 6 (corte a) y 3 (corte b), la del diseño general 2; el guion de ediciones aplica las 6 del corte a y las 4 del b una sola vez cada una. **No se midió** la sección A contra un árbol que tenga el código: lo hace la primera corrida real.
+- **Sintaxis:** `bash -n` sobre los 45 bloques de `T15` y los 22 de `T00` (0 errores; control: un bloque roto da 2), `node --check` sobre sus 8 guiones y `JSON.parse` sobre los 6 JSON por corte. El bloque del cuerpo del PR (paso 25) se corrió en un directorio de prueba, para los dos cortes: arma los dos cuerpos y sus controles discriminan (uno marcó una línea «Medido» vacía a propósito).
+- **La mudanza del 2026-10-06 (alias y filtro de las metas sin paso), medida contra el texto de las tareas y no sobre un árbol construido.** **Anclas:** cada texto que una tarea sustituye es el que la anterior deja escrito (un guion lo comprueba con control: sobre una `T09.md` con un carácter cambiado da `FALLA`): el viejo de la 9a es el viejo original de la 9 en los cinco sitios (cola, tablero, JSDoc e `include` de `compareRunToTargets`, perfil); el viejo de la 9 es lo que la 9a deja (la cola, la cola del tablero, el JSDoc y el `include` de `compareRunToTargets`); los cuatro anclajes de la 2b de la 8 (tres archivos) existen **una vez** en la 2; el de la 5d es el de la 7e original de la 2 y la 2 ya no lo toca; las filas 20 y 21 de la 8 mutan líneas que escribe la propia 8. **Barrido de símbolos del PR-B sobre `T09a.md`:** 4 menciones, **ninguna es un uso** (una frase de la caja, el control de ausencia del paso 1 y el patrón del paso 7 con su control positivo); control positivo: el mismo barrido sobre `T08`, `T10` y `T13` da 61, 279 y 468; sobre `T02` tras el corte, 1, en un comentario del código de `vocabulario.ts` que ya estaba. **Cifras que se tocaron:** el recuento de los bloques de catálogos de la 2 (259 inserciones y 5 borrados sin la 7e, contando líneas sobre los cuatro «Reemplazar … por …»: con la 7e eran las 267 y 5 que decía), 19 pruebas en el vocabulario (se contaron `it` en el bloque), 10 en la de base y 12 en la D7; las 8 de la 9a en 3 `describe` (contadas en el bloque, que pasa `node --check` con los tipos recortados); `T15_PR=a` 114 y `T15_PR=b` 185 (el guion de afirmaciones sacado de `T15.md` y corrido sobre un árbol vacío, que reproduce las 113 y 185 de antes y da 114 y 185 ahora); los JSON de flips y de ediciones de los dos cortes se leen con `JSON.parse` (a: seis flips, b: diez; las ediciones a y b, seis y cuatro), el `viejo` de D7 es **exactamente** la última fila de la 13.1 de la 15a, y las filas de la 13.1 siguen en 14 y 29. **Sintaxis:** `bash -n` sobre los bloques de `T02`, `T08`, `T09`, `T15` y `T09a`: los mismos con error que antes (los marcadores `<archivo de la fila>`) y ninguno nuevo. **No se midió ejecutando nada** (el árbol del PR-A no tiene todavía la 2, la 8 ni la 9a): los recuentos de «verla caer» y «verla pasar» de las tres tareas salen de restar o contar contra lo que el código hace, y lo dicen.
+- **El control de la unión del PR-B** (`T00.md`, paso 2: lo que `git merge-tree` añadiría a `main` fuera de `docs/`) se probó en un repositorio de juguete con un squash del PR-A: da 0, y con un archivo de código extra en la rama da 1.

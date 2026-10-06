@@ -1,0 +1,64 @@
+── Cliente de Prisma ───────────────────────────────────────────────────
+
+> nectar-nomada@0.1.0 prisma:generate
+> prisma generate
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (7.9.1) to ./generated/prisma in 7.19s
+
+── Compuerta: tipos, presupuesto de estado, inventario de rutas, lint ──
+
+> nectar-nomada@0.1.0 verify
+> npm run typecheck && npm run check:state && npm run check:rutas && npm run lint
+
+
+> nectar-nomada@0.1.0 typecheck
+> tsc --noEmit
+
+
+> nectar-nomada@0.1.0 check:state
+> node scripts/check-state-budget.mjs
+
+✓ SESSION_STATE.md cabe en una lectura: 407/450 líneas, ~11236/20000 tokens, 34480/45000 bytes.
+
+⚠  Al 90 % del presupuesto en líneas.
+   Archiva ya la más vieja, sin prisa, en vez de al chocar con el techo:
+       ### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
+   Va a docs/SESSION_STATE_ARCHIVE.md, la más vieja primero.
+
+> nectar-nomada@0.1.0 check:rutas
+> node scripts/inventario-de-rutas.mjs
+
+Inventario del router — 119 entradas (108 páginas, 11 handlers)
+    1  firma
+    3  flujo-auth
+    6  publica-discover
+    2  publica-rueda
+    4  publica-sin-datos
+  102  requiere-sesion
+    1  secreto-de-ruta
+
+Todas las entradas del router reconocidas están declaradas, y **no se
+detectaron las contradicciones textuales conocidas** entre código y
+declaración. El contraste es léxico: no demuestra control efectivo, y
+no dice nada sobre si los datos están protegidos — la frontera es el
+servicio de RBAC (SECURITY.md §2), no la ruta.
+
+> nectar-nomada@0.1.0 lint
+> eslint .
+
+── Tests herméticos ────────────────────────────────────────────────────
+── CI correrá 209 archivos de prueba; 215 los corre otra compuerta o ninguna
+
+ RUN  v4.1.10 /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a
+
+
+ Test Files  209 passed (209)
+      Tests  2863 passed (2863)
+   Start at  01:16:34
+   Duration  63.36s (transform 18.81s, setup 13.02s, import 150.32s, tests 59.23s, environment 122ms)
+
+── Todo verde ──────────────────────────────────────────────────────────

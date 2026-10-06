@@ -1,0 +1,153 @@
+
+> nectar-nomada@0.1.0 build
+> bash scripts/vercel-build.sh
+
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (7.9.1) to ./generated/prisma in 5.53s
+
+▲ Next.js 16.3.0 (Turbopack)
+✓ Running next.config.ts took 2.2s
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 16.9s
+  Running TypeScript ...
+  Finished TypeScript in 63s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/6) ...
+  Generating static pages using 7 workers (1/6) 
+  Generating static pages using 7 workers (2/6) 
+  Generating static pages using 7 workers (4/6) 
+✓ Generating static pages using 7 workers (6/6) in 298ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /admin/users
+├ ƒ /admin/users/[assignmentId]/permisos
+├ ƒ /ai
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/export
+├ ƒ /api/v1/auth/device
+├ ƒ /api/v1/auth/token
+├ ƒ /api/v1/devices
+├ ƒ /api/v1/ingest/notehub
+├ ƒ /api/v1/sync/authorization
+├ ƒ /api/v1/sync/field-events
+├ ƒ /api/v1/sync/field-media
+├ ƒ /api/v1/sync/field-work
+├ ƒ /api/webhooks/stripe
+├ ƒ /apiaries
+├ ƒ /apiaries/[id]
+├ ƒ /apiaries/[id]/etiquetas
+├ ƒ /apiaries/[id]/hives/[hiveId]
+├ ƒ /apiaries/new
+├ ƒ /beneficio
+├ ƒ /beneficio/ajustes
+├ ƒ /beneficio/bandejas
+├ ƒ /beneficio/pedidos
+├ ƒ /beneficio/recepcion
+├ ƒ /beneficio/secado
+├ ƒ /beneficio/secado/[unidad]
+├ ƒ /biochar
+├ ƒ /biochar/[id]
+├ ƒ /bodegas
+├ ƒ /bodegas/[id]
+├ ƒ /bodegas/nueva
+├ ƒ /bookings/success
+├ ƒ /calibration
+├ ƒ /calibration/[calibrationSessionId]
+├ ƒ /cart
+├ ƒ /checkout/success
+├ ƒ /competitions
+├ ƒ /competitions/[editionId]
+├ ƒ /content
+├ ƒ /content/[id]
+├ ƒ /content/new
+├ ƒ /discover
+├ ƒ /equipos
+├ ƒ /equipos/[id]
+├ ƒ /equipos/modelos
+├ ƒ /equipos/modelos/[id]
+├ ƒ /equipos/modelos/nuevo
+├ ƒ /equipos/nuevo
+├ ƒ /equipos/proveedores/nuevo
+├ ƒ /experiences/[slug]
+├ ƒ /field-sessions/[id]
+├ ƒ /field-sessions/[id]/report
+├ ƒ /finca
+├ ƒ /finca/jornadas
+├ ƒ /finca/jornadas/[id]
+├ ƒ /finca/trampas
+├ ƒ /finca/trampas/ronda
+├ ƒ /fincas
+├ ƒ /fincas/[siteId]/destino
+├ ƒ /fincas/[siteId]/logotipo
+├ ƒ /fincas/nueva
+├ ƒ /informe/[token]
+├ ƒ /inspecciones/nueva
+├ ƒ /instalaciones
+├ ƒ /instalaciones/[id]
+├ ƒ /instalaciones/nueva
+├ ƒ /inventario
+├ ƒ /inventario/lotes/[id]
+├ ƒ /inventario/recibir
+├ ƒ /locations/[slug]
+├ ƒ /login
+├ ƒ /lots
+├ ƒ /lots/[id]
+├ ƒ /lots/[id]/clasificacion
+├ ƒ /lots/[id]/drying/new
+├ ƒ /lots/[id]/fermentation/new
+├ ƒ /lots/[id]/green-selection/new
+├ ƒ /lots/[id]/hulling/new
+├ ƒ /lots/[id]/process
+├ ƒ /lots/[id]/report
+├ ƒ /lots/[id]/roast/new
+├ ƒ /lots/[id]/samples/new
+├ ƒ /lots/[id]/storage/new
+├ ƒ /mis-entregas
+├ ƒ /my-nectar
+├ ƒ /partner
+├ ƒ /partner/[projectId]
+├ ƒ /plots
+├ ƒ /plots/[id]
+├ ƒ /plots/[id]/ajustes
+├ ƒ /plots/[id]/fotos/nueva
+├ ƒ /plots/[id]/jornada/nueva
+├ ƒ /plots/[id]/manejo/[interventionId]
+├ ƒ /plots/[id]/manejo/nuevo
+├ ƒ /plots/[id]/microparcela/nueva
+├ ƒ /plots/[id]/muestras/nueva
+├ ƒ /plots/[id]/suelo/nuevo
+├ ƒ /products/[slug]
+├ ƒ /projects/[slug]
+├ ƒ /recipes
+├ ƒ /recipes/[id]
+├ ƒ /recipes/new
+├ ƒ /reports/proceso
+├ ƒ /research
+├ ƒ /research/[protocolId]
+├ ƒ /research/execute/[protocolVersionId]
+├ ƒ /research/new
+├ ƒ /research/treatments/[id]
+├ ƒ /sensory
+├ ƒ /sensory/[sessionId]
+├ ƒ /sensory/external-report
+├ ƒ /sensory/herramientas/ruedas
+├ ƒ /sensory/herramientas/ruedas/[wheel]
+├ ƒ /sensory/new
+├ ƒ /signup
+├ ƒ /start
+├ ƒ /stories/[slug]
+└ ƒ /tienda
+
+
+ƒ Proxy (Middleware)
+
+ƒ  (Dynamic)  server-rendered on demand
+
+▲ local build — skipping migrate and seed (no production database here)

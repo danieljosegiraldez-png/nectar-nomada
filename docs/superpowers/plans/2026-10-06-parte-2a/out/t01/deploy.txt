@@ -1,0 +1,16 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": PostgreSQL database "nectar_test_recetas_2a", schemas "ai, apiary, commerce, competitions, core, experiences, partner, reporting, research, sensory, traceability" at "127.0.0.1:55433"
+
+204 migrations found in prisma/migrations
+
+Applying migration `20261006004230_receta_con_pasos`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261006004230_receta_con_pasos/
+    └─ migration.sql
+
+All migrations have been successfully applied.

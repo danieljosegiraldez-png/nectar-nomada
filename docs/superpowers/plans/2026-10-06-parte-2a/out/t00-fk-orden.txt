@@ -1,0 +1,12 @@
+tests/beneficio/colaDeSecado.test.ts                 borra-receta=221      borra-org=229      receta antes de organización
+tests/beneficio/datos-del-tablero.test.ts            borra-receta=228      borra-org=237      receta antes de organización
+tests/traceability/bodegaConProceso.test.ts          borra-receta=206      borra-org=223      receta antes de organización
+tests/traceability/corridaConProceso.test.ts         borra-receta=181      borra-org=190      receta antes de organización
+tests/traceability/divisionBajoProceso.test.ts       borra-receta=183      borra-org=189      receta antes de organización
+tests/traceability/editarBeneficio.test.ts           borra-receta=305      borra-org=309      receta antes de organización
+tests/traceability/lotProcess.test.ts                borra-receta=210      borra-org=220      receta antes de organización
+tests/traceability/perfilDeTueste.test.ts            borra-receta=70       borra-org=76       receta antes de organización
+tests/traceability/processTargets.test.ts            borra-receta=137      borra-org=139      receta antes de organización
+tests/traceability/recipeAuthoring.test.ts           borra-receta=66       borra-org=70       receta antes de organización
+tests/traceability/recipeVersions.test.ts            borra-receta=120      borra-org=124      receta antes de organización
+tests/traceability/reporteDeProceso.test.ts          borra-receta=301      borra-org=307      receta antes de organización

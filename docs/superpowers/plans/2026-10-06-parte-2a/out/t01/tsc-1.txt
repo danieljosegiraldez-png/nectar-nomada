@@ -1,0 +1,2 @@
+app/lots/[id]/process/page.tsx(200,44): error TS18047: 'i.catalogValue' is possibly 'null'.
+lib/traceability/reporteDeProceso.ts(201,52): error TS18047: 'i.catalogValue' is possibly 'null'.

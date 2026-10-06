@@ -1,0 +1,11 @@
+
+ RUN  v4.1.10 /Users/danielsan/Developer/nectar-worktrees/recetas-parte-2a
+
+(node:60035) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ Test Files  113 passed (113)
+      Tests  2055 passed (2055)
+   Start at  00:46:12
+   Duration  116.48s (transform 18.99s, setup 6.80s, import 185.62s, tests 332.58s, environment 61ms)
+

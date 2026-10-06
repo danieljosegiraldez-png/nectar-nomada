@@ -1,0 +1,5 @@
+
+> nectar-nomada@0.1.0 db:seed
+> tsx prisma/seed.ts
+
+Seeded 55 permissions and 14 role profiles.

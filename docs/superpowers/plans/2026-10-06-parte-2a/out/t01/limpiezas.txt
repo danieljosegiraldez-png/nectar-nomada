@@ -1,0 +1,15 @@
+control: el orden bueno sale BIEN y el malo sale MAL
+archivos que crean una receta: 12 (esperados 12)
+BIEN tests/beneficio/colaDeSecado.test.ts · crea:107 · borra recetas:221 · borra organización:229
+BIEN tests/beneficio/datos-del-tablero.test.ts · crea:704 · borra recetas:228 · borra organización:237
+BIEN tests/traceability/bodegaConProceso.test.ts · crea:1207 · borra recetas:206 · borra organización:223
+BIEN tests/traceability/corridaConProceso.test.ts · crea:155 · borra recetas:181 · borra organización:190
+BIEN tests/traceability/divisionBajoProceso.test.ts · crea:135 · borra recetas:183 · borra organización:189
+BIEN tests/traceability/editarBeneficio.test.ts · crea:336 · borra recetas:305 · borra organización:309
+BIEN tests/traceability/lotProcess.test.ts · crea:120 · borra recetas:210 · borra organización:220
+BIEN tests/traceability/perfilDeTueste.test.ts · crea:54 · borra recetas:70 · borra organización:76
+BIEN tests/traceability/processTargets.test.ts · crea:92 · borra recetas:137 · borra organización:139
+BIEN tests/traceability/recipeAuthoring.test.ts · crea:79 · borra recetas:66 · borra organización:70
+BIEN tests/traceability/recipeVersions.test.ts · crea:57 · borra recetas:120 · borra organización:124
+BIEN tests/traceability/reporteDeProceso.test.ts · crea:122 · borra recetas:301 · borra organización:307
+MAL: 0

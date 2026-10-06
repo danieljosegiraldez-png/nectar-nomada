@@ -1,0 +1,6 @@
+Junta origin/main 4893ff40 en la Parte 2a
+
+Main entra con 97 commits que la rama no tenía; git merge-tree predijo la unión limpia.
+La rama ya estaba publicada: se une con merge y no se rebasa (R1).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

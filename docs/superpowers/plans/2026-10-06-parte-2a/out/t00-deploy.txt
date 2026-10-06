@@ -1,0 +1,38 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": PostgreSQL database "nectar_test_recetas_2a", schemas "ai, apiary, commerce, competitions, core, experiences, partner, reporting, research, sensory, traceability" at "127.0.0.1:55433"
+
+203 migrations found in prisma/migrations
+
+Applying migration `20261002200000_planton_en_la_rejilla`
+Applying migration `20261002210000_forma_del_lote`
+Applying migration `20261003120000_tres_columnas_a_enum`
+Applying migration `20261003190000_rejilla_solo_en_la_parcela`
+Applying migration `20261004100000_proceso_cubre_al_lote`
+
+┌─────────────────────────────────────────────────────────┐
+│  Update available 7.9.1 -> 8.0.0-rc.20                  │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261002200000_planton_en_la_rejilla/
+    └─ migration.sql
+  └─ 20261002210000_forma_del_lote/
+    └─ migration.sql
+  └─ 20261003120000_tres_columnas_a_enum/
+    └─ migration.sql
+  └─ 20261003190000_rejilla_solo_en_la_parcela/
+    └─ migration.sql
+  └─ 20261004100000_proceso_cubre_al_lote/
+    └─ migration.sql
+
+All migrations have been successfully applied.
