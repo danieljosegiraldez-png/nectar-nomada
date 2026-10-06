@@ -57,10 +57,16 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 2. **Las páginas 2-4 de Bralic**, donde está su tabla. Esta máquina no tiene ninguna herramienta de PDF
    y el visor nativo sólo rinde la primera; los otros caminos devolvieron nada **y su control también**.
 3. **Cuál de los DOS productos de abamectina** está en la bodega: sus reingresos son **24 h** y **48 h**,
-   que es la diferencia entre dejar entrar a alguien al lote o no.
+   que es la diferencia entre dejar entrar a alguien al lote o no. **Para el catálogo ya no bloquea** —el
+   2026-10-06 decidiste dar de alta las dos—, pero sigue bloqueando **registrar una aplicación**: ahí hay
+   que elegir una, y el reingreso que la pantalla haga valer sale de esa elección.
 4. **Las imágenes de Beauveria**, perdidas al compactarse la conversación del 2026-09-30.
-5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
-   contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
+5. **Cantidad y lote del fabricante** de los seis, si se quieren registrar EXISTENCIAS. **CORREGIDO EL
+   2026-10-06: esta línea decía «no hay camino de catálogo sin existencias», y es falso.** `crearMaterial`
+   (`lib/inventario/materiales.ts:131`) crea el material solo, y su comentario dice por qué: «sin identidad
+   no hay existencias» — la identidad va primero. Lo que no hay es **pantalla**, así que hoy se hace por
+   guion. Dar de alta sin existencias **sigue siendo decisión tuya**, y el 2026-10-06 la tomaste para las
+   dos abamectinas: `npm run data:abamectinas` (simula; `-- --apply` escribe).
 
 #### Preguntas tuyas rescatadas de entregas archivadas el 2026-10-04
 
@@ -73,6 +79,14 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
   en la 923) o pasa a obligatorio como pide el #621 §3.2.
 
 ## 2. Lo que se entregó — más nuevo primero
+
+### 2026-10-06 · El cierre y la alarma de backup mentían, y los dos del lado que tranquiliza (#659, #661, #663, #666)
+
+**Tres defectos de una clase en `scripts/cierre-de-sesion.sh`, y el tercero lo metí yo arreglando los dos primeros.** Decía «SIN EMPUJAR» de una rama empujada: comparaba `HEAD` con `origin/main`, o sea medía «sin fusionar», que es el estado normal de un PR abierto (#659). Su gemela leía `$?` después de un `if !`, que es **siempre 0**, así que «detrás de su remoto» no se distinguía de «al día» (#661). Hoy son cuatro estados con severidades distintas, y el flip-test produce los tres mundos de verdad en vez de simularlos.
+**La alarma gritaba «NO restauró» sobre un backup que acababa de restaurar bien** (#663). Lo que murió fue el `wc` del recuento, **después** de que el `diff` ya hubiera probado la copia idéntica: el set fallido tiene **0** `verified_result` y **0** `census-mismatch.diff`, o sea que no llegó a ninguna de sus dos ramas. Hoy el censo se reintenta y sale con **2** —«restauró, no se pudo contar»—, el `/fail` se sigue mandando, y las cifras del mensaje se leen de la copia local: aunque fallen, el veredicto no cambia. Verificar **escribe en el MANIFEST del backup real**; dos corridas mías acabaron ahí y se quitaron, con el checksum del dump idéntico antes y después.
+**Las dos abamectinas, de alta en el catálogo y nada más** (#666, tu decisión de hoy): sin dosis, porque ninguna de las dos etiquetas registra café. De paso corrige §1, que decía «no hay camino de catálogo sin existencias» — falso: `materiales.ts:131` crea el material solo, y lo que falta es **pantalla**.
+**Fichas nuevas:** `024`, la cosecha no registra quién la operó —35 de 35 nulos, porque la acción no manda un campo que el servicio sí guarda—, y `025`, ya hecha. Y quitados los worktrees `wt-ux` y `recovery-control`: sus 3 commits en un solo disco eran versiones **viejas** de documentos que `main` ya trae corregidos, comparados línea a línea antes de borrar.
+**Queda tuyo:** borrar la data —tienes punto de restauración **verificado**, PASS con 216 tablas y 15.315 filas idénticas, y yo dejaría `core.user_account` fuera, porque borrar cuentas pone a NULL el actor de 4.922 filas de auditoría en silencio—; correr `npm run data:abamectinas -- --apply`; y P-J.
 
 ### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
 
@@ -170,8 +184,12 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 perfil `Recolector` **existe** (1 de 14) y `/mis-entregas` **existe**, pero están a **cero las seis
 tablas** de esa familia: `jornada_de_cosecha`, `asignacion_de_jornada`, `entrega_de_cosecha`,
 `recepcion_de_cereza`, `lote_desde_recepcion` y `merma_de_recepcion`. Una entrega cuelga de una
-jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil. Daniel da los
-nombres; hay **23 cuentas activas** contra las que cruzarlos.
+jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil.
+
+**PARADO POR DECISIÓN DE DANIEL, 2026-10-06:** va a **borrar esta data y empezar de cero**, así que
+los nombres de los recolectores «no son necesarios ahora». Cuando vuelva a hacer falta había 23
+cuentas activas contra las que cruzarlos — y las seis cifras de arriba estarán caducadas, porque lo
+que miden es justo la data que se va.
 
 
 **Y un defecto DISTINTO, que no hay que confundir con lo de arriba:** la cosecha no registra quién
