@@ -25,6 +25,7 @@ import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 let usuario: Awaited<ReturnType<typeof crearUsuarioConAcceso>>;
 let madre: Awaited<ReturnType<typeof crearParcela>>;
 let hija: Awaited<ReturnType<typeof createMicrolot>>;
+let loteId: string | undefined;
 
 beforeAll(async () => {
   usuario = await crearUsuarioConAcceso();
@@ -44,8 +45,13 @@ afterAll(async () => {
   // porque las cohortes y los eventos cuelgan de ellas.
   const ubicaciones = [hija?.id, madre?.id].filter(Boolean) as string[];
   if (ubicaciones.length === 0) return;
+  await prisma.harvestEventSource.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
+  await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
   await prisma.plantingEvent.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
+  // El lote va DESPUÉS de la cosecha —`resultingLotId` cuelga de él— y antes que
+  // las ubicaciones.
+  if (loteId) await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }) });
 }, 30000);
 
@@ -90,5 +96,65 @@ describe("cohortes y eventos de producción enrollan (ADR-196)", () => {
 
     const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
     expect(ficha.eventosDeProduccion.map((e) => e.id)).toContain(evento.id);
+  });
+});
+
+describe("el rendimiento (ADR-196 §2.1: las áreas no se suman)", () => {
+  it("una cosecha de la microparcela cuenta en la madre, y el divisor es el área de la MADRE", async () => {
+    // Dos áreas distintas y a propósito: 2 en la madre, 1 en la hija. Si alguien
+    // las sumara, el divisor sería 3 y la cifra cambiaría — eso es lo que esta
+    // prueba existe para cazar. `areaHectares` NO se copia al crear el microlote,
+    // así que cada una se pone aquí.
+    await prisma.location.update({ where: { id: madre.id }, data: { areaHectares: 2 } });
+    await prisma.location.update({ where: { id: hija.id }, data: { areaHectares: 1 } });
+
+    // `Location.organizationId` es anulable y `Lot`/`HarvestEvent` la exigen. Se
+    // afirma como precondición del montaje en vez de con un `!`: si el ayudante
+    // cambiara y dejara de poner organización, esto lo dice por su nombre.
+    const organizationId = madre.organizationId;
+    if (organizationId == null) throw new Error("la parcela de prueba salió sin organización");
+
+    const lote = await prisma.lot.create({
+      data: {
+        lotCode: `TEST-ENROLL-${Date.now()}`,
+        lotType: "cherry",
+        organizationId,
+        locationId: madre.id,
+      },
+    });
+    loteId = lote.id;
+    // UNA cosecha con DOS aportes: uno de la madre y uno de la hija. El
+    // rendimiento se lee por `HarvestEventSource` y no por `HarvestEvent.locationId`,
+    // porque el segundo es el lote principal y una cosecha de varios bloques sólo
+    // nombra uno ahí.
+    const cosecha = await prisma.harvestEvent.create({
+      data: {
+        resultingLotId: lote.id,
+        locationId: madre.id,
+        organizationId,
+        harvestedAt: new Date("2026-08-01T12:00:00Z"),
+        provenanceClass: "original_record",
+      },
+    });
+    await prisma.harvestEventSource.create({
+      data: { harvestEventId: cosecha.id, locationId: madre.id, cherryWeightKg: 100 },
+    });
+    await prisma.harvestEventSource.create({
+      data: { harvestEventId: cosecha.id, locationId: hija.id, cherryWeightKg: 40 },
+    });
+
+    const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
+    if (ficha.yield.status !== "ok") throw new Error(`se esperaba status ok, salió ${ficha.yield.status}`);
+
+    // **El divisor: 2, el de la madre. Nunca 2+1.** La microparcela está DENTRO,
+    // no al lado; sumarlas sería tratarla como una parte.
+    expect(ficha.yield.hectares).toBe(2);
+    // Y el numerador sí crece: los 140 kg de los dos aportes.
+    expect(ficha.yield.years.find((y) => y.year === 2026)?.weighedKg).toBe(140);
+    // §4: el mismo total, desarmable por origen.
+    expect(ficha.rendimientoPorSeleccion.propio).toBe(100);
+    expect(ficha.rendimientoPorSeleccion.porSeleccion).toEqual([
+      { locationId: hija.id, nombre: hija.name, cherryWeightKg: 40 },
+    ]);
   });
 });
