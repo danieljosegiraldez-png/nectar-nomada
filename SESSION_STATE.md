@@ -228,6 +228,9 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   una calicata no, que `MeasurementSourceType` tenga **siete** valores —decía diez, re-medido el
   2026-10-04— y los **cinco** subconjuntos de `procedencia.ts` ofrezcan menos, y si `manufacturer_specification` debería estar en alguna. Decisión de
   diseño, sin tomar.
+- **Sin constar: si se cargó `protocolos/miel-competencia-100.json`** (#213). Salió de la
+  fila de §4 del protocolo de cata: §4 es «lo que NO se vuelve a proponer» y una duda
+  abierta ahí se entierra. Lo encontró otra sesión revisando el PR.
 - **Queda el acceso de Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`,
   perfil `Apiary Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
@@ -353,7 +356,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Pasar la contraseña como argumento a `auth:set-password` | Se niega a propósito: un argumento sobrevive en el historial y en la lista de procesos |
 | Duplicar personas canónicas creando una cuenta nueva por «sign-up» | Ya existen con Assignments colgando |
 | Construir herramienta de reconciliación de medios | Todavía no hay fotos reales. Ver `PENDING_IMPLEMENTATIONS/002` |
-| Pedirle a Daniel que corra `sensory:create-protocol` | El protocolo de cata **ya está en producción**, v1 y v2, confirmado por él el 2026-09-18. Sin constar: si se cargó `protocolos/miel-competencia-100.json` (#213) |
+| Pedirle a Daniel que corra `sensory:create-protocol` | El protocolo de cata **ya está en producción**, v1 y v2, confirmado por él el 2026-09-18 |
 | Pedirle la v2 del protocolo sensorial, o `apiary:load-protocol` v1 | **Ya los corrió** (2026-09-18 y 2026-09-16, `apiario-campo-v1`), confirmados por él. No se verificó contra la base y no se puede: leer producción está prohibido, es su palabra |
 | Dar de alta a Bob Huerbsch | **Ya entró**, lo dijo Daniel el 2026-09-17. Queda Kenis, que sigue en §3 |
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
