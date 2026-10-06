@@ -77,13 +77,18 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 ### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
 
 **Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
-**Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» está vacío en 105 de 108 lotes** porque la auditoría se busca por el id del lote y se guarda por el id del evento (3 filas contra 1.792); ése tiene sesión propia.
+**Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» estaba vacío en los 108, no en 105** —las 3 filas con `entity_id` de un lote son de `entity_type = 'lot'`, un sexto tipo que la consulta ni pedía—; **arreglado en #648**, con 104 de 108 estrenando historial.
 **Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
 ### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
 
 **Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
 **Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
 
+### 2026-10-05 · El Historial del lote: la lectura preguntaba por el id del lote (#648)
+
+`getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
+**Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
+**Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
 ### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
 
 **Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
@@ -137,8 +142,9 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
 - **El paso 2, capacidad con migración: sin plan propio** — re-medido el 2026-10-04: hay **47** planes (decía 39) y **ninguno se llama** «capacidad», aunque **5** mencionan «paso 2» y «capacidad» de pasada.
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
 - **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
-  2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 estaba HECHA desde A9.3 y su
-  ficha no lo sabía. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
+  2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 **no** estaba hecha: su cierre del
+  2026-10-03 tenía las tres comprobaciones ciertas y las tres miran artefactos, no conducta;
+  cerrada de verdad en #648. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
 - **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
   la receta en vez de la plantilla del perfil; «Daño consumado» contra la literatura que el propio
   documento cita; y que el bloque de riesgo hable en la hora 0 de todo lote sano y **calle en la
@@ -232,8 +238,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   las 38 parcelas, 16 sitios y 6 microparcelas, CERO tienen área**. De 35 eventos de cosecha, **17
   llevan `cherry_weight_kg` y 0 declaran su origen** (`harvest_event_source` está vacía). La
   densidad ya no depende del área —sale del marco— pero el rendimiento por hectárea sí. La cadena
-  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **La cosecha llega
-  en febrero**; después, el dato ya no sirve para esa cosecha.
+  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **Ninguna de las dos
+  caduca en el teclado**, y esta entrada decía lo contrario: no hay ninguna columna que guarde el
+  rendimiento —las dos menciones de la palabra en el esquema son comentarios—, así que el kg/ha se
+  calcula al mostrarlo y el área sirve igual para una cosecha ya registrada; y `recordHarvestSources`
+  recibe el **id de la cosecha**, o sea que atribuir a bloques también se hace después. Lo que sí
+  tiene ventana es **pesar por bloque mientras se cosecha**, que es del campo y no del programa:
+  **la cosecha llega en febrero**.
 - **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — lo que la
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
