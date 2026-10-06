@@ -326,7 +326,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "bioproteccion",
         definition:
-          "Levadura que coloniza la cereza sin fermentarla, durante la espera en frío (ADR-053, decisión 7; paquete farm-to-green v2, eje D: Metschnikowia pulcherrima, MP-72). La cepa se registra en Levadura/cultivo, donde están MP72 y HDA54.",
+          "Levadura que coloniza la cereza sin fermentarla, durante la espera en frío (ADR-051, decisión 7; paquete farm-to-green v2, eje D: Metschnikowia pulcherrima, MP-72). La cepa se registra en Levadura/cultivo, donde están MP72 y HDA54.",
       },
     ],
   },
@@ -789,7 +789,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "reception",
         definition:
-          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple: se compara con las recepciones del lote al abrir el proceso.",
+          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple: se compara, al leer la ficha, con las recepciones del lote.",
       },
       {
         value: "sorting_flotation",

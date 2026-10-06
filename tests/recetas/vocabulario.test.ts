@@ -60,6 +60,12 @@ describe("los tipos de paso", () => {
     expect(definicion("tipo_paso", "prefermentacion")).toMatch(/sacos de cosecha sin sellar/);
     expect(definicion("tipo_paso", "fermentation")).toMatch(/resultados, no métodos/);
   });
+
+  it("la recepción dice cuándo se compara: al leer la ficha, no al abrir el proceso (diseño §4.5, registro D5)", () => {
+    // El aviso de la recepción no se guarda ni se calcula al abrir: se calcula al leer, desde la recepción y la versión.
+    expect(definicion("tipo_paso", "reception")).toMatch(/se compara, al leer la ficha, con las recepciones del lote/);
+    expect(definicion("tipo_paso", "reception"), "la frase vieja («al abrir el proceso») no vuelve").not.toMatch(/al abrir el proceso/);
+  });
 });
 
 describe("la escala del mucílago: lo que QUEDA (decisión de Daniel, 2026-10-03)", () => {
@@ -139,6 +145,48 @@ describe("qué ejes aplican a cada tipo (inferencia de la casa, no del paquete)"
       expect.arrayContaining(["estadoFruto", "oxigeno", "temperatura", "fuenteMicrobiana", "adiciones"]),
     );
   });
+
+  it("la tabla completa, fila por fila: ningún tipo gana ni pierde un eje sin que esta prueba lo diga", () => {
+    // Segunda copia a propósito, como la de `TIPOS_POR_REGISTRO` más arriba: las pruebas de arriba fijan los ejes que importan
+    // (mucílago, secado, inoculación, fermentación) y dejaban sin aserción la mayoría de las 24 filas, así que quitarle
+    // `fuenteMicrobiana` a `cold_hold` o `oxigeno` a `prefermentacion` no las tocaba. El orden también cuenta: es el que la
+    // pantalla de la receta enseña. Si Daniel corrige una fila, se cambia aquí y en `lib/recetas/vocabulario.ts`.
+    const ESPERADOS: Record<TipoDePaso, readonly EjeDelPaso[]> = {
+      reception: [],
+      sorting_flotation: [],
+      sanitation: ["fisico"],
+      cold_hold: ["estadoFruto", "temperatura", "fuenteMicrobiana"],
+      freezing: ["estadoFruto", "temperatura"],
+      pulping: ["estadoFruto"],
+      demucilage: ["estadoFruto", "mucilagoObjetivo", "adiciones"],
+      fermentation: ["estadoFruto", "oxigeno", "temperatura", "fuenteMicrobiana", "fisico", "adiciones"],
+      immersion_hot: ["estadoFruto", "temperatura"],
+      immersion_cold: ["estadoFruto", "oxigeno", "temperatura"],
+      inoculation: ["fuenteMicrobiana", "adiciones"],
+      addition: ["adiciones"],
+      washing: ["estadoFruto", "mucilagoObjetivo", "medio"],
+      soaking: ["oxigeno", "medio"],
+      drying: ["estadoFruto", "modoSecado"],
+      hulling_wet: ["estadoFruto"],
+      reposo: [],
+      storage: [],
+      aging: [],
+      monsooning: [],
+      barrel_aging: ["adiciones"],
+      decaf: [],
+      milling: [],
+      prefermentacion: ["estadoFruto", "oxigeno", "temperatura", "fuenteMicrobiana"],
+    };
+    expect(Object.keys(ESPERADOS), "control: la copia literal tiene una fila por tipo").toHaveLength(24);
+    expect(Object.keys(ESPERADOS).sort()).toEqual([...TIPOS_DE_PASO].sort());
+    const distintas = TIPOS_DE_PASO.flatMap((t) =>
+      ESPERADOS[t].join(",") === EJES_POR_TIPO_DE_PASO[t].join(",")
+        ? []
+        : [`${t}: esperaba [${ESPERADOS[t].join(", ")}] y hay [${EJES_POR_TIPO_DE_PASO[t].join(", ")}]`],
+    );
+    // El mensaje nombra la fila: el aviso compacto de vitest sólo dice «[ Array(1) ]» y el diff queda fuera de los reportes cortos.
+    expect(distintas, distintas.join(" · ")).toEqual([]);
+  });
 });
 
 describe("los catálogos nuevos y los ampliados (diseño §7)", () => {
@@ -168,6 +216,21 @@ describe("los catálogos nuevos y los ampliados (diseño §7)", () => {
 
   it("fuente_microbiana gana la bioprotección, al final de su lista", () => {
     expect(valores("fuente_microbiana")).toEqual(["espontanea", "levadura_inoculada", "bacterias_lab", "koji", "cultivo_mixto", "bioproteccion"]);
+  });
+
+  it("la bioprotección cita una decisión que existe: la decisión 7 de ADR-051, que es la suya", () => {
+    // La definición sembrada citó «ADR-053, decisión 7», que no existe (ADR-053 llega a la 6): la cita se comprueba contra
+    // `docs/architecture/DECISIONS.md`, no se da por buena. La decisión 7 de ADR-051 es la que declara que la bioprotección
+    // es constitutiva del método.
+    const cita = definicion("fuente_microbiana", "bioproteccion").match(/(ADR-\d+), decisión (\d+)/);
+    expect(cita, "la definición ya no cita «ADR-NNN, decisión N»").not.toBeNull();
+    const [, adr, n] = cita!;
+    const decisiones = readFileSync("docs/architecture/DECISIONS.md", "utf8");
+    const inicio = decisiones.indexOf(`\n## ${adr} `);
+    expect(inicio, `control: ${adr} tiene encabezado en DECISIONS.md`).toBeGreaterThan(-1);
+    const fin = decisiones.indexOf("\n## ADR-", inicio + 1);
+    const seccion = decisiones.slice(inicio, fin);
+    expect(seccion, `${adr} no tiene una «Decision ${n}» sobre bioprotección`).toMatch(new RegExp(`\\*\\*Decision ${n} — bioprotection`));
   });
 
   it("las definiciones de los estados con mucílago dicen cuánto LE QUEDA, nunca cuánto se quitó", () => {

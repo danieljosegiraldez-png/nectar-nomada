@@ -57,7 +57,7 @@ export { LotProcessError };
  * agregar luego más», dijo él— y se lee en el diff.
  *
  * **Qué NO está aquí, a propósito:** `grado_proceso` (Natural, Washed, Honey) y
- * `estado_cereza` (entera, despulpada) describen el batch entero, no algo que
+ * `estado_cereza` (sus nueve estados del eje A, de `entera` a `verde`) describen el batch entero, no algo que
  * ocurre en un instante. Eso va en `intent`, que es donde el dueño lo puso en su
  * propio ejemplo: «tanto peso whole cherries, proceso natural anaeróbico».
  */
@@ -111,7 +111,7 @@ export interface AbrirProcesoInput {
    * es «ninguno». La columna es NOT NULL, así que el tipo lo dice igual.
    */
   processGradeValueId: string;
-  /** Del catálogo `estado_cereza`: entera, despulpada. **Obligatorio.** */
+  /** Del catálogo `estado_cereza`: uno de sus nueve estados del eje A, de `entera` a `verde`. **Obligatorio.** */
   cherryStateValueId: string;
   /** Obligatorio: «no se abre un proceso sin decir a qué humedad se va a almacenar». */
   targetMoisturePct: number;

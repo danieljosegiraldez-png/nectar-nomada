@@ -105,6 +105,76 @@ describe("el ejemplo del diseño §6: «volteo ≥ 3–4 al día · Cenicafé ·
   });
 });
 
+describe("el formato de cada referencia: valor y fuente, tal cual salen en pantalla", () => {
+  // Una referencia por cada forma en que el paquete da un valor (`valorDe` y `texto`, en `lib/recetas/referencias.ts`) y por
+  // cada forma de fuente. Los textos de abajo son los que el código produce hoy —medidos, no deducidos— y lo que el paquete
+  // dice en inglés sale sin traducir. Sin esto, invertir un `≤`, quitar un tope o perder los nombres de un valor con
+  // sub-valores dejaba las demás pruebas en verde: ninguna miraba el TEXTO del valor, sólo que hubiera referencia.
+  //
+  // `combo` dice de qué está hecho el parámetro (`rama · forma del valor`): el primer caso comprueba que cada referencia
+  // fijada sea de verdad de esa forma, y el segundo que ninguna forma que la copia trae quede sin fijar.
+  const rama = (p: Fila): string => {
+    if (p.value !== undefined && p.max !== undefined && p.min === undefined) return "valor con tope";
+    if (p.value !== undefined) return "valor";
+    if (p.min !== undefined && p.max !== undefined) return "rango";
+    if (p.max !== undefined) return "sólo tope";
+    if (p.min !== undefined) return "sólo mínimo";
+    return "sin valor";
+  };
+  const forma = (v: unknown): string => {
+    if (v === undefined) return "—";
+    if (Array.isArray(v)) return "lista";
+    return v !== null && typeof v === "object" ? "objeto" : typeof v;
+  };
+  const combo = (p: Fila): string => `${rama(p)} · ${forma(p.value)}`;
+
+  const CASOS: { clave: string; tipo: TipoDePaso; combo: string; valor: string; fuente: string }[] = [
+    { clave: "harvest.max_floaters_pct", tipo: "reception", combo: "sólo tope · —", valor: "≤ 5 %", fuente: "VNT-2025" },
+    { clave: "drying.layer_depth_cm.solar_dryer", tipo: "drying", combo: "valor con tope · number", valor: "2 (≤ 4) cm", fuente: "CENICAFE AT577 · perfil CENICAFE" },
+    {
+      clave: "drying.final_moisture_pct",
+      tipo: "drying",
+      combo: "rango · —",
+      valor: "10–12 % w.b.",
+      fuente: "ANACAFE-2018 + CENICAFE + VNT-2025 + ACT-INV-2026",
+    },
+    { clave: "process.depulp_warn_hours", tipo: "pulping", combo: "valor · number", valor: "10 h after picking", fuente: "ANACAFE-2018 · perfil ANACAFE" },
+    {
+      clave: "drying.interruption_rule",
+      tipo: "drying",
+      combo: "valor · string",
+      valor: "warn on any stop while moisture > 30–40 % (aw > 0.90); planned nightly stop allowed below that with cool-down log",
+      fuente: "CENICAFE AT562 + ANACAFE-2018 + NN gate",
+    },
+    { clave: "drying.mech_air_temp_max_c", tipo: "drying", combo: "valor · objeto", valor: "static: 50 · rotary: 60 °C", fuente: "CENICAFE + ANACAFE-2018" },
+    {
+      // El objeto cuyos sub-valores son pares de números: la rama «a–b» de `texto`.
+      clave: "harvest.brix_by_stage_reference",
+      tipo: "reception",
+      combo: "valor · objeto",
+      valor: "unripe: 17.9–18.3 · semi_ripe: 19.5–19.8 · ripe: 21.2–21.5 · overripe: 22.1–23.8 °Brix (mucilage, cv. Colombia)",
+      fuente: "MARTINEZ-2017 + CENICAFE",
+    },
+    { clave: "storage.packaging_enum", tipo: "storage", combo: "valor · lista", valor: "jute, sisal, fique, hermetic_multilayer, vacuum, other", fuente: "NN" },
+    { clave: "drying.direct_firing_allowed", tipo: "drying", combo: "valor · boolean", valor: "false", fuente: "CENICAFE" },
+  ];
+
+  it.each(CASOS)("$clave en $tipo: $combo", (c) => {
+    const fila = PARAMETROS.find((p) => p.key === c.clave);
+    expect(fila, `${c.clave} no está en la copia`).toBeDefined();
+    expect(combo(fila!), `${c.clave} ya no es de la forma que este caso fija`).toBe(c.combo);
+    const r = referencia(c.clave, c.tipo);
+    expect({ valor: r.valor, fuente: r.fuente }).toEqual({ valor: c.valor, fuente: c.fuente });
+  });
+
+  it("control: las formas de los casos son exactamente las que la copia trae, ninguna sin fijar", () => {
+    expect(PARAMETROS, "control: se leyó la copia entera").toHaveLength(51);
+    expect([...new Set(CASOS.map((c) => c.combo))].sort()).toEqual([...new Set(PARAMETROS.map(combo))].sort());
+    // La rama «sólo mínimo» (`≥ n`) y la de «sin valor» (`—`) no las dispara ningún parámetro de la copia: no hay dato con el
+    // que fijarlas, y esta prueba cae el día que aparezca uno para que se fije entonces.
+  });
+});
+
 describe("la nota del paquete sale con su referencia (registro I6)", () => {
   const conNota = PARAMETROS.filter((p) => p.note !== undefined);
 
