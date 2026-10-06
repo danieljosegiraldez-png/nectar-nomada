@@ -15,7 +15,9 @@
  * No hace falta contraseña: desde ADR-083 basta la dirección verificada.
  *
  * **DOS asignaciones, una por apiario, y no una sobre la finca.** Bajo Finca
- * Rosina cuelgan `Apiario Finca Rosina` y `Apiario Las Nubes`. Desde ADR-144 un
+ * Rosina cuelgan `Apiario 1 — Finca Rosina` y `Apiario 2 — Finca Rosina`
+ * (medido en producción el 2026-10-06; antes esta línea decía «Apiario Finca
+ * Rosina» y «Apiario Las Nubes», que son nombres que nunca existieron). Desde ADR-144 un
  * ámbito de ubicación alcanza a sus descendientes, así que asignarle la FINCA
  * le daría también las parcelas, el beneficio y los lotes de café — mucho más
  * de lo que su perfil necesita. Dos filas estrechas en vez de una ancha.
@@ -32,7 +34,26 @@ import { grantRole } from "../lib/rbac/admin";
 const PERSONA = "Kenis Abdiel Rodríguez Núñez";
 const CORREO = "rodriguezkenis907@gmail.com";
 const PERFIL = "Apiary Colony Event Recorder";
-const APIARIOS = ["Apiario Finca Rosina", "Apiario Las Nubes"] as const;
+// **Los nombres son los que la base tiene HOY, no los que el dueño dijo el 2026-09-14.**
+// Medido el 2026-10-06 contra producción: los dos apiarios que cuelgan de Finca Rosina se
+// llaman `Apiario 1 — Finca Rosina` (e8ca9b29) y `Apiario 2 — Finca Rosina` (51bf788e). La
+// raya es larga, U+2014 — `e2 80 94`, leído con `od` sobre el valor de la columna, no
+// supuesto: un guion corto `-` no casaría y el `findFirst` devolvería null.
+//
+// Antes esta constante pedía `Apiario Finca Rosina` y `Apiario Las Nubes`, que son los
+// nombres a los que `scripts/apiario-las-nubes.ts` los LLEVARÍA. Ese renombrado nunca se
+// aplicó, así que este guion abortaba con «No existe el apiario "Apiario Finca Rosina"
+// como apiary_site» — pidiendo el nombre de después de un cambio que no ocurrió.
+//
+// **Queda una contradicción en pie, nombrada a propósito en vez de escondida:** si algún día
+// se corre `npm run data:apiario-las-nubes -- --apply`, renombrará los dos apiarios y estas
+// dos constantes dejarán de casar; entonces hay que devolverlas a los nombres del párrafo
+// anterior. No se arregla aquí porque ese guion hace mucho más que renombrar —borra las
+// colonias de Rosina, y hoy la de `Apiario 1` está ACTIVA, capturada el 2026-08-23— así que
+// correrlo es una decisión del dueño y no un paso de este guion.
+//
+// Decisión de Daniel, 2026-10-06: cambiar el guion y dejar los nombres de la base como están.
+const APIARIOS = ["Apiario 1 — Finca Rosina", "Apiario 2 — Finca Rosina"] as const;
 
 class PreconditionError extends Error {}
 
