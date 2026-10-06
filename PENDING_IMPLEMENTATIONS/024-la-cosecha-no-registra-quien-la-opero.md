@@ -30,7 +30,34 @@ Y ninguna pantalla de cosecha pinta el campo. Sí lo pintan otras siete
 —`MeasurementForm`, las de apiario, `field-sessions`— así que el patrón existe y hay de dónde
 copiarlo.
 
-## Qué lo desbloquea
+## CORREGIDO EL 2026-10-06: la mitad del formulario NO se puede hacer, y el camino vivo ya está a salvo
+
+**Hecho: la acción ya manda el campo**, con su guardia de conducta
+(`tests/traceability/cosechaConOperario.test.ts`, en `base-sembrada`). Tres pruebas, y antes del
+arreglo caían **dos** por su nombre: el operario salía nulo, y **una persona ajena a la finca se
+aceptaba**, porque el campo nunca llegaba a `exigirPersonaPermitida`.
+
+**Sin hacer, y no se va a hacer: «el campo en el formulario de cosecha».** Ese formulario **no
+existe**. Se retiró el 2026-09-19 con la pieza 3, y lo dice el comentario de `app/lots/page.tsx:73`:
+«un lote de cereza nace de una recepción, en `/beneficio/recepcion`, y no de un formulario que pedía
+su organización y su ubicación a mano». Medido: `recordHarvestAction` tiene **cero** llamadores en
+`app/`, con control positivo —`recordMeasurementAction` sí aparece en `MeasurementForm.tsx`—.
+
+**Y el camino vivo no puede perder al recolector, por estructura y no por disciplina:**
+`entrega_de_cosecha.recolector_person_id` es **NOT NULL** (`schema.prisma`, modelo
+`EntregaDeCosecha`). Una entrega no existe sin nombrar a quien cosechó. Los **35** nulos de
+`harvest_event` son del camino retirado, no del que se va a usar.
+
+**Así que la última frase de esta ficha era falsa.** Decía que esto «es lo que hace falta antes de
+que dar el perfil Recolector signifique algo». No: el perfil sirve para la cadena de entregas, que
+ya obliga a nombrar al recolector. Lo que bloquea esa cadena es que nunca se ha usado —las seis
+tablas a cero— y eso es el bloque de §3, no esta ficha.
+
+**Lo que el arreglo sí vale:** que esa acción no vuelva a tragarse el campo en silencio si alguien
+la vuelve a cablear o la llama desde un guion, y que la autorización de la persona se ejerza. Es
+pequeño y está medido; no es la pieza que hacía falta para la finca.
+
+## Qué lo desbloquea (escrito el 2026-10-05, antes de medir lo de arriba)
 
 **Nada.** Son dos piezas: el `emptyToNull(formData.get("operatorPersonId"))` en la acción, y el
 campo en el formulario de cosecha. El selector de personas ya existe y ya está acotado por

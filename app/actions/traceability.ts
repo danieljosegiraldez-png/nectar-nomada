@@ -433,6 +433,10 @@ export async function recordHarvestAction(
       organizationId: String(formData.get("organizationId") ?? ""),
       projectId: emptyToNull(formData.get("projectId")),
       harvestedAt: fechaLocal(formData, "harvestedAt"),
+      // Quién cosechó. El servicio ya lo aceptaba, lo pasaba por
+      // `exigirPersonaPermitida` y lo guardaba; esta línea era la que faltaba, y
+      // sin ella las 35 cosechas de la finca nacieron sin operario (ficha 024).
+      operatorPersonId: emptyToNull(formData.get("operatorPersonId")),
       cherryWeightKg: emptyToNullNumber(formData.get("cherryWeightKg")),
       brix: emptyToNullNumber(formData.get("brix")),
       // La cereza como dato (2026-09-11). `condition` ya no se pide en pantalla
