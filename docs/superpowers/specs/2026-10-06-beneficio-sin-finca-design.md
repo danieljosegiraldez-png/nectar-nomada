@@ -1,6 +1,6 @@
 # Un beneficio puede existir sin finca propia
 
-**Estado: propuesta, pendiente de que Daniel la revise.** Reserva el ADR-197, que no se
+**Estado: propuesta, con las tres decisiones de dominio ya tomadas por Daniel; pendiente de su aprobación final.** Reserva el ADR-197, que no se
 escribe en `DECISIONS.md` hasta que este diseño se apruebe.
 
 ## La decisión de Daniel, 2026-10-06
@@ -87,17 +87,26 @@ sobre el propio beneficio— y **no está en ninguna geografía**, que es lo que
 especificación pide de una ubicación. La variante «opcional» lo acota: sólo lo pagan los
 beneficios que nacen sin padre.
 
-## Decisiones abiertas, y son de Daniel
+## Decisiones tomadas por Daniel, 2026-10-06
 
-1. **Qué ve el gestor de una finca como destino de su cosecha** (hallazgo 6). Hoy sólo ve
-   el beneficio que cuelga de su finca. Para que `Las Nubes` procese cereza ajena, ¿ve todos
-   los beneficios de la plataforma?, ¿los de su organización y los que le hayan concedido?,
-   ¿los que su finca tenga enlazados por `beneficioDestinoId`? Cambia quién puede mandar
-   cereza adónde.
-2. **Quién crea un beneficio sin padre.** Hoy exige permiso sobre el `site` padre. Sin padre
-   hace falta decir sobre qué: ¿la organización?, ¿la plataforma?
-3. **Si el beneficio de Kiva se crea ya, o espera al PR 2.** Hasta entonces no se puede por
-   pantalla.
+Las tres preguntas que dejaba abiertas este diseño, contestadas una por una:
+
+1. **Qué beneficios puede elegir como destino el gestor de una finca** (hallazgo 6): **los de su
+   organización y los que se le hayan concedido explícitamente.** Cereza a un beneficio ajeno
+   exige un permiso dado a propósito; ninguna finca puede mandar cereza a cualquier beneficio de
+   la plataforma por defecto. Es el punto medio entre «todos» y «sólo los enlazados por
+   `beneficioDestinoId`».
+2. **Quién crea un beneficio sin padre: quien administra la organización dueña.** Un beneficio
+   con padre sigue exigiendo permiso sobre la finca padre, como hoy; uno sin padre se crea con
+   permiso de gestión sobre su organización. Cada uno crea lo suyo.
+3. **Cuándo se crea el beneficio de Kiva: cuando el PR 2 permita crearlo sin finca.** No se
+   escribe a mano ni se cuelga provisionalmente de Finca 1: se espera a que el cambio de modelo
+   esté en `main` y se crea por pantalla. Hasta entonces el beneficio de Kiva no existe, y Luis
+   Sotillo sólo tiene sus dos fincas.
+
+Consecuencia para los PR: el 2 incluye **el permiso de «gestionar la organización» como
+requisito de crear un beneficio sin padre**, y el 3 incluye **la concesión explícita de un
+beneficio ajeno como destino**. Ninguna de las dos existe hoy y las dos hay que construirlas.
 
 ## Lo que este diseño NO cubre, y nadie miró
 
