@@ -163,15 +163,19 @@ salía «0 de 0». Verde no es lo mismo que probado.
 Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
 (ámbito: la finca) a cada recolector con cuenta, para que anote su entrega en `/mis-entregas`.
 
-#### Kiva Estate: crear su terreno (de Daniel)
+#### Kiva Estate: crear sus DOS terrenos (de Daniel)
 
-Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear el terreno de **Kiva
-Estate** desde `/fincas` → «sin terreno».
+Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear los **dos** terrenos de **Kiva
+Estate**: el primero desde `/fincas` → «sin terreno», el segundo desde
+`/fincas/nueva?organizacion=<id>`.
 
 
 **Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
-`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y los
-tres guiones **simulan por defecto**. Si la descripción «DEMO placeholder» sigue o no en esa fila
+`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y **sólo dos
+ensayan**: los dos `data:*` simulan y escriben con `--apply`; **`rbac:grant` NO simula** —sin
+argumentos lista, con argumentos concede en el acto—. Medido el 2026-10-05: 0 banderas de ensayo en
+`scripts/grant-role.ts` contra 4 en cada uno de los otros dos, y escribe vía `grantRole()`, no con un
+`prisma.*.create` que un grep de escrituras vería. Si la descripción «DEMO placeholder» sigue o no en esa fila
 **no se ha medido** —leer producción de Neon está prohibido desde aquí—: el guión la comprueba él
 mismo y **aborta sin escribir** si alguien puso otro texto, que es por qué se puede correr a ciegas.
 
@@ -195,10 +199,13 @@ Del recorrido del 2026-09-05 (375×812, sesión iniciada). Lo mecánico se arreg
 `docs/SESSION_STATE_ARCHIVE.md`; **comprimido el 2026-10-04 porque dos de sus cuatro viñetas decían
 ellas mismas que estaban cerradas y archivadas.** Queda, y es decisión tuya:
 
-- **El menú tiene 10 entradas y el objetivo del móvil son 8** — acortar el menú o mover el objetivo.
-  En el teléfono son 234 px de cabecera en tres filas, el 29 % de la pantalla antes de ver nada. **No
-  re-medido el 2026-10-04:** no se encontró el archivo que declara las entradas.
-- **`/plots` no ofrece nada que pulsar** — las ocho acciones existen un nivel abajo, en `/plots/[id]`;
+- **El menú tiene 10 entradas y el objetivo del móvil son 8.** Lo fija
+  `tests/navigation.test.ts`, que mide al visor más privilegiado de verdad; un operario ve 4. **Lo que
+  motivaba la decisión ya no existe:** eran 234 px de cabecera en tres filas (29 % de la pantalla) el
+  2026-09-05, y el #643 la dejó en **61 px en una fila, el 8 %** —medido en vivo a 375 px con sesión
+  de operario—. Cuántas entradas caben sigue siendo decisión tuya; el coste que la empujaba, no.
+- **`/plots` no ofrece nada que pulsar** — las acciones existen un nivel abajo: **20 formularios**,
+  19 de ellos en siete subrutas, y `/plots/[id]` es el tablero con 8 botones que llevan a ellas;
   subir alguna a la lista es decisión de producto.
 
 **Y lo que el recorrido no prueba:** fue un ratón sobre 375 px — ni guantes, ni sol, ni una conexión
@@ -240,12 +247,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Nadie barre las claves de idempotencia de las cuentas que dejan de
   escribir** — es lo único que quedó abierto al cerrar la idempotencia de
   envíos. Un barrido global pediría una tarea periódica y una ruta protegida, y
-  este proyecto no tiene ninguna de las dos: decisión aparte. Detalle en
+  este proyecto no tiene la primera —ni cron ni workflow programado—, y la ruta
+  protegida ya existe desde el 2026-09-18: decisión aparte. Detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
 - **La pantalla de tueste no la ha abierto nadie en un navegador** — las
-  acciones de servidor no las ejerce ninguna prueba (necesitan sesión) y un
-  worktree no tiene `.env`. Construida el 2026-09-06; detalle en
+  acciones de servidor no las ejerce ninguna prueba —**no por la sesión**, que nueve
+  pruebas de otras acciones simulan: nadie la ha escrito— y un worktree no tiene `.env`. Construida el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
 - **Humedad post-secado por proceso o variedad: NO existe, y esto es lo que
@@ -255,14 +263,19 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   en la página del lote. Lo que falta: la receta se identifica **sólo por nombre**
   dentro de una organización —no lleva método de proceso ni variedad—, el **lote
   no lleva variedad** (vive como valor de catálogo en el origen de la cosecha,
-  `cultivarValueId`), **no hay campo de método de proceso** en ningún sitio, y
-  **nada condiciona el paso a almacén** a haber alcanzado una humedad:
-  `moveLotToStorage` no mira ninguna medición. Es el hueco que el audit llama
-  `OperatingStandard` y umbrales versionados (Fase 3, parcial). **Decisión de
-  modelo pendiente de Daniel**, no se construyó nada.
+  `cultivarValueId`), y **ni la receta ni el lote llevan método de proceso** —sí lo
+  lleva `LotProcess.processGradeValueId`, obligatorio contra el catálogo
+  `grado_proceso` desde el 2026-09-08—. **Y ya NO es cierto que nada condicione el
+  paso a almacén:** `exigeSecadoTerminado` lo bloquea por encima del objetivo de
+  humedad (#228), aunque sólo cuando el lote o el ancestro que lo cubre tiene un
+  proceso. Es el hueco que el audit llama `OperatingStandard` (Fase 3, parcial).
+  **De Daniel sigue siendo el modelo:** método y variedad en la receta, variedad en
+  el lote.
 
-- **Falta correr `npm run sensory:create-protocol`** — escribe en producción y
-  no se ha ejecutado. La herramienta quedó lista el 2026-09-06; detalle en
+- **El protocolo de cata de café YA está en producción** (v1 y v2, Daniel,
+  2026-09-18), así que «falta correr `sensory:create-protocol`» era falso. Sin
+  constar: si se cargó `protocolos/miel-competencia-100.json` (#213). La herramienta
+  quedó lista el 2026-09-06; detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
 - **Clasificar por malla sobre muestra: decidido y sin construir (ADR-190, ADR-191)** —
@@ -285,7 +298,9 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   `PlantingCohort`) y sólo son *comparables* como `TreatmentBatch`, que **exige**
   protocolo de investigación. Lote→muestra→cata está entero, y el tueste ya es
   variable desde la entrada de abajo. **Falta el reporte:** `VariableComparison`
-  compara tratamientos, no puntajes entre lotes, y la Fase 6 sigue sin empezar.
+  compara tratamientos, no puntajes entre lotes. Sí existe `/reports/proceso` (#236),
+  proceso→tueste→puntaje: lo que falta atar son las faenas de FINCA. La Fase 6 está
+  **empezada y sin cerrar**, no sin empezar.
 
 - **Del plan S1 queda UNA entidad de la Tabla 15: el registro de microclima**
   (semanas 4–10), y está bloqueado en Daniel. `CLAUDE.md` §38 pide arquitectura
