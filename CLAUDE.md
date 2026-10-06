@@ -3851,3 +3851,17 @@ el `RUN_ID` dentro del propio `afterAll` —`lotCode: { startsWith: RUN_ID }`, `
 { contains: RUN_ID }`— y así una corrida que murió a mitad se limpia igual. Y se comprueba
 **contando filas del propio `RUN_ID` después**, que es lo único que distingue «limpió» de
 «pasó»: aquí las de la corrida buena daban 0 y las de la corrida muerta seguían las diez.
+
+## Skills de dominio del cuarto oscuro y del beneficio
+
+Siete skills en `.claude/skills/`, instaladas el 2026-10-06 por decisión de Daniel. Las tres
+`coffee-*` traen el dominio —física del cuarto oscuro, protocolo de secado, catálogo de levaduras,
+sensores y registro— y las cuatro `nn-*` son borradores de convenciones de este repositorio.
+
+**Los umbrales de `docs/beneficio/` mandan sobre cualquier cifra genérica de estas skills**, que es
+lo que ADR-181 ya decide y lo que ellas mismas declaran en su orden de autoridad.
+
+**Lo que se revisó, lo que no, y el defecto que se corrigió al instalarlas está en
+`.claude/skills/PROCEDENCIA.md`.** Dos cosas de ahí que conviene saber sin abrirlo: las cifras del
+catálogo de levaduras **no están verificadas** contra sus fuentes, y las plantillas de ESP32 y Pi 5
+**no se han probado en hardware**.

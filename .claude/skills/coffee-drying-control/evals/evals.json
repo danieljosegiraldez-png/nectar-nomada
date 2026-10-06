@@ -1,0 +1,55 @@
+{
+  "skill_name": "coffee-drying-control",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm closing out the dark room at Cerro Azul. Right now the extraction fans turn on whenever outside RH is lower than inside RH. Last week it was 29C and 44% outside and 25C and 66% inside at 3pm, and the room got hotter and the lot got wetter by morning. Is my logic wrong? Give me the corrected rule and the Python for the ESP32.",
+      "expected_output": "Explains that RH comparison is misleading, switches to absolute humidity with hysteresis, temperature cap, rain and dwell conditions, and provides MicroPython-compatible code with anti-short-cycle, sensor validation and fail-safe outputs.",
+      "files": [],
+      "assertions": [
+        "Explains that comparing RH% alone is misleading and converts to absolute humidity (g/m3) or dew point",
+        "Shows the 29C/44% outside vs 25C/66% inside case in absolute terms (about 12 vs 15 g/m3) and says what went wrong",
+        "Adds hysteresis, an outside temperature cap, a rain lockout and minimum dwell times",
+        "Includes code that validates sensor readings and defaults to a sealed safe state on error"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "we want to put a 12000 BTU mini-split in the dark room so it stays at 20C and drop the humidity way down. walls are cement, outside is usually 28C and 90% RH. any problems with this?",
+      "expected_output": "Flags the condensation/dew-point risk on cold surfaces and wall cavities, vapor ingress through leaks, need for sealing and dehumidification, and gives dew point numbers for the outside air.",
+      "files": [],
+      "assertions": [
+        "Computes the dew point of 28C/90% outside air (about 26C)",
+        "Flags condensation on surfaces colder than the dew point, including wall cavities and metal",
+        "Notes vapor ingress through leaks and the need to seal and dehumidify",
+        "Warns about cooling load or heat and sizing, not just humidity",
+        "Does not claim the mini-split alone solves moisture"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Wire up the relays for the 2 dehumidifiers and the intake/extraction dampers on an ESP32 with one of those 8 channel relay boards. The dehumidifiers are 600W each, 120V. Give me wiring and code.",
+      "expected_output": "Removes the JD-VCC jumper and uses a separate coil supply, drives contactor coils rather than the compressor directly, states contactor and breaker sizing, recommends an electrician, and uses the 300 s restart interlock and safe boot states.",
+      "files": [],
+      "assertions": [
+        "Says to remove the VCC-JDVCC jumper and use a separate coil supply with isolated ground",
+        "Drives contactor coils rather than switching the compressor directly from the relay",
+        "States about 5 A running per 600 W/120 V unit and sizes contactor and breaker with margin",
+        "Recommends a licensed electrician for mains wiring",
+        "Initializes relays to OFF at boot and uses a 300 s restart interlock"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "our dark room is 144 in interior and I want six 24 in trays per row, 7 levels, 2 racks, 3 cm of whole cherry per 2x4 ft tray. what does the full room weigh and can I insulate the inside walls?",
+      "expected_output": "Runs the width check (needs ~145.5 in, 144 does not fit), gives a density-dependent tray and room weight range flagged as unverified, and explains end-wall vs rack-wall insulation.",
+      "files": [],
+      "assertions": [
+        "States that 144 in is too tight for six 24 in trays with seams (about 145.5 in needed)",
+        "Gives per-tray and full-room weights as a range tied to bulk density and flags density as unverified",
+        "Explains interior insulation on end walls shortens the rack run while rack walls only reduce aisle",
+        "Mentions heat trapping without cooling when insulating"
+      ]
+    }
+  ]
+}
