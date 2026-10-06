@@ -85,11 +85,29 @@ elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$MAIN_SHA" "$HEAD_SHA" 
   ARRIBA=$(git rev-parse --verify --quiet "@{u}" 2>/dev/null || true)
   if [ -z "$ARRIBA" ]; then
     mal "$POR_DELANTE commit(s) en $RAMA_TXT y la rama NO tiene remoto: nada los respalda"
-  elif [ "$ARRIBA" != "$HEAD_SHA" ]; then
-    SIN_EMPUJAR=$(git rev-list --count "@{u}".."$HEAD_SHA")
-    mal "$SIN_EMPUJAR commit(s) SIN EMPUJAR en $RAMA_TXT (y $POR_DELANTE por delante de origin/main)"
   else
-    nota "$POR_DELANTE commit(s) por delante de origin/main en $RAMA_TXT, empujados y esperando fusión"
+    # **«Distinto de su remoto» son TRES estados, no uno**, y la primera versión
+    # de este bloque los metió en el mismo saco: comparaba `$ARRIBA != $HEAD_SHA`
+    # y contaba sólo `@{u}..HEAD`. Si la rama local va por DETRÁS —alguien empujó
+    # desde otro sitio— esa cuenta es 0 y el informe decía «✗ 0 commit(s) SIN
+    # EMPUJAR», que no significa nada. Lo encontró otra sesión revisando el PR
+    # #659, y se reprodujo antes de creerlo: dos commits, push, `reset --hard
+    # HEAD~1` deja la rama 1 por delante de `main` y 1 por detrás de su remoto,
+    # y el mensaje sale con su cero.
+    #
+    # Es la misma forma que el defecto que #659 arregló: una cuenta correcta con
+    # una etiqueta que habla de otra cosa. Se dicen los tres por separado.
+    DELANTE_REMOTO=$(git rev-list --count "@{u}".."$HEAD_SHA")
+    DETRAS_REMOTO=$(git rev-list --count "$HEAD_SHA".."@{u}")
+    if [ "$DELANTE_REMOTO" -gt 0 ] && [ "$DETRAS_REMOTO" -gt 0 ]; then
+      mal "$RAMA_TXT ha DIVERGIDO de su remoto: $DELANTE_REMOTO por delante y $DETRAS_REMOTO por detrás"
+    elif [ "$DELANTE_REMOTO" -gt 0 ]; then
+      mal "$DELANTE_REMOTO commit(s) SIN EMPUJAR en $RAMA_TXT (y $POR_DELANTE por delante de origin/main)"
+    elif [ "$DETRAS_REMOTO" -gt 0 ]; then
+      mal "$RAMA_TXT va $DETRAS_REMOTO commit(s) POR DETRÁS de su remoto — alguien empujó desde otro sitio; sincroniza antes de commitear"
+    else
+      nota "$POR_DELANTE commit(s) por delante de origin/main en $RAMA_TXT, empujados y esperando fusión"
+    fi
   fi
 else
   mal "$RAMA_TXT y origin/main han divergido"
