@@ -345,6 +345,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
   `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
 
+- **El enrollado de la selección: 2 de 6 tareas, en la rama `enrollado-impl`** (2026-10-05).
+  Diseño en `main` (#621), plan en el **#650** — con §3.2 **decidida en contra** (dos de sus
+  tres rechazos ya existían) y las tareas 4 y 6 **enmendadas antes de ejecutar**, porque
+  afirmaban campos que no existen. Hechas: el **ADR-196** y el conector con
+  `soloDescendientes`. **Faltan las 3-6**, las cinco consultas de `locationId` pelado.
+  **Queda tuyo:** fusionar el #650 y decir si se sigue.
+
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
   `PENDING_IMPLEMENTATIONS/002`.
