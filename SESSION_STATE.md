@@ -232,8 +232,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   las 38 parcelas, 16 sitios y 6 microparcelas, CERO tienen área**. De 35 eventos de cosecha, **17
   llevan `cherry_weight_kg` y 0 declaran su origen** (`harvest_event_source` está vacía). La
   densidad ya no depende del área —sale del marco— pero el rendimiento por hectárea sí. La cadena
-  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **La cosecha llega
-  en febrero**; después, el dato ya no sirve para esa cosecha.
+  entera está en pantalla desde el 2026-08-31 y las dos entradas las carga él. **Ninguna de las dos
+  caduca en el teclado**, y esta entrada decía lo contrario: no hay ninguna columna que guarde el
+  rendimiento —las dos menciones de la palabra en el esquema son comentarios—, así que el kg/ha se
+  calcula al mostrarlo y el área sirve igual para una cosecha ya registrada; y `recordHarvestSources`
+  recibe el **id de la cosecha**, o sea que atribuir a bloques también se hace después. Lo que sí
+  tiene ventana es **pesar por bloque mientras se cosecha**, que es del campo y no del programa:
+  **la cosecha llega en febrero**.
 - **Las páginas de `app/`: dos pasadas hechas, quedan las demás** — lo que la
   quinta y la sexta revisión (2026-09-05 y 06) encontraron ya está arreglado, y
   su detalle archivado. Sigue abierto que **quedan páginas sin mirar con esas
