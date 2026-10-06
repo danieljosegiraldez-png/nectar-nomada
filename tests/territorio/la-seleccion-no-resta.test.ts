@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createMicrolot } from "../../lib/traceability/locations";
 import { getPlotDetail } from "../../lib/traceability/plantingCohorts";
+import { listPlantSpecimens } from "../../lib/traceability/specimens";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 
@@ -45,6 +46,7 @@ afterAll(async () => {
   // porque las cohortes y los eventos cuelgan de ellas.
   const ubicaciones = [hija?.id, madre?.id].filter(Boolean) as string[];
   if (ubicaciones.length === 0) return;
+  await prisma.specimen.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
   await prisma.harvestEventSource.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
   await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
   await prisma.plantingEvent.deleteMany({ where: assertDefinedWhere({ locationId: { in: ubicaciones } }) });
@@ -156,5 +158,54 @@ describe("el rendimiento (ADR-196 §2.1: las áreas no se suman)", () => {
     expect(ficha.rendimientoPorSeleccion.porSeleccion).toEqual([
       { locationId: hija.id, nombre: hija.name, cherryWeightKg: 40 },
     ]);
+  });
+});
+
+describe("especímenes: trampas y plantas enrollan (ADR-196)", () => {
+  it("una trampa de la microparcela aparece en la ficha de su madre", async () => {
+    const trampa = await prisma.specimen.create({
+      data: {
+        locationId: hija.id,
+        specimenType: "trap",
+        commonName: "TEST Trampa del enrollado",
+        trapNumber: 7,
+        provenanceClass: "original_record",
+      },
+    });
+
+    const ficha = await getPlotDetail(usuario.userAccountId, madre.id);
+    expect(ficha.trampas.map((t) => t.id)).toContain(trampa.id);
+  });
+
+  it("una planta de la microparcela sale al pedir las plantas de su madre", async () => {
+    const deLaHija = await prisma.specimen.create({
+      data: {
+        locationId: hija.id,
+        specimenType: "plant",
+        commonName: "TEST Caturra de la hija",
+        status: "active",
+        provenanceClass: "original_record",
+      },
+    });
+
+    const desdeLaMadre = await listPlantSpecimens(usuario.userAccountId, madre.id);
+    expect(desdeLaMadre.map((p) => p.id)).toContain(deLaHija.id);
+
+    // **CONTROL POSITIVO, y es lo que hace que la aserción de arriba mida.** Una
+    // planta de la MADRE no debe salir al pedir las de su HIJA: si saliera, el
+    // enrollado iría en las dos direcciones y la aserción de arriba pasaría por
+    // devolverlo todo, no por enrollar hacia abajo.
+    const deLaMadre = await prisma.specimen.create({
+      data: {
+        locationId: madre.id,
+        specimenType: "plant",
+        commonName: "TEST Caturra de la madre",
+        status: "active",
+        provenanceClass: "original_record",
+      },
+    });
+    const desdeLaHija = await listPlantSpecimens(usuario.userAccountId, hija.id);
+    expect(desdeLaHija.map((p) => p.id)).toContain(deLaHija.id);
+    expect(desdeLaHija.map((p) => p.id)).not.toContain(deLaMadre.id);
   });
 });

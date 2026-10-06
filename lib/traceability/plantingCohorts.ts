@@ -746,7 +746,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // día: `observedAt` es un día a las 00:00Z.
   const trampasCrudas = puedeVerTrampas
     ? await prisma.specimen.findMany({
-        where: { locationId, specimenType: "trap" },
+        // ADR-196: las trampas de una selección son del lote. La compuerta de
+        // arriba (`puedeVerTrampas`) va sobre ESTA Location y el enrollado viene
+        // después, igual que en floración, cosecha e intervenciones.
+        where: { locationId: { in: emparentadas }, specimenType: "trap" },
         select: {
           id: true,
           trapNumber: true,
