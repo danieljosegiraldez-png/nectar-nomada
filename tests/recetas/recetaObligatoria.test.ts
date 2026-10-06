@@ -22,25 +22,25 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { abrirProceso } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../lib/traceability/processTargets";
 import type { Prisma } from "../../generated/prisma/client";
 import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `receta-obligatoria-${Date.now()}`;
-let orgId: string, otraOrgId: string, plotId: string, scopeId: string, gestor: string;
+let orgId: string, otraOrgId: string, plotId: string, scopeId: string, gestor: string, sinPermiso: string;
 let gradoId: string, cerezaId: string;
-const lotes: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN})`, locale: "es" } });
   return (await prisma.userAccount.create({ data: { personId: p.id, authProvider: "credentials", status: "active" } })).id;
 }
+/** Un lote de la corrida: su `lotCode` lleva el RUN, que es por lo que lo encuentra el `afterAll`. */
 async function lote(codigo: string) {
   const id = (await prisma.lot.create({ data: {
     lotCode: `${codigo}-${RUN}`, lotType: "cherry", organizationId: orgId, locationId: plotId, status: "approved", classification: "internal", createdBy: gestor,
   } })).id;
-  lotes.push(id);
   return id;
 }
 /** El id del valor `valor` del catálogo `tipo_paso`, el REAL de la base sembrada (tarea 2). */
@@ -67,12 +67,13 @@ async function receta(
   return { recipeId: r.id, versionId: r.versions[0]!.id };
 }
 
-/** Abre con la entrada mínima y válida: de una prueba a otra sólo cambian el lote y la versión. */
-const abrir = (lotId: string, processRecipeVersionId: string) =>
-  abrirProceso(gestor, {
+/** Abre con la entrada mínima y válida: de una prueba a otra sólo cambian la cuenta, el lote y la versión. */
+const abrirComo = (cuentaId: string, lotId: string, processRecipeVersionId: string) =>
+  abrirProceso(cuentaId, {
     lotId, processRecipeVersionId, intent: `TEST ${RUN}`, targetMoisturePct: 11, startedAt: new Date("2026-03-01T12:00:00Z"),
     provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId,
   });
+const abrir = (lotId: string, processRecipeVersionId: string) => abrirComo(gestor, lotId, processRecipeVersionId);
 const procesosDe = (lotId: string) => prisma.lotProcess.count({ where: { lotId } });
 
 /**
@@ -170,6 +171,8 @@ beforeAll(async () => {
   otraOrgId = (await prisma.organization.create({ data: { organizationType: "farm", name: `TEST otra ${RUN}`, status: "approved", classification: "internal" } })).id;
   plotId = (await prisma.location.create({ data: { locationType: "plot", name: `TEST plot ${RUN}`, organizationId: orgId, status: "approved", classification: "internal" } })).id;
   gestor = await cuenta("Gestor");
+  // Sin ninguna asignación: la prueba de acceso la usa para abrir sobre un lote que no puede gestionar.
+  sinPermiso = await cuenta("SinPermiso");
   scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
@@ -182,26 +185,54 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  // La limpieza DESCUBRE lo que tiene que borrar por el RUN de esta corrida y no hereda nada de las variables del fixture (ronda de arreglo del
+  // 2026-10-06, H2): si el `beforeAll` muriera antes de asignarlas —un rol que no existe, una parcela que no se crea—, `assertDefinedWhere` sobre una
+  // variable sin asignar abortaría el `afterAll` entero y dejaría vivo lo que el `beforeAll` SÍ creó (medido con esa mutación, en esta misma
+  // forma: dos organizaciones de más). Aquí `orgId`, `plotId`, `gestor`… no se leen: se buscan las filas por su nombre, y las que dependen de ellas
+  // (parcelas, cuentas, ámbitos, lotes) por las halladas. Cada `where` sale de arreglos —que pueden estar vacíos, y `{ in: [] }` no casa con nada—,
+  // nunca de una variable que pueda no estar asignada.
+  const organizaciones = (await prisma.organization.findMany({ where: { name: { contains: RUN } }, select: { id: true } })).map((o) => o.id);
+  const parcelas = (await prisma.location.findMany({
+    where: { OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] }, select: { id: true },
+  })).map((l) => l.id);
+  const personas = (await prisma.person.findMany({ where: { displayName: { contains: RUN } }, select: { id: true } })).map((p) => p.id);
+  const cuentas = (await prisma.userAccount.findMany({ where: { personId: { in: personas } }, select: { id: true } })).map((c) => c.id);
+  const ambitos = (await prisma.scope.findMany({
+    where: { scopeType: "location", scopeRefId: { in: parcelas } }, select: { id: true },
+  })).map((s) => s.id);
+  const lotesDeLaCorrida = (await prisma.lot.findMany({
+    where: { OR: [{ lotCode: { contains: RUN } }, { organizationId: { in: organizaciones } }] }, select: { id: true },
+  })).map((l) => l.id);
+
   // Los procesos primero (`process_recipe_version_id` es RESTRICT), con su auditoría.
-  await borrarProcesosDeLotesDonde({ id: { in: lotes } });
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
+  await borrarProcesosDeLotesDonde({ id: { in: lotesDeLaCorrida } });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotesDeLaCorrida } }) });
   // Las recetas de esta corrida —por su nombre, también las compartidas— y TODA receta que quede en sus dos
   // organizaciones (las de `abrirProcesoDePrueba` que traiga la 5b, si su limpieza fallara), con sus versiones, pasos y metas (Cascade). DESPUÉS de los
   // procesos que las usan y ANTES de las organizaciones: `process_recipe.organization_id` es RESTRICT desde la tarea 1, así
   // que una receta que quedara viva haría FALLAR el borrado de su organización (el `afterAll` entero, no una receta
   // convertida en plantilla de todas, que era lo que hacía el SET NULL de antes).
   await prisma.processRecipe.deleteMany({
-    where: assertDefinedWhere({ OR: [{ name: { contains: RUN } }, { organizationId: { in: [orgId, otraOrgId] } }] }),
+    where: assertDefinedWhere({ OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] }),
   });
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: gestor }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: gestor }) });
-  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [orgId, otraOrgId] } }) });
-  // Al final, para que un fallo no deje sin borrar lo de arriba.
-  expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } }), "quedan recetas de esta corrida").toBe(0);
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeId: { in: ambitos } }, { userAccountId: { in: cuentas } }] }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: ambitos } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: parcelas } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizaciones } }) });
+  // Al final, para que un fallo no deje sin borrar lo de arriba: se CUENTAN las filas del propio RUN, que es lo único que distingue «limpió» de «pasó».
+  const quedan = {
+    organizaciones: await prisma.organization.count({ where: { name: { contains: RUN } } }),
+    parcelas: await prisma.location.count({ where: { name: { contains: RUN } } }),
+    personas: await prisma.person.count({ where: { displayName: { contains: RUN } } }),
+    cuentas: await prisma.userAccount.count({ where: { id: { in: cuentas } } }),
+    ambitos: await prisma.scope.count({ where: { id: { in: ambitos } } }),
+    lotes: await prisma.lot.count({ where: { lotCode: { contains: RUN } } }),
+    recetas: await prisma.processRecipe.count({ where: { name: { contains: RUN } } }),
+  };
+  expect(Object.entries(quedan).filter(([, n]) => n > 0), "quedan filas de esta corrida").toEqual([]);
 }, 60000);
 
 describe("Parte 2a, §3.3 — la versión que se pasa a abrir tiene que estar publicada, viva y ser de la organización del lote", () => {
@@ -238,6 +269,75 @@ describe("Parte 2a, §3.3 — la versión que se pasa a abrir tiene que estar pu
     await prisma.processRecipe.update({ where: { id: ajena.recipeId }, data: { organizationId: orgId } });
     const l2 = await lote("AJENA-YA-PROPIA");
     expect((await abrir(l2, ajena.versionId)).processRecipeVersionId).toBe(ajena.versionId);
+  });
+
+  /**
+   * H3 (ronda de arreglo del 2026-10-06; decisión del controlador): la organización se mira ANTES que el estado, como en el tueste
+   * (`tuesteSoloConPublicadas.test.ts`, «una versión AJENA en borrador se rechaza por ser ajena»). Quien no es de la organización de la receta no
+   * aprende si su versión es un borrador o si la receta está archivada: recibe el mismo rechazo que con una ajena publicada. El control cambia SÓLO
+   * de quién es la receta: la misma forma, propia, sí cuenta su estado.
+   */
+  it("una versión AJENA en borrador, o de una receta AJENA archivada, se rechaza por ser ajena: su estado no se cuenta a quien no es de su organización", async () => {
+    const ajenaBorrador = await receta("Ajena borrador", { organizationId: otraOrgId, version: "draft" });
+    const ajenaArchivada = await receta("Ajena archivada", { organizationId: otraOrgId, receta: "archived" });
+    const l = await lote("AJENA-ESTADO");
+    await expect(abrir(l, ajenaBorrador.versionId), "la ajena en borrador contó su estado").rejects.toThrow(new LotProcessError("receta_de_otra_organizacion"));
+    await expect(abrir(l, ajenaArchivada.versionId), "la ajena archivada contó su estado").rejects.toThrow(new LotProcessError("receta_de_otra_organizacion"));
+    expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+    // Control: la MISMA forma, pero de la organización del lote, sí cuenta su estado: el borrador es `version_no_publicada`.
+    const propiaBorrador = await receta("Propia borrador", { organizationId: orgId, version: "draft" });
+    await expect(abrir(l, propiaBorrador.versionId)).rejects.toThrow(new LotProcessError("version_no_publicada"));
+    expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+  });
+
+  /**
+   * H1 (ronda de arreglo del 2026-10-06): `abrirProceso` recorta el id de la versión (`processRecipeVersionId?.trim() || null`), y el recorte no
+   * tenía prueba: la mutación `?? null` compilaba y dejaba verdes todas. Antes de la 5a un id en blanco reventaba con la clave foránea
+   * (P2007: la cadena vacía no es un uuid); ahora se trata como «sin versión» y abre «Sin receta».
+   *
+   * **La 5b invierte la primera mitad**: cuando la receta sea obligatoria, un id en blanco —igual que nulo o ausente— se rechaza con
+   * `sin_receta`, y esta mitad pasa a esperar ese rechazo. La segunda se queda tal cual: un id con espacios alrededor se recorta y abre con SU
+   * versión, y es la que prueba que el campo se lee y que el recorte llega a la versión (el control de que el id en blanco no se ignora porque sí).
+   * Cada mitad ve una mutación distinta: `?? null` cae por la primera (la cadena vacía llega a la base) y recortar sólo para decidir si el id está en
+   * blanco, pasando el id SIN recortar, cae por la segunda.
+   */
+  it("un id de versión en BLANCO abre «Sin receta»; con espacios alrededor, se recorta y abre con esa versión", async () => {
+    const l1 = await lote("ID-EN-BLANCO");
+    await expect(abrir(l1, "   "), "un id en blanco no abrió «Sin receta»").resolves.toMatchObject({ processRecipeVersionId: null });
+    expect(await procesosDe(l1)).toBe(1);
+    // Control: el MISMO campo, con una versión publicada y espacios alrededor, abre con ella.
+    const { versionId } = await receta("Recortada", { organizationId: orgId });
+    const l2 = await lote("ID-CON-ESPACIOS");
+    await expect(abrir(l2, `  ${versionId}  `), "un id con espacios alrededor no se recortó").resolves.toMatchObject({ processRecipeVersionId: versionId });
+    expect(await procesosDe(l2)).toBe(1);
+  });
+});
+
+/**
+ * H4 (ronda de arreglo del 2026-10-06; ruling INV): el ACCESO al lote va antes que todo lo que mira la versión. La única prueba de acceso de
+ * `abrirProceso` (`lotProcess.test.ts`, «sin acceso al lote no se puede abrir») no pasa versión ni nombra el error, así que no veía una autorización
+ * que sólo faltara cuando se pasa una. Aquí: sin permiso sobre el lote, abrir con una versión publicada —y con una en borrador— rechaza con la clase
+ * de acceso (`TraceabilityAccessError`), nunca con `version_no_publicada` ni `recipe_version_not_found`, que le contarían a quien no puede ver el lote
+ * cómo está esa receta. La cuenta con permiso es el control: sobre el mismo lote y las mismas versiones, el borrador sí se rechaza por su estado y la
+ * publicada abre.
+ */
+describe("Parte 2a, §3.3 — sin permiso sobre el lote, abrir con una versión rechaza por acceso, antes que por la versión", () => {
+  it("sin permiso: acceso rechazado con la versión publicada y con la que está en borrador; con permiso, el borrador es `version_no_publicada` y la publicada abre", async () => {
+    const publicada = await receta("Acceso publicada", { organizationId: orgId });
+    const borrador = await receta("Acceso borrador", { organizationId: orgId, version: "draft" });
+    const l = await lote("ACCESO");
+    for (const [cual, versionId] of [["publicada", publicada.versionId], ["en borrador", borrador.versionId]] as const) {
+      const r = await resultadoDe(abrirComo(sinPermiso, l, versionId));
+      expect(r.ok, `sin permiso, abrir con la versión ${cual} no se rechazó`).toBe(false);
+      if (r.ok) continue;
+      expect(r.error, `sin permiso, la versión ${cual} se rechazó con otra clase de error: ${String(r.error)}`).toBeInstanceOf(TraceabilityAccessError);
+      expect(r.error, `sin permiso, la versión ${cual} salió con el error de proceso`).not.toBeInstanceOf(LotProcessError);
+      expect((r.error as Error).message).toBe("no_lot_access");
+    }
+    expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+    // Control: la cuenta con permiso, sobre el MISMO lote. El estado de la versión sí lo rechaza (el acceso pasó) y la publicada abre.
+    await expect(abrir(l, borrador.versionId)).rejects.toThrow(new LotProcessError("version_no_publicada"));
+    expect((await abrir(l, publicada.versionId)).processRecipeVersionId).toBe(publicada.versionId);
   });
 });
 

@@ -174,12 +174,13 @@ async function loteGestionable(userAccountId: string, lotId: string) {
  * `SELECT` con `OF r, v`: la receta primero y la versión después. El orden linaje → receta → versión no cierra ningún ciclo:
  * ninguna otra operación de la 2a toma las dos filas (medido en los planes de las tareas 3 y 4: cada una toma una sola).
  *
- * Cuatro rechazos, en este orden: la versión no existe (`recipe_version_not_found`); no está publicada
- * (`version_no_publicada`: un borrador todavía se edita); su receta está archivada (`recipe_archived`); es de OTRA
- * organización (`receta_de_otra_organizacion`). Una receta sin organización es compartida y vale para todas: la misma
- * regla que el tueste (`roasting.ts`, `recipe_belongs_to_another_organization`). El selector (`listRecipeVersionsForLot`)
- * ya no ofrece nada de eso; esto es la puerta, para un formulario manipulado o una receta archivada entre cargar la página
- * y enviarla.
+ * Cuatro rechazos, en este orden: la versión no existe (`recipe_version_not_found`); es de OTRA organización
+ * (`receta_de_otra_organizacion`); no está publicada (`version_no_publicada`: un borrador todavía se edita); su receta está
+ * archivada (`recipe_archived`). **La organización va antes que el estado**, como en el tueste: una versión o una receta ajena se
+ * rechaza por ser ajena, y su estado no se le cuenta a quien no es de esa organización. Una receta sin organización es
+ * compartida y vale para todas: la misma regla que el tueste (`roasting.ts`, `recipe_belongs_to_another_organization`).
+ * El selector (`listRecipeVersionsForLot`) ya no ofrece nada de eso; esto es la puerta, para un formulario manipulado o una
+ * receta archivada entre cargar la página y enviarla.
  *
  * No se exporta: sólo la llama `abrirProceso`. La división y la devolución no pasan por aquí, a propósito (§5.1).
  */
@@ -195,11 +196,13 @@ async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionI
     where: { id: recipeVersionId },
     select: { status: true, recipe: { select: { status: true, organizationId: true } } },
   });
-  if (version.status !== "approved") throw new LotProcessError("version_no_publicada");
-  if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
+  // La organización PRIMERO (ronda de arreglo del 2026-10-06, H3), como en el tueste: quien no es de la organización de la receta no aprende si su
+  // versión es un borrador o si la receta está archivada; recibe el rechazo de una ajena publicada.
   if (version.recipe.organizationId !== null && version.recipe.organizationId !== organizationId) {
     throw new LotProcessError("receta_de_otra_organizacion");
   }
+  if (version.status !== "approved") throw new LotProcessError("version_no_publicada");
+  if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
 }
 
 /**

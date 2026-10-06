@@ -64,20 +64,52 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  // La limpieza DESCUBRE lo que tiene que borrar por el RUN de esta corrida y no hereda nada de las variables del fixture (ronda de arreglo del
+  // 2026-10-06, H2): si el `beforeAll` muriera antes de asignarlas —un rol que no existe—, `assertDefinedWhere` sobre `verdeId` sin asignar abortaba
+  // el `afterAll` entero y dejaba vivo lo que el `beforeAll` SÍ había creado (medido con esa mutación: organizaciones 0→2, parcelas, personas, cuentas
+  // y ámbitos 0→1). Aquí `orgId`, `plotId`, `cuenta`, `verdeId`… no se leen: se buscan las filas por su nombre, y las que dependen de ellas (parcelas,
+  // cuentas, ámbitos, lotes) por las halladas. Cada `where` sale de arreglos —que pueden estar vacíos, y `{ in: [] }` no casa con nada—, nunca de una
+  // variable que pueda no estar asignada.
+  const organizaciones = (await prisma.organization.findMany({ where: { name: { contains: RUN } }, select: { id: true } })).map((o) => o.id);
+  const parcelas = (await prisma.location.findMany({
+    where: { OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] }, select: { id: true },
+  })).map((l) => l.id);
+  const personas = (await prisma.person.findMany({ where: { displayName: { contains: RUN } }, select: { id: true } })).map((p) => p.id);
+  const cuentas = (await prisma.userAccount.findMany({ where: { personId: { in: personas } }, select: { id: true } })).map((c) => c.id);
+  const ambitos = (await prisma.scope.findMany({
+    where: { scopeType: "location", scopeRefId: { in: parcelas } }, select: { id: true },
+  })).map((s) => s.id);
+  // El verde (`VERDE-<RUN>`), los lotes del tueste (`TOST-<RUN>-…`) y cualquier otro que cuelgue de estas organizaciones o de estas cuentas.
+  const lotes = (await prisma.lot.findMany({
+    where: { OR: [{ lotCode: { contains: RUN } }, { organizationId: { in: organizaciones } }, { createdBy: { in: cuentas } }] }, select: { id: true },
+  })).map((l) => l.id);
+
   // El orden es el de las FK: el perfil elegido y los tuestes (que apuntan a la versión) antes que las recetas; las recetas
   // —con sus versiones en Cascade— antes que la organización (`process_recipe.organization_id` es RESTRICT desde la tarea 1).
-  await prisma.lotRoastProfile.deleteMany({ where: assertDefinedWhere({ lotId: verdeId }) });
-  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ createdBy: cuenta }) });
-  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ createdBy: cuenta }) });
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ createdBy: cuenta }) });
-  await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ organizationId: { in: [orgId, otraOrgId] } }) });
-  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: cuenta }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: cuenta }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: scopeId }) });
-  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: cuenta }) });
-  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: plotId }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [orgId, otraOrgId] } }) });
+  await prisma.lotRoastProfile.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotes } }) });
+  await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ createdBy: { in: cuentas } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ createdBy: { in: cuentas } }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
+  await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeId: { in: ambitos } }, { userAccountId: { in: cuentas } }] }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: ambitos } }) });
+  await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: parcelas } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizaciones } }) });
+  // Al final, para que un fallo no deje sin borrar lo de arriba: se CUENTAN las filas del propio RUN, que es lo único que distingue «limpió» de «pasó».
+  const quedan = {
+    organizaciones: await prisma.organization.count({ where: { name: { contains: RUN } } }),
+    parcelas: await prisma.location.count({ where: { name: { contains: RUN } } }),
+    personas: await prisma.person.count({ where: { displayName: { contains: RUN } } }),
+    cuentas: await prisma.userAccount.count({ where: { id: { in: cuentas } } }),
+    ambitos: await prisma.scope.count({ where: { id: { in: ambitos } } }),
+    lotes: await prisma.lot.count({ where: { lotCode: { contains: RUN } } }),
+    tuestes: await prisma.roastSession.count({ where: { createdBy: { in: cuentas } } }),
+    recetas: await prisma.processRecipe.count({ where: { name: { contains: RUN } } }),
+  };
+  expect(Object.entries(quedan).filter(([, n]) => n > 0), "quedan filas de esta corrida").toEqual([]);
 }, 60000);
 
 describe("Parte 2a — registrar un tueste con un perfil: sólo uno publicado y que no sea Libre", () => {
