@@ -1,0 +1,175 @@
+{
+  "_nota": "PENDING_IMPLEMENTATIONS/005, la propiedad que faltaba: que el guardia que domina una operacion sea EL DEBIDO, no solo que exista. Esto declara, POR DOMINIO, que modelos gobierna un permiso, y tests/arquitectura/el-permiso-es-el-debido.test.ts falla si una operacion toca uno de esos modelos sin exigir ese permiso y sin estar declarada aqui con su razon. El permiso que exige cada operacion se resuelve por SIMBOLO (escalon 2 de la ficha 007), no por el nombre del guardia: el tercer argumento de `can(userAccountId, action, resourceType, ...)`, propagado desde el envoltorio que lo pasa. La ficha 005 rechazo un token universal para todo Prisma; esto es la otra via que ella misma sugiere, por dominio, empezando por el de mas consecuencia.",
+  "_como_se_anade_un_dominio": "Un bloque mas en `dominios`, con su `permiso`, los `gobierna` y su `porque`. No hace falta tocar la compuerta. Lo que NO se hace es declarar un dominio sin adjudicar sus excepciones: una excepcion sin razon pone la compuerta en rojo, a proposito.",
+  "dominios": [
+    {
+      "permiso": "lot",
+      "porque": "El lote de cafe es la columna de la trazabilidad y el objeto del producto: de el cuelgan su proceso, sus transformaciones, su clasificacion, sus corridas de fermentacion y secado, y sus eventos de cosecha. Es el dominio de mas consecuencia, que es por donde la ficha 005 pide empezar. Medido el 2026-10-04: 107 operaciones tocan uno de estos modelos y 83 llevan clase de guardia.",
+      "gobierna": [
+        "lot",
+        "lotProcess",
+        "lotProcessIntervention",
+        "lotProcessReturn",
+        "lotTransformation",
+        "lotTransformationInput",
+        "lotTransformationOutput",
+        "lotRoastProfile",
+        "roastSession",
+        "fermentationRun",
+        "dryingRun",
+        "harvestEvent",
+        "harvestEventSource",
+        "harvestWithdrawalFlag",
+        "loteDesdeRecepcion"
+      ],
+      "excepciones": [
+        {
+          "archivo": "lib/research/treatments.ts",
+          "operacion": "recordWashMedium",
+          "permisos": [
+            "research"
+          ],
+          "veredicto": "ARREGLADO 2026-10-04: la cita se queda en el proyecto autorizado",
+          "confirmado_por_daniel": true,
+          "razon": "ERA UN DEFECTO y Daniel lo confirmo el 2026-10-04. Autorizaba `research:execute_protocol` sobre el proyecto del lote de tratamiento y despues leia el lote de `washMediumSourceLotId` SOLO para comprobar que existe -- el valor se descartaba --, asi que podia citar CUALQUIER lote de la base como medio de lavado y escribir esa cita en la etapa. ARREGLADO exigiendo que el lote citado este en el MISMO PROYECTO que el lote de tratamiento. Sigue usando el permiso `research` y no `lot`, y eso es deliberado: medido el 2026-10-04, el perfil `Research Lead` NO TIENE NINGUN permiso de `lot` --solo `research:*` y `classification:*`--, asi que exigir `lot:view` romperia `mosto_de_otro_lote`, que es una funcion deliberada, y obligaria a conceder un permiso nuevo a los perfiles de investigacion: eso es una decision del dueño, no un arreglo. La regla del proyecto cierra «cualquier lote de la base» sin tocar el modelo de permisos, porque la autorizacion de research YA es por proyecto. Guardado por tests/research/ro1.test.ts, que esta en el grupo `base-sembrada` y por tanto CI lo corre."
+        },
+        {
+          "archivo": "lib/traceability/samples.ts",
+          "operacion": "createSampleFromLot",
+          "permisos": [
+            "sample"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Lee el lote para SACAR SU AMBITO y despues autoriza `sample:manage` SOBRE ESE AMBITO (`[{projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: ...}]`). O sea que no hay ambito ajeno en juego: sacar una muestra de un lote es una operacion de muestra hecha dentro del ambito del lote. El patron se repite en cuatro mas de esta lista."
+        },
+        {
+          "archivo": "lib/traceability/samplingEvents.ts",
+          "operacion": "registrarInspeccion",
+          "permisos": [
+            "sample"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Mismo patron: lee el lote y le pasa el lote como contexto a `requireSamplingAccess`, que autoriza `sample:manage` sobre el project/location DEL LOTE. Verificado leyendo `requireSamplingAccess`: autoriza sobre el ambito que recibe, no sobre uno propio."
+        },
+        {
+          "archivo": "lib/traceability/samplingEvents.ts",
+          "operacion": "opcionesParaInspeccion",
+          "permisos": [
+            "sample"
+          ],
+          "veredicto": "propuesto legitimo, con una nota",
+          "confirmado_por_daniel": false,
+          "razon": "Autoriza por lote con `requireSamplingAccess`, asi que solo devuelve los lotes sobre los que tienes muestreo. LA NOTA: su `prisma.lot.findMany({ orderBy: { lotCode: 'asc' } })` NO LLEVA `where` ni `take` -- lee la tabla entera y filtra despues. Hoy no filtra nada porque el filtro corre antes de devolver, pero es la forma que `CLAUDE.md` avisa que se rompe el dia que alguien le ponga un tope: con `take`, verias las filas ajenas primero."
+        },
+        {
+          "archivo": "lib/traceability/samplingEvents.ts",
+          "operacion": "createSamplingEvent",
+          "permisos": [
+            "sample"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Es un envoltorio de una linea sobre `crearInspeccionEnTransaccion`, que autoriza igual que `registrarInspeccion`: `sample:manage` sobre el ambito del lote."
+        },
+        {
+          "archivo": "lib/research/treatments.ts",
+          "operacion": "createTreatmentBatch",
+          "permisos": [
+            "research"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Lee el lote y autoriza `research:execute_protocol` SOBRE EL AMBITO DEL LOTE (`[{projectId, locationId}]` sacados de el). Correr un protocolo sobre material real es una operacion de investigacion hecha dentro del ambito de ese material."
+        },
+        {
+          "archivo": "lib/apiary/harvest.ts",
+          "operacion": "recordApiaryHarvest",
+          "permisos": [
+            "apiary"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "No LEE un lote ajeno: lo CREA (`tx.lot.create`, linea 83) bajo el ambito de la colmena que ya autorizo con `apiary:manage`. Un lote de miel nace de un apiario, asi que el permiso de apiario es el que corresponde a su creacion. Es una decision de dominio deliberada y conviene que este escrita."
+        },
+        {
+          "archivo": "lib/commerce/tienda.ts",
+          "operacion": "pedidosPorDespachar",
+          "permisos": [
+            "commerce"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "El propio archivo lo documenta como una division deliberada: «Dos permisos distintos, a proposito. Asignar exige `lot:manage` sobre el lote -- es trabajo de campo --. Recibir y crear variantes exigen `commerce:manage_store`». Y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`. Esta lee que lote salio en cada pedido para despacharlo, que es trabajo de tienda."
+        },
+        {
+          "archivo": "lib/traceability/plantingCohorts.ts",
+          "operacion": "recordHarvestSources",
+          "permisos": [
+            "location"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "`harvestEvent` y `harvestEventSource` son datos del lote Y de la parcela a la vez: el origen de una cosecha es una afirmacion sobre QUE BLOQUES de la parcela la produjeron. Autoriza `requireLocationAttributeAccess` sobre la parcela, que es el ambito del dato que escribe. Las tres operaciones de este archivo son el mismo caso."
+        },
+        {
+          "archivo": "lib/traceability/plantingCohorts.ts",
+          "operacion": "getPlotDetail",
+          "permisos": [
+            "location",
+            "specimen"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Mismo caso: lee el origen de cosecha de una parcela ya autorizada con `requireLocationAttributeAccess`."
+        },
+        {
+          "archivo": "lib/traceability/plantingCohorts.ts",
+          "operacion": "getHarvestSourceContext",
+          "permisos": [
+            "location"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Mismo caso que las dos de arriba, en lectura."
+        },
+        {
+          "archivo": "lib/beneficio/datosDelTablero.ts",
+          "operacion": "datosDelTablero",
+          "permisos": [
+            "equipment"
+          ],
+          "veredicto": "legitimo por construccion",
+          "confirmado_por_daniel": false,
+          "razon": "La UNICA de las trece que no depende de un juicio de dominio: esta ACOTADA POR CONSTRUCCION. Llama a `resolveLotVisibility`, asi que los lotes que devuelve salen del alcance del propio principal y no puede ensenar lo ajeno. El `equipment` es para las unidades del beneficio, que es otro dato. Medido: `acotado=true` y `resolveLotVisibility` en su cuerpo, contra las otras doce que no tienen ninguna de las tres senales."
+        },
+        {
+          "archivo": "lib/commerce/tienda.ts",
+          "operacion": "despacharPedido",
+          "permisos": [
+            "commerce"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "La hermana de `pedidosPorDespachar`, y el mismo caso: autoriza `commerce:manage_store` con `exigeTienda` y toca `lotTransformationOutput`, que son los frascos que salieron de una transformacion del lote. El propio archivo documenta la division deliberada: asignar un lote a una variante exige `lot:manage` --y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`--, mientras recibir y despachar exigen tienda."
+        }
+      ],
+      "_como_salio_esta_lista": "SACADA DEL ESQUEMA, no de la prosa de la ficha, y es una correccion: la primera version declaraba `lotClassification`, `lotStorageMove` y `greenSample`, que NO EXISTEN como modelos de Prisma -- me los invente leyendo la 005. Lo cazo la propia compuerta en su primera corrida, que es el mejor estreno que puede tener un guardia. Las 16 de ahora salen de `grep '^model (Lot|Harvest|RoastSession|FermentationRun|DryingRun)'` sobre prisma/schema.prisma y las 16 las toca al menos una operacion, medido. `Sample` queda fuera a proposito: es su propio dominio, con su propio permiso. SEGUNDA CORRECCION, tambien de la propia compuerta: `harvestContainer` entro por el prefijo `Harvest*` y NO es del dominio del lote -- cuelga de `ApiaryHarvestEvent`, son los baldes y tambores de una cosecha de MIEL («balde 3», «tambor A»), y solo `lib/apiary/*` lo toca. Una heuristica por nombre barre de mas; lo que decide es la relacion del modelo. `harvestWithdrawalFlag` y `loteDesdeRecepcion` si se quedan: el primero cuelga de `HarvestEvent` (cosecha de cafe) y el segundo del `Lot`.",
+      "_arreglados": [
+        {
+          "operacion": "completeExternalCoffeeOrigin",
+          "archivo": "lib/traceability/samples.ts",
+          "cuando": "2026-10-04",
+          "como": "Exige ahora `requireLotAccess(userAccountId, \"view\", [lot])` sobre el lote que cita. `view` y no `manage` a proposito: el defecto medido era «un lote que no puedes ver», y exigir `manage` impediria citar un lote que legitimamente ves sin gestionarlo. Guardado por `tests/traceability/loteCitadoExigeSuPermiso.test.ts`, en el grupo `base-sembrada` -- NO en `s1.test.ts`, donde viven sus otras pruebas, porque ese archivo esta en `datos-reales` y CI no corre ese grupo: una prueba escrita alli no se ejecutaria nunca."
+        },
+        {
+          "operacion": "recordWashMedium",
+          "archivo": "lib/research/treatments.ts",
+          "cuando": "2026-10-04",
+          "como": "Exige que `sourceLot.projectId === stage.treatmentBatch.projectId`. NO exige `lot:view`, y la razon de la excepcion explica por que: habria obligado a cambiar el modelo de permisos de los perfiles de investigacion. Si Daniel prefiere esa via, el cambio es conceder `[\"lot\", \"view\"]` a `Research Lead` y `Research Contributor` en lib/rbac/catalog.ts, mas una siembra."
+        }
+      ]
+    }
+  ]
+}

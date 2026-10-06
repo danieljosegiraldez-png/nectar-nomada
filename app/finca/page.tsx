@@ -9,6 +9,8 @@ import { COOKIE_FINCA, fincaDeLaPagina, puedeCrearParcelaEn } from "../../lib/tr
 import { NuevaParcelaForm } from "../components/traceability/NuevaParcelaForm";
 import { FincaElegida } from "../components/traceability/FincaElegida";
 import { puedeCambiarLogotipo } from "../../lib/traceability/fincaLogo";
+import { situacionesDeLaFinca } from "../../lib/traceability/situacionesDeCampo";
+import { mostrarInstante } from "../../lib/time/mostrarInstante";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,16 @@ export default async function FincaPage() {
   if (finca.debeElegir) redirect("/fincas?volver=/finca");
   const puedeCrearParcela = finca.elegida ? await puedeCrearParcelaEn(user.userAccountId, finca.elegida.siteId) : false;
 
+  /**
+   * **El tablero arriba, el índice abajo** — ADR-193, que lo decidió para `/beneficio`; esto es
+   * aplicárselo a su hermana. Decisión de Daniel, 2026-10-04: lo que reporta el recolector tiene
+   * que verse «donde no haya que ir a buscarlo».
+   *
+   * El lector ya filtra por permiso: con `field_report:view` sobre la finca se ve todo y sin él
+   * sólo lo propio, así que aquí no se comprueba nada más. Un Farm Operator lo tiene entre sus 15.
+   */
+  const atencion = finca.elegida ? await situacionesDeLaFinca(user.userAccountId, finca.elegida.siteId) : null;
+
   const t = await getTranslations("SeccionFinca");
   const tf = await getTranslations("Fincas");
   const destinos = [
@@ -70,6 +82,43 @@ export default async function FincaPage() {
         fincas={finca.fincas}
         puedeCambiarLogotipo={finca.elegida ? await puedeCambiarLogotipo(user.userAccountId, finca.elegida.siteId) : false}
       />
+      {atencion ? (
+        <section className="nn-section" aria-labelledby="atencion-finca">
+          <h2 id="atencion-finca">{t("atencionTitulo")}</h2>
+          <p className="nn-muted">{t("atencionAyuda")}</p>
+          {atencion.filas.length === 0 ? (
+            <p className="nn-empty">{t("atencionVacio")}</p>
+          ) : (
+            <ul>
+              {atencion.filas.map((e) => {
+                /* Dónde pasó, de lo más fino a lo más grueso: la planta si la hay, si no el
+                   bloque, si no la parcela. Pintar los tres sería repetir el sitio tres veces. */
+                const donde = e.specimen?.commonName ?? e.plotBlock?.name ?? e.fieldSession?.location?.name ?? null;
+                /* El valor del catálogo se pinta crudo, como en `/field-sessions/[id]`: es el
+                   vocabulario fijo que pidió Daniel, no una cadena a traducir. */
+                const que = e.condicionDelDiaValue?.value ?? e.eventKindValue?.value ?? null;
+                return (
+                  <li key={e.id}>
+                    {que ? <strong>{que}</strong> : null}
+                    {donde ? <> · {donde}</> : null}
+                    {" · "}
+                    {mostrarInstante(e.occurredAt, atencion.zona)}
+                    {e.operator?.displayName ? <> · {e.operator.displayName}</> : null}
+                    {e.asset ? <> · {t("atencionConFoto")}</> : null}
+                    {e.notes ? <><br /><span className="nn-muted">{e.notes}</span></> : null}
+                    {e.fieldSession?.jornadaDeCosechaId ? (
+                      <>
+                        {" "}
+                        <Link href={`/finca/jornadas/${e.fieldSession.jornadaDeCosechaId}`}>{t("atencionVerJornada")}</Link>
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
       <p className="nn-muted">{t("intro")}</p>
       <ul>
         {destinos.map((d) => (

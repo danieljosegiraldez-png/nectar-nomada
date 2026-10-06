@@ -113,6 +113,29 @@ afterAll(async () => {
   });
 });
 
+/**
+ * Deja una microparcela con rejilla propia **saltándose los disparadores**, que es la
+ * única forma de fabricar ese estado desde que existe
+ * `20261003190000_rejilla_solo_en_la_parcela`.
+ *
+ * **No es una trampa para que la prueba pase: es el escenario.** Lo que se está
+ * probando son las filas que ya tenían rejilla ANTES de esa migración — nada lo
+ * impedía hasta entonces—, y una migración con disparadores no valida ni arregla lo
+ * existente. Producción tenía 0 de esas filas el 2026-10-03, así que estas dos pruebas
+ * son una red para el día que aparezca una, no el guardia de un camino vivo, y eso hay
+ * que leerlo así en vez de contarlas dos veces.
+ *
+ * `SET LOCAL` lo deja dentro de la transacción: medido con una sonda el 2026-10-03, el
+ * mismo `update` sin el truco **sí** se rechaza, y el disparador sigue vivo al salir.
+ */
+const conRejillaHeredada = (locationId: string) =>
+  prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+    await tx.$executeRaw`update core.location
+       set grid_origin = 'noreste', row_count = 2, plants_per_row = 3, row_spacing_meters = 1.1
+     where id = ${locationId}::uuid`;
+  });
+
 const microlote = (name: string, extra: Record<string, unknown> = {}) =>
   createMicrolot(usuario.userAccountId, {
     parentLocationId: parcela.id,
@@ -123,12 +146,21 @@ const microlote = (name: string, extra: Record<string, unknown> = {}) =>
 
 describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
   /**
-   * **Los NUEVE, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
-   * los nueve es la forma de que el día que alguien añada un atributo a
+   * **Los OCHO, uno por uno y no por muestreo.** Comprobar dos y dar por buenos
+   * los ocho es la forma de que el día que alguien añada un atributo a
    * `Location` y se olvide de copiarlo, la prueba siga verde. El `Decimal` va con
    * `Number()`, que es el idioma de la casa.
+   *
+   * **Eran nueve hasta el 2026-10-02, y el noveno era `areaHectares`.** Sale de la
+   * lista porque es la única EXTENSIVA: los ocho describen el sitio y valen igual en
+   * una parte que en el todo, mientras una microparcela es una PARTE, así que
+   * copiarle la superficie entera guarda un número que no puede ser suyo. Y no se
+   * queda en la ficha: `computePlotDensity` y `computePlotYield` dividen por esa
+   * columna, y `pendienteDeLaParcela` deja de pedir el área en cuanto no es nula —
+   * el único aviso que llevaría a medir la de verdad. La nota está en el §4.4 del
+   * diseño, que la nombraba entre los nueve.
    */
-  it("copia los nueve atributos, uno por uno", async () => {
+  it("copia los ocho atributos intensivos, uno por uno", async () => {
     const m = await microlote("Norte");
     locationIds.push(m.id);
     expect(m.altitudeMinM).toBe(1400);
@@ -139,7 +171,33 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(m.shadePercentage).toBe("pct_50");
     expect(m.aspect).toBe("north");
     expect(Number(m.plantSpacingMeters)).toBe(1.5);
-    expect(Number(m.areaHectares)).toBe(0.8);
+  });
+
+  /**
+   * **La que NO se copia.**
+   *
+   * **Recortada el 2026-10-04 al poner este PR al día, y es un recorte honesto, no una
+   * prueba debilitada por comodidad.** La versión anterior medía además la consecuencia
+   * —que el nulo hiciera saltar el aviso `sin_area`, el que llevaba a medir el área de
+   * verdad—, y eso era lo que la hacía un guardia y no un adorno. Ese aviso **ya no
+   * existe**: Daniel decidió el 2026-10-03 que la aplicación deja de pedir el área,
+   * porque el espacio de un lote sale de las plantas y la densidad y no del metraje, y
+   * `areaHectares` salió de `EntradaDePendiente` (su comentario lo explica, en
+   * `lib/traceability/pendienteDeLaParcela.ts`).
+   *
+   * O sea que la segunda columna no se quitó por pesar: desapareció el comportamiento
+   * que medía. Afirmar el nulo sigue cazando la regresión —volver a copiar el área hace
+   * caer esta prueba— y la procedencia la vigila la del libro de auditoría, aquí abajo.
+   * Lo que ya no hay es consecuencia que preguntar, y queda escrito para que nadie
+   * cuente esta prueba por dos.
+   */
+  it("NO copia el área: es extensiva, y una microparcela es una parte", async () => {
+    const m = await microlote("Este");
+    locationIds.push(m.id);
+    expect(m.areaHectares, "el área es extensiva: copiarla guarda un número que no puede ser suyo").toBeNull();
+    // El control de que esto mide algo: los intensivos SÍ llegaron en la misma creación.
+    // Sin esta línea, una `createMicrolot` que no copiara NADA pasaría igual de verde.
+    expect(m.soilType, "y los intensivos sí se copiaron, o esto no mediría nada").toBe(ATRIBUTOS.soilType);
   });
 
   /**
@@ -167,7 +225,7 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
       where: assertDefinedWhere({ entityId: m.id, operation: "location.copy_attributes_from_parent" }),
     });
     expect(ev, "sin el AuditEvent nadie distingue un valor copiado de uno medido").not.toBeNull();
-    // Y que diga DE DÓNDE y QUÉ — **los nueve, no una muestra**. Una revisión
+    // Y que diga DE DÓNDE y QUÉ — **los ocho, no una muestra**. Una revisión
     // independiente midió que comprobar sólo `soilType` dejaba sobrevivir la
     // mutación de quitar los otros ocho del `after`: el evento registraba que algo
     // se copió sin registrar qué, que para una auditoría es casi lo mismo que nada.
@@ -181,7 +239,9 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(despues?.shadePercentage).toBe("pct_50");
     expect(despues?.aspect).toBe("north");
     expect(Number(despues?.plantSpacingMeters)).toBe(1.5);
-    expect(Number(despues?.areaHectares)).toBe(0.8);
+    // Y el área **no** aparece, porque ya no se copia: este evento registra lo COPIADO,
+    // y un nulo aquí diría que se copió un nulo en vez de que no se copió nada.
+    expect(despues, "el evento sigue registrando un área que ya no se copia").not.toHaveProperty("areaHectares");
   });
 
   /** Y el evento de crear sigue estando: son dos actos, no uno. */
@@ -228,6 +288,237 @@ describe("createMicrolot copia los atributos de la parcela (D2, D6)", () => {
     expect(m.rowCount).toBeNull();
     expect(m.plantsPerRow).toBeNull();
     expect(m.rowSpacingMeters).toBeNull();
+  });
+});
+
+/**
+ * **Una microparcela no puede declarar rejilla propia (D3).**
+ *
+ * No basta con que `createMicrolot` no la copie —eso es lo de arriba—: hasta el
+ * 2026-10-03 nada impedía ponérsela DESPUÉS, y la pantalla de ajustes ofrecía el
+ * formulario. Medido en vivo ese día contra `nectar_ci_area`, como operaria de
+ * finca: se guardó `sureste`, 3×5, 1,20 m en una microparcela, y a partir de ahí
+ * `core.raiz_de_la_numeracion` devolvía **la microparcela misma** —esa función
+ * corona raíz a cualquier sitio con `row_count` propio— en vez de su madre. Dos
+ * numeraciones dentro de una parcela es exactamente lo que D3 prohíbe.
+ *
+ * El guardia es el que llama al SERVICIO con la entrada hostil, no la pantalla:
+ * la frontera es el servicio (SECURITY.md §2), y una pantalla condicionada se
+ * salta con una petición.
+ */
+describe("una microparcela no puede declarar rejilla propia (D3)", () => {
+  it("el servicio rechaza ponerle las cuatro, con su código propio", async () => {
+    const m = await microlote("Rejilla prohibida");
+    locationIds.push(m.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA }),
+      "rejilla_en_microparcela",
+    );
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.rowCount).toBeNull();
+  });
+
+  /**
+   * **El control positivo, y discrimina.** Si el guardia estuviera rechazando
+   * cualquier rejilla, este caso caería: es la MISMA llamada, con los mismos
+   * cuatro campos, sobre una parcela de primer nivel. Y se comprueba un valor
+   * DISTINTO del que `beforeAll` dejó puesto, para que «no cambió nada» no pueda
+   * leerse como «se guardó».
+   */
+  it("la misma llamada sobre la parcela madre SÍ guarda", async () => {
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: parcela.id,
+      gridOrigin: "sureste",
+      rowCount: 7,
+      plantsPerRow: 11,
+      rowSpacingMeters: 1.2,
+    });
+    const despues = await prisma.location.findUnique({ where: { id: parcela.id } });
+    expect(despues?.gridOrigin).toBe("sureste");
+    expect(despues?.rowCount).toBe(7);
+    expect(despues?.plantsPerRow).toBe(11);
+  });
+
+  /**
+   * **Vaciarla sí se puede, y hace falta.** Nada lo impedía hasta hoy, así que
+   * puede haber microparcelas con rejilla puesta; si el guardia bloqueara también
+   * el camino de vuelta, quedarían atrapadas. Se le pone por SQL directo —el
+   * servicio ya no deja— y se comprueba que el servicio la deja quitar.
+   */
+  it("una microparcela que YA tiene rejilla puede quedarse sin ella", async () => {
+    const m = await microlote("Rejilla heredada de antes");
+    locationIds.push(m.id);
+    await conRejillaHeredada(m.id);
+    await updateLocationAttributes(usuario.userAccountId, {
+      locationId: m.id,
+      gridOrigin: null,
+      rowCount: null,
+      plantsPerRow: null,
+      rowSpacingMeters: null,
+    });
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.gridOrigin).toBeNull();
+    expect(despues?.rowCount).toBeNull();
+  });
+
+  /**
+   * **Y el guardia no puede atrapar a quien no toca la rejilla.** Lo encontró una
+   * revisión independiente el 2026-10-03, sobre el commit anterior: `puestos` se
+   * cuenta sobre la FILA RESULTANTE —así tiene que ser para la regla «cuatro o
+   * ninguna»—, de modo que una microparcela con rejilla heredada daba 4 aunque el
+   * input no trajera ni una de las cuatro, y editarle la ALTITUD moría con
+   * `rejilla_en_microparcela`. O sea: el arreglo dejaba esas filas sin poder
+   * tocarse para nada.
+   */
+  it("con rejilla heredada, editarle OTRO atributo sigue funcionando", async () => {
+    const m = await microlote("Heredada, y le cambio la altitud");
+    locationIds.push(m.id);
+    await conRejillaHeredada(m.id);
+    await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, altitudeMinM: 1234 });
+    const despues = await prisma.location.findUnique({ where: { id: m.id } });
+    expect(despues?.altitudeMinM).toBe(1234);
+    // Y la rejilla heredada sigue donde estaba: esto no la limpia por la puerta de atrás.
+    expect(despues?.rowCount).toBe(2);
+  });
+
+  /**
+   * **La consecuencia, preguntada a la función que la decide.** Lo que importa no
+   * es que la columna quede nula sino que la numeración siga siendo una: con el
+   * guardia puesto, la raíz de una microparcela es su madre. Y el control está
+   * dentro del mismo caso — la raíz de la madre es ella misma —, porque una
+   * función que devolviera siempre lo mismo pasaría la primera mitad sola.
+   */
+  it("la raíz de la numeración de una microparcela es su madre", async () => {
+    const m = await microlote("Raíz de la numeración");
+    locationIds.push(m.id);
+    await falla(
+      updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA }),
+      "rejilla_en_microparcela",
+    );
+    const filas = await prisma.$queryRaw<{ raiz: string | null }[]>`
+      select core.raiz_de_la_numeracion(${m.id}::uuid) as raiz`;
+    const filasDeLaMadre = await prisma.$queryRaw<{ raiz: string | null }[]>`
+      select core.raiz_de_la_numeracion(${parcela.id}::uuid) as raiz`;
+    // Que la consulta devolviera UNA fila se afirma antes de leerla: con cero
+    // filas, `filas[0]?.raiz` sería `undefined` y `expect(undefined).not.toBe(m.id)`
+    // pasaría — un verde sobre nada medido.
+    expect(filas).toHaveLength(1);
+    expect(filasDeLaMadre).toHaveLength(1);
+    expect(filas[0]?.raiz).toBe(parcela.id);
+    expect(filasDeLaMadre[0]?.raiz).toBe(parcela.id);
+    expect(filas[0]?.raiz).not.toBe(m.id);
+  });
+});
+
+/**
+ * **Los dos disparadores de D3, ejercidos por SQL directo.**
+ *
+ * El servicio es la puerta de la aplicación, pero mira el padre EN EL MOMENTO de
+ * escribir la rejilla, así que hay un hueco que no puede ver: re-colgar una parcela
+ * ya numerada bajo otra parcela no toca ninguna de las cuatro columnas. La migración
+ * `20261003190000_rejilla_solo_en_la_parcela` lo cierra con dos disparadores, uno en
+ * el hijo y otro en el padre, el mismo patrón que `exigir_arbol_de_estante`.
+ *
+ * **Estas pruebas NO pasan por el servicio a propósito.** Un disparador que sólo se
+ * ejerciera a través de TypeScript no estaría probado: lo que vigila es justo lo que
+ * no pasa por ahí.
+ */
+describe("los disparadores de D3, por SQL directo (sin pasar por el servicio)", () => {
+  /** Una parcela hermana bajo el MISMO sitio: `crearParcela()` levantaría otra finca
+      entera y el `afterEach` no la limpia, que es la fuga que describe la cabecera. */
+  const hermana = async (nombre: string) => {
+    const p = await prisma.location.create({
+      data: {
+        name: `TEST Hermana ${nombre}`,
+        locationType: "plot",
+        parentLocationId: parcela.parentLocationId,
+        organizationId: parcela.organizationId,
+        status: "approved",
+      },
+    });
+    locationIds.push(p.id);
+    return p;
+  };
+
+  it("la base rechaza ponerle rejilla a una microparcela", async () => {
+    const m = await microlote("Rejilla por la puerta de atrás");
+    locationIds.push(m.id);
+    await expect(
+      prisma.$executeRaw`update core.location
+         set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+       where id = ${m.id}::uuid`,
+    ).rejects.toThrow(/no se numera aparte/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
+    expect(despues.rowCount, "y no se quedó a medias").toBeNull();
+  });
+
+  /**
+   * **El control positivo, y discrimina.** Si el disparador estuviera rechazando
+   * cualquier rejilla, este caso caería: es el MISMO `update`, con los mismos cuatro
+   * valores, sobre una parcela de primer nivel.
+   */
+  it("y la deja poner en una parcela de primer nivel — el control positivo", async () => {
+    const otra = await hermana("control positivo");
+    await prisma.$executeRaw`update core.location
+       set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+     where id = ${otra.id}::uuid`;
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: otra.id } });
+    expect(despues.rowCount).toBe(4);
+  });
+
+  /**
+   * **El hueco que el servicio no puede ver.** La rejilla se pone siendo parcela
+   * legítima y DESPUÉS la fila cambia de padre: ninguna de las cuatro columnas se
+   * toca, así que `updateLocationAttributes` no se entera nunca.
+   */
+  it("la base rechaza re-colgar una parcela ya numerada bajo otra parcela", async () => {
+    const otra = await hermana("re-colgada");
+    await prisma.$executeRaw`update core.location
+       set grid_origin = 'noroeste', row_count = 4, plants_per_row = 5, row_spacing_meters = 1.5
+     where id = ${otra.id}::uuid`;
+    await expect(
+      prisma.$executeRaw`update core.location set parent_location_id = ${parcela.id}::uuid where id = ${otra.id}::uuid`,
+    ).rejects.toThrow(/no se numera aparte/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: otra.id } });
+    expect(despues.parentLocationId, "sigue colgando de donde estaba").not.toBe(parcela.id);
+  });
+
+  /**
+   * **La otra mitad, la del padre.** Un `site` con una parcela numerada debajo no
+   * puede convertirse en parcela: eso haría microparcela a su hija sin tocarla.
+   */
+  /**
+   * **Con sitio propio, no con el compartido.** Si este caso retipara el sitio del que
+   * cuelga `parcela` y el disparador no estuviera, `parcela` pasaría a ser microparcela
+   * para todo lo que corra después y el `afterEach` no lo deshace — se vio al hacer el
+   * flip-test: tumbó una prueba del §6 que no tenía nada que ver. Una prueba no deja
+   * al fixture compartido en un estado que ella misma no pueda revertir.
+   */
+  it("la base rechaza volver parcela a un sitio que ya tiene hijas numeradas", async () => {
+    const sitio = await prisma.location.create({
+      data: { name: "TEST Sitio propio del retipado", locationType: "site", organizationId: parcela.organizationId, status: "approved" },
+    });
+    locationIds.push(sitio.id);
+    const hija = await prisma.location.create({
+      data: {
+        name: "TEST Hija numerada",
+        locationType: "plot",
+        parentLocationId: sitio.id,
+        organizationId: parcela.organizationId,
+        status: "approved",
+        gridOrigin: "noroeste",
+        rowCount: 4,
+        plantsPerRow: 5,
+        rowSpacingMeters: 1.5,
+      },
+    });
+    locationIds.push(hija.id);
+    expect(hija.rowCount, "la fila patrón: la hija está numerada, o esto no mediría nada").toBe(4);
+    await expect(
+      prisma.$executeRaw`update core.location set location_type = 'plot' where id = ${sitio.id}::uuid`,
+    ).rejects.toThrow(/ya tiene rejilla propia/i);
+    const despues = await prisma.location.findUniqueOrThrow({ where: { id: sitio.id } });
+    expect(despues.locationType, "y el sitio sigue siendo sitio").toBe("site");
   });
 });
 
@@ -344,23 +635,40 @@ describe("updateLocationAttributes cambia el rango de una microparcela (§6)", (
 
   /**
    * **LA PRUEBA QUE IMPORTA.** `RejillaForm` manda sólo los cuatro campos de la rejilla.
-   * Si el servicio tratara «ausente» como `null`, guardar la rejilla de la parcela
-   * **borraría el rango** de sus microparcelas sin decir nada — y nadie lo notaría hasta
-   * que la comparación empezara a decir `sin_rango` de algo que sí lo tenía.
+   * Si el servicio tratara «ausente» como `null`, guardar la rejilla **borraría** lo que
+   * no viene en el formulario sin decir nada — y nadie lo notaría hasta que la pantalla
+   * empezara a decir que falta algo que sí estaba.
+   *
+   * **Reescrita el 2026-10-03 al fusionar D3, y el montaje viejo era el que ya no vale,
+   * no la propiedad.** La versión anterior ponía la rejilla sobre la MICROPARCELA que
+   * tenía el rango, y eso es justo lo que D3 prohíbe desde este cambio
+   * (`rejilla_en_microparcela`): ninguna fila puede tener las dos cosas a la vez. Pero el
+   * escenario que su propio comentario describía son DOS filas — «guardar la rejilla de la
+   * parcela borraría el rango de sus microparcelas» —, así que eso es lo que se mide ahora,
+   * que además es el caso real. La propiedad «ausente no es null» se conserva entera, y se
+   * comprueba sobre la parcela con un atributo suyo que el formulario tampoco manda.
    */
-  it("guardar la REJILLA no borra el rango, porque ausente no es null", async () => {
+  it("guardar la REJILLA no borra lo que el formulario no manda, porque ausente no es null", async () => {
     const m = await micro({ rangeRowFrom: 1, rangeRowTo: 4, rangePlantFrom: 1, rangePlantTo: 20 });
-    await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA });
+    // La parcela madre guarda SU rejilla, que es lo que hace `RejillaForm`.
+    await updateLocationAttributes(usuario.userAccountId, { locationId: parcela.id, ...REJILLA });
+    const madre = await prisma.location.findUniqueOrThrow({ where: { id: parcela.id } });
+    expect(madre.rowCount, "la rejilla sí se guardó: el control de que la prueba mide").toBe(10);
+    expect(madre.soilType, "y lo que el formulario no manda sobrevive").toBe(ATRIBUTOS.soilType);
+    // Y el rango de su microparcela, que vive en otra fila, no se ha movido.
     const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
-    expect(leido.rangeRowFrom, "el rango sobrevive a guardar la rejilla").toBe(1);
+    expect(leido.rangeRowFrom, "el rango de la microparcela sobrevive").toBe(1);
     expect(leido.rangeRowTo).toBe(4);
-    expect(leido.rowCount, "y la rejilla sí se guardó: el control de que la prueba mide").toBe(10);
   });
 
-  /** Y el reverso: guardar el RANGO no borra la rejilla. */
-  it("guardar el rango no borra la rejilla", async () => {
+  /**
+   * Y el reverso: guardar el RANGO no borra lo que el formulario del rango no manda.
+   * Mismo motivo que arriba para no usar la rejilla como lo-que-sobrevive: una
+   * microparcela no puede tenerla. Se usa un atributo del terreno, que sí es suyo (D2).
+   */
+  it("guardar el rango no borra los atributos del terreno", async () => {
     const m = await micro();
-    await updateLocationAttributes(usuario.userAccountId, { locationId: m.id, ...REJILLA });
+    expect(m.soilType, "la microparcela nació con el suelo copiado de su madre (D2)").toBe(ATRIBUTOS.soilType);
     await updateLocationAttributes(usuario.userAccountId, {
       locationId: m.id,
       rangeRowFrom: 1,
@@ -369,8 +677,8 @@ describe("updateLocationAttributes cambia el rango de una microparcela (§6)", (
       rangePlantTo: 2,
     });
     const leido = await prisma.location.findUniqueOrThrow({ where: { id: m.id } });
-    expect(leido.rowCount).toBe(10);
-    expect(leido.rangeRowTo).toBe(2);
+    expect(leido.rangeRowTo, "el rango sí se guardó: el control de que la prueba mide").toBe(2);
+    expect(leido.soilType, "y el suelo sobrevive").toBe(ATRIBUTOS.soilType);
   });
 
   it("vaciar los cuatro quita el rango", async () => {

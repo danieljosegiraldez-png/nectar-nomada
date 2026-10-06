@@ -825,11 +825,6 @@
       "razon": "Recibe al principal y no llama a `can` porque parte de `getManageableContext(userAccountId)`, que resuelve la visibilidad de lotes de esa cuenta y es quien autoriza. La lectura del árbol de ubicaciones sólo sirve para subir de una ubicación ya visible a su sitio; no devuelve nada que no sea el sitio de algo visible. Probado en tests/traceability/fincas.test.ts: el Farm Manager de A no ve B. Verificado el 2026-09-18."
     },
     {
-      "archivo": "lib/rbac/admin.ts",
-      "operacion": "listScopeChoices",
-      "razon": "No recibe principal. La llama app/admin/users/page.tsx, que antes hace requirePermissionAdmin. Verificado el 2026-08-31."
-    },
-    {
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."
@@ -1491,6 +1486,36 @@
       "operacion": "exigeSinCorridasAbiertas",
       "razon": "Comprueba, sin escribir, que ninguna fermentación ni secado abierto cuelgue del linaje que cubre un proceso (R5): las unidas por `lotProcessId` y las que empezaron sobre el lote del proceso o un descendiente sin quedar unidas. Lanza `LotProcessError` con `corridas_abiertas`. No recibe principal ni devuelve datos de las corridas. La llaman `cerrarProceso`, dentro de su transacción, que ya autorizó el lote con `loteGestionable` y bloqueó el linaje; y desde R6 (2026-10-01) `antesDeTransformar`, para no dividir con una corrida en curso, dentro de la transacción de `recordTransformation` (que pidió `manage` sobre las entradas) y después de bloquear sus linajes. Quien la llame debe haber hecho lo mismo.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/rbac/admin.ts",
+      "operacion": "listScopeChoices",
+      "razon": "Estaba en `operaciones_sin_patron` como «recibe principal, sin guardia visible», y eso era falso: el AST dice que su cuerpo NO menciona `userAccountId`, ni como identificador ni como texto. El troceo por expresiones regulares cortaba en `function` y `const` y NO en `interface`, asi que el cuerpo de `listScopeChoices` (admin.ts:108) se tragaba la interfaz `GrantRoleInput` (admin.ts:123), cuyos campos incluyen `userAccountId`. Su unico camino, medido por unidad, es `app/admin/users/page.tsx` -> `AdminUsersPage`, que llama a `requirePermissionAdmin` en esa misma unidad. Verificado el 2026-08-31, re-medido el 2026-10-04.",
+      "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/traceability/entregasDeCosecha.ts",
+      "operacion": "parcelaDeOrigen",
+      "razon": "INVISIBLE al inventario hasta el 2026-10-04: su cliente se llama `db`, asi que con cero modelos la fila se descartaba ENTERA -- no quedaba «sin clasificar», no existia. Camina de una entrega a la parcela de la que salio (`plotBlock`, `specimen`) y no recibe principal. TRES caminos, medidos por unidad, y NINGUNO llama a un guardia de la convencion -- la primera version de esta razon decia que `entregasDeCosecha.ts` y `situacionesDeCampo.ts` autorizaban con `requireLotAccess` y `can`, y era FALSO: esos guardias viven en OTRAS unidades de esos archivos. Los tres autorizan por un guardia EN ESPANOL que la convencion `require\\w*(Access|Admin|Override)` no cubre: (1) `exigeOrigenAsignado` lo llama `anotarEntrega`, que recibe el principal y hace `exigePoderAnotar(userAccountId, jornada, recolectorPersonId)`; (2) y (3) `reportarSituacion` y `confirmarFotoDeSituacion` reciben el principal y hacen `exigeReportarEnJornada(userAccountId, input.jornadaId)`. Esos tres `exige*` SI son autorizacion, pero de las 50 funciones `exige*` del arbol la mayoria son VALIDADORES (`exigeFecha`, `exigeNombre`, `exigePct`), asi que meter `exige*` en la convencion marcaria 36 operaciones como guardadas por la fuerza de un validador de fechas -- medido: «guardia directo» pasaria de 396 a 432. Es una decision de Daniel, no una tarea, y hasta entonces esta operacion se justifica aqui. Verificado el 2026-10-04.",
+      "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/traceability/intervenciones.ts",
+      "operacion": "intervencionesVigentes",
+      "razon": "INVISIBLE hasta el 2026-10-04 por el mismo motivo que `parcelaDeOrigen`: el cliente se llama `db`. Recibe una LISTA de ubicaciones y devuelve las intervenciones vigentes sobre ellas; no recibe principal y no autoriza. CUATRO caminos, medidos por unidad. `lib/traceability/harvest.ts` -> `recordHarvestEvent` llama a `requireLotAccess` en la misma unidad. Las otras tres son paginas que autorizan por un mecanismo que el detector de guardias NO VE -- llaman a un servicio que LANZA un error de acceso y lo convierten en `notFound()`: `app/plots/[id]/page.tsx` via `getPlotDetail` (`requireLocationAttributeAccess` sobre el mismo id) y `app/field-sessions/[id]/page.tsx` via `getFieldSessionTimeline` (`requireFieldSessionAccess(userAccountId, session.locationId)`, el mismo id que pasa). QUEDA UNA SIN PROBAR: `app/lots/[id]/page.tsx` autoriza el lote con `getLotDetail` y pasa `harvestEvent.locationId`, que es otra cosa. Verificado el 2026-10-04.",
+      "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/traceability/locations.ts",
+      "operacion": "nombreLibreBajo",
+      "razon": "INVISIBLE hasta el 2026-10-04 por el cliente `db`. Comprueba si un nombre esta libre bajo una ubicacion padre -- es una comprobacion de unicidad para el alta, no una lectura de datos del dueño. No recibe principal. DOS caminos, medidos por unidad, y los dos autorizan en la misma unidad que la llama: `lib/traceability/fincas.ts` -> `crearParcela` y `lib/traceability/locations.ts` -> `createMicrolot`, los dos con `requireLocationAttributeAccess` sobre el padre antes de llamar. (La primera version decia «y `can`»: eso era del archivo, no del camino -- `createMicrolot` no llama a `can`.) Verificado el 2026-10-04.",
+      "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/traceability/ubicacionesEmparentadas.ts",
+      "operacion": "ubicacionesEmparentadas",
+      "razon": "INVISIBLE al inventario hasta el 2026-10-04: su cliente se llama `db` y la enumeracion era `prisma|aiPrisma|tx|client`, asi que con cero modelos la fila se descartaba ENTERA. Es la que mas importa de las seis: devuelve la ubicacion dada MAS todos sus ancestros y todos sus descendientes, o sea el conector sobre el que se apoya el rollup de la finca al lote. Recibe un id y no recibe principal. SEIS caminos, medidos POR UNIDAD y no por archivo -- la primera version de esta razon decia que `floracion.ts`, `harvest.ts` e `intervenciones.ts` autorizaban antes, y era FALSO en dos de los tres: el archivo tenia un guardia en OTRA funcion. (1) `harvest.ts` -> `recordHarvestEvent`: llama a `requireLotAccess` en la misma unidad. (2) `intervenciones.ts` -> `validarReferencias`: NO autoriza, pero sus dos unicos llamadores, `registrarIntervencion` y `corregirIntervencion`, si. (3) `floracion.ts` -> `floracionesDeLaParcela`: NO autoriza, y su comentario lo declara; sus dos llamadores son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, que autorizan atrapando `TraceabilityAccessError` de un servicio que lanza -- un mecanismo que el detector de guardias NO PUEDE VER. (4) `app/plots/[id]/page.tsx`: `getPlotDetail` hace `requireLocationAttributeAccess` sobre el MISMO id que luego pasa. (5) `app/field-sessions/[id]/page.tsx`: `getFieldSessionTimeline` hace `requireFieldSessionAccess(userAccountId, session.locationId)` y pasa ESE mismo id. (6) QUEDA SIN PROBAR, y se dice en vez de taparlo: `app/lots/[id]/page.tsx` autoriza el LOTE con `getLotDetail` y luego pasa `harvestEvent.locationId`, que es otra cosa; que ver el lote implique ver la ubicacion de su cosecha no lo demuestra ninguna medicion de este inventario. Verificado el 2026-10-04.",
+      "verificado": "2026-10-04"
     }
   ]
 }

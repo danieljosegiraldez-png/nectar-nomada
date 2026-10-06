@@ -172,9 +172,13 @@ describe("buildNavigation", () => {
    * **No se sube el techo: se fija el numero.** Poner `<= 10` habria borrado el
    * objetivo; fijarlo hace que crecer sea deliberado y deja el hueco a la vista.
    * El objetivo de 8 sigue vivo y **sin cumplir**, anotado en `SESSION_STATE.md`
-   * §3 con lo que cuesta: en un telefono de 375 px son **234 px de cabecera en
-   * tres filas, el 29 % de la pantalla** antes de ver nada. Acortar el menu o
-   * mover el objetivo es decision del dueño, no de este archivo.
+   * §3. **Lo que esta cifra decia y ya no es cierto:** hasta el 2026-10-05 este
+   * comentario afirmaba «234 px de cabecera en tres filas, el 29 % de la
+   * pantalla», medido el 2026-09-05 y repetido aqui citando a §3 como fuente. El
+   * PR #643 dejo la cabecera en **61 px en una fila, el 8 %**, asi que el coste
+   * que justificaba el objetivo ya no es ese — y el numero vivia en dos sitios
+   * que se citaban el uno al otro, que es como una cifra sobrevive a su mundo.
+   * Cuantas entradas caben sigue siendo decision del dueño, no de este archivo.
    *
    * Y el numero sale de `NAV_PERMISSIONS`, derivado de `NAV`: una entrada nueva
    * trae su permiso sola, asi que esto **no puede** volver a medir un visor que

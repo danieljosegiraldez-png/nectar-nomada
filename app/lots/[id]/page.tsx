@@ -1,4 +1,5 @@
 import { CampoNumerico } from "../../components/CampoNumerico";
+import { DESENLACES_DEL_SECADO } from "../../beneficio/bandejas/errorDeSecado";
 import { instrumentosParaMedicion } from "../../../lib/equipos/equipos";
 import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements";
 import Link from "next/link";
@@ -120,9 +121,26 @@ export default async function LotDetailPage({
   const quantity = await computeCurrentQuantity(user.userAccountId, id);
   // Sólo si este batch nació de una cosecha. Un lote recibido de un tercero no
   // tiene bloques propios que atribuir.
-  const harvestSources = detail.harvestEvent
-    ? await getHarvestSourceContext(user.userAccountId, detail.harvestEvent.id)
-    : null;
+  //
+  // **Y sólo si quien mira puede gestionar ese bloque.** `getHarvestSourceContext` exige
+  // `location:manage_attributes` sobre el bloque de la cosecha, y lo exige a propósito: una revisión
+  // independiente midió que la lectura filtraba el nombre, el cultivar, el peso y las notas de bloques
+  // ajenos (ver su comentario en `plantingCohorts.ts`). El permiso está bien; lo que faltaba era la red.
+  // Sin ella, un operario legítimamente acotado a su proyecto —sin ámbito de ubicación— recibía un **500
+  // en toda la ficha** en vez de la ficha sin ese detalle. Medido el 2026-10-04 en el lote PE-78-B con
+  // una cuenta de Farm Operator de ámbito de proyecto: `Error: no_location_attribute_access`, la página
+  // entera caída. Es la clase que `CLAUDE.md` ya nombra para las acciones —«una clase de validación
+  // nueva que llegue a una acción es un 500»— en una página.
+  //
+  // El predicado que no lanza ya existía y la página ya lo usaba... DESPUÉS de esta línea, para decidir
+  // si pinta el formulario de atribución. Se sube aquí, y se reusa abajo: una sola comprobación.
+  const puedeEditarFuentes = detail.harvestEvent
+    ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, detail.harvestEvent.locationId)
+    : false;
+  const harvestSources =
+    detail.harvestEvent && puedeEditarFuentes
+      ? await getHarvestSourceContext(user.userAccountId, detail.harvestEvent.id)
+      : null;
   const { people: observers, selfPersonId } = await getObserverCandidates(user.userAccountId, [{ projectId: detail.lot.projectId, locationId: detail.lot.locationId }]);
   // T12.6: organizations for the labour form's "provided in-kind by" toggle
   // — same convenience-not-security-boundary reasoning as getManageableContext's
@@ -201,9 +219,6 @@ export default async function LotDetailPage({
           label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
         }))
       : [];
-  const puedeEditarFuentes = harvestEvent
-    ? await puedeGestionarAtributosDeUbicacion(user.userAccountId, harvestEvent.locationId)
-    : false;
 
   // La marca de carencia al cosechar — Tarea 8 fitosanitaria, spec §3.4.
   // `harvestEvent.marcasDeCarencia` (ya en `detail`) es la FOTO de lo que el
@@ -545,7 +560,6 @@ export default async function LotDetailPage({
       <Link href="/lots" className="nn-back-link">
         {t("backToLots")}
       </Link>
-
       <span className="nn-badge">{t(`lotType_${lot.lotType}` as "lotType_cherry")}</span>
       {lot.rejectionCategoryValue ? (
         <span className="nn-badge">{t("rejectBadge", { category: lot.rejectionCategoryValue.value })}</span>
@@ -565,7 +579,6 @@ export default async function LotDetailPage({
         {lot.location ? <span>{lot.location.name}</span> : null}
         {lot.organization ? <span>{lot.organization.name}</span> : null}
       </p>
-
       {lot.lotType === "green" && lot.greenScreenStatus ? (
         <section className="nn-section">
           <h2>{t("greenGradingResultHeading")}</h2>
@@ -578,9 +591,7 @@ export default async function LotDetailPage({
           {lot.greenGradeNote ? <p>{lot.greenGradeNote}</p> : null}
         </section>
       ) : null}
-
       {mensajeDeErrorDeBandeja ? <p role="alert">{mensajeDeErrorDeBandeja}</p> : null}
-
       {/* `role="status"` y no `alert`: es una confirmación de algo que salió bien, y un lector de
           pantalla no debe interrumpir por ella. Mismo patrón que `/instalaciones/[id]`. */}
       {ok === "inspeccion" ? (
@@ -588,7 +599,6 @@ export default async function LotDetailPage({
           {t("inspeccionRegistrada")}
         </p>
       ) : null}
-
       {/* Un aviso, no dieciséis: repetir el motivo junto a cada formulario sería
           ruido en una página de 825 líneas. La trazabilidad se sigue leyendo
           entera —ése es el punto de poder ver el lote—; lo que desaparece es lo
@@ -597,328 +607,6 @@ export default async function LotDetailPage({
         <p className="nn-muted" role="status">
           {t("soloLecturaEnEsteLote")} {t("sinAmbitoGestionBody")}
         </p>
-      ) : null}
-
-      {/* Sólo para verde, y sólo si hay perfiles aprobados. Sin perfiles no se
-          pinta un desplegable vacío: los primeros tuestes se hacen sin perfil, y
-          una lista vacía sugeriría que falta algo cuando no falta nada. */}
-      {esVerde && (perfilElegido || perfilesDisponibles.length > 0) ? (
-        <section className="nn-section">
-          <h2>{t("roastProfileOptimalHeading")}</h2>
-          {perfilElegido ? (
-            <p className="nn-detail-meta">
-              <span>
-                {perfilElegido.recipeVersion.recipe.name} · v{perfilElegido.recipeVersion.version}
-              </span>
-              {perfilElegido.notes ? <span>{perfilElegido.notes}</span> : null}
-            </p>
-          ) : (
-            <p className="nn-muted">{t("roastProfileNoneChosen")}</p>
-          )}
-          {perfilesDisponibles.length > 0 ? (
-            <PerfilOptimoForm
-              lotId={lot.id}
-              perfiles={perfilesDisponibles}
-              actual={perfilElegido?.recipeVersionId ?? null}
-            />
-          ) : null}
-        </section>
-      ) : null}
-
-      {/* ADR-161 — la miel: de qué cosecha viene (subiendo por la genealogía, así que un frasco
-          también lo sabe), qué pasos se le hicieron, y los dos pasos que se le pueden hacer. */}
-      {esMiel ? (
-        <section className="nn-section">
-          <h2>{tMiel("mielOrigenTitulo")}</h2>
-          {origenApicola.length === 0 ? (
-            <p className="nn-vital-sin-registro">{tMiel("mielOrigenNinguno")}</p>
-          ) : (
-            <ul>
-              {origenApicola.map((o) => (
-                <li key={o.id}>
-                  {o.occurredAt.toISOString().slice(0, 10)} · {tMiel("mielOrigenCaja")}{" "}
-                  <Link href={`/apiaries/${o.colony.hive.location.id}/hives/${o.colony.hive.id}`}>
-                    {o.colony.hive.identifier}
-                  </Link>{" "}
-                  · {o.colony.hive.location.name}
-                  {o.resultingLotId !== lot.id ? (
-                    <>
-                      {" "}
-                      · {tMiel("mielOrigenLote")}{" "}
-                      <Link href={`/lots/${o.resultingLotId}`} className="nn-code">
-                        {lineage.lotCodesById.get(o.resultingLotId) ?? o.resultingLotId.slice(0, 8)}
-                      </Link>
-                    </>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <h3>{tMiel("mielPasosTitulo")}</h3>
-          {transformations.filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType)).length === 0 ? (
-            <p className="nn-muted">{tMiel("mielPasosNinguno")}</p>
-          ) : (
-            <ul>
-              {transformations
-                .filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType))
-                .map((tr) => (
-                  <li key={tr.id}>
-                    {tr.occurredAt.toISOString().slice(0, 10)} ·{" "}
-                    {t(`transformationType_${tr.transformationType}` as "transformationType_split")}
-                    {tr.transformationType === "honey_processing"
-                      ? `: ${tr.honeyProcessActs
-                          .map((a) => (a === "otro" ? tr.honeyProcessOtherNote ?? tMiel("mielActo_otro") : tMiel(`mielActo_${a}`)))
-                          .join(", ")}`
-                      : tr.transformationType === "split"
-                        ? ""
-                        : `: ${tMiel("mielEnvasesFila", { cuantos: tr.packageCount ?? 0, gramos: String(tr.packageNetMassG ?? "?") })}`}
-                  </li>
-                ))}
-            </ul>
-          )}
-
-          {puedeRegistrar ? (
-            <>
-              <h3 id="procesar-miel">{tMiel("mielProcesarTitulo")}</h3>
-              <ProcesarMielForm lotId={lot.id} />
-              <h3 id="envasar-miel">{tMiel("mielEnvasarTitulo")}</h3>
-              <EnvasarMielForm lotId={lot.id} />
-              <h3 id="dividir-miel">{tMiel("mielDividirTitulo")}</h3>
-              <DividirMielForm lotId={lot.id} />
-            </>
-          ) : null}
-
-          {/* ADR-163 — a la tienda. Asignar no toca el inventario: lo sube la recepción. */}
-          {tienda ? (
-            <>
-              <h3 id="a-la-tienda">{tTienda("loteTitulo")}</h3>
-              <p className="nn-muted">{tTienda("loteResumen", { envases: tienda.envases, asignados: tienda.asignados, libres: tienda.libres })}</p>
-              {tienda.filas.length > 0 ? (
-                <ul>
-                  {tienda.filas.map((f) => (
-                    <li key={f.id}>
-                      {f.assignedAt.toISOString().slice(0, 10)} ·{" "}
-                      {tTienda("pendienteFila", {
-                        envases: f.unitsAssigned,
-                        producto: f.productVariant.product.name,
-                        variante: f.productVariant.variantName ?? f.productVariant.sku,
-                      })}{" "}
-                      ·{" "}
-                      {f.cancelledAt
-                        ? tTienda("anuladaFila", { fecha: f.cancelledAt.toISOString().slice(0, 10), motivo: f.cancelReason ?? "" })
-                        : f.receivedAt
-                          ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
-                            (f.receiptNote ? ` — ${f.receiptNote}` : "")
-                          : tTienda("esperandoRecepcion")}
-                      {puedeRegistrar && !f.cancelledAt && !f.receivedAt ? (
-                        <AnularAsignacionForm allocationId={f.id} lotId={lot.id} />
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {puedeRegistrar && tienda.libres > 0 ? (
-                <AsignarATiendaForm lotId={lot.id} variantes={variantesTienda} libres={tienda.libres} />
-              ) : null}
-            </>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="nn-section">
-        <h2>{t("originLotHeading")}</h2>
-        {lot.location ? (
-          <>
-            <p className="nn-muted">{t("originLotConditionsIntro")}</p>
-            <p className="nn-detail-meta">
-              <span>{lot.location.name}</span>
-              {lot.location.sunExposure ? (
-                <span>
-                  {t("sunExposureLabel")}: {t(`sunExposure_${lot.location.sunExposure}` as "sunExposure_full_sun")}
-                </span>
-              ) : null}
-              {lot.location.shadePercentage ? (
-                <span>
-                  {t("shadePercentageLabel")}:{" "}
-                  {t(`shadePercentage_${lot.location.shadePercentage}` as "shadePercentage_pct_20")}
-                </span>
-              ) : null}
-              {lot.location.altitudeMinM != null || lot.location.altitudeMaxM != null ? (
-                <span>
-                  {t("altitudeRangeLabel")}:{" "}
-                  {t("altitudeRangeValue", {
-                    min: lot.location.altitudeMinM ?? "?",
-                    max: lot.location.altitudeMaxM ?? "?",
-                  })}
-                </span>
-              ) : null}
-              {lot.location.slopeDescription ? (
-                <span>
-                  {t("slopeLabel")}: {lot.location.slopeDescription}
-                </span>
-              ) : null}
-              {lot.location.soilType ? (
-                <span>
-                  {t("soilTypeLabel")}: {lot.location.soilType}
-                </span>
-              ) : null}
-            </p>
-          </>
-        ) : (
-          <p className="nn-muted">{t("noOriginLot")}</p>
-        )}
-      </section>
-
-      {harvestEvent ? (
-        <section className="nn-section">
-          <h2>{t("harvestInfoHeading")}</h2>
-          <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
-
-          {/* Ronda de arreglos 1 (importante #2): la caja se pinta si hay
-              marcas en la foto O si el cálculo de hoy difiere de ella —
-              antes sólo la primera condición decidía, y una foto vacía
-              apagaba también el aviso de discrepancia (spec §3.4). */}
-          {harvestEvent.marcasDeCarencia.length > 0 || difiereCarenciaDeHoy ? (
-            <div className="nn-card">
-              <h3>{t("harvestWithdrawalHeading")}</h3>
-              {harvestEvent.marcasDeCarencia.length > 0 ? (
-                <ul className="nn-detail-meta">
-                  {harvestEvent.marcasDeCarencia.map((m) => (
-                    <li key={m.id}>
-                      {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
-                      {" — "}
-                      <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
-                        {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {difiereCarenciaDeHoy ? (
-                <p className="nn-muted">
-                  {t("harvestWithdrawalRecalculated", {
-                    detalle:
-                      calculoDeCarenciaHoy.length === 0
-                        ? t("harvestWithdrawalRecalculatedNone")
-                        : calculoDeCarenciaHoy
-                            .map((m) =>
-                              m.diasQueFaltaban != null
-                                ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban })
-                                : t("harvestWithdrawalUnknown"),
-                            )
-                            .join("; "),
-                  })}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
-            <ul>
-              {labourEntries
-                .filter((le) => le.harvestEventId === harvestEvent.id)
-                .map((le) => (
-                  <li key={le.id}>{labourEntryLine(le)}</li>
-                ))}
-            </ul>
-          ) : null}
-          {puedeRegistrar ? (
-            <LabourEntryForm
-            claveDeEnvio={clavesDeJornal.harvestEvent}
-              lotId={lot.id}
-              parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
-              observers={observers}
-              selfPersonId={selfPersonId}
-              organizations={organizations}
-            />
-          ) : null}
-          {puedeRegistrar ? (
-            <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
-          ) : null}
-
-          {harvestSources ? (
-            <>
-              <h3>{t("harvestSourcesHeading")}</h3>
-              {harvestSources.existing.length > 0 ? (
-                <ul className="nn-detail-meta">
-                  {harvestSources.existing.map((source) => (
-                    <li key={source.id}>
-                      {source.location.name}
-                      {source.plantingCohort ? ` · ${source.plantingCohort.cultivarValue?.value ?? ""}` : ""}
-                      {" — "}
-                      {/* Sin peso NO es cero: el bloque aportó y nadie lo pesó
-                          aparte, que es el caso normal en un beneficio. */}
-                      {source.cherryWeightKg != null
-                        ? t("sourceWeightValue", { kg: Number(source.cherryWeightKg) })
-                        : t("sourceWeightUnweighed")}
-                      {source.notes ? ` · ${source.notes}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="nn-muted">{t("harvestSourcesNone")}</p>
-              )}
-              {puedeEditarFuentes ? (
-                <HarvestSourcesForm
-                  lotId={lot.id}
-                  harvestEventId={harvestSources.harvestEventId}
-                  declaredTotalKg={harvestSources.declaredTotalKg}
-                  alreadyRecordedKg={harvestSources.alreadyRecordedKg}
-                  // Los dos números que hacen honesta a la diferencia: aportes
-                  // guardados sin peso, y aportes que el RBAC oculta. El servicio
-                  // los tenía calculados y la pantalla los dejaba caer.
-                  sinPesar={harvestSources.existing.filter((s) => s.cherryWeightKg == null).length}
-                  ocultos={harvestSources.hiddenContributions}
-                  plots={harvestSources.plotLocations.map((plot) => ({
-                    id: plot.id,
-                    name: plot.name,
-                    cohorts: plot.plantingCohorts.map((cohort) => ({
-                      id: cohort.id,
-                      // Sin conteo NO es «0 plantas»: es que nadie lo contó.
-                      // Un 0 aquí se lee como un bloque vacío (ADR-080).
-                      label:
-                        cohort.plantCount != null
-                          ? t("sourceCohortOption", {
-                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
-                              plants: cohort.plantCount,
-                            })
-                          : t("sourceCohortOptionNoCount", {
-                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
-                            }),
-                    })),
-                  }))}
-                />
-              ) : null}
-            </>
-          ) : null}
-        </section>
-      ) : null}
-
-      {receivingEvent ? (
-        <section className="nn-section">
-          <h2>{t("receivingInfoHeading")}</h2>
-          <p className="nn-muted">{t("receivingOccurredAtLabel", { date: cuando(receivingEvent.receivedAt) })}</p>
-          {labourEntries.filter((le) => le.receivingEventId === receivingEvent.id).length > 0 ? (
-            <ul>
-              {labourEntries
-                .filter((le) => le.receivingEventId === receivingEvent.id)
-                .map((le) => (
-                  <li key={le.id}>{labourEntryLine(le)}</li>
-                ))}
-            </ul>
-          ) : null}
-          {puedeRegistrar ? (
-            <LabourEntryForm
-            claveDeEnvio={clavesDeJornal.receivingEvent}
-              lotId={lot.id}
-              parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
-              observers={observers}
-              selfPersonId={selfPersonId}
-              organizations={organizations}
-            />
-          ) : null}
-        </section>
       ) : null}
 
       {/*
@@ -969,147 +657,11 @@ export default async function LotDetailPage({
           </p>
         ) : null}
       </div>
-
       {/* Below the actions, not above them: recording the batch's state comes
           first, and the photo is the complement to it (ADR-096). */}
       {puedeRegistrar ? (
         <PhotoUploadForm lotId={lot.id} parent={{ kind: "lot" }} observers={observers} selfPersonId={selfPersonId} />
       ) : null}
-
-      {origenDeRecepciones.length > 0 ? (
-        <section className="nn-section">
-          <h2>{t("origenRecepcionesHeading")}</h2>
-          <ul>
-            {origenDeRecepciones.map((o) => {
-              const d = detalleDeOrigen.get(o.recepcionId);
-              return (
-                <li key={o.recepcionId}>
-                  {t("origenRecepcionLinea", { kg: o.kg.toFixed(1), origen: d?.origen ?? "" })}
-                  {d?.detalle ? <span className="nn-muted">{` · ${d.detalle}`}</span> : null}
-                  {o.nivel1LotId !== lot.id ? (
-                    <>
-                      {" · "}
-                      <Link href={`/lots/${o.nivel1LotId}`} className="nn-code">
-                        {lineage.lotCodesById.get(o.nivel1LotId) ?? o.nivel1LotId.slice(0, 8)}
-                      </Link>
-                    </>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          {veredictoDeCalidad ? (
-            <p>
-              {t(`juicio_${veredictoDeCalidad.juicio}`)}
-              {veredictoDeCalidad.motivo ? <span className="nn-muted">{` — ${veredictoDeCalidad.motivo}`}</span> : null}
-              <br />
-              <span className="nn-muted">
-                {t("veredictoMasas", {
-                  insumo: Number(veredictoDeCalidad.insumoKg).toFixed(1),
-                  aceptado: Number(veredictoDeCalidad.aceptadoKg).toFixed(1),
-                  verde: Number(veredictoDeCalidad.verdeKg).toFixed(1),
-                  flotes: Number(veredictoDeCalidad.flotesKg).toFixed(1),
-                  n: veredictoDeCalidad.selecciones,
-                })}
-              </span>
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="nn-section">
-        <h2>{t("lineageHeading")}</h2>
-        <p className="nn-detail-meta">
-          <span>{t("ancestorsLabel", { count: lineage.ancestorLotIds.length })}</span>
-          <span>{t("descendantsLabel", { count: lineage.descendantLotIds.length })}</span>
-        </p>
-        {lineage.ancestorLotIds.length > 0 ? (
-          <p>
-            {t("ancestorsHeading")}:{" "}
-            {lineage.ancestorLotIds.map((ancestorId, i) => (
-              <span key={ancestorId}>
-                {i > 0 ? ", " : ""}
-                <Link href={`/lots/${ancestorId}`} className="nn-code">{lineage.lotCodesById.get(ancestorId) ?? ancestorId.slice(0, 8)}</Link>
-              </span>
-            ))}
-          </p>
-        ) : null}
-        {lineage.descendantLotIds.length > 0 ? (
-          <p>
-            {t("descendantsHeading")}:{" "}
-            {lineage.descendantLotIds.map((descendantId, i) => (
-              <span key={descendantId}>
-                {i > 0 ? ", " : ""}
-                <Link href={`/lots/${descendantId}`} className="nn-code">{lineage.lotCodesById.get(descendantId) ?? descendantId.slice(0, 8)}</Link>
-              </span>
-            ))}
-          </p>
-        ) : null}
-      </section>
-
-      {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} zona={lot.location?.timezone ?? null} /> : null}
-
-      {outturn && !cuajadoEsElMismoEvento ? (
-        <section className="nn-section">
-          <h2>{t("selectionOutturnHeading")}</h2>
-          {outturn.method ? <p className="nn-muted">{t("selectionOutturnMethod", { method: outturn.method })}</p> : null}
-          <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
-            <tbody>
-              {outturn.accepted.map((stream) => (
-                <tr key={stream.lotId}>
-                  <td>{t("selectionOutturnAccepted")}</td>
-                  <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
-                  <td>{stream.quantity} {stream.unit}</td>
-                  <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
-                </tr>
-              ))}
-              {outturn.rejected.map((stream) => (
-                <tr key={stream.lotId}>
-                  <td>{t("selectionOutturnRejected")}{stream.rejectionCategory ? ` — ${stream.rejectionCategory}` : ""}</td>
-                  <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
-                  <td>{stream.quantity} {stream.unit}</td>
-                  <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
-                </tr>
-              ))}
-              {outturn.declaredLossQuantity != null ? (
-                <tr>
-                  <td>{t("selectionOutturnDeclaredLoss")}</td>
-                  <td />
-                  <td>{outturn.declaredLossQuantity}</td>
-                  <td />
-                </tr>
-              ) : null}
-              <tr>
-                <td>{t("selectionOutturnUnexplained")}</td>
-                <td />
-                {/* null is "unknown", never 0 — ADR-080's distinction, and the
-                    figure stored at write time rather than recomputed. */}
-                <td>{outturn.unexplainedQuantity != null ? outturn.unexplainedQuantity : t("selectionOutturnUnknown")}</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      ) : null}
-
-      {canSelect && selectionCatalogs ? (
-        <section className="nn-section" id="seleccion">
-          <h2>{t("selectionHeading")}</h2>
-          {puedeRegistrar ? (
-            <SelectionForm
-              lotId={lot.id}
-              lotCode={lot.lotCode}
-              codigosTomados={codigosTomados}
-              lotType={lot.lotType}
-              currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
-              unit={quantity.unit ?? "kg"}
-              methods={selectionCatalogs.methods}
-              categories={selectionCatalogs.categories}
-            />
-          ) : null}
-        </section>
-      ) : null}
-
       <section className="nn-section">
         <h2>{t("processingHeading")}</h2>
         {/* Parte 1, R1/R7 (tarea 9): el proceso que cubre al lote, en qué lote vive y su receta con versión; la cadena si hay
@@ -1298,6 +850,18 @@ export default async function LotDetailPage({
                 <input type="hidden" name="lotId" value={lot.id} />
                 <input type="hidden" name="dryingRunId" value={activeDrying.id} />
                 <div className="nn-field">
+                  <label htmlFor="dry-outcome">{tb("desenlace")}</label>
+                  <select id="dry-outcome" name="endedOutcome" defaultValue="" required aria-describedby="dry-outcome-help">
+                    <option value="" disabled>{tb("elegirDesenlace")}</option>
+                    {DESENLACES_DEL_SECADO.map((d) => (
+                      <option key={d} value={d}>
+                        {tb(`desenlace_${d}` as "desenlace_target_reached")}
+                      </option>
+                    ))}
+                  </select>
+                  <p id="dry-outcome-help" className="nn-muted">{tb("desenlaceAyuda")}</p>
+                </div>
+                <div className="nn-field">
                   <label htmlFor="dry-output-code">{t("outputLotCodeLabel")}</label>
                   <input id="dry-output-code" name="outputLotCode" type="text" required />
                 </div>
@@ -1375,7 +939,6 @@ export default async function LotDetailPage({
 
         {!activeFermentation && !activeDrying && !currentStorage ? <p className="nn-muted">{t("noProcessing")}</p> : null}
       </section>
-
       <section className="nn-section" id="measurements">
         <h2>{t("measurementsHeading")}</h2>
         {measurements.length === 0 ? (
@@ -1441,21 +1004,491 @@ export default async function LotDetailPage({
         ) : null}
       </section>
 
-      <section className="nn-section">
-        <h2>{t("timelineHeading")}</h2>
-        {timeline.length === 0 ? (
-          <p className="nn-muted">{t("noTimeline")}</p>
-        ) : (
-          <ul>
-            {timeline.map((entry) => (
-              <li key={entry.key}>
-                {cuando(entry.occurredAt)} — {entry.label}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {canSelect && selectionCatalogs ? (
+        <section className="nn-section" id="seleccion">
+          <h2>{t("selectionHeading")}</h2>
+          {puedeRegistrar ? (
+            <SelectionForm
+              lotId={lot.id}
+              lotCode={lot.lotCode}
+              codigosTomados={codigosTomados}
+              lotType={lot.lotType}
+              currentQuantity={quantity.recorded ? Number(quantity.quantity) : null}
+              unit={quantity.unit ?? "kg"}
+              methods={selectionCatalogs.methods}
+              categories={selectionCatalogs.categories}
+            />
+          ) : null}
+        </section>
+      ) : null}
+      {/* Sólo para verde, y sólo si hay perfiles aprobados. Sin perfiles no se
+          pinta un desplegable vacío: los primeros tuestes se hacen sin perfil, y
+          una lista vacía sugeriría que falta algo cuando no falta nada. */}
+      {esVerde && (perfilElegido || perfilesDisponibles.length > 0) ? (
+        <section className="nn-section">
+          <h2>{t("roastProfileOptimalHeading")}</h2>
+          {perfilElegido ? (
+            <p className="nn-detail-meta">
+              <span>
+                {perfilElegido.recipeVersion.recipe.name} · v{perfilElegido.recipeVersion.version}
+              </span>
+              {perfilElegido.notes ? <span>{perfilElegido.notes}</span> : null}
+            </p>
+          ) : (
+            <p className="nn-muted">{t("roastProfileNoneChosen")}</p>
+          )}
+          {perfilesDisponibles.length > 0 ? (
+            <PerfilOptimoForm
+              lotId={lot.id}
+              perfiles={perfilesDisponibles}
+              actual={perfilElegido?.recipeVersionId ?? null}
+            />
+          ) : null}
+        </section>
+      ) : null}
+      {/* ADR-161 — la miel: de qué cosecha viene (subiendo por la genealogía, así que un frasco
+          también lo sabe), qué pasos se le hicieron, y los dos pasos que se le pueden hacer. */}
+      {esMiel ? (
+        <section className="nn-section">
+          <h2>{tMiel("mielOrigenTitulo")}</h2>
+          {origenApicola.length === 0 ? (
+            <p className="nn-vital-sin-registro">{tMiel("mielOrigenNinguno")}</p>
+          ) : (
+            <ul>
+              {origenApicola.map((o) => (
+                <li key={o.id}>
+                  {o.occurredAt.toISOString().slice(0, 10)} · {tMiel("mielOrigenCaja")}{" "}
+                  <Link href={`/apiaries/${o.colony.hive.location.id}/hives/${o.colony.hive.id}`}>
+                    {o.colony.hive.identifier}
+                  </Link>{" "}
+                  · {o.colony.hive.location.name}
+                  {o.resultingLotId !== lot.id ? (
+                    <>
+                      {" "}
+                      · {tMiel("mielOrigenLote")}{" "}
+                      <Link href={`/lots/${o.resultingLotId}`} className="nn-code">
+                        {lineage.lotCodesById.get(o.resultingLotId) ?? o.resultingLotId.slice(0, 8)}
+                      </Link>
+                    </>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
 
+          <h3>{tMiel("mielPasosTitulo")}</h3>
+          {transformations.filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType)).length === 0 ? (
+            <p className="nn-muted">{tMiel("mielPasosNinguno")}</p>
+          ) : (
+            <ul>
+              {transformations
+                .filter((tr) => ["honey_processing", "packaging", "split"].includes(tr.transformationType))
+                .map((tr) => (
+                  <li key={tr.id}>
+                    {tr.occurredAt.toISOString().slice(0, 10)} ·{" "}
+                    {t(`transformationType_${tr.transformationType}` as "transformationType_split")}
+                    {tr.transformationType === "honey_processing"
+                      ? `: ${tr.honeyProcessActs
+                          .map((a) => (a === "otro" ? tr.honeyProcessOtherNote ?? tMiel("mielActo_otro") : tMiel(`mielActo_${a}`)))
+                          .join(", ")}`
+                      : tr.transformationType === "split"
+                        ? ""
+                        : `: ${tMiel("mielEnvasesFila", { cuantos: tr.packageCount ?? 0, gramos: String(tr.packageNetMassG ?? "?") })}`}
+                  </li>
+                ))}
+            </ul>
+          )}
+
+          {puedeRegistrar ? (
+            <>
+              <h3 id="procesar-miel">{tMiel("mielProcesarTitulo")}</h3>
+              <ProcesarMielForm lotId={lot.id} />
+              <h3 id="envasar-miel">{tMiel("mielEnvasarTitulo")}</h3>
+              <EnvasarMielForm lotId={lot.id} />
+              <h3 id="dividir-miel">{tMiel("mielDividirTitulo")}</h3>
+              <DividirMielForm lotId={lot.id} />
+            </>
+          ) : null}
+
+          {/* ADR-163 — a la tienda. Asignar no toca el inventario: lo sube la recepción. */}
+          {tienda ? (
+            <>
+              <h3 id="a-la-tienda">{tTienda("loteTitulo")}</h3>
+              <p className="nn-muted">{tTienda("loteResumen", { envases: tienda.envases, asignados: tienda.asignados, libres: tienda.libres })}</p>
+              {tienda.filas.length > 0 ? (
+                <ul>
+                  {tienda.filas.map((f) => (
+                    <li key={f.id}>
+                      {f.assignedAt.toISOString().slice(0, 10)} ·{" "}
+                      {tTienda("pendienteFila", {
+                        envases: f.unitsAssigned,
+                        producto: f.productVariant.product.name,
+                        variante: f.productVariant.variantName ?? f.productVariant.sku,
+                      })}{" "}
+                      ·{" "}
+                      {f.cancelledAt
+                        ? tTienda("anuladaFila", { fecha: f.cancelledAt.toISOString().slice(0, 10), motivo: f.cancelReason ?? "" })
+                        : f.receivedAt
+                          ? tTienda("recibidaFila", { n: f.unitsReceived ?? 0, fecha: f.receivedAt.toISOString().slice(0, 10) }) +
+                            (f.receiptNote ? ` — ${f.receiptNote}` : "")
+                          : tTienda("esperandoRecepcion")}
+                      {puedeRegistrar && !f.cancelledAt && !f.receivedAt ? (
+                        <AnularAsignacionForm allocationId={f.id} lotId={lot.id} />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {puedeRegistrar && tienda.libres > 0 ? (
+                <AsignarATiendaForm lotId={lot.id} variantes={variantesTienda} libres={tienda.libres} />
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      ) : null}
+      {harvestEvent ? (
+        <section className="nn-section">
+          <h2>{t("harvestInfoHeading")}</h2>
+          <p className="nn-muted">{t("harvestOccurredAtLabel", { date: cuando(harvestEvent.harvestedAt) })}</p>
+
+          {/* Ronda de arreglos 1 (importante #2): la caja se pinta si hay
+              marcas en la foto O si el cálculo de hoy difiere de ella —
+              antes sólo la primera condición decidía, y una foto vacía
+              apagaba también el aviso de discrepancia (spec §3.4). */}
+          {harvestEvent.marcasDeCarencia.length > 0 || difiereCarenciaDeHoy ? (
+            <div className="nn-card">
+              <h3>{t("harvestWithdrawalHeading")}</h3>
+              {harvestEvent.marcasDeCarencia.length > 0 ? (
+                <ul className="nn-detail-meta">
+                  {harvestEvent.marcasDeCarencia.map((m) => (
+                    <li key={m.id}>
+                      {m.diasQueFaltaban != null ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban }) : t("harvestWithdrawalUnknown")}
+                      {" — "}
+                      <Link href={`/plots/${m.intervention.locationId}/manejo/${m.intervention.id}`}>
+                        {cuandoDia(m.intervention.occurredAt)} · {textoDeObjetivoDeManejo[m.intervention.target]}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {difiereCarenciaDeHoy ? (
+                <p className="nn-muted">
+                  {t("harvestWithdrawalRecalculated", {
+                    detalle:
+                      calculoDeCarenciaHoy.length === 0
+                        ? t("harvestWithdrawalRecalculatedNone")
+                        : calculoDeCarenciaHoy
+                            .map((m) =>
+                              m.diasQueFaltaban != null
+                                ? t("harvestWithdrawalKnown", { n: m.diasQueFaltaban })
+                                : t("harvestWithdrawalUnknown"),
+                            )
+                            .join("; "),
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {labourEntries.filter((le) => le.harvestEventId === harvestEvent.id).length > 0 ? (
+            <ul>
+              {labourEntries
+                .filter((le) => le.harvestEventId === harvestEvent.id)
+                .map((le) => (
+                  <li key={le.id}>{labourEntryLine(le)}</li>
+                ))}
+            </ul>
+          ) : null}
+          {puedeRegistrar ? (
+            <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.harvestEvent}
+              lotId={lot.id}
+              parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+          ) : null}
+          {puedeRegistrar ? (
+            <PhotoUploadForm lotId={lot.id} parent={{ kind: "harvestEvent", harvestEventId: harvestEvent.id }} observers={observers} selfPersonId={selfPersonId} />
+          ) : null}
+
+          {harvestSources ? (
+            <>
+              <h3>{t("harvestSourcesHeading")}</h3>
+              {harvestSources.existing.length > 0 ? (
+                <ul className="nn-detail-meta">
+                  {harvestSources.existing.map((source) => (
+                    <li key={source.id}>
+                      {source.location.name}
+                      {source.plantingCohort ? ` · ${source.plantingCohort.cultivarValue?.value ?? ""}` : ""}
+                      {" — "}
+                      {/* Sin peso NO es cero: el bloque aportó y nadie lo pesó
+                          aparte, que es el caso normal en un beneficio. */}
+                      {source.cherryWeightKg != null
+                        ? t("sourceWeightValue", { kg: Number(source.cherryWeightKg) })
+                        : t("sourceWeightUnweighed")}
+                      {source.notes ? ` · ${source.notes}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="nn-muted">{t("harvestSourcesNone")}</p>
+              )}
+              {puedeEditarFuentes ? (
+                <HarvestSourcesForm
+                  lotId={lot.id}
+                  harvestEventId={harvestSources.harvestEventId}
+                  declaredTotalKg={harvestSources.declaredTotalKg}
+                  alreadyRecordedKg={harvestSources.alreadyRecordedKg}
+                  // Los dos números que hacen honesta a la diferencia: aportes
+                  // guardados sin peso, y aportes que el RBAC oculta. El servicio
+                  // los tenía calculados y la pantalla los dejaba caer.
+                  sinPesar={harvestSources.existing.filter((s) => s.cherryWeightKg == null).length}
+                  ocultos={harvestSources.hiddenContributions}
+                  plots={harvestSources.plotLocations.map((plot) => ({
+                    id: plot.id,
+                    name: plot.name,
+                    cohorts: plot.plantingCohorts.map((cohort) => ({
+                      id: cohort.id,
+                      // Sin conteo NO es «0 plantas»: es que nadie lo contó.
+                      // Un 0 aquí se lee como un bloque vacío (ADR-080).
+                      label:
+                        cohort.plantCount != null
+                          ? t("sourceCohortOption", {
+                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                              plants: cohort.plantCount,
+                            })
+                          : t("sourceCohortOptionNoCount", {
+                              cultivar: cohort.cultivarValue?.value ?? t("cultivarUnknown"),
+                            }),
+                    })),
+                  }))}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      ) : null}
+      {receivingEvent ? (
+        <section className="nn-section">
+          <h2>{t("receivingInfoHeading")}</h2>
+          <p className="nn-muted">{t("receivingOccurredAtLabel", { date: cuando(receivingEvent.receivedAt) })}</p>
+          {labourEntries.filter((le) => le.receivingEventId === receivingEvent.id).length > 0 ? (
+            <ul>
+              {labourEntries
+                .filter((le) => le.receivingEventId === receivingEvent.id)
+                .map((le) => (
+                  <li key={le.id}>{labourEntryLine(le)}</li>
+                ))}
+            </ul>
+          ) : null}
+          {puedeRegistrar ? (
+            <LabourEntryForm
+            claveDeEnvio={clavesDeJornal.receivingEvent}
+              lotId={lot.id}
+              parent={{ kind: "receivingEvent", receivingEventId: receivingEvent.id }}
+              observers={observers}
+              selfPersonId={selfPersonId}
+              organizations={organizations}
+            />
+          ) : null}
+        </section>
+      ) : null}
+      <section className="nn-section">
+        <details>
+          <summary>
+            <h2>{t("originLotHeading")}</h2>
+            {lot.location ? <span className="nn-resumen-cifra">{lot.location.name}</span> : null}
+          </summary>
+          {lot.location ? (
+            <>
+              <p className="nn-muted">{t("originLotConditionsIntro")}</p>
+              <p className="nn-detail-meta">
+                <span>{lot.location.name}</span>
+                {lot.location.sunExposure ? (
+                  <span>
+                    {t("sunExposureLabel")}: {t(`sunExposure_${lot.location.sunExposure}` as "sunExposure_full_sun")}
+                  </span>
+                ) : null}
+                {lot.location.shadePercentage ? (
+                  <span>
+                    {t("shadePercentageLabel")}:{" "}
+                    {t(`shadePercentage_${lot.location.shadePercentage}` as "shadePercentage_pct_20")}
+                  </span>
+                ) : null}
+                {lot.location.altitudeMinM != null || lot.location.altitudeMaxM != null ? (
+                  <span>
+                    {t("altitudeRangeLabel")}:{" "}
+                    {t("altitudeRangeValue", {
+                      min: lot.location.altitudeMinM ?? "?",
+                      max: lot.location.altitudeMaxM ?? "?",
+                    })}
+                  </span>
+                ) : null}
+                {lot.location.slopeDescription ? (
+                  <span>
+                    {t("slopeLabel")}: {lot.location.slopeDescription}
+                  </span>
+                ) : null}
+                {lot.location.soilType ? (
+                  <span>
+                    {t("soilTypeLabel")}: {lot.location.soilType}
+                  </span>
+                ) : null}
+              </p>
+            </>
+          ) : (
+            <p className="nn-muted">{t("noOriginLot")}</p>
+          )}
+        </details>
+      </section>
+      {origenDeRecepciones.length > 0 ? (
+        <section className="nn-section">
+          <details>
+            <summary>
+              <h2>{t("origenRecepcionesHeading")}</h2>
+              <span className="nn-resumen-cifra">{t("resumenRecepciones", { count: origenDeRecepciones.length })}</span>
+            </summary>
+            <ul>
+              {origenDeRecepciones.map((o) => {
+                const d = detalleDeOrigen.get(o.recepcionId);
+                return (
+                  <li key={o.recepcionId}>
+                    {t("origenRecepcionLinea", { kg: o.kg.toFixed(1), origen: d?.origen ?? "" })}
+                    {d?.detalle ? <span className="nn-muted">{` · ${d.detalle}`}</span> : null}
+                    {o.nivel1LotId !== lot.id ? (
+                      <>
+                        {" · "}
+                        <Link href={`/lots/${o.nivel1LotId}`} className="nn-code">
+                          {lineage.lotCodesById.get(o.nivel1LotId) ?? o.nivel1LotId.slice(0, 8)}
+                        </Link>
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            {veredictoDeCalidad ? (
+              <p>
+                {t(`juicio_${veredictoDeCalidad.juicio}`)}
+                {veredictoDeCalidad.motivo ? <span className="nn-muted">{` — ${veredictoDeCalidad.motivo}`}</span> : null}
+                <br />
+                <span className="nn-muted">
+                  {t("veredictoMasas", {
+                    insumo: Number(veredictoDeCalidad.insumoKg).toFixed(1),
+                    aceptado: Number(veredictoDeCalidad.aceptadoKg).toFixed(1),
+                    verde: Number(veredictoDeCalidad.verdeKg).toFixed(1),
+                    flotes: Number(veredictoDeCalidad.flotesKg).toFixed(1),
+                    n: veredictoDeCalidad.selecciones,
+                  })}
+                </span>
+              </p>
+            ) : null}
+          </details>
+        </section>
+      ) : null}
+      <section className="nn-section">
+        <details>
+          <summary>
+            <h2>{t("lineageHeading")}</h2>
+            <span className="nn-resumen-cifra">{t("resumenGenealogia", { ancestros: lineage.ancestorLotIds.length, derivados: lineage.descendantLotIds.length })}</span>
+          </summary>
+          <p className="nn-detail-meta">
+            <span>{t("ancestorsLabel", { count: lineage.ancestorLotIds.length })}</span>
+            <span>{t("descendantsLabel", { count: lineage.descendantLotIds.length })}</span>
+          </p>
+          {lineage.ancestorLotIds.length > 0 ? (
+            <p>
+              {t("ancestorsHeading")}:{" "}
+              {lineage.ancestorLotIds.map((ancestorId, i) => (
+                <span key={ancestorId}>
+                  {i > 0 ? ", " : ""}
+                  <Link href={`/lots/${ancestorId}`} className="nn-code">{lineage.lotCodesById.get(ancestorId) ?? ancestorId.slice(0, 8)}</Link>
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {lineage.descendantLotIds.length > 0 ? (
+            <p>
+              {t("descendantsHeading")}:{" "}
+              {lineage.descendantLotIds.map((descendantId, i) => (
+                <span key={descendantId}>
+                  {i > 0 ? ", " : ""}
+                  <Link href={`/lots/${descendantId}`} className="nn-code">{lineage.lotCodesById.get(descendantId) ?? descendantId.slice(0, 8)}</Link>
+                </span>
+              ))}
+            </p>
+          ) : null}
+        </details>
+      </section>
+      {clasificacionVerde ? <ClasificacionPorMalla clasificacion={clasificacionVerde} lotId={lot.id} zona={lot.location?.timezone ?? null} /> : null}
+      {outturn && !cuajadoEsElMismoEvento ? (
+        <section className="nn-section">
+          <details>
+            <summary>
+              <h2>{t("selectionOutturnHeading")}</h2>
+              <span className="nn-resumen-cifra">{t("resumenCuajado", { count: outturn.accepted.length + outturn.rejected.length })}</span>
+            </summary>
+            {outturn.method ? <p className="nn-muted">{t("selectionOutturnMethod", { method: outturn.method })}</p> : null}
+            <table className="nn-table" style={{ fontVariantNumeric: "tabular-nums" }}>
+              <tbody>
+                {outturn.accepted.map((stream) => (
+                  <tr key={stream.lotId}>
+                    <td>{t("selectionOutturnAccepted")}</td>
+                    <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
+                    <td>{stream.quantity} {stream.unit}</td>
+                    <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
+                  </tr>
+                ))}
+                {outturn.rejected.map((stream) => (
+                  <tr key={stream.lotId}>
+                    <td>{t("selectionOutturnRejected")}{stream.rejectionCategory ? ` — ${stream.rejectionCategory}` : ""}</td>
+                    <td><Link href={`/lots/${stream.lotId}`} className="nn-code">{stream.lotCode}</Link></td>
+                    <td>{stream.quantity} {stream.unit}</td>
+                    <td>{stream.sharePct != null ? t("selectionOutturnShare", { share: stream.sharePct }) : t("selectionOutturnUnknown")}</td>
+                  </tr>
+                ))}
+                {outturn.declaredLossQuantity != null ? (
+                  <tr>
+                    <td>{t("selectionOutturnDeclaredLoss")}</td>
+                    <td />
+                    <td>{outturn.declaredLossQuantity}</td>
+                    <td />
+                  </tr>
+                ) : null}
+                <tr>
+                  <td>{t("selectionOutturnUnexplained")}</td>
+                  <td />
+                  {/* null is "unknown", never 0 — ADR-080's distinction, and the
+                      figure stored at write time rather than recomputed. */}
+                  <td>{outturn.unexplainedQuantity != null ? outturn.unexplainedQuantity : t("selectionOutturnUnknown")}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </details>
+        </section>
+      ) : null}
+      <section className="nn-section">
+        <details>
+          <summary>
+            <h2>{t("timelineHeading")}</h2>
+            <span className="nn-resumen-cifra">{t("resumenCronologia", { count: timeline.length })}</span>
+          </summary>
+          {timeline.length === 0 ? (
+            <p className="nn-muted">{t("noTimeline")}</p>
+          ) : (
+            <ul>
+              {timeline.map((entry) => (
+                <li key={entry.key}>
+                  {cuando(entry.occurredAt)} — {entry.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </details>
+      </section>
       <section className="nn-section">
         <h2>{t("samplesHeading")}</h2>
         {samples.length === 0 ? (
@@ -1473,75 +1506,105 @@ export default async function LotDetailPage({
           </ul>
         )}
       </section>
-
       {samples.some((s) => sensoryLinkage[s.id]?.length) ? (
         <section className="nn-section">
-          <h2>{t("sensoryHeading")}</h2>
-          <ul>
-            {samples.flatMap((s) =>
-              (sensoryLinkage[s.id] ?? []).map((entry) => (
-                <li key={`${s.id}-${entry.sessionId}`}>
-                  {s.sampleCode} — {entry.sessionName}
-                  {entry.overallResult ? (
-                    <>
-                      : {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}
-                    </>
-                  ) : (
-                    <> — {t("sensoryAwaitingResultLabel")}</>
-                  )}
-                </li>
-              )),
-            )}
-          </ul>
+          <details>
+            <summary>
+              <h2>{t("sensoryHeading")}</h2>
+              <span className="nn-resumen-cifra">{t("resumenSensorial", { count: samples.filter((s) => sensoryLinkage[s.id]?.length).length })}</span>
+            </summary>
+            <ul>
+              {samples.flatMap((s) =>
+                (sensoryLinkage[s.id] ?? []).map((entry) => (
+                  <li key={`${s.id}-${entry.sessionId}`}>
+                    {s.sampleCode} — {entry.sessionName}
+                    {entry.overallResult ? (
+                      <>
+                        : {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}
+                      </>
+                    ) : (
+                      <> — {t("sensoryAwaitingResultLabel")}</>
+                    )}
+                  </li>
+                )),
+              )}
+            </ul>
+          </details>
         </section>
       ) : null}
-
       {assetsWithUrls.length > 0 ? (
         <section className="nn-section">
-          <h2>{t("photosHeading")}</h2>
-          <ul style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", listStyle: "none", padding: 0 }}>
-            {assetsWithUrls.map(({ asset, viewUrl }) => (
-              <li key={asset.id}>
-                {asset.assetType === "photo" ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not a static/optimizable Next asset
-                  <img src={viewUrl} alt="" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 4 }} />
-                ) : (
-                  <a href={viewUrl}>{asset.originalFilename ?? asset.id}</a>
-                )}
-              </li>
-            ))}
-          </ul>
+          <details>
+            <summary>
+              <h2>{t("photosHeading")}</h2>
+              <span className="nn-resumen-cifra">{t("resumenFotos", { count: assetsWithUrls.length })}</span>
+            </summary>
+            <ul style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", listStyle: "none", padding: 0 }}>
+              {assetsWithUrls.map(({ asset, viewUrl }) => (
+                <li key={asset.id}>
+                  {asset.assetType === "photo" ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, not a static/optimizable Next asset
+                    <img src={viewUrl} alt="" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 4 }} />
+                  ) : (
+                    <a href={viewUrl}>{asset.originalFilename ?? asset.id}</a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
         </section>
       ) : null}
-
       {lot.projectId ? (
         <section className="nn-section">
-          <h2>{t("tasksHeading")}</h2>
-          {tasks.length === 0 ? (
-            <p className="nn-muted">{t("noTasks")}</p>
+          <details>
+            <summary>
+              <h2>{t("tasksHeading")}</h2>
+              <span className="nn-resumen-cifra">{tasks.length === 20 ? t("resumenTope", { count: 20 }) : t("resumenTareas", { count: tasks.length })}</span>
+            </summary>
+            {tasks.length === 0 ? (
+              <p className="nn-muted">{t("noTasks")}</p>
+            ) : (
+              <ul>
+                {tasks.map((task) => (
+                  <li key={task.id}>{task.title}</li>
+                ))}
+              </ul>
+            )}
+          </details>
+        </section>
+      ) : null}
+      <section className="nn-section">
+        <details>
+          <summary>
+            <h2>{t("historyHeading")}</h2>
+            {/* **Ya lleva cifra: el defecto que la impedía se arregló el 2026-10-05.** Hasta entonces
+                esta era la única sección plegada sin ella, porque la cifra habría sido falsa —
+                `getLotDetail` buscaba la auditoría con `entityId = lotId` y las escrituras guardan el id
+                del PROPIO evento, así que de las 1.792 filas de esos cinco tipos esta pantalla podía
+                encontrar **0**, en los 108 lotes. Hoy la lectura resuelve los ids de los hechos y además
+                pregunta por el tipo `lot`, que es el único que sí lleva el id del lote. Ver la cabecera de
+                `getLotDetail`.
+                **Y el tope se dice, no se esconde:** `leerEnmiendas` corta en 50, así que con 50 filas la
+                cifra sería un suelo y no un total — se rotula «50 o más», igual que las tareas con su 20.
+                Medido el 2026-10-05: el lote con más historia tenía 9 filas y ninguno de los 108 pasaba
+                de 50, así que hoy esa rama no se pinta nunca; está porque el día que se pase, la pantalla
+                no debe afirmar un total que no sabe. */}
+            <span className="nn-resumen-cifra">
+              {auditEvents.length === 50 ? t("resumenTope", { count: 50 }) : t("resumenHistorial", { count: auditEvents.length })}
+            </span>
+          </summary>
+          {auditEvents.length === 0 ? (
+            <p className="nn-muted">{t("noHistory")}</p>
           ) : (
             <ul>
-              {tasks.map((task) => (
-                <li key={task.id}>{task.title}</li>
+              {auditEvents.map((ev) => (
+                <li key={ev.id}>
+                  {ev.operation} — {cuando(ev.occurredAt)}
+                </li>
               ))}
             </ul>
           )}
-        </section>
-      ) : null}
-
-      <section className="nn-section">
-        <h2>{t("historyHeading")}</h2>
-        {auditEvents.length === 0 ? (
-          <p className="nn-muted">{t("noHistory")}</p>
-        ) : (
-          <ul>
-            {auditEvents.map((ev) => (
-              <li key={ev.id}>
-                {ev.operation} — {cuando(ev.occurredAt)}
-              </li>
-            ))}
-          </ul>
-        )}
+        </details>
       </section>
     </div>
   );

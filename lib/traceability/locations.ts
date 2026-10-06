@@ -420,6 +420,42 @@ export async function updateLocationAttributes(userAccountId: string, input: Upd
   };
   const puestos = Object.values(rejilla).filter((v) => v !== null && v !== undefined).length;
   if (puestos !== 0 && puestos !== 4) throw new RejillaInvalida("rejilla_a_medias");
+  // **D3: una sola numeración, la de la parcela.** Una microparcela es una
+  // `Location` `plot` cuyo padre es OTRO `plot` (spec fincas y parcelas §3.3), y
+  // como hija lo que declara es su RANGO dentro de la rejilla de su madre
+  // (diseño §4.2: «como padre declaras tu rejilla; como hija, tu sitio en la de
+  // tu padre»), nunca una rejilla propia.
+  //
+  // **El defecto que esto cierra, medido en vivo el 2026-10-03** contra la base
+  // desechable `nectar_ci_area`, como operaria de finca y de punta a punta: la
+  // pantalla de ajustes ofrecía el formulario de rejilla también a una
+  // microparcela, guardaba —`sureste`, 3×5, 1,20 m, comprobado en la fila— y a
+  // partir de ahí `core.raiz_de_la_numeracion` devolvía **la microparcela misma**
+  // en vez de su madre, porque esa función corona como raíz a cualquier sitio con
+  // `row_count` propio. O sea: dos numeraciones dentro de la misma parcela, que es
+  // exactamente lo que D3 prohíbe, y el rango de la microparcela en la rejilla de
+  // su madre dejaba de querer decir nada.
+  //
+  // Se rechaza PONER una rejilla (los cuatro campos), no vaciarla: una
+  // microparcela que ya la tenga —las hay, nada lo impedía hasta hoy— tiene que
+  // poder quedarse sin ella, y `puestos === 0` es justo ese camino.
+  // **Se mira si el INPUT pone rejilla, no si la fila resultante la tiene.** Lo
+  // encontró una revisión independiente el mismo día: `puestos` se cuenta sobre la
+  // fila resultante —así tiene que ser para «cuatro o ninguna»—, de modo que una
+  // microparcela con rejilla heredada daba 4 aunque el input no trajera ninguna de
+  // las cuatro, y editarle la ALTITUD moría con `rejilla_en_microparcela`. El
+  // arreglo dejaba esas filas sin poder tocarse para nada, que es peor que el
+  // defecto que cerraba.
+  const ponenRejilla = [input.gridOrigin, input.rowCount, input.plantsPerRow, input.rowSpacingMeters].some(
+    (v) => v !== undefined && v !== null,
+  );
+  if (puestos === 4 && ponenRejilla && existing.parentLocationId) {
+    const padre = await prisma.location.findUnique({
+      where: { id: existing.parentLocationId },
+      select: { locationType: true },
+    });
+    if (padre?.locationType === "plot") throw new RejillaInvalida("rejilla_en_microparcela");
+  }
   // «No entera» seria falso para el 0 y el -3, que SON enteros. La propiedad es
   // «entero y desde 1», y el codigo lo dice entera: la misma correccion que se le
   // hizo a `no_es_celda` en `lib/territorio/rejilla.ts`.
@@ -676,7 +712,27 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
         sunExposure: parent.sunExposure,
         aspect: parent.aspect,
         plantSpacingMeters: parent.plantSpacingMeters,
-        areaHectares: parent.areaHectares,
+        // **`areaHectares` TAMPOCO esta en esta lista, y por una razon distinta de la rejilla.**
+        // Los ocho de arriba son INTENSIVOS: describen el sitio y valen igual en una parte que en el
+        // todo — la altitud de media hectarea es la de la hectarea, y la separacion entre plantas no
+        // cambia porque se mire un trozo. El area es EXTENSIVA: una microparcela es una PARTE, asi
+        // que copiar la superficie entera no es heredar un dato prestado, es guardar uno que no
+        // puede ser suyo y que es siempre demasiado grande.
+        //
+        // Y no se queda en la ficha: tres cosas dividen por esa columna. `computePlotDensity` saca
+        // plantas/ha, `computePlotYield` saca kg/ha, y `pendienteDeLaParcela` deja de pedir el area en
+        // cuanto la columna no es nula — que era el unico aviso que llevaria a medir la de verdad.
+        // Medido el 2026-10-02 sobre una microparcela de una decima de una parcela de 2 ha con 1.000
+        // matas: su ficha afirmaba «1.000 plantas en 2 ha» y 500 plantas/ha cuando son 5.000.
+        //
+        // Con el area en nulo la microparcela vuelve a decir «no se», que es lo que §3 exige de un
+        // dato que falta: Missing se queda Missing y no se infiere para guardarlo como hecho. El
+        // formulario de alta no tiene campo de area —tres campos: nombre, motivo y nota— asi que el
+        // camino es el aviso `sin_area`, que enlaza a los ajustes de la propia microparcela.
+        //
+        // **Esto reabre una linea del diseño aprobado** (§4.4, que la nombra entre los nueve). La
+        // nota esta puesta alli tambien, porque una decision que contradice un documento normativo se
+        // anota en el documento y no solo en el codigo.
         // Y donde esta, que viene del input y no del padre.
         rangeRowFrom: input.rangeRowFrom ?? null,
         rangeRowTo: input.rangeRowTo ?? null,
@@ -721,7 +777,8 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
           sunExposure: microlot.sunExposure,
           aspect: microlot.aspect,
           plantSpacingMeters: microlot.plantSpacingMeters,
-          areaHectares: microlot.areaHectares,
+          // `areaHectares` no aparece porque ya no se copia: este evento registra lo COPIADO, y
+          // escribir un nulo aqui diria que se copio un nulo en vez de que no se copio nada.
         },
         sourceInterface: "traceability.service",
       },

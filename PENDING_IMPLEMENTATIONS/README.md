@@ -14,7 +14,9 @@ idea se pierda cuando la respuesta es «ahora no».
 | [005](005-enumerar-rutas-privilegiadas.md) | Probar la frontera de RBAC, no sólo el router | Nada — trabajo pendiente |
 | [006](006-sin-ci-en-este-repositorio.md) | CI: qué cubre hoy y qué no | Parcialmente hecho · lo que falta necesita base efímera |
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
-| [009](009-el-unico-lector-de-auditevent-no-puede-acertar.md) | El único lector de `AuditEvent` en pantalla no puede acertar | Nada — trabajo pendiente |
+| [023](023-el-audit-no-lleva-el-sujeto-de-negocio.md) | Una fila de `core.audit_event` no dice de qué **lote** habla | Decisión de Daniel · ver la ficha |
+| [024](024-la-cosecha-no-registra-quien-la-opero.md) | La cosecha no registra **quién la operó**, aunque el servicio lo guarde | Nada — trabajo pendiente |
+| [025](025-el-verificador-dice-no-restauro-cuando-no-pudo-contar.md) | El verificador de backup dice «no restauró» cuando lo que no pudo fue **contar** | Decisión de Daniel · toca la alarma de P-A |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en
@@ -28,3 +30,8 @@ tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de 
 Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
 el mismo día en que se encontró recorriendo la pantalla en un navegador.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
+Y **009 · el único lector de `AuditEvent` no puede acertar**, cerrada el 2026-10-05 — **y su
+cierre anterior, del 2026-10-03, era falso con las tres comprobaciones en verde**: las tres
+miraban artefactos (existe el lector, no existe el comentario, existe el guardia) y ninguna
+llamaba a la función para contar filas. El panel seguía vacío en los 108 lotes. Está en su
+ficha, y es la razón de que la **023** nazca como decisión y no como tarea.

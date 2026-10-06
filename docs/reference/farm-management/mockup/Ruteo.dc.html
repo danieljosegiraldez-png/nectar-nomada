@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ruteo — L-0416</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9ECE7}
+a{color:#1F5FA8}a:hover{color:#174A85}
+</style>
+</helmet>
+<div style="width: 390px; height: 1560px; box-sizing: border-box; background: #E9ECE7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #16201A; display: flex; flex-direction: column">
+
+<header style="background: #16201A; color: #F3F5F1; padding: 10px 12px 12px; display: flex; align-items: center; gap: 8px">
+<a href="Main.dc.html" aria-label="Volver a inicio" style="height: 44px; width: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: #F3F5F1; text-decoration: none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #A9B3AC">Por decidir · 1 de 2</span>
+<span style="font-size: 18px; font-weight: 600">Ruteo de L-0416</span>
+</div>
+</header>
+
+<section style="margin: 12px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<span style="font: 600 18px 'IBM Plex Mono', monospace">L-0416 · 640 kg</span>
+<span style="font: 600 12px 'IBM Plex Mono', monospace; color: #8A3A05">espera 1 h 10</span>
+</div>
+<span style="font-size: 13px; color: #3E4741">Propio · Bloque 3 · Geisha · 1.750 m · pasada 2 · cosechado 11:30 · 2 entregas mezcladas</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<div style="background: #F3F5F1; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #59625C">Maduro / verde</span><span style="font: 600 15px 'IBM Plex Mono', monospace">92 / 1,4 %</span></div>
+<div style="background: #F3F5F1; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #59625C">°Brix mucílago</span><span style="font: 600 15px 'IBM Plex Mono', monospace">22,1</span></div>
+<div style="background: #F3F5F1; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #59625C">Flotes</span><span style="font: 600 15px 'IBM Plex Mono', monospace">2,8 %</span></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span style="font-size: 11px; padding: 4px 8px; border-radius: 12px; background: #E6F4EC; color: #1E7B4A; font-weight: 600">Califica natural</span>
+<span style="font-size: 11px; padding: 4px 8px; border-radius: 12px; background: #E6F4EC; color: #1E7B4A; font-weight: 600">Califica especial</span>
+<span style="font-size: 11px; padding: 4px 8px; border-radius: 12px; background: #F1EDF8; color: #4A2F8A; font-weight: 600">Compromiso: microlote comprador [NOMBRE]</span>
+</div>
+</section>
+
+<section style="margin: 16px 12px 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 700">Opciones del motor</h2>
+<span style="font-size: 12px; color: #59625C">ordenadas por puntaje</span>
+</div>
+<sc-for list="{{options}}" as="o" hint-placeholder-count="3">
+<div style="background: #FFFFFF; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; border: 2px solid {{o.border}}">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+<div style="display: flex; align-items: center; gap: 6px">
+<span style="font: 700 11px 'IBM Plex Mono', monospace; padding: 3px 6px; border-radius: 5px; color: #FFFFFF; background: {{o.color}}">{{o.proc}}</span>
+<span style="font-size: 14px; font-weight: 600">{{o.name}}</span>
+</div>
+<span style="font: 600 13px 'IBM Plex Mono', monospace">{{o.score}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; font-size: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #59625C">Activos</span><span style="font-weight: 600">{{o.assets}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #59625C">Termina (pred.)</span><span style="font-weight: 600">{{o.finish}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #59625C">Verde-eq</span><span style="font-weight: 600">{{o.green}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #59625C">Efecto en mezcla</span><span style="font-weight: 600">{{o.mix}}</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 8px; background: #F6F7F4">
+<sc-for list="{{o.reasons}}" as="r" hint-placeholder-count="3">
+<span style="font-size: 12px; color: #3E4741; line-height: 1.35">· {{r}}</span>
+</sc-for>
+<span style="font-size: 12px; font-weight: 600; color: {{o.capColor}}">{{o.cap}}</span>
+</div>
+<button type="button" onClick="{{o.pick}}" style="min-height: 44px; border-radius: 10px; font: 600 14px 'IBM Plex Sans', sans-serif; border: 1px solid #16201A; background: {{o.btnBg}}; color: {{o.btnFg}}">{{o.btnLabel}}</button>
+</div>
+</sc-for>
+</section>
+
+<section style="margin: 16px 12px 0; background: #FFFFFF; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 700">Dividir el lote</h2>
+<span style="font-size: 12px; color: #59625C">El motor sugiere una división si la capacidad o la meta lo justifican.</span>
+<div style="display: flex; height: 28px; border-radius: 6px; overflow: hidden; font: 600 12px 'IBM Plex Mono', monospace; color: #FFFFFF">
+<div style="width: 70%; background: #5B3FA0; display: flex; align-items: center; padding-left: 8px">70 % especial · 448 kg</div>
+<div style="width: 30%; background: #C27C0E; display: flex; align-items: center; padding-left: 8px">30 % miel</div>
+</div>
+<span style="font-size: 12px; color: #3E4741">SM-1 #3 admite 450 kg con 30 % de espacio libre; el resto a miel roja en patio P2 (libre hasta vie).</span>
+</section>
+
+<sc-if value="{{needsReason}}" hint-placeholder-val="{{false}}">
+<section style="margin: 16px 12px 0; background: #FEF3E2; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<label for="reason" style="font-size: 13px; font-weight: 600; color: #3D1D02">Elegiste una opción distinta a la sugerida. Motivo (obligatorio, una línea):</label>
+<input id="reason" type="text" placeholder="Ej.: el comprador pidió miel para este bloque" style="min-height: 44px; border-radius: 8px; border: 1px solid #D9B37A; padding: 0 10px; font: 400 14px 'IBM Plex Sans', sans-serif; background: #FFFFFF">
+</section>
+</sc-if>
+
+<section style="margin: 16px 12px 0; display: flex; flex-direction: column; gap: 8px">
+<sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+<div style="min-height: 52px; border-radius: 12px; background: #E6F4EC; color: #1E7B4A; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 12px">{{doneText}}</div>
+</sc-if>
+<sc-if value="{{notDone}}" hint-placeholder-val="{{true}}">
+<button type="button" onClick="{{confirm}}" style="min-height: 52px; border-radius: 12px; border: 0; background: #16201A; color: #FFFFFF; font: 600 15px 'IBM Plex Sans', sans-serif">Confirmar ruteo</button>
+</sc-if>
+<span style="font-size: 11px; color: #59625C; text-align: center">Al confirmar se reservan los activos, se actualizan capacidad 14 días y mezcla proyectada, y la decisión queda registrada.</span>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1560}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { picked: 0, done: false }; }
+  renderVals() {
+    var self = this;
+    var raw = [
+      { proc: 'E', color: '#5B3FA0', name: 'Natural anaeróbico', score: '0,86', assets: 'SM-1 #3 (120 h) → camas B9–B10', finish: 'fermenta hasta dom 17; seco ≈ mar 2 feb', green: '≈ 95 kg', mix: 'Especial 5 → 7 %', reasons: ['Especial está bajo meta (comprometido 5 % vs 10 %)', 'Bloque 3 tiene historial 89+ en anaeróbicos', 'Cumple el compromiso de microlote'], cap: 'Capacidad: camas B9–B10 libres desde lun 19 ✓', capColor: '#1E7B4A' },
+      { proc: 'M', color: '#C27C0E', name: 'Miel roja · patio P2', score: '0,71', assets: 'Despulpadora 2 → patio P2', finish: 'seco ≈ vie 29 ene', green: '≈ 100 kg', mix: 'Miel 31 → 33 %', reasons: ['Miel está bajo meta (31 % vs 40 %)', 'Usa patio libre; menos días de cama'], cap: 'Capacidad: patio P2 al 85 % vie–sáb', capColor: '#8A3A05' },
+      { proc: 'L', color: '#1F5FA8', name: 'Lavado · T4', score: '0,48', assets: 'T4 (24–36 h) → solar S1', finish: 'seco ≈ mar 26 ene', green: '≈ 102 kg', mix: 'Lavado 29 → 31 % (sobre meta)', reasons: ['Más rápido y seguro', 'Pero lavado ya supera la meta y desaprovecha la calidad del lote'], cap: 'Capacidad: T4 libre hoy ✓', capColor: '#1E7B4A' }
+    ];
+    var picked = this.state.picked;
+    var options = raw.map(function (o, i) {
+      var sel = i === picked;
+      return Object.assign({}, o, {
+        border: sel ? '#16201A' : '#FFFFFF',
+        btnBg: sel ? '#16201A' : '#FFFFFF', btnFg: sel ? '#FFFFFF' : '#16201A',
+        btnLabel: sel ? (i === 0 ? 'Seleccionada · sugerida' : 'Seleccionada') : 'Elegir esta opción',
+        pick: function () { self.setState({ picked: i, done: false }); }
+      });
+    });
+    return {
+      options: options,
+      needsReason: picked !== 0 && !this.state.done,
+      done: this.state.done, notDone: !this.state.done,
+      doneText: 'Ruteado a ' + raw[picked].name + ' · activos reservados',
+      confirm: function () { self.setState({ done: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

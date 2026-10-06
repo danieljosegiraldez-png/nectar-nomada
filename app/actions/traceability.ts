@@ -29,7 +29,7 @@ import {
 } from "../../lib/traceability/measurements";
 import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent, CerezaError } from "../../lib/traceability/harvest";
-import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError } from "../../lib/traceability/roasting";
+import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError, CODIGOS_DE_TUESTE_CON_FRASE } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
 import {
   createRecipeWithVersion,
@@ -38,6 +38,7 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
+import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 import { moveLotToStorage } from "../../lib/traceability/storage";
@@ -296,6 +297,15 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   if (error instanceof MassBalanceError) return t("error_mass_balance", { detail: error.message });
   if (error instanceof ByproductValidationError) return t("error_subproducto", { detail: error.message });
   if (error instanceof CerezaError) return t("error_cereza", { detail: error.message });
+  // Cada código del camino de la muestra tiene su frase: dice qué corregir, en vez de enseñar el
+  // código en inglés dentro de una frase en español. La lista vive en `lib/traceability/roasting.ts`,
+  // junto a los `throw`; el envoltorio de abajo sigue cubriendo a los demás.
+  if (
+    error instanceof RoastSessionValidationError &&
+    (CODIGOS_DE_TUESTE_CON_FRASE as readonly string[]).includes(error.message)
+  ) {
+    return t(`error_roast_${error.message}` as "error_roast_sample_must_be_green");
+  }
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
   if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
   if (error instanceof GreenGradingValidationError && error.message === "screen_system_invalid") {
@@ -772,10 +782,21 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const lotId = String(formData.get("lotId") ?? "");
+  // Cómo terminó (auditoría farm-to-green R10, 2026-10-04): esta puerta no lo pasaba y el reposo
+  // no arrancaba nunca. Se lee antes del servicio, con la regla de la última bandeja, y el
+  // `redirect` va fuera de cualquier `try`.
+  let endedOutcome: DesenlaceDelSecado | null = null;
+  try {
+    endedOutcome = desenlaceDelSecado(formData.get("endedOutcome"));
+  } catch (error) {
+    if (!(error instanceof DesenlaceDeSecadoRequerido)) throw error;
+  }
+  if (endedOutcome === null) redirect(`/lots/${lotId}?error=desenlace_requerido`);
   try {
     await endDryingRun(user.userAccountId, {
       dryingRunId: String(formData.get("dryingRunId") ?? ""),
       endedAt: new Date(),
+      endedOutcome,
       outputLotCode: String(formData.get("outputLotCode") ?? ""),
       outputLotType: String(formData.get("outputLotType") ?? "") as never,
       quantity: emptyToNullNumber(formData.get("quantity")),

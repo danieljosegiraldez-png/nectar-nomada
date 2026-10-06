@@ -1,0 +1,133 @@
+{
+  "_meta": {
+    "version": "2.0",
+    "generated": "2026-10-02",
+    "source": "research/R6_processing_taxonomy.md §3, cross-checked with routescoffee.co.uk, 1zpresso.coffee and font-mag.com guides (2026-10-02)",
+    "principle": "A processing protocol is an ORDERED SEQUENCE OF STEPS. Each step carries its own axis vector. Named methods are labels over vectors; the vector is the truth. 'Lactic', 'acetic', 'malic', 'winey' are TARGET OUTCOMES (descriptor K), not axes.",
+    "orthogonality": "Any value on one axis can combine with any value on another (some combinations are rare). Fruit state (A) and oxygen (B) usually change between steps, so they are stored per step."
+  },
+  "axes": {
+    "A_fruit_state": {
+      "question": "How much fruit is on the seed during this step?",
+      "values": {
+        "whole_cherry": "intact fruit",
+        "depulped_mucilage_full": "skin off, all mucilage on (pulped natural, black honey)",
+        "depulped_mucilage_partial": "skin off, part of mucilage on — requires mucilage_retained_pct",
+        "depulped_mucilage_removed_fermentation": "mucilage degraded by fermentation then washed",
+        "depulped_mucilage_removed_mechanical": "demucilager (Becolsub, Ecomill, Deslim, DELVA)",
+        "depulped_mucilage_removed_enzymatic": "pectinase processing aid",
+        "parchment_hulled_wet": "wet-hulled at 20–24 % moisture (giling basah)",
+        "green": "post-milling stages (aging, decaf, barrel)"
+      },
+      "extra_fields": ["mucilage_retained_pct", "mucilage_removal_mode"]
+    },
+    "B_oxygen_regime": {
+      "values": {
+        "aerobic_open": "open tank, heap, bed, patio",
+        "submerged": "under water (O2-limited)",
+        "sealed_self_induced": "closed vessel, microbial CO2 displaces O2 (SIAF)",
+        "sealed_valve": "closed vessel with one-way valve/airlock",
+        "co2_flushed": "headspace purged with CO2 (carbonic maceration when whole cherry)",
+        "inert_gas_flushed": "N2 or Ar purge",
+        "vacuum": "evacuated bag/vessel"
+      },
+      "extra_fields": ["gas", "pressure_kpa"]
+    },
+    "C_temperature_regime": {
+      "values": {
+        "ambient_uncontrolled": "no control",
+        "controlled_constant": "setpoint °C held",
+        "cold": "< 15 °C fermentation",
+        "cold_hold_prefermentation": "pre-fermentative cold hold of intact cherry (CryoBloom, cold soak analogue)",
+        "stepped": "≥ 2 setpoints in sequence (dynamic)",
+        "thermal_shock": "deliberate hot/cold immersions across tissue",
+        "heated": "> 30 °C",
+        "frozen": "≤ 0 °C freezing of cherry"
+      },
+      "extra_fields": ["setpoints_c[]", "duration_h[]"]
+    },
+    "D_microbial_control": {
+      "values": {
+        "spontaneous": "native microbiota",
+        "backslopped": "own must/mosto/lixiviado from a previous batch",
+        "inoculated_yeast_sacch": "Saccharomyces cerevisiae / pastorianus (SafCoffee, LALCAFÉ)",
+        "inoculated_yeast_non_sacch": "Torulaspora, Pichia, Hanseniaspora, Meyerozyma, Candida, Yarrowia…",
+        "inoculated_lab": "Lactiplantibacillus plantarum, Leuconostoc, Pediococcus",
+        "inoculated_mold": "Aspergillus oryzae (koji), Rhizopus",
+        "inoculated_mixed": "yeast + LAB, SCOBY-type (unverified)",
+        "bioprotection": "Metschnikowia pulcherrima (MP-72) applied to intact cherry",
+        "indigenous_isolate": "terroir-isolated starter cultured off-farm",
+        "animal_gut": "civet, elephant, bird"
+      },
+      "extra_fields": ["inocula[] {organism, strain, product, supplier, dose, unit, rehydration, lot, regulatory_note}"]
+    },
+    "E_substrate_additions": {
+      "values": {
+        "none": "nothing added",
+        "own_coffee_derivative": "must, cascara, pulp, mucilage, leachate from the same coffee",
+        "processing_aid": "enzymes, salt brine, acids (tartaric), sugar as nutrient",
+        "exogenous_natural": "fruit, cacao pulp, spices, hops, wine must, panela",
+        "exogenous_flavouring": "extracts, essential oils, powders, synthetic flavourings"
+      },
+      "extra_fields": ["additions[] {substance, category, form, amount, unit, timing: pre_green|post_green, step_seq}"],
+      "regulatory_note": "This is the axis competitions regulate. BoP 2024 excluded 'foreign additives'; WCC 2024 bans additions after the green stage. Inoculated yeast status at BoP/CoE 2026 NOT retrieved — confirm with SCAP in writing."
+    },
+    "F_physical_interventions": {
+      "values": ["none", "chilling", "freezing", "hot_immersion", "cold_immersion", "agitation", "pressure", "ultrasound", "ozone_uv"]
+    },
+    "G_drying_regime": {
+      "values": {
+        "patio": "concrete/brick/tarp, sun",
+        "raised_bed": "mesh beds (African beds, paseras)",
+        "shaded_bed": "shade cloth / covered (slow dry)",
+        "greenhouse_solar": "parabolic, marquesina, tunnel, modular PC dryer",
+        "mechanical": "guardiola, static silo, vertical dryer",
+        "dark_room_dehumidified": "dark, cool, dehumidified room",
+        "two_stage_wet_hull": "to 20–24 %, hull, then to 12–13 %"
+      },
+      "extra_fields": ["regime_split_pct[]", "layer_depth_cm", "target_moisture_pct", "target_aw"]
+    },
+    "H_post_drying_conditioning": {
+      "values": ["reposo", "hermetic_storage", "aged_green", "monsooned", "barrel_aged", "decaffeinated"],
+      "extra_fields": ["duration_d", "container", "barrel_type", "decaf_process_id"]
+    },
+    "I_biological_passage": {
+      "values": ["none", "civet", "elephant", "bird_jacu", "monkey"]
+    },
+    "J_duration_derived": {"note": "total and per-step hours — derived, not an axis"},
+    "K_target_outcome_descriptor": {
+      "values": ["lactic", "acetic", "malic", "alcoholic_winey", "ester_fruit", "clean", "funky"],
+      "note": "NOT an axis. A 'lactic' or 'malic' label requires measured acid data or must be published as 'target profile'."
+    }
+  },
+  "step_types": ["reception", "sorting_flotation", "sanitation", "cold_hold", "freezing", "pulping", "demucilage", "fermentation", "immersion_hot", "immersion_cold", "inoculation", "addition", "washing", "soaking", "drying", "hulling_wet", "reposo", "storage", "aging", "monsooning", "barrel_aging", "decaf", "milling"],
+  "families": {
+    "W": "Washed (mucilage removed before drying) — fruit-state family",
+    "N": "Natural / dry (whole cherry dried) — fruit-state family",
+    "H": "Honey / pulped natural (skin off, mucilage dried on) — fruit-state family",
+    "WH": "Wet-hulled — fruit-state family",
+    "AN": "Anaerobic / sealed — oxygen-regime MODIFIER of W/N/H",
+    "CM": "Carbonic maceration — oxygen-regime modifier (whole cherry + CO2)",
+    "T": "Temperature-defined — temperature modifier",
+    "M": "Microbial control — inoculation/backslop modifier",
+    "E": "Substrate additions — co-ferment/infused (regulatory class)",
+    "P": "Physical/technological interventions",
+    "G": "Drying regimes (often marketed as processes)",
+    "X": "Post-drying conditioning (aged, monsooned, barrel)",
+    "Z": "Animal passage",
+    "L": "Proprietary/person-named labels (not mechanisms)",
+    "D": "Decaffeination (post-green class)"
+  },
+  "genuinely_distinct_mechanisms": [
+    "mucilage removal by fermentation vs mechanics vs enzymes",
+    "whole-cherry intracellular (carbonic) vs extracellular fermentation",
+    "wet-hulling at 20–24 % moisture",
+    "monsooning (green rehydration)",
+    "koji (amylolytic/proteolytic mould, not yeast/LAB)",
+    "thermal shock (thermal gradient across tissue)",
+    "co-fermentation (new sugars + new microbes)",
+    "infusion (flavour transfer without fermentation)",
+    "decaffeination",
+    "animal gut passage"
+  ]
+}

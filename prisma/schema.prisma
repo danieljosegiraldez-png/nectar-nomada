@@ -924,6 +924,18 @@ model Location {
   /// **Opcional a propósito**: sin él sólo se pierde una comprobación. Una misma
   /// tabla lleva rejilla y rango sin contradicción — como padre declaras tu
   /// rejilla, como hija tu sitio en la de tu padre.
+  ///
+  /// **Lo decidió Daniel el 2026-10-04**, sobre la propuesta de #621 §3.2 de volver
+  /// los cuatro `range*` obligatorios para una `Location` con madre `plot`: siguen
+  /// siendo opcionales. No es una omisión pendiente — si lo fuera, esta línea no
+  /// estaría aquí. Una sesión que lea sólo «opcional a propósito» puede leerlo como
+  /// un hueco y volver a proponerlo, que es exactamente lo que pasó con #621.
+  ///
+  /// El dato que hizo la decisión barata, y que habría que volver a medir si se
+  /// reabre: cuando se tomó, producción **no tenía ninguna planta con coordenada de
+  /// rejilla declarada**, así que no había una sola fila que migrar en ninguna de las
+  /// dos direcciones. Se midió con la consulta que llama a
+  /// `core.raiz_de_la_numeracion`, la misma función que usa el disparador.
   rangeRowFrom   Int? @map("range_row_from")
   rangeRowTo     Int? @map("range_row_to")
   rangePlantFrom Int? @map("range_plant_from")

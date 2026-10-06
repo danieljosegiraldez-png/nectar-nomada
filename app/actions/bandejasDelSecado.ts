@@ -6,7 +6,13 @@ import { getCurrentUser } from "../../lib/auth/session";
 import { bajarBandeja, BandejaError, cargarBandeja, moverBandeja } from "../../lib/traceability/bandejasDelSecado";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { DryingValidationError } from "../../lib/traceability/drying";
-import { CantidadDeSecadoInvalida, numeroOpcionalDeSecado } from "../beneficio/bandejas/errorDeSecado";
+import {
+  CantidadDeSecadoInvalida,
+  desenlaceDelSecado,
+  DesenlaceDeSecadoRequerido,
+  type DesenlaceDelSecado,
+  numeroOpcionalDeSecado,
+} from "../beneficio/bandejas/errorDeSecado";
 
 type Estado = { error?: string };
 
@@ -26,6 +32,7 @@ function textoOVacio(v: FormDataEntryValue | null): string | null {
  */
 function codigo(error: unknown): string {
   if (error instanceof CantidadDeSecadoInvalida) return "cantidad_invalida";
+  if (error instanceof DesenlaceDeSecadoRequerido) return "desenlace_requerido";
   if (error instanceof DryingValidationError) return "estado_salida_invalido";
   if (error instanceof BandejaError) return error.codigo;
   if (error instanceof TraceabilityAccessError) return "sin_acceso";
@@ -59,8 +66,12 @@ export async function bajarBandejaAction(_prev: Estado, formData: FormData): Pro
   // Se parsea ANTES de llamar al servicio: "abc" nunca debe llegar a
   // `bajarBandeja` convertido en `NaN` (fix round 1, hallazgo 1).
   let cantidad: number | null;
+  // Cómo terminó: sólo la última bandeja cierra el secado, así que sólo ella lo pide
+  // (auditoría farm-to-green R10, 2026-10-04).
+  let endedOutcome: DesenlaceDelSecado | null = null;
   try {
     cantidad = numeroOpcionalDeSecado(formData.get("quantity"));
+    if (esUltima) endedOutcome = desenlaceDelSecado(formData.get("endedOutcome"));
   } catch (error) {
     return { error: codigo(error) };
   }
@@ -76,6 +87,7 @@ export async function bajarBandejaAction(_prev: Estado, formData: FormData): Pro
         quantity: cantidad,
         unit: textoOVacio(formData.get("unit")),
         provenanceClass: "original_record",
+        endedOutcome,
       } : null,
     });
   } catch (error) {

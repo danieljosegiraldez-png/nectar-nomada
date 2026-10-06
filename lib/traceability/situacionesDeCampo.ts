@@ -252,6 +252,72 @@ export async function confirmarFotoDeSituacion(userAccountId: string, input: Con
   );
 }
 
+/**
+ * **Lo que pide atención hoy en una finca: las situaciones de sus jornadas SIN CERRAR.**
+ *
+ * Decisión de Daniel, 2026-10-04, y corrige al spec en vez de obedecerlo. El
+ * `2026-09-18-jornada-y-entrega-de-cosecha-design.md` ya decía quién ve estas situaciones
+ * (§3.5) y su §6 ya exigía las pruebas de permiso — que existen y pasan—, pero **su §3.6
+ * «Pantallas» enumeró tres pantallas y se olvidó de ésta**. Medido el 2026-10-04:
+ * `situacionesDeJornada` aparecía en **0** archivos de `app/`, con `detalleDeJornada` —que la
+ * misma pantalla sí usa— en 1 como control. O sea: diez pruebas en verde encima de una función
+ * que ninguna pantalla llamaba, y un recolector metiendo datos en un agujero.
+ *
+ * **Por finca y no por jornada, porque el punto es enterarse sin abrir nada** («donde no haya
+ * que ir a buscarlas», Daniel). Su hermana `situacionesDeJornada` se queda: sirve para repasar
+ * una jornada concreta, que es otra pregunta.
+ *
+ * **«Pide atención» es la jornada abierta, no una ventana de días.** La jornada ya lleva su
+ * `estado`, así que no se inventa un plazo que nadie ha acordado — la misma disciplina que
+ * `pendienteDeLaParcela`, que no inventa un plazo para el laboratorio porque no hay ninguno
+ * acordado.
+ *
+ * **Las más nuevas primero**, al revés que su hermana: aquélla recorre una jornada en orden
+ * cronológico para leerla entera; ésta contesta «qué ha pasado», y lo último es lo que importa.
+ *
+ * El permiso es el MISMO y a propósito: con `field_report:view` sobre la finca se ve todo; sin
+ * él, sólo lo propio. No se ensancha nada para pintar una banda.
+ *
+ * **Devuelve la zona horaria junto a las filas** porque la pantalla tiene que enseñar la hora
+ * donde ocurrió y no en UTC, y lo que la página ya tiene a mano (`fincaDeLaPagina`) no la trae.
+ * Una sola consulta en vez de que la pantalla haga otra.
+ */
+export async function situacionesDeLaFinca(userAccountId: string, fincaSiteId: string) {
+  const finca = await prisma.location.findUnique({
+    where: { id: fincaSiteId },
+    select: { id: true, classification: true, timezone: true },
+  });
+  if (!finca) throw new SituacionError("finca_no_encontrada");
+  const veTodo = await can(
+    userAccountId,
+    "view",
+    "field_report",
+    { scopeType: "location" as const, scopeRefId: finca.id },
+    finca.classification,
+  );
+  const { personId } = await prisma.userAccount.findUniqueOrThrow({
+    where: { id: userAccountId },
+    select: { personId: true },
+  });
+  const filas = await prisma.fieldEvent.findMany({
+    where: {
+      fieldSession: { jornadaDeCosecha: { fincaSiteId: finca.id, estado: "abierta" } },
+      ...(veTodo ? {} : { operatorPersonId: personId }),
+    },
+    orderBy: { occurredAt: "desc" },
+    include: {
+      eventKindValue: { select: { value: true } },
+      condicionDelDiaValue: { select: { value: true } },
+      operator: { select: { id: true, displayName: true } },
+      fieldSession: { select: { jornadaDeCosechaId: true, location: { select: { id: true, name: true } } } },
+      plotBlock: { select: { id: true, name: true } },
+      specimen: { select: { id: true, commonName: true } },
+      asset: { select: { id: true, mimeType: true } },
+    },
+  });
+  return { zona: finca.timezone, filas };
+}
+
 /** Lo reportado en una jornada: todo, con `field_report:view` sobre la finca; si no, sólo lo propio. */
 export async function situacionesDeJornada(userAccountId: string, jornadaId: string) {
   const jornada = await prisma.jornadaDeCosecha.findUnique({
