@@ -166,13 +166,17 @@ visto bueno. Y sigue sin medir `TRANSACCION_DEL_LINAJE` = `{ timeout: 60_000, ma
 Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
 (ámbito: la finca) a cada recolector con cuenta, para que anote su entrega en `/mis-entregas`.
 
-**Y medido el 2026-10-05, esta nota pedía el paso equivocado: no falta sólo el perfil, falta saber
-a quién.** El perfil `Recolector` **existe** (1 de 14) y `/mis-entregas` **existe**, pero hay **0
-personas con ese perfil**, **0 entregas registradas** y —lo que lo explica— **35 cosechas con 0
-operarios anotados**: `harvest_event.operator_person_id` está nulo en las 35. Así que nada en la
-base dice quién cosecha. Daniel va a dar los nombres; hay **23 cuentas activas** contra las que
-cruzarlos. **Y queda sin medir** si la pantalla de cosecha pide el operario: si no lo pide, dar el
-perfil no arregla nada y es un defecto, no una tarea suya.
+**Y medido el 2026-10-05: no falta sólo el perfil — la cadena entera no se ha usado nunca.** El
+perfil `Recolector` **existe** (1 de 14) y `/mis-entregas` **existe**, pero están a **cero las seis
+tablas** de esa familia: `jornada_de_cosecha`, `asignacion_de_jornada`, `entrega_de_cosecha`,
+`recepcion_de_cereza`, `lote_desde_recepcion` y `merma_de_recepcion`. Una entrega cuelga de una
+jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil. Daniel da los
+nombres; hay **23 cuentas activas** contra las que cruzarlos.
+
+
+**Y un defecto DISTINTO, que no hay que confundir con lo de arriba:** la cosecha no registra quién
+la operó —35 de 35 con `operator_person_id` nulo, porque la acción no manda un campo que el
+servicio sí guarda—. Es trabajo, no decisión: `PENDING_IMPLEMENTATIONS/024`.
 
 #### Kiva Estate: crear sus DOS terrenos (de Daniel)
 
