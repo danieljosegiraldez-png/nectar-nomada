@@ -1,0 +1,10 @@
+URL,Problem
+https://pmc.ncbi.nlm.nih.gov/articles/PMC11405557,"Returned a bot-check page, no content (not circumvented)"
+"https://pmc.ncbi.nlm.nih.gov/articles/PMC8371688 (H. uvarum and P. kudriavzevii, wet coffee)",Same bot-check page
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8371688/,Redirected to the page above
+https://vri.lamolina.edu.pe/publicaciones/impact-of-single-and-mixed-cultures-of-yeasts-and-lactic-acid-bacteria-in-coffee-fermentation-and-cup-quality/,Only title and navigation returned
+https://www.lallemand.com/lallemand-lalcafe-intenso-yeast-wins-best-new-product-award/ and https://www.lallemand.com/en/news/lalcafe-yeast-present-at-international-coffee-week/,"Fetched but carried no strain, dose or temperature data (news items only)"
+https://www.novonesis.com/en/biosolutions/food-and-beverages/beverages/coffee,Fetched; gave only generic claims and no yeast dose
+https://metacast.app/... SCA Expo Lectures 2018 episode,"Fetched; panel description only (Batlle, Peterson, Hill), no product data"
+"https://en.angelyeast.com/... , Laffort, AB Mauri, Biotec, Wyeast, White Labs, Royal Coffee, Cafe Imports","No relevant coffee page found, so none fetched"
+"Lalvin TDS PDFs (Scott Labs, Murphy and Son, Lallemand wine catalog)","Appeared in search results but were not fetched; they are wine documents, not coffee data"
