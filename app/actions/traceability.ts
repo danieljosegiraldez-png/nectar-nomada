@@ -38,6 +38,7 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
+import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 import { moveLotToStorage } from "../../lib/traceability/storage";
@@ -781,10 +782,21 @@ export async function endDryingFormAction(formData: FormData): Promise<void> {
   if (!user) redirect("/login");
 
   const lotId = String(formData.get("lotId") ?? "");
+  // Cómo terminó (auditoría farm-to-green R10, 2026-10-04): esta puerta no lo pasaba y el reposo
+  // no arrancaba nunca. Se lee antes del servicio, con la regla de la última bandeja, y el
+  // `redirect` va fuera de cualquier `try`.
+  let endedOutcome: DesenlaceDelSecado | null = null;
+  try {
+    endedOutcome = desenlaceDelSecado(formData.get("endedOutcome"));
+  } catch (error) {
+    if (!(error instanceof DesenlaceDeSecadoRequerido)) throw error;
+  }
+  if (endedOutcome === null) redirect(`/lots/${lotId}?error=desenlace_requerido`);
   try {
     await endDryingRun(user.userAccountId, {
       dryingRunId: String(formData.get("dryingRunId") ?? ""),
       endedAt: new Date(),
+      endedOutcome,
       outputLotCode: String(formData.get("outputLotCode") ?? ""),
       outputLotType: String(formData.get("outputLotType") ?? "") as never,
       quantity: emptyToNullNumber(formData.get("quantity")),

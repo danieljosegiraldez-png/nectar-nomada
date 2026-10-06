@@ -243,6 +243,12 @@ export interface EndDryingRunInput {
    * siendo válido, porque obligarlo invalidaría todo lo anterior al 2026-09-16
    * y porque bloquear se esquiva en el patio. Sin esto, el lote no reposa — y
    * el motor lo dice con `SECADO_SIN_OBJETIVO_ALCANZADO` en vez de callarlo.
+   *
+   * **Desde el 2026-10-04 las dos pantallas de cierre lo PIDEN** (la ficha y la última bandeja;
+   * decisión de Daniel tras la auditoría farm-to-green R10): hasta ese día ninguna lo pasaba, así
+   * que el reposo no arrancaba nunca desde la app. El servicio lo sigue aceptando vacío por lo de
+   * arriba —lo anterior y las importaciones—; la regla de la pantalla vive en
+   * `desenlaceDelSecado` (`app/beneficio/bandejas/errorDeSecado.ts`).
    */
   endedOutcome?: DryingOutcome | null;
 }

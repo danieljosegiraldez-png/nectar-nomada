@@ -6,7 +6,7 @@ import { bajarBandejaAction, cargarBandejaAction, moverBandejaAction } from "../
 import { BotonDeEnvio } from "../BotonDeEnvio";
 import { CampoNumerico } from "../CampoNumerico";
 import type { BandejaEnCorrida, PosicionParaMover } from "../../../lib/traceability/bandejasDelSecado";
-import { claveDeErrorDeSecado } from "../../beneficio/bandejas/errorDeSecado";
+import { claveDeErrorDeSecado, DESENLACES_DEL_SECADO } from "../../beneficio/bandejas/errorDeSecado";
 
 type Fila = Omit<BandejaEnCorrida, "desde" | "hasta"> & { desde: string; hasta: string | null };
 
@@ -66,6 +66,11 @@ export function BandejasDelSecado({ lotId, dryingRunId, filas, disponibles, pued
             <input type="hidden" name="lotId" value={lotId} />
             <input type="hidden" name="dryingRunTrayId" value={f.id} />
             <input type="hidden" name="esUltima" value="1" />
+            <label>{t("desenlace")}<select name="endedOutcome" defaultValue="" required aria-describedby="desenlace-secado-ayuda">
+              <option value="" disabled>{t("elegirDesenlace")}</option>
+              {DESENLACES_DEL_SECADO.map((d) => <option key={d} value={d}>{t(`desenlace_${d}` as "desenlace_target_reached")}</option>)}
+            </select></label>
+            <p id="desenlace-secado-ayuda" className="nn-muted">{t("desenlaceAyuda")}</p>
             <label>{t("codigoSalida")}<input name="outputLotCode" type="text" required /></label>
             <label>{t("tipoSalida")}<select name="outputLotType" defaultValue="" required aria-describedby="salida-secado-ayuda">
               <option value="" disabled>{t("elegirTipoSalida")}</option>
