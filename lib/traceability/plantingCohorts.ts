@@ -21,6 +21,7 @@ import { resolveFarmSiteId } from "./fincas";
 import { celdasDelRango, type Rango } from "../territorio/rejilla";
 import { celdasDeLaForma, tableroDe } from "./formaDeLaParcela";
 import { densidadDelLote } from "./densidadPorMarco";
+import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -650,8 +651,15 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // here with nothing means the row vanished between the two queries.
   if (!location) throw new LocationAccessError("location_not_found");
 
+  // **ADR-196: una selección no resta.** El lote responde por lo que ocurre en sus
+  // selecciones, así que lo que se siembra o entra en producción en una
+  // microparcela cuenta en la ficha de su madre. Hacia los DESCENDIENTES
+  // solamente —`soloDescendientes`—: al revés, la ficha de una microparcela
+  // mostraría las cosechas de su madre y contaría dos veces el mismo café.
+  const emparentadas = await ubicacionesEmparentadas(locationId, prisma, { soloDescendientes: true });
+
   const cohorts = await prisma.plantingCohort.findMany({
-    where: { locationId },
+    where: { locationId: { in: emparentadas } },
     include: { cultivarValue: { select: { id: true, value: true } } },
     orderBy: [{ status: "asc" }, { plantedAt: "desc" }],
   });
@@ -680,7 +688,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // (ver el comentario de arriba): no se reutiliza
   // `listPlantingEventsForLocation`, que protege con `lot:view`.
   const eventosDeProduccionCrudos = await prisma.plantingEvent.findMany({
-    where: { locationId, eventType: "entered_production", plantingCohortId: { not: null } },
+    where: { locationId: { in: emparentadas }, eventType: "entered_production", plantingCohortId: { not: null } },
     select: {
       id: true,
       plantingCohortId: true,
