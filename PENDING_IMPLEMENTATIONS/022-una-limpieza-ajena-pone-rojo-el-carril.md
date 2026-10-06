@@ -126,11 +126,25 @@ mide que revocar marca y audita, y la ubicación es incidental.
 Los otros dos caminos se descartan por lo que la ficha ya decía: el 1 **esconde** que otra suite
 dejó basura, y el 3 cambia el `relanza` del helper, que está puesto a propósito.
 
-**Lo que el arreglo NO cubre, dicho para que no se cuente por hecho.** La misma suite hace
-`project.findFirstOrThrow({ select: { id: true } })` y cuelga de ese proyecto tres concesiones de
-ámbito `project`. Es **la misma forma** y está **latente**, no viva: hoy nada borra los ámbitos de
-un proyecto sembrado, así que no hay quién choque. Se deja escrito en vez de arreglarlo a ciegas,
-porque crear un `Project` propio arrastra más campos obligatorios y es un cambio mayor que éste.
+**La gemela, que primero dejé abierta y luego cerré — con la frase falsa que me hizo dejarla.**
+La misma suite hacía `project.findFirstOrThrow({ select: { id: true } })` y colgaba de ese proyecto
+tres concesiones de ámbito `project`: **la misma forma**, latente sólo porque hoy nada borra los
+ámbitos de un proyecto sembrado, así que no había con quién chocar.
+
+**La primera versión de esta sección decía que no se arreglaba porque «crear un `Project` propio
+arrastra más campos obligatorios y es un cambio mayor que éste». Es falso.** Medido el 2026-10-06
+sobre `model Project`: exige **un** campo, `name`. La frase era una suposición escrita como razón, y
+una razón falsa es peor que ninguna porque cierra la pregunta. Arreglada: la suite crea su proyecto y
+lo borra, con sus ámbitos, por el mismo razonamiento que con el sitio.
+
+**Y de paso deja exacta una aserción de esa misma suite:** «reuses the existing scope rather than
+minting a duplicate» cuenta los ámbitos del proyecto y espera **1**. Sobre un proyecto compartido,
+otra suite que concediera ahí la rompería sin que nada lo explicara — la misma familia de fallo por
+vecino que esta ficha persigue. Sobre el propio, el 1 no depende de nadie.
+
+**La regla que esto confirma, y que ya estaba escrita:** al arreglar un defecto de clase, enumerar
+sus hermanos EN EL MISMO ÁMBITO antes de dar el arreglo por hecho. Yo lo enumeré y aun así lo dejé
+abierto, apoyado en un coste que no había medido.
 
 **Y por qué no se escribió un guardia de la clase.** De las 11 apariciones sin `where`, casi todas
 sólo **leen** una fila sembrada, y eso es inocuo: un guardia que las marcara abortaría sobre código

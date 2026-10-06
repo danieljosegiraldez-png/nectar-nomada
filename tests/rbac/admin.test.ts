@@ -25,6 +25,7 @@ const created = {
   userAccountIds: [] as string[],
   personIds: [] as string[],
   locationIds: [] as string[],
+  projectIds: [] as string[],
 };
 
 let adminAccountId: string;
@@ -77,7 +78,25 @@ beforeAll(async () => {
   created.assignmentIds.push(a.id);
 
   projectViewerRoleId = (await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Project Viewer" } })).id;
-  projectId = (await prisma.project.findFirstOrThrow({ select: { id: true } })).id;
+  // **Un proyecto PROPIO, por la misma razón que el sitio de arriba.** Esto era
+  // `prisma.project.findFirstOrThrow({ select: { id: true } })` —sin `where` y sin `orderBy`—, y de
+  // ese proyecto ajeno cuelgan tres concesiones de ámbito `project`. Es la gemela del defecto de
+  // arriba, y estaba latente sólo porque hoy nada borra los ámbitos de un proyecto sembrado: no
+  // había con quién chocar. Se cierra igual — **arreglar una instancia y dejar su gemela al lado**
+  // es una clase que esta casa ya pagó.
+  //
+  // **Y cuesta una línea, al contrario de lo que yo escribí al dejarlo abierto:** la ficha 022 decía
+  // que crear un `Project` propio «arrastra más campos obligatorios y es un cambio mayor». Medido el
+  // 2026-10-06 sobre `model Project`: exige **uno**, `name`. La frase era falsa y queda corregida
+  // en la ficha.
+  //
+  // **Además deja exacta una aserción de esta misma suite.** «reuses the existing scope rather than
+  // minting a duplicate» cuenta los ámbitos de este proyecto y espera **1**: sobre un proyecto
+  // compartido, otra suite que concediera ahí la rompería sin que nada lo explicara; sobre el
+  // propio, el 1 no depende de vecinos.
+  const proyecto = await prisma.project.create({ data: { name: `ADMINTEST proyecto ${RUN}` } });
+  created.projectIds.push(proyecto.id);
+  projectId = proyecto.id;
 
   const sitio = await prisma.location.create({
     data: {
@@ -122,6 +141,16 @@ afterAll(async () => {
       await prisma.scope.deleteMany({ where: w(propios.map((s) => s.id)) });
     }
     await prisma.location.deleteMany({ where: w(created.locationIds) });
+  }
+  if (created.projectIds.length) {
+    // Mismo razonamiento que con el sitio: el proyecto es nuevo y nadie más puede tener un ámbito
+    // sobre él, así que borrarlo no deja huérfana ninguna asignación ajena.
+    const propios = await prisma.scope.findMany({
+      where: { scopeType: "project", scopeRefId: { in: created.projectIds } },
+      select: { id: true },
+    });
+    if (propios.length) await prisma.scope.deleteMany({ where: w(propios.map((x) => x.id)) });
+    await prisma.project.deleteMany({ where: w(created.projectIds) });
   }
 });
 
