@@ -80,6 +80,14 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-06 · Kiva Estate tiene su geografía y sus dos fincas, y Luis, Kenis y Chris sus permisos (#668, #670)
+
+Producción, **sin ningún borrado**, cada cifra releída por una lectura independiente. `Panamá → Coclé → Penonomé → Toabre → {Finca 1, Finca 2}` (provincias 2→3, localidades 4→6): el `site` que se llamaba como su organización es **Finca 1** y **Finca 2** se creó con `crearFinca` (`151f91e2…`). Bob y Robert Huerbsch eran la misma persona y quedaron unidos (Huerbsch 4→3, personas 19→18, las 14 asignaciones intactas); Chris, el 5-10. Luis: Farm Manager en las dos fincas. Kenis: sus dos apiarios — el guion pedía `Apiario Finca Rosina` y `Apiario Las Nubes`, nombres a los que los llevaría un renombrado **que nunca se aplicó**; hoy son `Apiario 1/2 — Finca Rosina` (#668). A Chris se le retiró su Platform Admin **global** con `revokeRole` (la fila queda `revoked`); conserva Café, Apiario y Cerro Azul.
+
+**Lo que enseñó:** un `tsc` en un worktree sin `node_modules` sale 0 sin comprobar nada; y las filas «repetidas» de Chris eran **tres ámbitos distintos** —mi `join` imprimía `(plataforma)` donde el proyecto no resolvía—: casi retiro justo las que describían lo que Daniel quería.
+
+**Queda tuyo:** aprobar el diseño del #672 (un beneficio sin finca) y su ADR-197; **`Las Nubes` tiene `organization_id` nulo en producción**, y siete guiones de datos llevan `Lote N` donde un renombrado dirá `Parcela N`, tres de ellos **crean una parcela nueva en vez de abortar**.
+
 ### 2026-10-06 · El cierre y la alarma de backup mentían, y los dos del lado que tranquiliza (#659, #661, #663, #666)
 
 **Tres defectos de una clase en `scripts/cierre-de-sesion.sh`, y el tercero lo metí yo arreglando los dos primeros.** Decía «SIN EMPUJAR» de una rama empujada: comparaba `HEAD` con `origin/main`, o sea medía «sin fusionar», que es el estado normal de un PR abierto (#659). Su gemela leía `$?` después de un `if !`, que es **siempre 0**, así que «detrás de su remoto» no se distinguía de «al día» (#661). Hoy son cuatro estados con severidades distintas, y el flip-test produce los tres mundos de verdad en vez de simularlos.
@@ -104,17 +112,6 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 > **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
 > `docs/SESSION_STATE_ARCHIVE.md`, «Auditoría de §3»), una falsa —archivada— y ocho con cifras rancias, corregidas aquí con su fecha.
 
-
-#### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
-
-El guion está arreglado y en `main` (#593, #594, #595) y **la consolidación no se ha aplicado**: la
-ficha del 13-08 tiene la membresía a Finca Rosina y la del 17-09 el correo y la cuenta activa con su
-Platform Admin. El ensayo contra producción confirma el plan: 2 asignaciones a mover, la duplicada
-referenciada sólo por su cuenta en 52 columnas. Falta que Daniel corra la misma línea con `--aplicar`
-y lea lo que el ensayo ahora imprime: el desglose «N propias + 2 movidas» y **las referencias a la
-cuenta que va a borrar**. Si esa cuenta tiene historia el guion se niega a propósito — borrarla
-pondría a NULL el actor de su auditoría (`ON DELETE SET NULL`), que es lo que §35 prohíbe. Lo que no
-tiene es prueba de conducta: los guardias leen la fuente y lo dicen en su cabecera.
 
 #### El aviso de floración está construido y no se puede alcanzar (PR #587, #590)
 
@@ -191,21 +188,9 @@ que miden es justo la data que se va.
 la operó —35 de 35 con `operator_person_id` nulo, porque la acción no manda un campo que el
 servicio sí guarda—. Es trabajo, no decisión: `PENDING_IMPLEMENTATIONS/024`.
 
-#### Kiva Estate: crear sus DOS terrenos (de Daniel)
+#### Kiva Estate: falta su beneficio, y `Apiario NN-04-TOABRE-KIVAEST` sigue sin padre
 
-Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear los **dos** terrenos de **Kiva
-Estate**: el primero desde `/fincas` → «sin terreno», el segundo desde
-`/fincas/nueva?organizacion=<id>`.
-
-
-**Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
-`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y **sólo dos
-ensayan**: los dos `data:*` simulan y escriben con `--apply`; **`rbac:grant` NO simula** —sin
-argumentos lista, con argumentos concede en el acto—. Medido el 2026-10-05: 0 banderas de ensayo en
-`scripts/grant-role.ts` contra 4 en cada uno de los otros dos, y escribe vía `grantRole()`, no con un
-`prisma.*.create` que un grep de escrituras vería. Si la descripción «DEMO placeholder» sigue o no en esa fila
-**no se ha medido** —leer producción de Neon está prohibido desde aquí—: el guión la comprueba él
-mismo y **aborta sin escribir** si alguien puso otro texto, que es por qué se puede correr a ciegas.
+Sus dos fincas ya existen bajo Toabre (2026-10-06, arriba). **El beneficio no se puede crear todavía**: `crearBeneficio` exige que el padre sea un `site` (`beneficios.ts:94`), y Daniel decidió que un beneficio puede existir sin finca. El diseño está en #672 con sus tres decisiones tomadas; **falta su aprobación y el ADR-197**. El apiario de Toabre cuelga de nada y nadie lo pidió: re-colgarlo cambia el alcance de cualquier asignación sobre él por ADR-144.
 
 
 #### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
@@ -256,10 +241,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Sin constar: si se cargó `protocolos/miel-competencia-100.json`** (#213). Salió de la
   fila de §4 del protocolo de cata: §4 es «lo que NO se vuelve a proponer» y una duda
   abierta ahí se entierra. Lo encontró otra sesión revisando el PR.
-- **Queda el acceso de Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`,
-  perfil `Apiary Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
-  `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
-  Daniel que corra algo, buscarlo aquí** — y lo ya hecho está en §4, no aquí.
 - **Área y rendimiento: bloqueado en el dueño, no en construir nada** (dos viñetas fundidas y
   **re-medidas el 2026-10-04** contra la base compartida; las cifras viejas decían «seis lotes» y
   «0 de 8», y ninguna de las dos era la cuenta). `area_hectares` vive en `core.location`, y **de
