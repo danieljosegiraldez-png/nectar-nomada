@@ -18,6 +18,7 @@ import {
   compareRunToTargets,
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
+import { agregarPaso, publicarVersion } from "../../lib/recetas/pasos";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
@@ -32,13 +33,27 @@ let lotId: string;
 let recipeId: string;
 let v1Id: string;
 let runOnV1: string;
+/** La v2 del fixture: nace borrador, y «only the newest version is offered» la publica (Parte 2a, tarea 3). */
+let v2Id: string;
 const created = {
   recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[],
   runIds: [] as string[], transformationIds: [] as string[], measurementIds: [] as string[],
   // Las versiones que crean las pruebas de R8 (Parte 1): su auditoría cuelga del id de la VERSIÓN, no
   // del de la receta, y por eso `recipeIds` no la alcanza.
   versionIds: [] as string[],
+  // Los pasos que les pone `conUnPaso`: su auditoría cuelga del id del PASO.
+  stepIds: [] as string[],
 };
+
+/** Publicar exige al menos un paso (I9): un lavado sin ejes, lo mínimo que una receta puede decir. Guarda el id para la auditoría. */
+async function conUnPaso(recipeVersionId: string) {
+  const tipo = await prisma.variableCatalogValue.findFirstOrThrow({
+    where: { value: "washing", catalog: { key: "tipo_paso" } },
+    select: { id: true },
+  });
+  const paso = await agregarPaso(gestor, { recipeVersionId, despuesDeSeq: null, paso: { stepTypeValueId: tipo.id } });
+  created.stepIds.push(paso.id);
+}
 
 beforeAll(async () => {
   admin = (
@@ -67,6 +82,11 @@ beforeAll(async () => {
   recipeId = recipe.id;
   v1Id = recipe.versions[0]!.id;
   created.recipeIds.push(recipe.id);
+  // Parte 2a (tarea 3, diseño §3.3): la v1 nace borrador. Una versión con una corrida encima es una versión que se
+  // publicó: así se usa, y así la ofrece el selector en «only the newest version is offered». Con un paso, porque publicar
+  // una versión sin pasos se rechaza (I9, `version_sin_pasos`).
+  await conUnPaso(v1Id);
+  await publicarVersion(gestor, v1Id);
 
   // A run operated against version 1, so the history has something to protect.
   const run = await prisma.fermentationRun.create({
@@ -111,11 +131,12 @@ afterAll(async () => {
   });
   const versionIds = [...new Set([...created.versionIds, ...porNombre.map((v) => v.id)])];
   if (versionIds.length) {
-    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: versionIds } }) });
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...versionIds, ...created.stepIds] } }) });
     // En orden de FK, aunque las tres claves sean CASCADE: fases y metas antes que las versiones, y las
     // versiones antes que las recetas (que se borran más abajo, por el prefijo de RUN).
     await prisma.processRecipePhase.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
     await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
+    await prisma.processRecipeStep.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
     await prisma.processRecipeVersion.deleteMany({ where: w(versionIds) });
   }
   // By RUN prefix rather than tracked id alone — see ADR-104 and the same
@@ -130,7 +151,7 @@ afterAll(async () => {
   await cuentas.limpiar();
 
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
-  expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: versionIds } }) })).toBe(0);
+  expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: [...versionIds, ...created.stepIds] } }) })).toBe(0);
 });
 
 describe("a name may be edited; targets may not", () => {
@@ -166,8 +187,11 @@ describe("creating version 2", () => {
       [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.0 }],
       "subimos el objetivo",
     );
+    v2Id = v2.id;
     expect(v2.version).toBe(2);
     expect(v2.targets[0]!.targetValue?.toNumber()).toBe(4);
+    // Parte 2a (tarea 3, diseño §3.3): nace borrador.
+    expect(v2.status).toBe("draft");
   });
 
   it("leaves the run on version 1 comparing against 3.8, not 4.0", async () => {
@@ -179,8 +203,10 @@ describe("creating version 2", () => {
   });
 
   it("records which version it supersedes", async () => {
+    // Por el id de la v2 y no «el último de toda la base»: desde la Parte 2a (tarea 3), `tests/recetas/pasos.test.ts` crea
+    // versiones a la vez en el mismo carril, y «el último» podía ser de otro archivo.
     const event = await prisma.auditEvent.findFirst({
-      where: { operation: "process_recipe_version.create" },
+      where: { operation: "process_recipe_version.create", entityId: v2Id },
       orderBy: { occurredAt: "desc" },
     });
     expect(event?.reason).toBe("supersedes_version_1");
@@ -200,10 +226,13 @@ describe("only the newest version is offered for a new run", () => {
     // Before versions could be created this returned everything approved,
     // which was the same thing because there was only ever one. The moment v2
     // exists, offering both asks the operator to know which is current.
-    const offered = await listRecipeVersionsForLot(admin, lotId);
-    const mine = offered.filter((v) => v.recipeId === recipeId);
-    expect(mine.length).toBe(1);
-    expect(mine[0]!.version).toBe(2);
+    const mias = async () =>
+      (await listRecipeVersionsForLot(admin, lotId)).filter((v) => v.recipeId === recipeId).map((v) => v.version);
+    // Parte 2a (tarea 3): la v2 nace borrador, y un borrador no se ofrece: sigue la v1. Publicada, la v2 y sólo ella.
+    expect(await mias()).toEqual([1]);
+    await conUnPaso(v2Id);
+    await publicarVersion(gestor, v2Id);
+    expect(await mias()).toEqual([2]);
   });
 });
 

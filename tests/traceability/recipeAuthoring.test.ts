@@ -15,6 +15,7 @@ import {
   listRecipeVersionsForLot,
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
+import { agregarPaso, publicarVersion } from "../../lib/recetas/pasos";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
@@ -26,9 +27,19 @@ let admin: string;
 let gestor: string;
 let organizationId: string;
 let lotId: string;
-const created = { recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[] };
+const created = { recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[], stepIds: [] as string[] };
 
 const oneTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
+
+/** Publicar exige al menos un paso (I9): un lavado sin ejes, lo mínimo que una receta puede decir. Guarda el id para la auditoría. */
+async function conUnPaso(recipeVersionId: string) {
+  const tipo = await prisma.variableCatalogValue.findFirstOrThrow({
+    where: { value: "washing", catalog: { key: "tipo_paso" } },
+    select: { id: true },
+  });
+  const paso = await agregarPaso(gestor, { recipeVersionId, despuesDeSeq: null, paso: { stepTypeValueId: tipo.id } });
+  created.stepIds.push(paso.id);
+}
 
 beforeAll(async () => {
   admin = (
@@ -56,6 +67,16 @@ afterAll(async () => {
   const w = (ids: string[]) => assertDefinedWhere({ id: { in: ids } });
   if (created.recipeIds.length) {
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: created.recipeIds } }) });
+  }
+  // Parte 2a (tarea 3): publicar una versión deja su evento con el id de la VERSIÓN, y agregar un paso, con el del PASO; ni uno ni
+  // otro lo alcanza `recipeIds`. La versión, por el prefijo de RUN, como la receta de abajo.
+  const versiones = await prisma.processRecipeVersion.findMany({
+    where: assertDefinedWhere({ recipe: { name: { contains: RUN } } }),
+    select: { id: true },
+  });
+  const huellas = [...versiones.map((v) => v.id), ...created.stepIds];
+  if (huellas.length) {
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: huellas } }) });
   }
   // Deleted by RUN prefix, not only by tracked id — ADR-104.
   //
@@ -95,14 +116,23 @@ describe("creating a recipe", () => {
     expect(recipe.versions.length).toBe(1);
     expect(recipe.versions[0]!.version).toBe(1);
     expect(recipe.versions[0]!.targets.length).toBe(2);
-    // Approved on creation, so it is immediately selectable — a draft nobody
-    // can attach would be a recipe that does nothing.
-    expect(recipe.versions[0]!.status).toBe("approved");
+    // Parte 2a (tarea 3, diseño §3.3): nace BORRADOR. Hasta el 2026-10-03 nacía `approved` «para poder elegirla en
+    // seguida»; con la receta con pasos, una versión se escribe en borrador y se PUBLICA, y sólo publicada se ofrece.
+    expect(recipe.versions[0]!.status).toBe("draft");
   });
 
-  it("offers the new version when starting a run on that organization's batch", async () => {
-    const versions = await listRecipeVersionsForLot(admin, lotId);
-    expect(versions.map((v) => v.recipe.name)).toContain(`RECIPE Lavado ${RUN}`);
+  it("does not offer the draft for a run; once published, it does", async () => {
+    const ofrecidas = async () => (await listRecipeVersionsForLot(admin, lotId)).map((v) => v.recipe.name);
+    expect(await ofrecidas()).not.toContain(`RECIPE Lavado ${RUN}`);
+    // Control: la misma lectura, con la versión publicada, sí la ofrece: el «no» de arriba no es una lista vacía.
+    const recipe = await prisma.processRecipe.findFirstOrThrow({
+      where: { name: `RECIPE Lavado ${RUN}` },
+      include: { versions: true },
+    });
+    // Sin pasos no se publica (I9, `version_sin_pasos`): se le pone uno.
+    await conUnPaso(recipe.versions[0]!.id);
+    await publicarVersion(gestor, recipe.versions[0]!.id);
+    expect(await ofrecidas()).toContain(`RECIPE Lavado ${RUN}`);
   });
 
   it("writes an audit row", async () => {

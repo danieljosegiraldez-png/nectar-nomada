@@ -35,6 +35,7 @@ import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/client";
 import { puedeEditarBeneficioEnOrganizacion } from "./locations";
 import { exigeAutoriaDeReceta } from "../recetas/autoria";
+import { RecipeError } from "../recetas/errorDeReceta";
 
 export class ProcessTargetError extends Error {}
 
@@ -321,7 +322,19 @@ export function validateFases(fases: CreateRecipeInput["fases"]) {
   }
 }
 
-export function validateTargets(targets: CreateRecipeInput["targets"]) {
+/**
+ * Las reglas de una meta: la de la versión y, desde la Parte 2a, la de un paso (tarea 3, diseño §3.2).
+ *
+ * Una meta de PASO lleva `recipeStepId` y no `phase`: la fase sale del tipo de su paso al escribirla (`lib/recetas/pasos.ts`),
+ * o queda nula si el tipo no la tiene (un lavado). Su paso tiene que estar en `pasosDeEstaVersion`, los de la versión que se
+ * escribe; si no, `paso_de_otra_version`. Sin esa lista no hay contra qué comprobar, y una meta con paso se rechaza igual.
+ */
+export function validateTargets(
+  targets: ReadonlyArray<
+    Omit<CreateRecipeInput["targets"][number], "phase"> & { phase?: ProcessPhase | null; recipeStepId?: string | null }
+  >,
+  pasosDeEstaVersion?: ReadonlySet<string>,
+) {
   if (targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
 
   for (const t of targets) {
@@ -342,7 +355,9 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
     if (!bounds) throw new ProcessTargetError("unknown_variable");
     if (t.unit !== bounds.canonicalUnit) throw new ProcessTargetError("wrong_unit_for_variable");
     for (const v of [t.targetValue, t.minValue, t.maxValue]) {
-      if (v != null && (v < bounds.min || v > bounds.max)) {
+      // Parte 2a (tarea 3, I9): `NaN` compara falso con todo, así que `v < min || v > max` lo dejaba pasar —y una meta con `NaN`
+      // se compararía contra lecturas para siempre—. Un valor que no es un número finito no es posible.
+      if (v != null && (!Number.isFinite(v) || v < bounds.min || v > bounds.max)) {
         throw new ProcessTargetError("target_out_of_physical_range");
       }
     }
@@ -352,7 +367,13 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
     // «cada 6 horas» es una contradicción, no una preferencia. Se rechaza en
     // vez de guardarla: una fila así haría que la pantalla prometiera lecturas
     // periódicas de un momento que no se repite.
-    if (!t.phase) throw new ProcessTargetError("phase_required");
+    // Parte 2a (tarea 3, diseño §3.2): una meta de paso no declara fase, y su paso tiene que ser de esta versión. Una de la
+    // versión sigue exigiendo la suya, como desde el 2026-09-27.
+    if (t.recipeStepId != null) {
+      if (!pasosDeEstaVersion?.has(t.recipeStepId)) throw new RecipeError("paso_de_otra_version");
+    } else if (!t.phase) {
+      throw new ProcessTargetError("phase_required");
+    }
     if (t.everyHours != null && t.moment !== "during") {
       throw new ProcessTargetError("cadence_only_while_running");
     }
@@ -370,7 +391,10 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
   for (const t of targets) {
     // La fase entra en la clave: la misma variable y el mismo momento pueden repetirse en
     // fermentación y en secado sin ser un duplicado — son dos cosas distintas.
-    const key = `${t.phase}:${t.variable}:${t.moment}`;
+    // Parte 2a (tarea 3, diseño §3.2): una meta de paso es única en SU paso —la base lo dice con el índice parcial
+    // `(recipe_step_id, variable, moment)` de la tarea 1—, así que la fiebre y la fermentación pueden pedir las dos pH inicial.
+    const key =
+      t.recipeStepId != null ? `paso:${t.recipeStepId}:${t.variable}:${t.moment}` : `${t.phase}:${t.variable}:${t.moment}`;
     if (seen.has(key)) throw new ProcessTargetError("duplicate_variable_and_moment");
     seen.add(key);
   }
@@ -394,12 +418,15 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
         name,
         description: input.description?.trim() || null,
         organizationId: input.organizationId,
+        // La RECETA nace activa: de su estado sólo se lee `archived` (`abrirProceso`). Lo que nace borrador es su versión.
         status: "approved",
         createdBy: userAccountId,
         versions: {
           create: {
             version: 1,
-            status: "approved",
+            // Parte 2a (tarea 3, diseño §3.3): la v1 nace BORRADOR. Se le escriben los pasos (`lib/recetas/pasos.ts`) y la
+            // publica `publicarVersion`; hasta entonces el selector (`listRecipeVersionsForLot`) no la ofrece.
+            status: "draft",
             expectedHours: input.expectedHours ?? null,
             createdBy: userAccountId,
             targets: {
@@ -656,15 +683,27 @@ export async function createRecipeVersion(
           targetMoistureMaxPct: f.targetMoistureMaxPct,
         }));
 
-  const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
-
   const version = await prisma.$transaction(async (tx) => {
+    // Parte 2a (tarea 3, diseño §3.3): el número sale DENTRO de la transacción, con la receta en `FOR UPDATE`. Calculado fuera
+    // y sin bloqueo, dos versiones a la vez leían el mismo máximo y la segunda chocaba con `@@unique([recipeId, version])`: un
+    // P2002 que ninguna acción traduce (reconocimiento u1, S7). Con la fila bloqueada, la segunda espera y lee el número que
+    // dejó la primera. `max + 1`, no `count + 1`, por lo que dice la cabecera de esta función.
+    await tx.$queryRaw`SELECT id FROM traceability.process_recipe WHERE id = ${recipeId}::uuid FOR UPDATE`;
+    const ultima = await tx.processRecipeVersion.findFirst({
+      where: { recipeId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const nextVersion = (ultima?.version ?? 0) + 1;
+
     const version = await tx.processRecipeVersion.create({
       data: {
         recipeId,
         version: nextVersion,
         notes: notes?.trim() || null,
-        status: "approved",
+        // Parte 2a (tarea 3, diseño §3.3): nace BORRADOR. La publica `publicarVersion` (`lib/recetas/pasos.ts`); hasta
+        // entonces el selector (`listRecipeVersionsForLot`, que sólo ofrece `approved`) no la ofrece.
+        status: "draft",
         expectedHours: expectedHours ?? null,
         createdBy: userAccountId,
         targets: {
@@ -708,7 +747,7 @@ export async function createRecipeVersion(
         after: version,
         // The fact worth searching the audit log for later: which version
         // superseded which, and when.
-        reason: `supersedes_version_${recipe.versions[0]?.version ?? "none"}`,
+        reason: `supersedes_version_${ultima?.version ?? "none"}`,
         sourceInterface: "traceability.processTargets",
       },
       tx,

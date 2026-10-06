@@ -682,6 +682,10 @@
       "archivo": "lib/traceability/formaDeLaParcela.ts",
       "razon": "Modulo de dominio: la FORMA declarada de un lote, como union de rectangulos (D9, 2026-10-03). La mitad pura —`celdasDeLaForma`, `celdasSinPlantar`, `tableroDe`— no toca la base; las dos que escriben exigen `requireLocationAttributeAccess` sobre la RAIZ de la numeracion ANTES de escribir, no sobre el sitio que pase quien llama: con el permiso de una microparcela no se cambia la forma de su madre (D3). Cada escritura lleva su AuditEvent en la MISMA transaccion (`location.declare_shape_range` y `location.remove_shape_range`). El disparador `plot_shape_range_exigir_forma_en_la_rejilla` de la migracion 20261002210000 es la red en la base: exige que el trozo quepa en el tablero. Quitar un trozo AVISA de las plantas que quedan fuera en vez de rechazar (§7.4), y con la forma vacia devuelve 0 y no «todas», porque «no se sabe» no es «esta vacio» (ADR-080).",
       "verificado": "2026-10-03"
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "razon": "Módulo de dominio: la receta como lista ordenada de pasos (Parte 2a, tarea 3, 2026-10-04). Sus seis operaciones exportadas autorizan antes de leer o escribir —las cinco que escriben, con `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso `lot:approve_exception` del Coffee Process Manager, V16); `pasosDeLaVersion`, con esa misma regla o con `requireLotAccess(manage)` sobre un lote de la organización, como `getRecipeForEditor`, y, si la receta es Libre, con `requireLotAccess(view)` sobre el lote de cada proceso que la usa (R24)—, y `agregarPaso` y `actualizarPaso` piden además `requireLotAccess(view)` sobre el lote de cada lectura de cierre que un fin cita (R6), y toda escritura va en una transacción que bloquea la versión y vuelve a leer su estado."
     }
   ],
   "reciben_transaccion": [
@@ -806,6 +810,10 @@
     {
       "archivo": "lib/traceability/lotProcess.ts",
       "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote."
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "razon": "Parte 2a, tarea 3 (2026-10-04): sus ayudantes privados (`bloquearBorrador`, `idsEnOrden`, `apartar`, `colocar`, `escribirHijos`, `borrarHijos`, `leerPasos`) reciben el `tx` de la transacción que abre la propia operación exportada, después de autorizar; `leerPasos` recibe el cliente global cuando sólo se lee. Ninguno se exporta ni autoriza por su cuenta."
     }
   ],
   "operaciones_sin_patron": [
