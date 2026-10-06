@@ -125,11 +125,32 @@ if ! bash scripts/backup/backup-db.sh >>"$LOG" 2>&1; then
   exit 1
 fi
 
-if ! bash scripts/backup/verify-restore.sh >>"$LOG" 2>&1; then
-  # Worse than a failed dump, and worth different wording: a set exists and
-  # cannot be restored, which is the state ADR-055 says must never pass
-  # unnoticed.
-  announce_failure "a backup was written but did NOT restore"
+# Worse than a failed dump, and worth different wording: a set exists and
+# cannot be restored, which is the state ADR-055 says must never pass unnoticed.
+#
+# **Y el código 2 es «no pude medir», que NO es «no restauró».** El 2026-10-05
+# esta comprobación anunció «did NOT restore» sobre un backup que
+# `verify-restore.sh` acababa de demostrar idéntico: murió formateando su
+# mensaje de éxito, y aquí sólo se veía un código distinto de cero. La alarma
+# sigue sonando en los dos casos —no poder comprobar un backup merece un `/fail`
+# igual que no poder restaurarlo— pero deja de decir cuál de los dos fue cuando
+# no lo sabe.
+#
+# **Y se captura con `|| CODIGO=$?`, NO con `$?` dentro de un `if !`.** La
+# primera versión de este bloque hacía lo segundo, y dentro del `then` de un
+# `if ! cmd` el `$?` vale **0** —la negación es lo que tuvo éxito—, así que
+# habría caído SIEMPRE en el `else` y dicho «did NOT restore»: el defecto que
+# este cambio viene a arreglar, reintroducido en su propio arreglo. Reproducido
+# antes de corregirlo: `if ! bash -c "exit 2"` da `$? = 0`, y
+# `bash -c "exit 2" || c=$?` da 2.
+CODIGO_VERIFY=0
+bash scripts/backup/verify-restore.sh >>"$LOG" 2>&1 || CODIGO_VERIFY=$?
+if [ "$CODIGO_VERIFY" -ne 0 ]; then
+  if [ "$CODIGO_VERIFY" -eq 2 ]; then
+    announce_failure "a backup was written and RESTORED, but its census could not be computed — unverified, not broken"
+  else
+    announce_failure "a backup was written but did NOT restore"
+  fi
   exit 1
 fi
 
