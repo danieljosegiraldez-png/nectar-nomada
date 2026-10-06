@@ -4921,3 +4921,23 @@ microparcela es `schema.prisma:941`; la 923 que se citaba es el comentario del b
 
 **Las ocho tareas de la rejilla están en `main`** (#584–#601) y encima trece PR del 2026-10-03. Lo que cambió es el concepto, dicho por Daniel: la rejilla es un **tablero de direcciones** —filas × plantas—, no una subdivisión; la **forma** del lote es opcional y son **varios rectángulos**, porque un lote no siempre es rectangular; la **densidad sale del marco de plantación** y el área se **deriva de la rejilla** en vez de pedírsela; y marcar fuera de la forma **guarda y avisa**. Se retiraron `computePlotDensity` y los dos pendientes de área.
 **Decisiones suyas abiertas:** si la coordenada de un plantón exige tablero, y los dos puntos del esquema que su lego del 2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`. Y si el rango de la microparcela sigue «opcional a propósito» (`schema.prisma:923`) o pasa a obligatorio como pide #621 §3.2.
+
+### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
+
+**Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
+**Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
+
+**Archivada el 2026-10-05**, por decisión de Daniel, para apagar el aviso del presupuesto: el estado
+estaba en 415/450 y el filtro `>=` lo dispara en el 90 % (405). **Lo que dejaba abierto NO se archivó
+con ella:** los 12 veredictos de `docs/arquitectura/permiso-por-dominio.json` y la compuerta del
+`action` siguen en §3 de `SESSION_STATE.md` — comprobado antes de mover, no supuesto.
+
+### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
+
+**Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
+**Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
+
+**Archivada el 2026-10-05**, por la misma razón. **Lo que dejaba abierto se rescató a §1 ANTES de
+moverla:** la Parte 2a tiene plan en la rama `recetas-parte-2a` y espera el visto bueno de Daniel.
+No estaba en §1 —medido, 0 menciones— y una entrega archivada entierra las preguntas que lleva al
+final: así es como este archivo envejece sin avisar.

@@ -67,10 +67,10 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 - **Si dos corridas abiertas en una CAMA son un conflicto de datos.** Para un tanque sí; con varias
   bandejas puede ser lo normal. Hoy el recuento por unidad las marca como conflicto en los dos casos.
 - **Si una receta de fermentación debe OBLIGAR a medir pH.** Hoy no obliga.
+- **Si se construye la Parte 2a de las recetas** (la receta con pasos). Tiene plan en la rama
+  `recetas-parte-2a` y no se construye sin tu visto bueno. Rescatado al archivar su Parte 1.
 - **Si la coordenada de un plantón exige tablero**, y los dos puntos del esquema que tu lego del
   2026-10-03 deja sin resolver — en `docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`.
-- **Si el rango de la microparcela sigue «opcional a propósito»** (`schema.prisma:941`, su comentario
-  en la 923) o pasa a obligatorio como pide el #621 §3.2.
 
 ## 2. Lo que se entregó — más nuevo primero
 
@@ -79,21 +79,11 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 **Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
 **Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» estaba vacío en los 108, no en 105** —las 3 filas con `entity_id` de un lote son de `entity_type = 'lot'`, un sexto tipo que la consulta ni pedía—; **arreglado en #648**, con 104 de 108 estrenando historial.
 **Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
-### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
-
-**Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
-**Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
-
 ### 2026-10-05 · El Historial del lote: la lectura preguntaba por el id del lote (#648)
 
 `getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
 **Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
 **Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
-### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
-
-**Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
-**Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
-
 ## 3. Bloqueado, y en qué
 
 > **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
@@ -356,12 +346,9 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
   `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
 
-- **El enrollado de la selección: 2 de 6 tareas, en la rama `enrollado-impl`** (2026-10-05).
-  Diseño en `main` (#621), plan en el **#650** — con §3.2 **decidida en contra** (dos de sus
-  tres rechazos ya existían) y las tareas 4 y 6 **enmendadas antes de ejecutar**, porque
-  afirmaban campos que no existen. Hechas: el **ADR-196** y el conector con
-  `soloDescendientes`. **Faltan las 3-6**, las cinco consultas de `locationId` pelado.
-  **Queda tuyo:** fusionar el #650 y decir si se sigue.
+- **El enrollado de la selección: 2 de 6 tareas, en `enrollado-impl`** (2026-10-05). Diseño en
+  `main` (#621), plan y el porqué de cada enmienda en el **#650**; hechos el **ADR-196** y el
+  conector. **Queda tuyo:** fusionar el #650 y decir si se sigue.
 
 - **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
   `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
