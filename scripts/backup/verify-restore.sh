@@ -166,12 +166,55 @@ fi
 echo "  la copia pliega las mayúsculas acentuadas, como producción"
 
 # --- the actual verification ----------------------------------------------
+# **El censo se reintenta, y si no se puede calcular se dice ESO, no otra cosa.**
+# Incidente del 2026-10-05: `row_census` o su lectura fallaron, `set -e` mató el
+# guion, y `run-scheduled.sh` —que sólo ve un código distinto de cero— anunció
+# «a backup was written but did NOT restore». No poder MEDIR y no poder
+# RESTAURAR son dos cosas, y la alarma decía la segunda. El código 2 existe para
+# que quien la emite pueda distinguirlas.
 echo "Recomputing row census on the restored copy..."
-row_census "$RESTORED" > "$WORK_DIR/restored-rowcounts.tsv"
+CENSO_HECHO=0
+for INTENTO in 1 2 3; do
+  if row_census "$RESTORED" > "$WORK_DIR/restored-rowcounts.tsv" 2>"$WORK_DIR/censo-error.txt"; then
+    CENSO_HECHO=1
+    break
+  fi
+  echo "  intento $INTENTO del censo falló: $(tr -d '\n' < "$WORK_DIR/censo-error.txt" | tail -c 160)" >&2
+  sleep 2
+done
+if [ "$CENSO_HECHO" -eq 0 ]; then
+  echo "" >&2
+  echo "SIN VEREDICTO — la copia restauró, pero el censo no se pudo calcular en 3 intentos." >&2
+  echo "  No es lo mismo que «no restauró»: la restauración terminó con $RESTORE_ERRORS error(es)." >&2
+  {
+    echo ""
+    echo "verified_at_utc:  $(date -u +%Y-%m-%dT%H%M%SZ)"
+    echo "verified_result:  SIN VEREDICTO — el censo no se pudo calcular"
+  } >> "$SET_DIR/MANIFEST.txt"
+  exit 2
+fi
 
 if diff -u "$SET_DIR/rowcounts.tsv" "$WORK_DIR/restored-rowcounts.tsv" > "$WORK_DIR/census.diff"; then
-  TABLES="$(wc -l < "$SET_DIR/rowcounts.tsv" | tr -d ' ')"
-  ROWS="$(awk -F'\t' '{s+=$2} END {print s+0}' "$SET_DIR/rowcounts.tsv")"
+  # **Las cifras del mensaje se leen de la copia LOCAL, no del destino.** Y eso
+  # es lo que de verdad falló el 2026-10-05: el `diff` de arriba YA había
+  # probado que las dos son idénticas, y el guion murió un renglón después
+  # haciendo `wc -l` sobre el `rowcounts.tsv` del destino —que vive en Google
+  # Drive— con `wc: stdin: read: Resource deadlock avoided`. `set -e` lo mató
+  # **dentro de la rama PASS**, así que no imprimió su PASS ni escribió su
+  # `verified_result`, y la alarma tradujo el código a «no restauró» sobre un
+  # backup que acababa de demostrarse idéntico.
+  #
+  # Que se probó así: `row_census` no contiene ningún `wc`, y la rama FAIL
+  # escribe `census-mismatch.diff`, que en ese set NO existe — luego el `diff`
+  # había pasado.
+  #
+  # El archivo local es idéntico por definición: lo acaba de decir el `diff`. Y
+  # aunque la lectura falle, **el veredicto no cambia**: son cifras de adorno, y
+  # un fallo al formatear no puede volver rojo lo que ya está verde.
+  TABLES="$(wc -l < "$WORK_DIR/restored-rowcounts.tsv" 2>/dev/null | tr -d ' ' || true)"
+  ROWS="$(awk -F'\t' '{s+=$2} END {print s+0}' "$WORK_DIR/restored-rowcounts.tsv" 2>/dev/null || true)"
+  [ -n "$TABLES" ] || TABLES="(no se pudo contar)"
+  [ -n "$ROWS" ] || ROWS="(no se pudo sumar)"
   echo ""
   echo "PASS — restored copy matches the source exactly."
   echo "  $TABLES tables, $ROWS rows, every count identical."
