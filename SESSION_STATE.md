@@ -166,6 +166,18 @@ visto bueno. Y sigue sin medir `TRANSACCION_DEL_LINAJE` = `{ timeout: 60_000, ma
 Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el perfil **Recolector**
 (ámbito: la finca) a cada recolector con cuenta, para que anote su entrega en `/mis-entregas`.
 
+**Y medido el 2026-10-05: no falta sólo el perfil — la cadena entera no se ha usado nunca.** El
+perfil `Recolector` **existe** (1 de 14) y `/mis-entregas` **existe**, pero están a **cero las seis
+tablas** de esa familia: `jornada_de_cosecha`, `asignacion_de_jornada`, `entrega_de_cosecha`,
+`recepcion_de_cereza`, `lote_desde_recepcion` y `merma_de_recepcion`. Una entrega cuelga de una
+jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil. Daniel da los
+nombres; hay **23 cuentas activas** contra las que cruzarlos.
+
+
+**Y un defecto DISTINTO, que no hay que confundir con lo de arriba:** la cosecha no registra quién
+la operó —35 de 35 con `operator_person_id` nulo, porque la acción no manda un campo que el
+servicio sí guarda—. Es trabajo, no decisión: `PENDING_IMPLEMENTATIONS/024`.
+
 #### Kiva Estate: crear sus DOS terrenos (de Daniel)
 
 Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear los **dos** terrenos de **Kiva
@@ -315,17 +327,16 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   sitio** — `budget`, `presupuesto` y `proposal` dan **cero** en el esquema, y
   `Project` no tiene dinero, ni plan, ni aprobación. Eso es modelo nuevo y una
   decisión, no improvisación.
-- **Lotes 5 y 6** — bloqueado en el dueño. Dijo que tienen 200 plantones cada
-  uno, y eso **contradice** la nota del evento del Lote 4, que afirma que los
-  otros 400 de Cafelino siguen sin sembrar. 200+200 son exactamente esos 400. No
-  se registró nada hasta saber si son ese material o uno anterior y distinto; de
-  la respuesta dependen la variedad, la fecha, y si hay que corregir esa nota.
-- **Si los 200 Caturra del Lote 4 llevan marca de calidad** — hoy no la llevan,
-  que aquí significa «no hay motivo para dudar». El dueño avisó que puede
-  cambiar los conteos de cada lote, así que puede que corresponda `provisional`.
-- **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
-  solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
-  `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
+- **La siembra, contestada el 2026-10-05 — esta nota decía 200+200 y era falso.** Son **600
+  Caturra** (400 + 200), **115 Geisha**, y el **Pink Bourbon** llega esta semana: lo único sin
+  sembrar. El **Lote 4 ya tiene sus 200** —corrección suya del 2026-08-29, con su razón en la
+  auditoría— así que **los 400 irían al Lote 5**, la única parcela de Rosina vacía; **eso es un
+  supuesto**, dio totales sin nombrar parcelas. **Falta:** registrar los 400 y los 115 («Geisha»,
+  no «Gesha»: el catálogo tiene las dos), y **crear el Lote 7, que no existe** (Rosina tiene 1–6;
+  9 y 10 son de Cafelino).
+- **`app.nectarnomada.com`: decidido el 2026-10-05, y lo que queda es trabajo, no decisión.**
+  Medido: **6** archivos citan la URL de Vercel y `AUTH_URL` sale del **entorno** (1 mención en
+  `lib`/`app`), así que es DNS + variable, no código. **El DNS y la variable son suyos.**
 - **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
   por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
   del **lote**: 15 modelos gobernados y **13 excepciones** declaradas con su razón.
@@ -358,6 +369,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Construir herramienta de reconciliación de medios | Todavía no hay fotos reales. Ver `PENDING_IMPLEMENTATIONS/002` |
 | Pedirle a Daniel que corra `sensory:create-protocol` | El protocolo de cata **ya está en producción**, v1 y v2, confirmado por él el 2026-09-18 |
 | Pedirle la v2 del protocolo sensorial, o `apiary:load-protocol` v1 | **Ya los corrió** (2026-09-18 y 2026-09-16, `apiario-campo-v1`), confirmados por él. No se verificó contra la base y no se puede: leer producción está prohibido, es su palabra |
+| Preguntar si los 200 Caturra del Lote 4 llevan marca de calidad | **Decidido por Daniel el 2026-10-05: sin marca, el conteo es firme** — la ausencia es literal, no una omisión. Asimetría medida, por si algún día importa: los Lotes 1–3 llevan 833 Catuaí con `provisional` y sin fecha; el 4 tiene fecha (2026-08-01) y ninguna marca |
 | Dar de alta a Bob Huerbsch | **Ya entró**, lo dijo Daniel el 2026-09-17. Queda Kenis, que sigue en §3 |
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
