@@ -67,7 +67,30 @@ elif [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$HEAD_SHA" "$MAIN_SHA" 2>/dev/null; then
   mal "detrás de origin/main por $(git rev-list --count "$HEAD_SHA".."$MAIN_SHA") commit(s) — sincroniza"
 elif [ -n "$MAIN_SHA" ] && git merge-base --is-ancestor "$MAIN_SHA" "$HEAD_SHA" 2>/dev/null; then
-  mal "$(git rev-list --count "$MAIN_SHA".."$HEAD_SHA") commit(s) SIN EMPUJAR en $RAMA_TXT"
+  # **«Por delante de main» NO es «sin empujar», y durante un tiempo esta línea
+  # dijo lo segundo midiendo lo primero.** Comparaba `HEAD` sólo con
+  # `origin/main`, así que una rama empujada y esperando turno de fusión —el
+  # estado NORMAL de un PR abierto en este repositorio— salía con una ✗ que
+  # decía «SIN EMPUJAR». El 2026-10-06 el informe acabó en «3 cosa(s) que
+  # arreglar» con **cero** que fueran de quien cerraba: ésta era falsa y las
+  # otras dos, de worktrees ajenos que el propio script dice no tocar. Un
+  # guardia cuyas banderas rojas son todas falsas o intocables enseña a ignorar
+  # el informe entero, que es lo que `~/.claude/CLAUDE.md` llama un guardia que
+  # nunca puede pasar.
+  #
+  # La propiedad que importa son DOS, no una: ¿está empujado? y ¿está fusionado?
+  # La primera se mide contra la contrapartida remota de la rama, nunca contra
+  # `main`. Se dicen por separado.
+  POR_DELANTE=$(git rev-list --count "$MAIN_SHA".."$HEAD_SHA")
+  ARRIBA=$(git rev-parse --verify --quiet "@{u}" 2>/dev/null || true)
+  if [ -z "$ARRIBA" ]; then
+    mal "$POR_DELANTE commit(s) en $RAMA_TXT y la rama NO tiene remoto: nada los respalda"
+  elif [ "$ARRIBA" != "$HEAD_SHA" ]; then
+    SIN_EMPUJAR=$(git rev-list --count "@{u}".."$HEAD_SHA")
+    mal "$SIN_EMPUJAR commit(s) SIN EMPUJAR en $RAMA_TXT (y $POR_DELANTE por delante de origin/main)"
+  else
+    nota "$POR_DELANTE commit(s) por delante de origin/main en $RAMA_TXT, empujados y esperando fusión"
+  fi
 else
   mal "$RAMA_TXT y origin/main han divergido"
 fi
