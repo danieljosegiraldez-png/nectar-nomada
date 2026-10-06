@@ -8,7 +8,7 @@ import {
 } from "../../../lib/beneficio/curvaDeLote";
 import { ejesDeLaCurva } from "../../../lib/beneficio/ejesDeLaCurva";
 import type { ClaveDePerfil } from "../../../lib/beneficio/perfiles";
-import { riesgoDeEsperar } from "../../../lib/beneficio/riesgoDeEsperar";
+import { riesgoDeEsperar, sostieneLaCita } from "../../../lib/beneficio/riesgoDeEsperar";
 import {
   VARIABLES_DE_CURVA,
   colocarPuntos,
@@ -288,12 +288,22 @@ export async function CurvaDeLote({
   // Qué sugiere la ÚLTIMA lectura si se espera, y sólo si hay UNA última (`ultimaLectura`: con varias en el
   // mismo instante no la hay) y la matriz es la del perfil de este lote (`riesgoDeEsperar`).
   const ultima = ultimaLectura(curva.lecturas);
-  const riesgo = ultima ? riesgoDeEsperar(pedida.variable, ultima.value, perfilDelLote) : null;
+  const citable = ultima ? riesgoDeEsperar(pedida.variable, ultima.value, perfilDelLote) : null;
+  // **Dibujar el registro y usarlo como fundamento de una interpretación son juicios distintos**
+  // (`PENDING_IMPLEMENTATIONS/021`, decisión de Daniel del 2026-10-02). La lectura se pinta siempre
+  // —abajo, marcada si su instrumento no está verificado— y aquí se decide si además puede
+  // SOSTENER la cita: una de instrumento fallido no sostiene ninguna, y una con la revisión vencida
+  // no sostiene las de grado `CRITICAL`, que son tres de las ocho bandas. `null` de confianza no
+  // degrada nada, que es el caso de todas las lecturas de hoy.
+  const riesgo = citable && sostieneLaCita(ultima?.confianza ?? null, citable.severidad) ? citable : null;
   const envoltura = riesgo ? BANDAS_QUE_SE_PINTAN.get(riesgo.banda) : undefined;
   // La guía de Daniel (columna «Qué hace el operario» de §1), **si ya la rellenó**: hoy ninguna celda lo está y esto es
   // `undefined`. Vacía o sólo espacios es «no hay registro», nunca una frase.
   const guia = riesgo?.queHaceElOperario?.trim();
   const puntos = colocarPuntos(curva, margen);
+  // Cuántos puntos se dibujan sin poder sostener nada. Si hay alguno, la pantalla lo DICE: un punto
+  // marcado sin leyenda es un adorno que nadie puede interpretar.
+  const sinVerificar = puntos.filter((p) => p.confianza === "UNCALIBRATED").length;
   const banda = curva.banda;
   // Qué se puede afirmar sobre las lecturas y la banda: lo decide UNA función (ver `JuicioDeBanda`).
   const juicio = juicioDeBanda(curva, puntos);
@@ -396,7 +406,7 @@ export async function CurvaDeLote({
             // Triángulo en el borde, apuntando hacia donde quedó el dato.
             <polygon
               key={i}
-              className="nn-curva-punto nn-curva-punto-lejos"
+              className={`nn-curva-punto nn-curva-punto-lejos${p.confianza === "UNCALIBRATED" ? " nn-curva-punto-sin-verificar" : ""}`}
               points={
                 p.fuera === "arriba"
                   ? `${p.x},${p.y - 7} ${p.x - 6},${p.y + 5} ${p.x + 6},${p.y + 5}`
@@ -406,11 +416,11 @@ export async function CurvaDeLote({
           ) : p.fueraDeBanda === true ? (
             <polygon
               key={i}
-              className="nn-curva-punto nn-curva-punto-fuera"
+              className={`nn-curva-punto nn-curva-punto-fuera${p.confianza === "UNCALIBRATED" ? " nn-curva-punto-sin-verificar" : ""}`}
               points={`${p.x},${p.y - 6} ${p.x + 6},${p.y} ${p.x},${p.y + 6} ${p.x - 6},${p.y}`}
             />
           ) : (
-            <circle key={i} className="nn-curva-punto" cx={p.x} cy={p.y} r={4.5} />
+            <circle key={i} className={`nn-curva-punto${p.confianza === "UNCALIBRATED" ? " nn-curva-punto-sin-verificar" : ""}`} cx={p.x} cy={p.y} r={4.5} />
           ),
         )}
       </svg>
@@ -475,6 +485,11 @@ export async function CurvaDeLote({
         </>
       )}
       {fueraDeEscala > 0 ? <p className="nn-muted">{t("curvaFueraDeEscala", { n: fueraDeEscala })}</p> : null}
+      {/* El registro se conserva y se pinta; lo que no hace es sostener ninguna afirmación. Sin esta
+          línea el punto marcado no diría por qué lo está. */}
+      {sinVerificar > 0 ? (
+        <p className="nn-muted nn-curva-sin-verificar">{t("curvaRiesgoSinVerificar")}</p>
+      ) : null}
       {riesgo && envoltura ? (
         <div className="nn-curva-riesgo">
           <p>

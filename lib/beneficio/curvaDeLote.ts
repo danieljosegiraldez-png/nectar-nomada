@@ -56,6 +56,12 @@
 export interface PuntoDeCurva {
   readonly x: number;
   readonly y: number;
+  /**
+   * La confianza de la lectura que produjo este punto, tal cual (ver `LecturaDeCurva.confianza`).
+   * Viaja en el punto y no se re-empareja por índice con `lecturas`: la alineación es 1:1 hoy, y
+   * una alineación implícita es justo la clase de supuesto que se rompe en silencio.
+   */
+  readonly confianza?: DataConfidence | null;
 }
 
 /**
@@ -105,10 +111,28 @@ export type Banda =
   /** `minValue === maxValue`: no hay rango contra el que escalar. Ver el encabezado. */
   | { readonly tipo: "banda_de_ancho_cero" };
 
+/**
+ * La confianza que la verificación del instrumento impone sobre una lectura, o `null` si no impone
+ * nada (`SIN_INSTRUMENTO`). `import type`, así que se borra al compilar y este módulo sigue puro.
+ */
+import type { DataConfidence } from "./ph";
+
 /** Una lectura tal como llegó: instante y valor, sin escalar. */
 export interface LecturaDeCurva {
   readonly occurredAt: Date;
   readonly value: number;
+  /**
+   * **Lo que la verificación del instrumento permite afirmar sobre esta lectura**
+   * (`PENDING_IMPLEMENTATIONS/021`). Opcional, y ausente **no** es «dudosa»: quien no la pase no
+   * pierde nada, porque `sostieneLaCita` trata `null` y `undefined` como «no impone nada» — que es
+   * el caso de todas las lecturas de hoy, cuyo `instrument_id` nadie ha rellenado.
+   *
+   * `UNCALIBRATED` es la que importa: su instrumento falló el contraste o nunca se contrastó, el
+   * motor de veredictos la excluye, y la curva **la dibuja marcada y sin interpretarla** — decisión
+   * de Daniel del 2026-10-02. Dibujar el registro y usarlo como fundamento de una interpretación
+   * requieren juicios distintos.
+   */
+  readonly confianza?: DataConfidence | null;
 }
 
 export interface Curva {
@@ -309,6 +333,7 @@ export function curvaDeLote(input: {
   const puntos = lecturas.map((l): PuntoDeCurva => ({
     x: t1 === t0 ? ancho / 2 : ((l.occurredAt.getTime() - t0) / (t1 - t0)) * ancho,
     y: escalaY(l.value, escalaMin, escalaMax, alto),
+    confianza: l.confianza,
   }));
 
   return { puntos, banda, ancho, alto, lecturas, rango, eleccion };
