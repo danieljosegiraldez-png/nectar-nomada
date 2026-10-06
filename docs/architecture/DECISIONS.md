@@ -12732,3 +12732,54 @@ hoy» es peor que una ausencia declarada.
 - Las cifras de `docs/arquitectura/inventario-de-acceso.md` **no se mueven** (596 operaciones, 165
   archivos): el script cuenta por función, no por consulta. La razón de la allowlist sí cambió, de
   «cinco recuentos» a «tres».
+
+## ADR-196 — Una selección no resta
+
+**Fecha:** 2026-10-05 · **Spec:** `docs/superpowers/specs/2026-10-03-la-seleccion-no-resta-design.md`
+
+**Contexto.** Un microlote, un bloque o una planta nombran **parte de la rejilla de su lote**, y el
+lote sigue respondiendo por lo que ocurre en ellos. Lo que cambia entre niveles es el **nivel de
+atención, acción e impacto**, no la identidad: la misma planta es «hilera 12, planta 30» del lote
+mire quien mire. De Daniel, 2026-10-03, con la metáfora del lego: «microparcela o microlote **no
+como una parte del lote, es una selección del lote**», y «el lote sigue relevante».
+
+**Decisión.** El lote enrolla los hechos de sus selecciones, y lo hace **hacia los descendientes**.
+
+**Corolario que caza errores: las áreas no se suman.** Si el rendimiento del lote incluye el de su
+microlote, el divisor sigue siendo las hectáreas **del lote**. La microparcela está *dentro*, no *al
+lado*; sumar las dos áreas sería tratarla como una parte, que es el error que esta regla existe para
+impedir.
+
+**Qué enrolla el lote, y qué no.** Decisión de Daniel, 2026-10-03: lo que cruza físicamente el
+límite, más la producción y las plantas.
+
+| hecho | ¿el lote responde por su microparcela? |
+|---|---|
+| intervenciones y su carencia, floración, cosecha | sí |
+| rendimiento, cohortes de siembra, eventos de producción | sí |
+| especímenes y trampas | sí |
+| muestras, calicatas de suelo, fotos, jornadas de campo | **no** — se toman en un punto y son de ese punto |
+| bloques | **no** — un bloque es una selección de SU parcela; listarlo en la madre lo haría parecer suyo |
+
+Las tres primeras son las tres donde algo cruza: un producto aplicado y su carencia, una floración,
+un residuo. Las que no, son observaciones de un punto. **Esta frontera se escribe aquí porque antes
+no estaba dicha en ninguna parte, y por eso parecía un olvido en vez de una decisión.**
+
+**La dirección es hacia abajo, y es una decisión aparte** (Daniel, 2026-10-05).
+`ubicacionesEmparentadas` devuelve también ascendientes, a propósito, porque la carencia los
+necesita: «una cosecha de la parcela madre puede llevar café de la microparcela tratada, y al revés».
+Para el rendimiento, las cohortes, los eventos de producción y los especímenes **no**: una ficha de
+microparcela que mostrara las cosechas de su madre contaría dos veces el mismo café. Se pide con
+`{ soloDescendientes: true }` sobre la misma función, no con una función nueva: duplicar el recorrido
+es cómo se pierde la regla.
+
+**Un hecho heredado se marca, nunca se mezcla.** El rendimiento del lote distingue lo propio de lo de
+cada selección, con su nombre. **Un total no es una medición si no se puede desarmar** — la misma
+regla que esta casa aplica en `loteNoVisible` y la que cerró `PENDING_IMPLEMENTATIONS/019`.
+
+**Consecuencias.** Cinco consultas pasan de `locationId` pelado a los descendientes: cohortes,
+rendimiento y eventos de producción en `lib/traceability/plantingCohorts.ts`, las trampas en el mismo
+archivo, y las plantas en `lib/traceability/specimens.ts`. Las cuatro lecturas que **no** enrollan
+—`listSoilProfilesForLocation`, `listLandAssets`, `listSamplesForLocation`, `listFieldSessions`— se
+quedan como están, y tienen guardia propio: el lado de «no enrolla» es el que una sesión futura rompe
+por simetría.

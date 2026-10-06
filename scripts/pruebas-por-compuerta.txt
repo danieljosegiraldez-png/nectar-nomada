@@ -16,6 +16,8 @@
 # @grupo: base-sembrada
 tests/territorio/rejillaEnLaBase.test.ts
 tests/territorio/microparcelaConRango.test.ts
+tests/territorio/la-seleccion-no-resta.test.ts
+tests/territorio/lo-que-no-enrolla.test.ts
 tests/territorio/rangosDeBloque.test.ts
 tests/territorio/plantonEnLaRejilla.test.ts
 tests/territorio/formaDelLote.test.ts
