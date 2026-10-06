@@ -3478,6 +3478,7 @@
     "curvaBandaAlReves": "The recipe declares its range backwards (minimum greater than maximum): the band is not drawn and nothing is claimed about which readings are inside or outside, because the curve would come out mirrored. The readings are drawn anyway, from the lowest to the highest. Tell whoever manages the recipe so it can be fixed.",
     "curvaBandaAlRevesCorto": "range declared backwards in the recipe: readings are not judged",
     "curvaRiesgoMarca": "Néctar Nómada criterion",
+    "curvaRiesgoSinVerificar": "Unverified instrument: recorded, not interpreted.",
     "curvaRiesgoDice": "with your latest reading (pH {ph}), the data suggests:",
     "curvaRiesgoDiceSiSeEstanca": "if the pH stalls where it is today (your latest reading: {ph}), the data suggests:",
     "curvaRiesgoDeDondeSale": "Where this comes from",

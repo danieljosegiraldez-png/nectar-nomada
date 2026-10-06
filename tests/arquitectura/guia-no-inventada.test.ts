@@ -241,7 +241,8 @@ const consultarReal = (ph: number) => riesgoDeEsperar("ph", ph, "WASHED_STANDARD
 /** El módulo real SIN `queHaceElOperario`, pase lo que pase en el real: la base de los controles. */
 const sinGuia = (ph: number): Riesgo | null => {
   const r = consultarReal(ph);
-  return r && { perfil: r.perfil, banda: r.banda, riesgo: r.riesgo };
+  // `severidad` viaja tal cual: este helper quita SÓLO `queHaceElOperario`, que es lo que mide.
+  return r && { perfil: r.perfil, banda: r.banda, riesgo: r.riesgo, severidad: r.severidad };
 };
 
 /** `sinGuia` con `queHaceElOperario` añadido a las bandas que se digan. */

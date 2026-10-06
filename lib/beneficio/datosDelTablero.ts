@@ -10,6 +10,7 @@
 import { prisma } from "../db";
 import { lotWhereFromVisibility, resolveLotVisibility } from "../traceability/lots";
 import { estadosDeInstrumentoPorMedicion, listarEquipos } from "../equipos/equipos";
+import { confianzaPorVerificacion } from "../equipos/verificacion";
 import { entradaDelLote } from "./entradaDelLote";
 import { procesoQueCubre, procesosParaEntrada, type Cobertura } from "../traceability/procesoDelLinaje";
 import { LotProcessError } from "../traceability/errorDeProceso";
@@ -531,7 +532,7 @@ export async function datosDelTablero(
     ? (lotes.find((l) => l.lotId === opciones.curva!.lotId)?.corridaId ?? null)
     : null;
   const curva = opciones.curva
-    ? await curvaDeUnLote(lotWhere, crudas, procesoPorLote, opciones.curva, corridaDeLaCurva)
+    ? await curvaDeUnLote(userAccountId, lotWhere, crudas, procesoPorLote, opciones.curva, corridaDeLaCurva)
     : null;
 
   return {
@@ -565,6 +566,13 @@ export async function datosDelTablero(
  *   mismo mapeo que su veredicto; sin fase abierta, o con una que no es de fermentación, es `null`.
  */
 async function curvaDeUnLote(
+  /**
+   * Quién mira. Hace falta para resolver la verificación del instrumento de cada lectura
+   * (`estadosDeInstrumentoPorMedicion` lo exige): un instrumento que esta cuenta no puede ver se
+   * trata como `SIN_INSTRUMENTO`, o sea que no impone confianza ninguna — así el mismo lote no se
+   * juzga distinto según quién lo abre.
+   */
+  userAccountId: string,
   lotWhere: Prisma.LotWhereInput,
   crudas: readonly {
     /** El id de la corrida: con él se elige, en vez de buscar por lote. Ver `corridaElegida`. */
@@ -607,7 +615,10 @@ async function curvaDeUnLote(
   const [mediciones, correcciones] = await Promise.all([
     prisma.measurement.findMany({
       where: { lotId, variable, ...(abierta ? { occurredAt: { gte: abierta.startedAt } } : {}) },
-      select: { id: true, value: true, occurredAt: true, correctsId: true },
+      // `instrumentId` entra para poder resolver la verificación de cada lectura
+      // (`PENDING_IMPLEMENTATIONS/021`): sin él, la curva dibujaba una lectura excluida por el motor
+      // de veredictos y le colgaba una afirmación citada como criterio de Néctar Nómada.
+      select: { id: true, value: true, occurredAt: true, correctsId: true, instrumentId: true },
       orderBy: { occurredAt: "asc" },
     }),
     prisma.measurement.findMany({
@@ -649,10 +660,35 @@ async function curvaDeUnLote(
   // ausentes no se afirma nada de la receta; se dice que no se pudo resolver.
   const recetaResuelta = proceso?.processRecipeVersion != null;
 
+  // **La verificación del instrumento de cada lectura, en el instante de cada una.** Una consulta por
+  // instrumento, no una por lectura: lo hace la misma función por lotes que usa el camino del
+  // veredicto unas líneas más arriba, para que las dos pantallas no deriven.
+  const vigentes = mediciones.filter((m) => !corregidas.has(m.id));
+  const estadosDeLaCurva = await estadosDeInstrumentoPorMedicion(
+    userAccountId,
+    vigentes.map((m) => ({ id: m.id, instrumentId: m.instrumentId, occurredAt: m.occurredAt })),
+  );
+
   const curva = curvaDeLote({
-    lecturas: mediciones
-      .filter((m) => !corregidas.has(m.id))
-      .map((m) => ({ occurredAt: m.occurredAt, value: m.value.toNumber() })),
+    lecturas: vigentes.map((m) => ({
+      occurredAt: m.occurredAt,
+      value: m.value.toNumber(),
+      // `??` y no `?`: una medición que el mapa no trae es `SIN_INSTRUMENTO`, que
+      // `confianzaPorVerificacion` convierte en `null` — «no impone nada». Es el caso de todas las
+      // lecturas de hoy y tratarlo como avería apagaría la pantalla entera.
+      //
+      // **Y la clave NO SE EMITE cuando sería `null`, que no es cosmética.** `null` y ausente
+      // significan lo mismo aquí —«no impone nada»— pero `toEqual` de vitest **ignora `undefined` y
+      // no `null`**, así que un `confianza: null` añade una clave a cada punto y rompe las ~25
+      // comparaciones de puntos enteros que esta casa ya tiene. Lo cazó el carril con base del PR:
+      // `datos-del-tablero.test.ts:953` —la única que compara puntos pasando por esta función—
+      // falló con «expected { x, y, …(1) } to deeply equal { x, y }», mientras
+      // `curva-de-lote.test.ts` pasaba porque llama a `curvaDeLote` sin confianza, o sea
+      // `undefined`. Omitirla es además lo más honesto: la ausencia ya es el caso por defecto.
+      ...(((c) => (c === null ? {} : { confianza: c }))(
+        confianzaPorVerificacion(estadosDeLaCurva.get(m.id) ?? "SIN_INSTRUMENTO"),
+      )),
+    })),
     objetivos,
     recetaResuelta,
     ancho,

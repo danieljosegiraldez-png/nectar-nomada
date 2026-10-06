@@ -3478,6 +3478,7 @@
     "curvaBandaAlReves": "La receta declara el rango al revés (mínimo mayor que máximo): no se dibuja la banda ni se afirma qué lecturas quedan dentro o fuera, porque la curva saldría espejada. Las lecturas se dibujan igual, de la menor a la mayor. Avisa a quien gestiona la receta para que la corrija.",
     "curvaBandaAlRevesCorto": "rango al revés en la receta: no se juzgan las lecturas",
     "curvaRiesgoMarca": "Criterio de Néctar Nómada",
+    "curvaRiesgoSinVerificar": "Instrumento sin verificar: se registra, no se interpreta.",
     "curvaRiesgoDice": "con tu última lectura (pH {ph}), el dato sugiere:",
     "curvaRiesgoDiceSiSeEstanca": "si el pH se estanca donde está hoy (tu última lectura: {ph}), el dato sugiere:",
     "curvaRiesgoDeDondeSale": "De dónde sale",
