@@ -228,6 +228,8 @@ model UserAccount {
   lotProcessesCreated               LotProcess[]                 @relation("LotProcessCreatedBy")
   lotProcessInterventionsCreated    LotProcessIntervention[]     @relation("LotProcessInterventionCreatedBy")
   lotProcessReturnsCreated          LotProcessReturn[]           @relation("LotProcessReturnCreatedBy")
+  // Parte 2a (2026-10-03), §5.3
+  stepClosingReadingsCreated        ProcessStepClosingReading[]  @relation("ProcessStepClosingReadingCreatedBy")
   // P2 (ADR-098)
   processRecipesCreated             ProcessRecipe[]              @relation("ProcessRecipeCreatedBy")
   processRecipeVersionsCreated      ProcessRecipeVersion[]       @relation("ProcessRecipeVersionCreatedBy")
@@ -3871,6 +3873,10 @@ model Measurement {
   evidence    Evidence[]
   fieldEvents FieldEvent[]
   closingMoistureOfProcesses LotProcess[] @relation("LotProcessClosingMoisture")
+  // Parte 2a (2026-10-03), §5.3: las marcas de «esta lectura cerró el registro», y los fines de paso
+  // que salieron de una lectura marcada.
+  closingReadingMarks        ProcessStepClosingReading[] @relation("ProcessStepClosingReadingMeasurement")
+  stepEndsFromThis           ProcessRecipeStepEnd[]      @relation("ProcessRecipeStepEndDesdeLectura")
 
   @@index([lotId])
   @@index([sampleId])
@@ -4087,6 +4093,18 @@ model FermentationRun {
   processRecipeVersionId String?               @map("process_recipe_version_id") @db.Uuid
   processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id])
 
+  /// Parte 2a (2026-10-03), §4.1: el tipo de paso que esta corrida cumple (catálogo `tipo_paso`) y,
+  /// si lo hay, el paso de la receta. Sin paso bajo una receta con pasos es una DESVIACIÓN, con
+  /// `motivoDesviacion` (§4.4; lo exige el servicio). La base exige que un paso venga con su tipo
+  /// (CHECK `fermentation_run_paso_exige_tipo`). `recipeStepId` es RESTRICT: un SET NULL convertiría
+  /// en silencio una corrida cumplida en una desviación sin motivo.
+  stepTypeValueId  String?               @map("step_type_value_id") @db.Uuid
+  stepTypeValue    VariableCatalogValue? @relation("FermentationRunStepType", fields: [stepTypeValueId], references: [id], onDelete: Restrict)
+  recipeStepId     String?               @map("recipe_step_id") @db.Uuid
+  recipeStep       ProcessRecipeStep?    @relation(fields: [recipeStepId], references: [id], onDelete: Restrict)
+  motivoDesviacion String?               @map("motivo_desviacion")
+  closingReadings  ProcessStepClosingReading[]
+
   interventions              FermentationIntervention[]
   measurements               Measurement[]
   transformations            LotTransformation[]
@@ -4096,6 +4114,8 @@ model FermentationRun {
 
   @@index([processRecipeVersionId])
   @@index([lotProcessId])
+  @@index([stepTypeValueId])
+  @@index([recipeStepId])
   /// §4 — el texto de arriba es el registro original de lo que el operario
   /// escribió; esta FK es la INTERPRETACIÓN de a qué objeto se refería. Las dos
   /// conviven a propósito: `DATA_ARCHITECTURE.md` §4 prohíbe re-etiquetar
@@ -4146,6 +4166,12 @@ model LotProcess {
   /// justo lo que CLAUDE.md §3 prohíbe.
   processRecipeVersionId String?               @map("process_recipe_version_id") @db.Uuid
   processRecipeVersion   ProcessRecipeVersion? @relation(fields: [processRecipeVersionId], references: [id], onDelete: Restrict)
+
+  /// Parte 2a (2026-10-03), §5.3: la receta que nació de convertir la Libre de este proceso. El
+  /// proceso conserva su Libre —es lo que ocurrió— y esto cuenta como uso de la receta nueva.
+  /// RESTRICT: esa versión no se borra mientras un proceso diga que salió de él.
+  origenDeRecetaVersionId String?               @map("origen_de_receta_version_id") @db.Uuid
+  origenDeRecetaVersion   ProcessRecipeVersion? @relation("LotProcessOrigenDeReceta", fields: [origenDeRecetaVersionId], references: [id], onDelete: Restrict)
 
   /// **La intención de ESTE batch. Obligatoria, aunque no haya receta.**
   ///
@@ -4267,6 +4293,7 @@ model LotProcess {
   @@index([closingMoistureMeasurementId])
   @@index([dividedByTransformationId])
   @@index([derivedFromLotProcessId])
+  @@index([origenDeRecetaVersionId])
   @@map("lot_process")
   @@schema("traceability")
 }
@@ -4285,9 +4312,23 @@ model LotProcessIntervention {
   id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lotProcessId   String               @map("lot_process_id") @db.Uuid
   lotProcess     LotProcess           @relation(fields: [lotProcessId], references: [id], onDelete: Cascade)
-  catalogValueId String               @map("catalog_value_id") @db.Uuid
-  catalogValue   VariableCatalogValue @relation("LotProcessInterventionKind", fields: [catalogValueId], references: [id])
+  /// El «cómo» del manejo (con qué medio se lavó, qué condición de oxígeno…). **Anulable desde la
+  /// Parte 2a** (decisión de Daniel, 2026-10-03): el acto es el tipo de paso (`stepTypeValueId`), así
+  /// que un despulpado o un lavado se registran sin valor de catálogo. Uno de los dos, siempre: CHECK
+  /// `lot_process_intervention_catalogo_o_tipo`. RESTRICT, como era en la base.
+  catalogValueId String?               @map("catalog_value_id") @db.Uuid
+  catalogValue   VariableCatalogValue? @relation("LotProcessInterventionKind", fields: [catalogValueId], references: [id], onDelete: Restrict)
   occurredAt     DateTime             @map("occurred_at")
+
+  /// Parte 2a, §4.1: el tipo de paso (el ACTO: despulpado, lavado, flotación…), el paso de la receta
+  /// si lo hay, y el motivo si es una desviación. Mismas reglas que en `FermentationRun`; CHECK
+  /// `lot_process_intervention_paso_exige_tipo`.
+  stepTypeValueId  String?               @map("step_type_value_id") @db.Uuid
+  stepTypeValue    VariableCatalogValue? @relation("LotProcessInterventionStepType", fields: [stepTypeValueId], references: [id], onDelete: Restrict)
+  recipeStepId     String?               @map("recipe_step_id") @db.Uuid
+  recipeStep       ProcessRecipeStep?    @relation(fields: [recipeStepId], references: [id], onDelete: Restrict)
+  motivoDesviacion String?               @map("motivo_desviacion")
+  closingReadings  ProcessStepClosingReading[]
 
   operatorPersonId String?      @map("operator_person_id") @db.Uuid
   operator         Person?      @relation("LotProcessInterventionOperator", fields: [operatorPersonId], references: [id])
@@ -4299,6 +4340,8 @@ model LotProcessIntervention {
   @@index([lotProcessId])
   @@index([catalogValueId])
   @@index([occurredAt])
+  @@index([stepTypeValueId])
+  @@index([recipeStepId])
   @@map("lot_process_intervention")
   @@schema("traceability")
 }
@@ -4343,7 +4386,12 @@ model ProcessRecipe {
   name           String
   description    String?
   organizationId String?             @map("organization_id") @db.Uuid
-  organization   Organization?       @relation(fields: [organizationId], references: [id])
+  /// **RESTRICT desde la Parte 2a** (2026-10-04, registro, Ruling FK-ORG). Era `SET NULL`, que es lo que
+  /// emite Prisma para una relación opcional sin `onDelete`: borrar una organización convertía en silencio
+  /// sus recetas en plantillas de todas, y desde la 2a una plantilla significa algo (sólo se edita con
+  /// alcance de plataforma, y cualquier organización puede derivar de ella). Una receta sin organización
+  /// es una plantilla DECLARADA, no la que dejó un borrado.
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   status         RecordStatus        @default(draft)
   classification ClassificationLevel @default(internal)
   createdAt      DateTime            @default(now()) @map("created_at")
@@ -4351,12 +4399,32 @@ model ProcessRecipe {
   createdBy      String?             @map("created_by") @db.Uuid
   creator        UserAccount?        @relation("ProcessRecipeCreatedBy", fields: [createdBy], references: [id])
 
+  /// Parte 2a (2026-10-03), §5.2: una receta «Libre», la que se escribe al abrir un proceso con su
+  /// intención y sus pasos planeados. La marca es ESTA columna y no el nombre: una receta propia que
+  /// se llame «Libre» no se confunde con ella.
+  esLibre Boolean @default(false) @map("es_libre")
+
+  /// §3.4: la plantilla (una versión) de la que una organización derivó esta receta. RESTRICT: la
+  /// plantilla no se borra mientras una receta diga que salió de ella.
+  derivadaDeVersionId String?               @map("derivada_de_version_id") @db.Uuid
+  derivadaDeVersion   ProcessRecipeVersion? @relation("ProcessRecipeDerivadaDe", fields: [derivadaDeVersionId], references: [id], onDelete: Restrict)
+
+  /// §5.2, el control de parecido: con qué receta publicada coincidió una Libre al crearse, y por qué
+  /// se creó igual. Dos CHECKs de la migración: con parecido hay motivo
+  /// (`process_recipe_parecida_exige_motivo`), y sólo una Libre lleva parecido o motivo
+  /// (`process_recipe_solo_libre_lleva_parecido_y_motivo`). RESTRICT, como la derivada.
+  parecidaAVersionId String?               @map("parecida_a_version_id") @db.Uuid
+  parecidaAVersion   ProcessRecipeVersion? @relation("ProcessRecipeParecidaA", fields: [parecidaAVersionId], references: [id], onDelete: Restrict)
+  motivoDeLibre      String?               @map("motivo_de_libre")
+
   versions ProcessRecipeVersion[]
 
   // Scoped to the organization rather than globally: two farms may both run a
   // process they each call "Lavado".
   @@unique([organizationId, name])
   @@index([organizationId])
+  @@index([derivadaDeVersionId])
+  @@index([parecidaAVersionId])
   @@map("process_recipe")
   @@schema("traceability")
 }
@@ -4391,6 +4459,11 @@ model ProcessRecipeVersion {
   roastSessions    RoastSession[]
   lotRoastProfiles LotRoastProfile[]
   lotProcesses     LotProcess[]
+  // Parte 2a (2026-10-03)
+  steps              ProcessRecipeStep[]
+  recetasDerivadas   ProcessRecipe[]     @relation("ProcessRecipeDerivadaDe")
+  recetasParecidas   ProcessRecipe[]     @relation("ProcessRecipeParecidaA")
+  procesosOriginados LotProcess[]        @relation("LotProcessOrigenDeReceta")
 
   @@unique([recipeId, version])
   @@index([recipeId])
@@ -4500,13 +4573,28 @@ model ProcessTarget {
   /// corren solas en cada despliegue, así que una que pueda fallar con los datos de producción
   /// tumbaría el despliegue: se prefiere un nulo visible a un despliegue roto o a un dato inventado.
   ///
-  /// **La grieta que esto abre, dicha.** La unicidad de abajo lleva la fase dentro, y en Postgres dos
+  /// **La grieta que esto abre, dicha.** La unicidad de las metas sin paso lleva la fase dentro (el
+  /// índice parcial `process_target_unica_sin_paso`, ver abajo), y en Postgres dos
   /// nulos no chocan: dos objetivos heredados con la misma variable y momento podrían coexistir donde
   /// antes no. Se acepta porque **nada escribe ya una fase nula** —`createRecipeWithVersion` la exige—
   /// así que el hueco sólo alcanza a filas que ninguna escritura nueva puede crear.
   phase            ProcessPhase?        @map("phase")
 
-  @@unique([recipeVersionId, phase, variable, moment])
+  /// **Parte 2a (2026-10-03), §3.2: el paso al que pertenece esta meta.** Nulo = meta de la versión,
+  /// como hasta hoy. Con paso, la meta y su paso son de la MISMA versión, y eso lo exige la base y no
+  /// sólo el servicio: la clave ajena es COMPUESTA, `(recipe_step_id, recipe_version_id)` →
+  /// `process_recipe_step(id, recipe_version_id)`, así que una meta no puede colgar de un paso de otra
+  /// versión. CASCADE: quitar un paso de un borrador se lleva sus metas, como sus adiciones y fines.
+  recipeStepId     String?              @map("recipe_step_id") @db.Uuid
+  recipeStep       ProcessRecipeStep?   @relation("ProcessTargetStep", fields: [recipeStepId, recipeVersionId], references: [id, recipeVersionId], onDelete: Cascade)
+
+  // **La unicidad NO se declara aquí** (Parte 2a, §3.2). Son dos índices únicos PARCIALES, en la
+  // migración `receta_con_pasos`: `process_target_unica_sin_paso`, `(recipe_version_id, phase,
+  // variable, moment) WHERE recipe_step_id IS NULL` —la de siempre, para las metas de la versión—, y
+  // `process_target_unica_por_paso`, `(recipe_step_id, variable, moment) WHERE recipe_step_id IS NOT
+  // NULL`, para que la fiebre y la fermentación de una misma versión pidan las dos su pH inicial.
+  // Prisma no sabe expresar índices parciales; la base sí. El índice de abajo es el de la FK compuesta.
+  @@index([recipeStepId, recipeVersionId])
   @@index([recipeVersionId])
   @@map("process_target")
   @@schema("traceability")
@@ -4524,6 +4612,212 @@ enum ProcessTargetMoment {
   @@schema("traceability")
 }
 
+/// Parte 2a (2026-10-03), §3 (D2): cómo se combinan las condiciones de fin de un paso. `first`: la
+/// primera que se cumpla lo termina. `all`: hacen falta todas, incluido el tiempo si `finPorTiempo`.
+enum StepEndRule {
+  first
+  all
+
+  @@schema("traceability")
+}
+
+/// Parte 2a, §3 (D2): el operador de una condición de fin («pH ≤ 4,2»).
+enum StepEndOperator {
+  gte
+  lte
+
+  @@schema("traceability")
+}
+
+/// Parte 2a, §3 (decisión de Daniel, 2026-10-03): una adición se hace antes o después de que el café
+/// sea verde.
+enum AdditionMoment {
+  pre_green
+  post_green
+
+  @@schema("traceability")
+}
+
+/// Parte 2a (2026-10-03), §3: un paso de la receta. La receta pasa a ser una lista ORDENADA de pasos
+/// (`seq`), hija de la versión: cambiar una versión publicada crea otra con sus pasos copiados (§3.3),
+/// así que un paso nunca se reescribe debajo de un lote que ya lo cumplió.
+///
+/// **Lo que exige la base y lo que no.** La base exige `seq` único por versión, que cada eje apunte a
+/// un valor de catálogo que exista, que el mucílago vaya en uno de los seis tramos, y los rangos en orden
+/// (CHECKs `process_recipe_step_mucilago_en_tramos`, `…_horas_en_orden`, `…_humedad_en_orden` y
+/// `…_temperatura_en_orden` de la migración `receta_con_pasos`). **No** exige que el valor sea del
+/// catálogo que toca (`tipo_paso` para el tipo, `estado_cereza` para el fruto…) ni qué ejes aplican a
+/// cada tipo (`EJES_POR_TIPO_DE_PASO`): eso lo comprueba el servicio, y se dice aquí en vez de llamarlo
+/// estructural.
+model ProcessRecipeStep {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeVersionId String               @map("recipe_version_id") @db.Uuid
+  recipeVersion   ProcessRecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  seq             Int
+  /// Del catálogo `tipo_paso`: los 23 del paquete «farm-to-green v2» y `prefermentacion` (D1).
+  stepTypeValueId String               @map("step_type_value_id") @db.Uuid
+  stepTypeValue   VariableCatalogValue @relation("ProcessRecipeStepType", fields: [stepTypeValueId], references: [id], onDelete: Restrict)
+  intencion       String?
+  opcional        Boolean              @default(false)
+
+  // Los ejes (§3), todos anulables: ausencia es «no se declaró», no «ninguno».
+  /// A — el estado del fruto, del catálogo `estado_cereza`.
+  estadoFrutoValueId      String?               @map("estado_fruto_value_id") @db.Uuid
+  estadoFrutoValue        VariableCatalogValue? @relation("ProcessRecipeStepEstadoFruto", fields: [estadoFrutoValueId], references: [id], onDelete: Restrict)
+  /// A — cuánto mucílago QUEDA en el café al terminar el paso, en tramos (decisión de Daniel, 2026-10-03,
+  /// que corrige ADR-181 #12): 0 = Lavado, 100 = Honey, y «Semi Wash 75 %» es que le queda el 75 %. Sólo
+  /// los seis tramos que se ven a ojo y al tacto: 0, 10, 25, 50, 75 y 100 (CHECK
+  /// `process_recipe_step_mucilago_en_tramos`). Lo declaran los pasos `washing` y `demucilage` (2b §8.2).
+  /// El paquete usa `mucilage_retained_pct`: la misma dirección.
+  mucilagoObjetivo        Int?                  @map("mucilago_objetivo")
+  /// B — `condicion_oxigeno`.
+  oxigenoValueId          String?               @map("oxigeno_value_id") @db.Uuid
+  oxigenoValue            VariableCatalogValue? @relation("ProcessRecipeStepOxigeno", fields: [oxigenoValueId], references: [id], onDelete: Restrict)
+  /// C — `manejo_temperatura`, y el rango en °C.
+  temperaturaValueId      String?               @map("temperatura_value_id") @db.Uuid
+  temperaturaValue        VariableCatalogValue? @relation("ProcessRecipeStepTemperatura", fields: [temperaturaValueId], references: [id], onDelete: Restrict)
+  temperaturaMinC         Decimal?              @map("temperatura_min_c") @db.Decimal(5, 2)
+  temperaturaMaxC         Decimal?              @map("temperatura_max_c") @db.Decimal(5, 2)
+  /// D — `fuente_microbiana`.
+  fuenteMicrobianaValueId String?               @map("fuente_microbiana_value_id") @db.Uuid
+  fuenteMicrobianaValue   VariableCatalogValue? @relation("ProcessRecipeStepFuenteMicrobiana", fields: [fuenteMicrobianaValueId], references: [id], onDelete: Restrict)
+  /// El medio — `medio_lavado`.
+  medioValueId            String?               @map("medio_value_id") @db.Uuid
+  medioValue              VariableCatalogValue? @relation("ProcessRecipeStepMedio", fields: [medioValueId], references: [id], onDelete: Restrict)
+  /// F — `fisico`: sólo lo que no existe en otro sitio (el frío va por `manejo_temperatura`).
+  fisicoValueId           String?               @map("fisico_value_id") @db.Uuid
+  fisicoValue             VariableCatalogValue? @relation("ProcessRecipeStepFisico", fields: [fisicoValueId], references: [id], onDelete: Restrict)
+  /// G — el modo de secado, con el enum que ya usan las instalaciones, no un catálogo nuevo.
+  modoSecado              DryingEnvironment?    @map("modo_secado")
+
+  // Los valores por defecto (§3). Que el volteo y la banda de humedad sólo vayan en un paso de secado
+  // lo dice el servicio (`EJES_POR_TIPO_DE_PASO`), no la base.
+  horasMin        Int?     @map("horas_min")
+  horasSugeridas  Int?     @map("horas_sugeridas")
+  horasMax        Int?     @map("horas_max")
+  volteoCadaHoras Int?     @map("volteo_cada_horas")
+  humedadMinPct   Decimal? @map("humedad_min_pct") @db.Decimal(5, 2)
+  humedadMaxPct   Decimal? @map("humedad_max_pct") @db.Decimal(5, 2)
+
+  // El fin (D2): por tiempo —al cumplir `horasSugeridas` desde su inicio— y/o por las filas de `ends`.
+  finPorTiempo Boolean     @default(false) @map("fin_por_tiempo")
+  reglaDeFin   StepEndRule @default(first) @map("regla_de_fin")
+
+  additions    ProcessRecipeStepAddition[]
+  ends         ProcessRecipeStepEnd[]
+  requirements ProcessRecipeStepRequirement[]
+  /// Las metas del paso (§3.2), por la clave ajena compuesta de `ProcessTarget`.
+  targets      ProcessTarget[]                @relation("ProcessTargetStep")
+
+  fermentationRuns          FermentationRun[]
+  dryingRuns                DryingRun[]
+  lotProcessInterventions   LotProcessIntervention[]
+  fermentationInterventions FermentationIntervention[]
+
+  @@unique([recipeVersionId, seq])
+  // El destino de la clave ajena compuesta de `ProcessTarget`: la meta y su paso, de la misma versión.
+  @@unique([id, recipeVersionId])
+  @@index([recipeVersionId])
+  @@index([stepTypeValueId])
+  @@index([estadoFrutoValueId])
+  @@index([oxigenoValueId])
+  @@index([temperaturaValueId])
+  @@index([fuenteMicrobianaValueId])
+  @@index([medioValueId])
+  @@index([fisicoValueId])
+  @@map("process_recipe_step")
+  @@schema("traceability")
+}
+
+/// Parte 2a, §3 (E) — decisión de Daniel, 2026-10-03: una adición del paso guarda la CATEGORÍA
+/// (`sustrato_anadido`; en una inoculación, la cepa de `levadura_cultivo`), con cantidad, unidad y
+/// momento. El material concreto se anota al ejecutar, como consumo de la corrida
+/// (`MaterialConsumptionEntry`): un material es de una organización, y una plantilla sirve en todas.
+/// Cantidad y unidad, las dos o ninguna: CHECK `process_recipe_step_addition_cantidad_con_unidad`.
+model ProcessRecipeStepAddition {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stepId           String               @map("step_id") @db.Uuid
+  step             ProcessRecipeStep    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  categoriaValueId String               @map("categoria_value_id") @db.Uuid
+  categoriaValue   VariableCatalogValue @relation("ProcessRecipeStepAdditionCategoria", fields: [categoriaValueId], references: [id], onDelete: Restrict)
+  cantidad         Decimal?             @db.Decimal(12, 4)
+  unidad           String?
+  momento          AdditionMoment
+
+  @@index([stepId])
+  @@index([categoriaValueId])
+  @@map("process_recipe_step_addition")
+  @@schema("traceability")
+}
+
+/// Parte 2a, §3 (D2): una condición de fin del paso, «pH ≤ 4,2». Con `finPorTiempo` y varias filas,
+/// `reglaDeFin` dice si basta la primera o hacen falta todas. `desdeLecturaId` (§5.3): la lectura de
+/// cierre MARCADA de la que salió esta condición al convertir una Libre; nula si la escribió alguien.
+/// RESTRICT: la lectura que sostiene un fin no se borra debajo de él.
+model ProcessRecipeStepEnd {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stepId         String            @map("step_id") @db.Uuid
+  step           ProcessRecipeStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  variable       String
+  operador       StepEndOperator
+  valor          Decimal           @db.Decimal(12, 4)
+  unidad         String
+  desdeLecturaId String?           @map("desde_lectura_id") @db.Uuid
+  desdeLectura   Measurement?      @relation("ProcessRecipeStepEndDesdeLectura", fields: [desdeLecturaId], references: [id], onDelete: Restrict)
+
+  @@index([stepId])
+  @@index([desdeLecturaId])
+  @@map("process_recipe_step_end")
+  @@schema("traceability")
+}
+
+/// Parte 2a, §3 — decisión de Daniel, 2026-10-03: el paso no nombra equipo ni recipiente; declara las
+/// CAPACIDADES que necesita (catálogo `capacidad`: sellable, válvula, control de temperatura…). La 2a
+/// las guarda; comprobar que el beneficio las tiene es de la 2c.
+model ProcessRecipeStepRequirement {
+  stepId           String               @map("step_id") @db.Uuid
+  step             ProcessRecipeStep    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  capacidadValueId String               @map("capacidad_value_id") @db.Uuid
+  capacidadValue   VariableCatalogValue @relation("ProcessRecipeStepRequirementCapacidad", fields: [capacidadValueId], references: [id], onDelete: Restrict)
+
+  @@id([stepId, capacidadValueId])
+  @@index([capacidadValueId])
+  @@map("process_recipe_step_requirement")
+  @@schema("traceability")
+}
+
+/// Parte 2a, §5.3: una lectura que el operario MARCÓ como la que motivó el cierre de un registro —una
+/// corrida o una intervención del proceso—. Al convertir una Libre, el borrador sólo propone fines desde
+/// lecturas marcadas: nunca deduce un umbral de una lectura que nadie marcó.
+///
+/// Exactamente un registro por fila (CHECK `process_step_closing_reading_un_registro`), y la misma
+/// lectura no se marca dos veces para el mismo registro: los tres `@@unique`, que en Postgres sólo
+/// actúan sobre la columna que la fila usa porque dos nulos no chocan. CASCADE desde el registro: la
+/// marca no existe sin él. RESTRICT hacia la lectura: la evidencia no se borra debajo de la marca.
+model ProcessStepClosingReading {
+  id                       String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  measurementId            String                  @map("measurement_id") @db.Uuid
+  measurement              Measurement             @relation("ProcessStepClosingReadingMeasurement", fields: [measurementId], references: [id], onDelete: Restrict)
+  fermentationRunId        String?                 @map("fermentation_run_id") @db.Uuid
+  fermentationRun          FermentationRun?        @relation(fields: [fermentationRunId], references: [id], onDelete: Cascade)
+  dryingRunId              String?                 @map("drying_run_id") @db.Uuid
+  dryingRun                DryingRun?              @relation(fields: [dryingRunId], references: [id], onDelete: Cascade)
+  lotProcessInterventionId String?                 @map("lot_process_intervention_id") @db.Uuid
+  lotProcessIntervention   LotProcessIntervention? @relation(fields: [lotProcessInterventionId], references: [id], onDelete: Cascade)
+  createdAt                DateTime                @default(now()) @map("created_at")
+  createdBy                String?                 @map("created_by") @db.Uuid
+  creator                  UserAccount?            @relation("ProcessStepClosingReadingCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([measurementId, fermentationRunId])
+  @@unique([measurementId, dryingRunId])
+  @@unique([measurementId, lotProcessInterventionId])
+  @@index([fermentationRunId])
+  @@index([dryingRunId])
+  @@index([lotProcessInterventionId])
+  @@map("process_step_closing_reading")
+  @@schema("traceability")
+}
+
 model FermentationIntervention {
   id                String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fermentationRunId String                       @map("fermentation_run_id") @db.Uuid
@@ -4531,10 +4825,21 @@ model FermentationIntervention {
   interventionType  FermentationInterventionType @map("intervention_type")
   occurredAt        DateTime                     @map("occurred_at")
   notes             String?
+
+  /// Parte 2a (2026-10-03), §4.1: una inoculación o una adición DENTRO de una fermentación cumple un
+  /// paso `inoculation` o `addition`. Mismas reglas que en `FermentationRun`; CHECK
+  /// `fermentation_intervention_paso_exige_tipo`.
+  stepTypeValueId  String?               @map("step_type_value_id") @db.Uuid
+  stepTypeValue    VariableCatalogValue? @relation("FermentationInterventionStepType", fields: [stepTypeValueId], references: [id], onDelete: Restrict)
+  recipeStepId     String?               @map("recipe_step_id") @db.Uuid
+  recipeStep       ProcessRecipeStep?    @relation(fields: [recipeStepId], references: [id], onDelete: Restrict)
+  motivoDesviacion String?               @map("motivo_desviacion")
   createdAt         DateTime                     @default(now()) @map("created_at")
   createdBy         String?                      @map("created_by") @db.Uuid
   creator           UserAccount?                 @relation("FermentationInterventionCreatedBy", fields: [createdBy], references: [id])
 
+  @@index([stepTypeValueId])
+  @@index([recipeStepId])
   @@index([fermentationRunId])
   @@map("fermentation_intervention")
   @@schema("traceability")
@@ -4592,6 +4897,17 @@ model DryingRun {
   /// existía es anterior a `LotProcess` y no cuelga de ninguno.
   lotProcessId String?     @map("lot_process_id") @db.Uuid
   lotProcess   LotProcess? @relation(fields: [lotProcessId], references: [id])
+
+  /// Parte 2a (2026-10-03), §4.1: el tipo de paso (`drying`), el paso de la receta si lo hay, y el
+  /// motivo si es una desviación. Mismas reglas que en `FermentationRun`; CHECK
+  /// `drying_run_paso_exige_tipo`.
+  stepTypeValueId  String?               @map("step_type_value_id") @db.Uuid
+  stepTypeValue    VariableCatalogValue? @relation("DryingRunStepType", fields: [stepTypeValueId], references: [id], onDelete: Restrict)
+  recipeStepId     String?               @map("recipe_step_id") @db.Uuid
+  recipeStep       ProcessRecipeStep?    @relation(fields: [recipeStepId], references: [id], onDelete: Restrict)
+  motivoDesviacion String?               @map("motivo_desviacion")
+  closingReadings  ProcessStepClosingReading[]
+
   startedAt    DateTime     @map("started_at")
   endedAt      DateTime?    @map("ended_at")
 
@@ -4618,6 +4934,8 @@ model DryingRun {
 
   @@index([locationId])
   @@index([lotProcessId])
+  @@index([stepTypeValueId])
+  @@index([recipeStepId])
   /// Lo crea la migración `corrida_de_secado_en_su_cama`. Se declara aquí porque
   /// el esquema y las migraciones tienen que decir lo mismo: el guardia de deriva
   /// lo cazó el 2026-09-16, y sólo pudo verlo cuando se le dio `SHADOW_DATABASE_URL`.
@@ -9312,6 +9630,22 @@ model VariableCatalogValue {
   cherryCleanlinessOfHarvests HarvestEvent[]           @relation("HarvestCherryCleanliness")
 
   fieldEventsCondicionDelDia FieldEvent[] @relation("FieldEventCondicionDelDia")
+
+  // Parte 2a (2026-10-03): el tipo y los ejes de un paso, sus adiciones y requisitos, y el tipo de
+  // paso que cumple cada registro.
+  stepTypeOfSteps                     ProcessRecipeStep[]            @relation("ProcessRecipeStepType")
+  estadoFrutoOfSteps                  ProcessRecipeStep[]            @relation("ProcessRecipeStepEstadoFruto")
+  oxigenoOfSteps                      ProcessRecipeStep[]            @relation("ProcessRecipeStepOxigeno")
+  temperaturaOfSteps                  ProcessRecipeStep[]            @relation("ProcessRecipeStepTemperatura")
+  fuenteMicrobianaOfSteps             ProcessRecipeStep[]            @relation("ProcessRecipeStepFuenteMicrobiana")
+  medioOfSteps                        ProcessRecipeStep[]            @relation("ProcessRecipeStepMedio")
+  fisicoOfSteps                       ProcessRecipeStep[]            @relation("ProcessRecipeStepFisico")
+  categoriaOfStepAdditions            ProcessRecipeStepAddition[]    @relation("ProcessRecipeStepAdditionCategoria")
+  capacidadOfStepRequirements         ProcessRecipeStepRequirement[] @relation("ProcessRecipeStepRequirementCapacidad")
+  stepTypeOfFermentationRuns          FermentationRun[]              @relation("FermentationRunStepType")
+  stepTypeOfDryingRuns                DryingRun[]                    @relation("DryingRunStepType")
+  stepTypeOfLotProcessInterventions   LotProcessIntervention[]       @relation("LotProcessInterventionStepType")
+  stepTypeOfFermentationInterventions FermentationIntervention[]     @relation("FermentationInterventionStepType")
   @@unique([catalogId, value])
   @@index([aliasOfId])
   @@map("variable_catalog_value")

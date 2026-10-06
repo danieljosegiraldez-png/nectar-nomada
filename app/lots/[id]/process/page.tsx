@@ -197,7 +197,8 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
             <ul>
               {p.interventions.map((i) => (
                 <li key={i.id}>
-                  {fecha(i.occurredAt)} · {i.catalogValue.value}
+                  {/* Parte 2a: el «cómo» si se declaró; si no, el acto. La base exige uno de los dos (lot_process_intervention_catalogo_o_tipo). */}
+                  {fecha(i.occurredAt)} · {(i.catalogValue ?? i.stepTypeValue)!.value}
                   {i.notes ? ` · ${i.notes}` : ""}
                 </li>
               ))}

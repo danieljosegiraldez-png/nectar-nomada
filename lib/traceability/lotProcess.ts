@@ -791,7 +791,8 @@ const INCLUIR_PARA_PANTALLA = {
   processGradeValue: true,
   cherryStateValue: true,
   closingMoistureMeasurement: true,
-  interventions: { orderBy: { occurredAt: "asc" as const }, include: { catalogValue: true, operator: true } },
+  // Parte 2a (tarea 1): el tipo de paso nombra el acto cuando la intervención no lleva valor de catálogo.
+  interventions: { orderBy: { occurredAt: "asc" as const }, include: { catalogValue: true, stepTypeValue: true, operator: true } },
   fermentationRuns: { orderBy: { startedAt: "asc" as const } },
   dryingRuns: { orderBy: { startedAt: "asc" as const } },
   lot: { select: { id: true, lotCode: true } },
