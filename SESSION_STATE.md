@@ -84,6 +84,7 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 `getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
 **Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
 **Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
+
 ## 3. Bloqueado, y en qué
 
 > **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
@@ -147,6 +148,13 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
+
+#### Recetas: TRES planes sin construir, y una cifra sin medir (rescatado de #626, medido el 2026-10-05)
+
+La rama `recetas-parte-2a` lleva **tres** diseños —2a la receta con pasos, 2b lo que vigila, y **2c
+equipos y capacidades**, que la entrada archivada no nombraba— y ninguno se ha construido; esperan tu
+visto bueno. Y sigue sin medir `TRANSACCION_DEL_LINAJE` = `{ timeout: 60_000, maxWait: 10_000 }`, en
+**6** archivos de `lib/`, sin contrastar con Neon ni con el máximo de Vercel.
 
 #### Recolectores: darles su perfil (de Daniel)
 
@@ -324,27 +332,12 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
-- **El inventario de acceso: ficha `007` CERRADA, los dos escalones** (#639,
-  2026-10-04). El detector lee el AST y una compuerta nueva resuelve el guardia
-  hasta su **símbolo**: de las 396 «guardia directo» por nombre, **0 mienten**. La
-  pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
-- **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
-  por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
-  del **lote**: 15 modelos gobernados y **13 excepciones** declaradas con su razón.
-  **Los dos defectos están arreglados** (2026-10-04, cada uno con su prueba en rojo
-  primero y su control positivo, en el grupo `base-sembrada`):
-  `completeExternalCoffeeOrigin` exige ahora `lot:view` sobre el lote que cita, y
-  `recordWashMedium` exige mismo proyecto —su actor, `Research Lead`, **no tiene**
-  permiso de `lot`, y exigírselo habría roto `mosto_de_otro_lote` y forzado una
-  concesión de RBAC que es tuya—.
-  **El `action` también está medido** y no hay defecto vivo: de 23 unidades que
-  escriben un modelo del dominio, **0 exigen sólo `view`**, y las 28 raíces exigen
-  todas una acción de escritura; el flip lo confirma mutando una línea. Si se
-  convierte en compuerta tiene que resolver **valores por omisión de parámetro** o
-  nace con un falso positivo —`bajarBandejaAction`, que autoriza bien—.
-  **Queda tuyo:** los **12 veredictos** sin confirmar, si se construye esa compuerta
-  del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
-  `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
+- **Las fichas `007` y `005`: entregadas** (#639, 2026-10-04). Lo que queda de ellas es tuyo: los
+  **12 veredictos** sin confirmar de `docs/arquitectura/permiso-por-dominio.json`; si se construye
+  la compuerta del **`action`** —medida, **0 defectos vivos**, y si se hace tiene que resolver
+  **valores por omisión de parámetro** o nace con un falso positivo—; y los otros dominios
+  (`location` 34 llamadas a `can`, `equipment` 20, `specimen` 7, `sample` 4), que son un bloque más
+  en el mismo archivo. El detalle de lo entregado está en la ficha `005` y en el #639.
 
 - **El enrollado de la selección: 2 de 6 tareas, en `enrollado-impl`** (2026-10-05). Diseño en
   `main` (#621), plan y el porqué de cada enmienda en el **#650**; hechos el **ADR-196** y el
