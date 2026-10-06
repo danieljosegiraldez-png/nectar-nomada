@@ -199,6 +199,7 @@ tests/traceability/processTargets.test.ts
 tests/traceability/quantity.test.ts
 tests/traceability/recipeAuthoring.test.ts
 tests/traceability/recipeVersions.test.ts
+tests/recetas/versiones.test.ts
 tests/recetas/autoria.test.ts
 tests/recetas/pasos.test.ts
 tests/recetas/esquemaDePasos.test.ts

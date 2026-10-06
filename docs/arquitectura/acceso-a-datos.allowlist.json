@@ -686,6 +686,10 @@
     {
       "archivo": "lib/recetas/pasos.ts",
       "razon": "Módulo de dominio: la receta como lista ordenada de pasos (Parte 2a, tarea 3, 2026-10-04). Sus seis operaciones exportadas autorizan antes de leer o escribir —las cinco que escriben, con `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso `lot:approve_exception` del Coffee Process Manager, V16); `pasosDeLaVersion`, con esa misma regla o con `requireLotAccess(manage)` sobre un lote de la organización, como `getRecipeForEditor`, y, si la receta es Libre, con `requireLotAccess(view)` sobre el lote de cada proceso que la usa (R24)—, y `agregarPaso` y `actualizarPaso` piden además `requireLotAccess(view)` sobre el lote de cada lectura de cierre que un fin cita (R6), y toda escritura va en una transacción que bloquea la versión y vuelve a leer su estado."
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "razon": "Parte 2a, tarea 4: versiones y plantillas de una receta con pasos (diseño §3.3–§3.4). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     }
   ],
   "reciben_transaccion": [
@@ -814,6 +818,10 @@
     {
       "archivo": "lib/recetas/pasos.ts",
       "razon": "Parte 2a, tarea 3 (2026-10-04): sus ayudantes privados (`bloquearBorrador`, `idsEnOrden`, `apartar`, `colocar`, `escribirHijos`, `borrarHijos`, `leerPasos`) reciben el `tx` de la transacción que abre la propia operación exportada, después de autorizar; `leerPasos` recibe el cliente global cuando sólo se lee. Ninguno se exporta ni autoriza por su cuenta."
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "razon": "Parte 2a, tarea 4: `copiarContenidoDeVersion` recibe el cliente de la transacción de quien la llama (`nuevaVersionBorrador`, `derivarReceta` y `createRecipeVersion`) y copia dentro de ella pasos, adiciones, fines, requisitos, metas y fases de una versión a otra. No abre conexión ni transacción propia, y no autoriza: sus llamadores ya pidieron `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16)."
     }
   ],
   "operaciones_sin_patron": [
@@ -1524,6 +1532,12 @@
       "operacion": "ubicacionesEmparentadas",
       "razon": "INVISIBLE al inventario hasta el 2026-10-04: su cliente se llama `db` y la enumeracion era `prisma|aiPrisma|tx|client`, asi que con cero modelos la fila se descartaba ENTERA. Es la que mas importa de las seis: devuelve la ubicacion dada MAS todos sus ancestros y todos sus descendientes, o sea el conector sobre el que se apoya el rollup de la finca al lote. Recibe un id y no recibe principal. SEIS caminos, medidos POR UNIDAD y no por archivo -- la primera version de esta razon decia que `floracion.ts`, `harvest.ts` e `intervenciones.ts` autorizaban antes, y era FALSO en dos de los tres: el archivo tenia un guardia en OTRA funcion. (1) `harvest.ts` -> `recordHarvestEvent`: llama a `requireLotAccess` en la misma unidad. (2) `intervenciones.ts` -> `validarReferencias`: NO autoriza, pero sus dos unicos llamadores, `registrarIntervencion` y `corregirIntervencion`, si. (3) `floracion.ts` -> `floracionesDeLaParcela`: NO autoriza, y su comentario lo declara; sus dos llamadores son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, que autorizan atrapando `TraceabilityAccessError` de un servicio que lanza -- un mecanismo que el detector de guardias NO PUEDE VER. (4) `app/plots/[id]/page.tsx`: `getPlotDetail` hace `requireLocationAttributeAccess` sobre el MISMO id que luego pasa. (5) `app/field-sessions/[id]/page.tsx`: `getFieldSessionTimeline` hace `requireFieldSessionAccess(userAccountId, session.locationId)` y pasa ESE mismo id. (6) QUEDA SIN PROBAR, y se dice en vez de taparlo: `app/lots/[id]/page.tsx` autoriza el LOTE con `getLotDetail` y luego pasa `harvestEvent.locationId`, que es otra cosa; que ver el lote implique ver la ubicacion de su cosecha no lo demuestra ninguna medicion de este inventario. Verificado el 2026-10-04.",
       "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "operacion": "copiarContenidoDeVersion",
+      "razon": "Copia lo que cuelga de una versión de receta a otra recién creada —pasos con sus adiciones, fines y requisitos; metas de paso con el paso remapeado al nuevo; metas de versión si se piden; y las fases sólo si el origen no tiene pasos (diseño §3.1)— dentro de la transacción del llamador. No recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (mismo archivo) después de `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta, o de plataforma si es una plantilla), y `createRecipeVersion` (lib/traceability/processTargets.ts) después de esa misma regla. Devuelve cuántas filas copió, no filas.",
+      "verificado": "2026-10-06"
     }
   ]
 }

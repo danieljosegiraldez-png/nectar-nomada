@@ -1953,7 +1953,13 @@
     "error_receta_fin_invalido": "An end condition is not valid: check the variable, its unit, and that the value is possible.",
     "error_receta_lectura_no_marcada": "An end can only come from a reading marked as a closing reading, from a lot of the recipe's organization that you can see. A template does not cite readings.",
     "error_receta_meta_de_recepcion_no_se_vigila": "In a reception step only the initial Brix is watched: any other target would be written down and never compared.",
-    "error_receta_paso_de_otra_version": "That target points to a step of another version of the recipe."
+    "error_receta_paso_de_otra_version": "That target points to a step of another version of the recipe.",
+    "error_receta_ya_hay_un_borrador": "This recipe already has a draft version. Keep editing that draft, or publish it, before starting another version.",
+    "error_receta_no_es_plantilla": "Only a template, a recipe shared by every organization, can be derived. This one already belongs to an organization: to change it, start a new version.",
+    "error_receta_version_no_publicada": "That template version is still a draft. Derive the copy from a published version.",
+    "error_receta_nombre_requerido": "Enter the recipe name.",
+    "error_receta_nombre_repetido": "Your organization already has a recipe with that name. Choose another.",
+    "error_receta_receta_libre_no_se_versiona": "A free-form recipe is not versioned: it is what happened in a process. Convert it into an organization recipe to change it."
   },
   "Apiary": {
     "artefactosHeading": "Fitted equipment",

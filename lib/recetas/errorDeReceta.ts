@@ -46,6 +46,13 @@ export const CODIGOS_DE_RECETA_TRADUCIDOS = [
   "meta_de_recepcion_no_se_vigila",
   // Metas por paso (diseño §3.2; el nombre es de la lista del §12).
   "paso_de_otra_version",
+  // Tarea 4 (versiones y plantillas, diseño §3.3–§3.4; la Libre no se versiona, I14).
+  "ya_hay_un_borrador",
+  "no_es_plantilla",
+  "version_no_publicada",
+  "nombre_requerido",
+  "nombre_repetido",
+  "receta_libre_no_se_versiona",
 ] as const;
 
 export type CodigoDeRecetaTraducido = (typeof CODIGOS_DE_RECETA_TRADUCIDOS)[number];

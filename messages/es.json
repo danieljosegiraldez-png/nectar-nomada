@@ -1953,7 +1953,13 @@
     "error_receta_fin_invalido": "Una condición de fin no es válida: revisa la variable, su unidad y que el valor sea posible.",
     "error_receta_lectura_no_marcada": "Un fin sólo puede salir de una lectura marcada como lectura de cierre, de un lote de la organización de la receta y que tú puedas ver. Una plantilla no cita lecturas.",
     "error_receta_meta_de_recepcion_no_se_vigila": "En un paso de recepción sólo se vigila el Brix inicial: cualquier otra meta quedaría escrita sin que nadie la compare.",
-    "error_receta_paso_de_otra_version": "Esa meta apunta a un paso de otra versión de la receta."
+    "error_receta_paso_de_otra_version": "Esa meta apunta a un paso de otra versión de la receta.",
+    "error_receta_ya_hay_un_borrador": "Esta receta ya tiene una versión en borrador. Sigue editando ese borrador, o publícalo, antes de empezar otra versión.",
+    "error_receta_no_es_plantilla": "Sólo se deriva una copia de una plantilla, una receta común a todas las organizaciones. Ésta ya es de una organización: para cambiarla, empieza una versión nueva.",
+    "error_receta_version_no_publicada": "Esa versión de la plantilla todavía es un borrador. Deriva la copia de una versión publicada.",
+    "error_receta_nombre_requerido": "Escribe el nombre de la receta.",
+    "error_receta_nombre_repetido": "Tu organización ya tiene una receta con ese nombre. Elige otro.",
+    "error_receta_receta_libre_no_se_versiona": "Una receta Libre no se versiona: es lo que ocurrió en un proceso. Conviértela en una receta de la organización para poder cambiarla."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

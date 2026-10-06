@@ -36,6 +36,7 @@ import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/c
 import { puedeEditarBeneficioEnOrganizacion } from "./locations";
 import { exigeAutoriaDeReceta } from "../recetas/autoria";
 import { RecipeError } from "../recetas/errorDeReceta";
+import { copiarContenidoDeVersion } from "../recetas/versiones";
 
 export class ProcessTargetError extends Error {}
 
@@ -645,17 +646,17 @@ export async function createRecipeVersion(
    */
   expectedHours?: number | null,
   /**
-   * R8 (Parte 1, 2026-09-30): las fases de la versión. **Sin pasarlas (`undefined`), se copian las de
-   * la versión anterior** —la pantalla todavía no las edita, y publicar una v2 desde ella las borraba
-   * en silencio, el mismo fallo que con las horas el 2026-09-13—. Un arreglo vacío explícito sí
-   * significa «sin fases».
+   * R8 (Parte 1, 2026-09-30), extendido en la Parte 2a (tarea 4, 2026-10-03): las fases de la versión. **Sin pasarlas
+   * (`undefined`), la versión nueva trae las de la anterior** —la pantalla todavía no las edita, y publicar una v2 desde
+   * ella las borraba en silencio, el mismo fallo que con las horas el 2026-09-13—, **pero sólo si la anterior no tiene
+   * pasos**: con pasos, las fases las deriva `publicarVersion` (diseño §3.1). Un arreglo explícito, vacío incluido, las
+   * sustituye. **Los pasos se copian siempre**, con sus adiciones, fines, requisitos y metas de paso remapeadas
+   * (`copiarContenidoDeVersion`, `lib/recetas/versiones.ts`): esta puerta no los edita, y perderlos sería el mismo
+   * borrado en silencio que R8 cerró para las fases.
    */
   fases?: CreateRecipeInput["fases"],
 ) {
-  const recipe = await prisma.processRecipe.findUnique({
-    where: { id: recipeId },
-    include: { versions: { orderBy: { version: "desc" }, take: 1, include: { fases: true } } },
-  });
+  const recipe = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
   // V16 (Parte 2a, tarea 3, 2026-10-04): la misma regla única de autoría que al crearla.
@@ -664,24 +665,15 @@ export async function createRecipeVersion(
   validateTargets(targets);
   validateExpectedHours(expectedHours);
   if (fases !== undefined) validateFases(fases);
-  // Las copiadas ya se validaron al escribirse, y traen `Decimal`: no pasan por `validateFases`, que
-  // compara números.
-  const fasesDeLaVersion =
-    fases !== undefined
-      ? fases.map((f) => ({
-          phase: f.phase,
-          expectedHours: f.expectedHours ?? null,
-          turnEveryHours: f.turnEveryHours ?? null,
-          targetMoistureMinPct: f.targetMoistureMinPct ?? null,
-          targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
-        }))
-      : (recipe.versions[0]?.fases ?? []).map((f) => ({
-          phase: f.phase,
-          expectedHours: f.expectedHours,
-          turnEveryHours: f.turnEveryHours,
-          targetMoistureMinPct: f.targetMoistureMinPct,
-          targetMoistureMaxPct: f.targetMoistureMaxPct,
-        }));
+  // Sólo las que llegan. Las de la versión anterior —si no llegan y la anterior no tiene pasos— las copia
+  // `copiarContenidoDeVersion` dentro de la transacción, junto con los pasos (Parte 2a, tarea 4).
+  const fasesDeLaVersion = (fases ?? []).map((f) => ({
+    phase: f.phase,
+    expectedHours: f.expectedHours ?? null,
+    turnEveryHours: f.turnEveryHours ?? null,
+    targetMoistureMinPct: f.targetMoistureMinPct ?? null,
+    targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
+  }));
 
   const version = await prisma.$transaction(async (tx) => {
     // Parte 2a (tarea 3, diseño §3.3): el número sale DENTRO de la transacción, con la receta en `FOR UPDATE`. Calculado fuera
@@ -692,7 +684,7 @@ export async function createRecipeVersion(
     const ultima = await tx.processRecipeVersion.findFirst({
       where: { recipeId },
       orderBy: { version: "desc" },
-      select: { version: true },
+      select: { id: true, version: true },
     });
     const nextVersion = (ultima?.version ?? 0) + 1;
 
@@ -738,13 +730,25 @@ export async function createRecipeVersion(
       include: { targets: true, fases: true },
     });
 
+    // R8 extendido (Parte 2a, tarea 4): lo que la versión anterior declaraba y esta puerta no edita viaja a la nueva
+    // —pasos con adiciones, fines, requisitos y metas de paso remapeadas; sus fases sólo si no llegaron otras y no tiene
+    // pasos—. Las metas de versión no: son las que manda el formulario (`targets`).
+    if (ultima) {
+      await copiarContenidoDeVersion(tx, ultima.id, version.id, { metasDeVersion: false, fases: fases === undefined });
+    }
+    // Releída: lo copiado entró después del `create`, y lo que se audita y se devuelve es la versión entera.
+    const completa = await tx.processRecipeVersion.findUniqueOrThrow({
+      where: { id: version.id },
+      include: { targets: true, fases: true },
+    });
+
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,
         operation: "process_recipe_version.create",
         entityType: "process_recipe_version",
         entityId: version.id,
-        after: version,
+        after: completa,
         // The fact worth searching the audit log for later: which version
         // superseded which, and when.
         reason: `supersedes_version_${ultima?.version ?? "none"}`,
@@ -753,7 +757,7 @@ export async function createRecipeVersion(
       tx,
     );
 
-    return version;
+    return completa;
   });
   return version;
 }

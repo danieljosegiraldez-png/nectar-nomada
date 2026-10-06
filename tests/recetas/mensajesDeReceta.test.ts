@@ -54,6 +54,17 @@ const CODIGOS_DE_LA_TAREA_3 = [
   "paso_de_otra_version",
 ];
 
+// Tarea 4 (versiones y plantillas, diseño §3.3–§3.4): seis. Una lista aparte, con su propio control del número, para que añadir o
+// quitar un código de una tarea no mueva la cuenta de la otra.
+const CODIGOS_DE_LA_TAREA_4 = [
+  "ya_hay_un_borrador",
+  "no_es_plantilla",
+  "version_no_publicada",
+  "nombre_requerido",
+  "nombre_repetido",
+  "receta_libre_no_se_versiona",
+];
+
 /**
  * Los comentarios fuera, SALTANDO las cadenas. Copia de `sinComentarios` de `tests/traceability/mensajesDeProceso.test.ts`: no
  * se importa de allí porque ese archivo es una prueba y importarlo registraría sus `describe` aquí. Tiene su control abajo.
@@ -78,6 +89,11 @@ describe("los códigos de la receta tienen su texto en es y en", () => {
   it("control: la lista trae los veintiún códigos de la tarea 3", () => {
     expect(CODIGOS_DE_LA_TAREA_3.length).toBe(21);
     expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_3));
+  });
+
+  it("control: la lista trae los seis códigos de la tarea 4", () => {
+    expect(CODIGOS_DE_LA_TAREA_4.length).toBe(6);
+    expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_4));
   });
 
   it("cada código tiene `Traceability.error_receta_<código>` en los dos idiomas", () => {
