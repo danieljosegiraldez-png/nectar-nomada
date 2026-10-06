@@ -228,13 +228,13 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   una calicata no, que `MeasurementSourceType` tenga **siete** valores —decía diez, re-medido el
   2026-10-04— y los **cinco** subconjuntos de `procedencia.ts` ofrezcan menos, y si `manufacturer_specification` debería estar en alguna. Decisión de
   diseño, sin tomar.
-- **Dar acceso a alguien más que Daniel y José** — **Bob Huerbsch YA ENTRÓ**: lo
-  dijo Daniel el 2026-09-17. **No se verificó contra la base y no se puede** —
-  leer producción está prohibido—; es la palabra del dueño, y basta. Queda
-  **Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`, perfil `Apiary
-  Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
+- **Sin constar: si se cargó `protocolos/miel-competencia-100.json`** (#213). Salió de la
+  fila de §4 del protocolo de cata: §4 es «lo que NO se vuelve a proponer» y una duda
+  abierta ahí se entierra. Lo encontró otra sesión revisando el PR.
+- **Queda el acceso de Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`,
+  perfil `Apiary Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
   `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
-  Daniel que corra algo, buscarlo aquí.**
+  Daniel que corra algo, buscarlo aquí** — y lo ya hecho está en §4, no aquí.
 - **Área y rendimiento: bloqueado en el dueño, no en construir nada** (dos viñetas fundidas y
   **re-medidas el 2026-10-04** contra la base compartida; las cifras viejas decían «seis lotes» y
   «0 de 8», y ninguna de las dos era la cuenta). `area_hectares` vive en `core.location`, y **de
@@ -280,11 +280,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   **De Daniel sigue siendo el modelo:** método y variedad en la receta, variedad en
   el lote.
 
-- **El protocolo de cata de café YA está en producción** (v1 y v2, Daniel,
-  2026-09-18), así que «falta correr `sensory:create-protocol`» era falso. Sin
-  constar: si se cargó `protocolos/miel-competencia-100.json` (#213). La herramienta
-  quedó lista el 2026-09-06; detalle en
-  `docs/SESSION_STATE_ARCHIVE.md`.
 
 - **Clasificar por malla sobre muestra: decidido y sin construir (ADR-190, ADR-191)** —
   Daniel decidió el 2026-09-29 que son **dos operaciones** —medición sobre unos cientos de
@@ -294,12 +289,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   ir el rango. Falta construirlo —tabla, migración, y el servicio que escribe esas filas—
   y decidir si las tres lecturas deben distinguir en pantalla una fracción medida sobre
   muestra de una salida de un corte real. El corte de hoy no se toca.
-- **Dos guiones que YA SE CORRIERON: no volver a pedírselos a Daniel.** La v2 del
-  protocolo sensorial (2026-09-18) y `npm run apiary:load-protocol` v1
-  (2026-09-16, `apiario-campo-v1` en producción), las dos confirmadas por él.
-  **No se verificó contra la base y no se puede** —leer producción de Neon está
-  prohibido—: es su palabra, y basta. El segundo se anota porque **no estaba
-  anotado**, y ese día se le pidió correr un guion que ya había corrido.
 
 - **Dónde se rompe «tarea de finca → puntaje de taza», medido.** Fumigar y
   sembrar se registran como *hechos* (`LabourEntry`, `MaterialConsumptionEntry`,
@@ -337,10 +326,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Un nombre propio para este OS** — al mover el dominio, esta aplicación queda
   solo en `nectar-nomada-package.vercel.app`. Si quiere algo como
   `app.nectarnomada.com`, es decisión suya. No es urgente: nada depende de ello.
-- **El inventario de acceso: ficha `007` CERRADA, los dos escalones** (#639,
-  2026-10-04). El detector lee el AST y una compuerta nueva resuelve el guardia
-  hasta su **símbolo**: de las 396 «guardia directo» por nombre, **0 mienten**. La
-  pregunta de los 50 `exige*` **se cae**: con símbolos no hay nada que enumerar.
 - **Y la `005` ya tiene mecanismo para «el guardia debido»** (mismo PR): se declara
   por dominio qué permiso gobierna qué modelo y una compuerta lo exige. Del dominio
   del **lote**: 15 modelos gobernados y **13 excepciones** declaradas con su razón.
@@ -359,10 +344,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   del `action`, y los otros dominios (`location` 34, `equipment` 20, `specimen` 7,
   `sample` 4 llamadas a `can`), que son un bloque más en el mismo archivo.
 
-- **Reconciliación de medios en R2** — no está bloqueada, está *aplazada*:
-  `core.asset` y el bucket estaban vacíos al 2026-08-20. Ver
-  `PENDING_IMPLEMENTATIONS/002`.
-
 ---
 
 ## 4. Lo que NO se vuelve a proponer
@@ -375,6 +356,9 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 | Pasar la contraseña como argumento a `auth:set-password` | Se niega a propósito: un argumento sobrevive en el historial y en la lista de procesos |
 | Duplicar personas canónicas creando una cuenta nueva por «sign-up» | Ya existen con Assignments colgando |
 | Construir herramienta de reconciliación de medios | Todavía no hay fotos reales. Ver `PENDING_IMPLEMENTATIONS/002` |
+| Pedirle a Daniel que corra `sensory:create-protocol` | El protocolo de cata **ya está en producción**, v1 y v2, confirmado por él el 2026-09-18 |
+| Pedirle la v2 del protocolo sensorial, o `apiary:load-protocol` v1 | **Ya los corrió** (2026-09-18 y 2026-09-16, `apiario-campo-v1`), confirmados por él. No se verificó contra la base y no se puede: leer producción está prohibido, es su palabra |
+| Dar de alta a Bob Huerbsch | **Ya entró**, lo dijo Daniel el 2026-09-17. Queda Kenis, que sigue en §3 |
 | Tocar `~/Developer/nectarnomada-web` desde esta ventana | Es el sitio público, otro repositorio (D-001 allí) |
 | Deducir el dueño de una Location por su nombre | Exactamente lo que salió mal en el renombrado de Finca Rosina. Se mira `core.location.organization_id` |
 | Subir el límite de `check:state` cuando falle | El límite es la lectura, no la preferencia. Se archiva, no se sube |
