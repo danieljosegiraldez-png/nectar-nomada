@@ -66,6 +66,76 @@ El primer control importa: la primera versión usó la palabra `scope`, que da *
 —la limpieza vive en el helper—, así que los cuatro ceros no medían nada. Con una palabra que tiene
 que estar, miden.
 
+## La culpable, medida el 2026-10-06 — y sin tocar ninguna base
+
+La ficha decía que faltaba por medir «cuál es el `Assignment` que bloquea», y proponía imprimirlo
+desde el `catch`. Se midió por otro camino, estático, que no necesita base: **buscar quién puede
+tener un `Assignment` colgado de un ámbito del fixture.**
+
+**Es `tests/rbac/admin.test.ts`, en la que era su línea 158:**
+
+```ts
+scopeType: "location",
+scopeRefId: (await prisma.location.findFirstOrThrow({ select: { id: true } })).id,
+```
+
+**Sin `where` y sin `orderBy`:** «la ubicación que la base devuelva primero», que puede ser de
+cualquiera. Y `grantRole` (`lib/rbac/admin.ts:146`) **reutiliza** el `Scope` de ese sitio con el
+mismo `findFirst ?? create` que el fixture, así que las dos acaban colgando del mismo ámbito.
+
+El mecanismo entero, con lo medido en cada eslabón:
+
+| eslabón | medido |
+|---|---|
+| `admin.test.ts` y `datosDeEquipo.test.ts` corren **a la vez** | las dos están en el grupo `base-sembrada`, que son **208** archivos contra la misma base |
+| `admin.test.ts` concede sobre una ubicación que no creó | **no crea ninguna**: `location.create` sale 0 veces en sus 342 líneas |
+| la cuenta de esa asignación no está en `cuentas` del fixture | es `subjectAccountId`, de `admin.test.ts` |
+| el fixture borra el ámbito de sus sitios | `limpiar()` paso 3: `scope.deleteMany({ where: { id: { in: scopes } } })` |
+| y sólo borra las asignaciones de SUS cuentas | paso 2: `where: { userAccountId: { in: cuentas } }` |
+| de ahí el `RESTRICT` | `assignment_scope_id_fkey` |
+| es la única de su clase | de **298** `findFirst*` en `tests/`, **11** van sin `where`, y es la **única** cuyo resultado alimenta un `scopeRefId` de ubicación |
+
+**El eslabón que NO se midió, y hay que decirlo:** que `findFirstOrThrow` devuelva de verdad una
+ubicación del fixture. Sin `orderBy`, Postgres devuelve una fila arbitraria y **puede** ser una
+recién insertada, pero cuál devuelve en una corrida concreta sólo lo dice la base. Lo que sí está
+medido es que **ningún otro camino puede producir el error observado**: las otras 9 suites que usan
+el fixture no crean ni una asignación, y el único código de producción que crea asignaciones sobre
+un ámbito de **ubicación** es `grantRole`.
+
+**Y una hipótesis mía que era falsa, anotada porque costó una medición.** Primero acusé a
+`tests/rutinas/rutinasDeLugar.test.ts`, que es la única de las diez que crea cuenta, ámbito y
+asignación propios. Es **ejemplar**: su ámbito apunta a `L.cama`, una ubicación **suya**, y un
+`try/finally` borra asignación, ámbito, cuenta y persona. El control que lo deshizo fue leer sobre
+qué ubicación concede, no contar cuántas asignaciones crea.
+
+## El arreglo, y por qué es el camino 2 y no el 1 ni el 3
+
+Con la culpable nombrada, el camino 2 —«que cada suite limpie lo suyo»— deja de ser disperso:
+**`admin.test.ts` crea su propio sitio en `beforeAll` y lo borra en `afterAll`**, con el ámbito que
+`grantRole` cuelgue de él, que es de esa suite y de nadie más. La prueba afirma lo mismo: su caso
+mide que revocar marca y audita, y la ubicación es incidental.
+
+Los otros dos caminos se descartan por lo que la ficha ya decía: el 1 **esconde** que otra suite
+dejó basura, y el 3 cambia el `relanza` del helper, que está puesto a propósito.
+
+**Lo que el arreglo NO cubre, dicho para que no se cuente por hecho.** La misma suite hace
+`project.findFirstOrThrow({ select: { id: true } })` y cuelga de ese proyecto tres concesiones de
+ámbito `project`. Es **la misma forma** y está **latente**, no viva: hoy nada borra los ámbitos de
+un proyecto sembrado, así que no hay quién choque. Se deja escrito en vez de arreglarlo a ciegas,
+porque crear un `Project` propio arrastra más campos obligatorios y es un cambio mayor que éste.
+
+**Y por qué no se escribió un guardia de la clase.** De las 11 apariciones sin `where`, casi todas
+sólo **leen** una fila sembrada, y eso es inocuo: un guardia que las marcara abortaría sobre código
+correcto, que es lo que enseña a ignorar una línea roja. La propiedad peligrosa no es «coger una
+fila cualquiera» sino «colgar un ámbito de una fila que no creaste», y detectar ese flujo de datos
+en texto es el analizador frágil que esta casa ya pagó dos veces. El veredicto aterriza donde la
+próxima sesión va a mirar: en el comentario de `admin.test.ts`, encima de `sitioPropio`.
+
+**Un detalle de medición, por si alguien repite el barrido:** el patrón que cuenta la clase
+encuentra **12**, y la doceava es **el comentario de este arreglo citando el código viejo**. Un
+analizador de fuente que no distingue código de comentario cuenta su propia explicación — la misma
+lección que `tests/arquitectura/vocabulario-de-audit.test.ts` ya lleva escrita.
+
 ## Qué haría falta para arreglarlo
 
 **Lo que falta medir primero, y es una línea:** cuál es el `Assignment` que bloquea. El `catch` del
