@@ -302,13 +302,19 @@ describe("la lista de pasos queda numerada 1..n, sin huecos", () => {
     );
     await rechaza(moverPaso(gestor, { stepId: despulpado.id, aSeq: 0 }), "posicion_invalida");
     await rechaza(moverPaso(gestor, { stepId: despulpado.id, aSeq: 3 }), "posicion_invalida");
+    // H5: una posición que no es un número entero tampoco existe. `1.5` cae DENTRO de 1..n y `NaN` compara falso con todo, así que sólo
+    // `Number.isInteger` las deja fuera; sin él, `splice` las trunca y el paso se movería en silencio.
+    await rechaza(moverPaso(gestor, { stepId: despulpado.id, aSeq: 1.5 }), "posicion_invalida");
+    await rechaza(moverPaso(gestor, { stepId: despulpado.id, aSeq: Number.NaN }), "posicion_invalida");
     expect(await orden(versionId)).toEqual([[1, "pulping"], [2, "washing"]]);
     // Control: la última posición que sí existe.
     await moverPaso(gestor, { stepId: despulpado.id, aSeq: 2 });
     expect(await orden(versionId)).toEqual([[1, "washing"], [2, "pulping"]]);
   });
 
-  it("lo que se escribe es lo que se lee; actualizar reemplaza columnas e hijas y conserva el lugar", async () => {
+  // H2: el título decía «lo que se escribe es lo que se lee» y no lo promete para el ORDEN de las adiciones ni de los fines: dentro de un
+  // paso no es semántico (las adiciones son simultáneas y los fines se combinan por `reglaDeFin`). Lo fija la prueba de después.
+  it("lo escrito se lee con los mismos valores; actualizar reemplaza columnas e hijas y conserva el lugar", async () => {
     expect(FASE_DEL_TIPO.drying, "precondición (tarea 2)").toBe("drying");
     expect(EJES_POR_TIPO_DE_PASO.drying, "precondición (tarea 2)").toContain("modoSecado");
     const { versionId } = await borrador("ida-y-vuelta");
@@ -399,9 +405,146 @@ describe("la lista de pasos queda numerada 1..n, sin huecos", () => {
     await quitarPaso(gestor, adicion.id);
     expect(await cuantas()).toEqual([0, 0, 0, 0, 0]);
   });
+
+  it("el orden de las adiciones y de los fines de un paso es el de su contenido: el mismo escribas en el orden que escribas, y el mismo en cada reescritura (H2)", async () => {
+    // Antes se leían por `id`, un UUID aleatorio: salían en otro orden del que se escribieron y cambiaban de orden en CADA reescritura, porque
+    // cada una borra las filas y crea otras con ids nuevos. Dentro de un paso el orden no es semántico —las adiciones son simultáneas y
+    // los fines se combinan por `reglaDeFin`—, así que lo único que se pide es que sea estable. Con `orderBy: id` cada lectura es una
+    // permutación al azar de cuatro: la probabilidad de que cinco coincidan con la primera es (1/24)^5, por cada lista.
+    expect(EJES_POR_TIPO_DE_PASO.fermentation, "precondición (tarea 2)").toContain("adiciones");
+    const { versionId } = await borrador("orden-de-hijas");
+    const sustratos = (
+      await prisma.variableCatalogValue.findMany({
+        where: { catalog: { key: "sustrato_anadido" }, aliasOfId: null },
+        orderBy: { displayOrder: "asc" },
+        select: { id: true },
+      })
+    ).map((v) => v.id);
+    expect(sustratos.length, "precondición: el catálogo sembrado trae al menos dos sustratos").toBeGreaterThanOrEqual(2);
+    const adiciones = [
+      { categoriaValueId: sustratos[0]!, cantidad: 2, unidad: "L", momento: "pre_green" },
+      { categoriaValueId: sustratos[0]!, cantidad: 5, unidad: "L", momento: "post_green" },
+      { categoriaValueId: sustratos[1]!, cantidad: 1, unidad: "kg", momento: "pre_green" },
+      { categoriaValueId: sustratos[1]!, momento: "post_green" },
+    ] as const;
+    const fines = [
+      { variable: "ph", operador: "lte", valor: 4.2, unidad: "pH" },
+      { variable: "ph", operador: "gte", valor: 3.4, unidad: "pH" },
+      { variable: "brix", operador: "lte", valor: 8, unidad: "Bx" },
+      { variable: "moisture", operador: "lte", valor: 11.5, unidad: "%" },
+    ] as const;
+    // Seis órdenes de entrada distintos de las mismas cuatro filas: la identidad, el inverso y cuatro más.
+    const ordenes = [[0, 1, 2, 3], [3, 2, 1, 0], [1, 2, 3, 0], [2, 3, 0, 1], [1, 3, 0, 2], [2, 0, 3, 1]];
+    const como = async (orden: number[]) =>
+      pasoDe("fermentation", { adiciones: orden.map((i) => adiciones[i]!), fines: orden.map((i) => fines[i]!) });
+    const leerHijas = async () => {
+      const [paso] = await pasosDeLaVersion(gestor, versionId);
+      return { adiciones: paso!.adiciones, fines: paso!.fines };
+    };
+    const huella = (xs: readonly unknown[]) => xs.map((x) => JSON.stringify(x)).sort();
+
+    const creado = await agregar(versionId, null, await como(ordenes[0]!));
+    const primera = await leerHijas();
+    expect(primera.adiciones, "control: las cuatro adiciones se leen").toHaveLength(4);
+    expect(primera.fines, "control: los cuatro fines se leen").toHaveLength(4);
+    // Lo que se lee es lo que se escribió (mismo contenido, aunque no se promete el orden)...
+    expect(huella(primera.adiciones)).toEqual(
+      huella(adiciones.map((a) => ({ categoriaValueId: a.categoriaValueId, cantidad: "cantidad" in a ? a.cantidad : null, unidad: "unidad" in a ? a.unidad : null, momento: a.momento }))),
+    );
+    expect(huella(primera.fines)).toEqual(huella(fines.map((f) => ({ ...f, desdeLecturaId: null }))));
+    // ...y se lee en el MISMO orden cada vez que se reescribe, sea cual sea el orden de entrada.
+    for (const orden of ordenes.slice(1)) {
+      await actualizarPaso(gestor, { stepId: creado.id, paso: await como(orden) });
+      const otra = await leerHijas();
+      expect(otra.adiciones, `adiciones, entrada ${orden.join("")}`).toEqual(primera.adiciones);
+      expect(otra.fines, `fines, entrada ${orden.join("")}`).toEqual(primera.fines);
+    }
+  });
 });
 
+/**
+ * H1 (revisión de la tarea 3, 2026-10-06): las dos tablas de `pasos.ts` —`EJE_DEL_CAMPO`, de qué eje es cada columna, y
+ * `CATALOGO_DEL_CAMPO`, de qué catálogo sale cada valor— se prueban CAMPO A CAMPO, y estas dos listas están ESCRITAS A MANO aquí, no
+ * importadas de `pasos.ts`: una prueba que recorriera la tabla del servicio recorrería lo que quede de ella, y quitar una fila la dejaba
+ * en verde con una fila menos. Medido en la revisión: quitar `fisicoValueId` (o `estadoFrutoValueId`, `temperaturaValueId`,
+ * `fuenteMicrobianaValueId`, `medioValueId`, `mucilagoObjetivo`) de `EJE_DEL_CAMPO`, o cambiar el catálogo de cuatro de las seis de
+ * `CATALOGO_DEL_CAMPO`, dejaba 120 de 120 en verde; sólo caía quitar el oxígeno. La especificación es ésta (diseño §3: los
+ * vocabularios y los ejes); lo que se comprueba contra ella es el servicio, llamado con la entrada hostil.
+ *
+ * Los tipos salen de `EJES_POR_TIPO_DE_PASO` (`tipoCon`, `tipoSin`) y los valores del catálogo sembrado (`primerValor`): ninguno se
+ * inventa. Cada caso lleva su control al lado —el mismo dato en un tipo que SÍ admite el eje se guarda y se lee igual—, para que el
+ * rechazo no pase vacío.
+ */
+type CampoDeEje = Exclude<keyof PasoEditable, "stepTypeValueId">;
+type DatoDeEje = Omit<PasoEditable, "stepTypeValueId">;
+
+/** Las diez columnas de eje, con el eje del tipo al que pertenecen y un dato que se guardaría si el tipo lo admitiera. */
+const CAMPOS_DE_EJE: ReadonlyArray<[campo: CampoDeEje, eje: EjeDelPaso, dato: () => Promise<DatoDeEje>]> = [
+  ["estadoFrutoValueId", "estadoFruto", async () => ({ estadoFrutoValueId: await primerValor("estado_cereza") })],
+  ["mucilagoObjetivo", "mucilagoObjetivo", async () => ({ mucilagoObjetivo: 50 })],
+  ["oxigenoValueId", "oxigeno", async () => ({ oxigenoValueId: await primerValor("condicion_oxigeno") })],
+  ["temperaturaValueId", "temperatura", async () => ({ temperaturaValueId: await primerValor("manejo_temperatura") })],
+  ["temperaturaMinC", "temperatura", async () => ({ temperaturaMinC: 18 })],
+  ["temperaturaMaxC", "temperatura", async () => ({ temperaturaMaxC: 22 })],
+  ["fuenteMicrobianaValueId", "fuenteMicrobiana", async () => ({ fuenteMicrobianaValueId: await primerValor("fuente_microbiana") })],
+  ["medioValueId", "medio", async () => ({ medioValueId: await primerValor("medio_lavado") })],
+  ["fisicoValueId", "fisico", async () => ({ fisicoValueId: await primerValor("fisico") })],
+  ["modoSecado", "modoSecado", async () => ({ modoSecado: "open_patio" })],
+];
+
+/** Las seis columnas que son un valor de catálogo: el suyo, y el de OTRO catálogo con el que se prueba el rechazo (el siguiente de la lista). */
+const CATALOGOS_DE_CAMPO: ReadonlyArray<[campo: CampoDeEje, catalogo: string, ajeno: string, eje: EjeDelPaso]> = [
+  ["estadoFrutoValueId", "estado_cereza", "condicion_oxigeno", "estadoFruto"],
+  ["oxigenoValueId", "condicion_oxigeno", "manejo_temperatura", "oxigeno"],
+  ["temperaturaValueId", "manejo_temperatura", "fuente_microbiana", "temperatura"],
+  ["fuenteMicrobianaValueId", "fuente_microbiana", "medio_lavado", "fuenteMicrobiana"],
+  ["medioValueId", "medio_lavado", "fisico", "medio"],
+  ["fisicoValueId", "fisico", "estado_cereza", "fisico"],
+];
+
 describe("§3.5 — cada tipo admite sólo sus ejes, y cada valor sale de su catálogo", () => {
+  it.each(CAMPOS_DE_EJE)(
+    "EJE_DEL_CAMPO — %s es del eje «%s»: se rechaza en un tipo que no lo admite (eje_no_aplica) y se guarda en uno que sí",
+    async (campo, eje, dato) => {
+      const { versionId } = await borrador(`eje-${campo}`);
+      const sin = tipoSin(eje);
+      const con = tipoCon(eje);
+      const delCampo = await dato();
+      expect(delCampo[campo], "precondición: el dato de la prueba no es nulo").not.toBeNull();
+      await rechaza(
+        agregarPaso(gestor, { recipeVersionId: versionId, despuesDeSeq: null, paso: await pasoDe(sin, delCampo) }),
+        "eje_no_aplica",
+      );
+      expect(await prisma.processRecipeStep.count({ where: { recipeVersionId: versionId } }), "el rechazo no dejó el paso").toBe(0);
+      // Control: el mismo dato, en un tipo que admite el eje, se guarda y se lee igual.
+      await agregar(versionId, null, await pasoDe(con, delCampo));
+      const [guardado] = await pasosDeLaVersion(gestor, versionId);
+      expect(guardado!.tipo).toBe(con);
+      expect(guardado![campo]).toBe(delCampo[campo]);
+    },
+  );
+
+  it.each(CATALOGOS_DE_CAMPO)(
+    "CATALOGO_DEL_CAMPO — %s sale de «%s»: un valor de otro catálogo se rechaza (valor_de_otro_catalogo) y uno suyo se guarda",
+    async (campo, catalogo, ajeno, eje) => {
+      const { versionId } = await borrador(`catalogo-${campo}`);
+      const tipo = tipoCon(eje);
+      const propio = await primerValor(catalogo);
+      const deOtro = await primerValor(ajeno);
+      expect(deOtro, "precondición: el valor ajeno es de otro catálogo").not.toBe(propio);
+      const con = (id: string) => pasoDe(tipo, { [campo]: id } as DatoDeEje);
+      await rechaza(
+        agregarPaso(gestor, { recipeVersionId: versionId, despuesDeSeq: null, paso: await con(deOtro) }),
+        "valor_de_otro_catalogo",
+      );
+      expect(await prisma.processRecipeStep.count({ where: { recipeVersionId: versionId } }), "el rechazo no dejó el paso").toBe(0);
+      // Control: el mismo campo con un valor de SU catálogo se guarda y se lee igual.
+      await agregar(versionId, null, await con(propio));
+      const [guardado] = await pasosDeLaVersion(gestor, versionId);
+      expect(guardado![campo]).toBe(propio);
+    },
+  );
+
   it("un eje que no aplica al tipo se rechaza; el mismo valor en un tipo que lo admite, pasa", async () => {
     const { versionId } = await borrador("ejes");
     const intenta = (paso: PasoEditable) => agregarPaso(gestor, { recipeVersionId: versionId, despuesDeSeq: null, paso });
@@ -991,6 +1134,36 @@ describe("cada escritura deja su evento", () => {
     expect(await ops(a.id)).toEqual(["process_recipe_step.create", "process_recipe_step.delete", "process_recipe_step.update"]);
     expect(await ops(b.id)).toEqual(["process_recipe_step.create", "process_recipe_step.move"]);
     expect(await ops(versionId)).toEqual(["process_recipe_version.publish"]);
+
+    // H4: que haya un evento por escritura no dice QUÉ dejó escrito. Quitar `before` y `after` del `update` dejaba esta prueba en verde, así
+    // que cada evento se lee entero: quién lo escribió, y el antes y el después del cambio.
+    const evento = (entityId: string, operation: string) => prisma.auditEvent.findFirstOrThrow({ where: { entityId, operation } });
+    const todos = await prisma.auditEvent.findMany({
+      where: { entityId: { in: [a.id, b.id, versionId] } },
+      select: { actorUserAccountId: true },
+    });
+    expect(todos, "control: los seis eventos de la corrida").toHaveLength(6);
+    expect(todos.map((e) => e.actorUserAccountId), "el actor de cada evento es quien escribió").toEqual(Array(6).fill(gestor));
+
+    const creado = await evento(a.id, "process_recipe_step.create");
+    expect(creado.before).toBeNull();
+    expect(creado.after).toMatchObject({ recipeVersionId: versionId, id: a.id, seq: 1, tipo: "pulping", intencion: null });
+    // Actualizar: la intención pasa de nula al texto nuevo.
+    const actualizado = await evento(a.id, "process_recipe_step.update");
+    expect(actualizado.before).toMatchObject({ recipeVersionId: versionId, id: a.id, tipo: "pulping", intencion: null });
+    expect(actualizado.after).toMatchObject({ recipeVersionId: versionId, id: a.id, tipo: "pulping", intencion: "despulpar en seco" });
+    // Mover: de la posición 2 a la 1.
+    const movido = await evento(b.id, "process_recipe_step.move");
+    expect(movido.before).toEqual({ recipeVersionId: versionId, seq: 2 });
+    expect(movido.after).toEqual({ recipeVersionId: versionId, seq: 1 });
+    // Quitar: el antes lleva el paso entero (con la intención ya cambiada, y en el lugar 2 que le dejó el movimiento), y no hay después.
+    const quitado = await evento(a.id, "process_recipe_step.delete");
+    expect(quitado.before).toMatchObject({ recipeVersionId: versionId, id: a.id, seq: 2, intencion: "despulpar en seco" });
+    expect(quitado.after).toBeNull();
+    // Publicar: de borrador a aprobada.
+    const publicado = await evento(versionId, "process_recipe_version.publish");
+    expect(publicado.before).toMatchObject({ id: versionId, status: "draft" });
+    expect(publicado.after).toMatchObject({ id: versionId, status: "approved" });
   });
 });
 
@@ -1034,6 +1207,23 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     }
     return { org, lugar };
   }
+
+  /** Otro lote de la misma organización, en su PROPIA ubicación (hermana de la de `finca`: un ámbito en una no alcanza la otra). */
+  async function otroLoteEnLaFinca(orgId: string) {
+    const lugar = await prisma.location.create({
+      data: { name: `TEST-PASOS-${randomUUID()}`, locationType: "site", classification: "internal", organizationId: orgId },
+    });
+    lugares.push(lugar.id);
+    const lot = await prisma.lot.create({
+      data: { lotCode: `PASOS-F-${randomUUID()}`, lotType: "cherry", organizationId: orgId, locationId: lugar.id, classification: "internal" },
+    });
+    lotesDeFinca.push(lot.id);
+    return { lugar, lot };
+  }
+
+  /** ¿Gestiona esta cuenta el lote `internal` de esa ubicación? Es la fila patrón de las pruebas de H3: lo que cada una puede gestionar. */
+  const gestiona = (quien: string, lugarId: string) =>
+    requireLotAccess(quien, "manage", [{ projectId: null, locationId: lugarId, classification: "internal" }]);
 
   it("un Farm Manager NO escribe en una receta de su organización —edit_beneficio ya no basta—, ni un capataz; el Coffee Process Manager sí", async () => {
     const { org, lugar } = await finca(true);
@@ -1103,6 +1293,62 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     // Control: con alcance de plataforma (el `gestor` de este archivo), sí.
     await agregar(versionId, null, paso, gestor);
     expect((await pasosDeLaVersion(gestor, versionId)).length).toBe(1);
+  });
+
+  // H3 (revisión de la tarea 3): leer los pasos pedía `lot:manage` sobre «un lote cualquiera» —`findFirst` sin orden—, así que quien
+  // gestionaba UN lote de la organización lo leía o no según el orden físico de las filas. Ahora basta con gestionar AL MENOS UNO. Las
+  // tres pruebas de abajo no dependen de ese orden: la finca lleva dos lotes en ubicaciones hermanas, cada jefe gestiona sólo uno, y
+  // por tanto, con cualquier orden físico, uno de los dos habría caído con el `findFirst` de antes.
+  async function dosJefesDeUnaFincaConDosLotes() {
+    const { org, lugar: lugarA } = await finca(true); // el lote A, el primero que se crea
+    const { lugar: lugarB } = await otroLoteEnLaFinca(org.id); // el lote B, después
+    const jefeA = await cuentasDePermisos.cuenta("Farm Manager", { locationId: lugarA.id });
+    const jefeB = await cuentasDePermisos.cuenta("Farm Manager", { locationId: lugarB.id });
+    // Fila patrón: cada jefe gestiona SU lote y no el del otro. Sin esto, lo que sigue no mediría nada.
+    await gestiona(jefeA, lugarA.id);
+    await gestiona(jefeB, lugarB.id);
+    await expect(gestiona(jefeA, lugarB.id)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    await expect(gestiona(jefeB, lugarA.id)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    return { org, lugarA, lugarB, jefeA, jefeB };
+  }
+
+  it("H3 — quien gestiona un solo lote de la organización lee los pasos de su receta, haya o no otro lote suyo que no gestiona (sin depender del orden de las filas)", async () => {
+    const { org, jefeA, jefeB } = await dosJefesDeUnaFincaConDosLotes();
+    const receta = await createRecipeWithVersion(gestor, { name: nombre("de una finca con dos lotes"), organizationId: org.id, targets: OBJETIVO });
+    const versionId = receta.versions[0]!.id;
+    await agregar(versionId, null, await pasoDe("washing"));
+    for (const quien of [jefeA, jefeB]) {
+      expect((await pasosDeLaVersion(quien, versionId)).map((p) => p.tipo)).toEqual(["washing"]);
+    }
+  });
+
+  it("H3 — los mismos dos jefes leen los pasos de una plantilla, y también quien gestiona un lote de OTRA organización: una plantilla sirve en cualquiera", async () => {
+    const { jefeA, jefeB } = await dosJefesDeUnaFincaConDosLotes();
+    const ajena = await finca(true);
+    const jefeAjeno = await cuentasDePermisos.cuenta("Farm Manager", { locationId: ajena.lugar.id });
+    const plantilla = await createRecipeWithVersion(gestor, { name: nombre("plantilla a leer"), organizationId: null, targets: OBJETIVO });
+    const versionId = plantilla.versions[0]!.id;
+    await agregar(versionId, null, await pasoDe("washing"));
+    for (const quien of [jefeA, jefeB, jefeAjeno]) {
+      expect((await pasosDeLaVersion(quien, versionId)).map((p) => p.tipo)).toEqual(["washing"]);
+    }
+  });
+
+  it("H3 — quien no gestiona ningún lote ni escribe recetas no lee: ni un Project Viewer, en la receta ni en la plantilla, ni quien gestiona lotes sólo de OTRA organización, en la receta", async () => {
+    const { org, lugarA, jefeA } = await dosJefesDeUnaFincaConDosLotes();
+    const visor = await cuentasDePermisos.cuenta("Project Viewer", { locationId: lugarA.id });
+    const ajena = await finca(true);
+    const jefeAjeno = await cuentasDePermisos.cuenta("Farm Manager", { locationId: ajena.lugar.id });
+    const deLaOrg = (await createRecipeWithVersion(gestor, { name: nombre("de la organización"), organizationId: org.id, targets: OBJETIVO })).versions[0]!.id;
+    const plantilla = (await createRecipeWithVersion(gestor, { name: nombre("plantilla cerrada"), organizationId: null, targets: OBJETIVO })).versions[0]!.id;
+    await agregar(deLaOrg, null, await pasoDe("washing"));
+    await agregar(plantilla, null, await pasoDe("washing"));
+    // Control: quien sí gestiona un lote de la organización la lee; sin esto los rechazos de abajo no distinguen nada.
+    expect((await pasosDeLaVersion(jefeA, deLaOrg)).length).toBe(1);
+    await expect(pasosDeLaVersion(visor, deLaOrg)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    await expect(pasosDeLaVersion(visor, plantilla)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    // Los lotes candidatos son los de la organización de la receta: el jefe de otra finca gestiona los suyos y no los de ésta.
+    await expect(pasosDeLaVersion(jefeAjeno, deLaOrg)).rejects.toBeInstanceOf(TraceabilityAccessError);
   });
 });
 

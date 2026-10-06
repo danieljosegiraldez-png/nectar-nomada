@@ -447,17 +447,29 @@ async function lecturasQueElPasoYaCita(stepId: string): Promise<Set<string>> {
 
 /**
  * Quién LEE los pasos de una receta que NO es Libre: quien puede escribirla (V16: el Coffee Process Manager, que no lleva `lot:manage`) o
- * quien opera los lotes de su organización (`lot:manage` sobre un lote suyo: lo que pide hoy el editor, `getRecipeForEditor`). Ver una
- * receta no es configurarla. Una plantilla se lee contra un lote cualquiera, como hoy (reconocimiento u1, S11). Sin ningún lote
- * al que mirar, `organizacion_sin_lotes` —un `RecipeError`, con su texto—: el de las lecturas viejas, `organization_has_no_lots`,
- * es un `ProcessTargetError` sin frase propia. **Una receta Libre no pasa por aquí** (R24): `pasosDeLaVersion` la manda antes a
- * `exigeVerLosLotesDeLaLibre`, porque una Libre se lee por su lote y no por la autoría.
+ * quien opera los lotes de su organización (`lot:manage`: lo que pide hoy el editor, `getRecipeForEditor`). Ver una receta no es
+ * configurarla.
+ *
+ * **Basta con gestionar AL MENOS UN lote** de la organización de la receta —de cualquier organización, si es una plantilla, que sirve en
+ * todas (reconocimiento u1, S11)—. Antes se miraba UN lote cualquiera (`findFirst` sin orden) y la respuesta dependía del orden físico de
+ * las filas: un Farm Manager que gestiona sólo uno de los dos lotes de su organización leía o no según cuál saliera primero, y una
+ * plantilla se leía contra el primer lote de toda la base (H3, revisión de la tarea 3). Aquí el «O» de `requireLotAccess` es lo que se
+ * quiere (su comentario lo explica: pasa en cuanto UNO de los candidatos pasa), y los candidatos son las combinaciones DISTINTAS de
+ * (proyecto, ubicación, clasificación), que es lo único que esa comprobación mira de un lote: son pocas (7 sobre 108 lotes, medido el
+ * 2026-10-06 en la copia local) y no dependen del orden de nada. Sin ningún lote al que mirar, `organizacion_sin_lotes` —un
+ * `RecipeError`, con su texto—: el de las lecturas viejas, `organization_has_no_lots`, es un `ProcessTargetError` sin frase propia.
+ * **Una receta Libre no pasa por aquí** (R24): `pasosDeLaVersion` la manda antes a `exigeVerLosLotesDeLaLibre`, porque una Libre se lee
+ * por su lote y no por la autoría.
  */
 async function exigeLecturaDeLosPasos(userAccountId: string, organizationId: string | null): Promise<void> {
   if (await puedeAutoriaDeReceta(userAccountId, organizationId)) return;
-  const unLote = await prisma.lot.findFirst({ where: { organizationId: organizationId ?? undefined } });
-  if (!unLote) throw new RecipeError("organizacion_sin_lotes");
-  await requireLotAccess(userAccountId, "manage", [unLote]);
+  const candidatos = await prisma.lot.findMany({
+    where: organizationId === null ? {} : { organizationId },
+    select: { projectId: true, locationId: true, classification: true },
+    distinct: ["projectId", "locationId", "classification"],
+  });
+  if (candidatos.length === 0) throw new RecipeError("organizacion_sin_lotes");
+  await requireLotAccess(userAccountId, "manage", candidatos);
 }
 
 /**
@@ -628,6 +640,9 @@ function aNumero(valor: { toNumber(): number } | null): number | null {
 /**
  * Los pasos de una versión —o uno solo—, como los lee la pantalla: en `seq`, con su tipo, sus hijas y números. Recibe el `tx`
  * de quien escribe (para el antes y el después de la auditoría) o el cliente global cuando sólo se lee.
+ *
+ * **El orden dentro de un paso no es semántico: las adiciones son simultáneas y los fines se combinan por `reglaDeFin`.** Se leen por su
+ * contenido —el mismo en cada reescritura—, no en el orden en que se escribieron, que no se guarda (H2).
  */
 async function leerPasos(db: Tx, recipeVersionId: string, soloStepId?: string) {
   const pasos = await db.processRecipeStep.findMany({
@@ -640,8 +655,18 @@ async function leerPasos(db: Tx, recipeVersionId: string, soloStepId?: string) {
     where: { id: { in: [...new Set(pasos.map((p) => p.stepTypeValueId))] } },
     select: { id: true, value: true },
   });
-  const adiciones = await db.processRecipeStepAddition.findMany({ where: { stepId: { in: ids } }, orderBy: { id: "asc" } });
-  const fines = await db.processRecipeStepEnd.findMany({ where: { stepId: { in: ids } }, orderBy: { id: "asc" } });
+  // El orden de las adiciones y de los fines DENTRO de un paso no es semántico —las adiciones son simultáneas y los fines se combinan por
+  // `reglaDeFin`—, y no se guarda: cada reescritura borra las filas y crea otras con ids nuevos (UUID al azar), así que ordenar por `id`
+  // las devolvía en otro orden del que se escribieron y en otro distinto cada vez. Se leen por su CONTENIDO, que es el mismo en cada
+  // reescritura (H2, revisión de la tarea 3); el `id` va al final sólo para desempatar filas idénticas, que no se distinguen por fuera.
+  const adiciones = await db.processRecipeStepAddition.findMany({
+    where: { stepId: { in: ids } },
+    orderBy: [{ categoriaValueId: "asc" }, { momento: "asc" }, { cantidad: "asc" }, { unidad: "asc" }, { id: "asc" }],
+  });
+  const fines = await db.processRecipeStepEnd.findMany({
+    where: { stepId: { in: ids } },
+    orderBy: [{ variable: "asc" }, { operador: "asc" }, { valor: "asc" }, { unidad: "asc" }, { desdeLecturaId: "asc" }, { id: "asc" }],
+  });
   const requisitos = await db.processRecipeStepRequirement.findMany({
     where: { stepId: { in: ids } },
     orderBy: { capacidadValueId: "asc" },
