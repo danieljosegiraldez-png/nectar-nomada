@@ -41,6 +41,7 @@ import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryin
 import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
+import { RecipeError, claveDeErrorDeReceta } from "../../lib/recetas/errorDeReceta";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
@@ -315,6 +316,11 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
     return t("error_green_grading_screen_system_other_needs_note");
   }
   if (error instanceof GreenGradingValidationError) return t("error_green_grading", { detail: error.message });
+  // Parte 2a (tarea 3, 2026-10-03): la receta con pasos, un texto por código. El genérico de la receta de hoy, con el código
+  // de detalle, queda para un código que no tenga el suyo.
+  const claveDeReceta = claveDeErrorDeReceta(error);
+  if (claveDeReceta) return t(claveDeReceta as "error_receta_version_no_es_borrador");
+  if (error instanceof RecipeError) return t("error_process_target", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
   if (error instanceof MaterialConsumptionValidationError) {
