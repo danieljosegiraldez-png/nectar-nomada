@@ -1,6 +1,35 @@
 # 021 · La curva interpreta una lectura sin mirar su procedencia
 
-**Estado: abierto.** Encontrado el 2026-10-02 por el CLI de Codex, revisando el diff de los ejes y la
+**Estado: HECHA el 2026-10-06, las dos mitades** —la procedencia y la compuerta por severidad, que
+Daniel decidió juntar ese día—. Lo entregado, con lo medido al lado:
+
+| lo que la ficha pedía | lo hecho | medido |
+|---|---|---|
+| decidir qué hace la curva con una lectura excluida | **ya estaba decidido** (Daniel, 2026-10-02): dibujarla marcada y nunca interpretarla | — |
+| traer a `curvaDeUnLote` lo que haga falta | `instrumentId` en su `select` y `estadosDeInstrumentoPorMedicion`, que **ya estaba importada** en la línea 12 del mismo archivo para el camino del veredicto | una consulta por instrumento, no por lectura |
+| un guardia que llame a la pantalla con una lectura excluida | **C3 en `pantalla-del-tablero.test.ts`**, cuatro casos | 70 → **74** pruebas |
+| *(salió al medir)* la severidad de cada banda | las ocho filas transcritas de la columna «Acción del software», y `sostieneLaCita` | **3 de las 8 son `CRITICAL`** |
+
+**El flip, con sus tres filas.** Quitando la compuerta del componente —la conducta, no el token—:
+el sha del archivo cambió (`43790851` → `b0b5183c`), **compila** (`tsc=0`, 0 errores, así que el
+rojo no es un artefacto), y caen **exactamente dos** pruebas, por su nombre: «instrumento que falló
+su contraste…» y «revisión vencida: sostiene la de grado WARNING y NO la CRITICAL». El control
+positivo y la de «sin instrumento declarado NO degrada» **siguen verdes**, que es lo correcto.
+
+**Lo que el guardia del vocabulario cerrado obligó a corregir, y por eso existe.** Su `replace` de
+`{...}` no es anidado, así que un plural ICU le filtra la palabra `other` al léxico: la frase se
+quedó sin plural. Y «registra» e «interpreta» sirven también de imperativo en castellano —que es por
+lo que «sugiere» y «estanca» NO están en ese léxico—: se añadieron A PROPÓSITO, con su razón, porque
+no mandan nada sobre el lote. La clave se llama `curvaRiesgoSinVerificar` para caer DENTRO del
+`toEqual` que enumera las vigiladas, no fuera.
+
+**Sigue sin reproducirse en pantalla con datos vivos**, como la ficha advertía: en la base local no
+hay recetas y el bloque no se pinta. El guardia llama a la función con la entrada construida, que es
+como esta casa prueba lo que el árbol real no ejercita. Eso no cambió.
+
+---
+
+**Estado original: abierto.** Encontrado el 2026-10-02 por el CLI de Codex, revisando el diff de los ejes y la
 rúbrica 22 (PR de `ejes-curva`) **antes** de pedir la fusión. **No está reproducido en el navegador**:
 es propagación leída en el código, con el escenario construido.
 
