@@ -95,12 +95,20 @@ El mecanismo entero, con lo medido en cada eslabón:
 | de ahí el `RESTRICT` | `assignment_scope_id_fkey` |
 | es la única de su clase | de **298** `findFirst*` en `tests/`, **11** van sin `where`, y es la **única** cuyo resultado alimenta un `scopeRefId` de ubicación |
 
-**El eslabón que NO se midió, y hay que decirlo:** que `findFirstOrThrow` devuelva de verdad una
-ubicación del fixture. Sin `orderBy`, Postgres devuelve una fila arbitraria y **puede** ser una
-recién insertada, pero cuál devuelve en una corrida concreta sólo lo dice la base. Lo que sí está
-medido es que **ningún otro camino puede producir el error observado**: las otras 9 suites que usan
-el fixture no crean ni una asignación, y el único código de producción que crea asignaciones sobre
-un ámbito de **ubicación** es `grantRole`.
+**Y el eslabón que faltaba está medido, por el flip.** La primera versión de esta sección decía que
+no se podía saber si `findFirstOrThrow` devuelve de hecho una ubicación ajena. Se midió: volviendo a
+poner la línea sin filtro y corriendo la suite sobre la desechable `nectar_ci_022b`, **dejó un ámbito
+de ubicación colgado de `Panamá`** —una ubicación sembrada, de nivel país, que la suite no creó—, con
+`es_suya = f`. Con el arreglo, la misma consulta devuelve **cero** ámbitos de ubicación.
+
+Y la parte que explica por qué esto sobrevivió tanto: **la suite pasa sus 13 pruebas y sale con 0 en
+las dos corridas.** El daño es invisible a su propio veredicto; sólo se ve consultando la base
+después. Eso es la regla de esta casa —«una prueba no deja al fixture compartido en un estado que
+ella misma no pueda revertir»— y el flip es lo único que lo enseña.
+
+Lo que ya estaba medido antes del flip, y sigue valiendo: **ningún otro camino puede producir el
+error observado**. Las otras 9 suites que usan el fixture no crean ni una asignación, y el único
+código de producción que crea asignaciones sobre un ámbito de **ubicación** es `grantRole`.
 
 **Y una hipótesis mía que era falsa, anotada porque costó una medición.** Primero acusé a
 `tests/rutinas/rutinasDeLugar.test.ts`, que es la única de las diez que crea cuenta, ámbito y
