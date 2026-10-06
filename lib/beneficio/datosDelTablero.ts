@@ -676,7 +676,18 @@ async function curvaDeUnLote(
       // `??` y no `?`: una medición que el mapa no trae es `SIN_INSTRUMENTO`, que
       // `confianzaPorVerificacion` convierte en `null` — «no impone nada». Es el caso de todas las
       // lecturas de hoy y tratarlo como avería apagaría la pantalla entera.
-      confianza: confianzaPorVerificacion(estadosDeLaCurva.get(m.id) ?? "SIN_INSTRUMENTO"),
+      //
+      // **Y la clave NO SE EMITE cuando sería `null`, que no es cosmética.** `null` y ausente
+      // significan lo mismo aquí —«no impone nada»— pero `toEqual` de vitest **ignora `undefined` y
+      // no `null`**, así que un `confianza: null` añade una clave a cada punto y rompe las ~25
+      // comparaciones de puntos enteros que esta casa ya tiene. Lo cazó el carril con base del PR:
+      // `datos-del-tablero.test.ts:953` —la única que compara puntos pasando por esta función—
+      // falló con «expected { x, y, …(1) } to deeply equal { x, y }», mientras
+      // `curva-de-lote.test.ts` pasaba porque llama a `curvaDeLote` sin confianza, o sea
+      // `undefined`. Omitirla es además lo más honesto: la ausencia ya es el caso por defecto.
+      ...(((c) => (c === null ? {} : { confianza: c }))(
+        confianzaPorVerificacion(estadosDeLaCurva.get(m.id) ?? "SIN_INSTRUMENTO"),
+      )),
     })),
     objetivos,
     recetaResuelta,
