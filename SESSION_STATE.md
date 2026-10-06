@@ -89,10 +89,6 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 `getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
 **Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
 **Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
-### 2026-10-04 · Recetas, Parte 1: el proceso cubre al lote (#626)
-
-**Una división, una devolución o una continuación siguen bajo el proceso de arriba**, y todo lector del proceso de un lote pasa por `procesoQueCubre` (`lib/traceability/procesoDelLinaje.ts`); lo vigila `tests/arquitectura/proceso-por-el-resolvedor.test.ts`. Un proceso se cierra por humedad o por división (`closure_kind`, migración `20261004100000_proceso_cubre_al_lote`; las tres cuentas de producción dieron 0). **Sin medir:** las operaciones que bloquean el linaje esperan hasta 60 s (`TRANSACCION_DEL_LINAJE`), cifra no contrastada con Neon ni con el máximo de Vercel.
-**Lo siguiente:** la Parte 2a (la receta con pasos) tiene plan en la rama `recetas-parte-2a` y no se construye sin el visto bueno de Daniel; recoge su decisión del mucílago (lo que QUEDA: 0 = Lavado, 100 = Honey) y la autoría por el Coffee Process Manager (2b §12).
 
 ## 3. Bloqueado, y en qué
 
@@ -157,6 +153,13 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
 **Y una advertencia del paso 1 que no se debe perder:** la base local tenía 0 tanques y 0
 instrumentos, así que **la capacidad nunca quedó ejercida con unidades reales** — el bloque
 salía «0 de 0». Verde no es lo mismo que probado.
+
+#### Recetas: TRES planes sin construir, y una cifra sin medir (rescatado de #626, medido el 2026-10-05)
+
+La rama `recetas-parte-2a` lleva **tres** diseños —2a la receta con pasos, 2b lo que vigila, y **2c
+equipos y capacidades**, que la entrada archivada no nombraba— y ninguno se ha construido; esperan tu
+visto bueno. Y sigue sin medir `TRANSACCION_DEL_LINAJE` = `{ timeout: 60_000, maxWait: 10_000 }`, en
+**6** archivos de `lib/`, sin contrastar con Neon ni con el máximo de Vercel.
 
 #### Recolectores: darles su perfil (de Daniel)
 
