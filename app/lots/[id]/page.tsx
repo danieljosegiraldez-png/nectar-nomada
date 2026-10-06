@@ -1,4 +1,5 @@
 import { CampoNumerico } from "../../components/CampoNumerico";
+import { DESENLACES_DEL_SECADO } from "../../beneficio/bandejas/errorDeSecado";
 import { instrumentosParaMedicion } from "../../../lib/equipos/equipos";
 import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements";
 import Link from "next/link";
@@ -848,6 +849,18 @@ export default async function LotDetailPage({
               <form action={endDryingFormAction} className="nn-form" style={{ maxWidth: 420, marginTop: "1rem" }}>
                 <input type="hidden" name="lotId" value={lot.id} />
                 <input type="hidden" name="dryingRunId" value={activeDrying.id} />
+                <div className="nn-field">
+                  <label htmlFor="dry-outcome">{tb("desenlace")}</label>
+                  <select id="dry-outcome" name="endedOutcome" defaultValue="" required aria-describedby="dry-outcome-help">
+                    <option value="" disabled>{tb("elegirDesenlace")}</option>
+                    {DESENLACES_DEL_SECADO.map((d) => (
+                      <option key={d} value={d}>
+                        {tb(`desenlace_${d}` as "desenlace_target_reached")}
+                      </option>
+                    ))}
+                  </select>
+                  <p id="dry-outcome-help" className="nn-muted">{tb("desenlaceAyuda")}</p>
+                </div>
                 <div className="nn-field">
                   <label htmlFor="dry-output-code">{t("outputLotCodeLabel")}</label>
                   <input id="dry-output-code" name="outputLotCode" type="text" required />

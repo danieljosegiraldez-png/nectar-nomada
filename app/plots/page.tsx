@@ -58,9 +58,11 @@ export default async function PlotsPage() {
           con Lotes, Parcelas o Investigación por un sitio ahí arriba.
 
           (Ese «≤8» es hoy una afirmación falsa: `NAV` tiene 10 entradas y el
-          fixture del test es una lista de permisos escrita a mano que no llega
-          a abrirlas todas. Está anotado en `SESSION_STATE.md` §3; la decisión
-          de acortar el menú o mover el objetivo sigue siendo del dueño.) */}
+          fixture del test era una lista de permisos escrita a mano que no
+          llegaba a abrirlas todas. Está anotado en `SESSION_STATE.md` §3. Lo que
+          motivaba la decisión —234 px de cabecera— lo resolvió el PR #643 por
+          otro lado: hoy son 61 px en una fila. Cuántas entradas caben sigue
+          siendo del dueño.) */}
       <p>
         <Link href="/biochar">{t("biocharTitle")}</Link>
       </p>
