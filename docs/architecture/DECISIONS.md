@@ -11983,6 +11983,12 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
+    **Corregido el 2026-10-04 (decisión de Daniel del 2026-10-03, preguntado dos veces con este ADR delante):** la escala es
+    la contraria. **«Semi Wash NN %» = le QUEDA el NN % del mucílago**; 0 % = Lavado, 100 % = Honey. Lo de arriba se
+    conserva como se escribió. Con el 50 % las dos lecturas coinciden; con el 75 % no (antes quedaba el 25 %). Hoy la escala
+    vive en el `mucilagoObjetivo` de cada paso de receta (0, 10, 25, 50, 75, 100; Parte 2a) y en las definiciones de
+    `grado_proceso` de `lib/research/catalogs.ts`. **Cómo se leen los procesos ya registrados con `Semi Wash 50%` o
+    `Semi Wash 75%` lo decide Daniel antes del reimport**: la Parte 2a deja una consulta de sólo lectura que los cuenta.
 13. **Agua y sospecha de dilución**: fuera el 6,5 fijo. **El mosto se compara contra el pH del agua de
     ese lote**, y sólo contra eso: si mide casi lo mismo que el agua que se usó, avisa. Nunca se avisa
     sobre una lectura de agua. Para tenerlo, opción en el beneficio de **medir el pH del agua** cada día

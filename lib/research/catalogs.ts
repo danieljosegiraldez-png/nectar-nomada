@@ -85,12 +85,35 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
     // value gets added, same insert-extensible mechanism, only once a real
     // batch's measured percentage justifies it — never guessed ahead of
     // that, same discipline as everywhere else in this catalog.
+    //
+    // Parte 2a (2026-10-03/04): «added bare» deja de valer para los cuatro que no son `Natural`. Llevan la definición
+    // que fijó el dueño, y la escala del mucílago es la de lo que QUEDA —0 = Lavado, 100 = Honey, y «Semi Wash 75 %» es
+    // que le queda el 75 %— (Lavado, 2026-09-19; Honey, 2026-09-30; la escala, 2026-10-03, que corrige ADR-181 #12;
+    // `docs/superpowers/specs/2026-09-30-recetas-del-beneficio-design.md`). No es una equivalencia de color a
+    // porcentaje, que es lo que RO1.1 prohíbe: es la frontera entre Lavado, semi-lavado y Honey. Los procesos YA
+    // registrados con los dos semi-lavados los lee Daniel, no esta definición.
     values: [
       { value: "Natural" },
-      { value: "Washed" },
-      { value: "Semi Wash 50%" },
-      { value: "Semi Wash 75%" },
-      { value: "Honey" },
+      {
+        value: "Washed",
+        definition:
+          "Lavado: el café llega a la cama de secado sin nada de mucílago —le queda el 0 %—. Si llega con mucílago es semi-lavado (Daniel, 2026-09-19; escala de lo que QUEDA, 2026-10-03).",
+      },
+      {
+        value: "Semi Wash 50%",
+        definition:
+          "Semi-lavado: al llegar a la cama de secado le queda el 50 % del mucílago (Daniel, 2026-10-03). Es la escala de lo que QUEDA: ADR-181 #12 decía «quitado» y se corrigió el 2026-10-04; con el 50 % las dos lecturas coinciden.",
+      },
+      {
+        value: "Semi Wash 75%",
+        definition:
+          "Semi-lavado: al llegar a la cama de secado le queda el 75 % del mucílago (Daniel, 2026-10-03). Es la escala de lo que QUEDA: ADR-181 #12 decía «quitado» y se corrigió el 2026-10-04, así que el 75 % de antes era que le quedaba el 25 %.",
+      },
+      {
+        value: "Honey",
+        definition:
+          "Honey: 100 % del mucílago retenido —le queda el 100 %— a la cama de secado. Con menos es semi-lavado (Daniel, 2026-09-30; escala de lo que QUEDA, 2026-10-03).",
+      },
     ],
   },
   // RO1.1 (35_RO1.1_HONEY_PORCENTAJE_CANONICO.md) — a separate catalog, not
@@ -297,6 +320,14 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
         value: "cultivo_mixto",
         definition: "Combinación deliberada de más de una fuente microbiana en el mismo tratamiento.",
       },
+      // Parte 2a (2026-10-03): el valor del eje D del paquete «farm-to-green v2» que faltaba y la 2a usa (el
+      // paso `cold_hold` de CryoBloom). Al FINAL, para no mover el orden de los demás. «Mosto propio» y
+      // «mosto de otro fermento» no entran: ya son `medio_lavado`, y un alias no cruza catálogos.
+      {
+        value: "bioproteccion",
+        definition:
+          "Levadura que coloniza la cereza sin fermentarla, durante la espera en frío (ADR-053, decisión 7; paquete farm-to-green v2, eje D: Metschnikowia pulcherrima, MP-72). La cepa se registra en Levadura/cultivo, donde están MP72 y HDA54.",
+      },
     ],
   },
   {
@@ -319,7 +350,48 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
   {
     key: "estado_cereza",
     name: "Estado de la cereza",
-    values: [{ value: "entera", definition: "Cereza sin despulpar." }, { value: "despulpada", definition: "Cereza sin la piel/pulpa exterior." }],
+    // Parte 2a (2026-10-03, diseño §7): los estados del eje A del paquete «farm-to-green v2» que faltaban,
+    // para que un paso diga cuánta fruta lleva la semilla. DETRÁS de los dos de siempre, porque la semilla
+    // pone el orden por posición. El formulario de abrir proceso los ofrece también (registro de la 2a):
+    // son estados válidos al abrir. El id del paquete va en cada definición. Cuánto mucílago LE QUEDA al café lo
+    // dice el paso (`mucilagoObjetivo`), no el estado: la escala es la de lo que queda (Daniel, 2026-10-03).
+    values: [
+      { value: "entera", definition: "Cereza sin despulpar." },
+      { value: "despulpada", definition: "Cereza sin la piel/pulpa exterior." },
+      {
+        value: "despulpada_con_mucilago",
+        definition:
+          "Sin piel, con todo el mucílago (paquete, eje A: depulped_mucilage_full). Secada así es Honey: le queda el 100 % del mucílago (Daniel, 2026-09-30).",
+      },
+      {
+        value: "despulpada_mucilago_parcial",
+        definition:
+          "Sin piel, con parte del mucílago (paquete: depulped_mucilage_partial). Cuánto le queda lo dice el paso, en tramos de 0 a 100 —0 es Lavado y 100 es Honey (Daniel, 2026-10-03)—. Secada así es semi-lavado.",
+      },
+      {
+        value: "sin_mucilago_por_fermentacion",
+        definition:
+          "El mucílago se degradó fermentando y después se lavó (paquete: depulped_mucilage_removed_fermentation). Si llega así a la cama de secado, sin nada de mucílago, el proceso es Lavado (Daniel, 2026-09-19).",
+      },
+      {
+        value: "sin_mucilago_por_maquina",
+        definition:
+          "El mucílago se quitó con desmucilaginadora: Becolsub, Ecomill, Deslim, DELVA (paquete: depulped_mucilage_removed_mechanical). El «semi-washed» de Brasil que nombra el paquete es esto, no el semi-lavado de la casa.",
+      },
+      {
+        value: "sin_mucilago_por_enzimas",
+        definition:
+          "El mucílago se quitó con pectinasa, que se declara como adición (paquete: depulped_mucilage_removed_enzymatic).",
+      },
+      {
+        value: "pergamino_trillado_humedo",
+        definition: "Pergamino trillado en húmedo, al 20–24 % de humedad (paquete: parchment_hulled_wet, giling basah).",
+      },
+      {
+        value: "verde",
+        definition: "Café verde, ya trillado: el estado de los pasos posteriores al verde (paquete: green).",
+      },
+    ],
   },
   // §1a. Selected via ProcessingStage.washMediumCatalogValueId. Water rinses
   // and dilutes; mosto keeps the microbial load and the compounds already
@@ -696,6 +768,188 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       { value: "humedad_alta_por_error_de_manejo", definition: "La humedad quedó por encima del objetivo por un error en el manejo del secado." },
       { value: "error_de_medicion", definition: "La medición con la que se cerró estaba mal tomada o el instrumento fallaba." },
       { value: "otro", definition: "Siempre con nota libre." },
+    ],
+  },
+  // Parte 2a (2026-10-03, diseño §3 y §7): el vocabulario de la receta con pasos. Tres catálogos nuevos
+  // porque no existe nada parecido; lo que ya existía se amplió arriba (`estado_cereza`,
+  // `fuente_microbiana`), y el eje del secado es el enum `DryingEnvironment` de las instalaciones, no un
+  // catálogo (registro de la 2a). Qué ejes aplican a cada tipo vive en `lib/recetas/vocabulario.ts`.
+  //
+  // `tipo_paso`: los 23 `step_types` del paquete «farm-to-green v2» (`processing_axes.json`, v2.0) EN SU
+  // ORDEN y con sus ids de programa tal cual —como los de `DryingEnvironment`—, más `prefermentacion`,
+  // que es de Daniel (D1). El rótulo es/en vive en `messages/*.json` (`Traceability.tipoPaso_<id>`). Las
+  // definiciones salen de la tabla de mediciones por paso del paquete (R6 §7.2), de sus métodos (W03,
+  // T02…) y de las definiciones de la casa (diseño §7); ninguna cifra es nuestra.
+  {
+    key: "tipo_paso",
+    name: "Tipo de paso",
+    description:
+      "Qué hace un paso de una receta. Los 23 tipos del paquete farm-to-green v2, con sus ids, más la prefermentación (Daniel). Qué registro del lote cumple cada uno lo dice la tabla §4.1 de la Parte 2a.",
+    values: [
+      {
+        value: "reception",
+        definition:
+          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple: se compara con las recepciones del lote al abrir el proceso.",
+      },
+      {
+        value: "sorting_flotation",
+        definition:
+          "Selección y flotación: flotadores retirados y agua usada (R6 §7.2). Con el proceso abierto se cumple como intervención de observación; la flotación con pesos es una selección y ocurre antes de abrir el proceso.",
+      },
+      {
+        value: "sanitation",
+        definition:
+          "Sanitización o pretratamiento de la cereza: agente, concentración, tiempo de contacto y enjuague; ozono o UV opcional (R6 §7.2).",
+      },
+      {
+        value: "cold_hold",
+        definition:
+          "Espera en frío de la cereza antes de fermentar: consigna de la cámara, temperatura del núcleo y duración (R6 §7.2). Es su propio paso para poder ir antes de cualquier fermentación (paquete, 06). Es el cold hold de CryoBloom.",
+      },
+      {
+        value: "freezing",
+        definition: "Congelar la cereza (paquete, T03). Se puede escribir en una receta; ningún registro lo cumple todavía.",
+      },
+      {
+        value: "pulping",
+        definition:
+          "Despulpado: quitar la piel y la pulpa (R6 §7.2: calibre de la despulpadora, masa que entra y sale, mucílago que queda, agua).",
+      },
+      {
+        value: "demucilage",
+        definition:
+          "Desmucilaginado: quitar el mucílago con máquina o con enzimas, sin fermentarlo (paquete, eje A). Con enzimas, la pectinasa se declara como adición. Cuánto mucílago le queda lo declara el paso, en tramos de 0 a 100 (2b §8.2).",
+      },
+      {
+        value: "fermentation",
+        definition:
+          "Fermentación (R6 §7.2: temperatura de la masa y del ambiente, pH, °Brix, acidez, gases, presión). Láctico, málico y acético son resultados, no métodos: exigen datos medidos o se publican como perfil buscado (diseño §7).",
+      },
+      {
+        value: "immersion_hot",
+        definition:
+          "Inmersión en agua caliente, parte de un choque térmico (paquete, T04): temperatura del agua, tiempo de contacto y proporción masa:agua (R6 §7.2).",
+      },
+      {
+        value: "immersion_cold",
+        definition: "Inmersión en agua fría, parte de un choque térmico (paquete, T04), o la bolsa sellada en el río (A07).",
+      },
+      {
+        value: "inoculation",
+        definition: "Inoculación: producto, lote, dosis, rehidratación y momento (R6 §7.2). La cepa sale del catálogo Levadura/cultivo.",
+      },
+      {
+        value: "addition",
+        definition: "Adición: sustancia, forma, cantidad y momento respecto al verde (R6 §7.2). Decide la divulgación (paquete, eje E).",
+      },
+      {
+        value: "washing",
+        definition:
+          "Lavado: agua, ciclos, horas de remojo y temperatura del agua (R6 §7.2). Para que el proceso sea Lavado, el café llega a la cama de secado sin nada de mucílago —le queda el 0 %—; si llega con mucílago es semi-lavado (Daniel, 2026-09-19). Cuánto le queda lo declara el paso, en tramos de 0 a 100 (2b §8.2).",
+      },
+      {
+        value: "soaking",
+        definition: "Remojo bajo agua después de fermentar (paquete, W03: el doble proceso keniano).",
+      },
+      {
+        value: "drying",
+        definition: "Secado: humedad, aw, temperatura del grano y del aire, capa, volteos, luz y días (R6 §7.2).",
+      },
+      {
+        value: "hulling_wet",
+        definition: "Trillado en húmedo, al 20–24 % de humedad (paquete, WH01, giling basah). Ningún registro lo cumple todavía.",
+      },
+      {
+        value: "reposo",
+        definition:
+          "Reposo después del secado: días, contenedor, registro de temperatura y humedad (R6 §7.2). Lo lee la Parte 2b desde la bodega.",
+      },
+      {
+        value: "storage",
+        definition: "Almacenamiento (R6 §7.2, junto al reposo). Lo lee la Parte 2b desde la bodega.",
+      },
+      {
+        value: "aging",
+        definition: "Añejado del café verde (paquete, X02). Posterior al verde: ningún registro lo cumple.",
+      },
+      {
+        value: "monsooning",
+        definition: "Monzonado del café verde (paquete, X01). Posterior al verde: ningún registro lo cumple.",
+      },
+      {
+        value: "barrel_aging",
+        definition: "Café verde en barrica (paquete, X03). Posterior al verde: ningún registro lo cumple.",
+      },
+      {
+        value: "decaf",
+        definition: "Descafeinado del café verde (paquete, D01–D08). Posterior al verde: ningún registro lo cumple.",
+      },
+      {
+        value: "milling",
+        definition: "Trilla hasta el café verde. Ningún registro de paso la cumple: la trilla ocurre con el proceso cerrado (diseño §4.4).",
+      },
+      {
+        value: "prefermentacion",
+        definition:
+          "Fermentación ANTES de la principal, por intención (Daniel, D1, 2026-10-02); no es del paquete. Una es la fiebre: la cereza entera reposa, de horas a días, en sus sacos de cosecha sin sellar, y se calienta (Daniel, 2026-09-30).",
+      },
+    ],
+  },
+  // `fisico`: el eje F del paquete, SÓLO con lo que no existe en otro sitio. El frío va por
+  // `manejo_temperatura`, y congelar y las inmersiones son tipos de paso (registro de la 2a).
+  {
+    key: "fisico",
+    name: "Intervención física",
+    description:
+      "Lo físico que se le hace al café en un paso, fuera del frío (que es Manejo de temperatura) y de congelar o sumergir (que son tipos de paso).",
+    values: [
+      { value: "ninguno", definition: "Sin intervención física en el paso." },
+      {
+        value: "agitacion",
+        definition:
+          "Agitar o rotar la masa durante el paso (paquete: P04; A10, biorreactor agitado). Una agitación puntual dentro de una fermentación se registra además como intervención de tipo agitación.",
+      },
+      {
+        value: "presion",
+        definition: "Tanque presurizado: el paso trabaja con presión aplicada (paquete: P03). La presión del recipiente se mide como vessel_pressure.",
+      },
+      { value: "ultrasonido", definition: "Fermentación asistida por ultrasonido (paquete: P01)." },
+      { value: "ozono_uv", definition: "Sanitización de la cereza con ozono o luz UV (paquete: P02, en el paso sanitation)." },
+    ],
+  },
+  // `capacidad`: lo que un paso pide de un equipo o de una instalación, NUNCA el equipo (decisión de
+  // Daniel, 2026-10-03). Son los campos que el paquete declara para un paso (`vessel_requirement`, 06 §5)
+  // y los que usa su comprobación al planear (07 §4; R7 §5.3). La 2a lo guarda; comprobarlo al abrir el
+  // proceso es de la 2c, y si la 2c necesita otro, se añade aquí con su fuente.
+  {
+    key: "capacidad",
+    name: "Capacidad requerida",
+    description:
+      "Lo que un paso necesita de un equipo o de una instalación, nunca el equipo concreto (Daniel, 2026-10-03). La Parte 2a lo guarda; comprobar al abrir el proceso que el beneficio lo tiene es de la Parte 2c.",
+    values: [
+      {
+        value: "sellable",
+        definition:
+          "El recipiente cierra hermético (paquete 06 §5, vessel_requirement.sealable). Lo exige un paso con CO₂ o gas inerte purgado (07 §4).",
+      },
+      {
+        value: "valvula",
+        definition:
+          "Válvula de una vía o airlock: deja salir el gas sin dejar entrar aire (paquete R7 §5.3, pressure.one_way_valve; régimen de oxígeno sealed_valve).",
+      },
+      {
+        value: "puertos_de_gas",
+        definition: "Conexión para purgar con CO₂, N₂ o argón (paquete 06 §5, gas_ports). Lo exige un paso con CO₂ o gas inerte purgado (07 §4).",
+      },
+      {
+        value: "control_temperatura",
+        definition:
+          "Mantener una consigna distinta del ambiente: chaqueta con enfriador o cámara fría (paquete 06 §5, thermal_control). Una consigna bajo el ambiente lo exige (07 §4).",
+      },
+      {
+        value: "oscuridad",
+        definition: "Excluir la luz (paquete 06 §5, light_exclusion). El secado en cuarto oscuro lo exige (07 §4).",
+      },
     ],
   },
 ] as const;

@@ -228,6 +228,7 @@ tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
 tests/traceability/carreraDelArbolDeEstante.test.ts
 tests/apiary/apiarioHeredado.test.ts
 tests/people/quienLoHizo.test.ts
+tests/recetas/vocabularioSembrado.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #
