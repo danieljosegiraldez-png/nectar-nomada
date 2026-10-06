@@ -16,10 +16,14 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
 const RUN = `recipe-${Date.now()}`;
+const cuentas = fabricaDeCuentas("RecipeAuthoring");
 
 let admin: string;
+/** Un Coffee Process Manager de plataforma: el que escribe las recetas (V16). `admin` queda para lo que es del LOTE. */
+let gestor: string;
 let organizationId: string;
 let lotId: string;
 const created = { recipeIds: [] as string[], lotIds: [] as string[], organizationIds: [] as string[] };
@@ -33,6 +37,7 @@ beforeAll(async () => {
       select: { userAccountId: true },
     })
   ).userAccountId;
+  gestor = await cuentas.cuenta("Coffee Process Manager", "plataforma");
 
   const org = await prisma.organization.create({
     data: { name: `RECIPE Org ${RUN}`, organizationType: "farm" },
@@ -68,6 +73,7 @@ afterAll(async () => {
   });
   if (created.lotIds.length) await prisma.lot.deleteMany({ where: w(created.lotIds) });
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
+  await cuentas.limpiar();
 
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
 });
@@ -76,7 +82,7 @@ describe("creating a recipe", () => {
   it("creates the recipe and its first version together", async () => {
     // There is no useful recipe with no version — a name with no targets
     // declares nothing — so the two are one operation.
-    const recipe = await createRecipeWithVersion(admin, {
+    const recipe = await createRecipeWithVersion(gestor, {
       name: `RECIPE Lavado ${RUN}`,
       organizationId,
       targets: [
@@ -112,7 +118,7 @@ describe("creating a recipe", () => {
    * same recipe with no way to tell them apart, and drying gets neither targets nor a rhythm.
    */
   it("stores each target's phase and the recipe's per-phase rows", async () => {
-    const recipe = await createRecipeWithVersion(admin, {
+    const recipe = await createRecipeWithVersion(gestor, {
       name: `RECIPE washed with drying ${RUN}`,
       organizationId,
       expectedHours: 18,
@@ -143,7 +149,7 @@ describe("what it refuses", () => {
   /** Turning does not exist during fermentation: there is nothing to turn. */
   it("refuses a turn rhythm on fermentation", async () => {
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE odd turning ${RUN}`,
         organizationId,
         targets: oneTarget,
@@ -155,7 +161,7 @@ describe("what it refuses", () => {
   /** Half a range is not a range: the queue cannot say "close to target" with one end. */
   it("refuses a moisture range with only one end", async () => {
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE half range ${RUN}`,
         organizationId,
         targets: oneTarget,
@@ -167,7 +173,7 @@ describe("what it refuses", () => {
   /** And the inverted range, which is the mistake a finger actually makes. */
   it("refuses an inverted moisture range", async () => {
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE inverted range ${RUN}`,
         organizationId,
         targets: oneTarget,
@@ -178,13 +184,13 @@ describe("what it refuses", () => {
 
   it("refuses a recipe with no name", async () => {
     await expect(
-      createRecipeWithVersion(admin, { name: "   ", organizationId, targets: oneTarget }),
+      createRecipeWithVersion(gestor, { name: "   ", organizationId, targets: oneTarget }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
 
   it("refuses a recipe with no targets — a name declares nothing", async () => {
     await expect(
-      createRecipeWithVersion(admin, { name: `RECIPE Empty ${RUN}`, organizationId, targets: [] }),
+      createRecipeWithVersion(gestor, { name: `RECIPE Empty ${RUN}`, organizationId, targets: [] }),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
 
@@ -193,7 +199,7 @@ describe("what it refuses", () => {
     // which is what ProtocolRequiredMeasurement is for. Accepting it here
     // would put a row in the comparison table with nothing to compare.
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE NoNumber ${RUN}`,
         organizationId,
         targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH" }],
@@ -203,7 +209,7 @@ describe("what it refuses", () => {
 
   it("refuses an inverted range", async () => {
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE Inverted ${RUN}`,
         organizationId,
         targets: [{ variable: "ph", moment: "during", phase: "fermentation" as const, unit: "pH", minValue: 5, maxValue: 4 }],
@@ -216,7 +222,7 @@ describe("what it refuses", () => {
     // comparison table would otherwise report a deviation of −11 for the rest
     // of the run's life — looking like a process problem rather than a typo.
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE Impossible ${RUN}`,
         organizationId,
         targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 15 }],
@@ -229,7 +235,7 @@ describe("what it refuses", () => {
     // silently misreport. The form does not let this happen; the service
     // refuses it anyway, because the form is not the boundary.
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE WrongUnit ${RUN}`,
         organizationId,
         targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "Bx", targetValue: 4 }],
@@ -239,7 +245,7 @@ describe("what it refuses", () => {
 
   it("refuses a variable that is not in the registry", async () => {
     await expect(
-      createRecipeWithVersion(admin, {
+      createRecipeWithVersion(gestor, {
         name: `RECIPE Unknown ${RUN}`,
         organizationId,
         targets: [{ variable: "vibes", moment: "final", phase: "fermentation" as const, unit: "x", targetValue: 1 }],

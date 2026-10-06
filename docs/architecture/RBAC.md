@@ -155,6 +155,17 @@ something to assign, not a closed list:
   being trusted with a formal Inspection — a competence gate expressed on
   the Assignment, not a separate permission tier. Same documentation gap as
   Project Viewer, same fix.
+- **Coffee Process Manager** (scope: location, para las recetas de una organización; platform, para las plantillas) — escribe,
+  versiona y publica recetas (`lot:approve_exception`, nombre provisional; decisión de Daniel V16, 2026-10-04, Parte 2a del
+  módulo de recetas). Lleva ese permiso y SÓLO las dos autorizaciones de clasificación que su comprobación necesita
+  (`classification:clear_partner` y `clear_internal`); **no opera lotes** (ni `lot:manage` ni `lot:view`) ni lleva
+  `location:edit_beneficio`, y **el Farm Manager no lo recibe de serie**: quien lleva los dos perfiles opera y aprueba. Sus pantallas de
+  recetas se abren porque las lecturas de recetas aceptan también `puedeAutoriaDeReceta`, no porque el perfil lleve `lot:manage` ni
+  `lot:view` (Ruling C4, 2026-10-04). La Parte 2b
+  le añade las excepciones y los límites de un lote (diseño 2b §12). Es un perfil y no un permiso suelto porque
+  `resolveLotVisibility` no cuenta los permisos que se le añaden a una persona. Su regla vive en `lib/recetas/autoria.ts`, y sus
+  pruebas en `tests/recetas/autoria*.test.ts`, con lo que §9 pide para un perfil: un caso positivo dentro de su ámbito, uno
+  fuera de él y uno contra una clasificación que no limpia (`confidential`).
 - **Customer** — not an Assignment-based profile; every authenticated
   UserAccount without further Assignments gets the implicit baseline "Registered
   Customer" permission set (My Néctar, ordering, booking) enforced as a default

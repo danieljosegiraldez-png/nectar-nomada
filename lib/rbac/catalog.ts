@@ -77,6 +77,9 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { resourceType: "hive_node", action: "manage", description: "Register a sensor node and install, move or remove it on a hive. Deliberately separate from apiary:manage, which every Farm Operator holds: moving a node REASSIGNS its data — May's observations start belonging to another hive (artefactos de colmena spec, §7.1)." },
   { resourceType: "lot", action: "release", description: "Authorize a rested lot for sale. Deliberately separate from lot:manage, which every Farm Operator holds: releasing is a commercial decision, not field work. Does not check the resting age — that is a judgement about the buyer, not the calendar." },
   { resourceType: "lot", action: "override_balance", description: "Accept a lot transformation whose mass balance is outside the organization's tolerance." },
+  // Parte 2a (2026-10-04), decisión de Daniel V16 (diseño 2b §12). Nombre PROVISIONAL, y su razón de ser es el código que lo
+  // comprueba (ADR-091): hoy lo comprueba `exigeAutoriaDeReceta` (lib/recetas/autoria.ts).
+  { resourceType: "lot", action: "approve_exception", description: "Escribir, versionar y publicar recetas (V16, Parte 2a): lo comprueba exigeAutoriaDeReceta, y edit_beneficio ya no basta. HOY cubre la autoría de recetas y que sus pantallas se abran sin operar lotes (las lecturas de recetas aceptan también esta autoría: Ruling C4); la Parte 2b le añade aprobar las excepciones —venta temprana, reposo desconocido, sobresecado, conservar o no el nombre de la receta fuera de lo permitido— y cambiar en un lote los días de reposo y el objetivo de humedad, con motivo. Separado a propósito de lot:manage y de location:edit_beneficio: operar un lote y escribir su receta son dos actos de dos perfiles (V13); quien lleva los dos perfiles hace los dos. Ni Farm Manager ni Farm Operator lo llevan de serie." },
   // §9 de `docs/architecture/EQUIPMENT_AND_READINESS.md`: «No new *machinery*,
   // only new verbs». Comprobado, no supuesto: el aislamiento entre clientes ya
   // lo dan los ámbitos hoja de `resolve.ts` —una asignación de `project` nunca
@@ -446,6 +449,31 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
       // `clear_internal` and enforcing is also a NARROWING against today,
       // where the gate is not applied and they can reach `confidential` and
       // `trade_secret` too.
+      ["classification", "clear_partner"],
+      ["classification", "clear_internal"],
+    ],
+  },
+  {
+    // Parte 2a (2026-10-04), decisión de Daniel V16 (diseño 2b §12). Es PERFIL, no un permiso suelto añadido a alguien:
+    // `resolveLotVisibility` no cuenta los permisos que se le añaden a una persona (2b §12), y esta casa prefiere que quien
+    // aprueba lo sea por un perfil que se ve en la lista de asignaciones.
+    name: "Coffee Process Manager",
+    description:
+      "Escribe, versiona y publica las recetas del beneficio (V16, 2026-10-04) y, desde la Parte 2b, aprueba las " +
+      "excepciones de lo que la receta vigila. Lleva el permiso `lot:approve_exception` y SÓLO las dos autorizaciones de " +
+      "clasificación que su comprobación necesita (`clear_partner` y `clear_internal`, las mismas con las que el Farm Manager " +
+      "alcanza las ubicaciones de su finca: una ubicación nace `internal`, y `can()` exige la autorización de su clasificación " +
+      "además del permiso — ADR-063). " +
+      "DELIBERADAMENTE NO LLEVA `lot:manage`, `lot:view` ni `location:edit_beneficio`: no opera lotes —el operario es el " +
+      "Farm Operator de hoy (V13)— y la misma persona opera y aprueba llevando los dos perfiles (V14). Medido el 2026-10-04: las " +
+      "lecturas de las pantallas de recetas (`listRecipes`, `listRecipeOrganizations`, `getRecipeForEditor`) piden hoy " +
+      "`lot:manage`, que este perfil NO lleva: las pantallas se le abren porque esas tres lecturas aceptan TAMBIÉN la autoría " +
+      "(`puedeAutoriaDeReceta`, la gemela de `exigeAutoriaDeReceta`; Parte 2a, Ruling C4, 2026-10-04, en el commit del editor de " +
+      "recetas) y no porque el perfil gane `lot:manage` ni `lot:view`; `pasosDeLaVersion` ya lee con este permiso. Intended " +
+      "scope: la ubicación de la finca, que alcanza todo lo que cuelga de ella, para las recetas de una organización; " +
+      "plataforma para las plantillas (recetas sin organización).",
+    permissions: [
+      ["lot", "approve_exception"],
       ["classification", "clear_partner"],
       ["classification", "clear_internal"],
     ],

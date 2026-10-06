@@ -19,10 +19,14 @@ import {
   ProcessTargetError,
 } from "../../lib/traceability/processTargets";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
 const RUN = `rver-${Date.now()}`;
+const cuentas = fabricaDeCuentas("RecipeVersions");
 
 let admin: string;
+/** Un Coffee Process Manager de plataforma: el que escribe las recetas (V16). `admin` queda para lo que es del LOTE. */
+let gestor: string;
 let organizationId: string;
 let lotId: string;
 let recipeId: string;
@@ -43,6 +47,7 @@ beforeAll(async () => {
       select: { userAccountId: true },
     })
   ).userAccountId;
+  gestor = await cuentas.cuenta("Coffee Process Manager", "plataforma");
 
   const org = await prisma.organization.create({ data: { name: `RVER Org ${RUN}`, organizationType: "farm" } });
   organizationId = org.id;
@@ -54,7 +59,7 @@ beforeAll(async () => {
   lotId = lot.id;
   created.lotIds.push(lot.id);
 
-  const recipe = await createRecipeWithVersion(admin, {
+  const recipe = await createRecipeWithVersion(gestor, {
     name: `RVER Lavado ${RUN}`,
     organizationId,
     targets: [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }],
@@ -122,6 +127,7 @@ afterAll(async () => {
   });
   if (created.lotIds.length) await prisma.lot.deleteMany({ where: w(created.lotIds) });
   if (created.organizationIds.length) await prisma.organization.deleteMany({ where: w(created.organizationIds) });
+  await cuentas.limpiar();
 
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
   expect(await prisma.auditEvent.count({ where: assertDefinedWhere({ entityId: { in: versionIds } }) })).toBe(0);
@@ -131,7 +137,7 @@ describe("a name may be edited; targets may not", () => {
   it("renames the recipe without touching any version", async () => {
     // Correcting a typo in a label changes nothing about what any run was
     // aiming for, which is exactly why this is an edit and targets are not.
-    await updateRecipeMetadata(admin, recipeId, {
+    await updateRecipeMetadata(gestor, recipeId, {
       name: `RVER Lavado tradicional ${RUN}`,
       description: "corregido",
     });
@@ -156,7 +162,7 @@ describe("a name may be edited; targets may not", () => {
 describe("creating version 2", () => {
   it("numbers it from the highest existing version", async () => {
     const v2 = await createRecipeVersion(
-      admin, recipeId,
+      gestor, recipeId,
       [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.0 }],
       "subimos el objetivo",
     );
@@ -204,7 +210,7 @@ describe("only the newest version is offered for a new run", () => {
 describe("a new version is validated like a first one", () => {
   it("refuses an impossible value", async () => {
     await expect(
-      createRecipeVersion(admin, recipeId, [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 15 }]),
+      createRecipeVersion(gestor, recipeId, [{ variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 15 }]),
     ).rejects.toBeInstanceOf(ProcessTargetError);
   });
 
@@ -212,7 +218,7 @@ describe("a new version is validated like a first one", () => {
     // The unique index would catch this as a P2002 the operator cannot read.
     // Catching it first names the actual mistake.
     await expect(
-      createRecipeVersion(admin, recipeId, [
+      createRecipeVersion(gestor, recipeId, [
         { variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 3.8 },
         { variable: "ph", moment: "final", phase: "fermentation" as const, unit: "pH", targetValue: 4.0 },
       ]),
@@ -220,7 +226,7 @@ describe("a new version is validated like a first one", () => {
   });
 
   it("refuses an empty set of targets", async () => {
-    await expect(createRecipeVersion(admin, recipeId, [])).rejects.toBeInstanceOf(ProcessTargetError);
+    await expect(createRecipeVersion(gestor, recipeId, [])).rejects.toBeInstanceOf(ProcessTargetError);
   });
 
   it("created no version when it refused", async () => {
@@ -256,7 +262,7 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
   let v1Fases: Awaited<ReturnType<typeof createRecipeWithVersion>>["versions"][number]["fases"];
 
   beforeAll(async () => {
-    const r = await createRecipeWithVersion(admin, {
+    const r = await createRecipeWithVersion(gestor, {
       name: `RVER Natural fases ${RUN}`,
       organizationId,
       targets: OBJETIVOS(4),
@@ -270,7 +276,7 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
   });
 
   it("publicar una v2 sin fases copia las de la v1", async () => {
-    const v2 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.1));
+    const v2 = await createRecipeVersion(gestor, recetaId, OBJETIVOS(4.1));
     created.versionIds.push(v2.id);
 
     const secado = v2.fases.find((f) => f.phase === "drying");
@@ -293,7 +299,7 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
     // `fasesDeLaVersion` tiene que escribir esos DOS campos, y un cruce (mínimo ← máximo) o un `null`
     // sólo se ve si cada extremo tiene un valor propio. Sin rango, la prueba esperaba `null` y no
     // distinguía un `null` escrito de uno que se perdió.
-    const v3 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.2), null, null, [
+    const v3 = await createRecipeVersion(gestor, recetaId, OBJETIVOS(4.2), null, null, [
       { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: 10.5, targetMoistureMaxPct: 11.75 },
     ]);
     created.versionIds.push(v3.id);
@@ -301,7 +307,7 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
       { phase: "drying", expectedHours: 240, turnEveryHours: 2, targetMoistureMinPct: 10.5, targetMoistureMaxPct: 11.75 },
     ]);
 
-    const v4 = await createRecipeVersion(admin, recetaId, OBJETIVOS(4.3), null, null, []);
+    const v4 = await createRecipeVersion(gestor, recetaId, OBJETIVOS(4.3), null, null, []);
     created.versionIds.push(v4.id);
     expect(v4.fases).toEqual([]);
   });
@@ -311,7 +317,7 @@ describe("R8 (Parte 1) — una versión nueva conserva las fases de la anterior"
     const antes = await versiones();
     // Un rango de humedad invertido: la base no lo impide, es una regla del servicio (`validateFases`).
     await expect(
-      createRecipeVersion(admin, recetaId, OBJETIVOS(4.4), null, null, [
+      createRecipeVersion(gestor, recetaId, OBJETIVOS(4.4), null, null, [
         { phase: "drying", targetMoistureMinPct: 12, targetMoistureMaxPct: 11 },
       ]),
     ).rejects.toBeInstanceOf(ProcessTargetError);

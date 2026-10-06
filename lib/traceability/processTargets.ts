@@ -29,12 +29,12 @@
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { requireLotAccess } from "./lots";
-import { exigeEditarBeneficioEnOrganizacion } from "./locations";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/client";
 import { puedeEditarBeneficioEnOrganizacion } from "./locations";
+import { exigeAutoriaDeReceta } from "../recetas/autoria";
 
 export class ProcessTargetError extends Error {}
 
@@ -383,19 +383,10 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   validateFases(input.fases);
   validateExpectedHours(input.expectedHours);
 
-  // Gated on the organization the recipe belongs to, through a lot of that
-  // organization — the same authority that operates the batches it will be
-  // applied to.
-  // A shared recipe (no organization) is gated on any lot the account can
-  // manage; an organization's recipe on a lot of that organization.
-  const anyLot = await prisma.lot.findFirst({
-    where: input.organizationId === null ? {} : { organizationId: input.organizationId },
-  });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, input.organizationId);
+  // V16 (Parte 2a, tarea 3, 2026-10-04): escribir recetas es del Coffee Process Manager, y la regla es UNA sola
+  // (`lib/recetas/autoria.ts`). Hasta hoy aquí se pedía `lot:manage` sobre un lote de la organización y `edit_beneficio`
+  // (spec #370 §4.3); ni uno ni otro bastan ya, y la organización ya no necesita ningún lote.
+  await exigeAutoriaDeReceta(userAccountId, input.organizationId);
 
   const recipe = await prisma.$transaction(async (tx) => {
     const recipe = await tx.processRecipe.create({
@@ -576,12 +567,8 @@ export async function updateRecipeMetadata(
   const before = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
   if (!before) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: before.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, before.organizationId);
+  // V16 (Parte 2a, tarea 3, 2026-10-04): la misma regla única de autoría que al crearla.
+  await exigeAutoriaDeReceta(userAccountId, before.organizationId);
 
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
@@ -644,12 +631,8 @@ export async function createRecipeVersion(
   });
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, recipe.organizationId);
+  // V16 (Parte 2a, tarea 3, 2026-10-04): la misma regla única de autoría que al crearla.
+  await exigeAutoriaDeReceta(userAccountId, recipe.organizationId);
 
   validateTargets(targets);
   validateExpectedHours(expectedHours);

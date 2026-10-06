@@ -30,13 +30,25 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **397** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **59** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
+| **394** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **62** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **La autoría de recetas pasa por `exigeAutoriaDeReceta` (2026-10-06): 397→394 «guardia directo», 59→62 «guardia transitivo», ninguna operación más.**
+> Parte 2a, tarea 3. Las tres puertas de `lib/traceability/processTargets.ts` que escriben recetas
+> (`createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`) dejaron de llamar ellas mismas a
+> `requireLotAccess` y a `exigeEditarBeneficioEnOrganizacion` y llaman a `exigeAutoriaDeReceta`
+> (`lib/recetas/autoria.ts`, la regla única de V16: el permiso del Coffee Process Manager). Esa función guarda en su archivo y
+> **se importa**, así que el inventario las ve como «guardia transitivo» —delegan en otra función que guarda— y no como
+> «guardia directo»: la autorización es la misma, y es más fuerte que antes (`edit_beneficio` ya no basta). Medido con
+> `node scripts/inventario-de-acceso.mjs --json`: las tres salen con `exigeAutoriaDeReceta` como guardia y clase «guardia
+> transitivo», y ninguna otra operación cambia de clase. **El plan de la tarea 3 daba por hecho que seguirían en «guardia
+> directo»** (`.superpowers/plan-2a/tareas/T03.md`, paso 9h); lo midió la compuerta (`cifras-del-inventario`), no la lectura.
+> `lib/recetas/autoria.ts` no toca la base y no aparece en el inventario.
 
 > **DOS MECANISMOS DE AUTORIZACIÓN QUE ESTE INVENTARIO NO VE (2026-10-04).** Los destapó la revisión
 > independiente al mirar las razones nuevas del allowlist, y conviene leerlos antes de apoyarse en una cifra:
