@@ -55,8 +55,10 @@
  * - **No toca `Apiario NN-04-TOABRE-KIVAEST`**, que sigue sin padre. Su nombre dice TOABRE y
  *   probablemente debería colgar de la misma localidad, pero Daniel no lo pidió y re-colgar
  *   un apiario cambia el alcance de cualquier asignación sobre él por ADR-144. Se señala.
- * - **No crea «Finca 2»**: eso lo hace Daniel por pantalla, en `/fincas/nueva`, que es el
- *   camino que comprueba permiso y nombre libre (ADR-189).
+ * - **No crea «Finca 2»**: se crea por `crearFinca` o en `/fincas/nueva` (ADR-189), que
+ *   comprueba permiso y nombre libre y la deja SIN padre. Este guion sí la cuelga de Toabre
+ *   cuando ya existe, con su AuditEvent; si todavía no existe, lo dice y no hace nada.
+ *   Creada el 2026-10-06 (`151f91e2-256e-4094-b4fe-38c11c38abe8`).
  * - **No crea el beneficio de Kiva.** Hoy un beneficio sólo puede colgar de un `site`
  *   —`lib/traceability/beneficios.ts` lo impone— y Daniel decidió el 2026-10-06 que ese límite
  *   debe cambiar, porque una organización puede tener beneficio y no tener finca. Es otra
@@ -77,6 +79,8 @@ import { recordAuditEvent } from "../lib/audit";
 const ORG = "Kiva Estate";
 const SITE_VIEJO = "Kiva Estate";
 const SITE_NUEVO = "Finca 1";
+/** La segunda finca de Kiva. La crea Daniel, no este guion: aquí sólo se cuelga de Toabre. */
+const FINCA_2 = "Finca 2";
 
 const RAZON =
   "Encargo de Daniel 2026-10-06: Kiva Estate es la organización; sus fincas son Finca 1 y " +
@@ -225,9 +229,43 @@ async function main() {
     if (sitio.slug) linea(`AVISO: tiene slug «${sitio.slug}», que NO se toca — la URL pública sobrevive`);
   }
 
+  // --- la Finca 2 ------------------------------------------------------------
+  // La crea Daniel por pantalla o por `crearFinca` (ADR-189), que la deja SIN padre, igual que
+  // dejó a «Kiva Estate». Este guion no la crea: sólo la cuelga de Toabre si ya existe.
+  console.log("");
+  linea(`— ${FINCA_2} —`);
+  const fincas2 = await prisma.location.findMany({
+    where: { name: FINCA_2, locationType: "site", organizationId: org.id },
+    select: { id: true, parentLocationId: true },
+  });
+  if (fincas2.length > 1) {
+    throw new PreconditionError(`Hay ${fincas2.length} sitios llamados "${FINCA_2}" bajo "${ORG}". Parar y mirar.`);
+  }
+  let finca2PorColgar: { id: string } | null = null;
+  const finca2 = fincas2[0] ?? null;
+  if (!finca2) {
+    linea(`todavía no existe — créala en /fincas/nueva (este guion no la crea) y volvé a correrlo`);
+  } else if (finca2.parentLocationId === null) {
+    linea(`existe (${finca2.id}), sin padre — colgaría de «${DESTINO}» (${TIPO_DESTINO})`);
+    finca2PorColgar = { id: finca2.id };
+  } else {
+    const p2 = await prisma.location.findUnique({
+      where: { id: finca2.parentLocationId },
+      select: { name: true, locationType: true },
+    });
+    if (p2 && p2.name === DESTINO && p2.locationType === TIPO_DESTINO) {
+      linea(`ya cuelga de «${DESTINO}». Nada que hacer.`);
+    } else {
+      throw new PreconditionError(
+        `«${FINCA_2}» ya cuelga de «${p2?.name}» (${p2?.locationType}), que no es «${DESTINO}».\n` +
+          "  Alguien la colocó ahí a propósito. No se mueve sin mirar: parar y preguntar.",
+      );
+    }
+  }
+
   if (!apply) {
-    console.log(`\n  ENSAYO: no se escribió nada. ${faltan.length} fila(s) de geografía y ` +
-      `${sitio ? 1 : 0} renombrado. Añadí --apply para hacerlo.\n`);
+    console.log(`\n  ENSAYO: no se escribió nada. ${faltan.length} fila(s) de geografía, ` +
+      `${sitio ? 1 : 0} renombrado y ${finca2PorColgar ? 1 : 0} finca por colgar. Añadí --apply para hacerlo.\n`);
     return;
   }
 
@@ -300,6 +338,37 @@ async function main() {
       renombrado = despues;
     }
 
+    // La Finca 2, creada aparte y sin padre: se cuelga de Toabre con la misma razón.
+    if (finca2PorColgar) {
+      const destino2 = await tx.location.findFirst({
+        where: { name: DESTINO, locationType: TIPO_DESTINO },
+        select: { id: true },
+      });
+      if (!destino2) throw new Error(`dentro de la transacción no existe «${DESTINO}» (${TIPO_DESTINO})`);
+      const antes2 = await tx.location.findUniqueOrThrow({
+        where: { id: finca2PorColgar.id },
+        select: { id: true, name: true, parentLocationId: true },
+      });
+      const despues2 = await tx.location.update({
+        where: { id: finca2PorColgar.id },
+        data: { parentLocationId: destino2.id },
+        select: { id: true, name: true, parentLocationId: true },
+      });
+      await recordAuditEvent(
+        {
+          actorUserAccountId: actor.id,
+          operation: "location.update",
+          entityType: "location",
+          entityId: despues2.id,
+          before: antes2,
+          after: despues2,
+          reason: RAZON,
+          sourceInterface: FUENTE,
+        },
+        tx,
+      );
+    }
+
     return { creadas, renombrado };
   });
 
@@ -324,6 +393,20 @@ async function main() {
     linea(`releído: «${comprobacion.name}» cuelga de ${p ? `«${p.name}» (${p.locationType})` : "(nada)"}`);
     if (!p || p.name !== DESTINO) {
       linea(`OJO: se esperaba que colgara de «${DESTINO}».`);
+      process.exitCode = 1;
+    }
+  }
+
+  // Y la Finca 2, si existía: releída también, por la misma razón.
+  if (finca2) {
+    const c2 = await prisma.location.findUnique({
+      where: { id: finca2.id },
+      select: { name: true, parentLocation: { select: { name: true, locationType: true } } },
+    });
+    const p2 = c2?.parentLocation;
+    linea(`releído: «${c2?.name}» cuelga de ${p2 ? `«${p2.name}» (${p2.locationType})` : "(nada)"}`);
+    if (!p2 || p2.name !== DESTINO) {
+      linea(`OJO: se esperaba que «${FINCA_2}» colgara de «${DESTINO}».`);
       process.exitCode = 1;
     }
   }
