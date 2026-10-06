@@ -133,7 +133,10 @@ const procesoSelect = {
   processRecipeVersion: {
     select: {
       fases: { select: { phase: true, expectedHours: true } },
+      // Parte 2a, tarea 9a (§3.2): las metas de la VERSIÓN son las que no tienen paso. Las de un paso son de ese paso: sin este filtro, el lote de
+      // una corrida que no lo cumple vería en la cola de atención y en la curva las metas de todos los pasos de su versión.
       targets: {
+        where: { recipeStepId: null },
         select: {
           variable: true,
           everyHours: true,

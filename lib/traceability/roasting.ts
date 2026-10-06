@@ -494,6 +494,13 @@ export async function getPerfilDeTuesteElegido(userAccountId: string, lotId: str
 
   return prisma.lotRoastProfile.findUnique({
     where: { lotId },
-    include: { recipeVersion: { include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } } } },
+    // Parte 2a, tarea 9a (§3.2, adjudicación I5): las metas de la VERSIÓN son las que no cuelgan de ningún paso; las de cada paso son de su
+    // paso y no del perfil. Hoy ninguna pantalla lee estas metas (la ficha pinta el nombre, la versión y las notas): el filtro es el
+    // contrato de esta función, para que el día que alguien las pinte no enseñe como del perfil las de un paso.
+    include: {
+      recipeVersion: {
+        include: { recipe: true, targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } } },
+      },
+    },
   });
 }

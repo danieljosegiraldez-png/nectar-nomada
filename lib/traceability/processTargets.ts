@@ -116,7 +116,7 @@ function readingsForMoment(all: Reading[], moment: ProcessTargetMoment): { readi
 }
 
 /**
- * Every target of the run's recipe version, set against what was measured.
+ * Every target of the run's recipe version that hangs from no step, set against what was measured.
  *
  * Returns an empty array when the run has no recipe — a run improvised without
  * one is a legitimate state (most existing runs are), and an empty comparison
@@ -129,7 +129,8 @@ export async function compareRunToTargets(
   const run = await prisma.fermentationRun.findUnique({
     where: { id: fermentationRunId },
     include: {
-      processRecipeVersion: { include: { targets: { orderBy: { displayOrder: "asc" } } } },
+      // Parte 2a, tarea 9a (§3.2): the version's targets are the ones that hang from no step; a step's targets are the step's, not the version's.
+      processRecipeVersion: { include: { targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } } } },
       measurements: { select: { id: true, variable: true, value: true, occurredAt: true } },
       transformations: { include: { inputs: { include: { lot: true } } }, take: 1 },
     },

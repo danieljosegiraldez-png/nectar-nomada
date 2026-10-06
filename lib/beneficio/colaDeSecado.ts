@@ -285,7 +285,9 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
             processRecipeVersion: {
               select: {
                 fases: { where: { phase: "drying" }, select: { expectedHours: true, turnEveryHours: true, targetMoistureMinPct: true, targetMoistureMaxPct: true } },
-                targets: { select: { variable: true, everyHours: true, phase: true } },
+                // Parte 2a, tarea 9a (§3.2): las metas de la VERSIÓN son las que no tienen paso. Las de un paso son de ese paso: sin este filtro,
+                // una receta con metas por paso le haría deber a toda corrida de su versión lecturas de un paso que quizá no hizo.
+                targets: { where: { recipeStepId: null }, select: { variable: true, everyHours: true, phase: true } },
               },
             },
           },
