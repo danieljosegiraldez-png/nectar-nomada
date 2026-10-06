@@ -307,6 +307,12 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   ) {
     return t(`error_roast_${error.message}` as "error_roast_sample_must_be_green");
   }
+  // Parte 2a (tarea 5, C13): una versión que un tueste no puede seguir —no publicada, o de una receta Libre— tiene su frase,
+  // como `screen_system_invalid` de la clasificación por malla. El resto de los rechazos del tueste sigue por el genérico, con
+  // el código de detalle.
+  if (error instanceof RoastSessionValidationError && error.message === "version_no_publicada") {
+    return t("error_tueste_version_no_publicada");
+  }
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
   if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
   if (error instanceof GreenGradingValidationError && error.message === "screen_system_invalid") {

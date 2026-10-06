@@ -813,7 +813,7 @@
     },
     {
       "archivo": "lib/traceability/lotProcess.ts",
-      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote."
+      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote. Parte 2a, tarea 5a: `exigeRecetaParaAbrir(tx, …)`, privada, recibe el `tx` de `abrirProceso` para bloquear la fila de la versión y la de su receta (`FOR SHARE`) DESPUÉS del linaje y validarlas dentro de la misma transacción —la versión existe y está publicada, la receta no está archivada y es de la organización del lote o compartida—. Sólo lee y lanza; `abrirProceso` ya autorizó con `requireLotAccess(manage)` (`loteGestionable`)."
     },
     {
       "archivo": "lib/recetas/pasos.ts",

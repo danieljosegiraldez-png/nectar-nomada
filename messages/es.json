@@ -1959,7 +1959,12 @@
     "error_receta_version_no_publicada": "Esa versión de la plantilla todavía es un borrador. Deriva la copia de una versión publicada.",
     "error_receta_nombre_requerido": "Escribe el nombre de la receta.",
     "error_receta_nombre_repetido": "Tu organización ya tiene una receta con ese nombre. Elige otro.",
-    "error_receta_receta_libre_no_se_versiona": "Una receta Libre no se versiona: es lo que ocurrió en un proceso. Conviértela en una receta de la organización para poder cambiarla."
+    "error_receta_receta_libre_no_se_versiona": "Una receta Libre no se versiona: es lo que ocurrió en un proceso. Conviértela en una receta de la organización para poder cambiarla.",
+    "error_proceso_version_no_publicada": "Esa versión de la receta todavía es un borrador: un proceso sólo se abre con una versión publicada.",
+    "error_proceso_receta_de_otra_organizacion": "Esa receta es de otra organización: este café sólo puede seguir una receta de su organización o una compartida.",
+    "error_proceso_recipe_archived": "Esa receta está archivada: ya no se abre ningún proceso con ella. Elige otra receta publicada.",
+    "error_proceso_recipe_version_not_found": "Esa versión de la receta no existe. Recarga la página y elige la receta otra vez.",
+    "error_tueste_version_no_publicada": "Esa receta no se puede usar como perfil de tueste: su versión todavía es un borrador, o es una receta libre. Elige una versión publicada."
   },
   "Apiary": {
     "artefactosHeading": "Artefactos puestos",

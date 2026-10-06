@@ -39,6 +39,14 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
 
+> **`abrirProceso` valida la versión que se le pasa (Parte 2a, tarea 5a): ninguna cifra cambia.** Sigue en «guardia directo»
+> (`loteGestionable`). Lo nuevo —que la versión, si se pasa, exista y esté publicada, su receta viva y sea de la organización del lote o
+> compartida, con la fila de la versión y la de su receta bloqueadas (`FOR SHARE`) después del linaje— vive en
+> `exigeRecetaParaAbrir`, privada del mismo archivo, que el script absorbe en `abrirProceso`: gana el modelo `SQL-crudo` por su
+> `SELECT … FOR SHARE`. `listRecipeVersionsForLot` sigue en su fila: sólo filtra más (ni recetas archivadas ni Libres) y trae
+> cuántos pasos tiene cada versión. `recordRoastSession` y `elegirPerfilDeTueste` rechazan una versión no publicada o Libre con
+> un ayudante privado sin acceso a la base (`exigeVersionPublicada`): tampoco cambian de fila.
+
 > **Versiones y plantillas de la receta con pasos (2026-10-06): 631→634, 171→172 archivos; «guardia transitivo» 65→67 y «depende del llamador» 99→100; «guardia directo» no se mueve (397).**
 > Parte 2a, tarea 4. `lib/recetas/versiones.ts` es el archivo nuevo, con tres operaciones. `nuevaVersionBorrador` y `derivarReceta` piden sólo
 > `exigeAutoriaDeReceta` —el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta; una plantilla, sólo con

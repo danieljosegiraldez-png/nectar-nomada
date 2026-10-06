@@ -42,6 +42,15 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   "moisture_above_target",
   "no_closing_moisture",
   "process_already_closed",
+  // Parte 2a, tarea 5a (2026-10-03): lo que se exige de la versión que se pasa a `abrirProceso` (diseño 2a, §3.3). Los lanza sólo
+  // `abrirProceso`, y llegan a la pantalla por `abrirProcesoAction` → `friendlyError` → `claveDeErrorDeProceso`. (`sin_receta`, la
+  // obligatoriedad, lo añade la 5b delante de éstos.)
+  "version_no_publicada",
+  "receta_de_otra_organizacion",
+  // Los dos que `abrirProceso` ya lanzaba desde la Parte 1 y salían crudos por el mensaje genérico (ronda de arreglo del
+  // 2026-10-04, C14): una receta archivada ENTRE cargar la pantalla y enviarla es un caso real, no sólo un formulario fabricado.
+  "recipe_archived",
+  "recipe_version_not_found",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

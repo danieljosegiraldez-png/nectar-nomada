@@ -96,7 +96,11 @@ export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
 /** Lo que declara la intención al abrir un proceso. */
 export interface AbrirProcesoInput {
   lotId: string;
-  /** Null = «Sin receta», que el reporte agrupa aparte (decisión de Daniel). */
+  /**
+   * La versión de receta con la que se abre (Parte 2a, §3.3, tarea 5a): si se pasa, tiene que estar PUBLICADA, ser de una receta no
+   * archivada y de la organización del lote o compartida (`exigeRecetaParaAbrir`). Null, ausente o en blanco sigue siendo «Sin receta»,
+   * que el reporte agrupa aparte (decisión de Daniel) y que la tarea 5b deja de aceptar: la receta pasa a ser obligatoria (§5.1).
+   */
   processRecipeVersionId?: string | null;
   /**
    * La intención de ESTE batch. **Obligatoria aunque no haya receta**, por
@@ -159,6 +163,46 @@ async function loteGestionable(userAccountId: string, lotId: string) {
 }
 
 /**
+ * La receta con la que se abre un proceso — Parte 2a, §5.1 y §3.3 (tarea 5).
+ *
+ * Corre DENTRO de la transacción de `abrirProceso` y DESPUÉS de `bloquearLinaje`, y lo primero que hace es bloquear la fila
+ * de la versión **y la de su receta** con `FOR SHARE` (decisión del controlador, 2026-10-04): editar y publicar una versión
+ * (tarea 3) toman `FOR UPDATE` sobre ella, y archivar la receta o numerar una versión nueva (tareas 3 y 4) lo toman sobre la
+ * receta, así que ninguno se cuela entre esta lectura y la apertura. **`FOR SHARE` y no `FOR UPDATE`**: basta para cerrarles
+ * el paso, no serializa las aperturas entre sí —dos `FOR SHARE` conviven, y la misma receta la abren decenas de lotes— y no
+ * choca con el `FOR KEY SHARE` que la clave foránea de `lot_process` toma sobre la versión al insertar el proceso. Un solo
+ * `SELECT` con `OF r, v`: la receta primero y la versión después. El orden linaje → receta → versión no cierra ningún ciclo:
+ * ninguna otra operación de la 2a toma las dos filas (medido en los planes de las tareas 3 y 4: cada una toma una sola).
+ *
+ * Cuatro rechazos, en este orden: la versión no existe (`recipe_version_not_found`); no está publicada
+ * (`version_no_publicada`: un borrador todavía se edita); su receta está archivada (`recipe_archived`); es de OTRA
+ * organización (`receta_de_otra_organizacion`). Una receta sin organización es compartida y vale para todas: la misma
+ * regla que el tueste (`roasting.ts`, `recipe_belongs_to_another_organization`). El selector (`listRecipeVersionsForLot`)
+ * ya no ofrece nada de eso; esto es la puerta, para un formulario manipulado o una receta archivada entre cargar la página
+ * y enviarla.
+ *
+ * No se exporta: sólo la llama `abrirProceso`. La división y la devolución no pasan por aquí, a propósito (§5.1).
+ */
+async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionId: string, organizationId: string): Promise<void> {
+  const bloqueada = await tx.$queryRaw<{ id: string }[]>`
+    SELECT v.id
+      FROM traceability.process_recipe_version v
+      JOIN traceability.process_recipe r ON r.id = v.recipe_id
+     WHERE v.id = ${recipeVersionId}::uuid
+       FOR SHARE OF r, v`;
+  if (bloqueada.length === 0) throw new LotProcessError("recipe_version_not_found");
+  const version = await tx.processRecipeVersion.findUniqueOrThrow({
+    where: { id: recipeVersionId },
+    select: { status: true, recipe: { select: { status: true, organizationId: true } } },
+  });
+  if (version.status !== "approved") throw new LotProcessError("version_no_publicada");
+  if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
+  if (version.recipe.organizationId !== null && version.recipe.organizationId !== organizationId) {
+    throw new LotProcessError("receta_de_otra_organizacion");
+  }
+}
+
+/**
  * Abre un proceso sobre un lote y devuelve la fila creada.
  *
  * **El `sequenceOrder` se calcula, no se pide.** Un lote puede pasar por varios
@@ -171,21 +215,21 @@ async function loteGestionable(userAccountId: string, lotId: string) {
  * este lote» dejara de tener respuesta. Desde la Parte 1 (R2, 2026-10-01) la
  * regla es del café y no del lote: se mira todo el linaje, y la hace
  * `abrirProcesoEnTx` dentro de la transacción, con el linaje bloqueado.
+ *
+ * **Y la versión que se pasa se valida** (Parte 2a, §3.3, 2026-10-03; tarea 5a): publicada, de una receta viva y de la organización del lote
+ * o compartida (`exigeRecetaParaAbrir`). Sin versión sigue abriendo «Sin receta»: la receta obligatoria es de la tarea 5b. La regla vive AQUÍ,
+ * en lo que abre un proceso a pedido de alguien, y no en `abrirProcesoEnTx`: la división (R6) y la devolución a secado (R7) copian el
+ * proceso vigente tal cual, y un proceso viejo sin receta se sigue pudiendo dividir y devolver.
  */
 export async function abrirProceso(userAccountId: string, input: AbrirProcesoInput) {
-  await loteGestionable(userAccountId, input.lotId);
+  const lote = await loteGestionable(userAccountId, input.lotId);
   exigePorcentaje(input.targetMoisturePct, "target_moisture_pct");
   // El CHECK de la base la rechaza igual; aquí sale con una frase legible.
   if (input.intent.trim().length === 0) throw new LotProcessError("intent_required");
 
-  if (input.processRecipeVersionId) {
-    const version = await prisma.processRecipeVersion.findUnique({
-      where: { id: input.processRecipeVersionId },
-      include: { recipe: true },
-    });
-    if (!version) throw new LotProcessError("recipe_version_not_found");
-    if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
-  }
+  // Parte 2a, §3.3 (5a): la versión que se pasa se valida DENTRO de la transacción, con su fila bloqueada (`exigeRecetaParaAbrir`).
+  // Sin versión sigue abriendo «Sin receta»: la receta obligatoria (`sin_receta`) es de la 5b.
+  const recetaVersionId = input.processRecipeVersionId?.trim() || null;
 
   // Se comprueban SIEMPRE, no «si vienen»: son obligatorios, y una cadena vacía
   // que llegara de un formulario mal armado tiene que salir con una frase, no
@@ -200,9 +244,11 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
   try {
     return await prisma.$transaction(async (tx) => {
       await bloquearLinaje(tx, input.lotId);
+      // Parte 2a, §3.3: la versión se bloquea DESPUÉS del linaje —el linaje siempre primero, el orden de R2—.
+      if (recetaVersionId) await exigeRecetaParaAbrir(tx, recetaVersionId, lote.organizationId);
       return abrirProcesoEnTx(tx, userAccountId, {
         lotId: input.lotId,
-        processRecipeVersionId: input.processRecipeVersionId ?? null,
+        processRecipeVersionId: recetaVersionId,
         intent: input.intent.trim(),
         processGradeValueId: input.processGradeValueId,
         cherryStateValueId: input.cherryStateValueId,

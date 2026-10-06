@@ -65,6 +65,13 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "moisture_above_target",
   "no_closing_moisture",
   "process_already_closed",
+  // Parte 2a, tarea 5a (2026-10-03, partida el 2026-10-06): lo que se exige de la versión que se pasa a `abrirProceso` (diseño 2a, §3.3; «Nombres nuevos para
+  // que Daniel los revise», §12). Los lanza sólo `abrirProceso`. (`sin_receta`, la obligatoriedad, lo añade la 5b.)
+  "version_no_publicada",
+  "receta_de_otra_organizacion",
+  // Ronda de arreglo del 2026-10-04 (C14): los dos que `abrirProceso` ya lanzaba desde la Parte 1 y salían crudos.
+  "recipe_archived",
+  "recipe_version_not_found",
 ];
 
 /**

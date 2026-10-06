@@ -201,14 +201,31 @@ export async function listRecipeVersionsForLot(userAccountId: string, lotId: str
   const versions = await prisma.processRecipeVersion.findMany({
     // Only approved versions are offered. A draft is someone still deciding
     // what the targets should be, and a run operated against a moving target
-    // is worse than a run with none.
+    // is worse than a run with none. Parte 2a (§3.3): `abrirProceso` rechaza un
+    // borrador (`version_no_publicada`), y lo que se ofrece es la versión
+    // PUBLICADA más nueva de cada receta: una v2 en borrador no esconde a la v1.
     where: {
       status: "approved",
-      // A recipe belonging to another organization is not this batch's to use.
-      // Null organizationId means a shared recipe, available to everyone.
-      recipe: { OR: [{ organizationId: lot.organizationId }, { organizationId: null }] },
+      recipe: {
+        // A recipe belonging to another organization is not this batch's to use.
+        // Null organizationId means a shared recipe, available to everyone.
+        OR: [{ organizationId: lot.organizationId }, { organizationId: null }],
+        // Parte 2a (tarea 5): ni una receta archivada —`abrirProceso` la rechaza
+        // con `recipe_archived`— ni una Libre (§5.2), que es de UN proceso y se
+        // escribe al abrirlo, no se elige de una lista. Esta función es el
+        // selector del proceso, de `roast/new` y del perfil de tueste de la
+        // ficha: ninguno ofrece Libres (decisión del controlador, 2026-10-03).
+        status: { not: "archived" },
+        esLibre: false,
+      },
     },
-    include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } },
+    include: {
+      recipe: true,
+      // Parte 2a (tarea 5, I5): sólo las metas de LA VERSIÓN (las de un paso, con `recipeStepId`, las cuenta el paso), y cuántos
+      // pasos tiene: el rótulo de los tres selectores dice «<n> pasos» si la versión los tiene y «<n> objetivos» si no (tarea 13).
+      targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } },
+      _count: { select: { steps: true } },
+    },
     orderBy: [{ recipe: { name: "asc" } }, { version: "desc" }],
   });
 
