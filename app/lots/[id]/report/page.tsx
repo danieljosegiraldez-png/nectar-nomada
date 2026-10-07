@@ -56,6 +56,8 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
    * contado, y un informe se imprime y se comparte. Ver
    * `lib/time/mostrarInstante.ts`.
    */
+  const supersededMeasurementIds = new Set(measurements.map((m) => m.correctsId).filter((id): id is string => id != null));
+
   const formatDate = (date: Date) => mostrarInstante(date, lot.location?.timezone ?? null);
 
   return (
@@ -211,6 +213,8 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
             {measurements.map((m) => (
               <li key={m.id}>
                 {m.variable}: {m.value.toString()} {m.unit} — {formatDate(m.occurredAt)}
+                {m.correctsId ? ` (${t("correctionLabel")})` : ""}
+                {supersededMeasurementIds.has(m.id) ? <> · <strong>{t("supersededLabel")}</strong></> : null}
               </li>
             ))}
           </ul>
