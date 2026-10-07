@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { submitAssessment, computePanelResult, SensoryAccessError } from "../../lib/sensory/service";
+import { submitAssessment, computePanelResult, SensoryAccessError, SensoryPurposeNotDeclaredError } from "../../lib/sensory/service";
 import {
   buscarMuestrasParaCata,
   crearSesionDeCata,
@@ -82,7 +82,12 @@ export async function computePanelResultFormAction(formData: FormData): Promise<
   const blindSampleId = String(formData.get("blindSampleId") ?? "");
   const sessionId = String(formData.get("sessionId") ?? "");
 
-  await computePanelResult(user.userAccountId, blindSampleId);
+  try {
+    await computePanelResult(user.userAccountId, blindSampleId);
+  } catch (error) {
+    if (error instanceof SensoryPurposeNotDeclaredError) redirect(`/sensory/${encodeURIComponent(sessionId)}`);
+    throw error;
+  }
   revalidatePath(`/sensory/${sessionId}`);
 }
 

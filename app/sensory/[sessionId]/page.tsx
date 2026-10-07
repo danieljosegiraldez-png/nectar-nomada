@@ -141,10 +141,11 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                     <p className="nn-muted">
                       {t("assessmentCount", { count: headJudgeSample.assessments.length })}
                     </p>
+                    {session.purpose === null ? <p className="nn-muted" role="status">{t("panelPurposeRequired")}</p> : null}
                     <form action={computePanelResultFormAction}>
                       <input type="hidden" name="sessionId" value={sessionId} />
                       <input type="hidden" name="blindSampleId" value={blindSample.id} />
-                      <BotonDeEnvio className="nn-button" disabled={headJudgeSample.assessments.length === 0}>
+                      <BotonDeEnvio className="nn-button" disabled={headJudgeSample.assessments.length === 0 || session.purpose === null}>
                         {t("computePanelResultButton")}
                       </BotonDeEnvio>
                     </form>
