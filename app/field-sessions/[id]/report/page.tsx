@@ -1,3 +1,4 @@
+import { fechaDelReporte, detalleDelReporte } from "../../../../lib/traceability/presentacionDelReporte";
 import { DetallesDelReporte } from "../../../components/traceability/DetallesDelReporte";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
@@ -31,6 +32,7 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const ta = await getTranslations("Apiary");
 
   let reporte;
   try {
@@ -71,14 +73,14 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
       <p className="nn-detail-meta">
         {/* La versión y la fecha de emisión van en la cara del documento: un
             reporte que no dice cuál es no se puede citar en una conversación. */}
-        {t("reportVersionLine", { version: reporte.version, emitido: snapshot.emitidoEn })}
+        {t("reportVersionLine", { version: reporte.version, emitido: fechaDelReporte(snapshot.emitidoEn, snapshot.sitio.zona) })}
       </p>
 
       <section className="nn-section">
         <h2>{t("reportVisitHeading")}</h2>
         <ul className="nn-detail-meta">
-          <li>{t("reportVisitStart", { cuando: snapshot.visita.inicio })}</li>
-          {snapshot.visita.fin ? <li>{t("reportVisitEnd", { cuando: snapshot.visita.fin })}</li> : null}
+          <li>{t("reportVisitStart", { cuando: fechaDelReporte(snapshot.visita.inicio, snapshot.sitio.zona) })}</li>
+          {snapshot.visita.fin ? <li>{t("reportVisitEnd", { cuando: fechaDelReporte(snapshot.visita.fin, snapshot.sitio.zona) })}</li> : null}
           <li>{t("reportVisitOperator", { quien: snapshot.visita.operador })}</li>
         </ul>
         {snapshot.visita.notas ? <p>{snapshot.visita.notas}</p> : null}
@@ -119,8 +121,8 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
                     la línea se dibuja igual. */}
                 {r.colmena ? <strong>{r.colmena}</strong> : null}
                 {r.colmena ? " · " : ""}
-                {r.cuando} · {r.clase}
-                {r.detalle ? ` · ${r.detalle}` : ""}
+                {fechaDelReporte(r.cuando, snapshot.sitio.zona)} · {r.clase}
+                {r.detalle ? ` · ${detalleDelReporte(r, ta)}` : ""}
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}

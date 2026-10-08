@@ -35,7 +35,7 @@ export interface EmitirReporteInput {
 
 /** Lo que se congela. Deliberadamente plano y sin ids internos donde se puede. */
 export interface SnapshotDeVisita {
-  sitio: { nombre: string; tipo: string };
+  sitio: { nombre: string; tipo: string; zona?: string | null };
   visita: {
     inicio: string;
     fin: string | null;
@@ -123,7 +123,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
   const visita = await prisma.fieldSession.findUnique({
     where: { id: input.fieldSessionId },
     include: {
-      location: { select: { name: true, locationType: true } },
+      location: { select: { name: true, locationType: true, timezone: true } },
       operator: { select: { displayName: true } },
     },
   });
@@ -166,7 +166,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
   });
 
   const snapshot: SnapshotDeVisita = {
-    sitio: { nombre: visita.location.name, tipo: visita.location.locationType },
+    sitio: { nombre: visita.location.name, tipo: visita.location.locationType, zona: visita.location.timezone },
     visita: {
       inicio: visita.startedAt.toISOString(),
       fin: visita.endedAt?.toISOString() ?? null,

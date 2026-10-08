@@ -1,3 +1,4 @@
+import { fechaDelReporte, detalleDelReporte } from "../../../lib/traceability/presentacionDelReporte";
 import { DetallesDelReporte } from "../../components/traceability/DetallesDelReporte";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -31,6 +32,7 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
   if (!abierto) notFound();
 
   const t = await getTranslations("Traceability");
+  const ta = await getTranslations("Apiary");
   // El tipo sale del servicio, no de aquí: la primera version invento un
   // `snapshot.eventos` que no existe —son `registros`— y sólo lo dijo leer la
   // interfaz. Con `SnapshotDeVisita` lo comprueba el compilador.
@@ -41,15 +43,15 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
     <div>
       <h1>{snapshot.sitio.nombre}</h1>
       <p className="nn-detail-meta">
-        {t("reportVersionLine", { version, emitido: snapshot.emitidoEn })}
+        {t("reportVersionLine", { version, emitido: fechaDelReporte(snapshot.emitidoEn, snapshot.sitio.zona) })}
       </p>
 
       <section className="nn-section">
         <h2>{t("reportVisitHeading")}</h2>
         <p className="nn-detail-meta">
           <span>{t("fieldSessionOperatorLabel")}: {snapshot.visita.operador}</span>{" "}
-          <span>{snapshot.visita.inicio}</span>
-          {snapshot.visita.fin ? <span> — {snapshot.visita.fin}</span> : null}
+          <span>{fechaDelReporte(snapshot.visita.inicio, snapshot.sitio.zona)}</span>
+          {snapshot.visita.fin ? <span> — {fechaDelReporte(snapshot.visita.fin, snapshot.sitio.zona)}</span> : null}
         </p>
         {snapshot.visita.notas ? <p>{snapshot.visita.notas}</p> : null}
       </section>
@@ -90,8 +92,8 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
                     <strong>{r.colmena}</strong> ·{" "}
                   </>
                 ) : null}
-                <strong>{r.clase}</strong> · {r.cuando}
-                {r.detalle ? ` · ${r.detalle}` : ""}
+                <strong>{r.clase}</strong> · {fechaDelReporte(r.cuando, snapshot.sitio.zona)}
+                {r.detalle ? ` · ${detalleDelReporte(r, ta)}` : ""}
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
