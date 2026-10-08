@@ -27,6 +27,7 @@
  */
 import { prisma } from "../db";
 import { getLotDetail } from "./lots";
+import { getReportRoastPreparations } from "./reportRoastPreparations";
 
 /**
  * A lot's origin is every HarvestEvent/ReceivingEvent/ApiaryHarvestEvent
@@ -109,8 +110,11 @@ export async function getLotReport(userAccountId: string, lotId: string) {
     prisma.measurement.findMany({ where: { lotId: { in: lineageLotIds } }, orderBy: { occurredAt: "asc" } }),
   ]);
 
+  const roastPreparations = await getReportRoastPreparations(userAccountId, detail.samples.map((sample) => sample.id));
+
   return {
     ...detail,
+    roastPreparations,
     fermentationRuns,
     dryingRuns,
     storageAssignments,

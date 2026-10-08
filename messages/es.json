@@ -1478,6 +1478,7 @@
     "greenSampleSaving": "Preparando muestra…",
     "recordRoastIntro": "Se anota cuando el tueste ya ha terminado. Sólo hacen falta el código del lote tostado y la hora de inicio; lo demás es opcional.",
     "roastOutputLotCodeLabel": "Código del lote tostado",
+    "reportRoastReferenceLabel": "Preparación de tueste",
     "roastStartedAtLabel": "Inicio del tueste",
     "roastEndedAtLabel": "Fin del tueste (opcional)",
     "roastLevelLabel": "Nivel de tueste",

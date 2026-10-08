@@ -1478,6 +1478,7 @@
     "greenSampleSaving": "Preparing sample…",
     "recordRoastIntro": "Logged once the roast is done. Only the roasted lot code and the start time are required; everything else is optional.",
     "roastOutputLotCodeLabel": "Roasted lot code",
+    "reportRoastReferenceLabel": "Roast preparation",
     "roastStartedAtLabel": "Roast start",
     "roastEndedAtLabel": "Roast end (optional)",
     "roastLevelLabel": "Roast level",

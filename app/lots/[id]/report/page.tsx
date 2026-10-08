@@ -249,6 +249,18 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
                   ) : (
                     <> — {t("sensoryAwaitingResultLabel")}</>
                   )}
+                  {(report.roastPreparations ?? []).filter((preparation) =>
+                    preparation.sampleId === s.id && preparation.sessionId === entry.sessionId,
+                  ).map((preparation) => (
+                    <p className="nn-muted" key={preparation.roastId}>
+                      {t("reportRoastReferenceLabel")}: {preparation.roastId}<br />
+                      {t("roastStartedAtLabel")}: {formatDate(preparation.startedAt)}
+                      {preparation.endedAt ? <> · {t("roastEndedAtLabel")}: {formatDate(preparation.endedAt)}</> : null}
+                      {preparation.roastLevel ? <> · {t("roastLevelLabel")}: {preparation.roastLevel}</> : null}
+                      {preparation.chargeWeightKg != null ? <> · {t("roastChargeWeightLabel")}: {preparation.chargeWeightKg}</> : null}
+                      {preparation.dischargeWeightKg != null ? <> · {t("roastDischargeWeightLabel")}: {preparation.dischargeWeightKg}</> : null}
+                    </p>
+                  ))}
                 </li>
               )),
             )}
