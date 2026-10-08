@@ -1,3 +1,4 @@
+import { tuesteVisible } from "./tuesteVisible";
 import type { ClassificationLevel } from "../rbac/types";
 /**
  * Phase 1, ticket T1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
@@ -1232,7 +1233,8 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
     result[sample.id] = sample.blindMappings.map((mapping) => {
       const overall = mapping.blindSample.panelResults[0] ?? null;
       return {
-        roastSessionId: mapping.roastSessionId,
+        // ADR-043: el id del tueste de una cata abierta no sale (ver `tuesteVisible`).
+        roastSessionId: tuesteVisible(mapping.revealedAt != null, mapping.blindSample.flight.session.status) ? mapping.roastSessionId : null,
         sessionId: mapping.blindSample.flight.session.id,
         sessionName: mapping.blindSample.flight.session.name,
         sessionStatus: mapping.blindSample.flight.session.status,

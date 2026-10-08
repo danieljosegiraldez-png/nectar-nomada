@@ -1299,4 +1299,4 @@ resolver el símbolo hasta el servicio de autorización de verdad. No se hace
 aquí. Se deja escrito, con la mutación que lo demuestra, para que nadie lea
 «208 operaciones inventariadas» como «208 operaciones autorizadas».
 
-> Medición local del 2026-10-07:626operaciones/170archivos. El informe de preparación ahora llama directamente a requireLotAccess para cada código relacionado:398guardias directos y59transitivos; total sin cambio. Esta medición corresponde a esta rama, no a main.
+> Medición local del 2026-10-07: 626 operaciones en 170 archivos. El informe de preparación ahora llama directamente a `requireLotAccess` para cada código relacionado: 398 guardias directos y 59 transitivos; total sin cambio. Esta medición corresponde a esta rama, no a main.

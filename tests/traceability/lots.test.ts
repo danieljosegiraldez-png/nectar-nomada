@@ -537,7 +537,11 @@ describe("getSensoryLinkageForSamples — T12 boundary (ADR-043)", () => {
     //    una FK a una sesión de tueste, que es dato del lado del LOTE.
     //  - Los cuatro llamadores de producción son todos de ámbito de lote
     //    —`getLotDetail`, `getTreatmentBatchDetail`, el export y el informe—, y
-    //    ninguno es un camino de juez. Medido el 2026-10-08.
+    //    ninguno es un camino de juez. Medido el 2026-10-08. OJO: eso es por
+    //    LLAMADOR, no por usuario. Quien ve lotes puede ser también juez —medido
+    //    en producción el 2026-10-08: Bob Huerbsch es Farm Manager y Sensory
+    //    Judge—, así que el id sólo sale con la cata revelada o cerrada
+    //    (`tuesteVisible`, probado en `vinculoDeCataTueste.test.ts`).
     //  - La clave hace falta: una misma muestra puede ir DOS veces en la misma
     //    sesión con tuestes distintos, y sin ella el informe no puede decir qué
     //    resultado salió de qué tueste. El detalle del tueste sí pasa por su

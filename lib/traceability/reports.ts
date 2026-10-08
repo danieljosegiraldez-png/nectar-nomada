@@ -28,6 +28,7 @@
 import { prisma } from "../db";
 import { getLotDetail, requireLotAccess, TraceabilityAccessError } from "./lots";
 import { getRoastSessionDetail } from "./roasting";
+import { tuesteVisible } from "./tuesteVisible";
 
 /**
  * A lot's origin is every HarvestEvent/ReceivingEvent/ApiaryHarvestEvent
@@ -136,13 +137,15 @@ export async function getReportRoastPreparations(userAccountId: string, sampleId
   if (!sampleIds.length) return [];
   const mappings = await prisma.sensoryBlindMapping.findMany({
     where: { sampleId: { in: sampleIds }, roastSessionId: { not: null } },
-    select: { sampleId: true, roastSessionId: true,
-      blindSample: { select: { flight: { select: { sessionId: true } } } } },
+    select: { sampleId: true, roastSessionId: true, revealedAt: true,
+      blindSample: { select: { flight: { select: { sessionId: true, session: { select: { status: true } } } } } } },
   });
   const preparations = [];
   const authorizedRoasts = new Map<string, ReturnType<typeof getRoastSessionDetail>>();
   for (const mapping of mappings) {
     if (!mapping.roastSessionId) continue;
+    // ADR-043: una cata abierta y sin revelar no dice qué tueste tiene en la mesa.
+    if (!tuesteVisible(mapping.revealedAt != null, mapping.blindSample.flight.session.status)) continue;
     try {
       let authorizedRoast = authorizedRoasts.get(mapping.roastSessionId);
       if (!authorizedRoast) {

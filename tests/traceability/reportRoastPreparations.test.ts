@@ -11,7 +11,7 @@ it("no consulta preparaciones cuando el informe no tiene muestras", async () => 
   expect(mocks.mappings).not.toHaveBeenCalled();
 });
 it("conserva dos preparaciones distintas en la misma sesión sin exponer códigos ciegos", async () => {
-  mocks.mappings.mockResolvedValue(["roast-a", "roast-b"].map((id) => ({ sampleId: "sample", roastSessionId: id, blindSample: { flight: { sessionId: "session" } } })));
+  mocks.mappings.mockResolvedValue(["roast-a", "roast-b"].map((id) => ({ sampleId: "sample", roastSessionId: id, revealedAt: new Date(), blindSample: { flight: { sessionId: "session", session: { status: "completed" } } } })));
   mocks.roast.mockImplementation(async (_user, id) => ({ id, startedAt: new Date("2026-10-07T12:00Z"), endedAt: null, roastLevel: "claro", chargeWeightKg: { toString: () => "0.100" }, dischargeWeightKg: null, notes: "private", roaster: { name: "private" } }));
   const result = await getReportRoastPreparations("operator", ["sample"]);
   expect(mocks.mappings).toHaveBeenCalledWith(expect.objectContaining({ where: { sampleId: { in: ["sample"] }, roastSessionId: { not: null } } }));
@@ -23,18 +23,18 @@ it("conserva dos preparaciones distintas en la misma sesión sin exponer código
   expect(result[0]).not.toHaveProperty("roaster");
 });
 it("omite toda referencia de un tueste denegado por el servicio de permisos", async () => {
-  mocks.mappings.mockResolvedValue([{ sampleId: "sample", roastSessionId: "secret", blindSample: { flight: { sessionId: "session" } } }]);
+  mocks.mappings.mockResolvedValue([{ sampleId: "sample", roastSessionId: "secret", revealedAt: new Date(), blindSample: { flight: { sessionId: "session", session: { status: "completed" } } } }]);
   mocks.roast.mockRejectedValue(new TraceabilityAccessError("denied"));
   expect(await getReportRoastPreparations("operator", ["sample"])).toEqual([]);
 });
 it("no oculta fallos inesperados como si fueran denegaciones de acceso", async () => {
-  mocks.mappings.mockResolvedValue([{ sampleId: "sample", roastSessionId: "roast", blindSample: { flight: { sessionId: "session" } } }]);
+  mocks.mappings.mockResolvedValue([{ sampleId: "sample", roastSessionId: "roast", revealedAt: new Date(), blindSample: { flight: { sessionId: "session", session: { status: "completed" } } } }]);
   mocks.roast.mockRejectedValue(new Error("database unavailable"));
   await expect(getReportRoastPreparations("operator", ["sample"])).rejects.toThrow("database unavailable");
 });
 
 it("reutiliza la autorización del mismo tueste en dos sesiones sin perder sus vínculos", async () => {
-  mocks.mappings.mockResolvedValue(["session-a", "session-b"].map((sessionId) => ({sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId}}})));
+  mocks.mappings.mockResolvedValue(["session-a", "session-b"].map((sessionId) => ({sampleId:"sample",roastSessionId:"roast",revealedAt:new Date(),blindSample:{flight:{sessionId,session:{status:"completed"}}}})));
   mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null});
   const result=await getReportRoastPreparations("operator",["sample"]);
   expect(result.map((row)=>row.sessionId)).toEqual(["session-a","session-b"]);
@@ -42,7 +42,7 @@ it("reutiliza la autorización del mismo tueste en dos sesiones sin perder sus v
 });
 
 it("conserva identidad y autoría del tueste autorizado sin enviar datos personales completos", async () => {
-  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId:"session"}}}]);
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",revealedAt:new Date(),blindSample:{flight:{sessionId:"session",session:{status:"completed"}}}}]);
   mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null,
     roaster:{displayName:"Tostador",email:"private"},equipment:{name:"Equipo"},
     transformations:[{inputs:[{lot:{lotCode:"PE-86"}}],outputs:[{lot:{lotCode:"PE-86-T01",lotType:"roast"}},{lot:{lotCode:"residue",lotType:"waste"}}]}]});
@@ -52,10 +52,24 @@ it("conserva identidad y autoría del tueste autorizado sin enviar datos persona
 });
 
 it("omite códigos de lotes relacionados denegados sin perder la preparación autorizada", async () => {
-  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId:"session"}}}]);
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",revealedAt:new Date(),blindSample:{flight:{sessionId:"session",session:{status:"completed"}}}}]);
   mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date(),transformations:[{inputs:[{lot:{lotCode:"visible"}},{lot:{lotCode:"secret"}}],outputs:[{lot:{lotCode:"secret",lotType:"roast"}}]}]});
   mocks.access.mockImplementation(async (_user,_action,[lot])=>{if(lot.lotCode==="secret")throw new TraceabilityAccessError("denied");});
   const [row]=await getReportRoastPreparations("operator",["sample"]);
   expect(row?.sourceLotCodes).toEqual(["visible"]);expect(row?.roastCodes).toEqual([]);
   expect(JSON.stringify(row)).not.toContain("secret");
+});
+
+it("ADR-043: no entrega ni consulta el tueste de una cata abierta y sin revelar", async () => {
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",revealedAt:null,blindSample:{flight:{sessionId:"session",session:{status:"in_progress"}}}}]);
+  mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date()});
+  expect(await getReportRoastPreparations("operator",["sample"])).toEqual([]);
+  // Ni siquiera se pide el detalle: el dato no se arma para descartarlo después.
+  expect(mocks.roast).not.toHaveBeenCalled();
+});
+
+it("ADR-043: sí lo entrega si el mapeo se reveló aunque la sesión siga abierta", async () => {
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",revealedAt:new Date(),blindSample:{flight:{sessionId:"session",session:{status:"in_progress"}}}}]);
+  mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date()});
+  expect((await getReportRoastPreparations("operator",["sample"])).map((row)=>row.roastId)).toEqual(["roast"]);
 });
