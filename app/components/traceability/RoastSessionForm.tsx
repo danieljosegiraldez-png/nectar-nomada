@@ -100,10 +100,10 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
         </div>
       ) : null}
 
-      <div className="nn-field">
+      {purpose === "sample" ? <p className="nn-muted">{t("sampleRoastAutomaticCodeHelp")}</p> : <div className="nn-field">
         <label htmlFor="r-outputLotCode">{t("roastOutputLotCodeLabel")}</label>
         <input id="r-outputLotCode" name="outputLotCode" type="text" required />
-      </div>
+      </div>}
       <div className="nn-field">
         <label htmlFor="r-startedAt">{t("roastStartedAtLabel")}</label>
         <input id="r-startedAt" name="startedAt" type="datetime-local" required />
