@@ -13,6 +13,14 @@ import {
   ProvenanceClass,
   SoilFeatureObservation,
   SunExposure,
+  BroodPattern,
+  BroodStage,
+  ColonyPopulation,
+  FeedingMaterial,
+  InspectionOutcome,
+  QueenSighting,
+  StoresLevel,
+  Temperament,
 } from "../../generated/prisma/enums";
 
 /**
@@ -53,6 +61,45 @@ const CASOS = [
   { nombre: "SoilFeatureObservation", prefijo: "soilObservation", valores: Object.values(SoilFeatureObservation) },
   { nombre: "CanopyPosition", prefijo: "canopyPosition", valores: Object.values(CanopyPosition) },
 ] as const;
+
+/**
+ * Los valores del reporte de visita viven en otro espacio de nombres: `Apiary`, no `Traceability`.
+ *
+ * **Por qué hace falta aparte.** El bloque de abajo lee sólo `Traceability`, así que jamás vio
+ * `population_*`. El #373 renombró el valor del enum de `apinada` a `apiñada` y dejó la clave
+ * sin la eñe: el formulario de inspección pedía `population_apiñada`, no la encontraba, y
+ * `next-intl` —sin `onError` configurado— pintaba el nombre de la clave en el desplegable.
+ * Nada falló en rojo; se leyó mal en pantalla. Producción no tenía ninguna inspección todavía
+ * (`apiary.inspection` vacía el 2026-10-08), así que nadie lo había visto.
+ *
+ * Cubre las ocho familias que construye `DetallesDelReporte` con una plantilla
+ * (`population_${v}`...): una clave que falte ahí no la ve el compilador.
+ */
+const esApiary = JSON.parse(leer("messages/es.json")).Apiary as Record<string, string>;
+const enApiary = JSON.parse(leer("messages/en.json")).Apiary as Record<string, string>;
+
+const CASOS_APIARY = [
+  { nombre: "ColonyPopulation", prefijo: "population", valores: Object.values(ColonyPopulation) },
+  { nombre: "QueenSighting", prefijo: "queenSighting", valores: Object.values(QueenSighting) },
+  { nombre: "BroodPattern", prefijo: "broodPattern", valores: Object.values(BroodPattern) },
+  { nombre: "BroodStage", prefijo: "broodStage", valores: Object.values(BroodStage) },
+  { nombre: "StoresLevel", prefijo: "storesLevel", valores: Object.values(StoresLevel) },
+  { nombre: "Temperament", prefijo: "temperament", valores: Object.values(Temperament) },
+  { nombre: "FeedingMaterial", prefijo: "feedingMaterial", valores: Object.values(FeedingMaterial) },
+  { nombre: "InspectionOutcome", prefijo: "inspectionOutcome", valores: Object.values(InspectionOutcome) },
+] as const;
+
+describe("cada valor de colonia del reporte tiene etiqueta en los dos idiomas (Apiary)", () => {
+  for (const { nombre, prefijo, valores } of CASOS_APIARY) {
+    it(`${nombre}: ${valores.length} valores, en español y en inglés`, () => {
+      expect(valores.length).toBeGreaterThan(0);
+      for (const valor of valores) {
+        expect(esApiary[`${prefijo}_${valor}`], `falta Apiary.${prefijo}_${valor} en es.json`).toBeTruthy();
+        expect(enApiary[`${prefijo}_${valor}`], `falta Apiary.${prefijo}_${valor} en en.json`).toBeTruthy();
+      }
+    });
+  }
+});
 
 describe("cada valor enumerado tiene etiqueta en los dos idiomas", () => {
   for (const { nombre, prefijo, valores } of CASOS) {
