@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({ mappings: vi.fn(), roast: vi.fn() }));
 vi.mock("../../lib/db", () => ({ prisma: { sensoryBlindMapping: { findMany: mocks.mappings } } }));
 vi.mock("../../lib/traceability/roasting", () => ({ getRoastSessionDetail: mocks.roast }));
 vi.mock("../../lib/traceability/lots", () => ({ TraceabilityAccessError: class extends Error {} }));
-import { getReportRoastPreparations } from "../../lib/traceability/reportRoastPreparations";
+import { getReportRoastPreparations } from "../../lib/traceability/reports";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 beforeEach(() => { vi.resetAllMocks(); });
 it("no consulta preparaciones cuando el informe no tiene muestras", async () => {

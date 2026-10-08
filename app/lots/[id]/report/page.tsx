@@ -242,7 +242,7 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
           <ul>
             {samples.flatMap((s) =>
               (sensoryLinkage[s.id] ?? []).map((entry) => (
-                <li key={`${s.id}-${entry.sessionId}`}>
+                <li key={`${s.id}-${entry.sessionId}-${entry.roastSessionId ?? "historical"}`}>
                   {s.sampleCode} — {entry.sessionName}
                   {entry.overallResult ? (
                     <>: {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}</>
@@ -250,7 +250,7 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
                     <> — {t("sensoryAwaitingResultLabel")}</>
                   )}
                   {(report.roastPreparations ?? []).filter((preparation) =>
-                    preparation.sampleId === s.id && preparation.sessionId === entry.sessionId,
+                    preparation.sampleId === s.id && preparation.sessionId === entry.sessionId && preparation.roastId === entry.roastSessionId,
                   ).map((preparation) => (
                     <p className="nn-muted" key={preparation.roastId}>
                       {t("reportRoastReferenceLabel")}: {preparation.roastId}<br />

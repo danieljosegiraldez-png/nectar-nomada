@@ -1158,6 +1158,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
 }
 
 export interface SensoryLinkageEntry {
+  roastSessionId: string | null;
   sessionId: string;
   sessionName: string;
   sessionStatus: string;
@@ -1202,6 +1203,7 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
       blindMappings: {
         select: {
           revealedAt: true,
+          roastSessionId: true,
           blindSample: {
             select: {
               flight: { select: { session: { select: { id: true, name: true, status: true } } } },
@@ -1222,6 +1224,7 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
     result[sample.id] = sample.blindMappings.map((mapping) => {
       const overall = mapping.blindSample.panelResults[0] ?? null;
       return {
+        roastSessionId: mapping.roastSessionId,
         sessionId: mapping.blindSample.flight.session.id,
         sessionName: mapping.blindSample.flight.session.name,
         sessionStatus: mapping.blindSample.flight.session.status,
