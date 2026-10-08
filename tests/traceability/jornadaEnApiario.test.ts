@@ -427,13 +427,17 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
       ...visita_(apiarioId),
       startedAt: new Date("2026-09-03T13:00:00Z"),
     });
-    await recordInspection(apicultorConManejo, { colonyId, outcome: "nothing_unusual", note: `TEST rep (${RUN_ID})` });
+    const inspeccion = await recordInspection(apicultorConManejo, { colonyId, outcome: "nothing_unusual", note: `TEST rep (${RUN_ID})`, population: "normal", beeCoveredFrames: 6, queenSighted: "no_se_busco", honeyStoresLevel: "baja", broodStages: ["larva"] });
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id, notes: "notas originales" });
 
     const { version, snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
     expect(version.version).toBe(1);
     expect(snapshot.registros.length).toBe(1);
     expect(snapshot.visita.notas).toBe("notas originales");
+    expect(snapshot.registros[0]?.inspeccion).toMatchObject({ poblacion: "normal", cuadrosCubiertos: 6, reina: "no_se_busco", reservasMiel: "baja", reservasPolen: null, etapasCria: ["larva"] });
+    await prisma.inspection.update({ where: { id: inspeccion.id }, data: { beeCoveredFrames: 8 } });
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido?.snapshot.registros[0]?.inspeccion?.cuadrosCubiertos).toBe(6);
 
     // Se cambian los datos vivos DESPUÉS de emitir.
     await prisma.fieldSession.update({ where: { id: visita.id }, data: { notes: "corregido despues" } });
@@ -441,6 +445,14 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     const guardado = await prisma.reportVersion.findUniqueOrThrow({ where: { id: version.id } });
     const congelado = guardado.renderedSnapshot as unknown as { visita: { notas: string } };
     expect(congelado.visita.notas, "el snapshot siguió a los datos vivos: no está congelado").toBe("notas originales");
+  });
+
+  it("congela masa de alimento y unidad sin inventar volumen de jarabe", async () => {
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-03T14:00:00Z") });
+    await recordColonyEvent(apicultorConManejo, { colonyId, eventType: "feeding", feedingMaterialKind: "azucar_blanca", feedingQuantity: 3, feedingUnit: "lb", coverageUntil: new Date("2026-09-10T00:00:00Z") });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    const { snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    expect(snapshot.registros.find(r => r.alimentacion)?.alimentacion).toEqual({ tipo: "azucar_blanca", material: null, cantidad: "3", unidad: "lb" });
   });
 
   it("EL INFORME NOMBRA LA COLMENA Y QUÉ SE HIZO, no sólo la clase del registro", async () => {

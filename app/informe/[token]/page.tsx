@@ -1,3 +1,4 @@
+import { DetallesDelReporte } from "../../components/traceability/DetallesDelReporte";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { abrirReportePorEnlace } from "../../../lib/traceability/reporteDeVisita";
@@ -94,6 +95,7 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
+                <DetallesDelReporte registro={r} />
               </li>
             ))}
           </ul>

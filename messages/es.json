@@ -2033,6 +2033,8 @@
     "colonyStatus_dead": "Muerta",
     "colonyStatus_absconded": "Abandonó la colmena",
     "colonyStatus_combined": "Se combinó con otra",
+    "reportAssessment": "Valoración del técnico",
+    "reportNotRecorded": "Sin registrar",
     "inspectionHeading": "Inspección",
     "inspectionNothingUnusualButton": "Nada fuera de lo normal",
     "inspectionRecordDetailsButton": "Registrar detalles",

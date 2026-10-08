@@ -60,6 +60,20 @@ export interface SnapshotDeVisita {
     colmena?: string | null;
     /** Que se hizo o que se vio, en una linea: el producto, el alimento, el resultado. */
     detalle?: string | null;
+    /** Opcional para conservar lectura de versiones anteriores. */
+    inspeccion?: {
+      poblacion: string | null;
+      cuadrosCubiertos: number | null;
+      reina: string | null;
+      patronCria: string | null;
+      etapasCria: string[];
+      reservasMiel: string | null;
+      reservasPolen: string | null;
+      temperamento: string | null;
+      nota: string | null;
+      valoracion: string | null;
+    };
+    alimentacion?: { tipo: string | null; material: string | null; cantidad: string | null; unidad: string | null };
   }>;
   /**
    * La lectura del tecnico y lo que le recomienda al cliente. Opcionales por lo mismo que
@@ -132,13 +146,16 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       // listado de tipos de fila. El identificador NO es un id interno: es justo el dato con
       // el que el cliente sigue su servicio.
       inspection: {
-        select: { outcome: true, colony: { select: { hive: { select: { identifier: true } } } } },
+        select: { outcome: true, population: true, beeCoveredFrames: true, queenSighted: true, broodPattern: true, broodStages: true, honeyStoresLevel: true, pollenStoresLevel: true, temperament: true, note: true, assessment: true, colony: { select: { hive: { select: { identifier: true } } } } },
       },
       colonyEvent: {
         select: {
           eventType: true,
           treatmentProduct: true,
           feedingMaterial: true,
+          feedingMaterialKind: true,
+          feedingQuantity: true,
+          feedingUnit: true,
           colony: { select: { hive: { select: { identifier: true } } } },
         },
       },
@@ -171,6 +188,24 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       // producto anotado dice `null`, no una cadena vacia ni un "se aplico algo": el vacio se
       // ve, que es la regla del Anexo C y de ADR-125.
       detalle: detalleDe(e),
+      ...(e.inspection ? { inspeccion: {
+        poblacion: e.inspection.population,
+        cuadrosCubiertos: e.inspection.beeCoveredFrames,
+        reina: e.inspection.queenSighted,
+        patronCria: e.inspection.broodPattern,
+        etapasCria: e.inspection.broodStages,
+        reservasMiel: e.inspection.honeyStoresLevel,
+        reservasPolen: e.inspection.pollenStoresLevel,
+        temperamento: e.inspection.temperament,
+        nota: e.inspection.note,
+        valoracion: e.inspection.assessment,
+      } } : {}),
+      ...(e.colonyEvent?.eventType === "feeding" ? { alimentacion: {
+        tipo: e.colonyEvent.feedingMaterialKind,
+        material: e.colonyEvent.feedingMaterial,
+        cantidad: e.colonyEvent.feedingQuantity?.toString() ?? null,
+        unidad: e.colonyEvent.feedingUnit,
+      } } : {}),
       // Qué hecho concreto cuelga de este registro, sin exponer el id interno.
       sujeto:
         e.inspectionId ? "inspeccion"
