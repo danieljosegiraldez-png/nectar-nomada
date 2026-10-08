@@ -2592,6 +2592,19 @@ that turns out to be the wrong call in practice, it is a one-line `can()`
 addition, not a schema change — noted here, not resolved, since no
 concrete case has required it yet.
 
+**Enmienda 2026-10-08 (informe de preparaciones de tueste).** La función devuelve ahora el id del
+tueste de cada muestra (`roastSessionId`), para que el informe del lote ponga junto a cada
+resultado la preparación exacta que se catió. Eso ensancha lo que `lot:view` revela de
+`SensoryBlindMapping`, y el caso que lo hace real es concreto: medido en producción el 2026-10-08,
+**Bob Huerbsch tiene a la vez Farm Operator/Farm Manager (ve lotes) y Sensory Judge**. Decisión de
+Daniel: el tueste sólo sale **cuando el mapeo se reveló o la sesión ya cerró** (`completed` o
+`locked`); con la cata en `draft`, `blind_coding` o `in_progress` y sin revelar, `roastSessionId`
+es `null` y el informe no arma la preparación. La regla vive en `lib/traceability/tuesteVisible.ts`
+y se prueba en `tuesteVisible.test.ts`, `vinculoDeCataTueste.test.ts` y
+`reportRoastPreparations.test.ts`. La lista de campos permitidos de `lots.test.ts` se amplió a
+propósito con `roastSessionId`. El código ciego, el id del mapeo y la identidad del evaluador siguen
+sin salir de aquí.
+
 ---
 
 ## ADR-044 — Amendment to ADR-039: the capture-or-lose-it clause;
@@ -12869,3 +12882,26 @@ observada por las condiciones del lugar (C12b).
 (floración con pantalla), R1 (pantallas de carga y error), R2 (`/beneficio` legible sin conexión), R3
 (contraste y tacto) y R4 (el 6,5 de dilución y la aw del motor). El cockpit (B2) espera al PR-B de la 2a,
 a la ocupación de la 2c y al alta real de Las Nubes (B0), que depende de la lista de equipos de Daniel.
+
+## ADR-198 — Un beneficio puede existir sin finca propia
+
+**Fecha:** 2026-10-08 · **Spec:** `docs/superpowers/specs/2026-10-06-beneficio-sin-finca-design.md`
+
+**Contexto.** Hoy un beneficio debe colgar de un `site` (`lib/traceability/beneficios.ts`) y su
+organización se copia del padre. Daniel, 2026-10-06: «una organización puede tener un beneficio y no
+tener finca, que sólo compran», y `Las Nubes` puede procesar cereza de una finca ajena. Medido en
+producción ese día: `Las Nubes` tiene `organization_id` nulo aunque su padre lo tiene, así que el
+invariante en el que se apoyan varios filtros ya no se cumple.
+
+**Decisión.** El beneficio puede nacer **sin padre**, y **la organización es su ancla**; el que ya
+tiene padre lo conserva (variante opcional). Quien crea uno sin padre es quien administra la
+organización dueña. Un gestor de finca elige como destino de su cosecha los beneficios de su
+organización y los que se le hayan concedido de forma explícita. Kiva Estate crea el suyo por
+pantalla cuando el PR 2 esté en `main`, no a mano.
+
+**Consecuencias.** Tres PR, en este orden y cada uno útil solo: (1) la organización del beneficio
+deja de salir de su padre — incluye poner la de `Las Nubes`, escritura en producción que hace
+Daniel; (2) se relaja la regla y se hacen alcanzables las pantallas, reescribiendo el test que hoy
+afirma lo contrario; (3) permisos y procedencia. Sin padre se pierde la jerarquía de permisos y la
+geografía: es el precio de la variante, y sólo lo pagan los beneficios que nacen así.
+`lib/rbac/resolve.ts` queda sin leer y el PR 3 empieza por ahí.

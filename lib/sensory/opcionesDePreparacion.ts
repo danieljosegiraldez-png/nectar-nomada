@@ -34,7 +34,7 @@ export function opcionesDePreparacion(
     sinEquipo: string;
     /** Lo que va en el sitio del grado cuando el linaje es demasiado hondo para saberlo. */
     linajeDemasiadoHondo: string;
-    describirTueste: (datos: { date: string; profile: string; equipment: string }) => string;
+    describirTueste: (datos: { date: string; profile: string; equipment: string; reference: string }) => string;
   },
 ): OpcionDePreparacion[] {
   // Tarea 9, ronda de arreglo 1 (2026-10-02): sin grado porque no se pudo saber no es sin grado porque no lo tiene. Se dice
@@ -51,6 +51,7 @@ export function opcionesDePreparacion(
     roastSessionId: roast.id,
     label: `${base} · ${textos.describirTueste({
       date: roast.startedAt.toISOString().slice(0, 10),
+      reference: roast.id,
       profile: roast.recipeVersion ? `${roast.recipeVersion.recipe.name} v${roast.recipeVersion.version}` : textos.sinPerfil,
       equipment: roast.equipment?.name ?? textos.sinEquipo,
     })}`,

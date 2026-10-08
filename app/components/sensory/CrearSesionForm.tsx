@@ -68,7 +68,7 @@ export function CrearSesionForm({
           y después no se pueden separar para reportar. */}
       <div className="nn-field">
         <label htmlFor="cs-purpose">{t("sessionPurposeLabel")}</label>
-        <select id="cs-purpose" name="purpose" defaultValue="">
+        <select id="cs-purpose" name="purpose" defaultValue="" aria-describedby="cs-purpose-help">
           <option value="">{t("sessionPurposeNone")}</option>
           {(["characterize", "select", "verify_conformance", "hedonic", "rank"] as const).map((v) => (
             <option key={v} value={v}>
@@ -76,6 +76,7 @@ export function CrearSesionForm({
             </option>
           ))}
         </select>
+        <p id="cs-purpose-help" className="nn-muted">{t("sessionPurposeHelp")}</p>
       </div>
 
       <div className="nn-field">
