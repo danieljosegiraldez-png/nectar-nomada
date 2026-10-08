@@ -1,7 +1,8 @@
 # Un beneficio puede existir sin finca propia
 
-**Estado: propuesta, con las tres decisiones de dominio ya tomadas por Daniel; pendiente de su aprobación final.** Reserva el ADR-197, que no se
-escribe en `DECISIONS.md` hasta que este diseño se apruebe.
+**Estado: aprobado por Daniel el 2026-10-08.** Decisión registrada como ADR-198 en
+`docs/architecture/DECISIONS.md`. (Este diseño reservó primero el ADR-197; `auditoria-farm-to-green`, #675, lo reclamó antes de
+fusionarse, y se tomó el siguiente libre.) Los tres PR de abajo siguen sin construirse.
 
 ## La decisión de Daniel, 2026-10-06
 
