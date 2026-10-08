@@ -243,6 +243,11 @@
     "status_modified": "Modificada"
   },
   "Sensory": {
+    "servedRoastCode": "Tueste: {value}",
+    "servedSourceLot": "Lote de origen: {value}",
+    "servedRoaster": "Quién tostó: {value}",
+    "roastDataNotRecorded": "No registrado",
+
     "badge": "Sensorial",
     "title": "Tus sesiones de cata",
     "noSessions": "Aún no tienes sesiones asignadas. Un administrador puede darte acceso a una sesión de cata.",
@@ -430,6 +435,10 @@
     "error_upload_failed": "La subida falló. Intenta de nuevo."
   },
   "Traceability": {
+    "reportRoastCodeLabel": "Código de tueste",
+    "reportRoastSourceLabel": "Lote de origen",
+    "roastDataNotRecorded": "No registrado",
+
     "badge": "Panel del Operador",
     "lotsTitle": "Lotes",
     "lotsIntro": "Operaciones activas y todos los lotes que puedes ver.",

@@ -106,6 +106,9 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                     </span>
                     {preparacion ? (
                       <>
+                        <span>{t("servedRoastCode", { value: preparacion.transformations.flatMap((transformation) => transformation.outputs.filter((output) => output.lot.lotType === "roast").map((output) => output.lot.lotCode)).join(", ") || t("roastDataNotRecorded") })}</span>
+                        <span>{t("servedSourceLot", { value: preparacion.transformations.flatMap((transformation) => transformation.inputs.map((input) => input.lot.lotCode)).join(", ") || t("roastDataNotRecorded") })}</span>
+                        <span>{t("servedRoaster", { value: preparacion.roaster?.displayName ?? t("roastDataNotRecorded") })}</span>
                         <span>{t("servedRoastDate", { date: preparacion.startedAt.toISOString().slice(0, 10) })}</span>
                         <span>{preparacion.recipeVersion ? `${preparacion.recipeVersion.recipe.name} · v${preparacion.recipeVersion.version}` : t("sampleRoastNoProfile")}</span>
                         <span>{preparacion.equipment?.name ?? t("sampleRoastNoEquipment")}</span>

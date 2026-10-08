@@ -15,7 +15,7 @@ vi.mock("../../lib/traceability/reports",()=>({getLotReport:async()=>({
   {sessionId:"session",sessionName:"Distinct score A",roastSessionId:"roast-a",overallResult:{meanValue:"4",responseCount:1}},
   {sessionId:"session",sessionName:"Distinct score B",roastSessionId:"roast-b",overallResult:{meanValue:"8",responseCount:1}},
  ]} : {},
- roastPreparations:data.withRoasts ? ["roast-a","roast-b"].map((roastId)=>({sampleId:"sample",sessionId:"session",roastId,startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null})) : [],
+ roastPreparations:data.withRoasts ? ["roast-a","roast-b"].map((roastId)=>({sampleId:"sample",sessionId:"session",roastId,roastCodes:[roastId+"-T01"],sourceLotCodes:["PE-86"],roasterName:roastId+"-person",equipmentName:roastId+"-equipment",startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null})) : [],
  fermentationRuns:[],dryingRuns:[],storageAssignments:[],assets:[],generatedAt:new Date(),
 })}));
 vi.mock("../../lib/traceability/quantity",()=>({computeCurrentQuantity:async()=>({quantity:1,unit:"kg"})}));
@@ -40,6 +40,7 @@ it("cada resultado incluye exclusivamente su preparación cuando hay dos tuestes
  const rows=html.match(/<li[^>]*>[\s\S]*?<\/li>/g) ?? [];
  const first=rows.find((row)=>row.includes("Distinct score A"))!;
  const second=rows.find((row)=>row.includes("Distinct score B"))!;
+ expect(first).toContain("roast-a-person");expect(first).toContain("roast-a-equipment");expect(first).toContain("PE-86");
  expect(first).toContain("roast-a");expect(first).not.toContain("roast-b");
  expect(second).toContain("roast-b");expect(second).not.toContain("roast-a");
 });

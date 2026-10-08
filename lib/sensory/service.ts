@@ -468,6 +468,11 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
                   roastSession: {
                     include: {
                       equipment: { select: { name: true } },
+                      roaster: { select: { displayName: true } },
+                      transformations: { select: {
+                        inputs: { select: { lot: { select: { lotCode: true } } } },
+                        outputs: { select: { lot: { select: { lotCode: true, lotType: true } } } },
+                      } },
                       recipeVersion: { include: { recipe: { select: { name: true } } } },
                     },
                   },

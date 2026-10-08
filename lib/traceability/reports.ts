@@ -154,6 +154,10 @@ export async function getReportRoastPreparations(userAccountId: string, sampleId
         sampleId: mapping.sampleId, sessionId: mapping.blindSample.flight.sessionId,
         roastId: roast.id, startedAt: roast.startedAt, endedAt: roast.endedAt,
         roastLevel: roast.roastLevel,
+        roastCodes: (roast.transformations ?? []).flatMap((transformation) => transformation.outputs.filter((output) => output.lot.lotType === "roast").map((output) => output.lot.lotCode)),
+        sourceLotCodes: (roast.transformations ?? []).flatMap((transformation) => transformation.inputs.map((input) => input.lot.lotCode)),
+        roasterName: roast.roaster?.displayName ?? null,
+        equipmentName: roast.equipment?.name ?? roast.equipmentNote ?? null,
         chargeWeightKg: roast.chargeWeightKg?.toString() ?? null,
         dischargeWeightKg: roast.dischargeWeightKg?.toString() ?? null,
       });

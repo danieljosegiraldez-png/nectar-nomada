@@ -253,6 +253,10 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
                     preparation.sampleId === s.id && preparation.sessionId === entry.sessionId && preparation.roastId === entry.roastSessionId,
                   ).map((preparation) => (
                     <p className="nn-muted" key={preparation.roastId}>
+                      {t("reportRoastCodeLabel")}: {preparation.roastCodes?.join(", ") || t("roastDataNotRecorded")}<br />
+                      {t("reportRoastSourceLabel")}: {preparation.sourceLotCodes?.join(", ") || t("roastDataNotRecorded")}<br />
+                      {t("roastPersonLabel")}: {preparation.roasterName ?? t("roastDataNotRecorded")}<br />
+                      {t("roastEquipmentLabel")}: {preparation.equipmentName ?? t("roastDataNotRecorded")}<br />
                       {t("reportRoastReferenceLabel")}: {preparation.roastId}<br />
                       {t("roastStartedAtLabel")}: {formatDate(preparation.startedAt)}
                       {preparation.endedAt ? <> · {t("roastEndedAtLabel")}: {formatDate(preparation.endedAt)}</> : null}

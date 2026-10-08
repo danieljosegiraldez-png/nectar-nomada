@@ -415,6 +415,7 @@ export async function getRoastSessionDetail(userAccountId: string, roastSessionI
     where: { id: roastSessionId },
     include: {
       roaster: true,
+      equipment: { select: { name: true } },
       measurements: { orderBy: { occurredAt: "asc" } },
       transformations: {
         include: {

@@ -243,6 +243,11 @@
     "status_modified": "Modified"
   },
   "Sensory": {
+    "servedRoastCode": "Roast: {value}",
+    "servedSourceLot": "Source lot: {value}",
+    "servedRoaster": "Roasted by: {value}",
+    "roastDataNotRecorded": "Not recorded",
+
     "badge": "Sensory",
     "title": "Your judging sessions",
     "noSessions": "No sessions assigned to you yet. An admin can give you access to a tasting session.",
@@ -430,6 +435,10 @@
     "error_upload_failed": "The upload failed. Try again."
   },
   "Traceability": {
+    "reportRoastCodeLabel": "Roast code",
+    "reportRoastSourceLabel": "Source lot",
+    "roastDataNotRecorded": "Not recorded",
+
     "badge": "Operator Workbench",
     "lotsTitle": "Lots",
     "lotsIntro": "Active operations, and every lot you can see.",

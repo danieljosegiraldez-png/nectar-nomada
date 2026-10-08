@@ -40,3 +40,13 @@ it("reutiliza la autorización del mismo tueste en dos sesiones sin perder sus v
   expect(result.map((row)=>row.sessionId)).toEqual(["session-a","session-b"]);
   expect(mocks.roast).toHaveBeenCalledTimes(1);
 });
+
+it("conserva identidad y autoría del tueste autorizado sin enviar datos personales completos", async () => {
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId:"session"}}}]);
+  mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null,
+    roaster:{displayName:"Tostador",email:"private"},equipment:{name:"Equipo"},
+    transformations:[{inputs:[{lot:{lotCode:"PE-86"}}],outputs:[{lot:{lotCode:"PE-86-T01",lotType:"roast"}},{lot:{lotCode:"residue",lotType:"waste"}}]}]});
+  const [row]=await getReportRoastPreparations("operator",["sample"]);
+  expect(row).toMatchObject({roastCodes:["PE-86-T01"],sourceLotCodes:["PE-86"],roasterName:"Tostador",equipmentName:"Equipo"});
+  expect(JSON.stringify(row)).not.toContain("private");
+});
