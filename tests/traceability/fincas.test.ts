@@ -72,7 +72,7 @@ beforeAll(async () => {
   B = await finca("B");
   C = await finca("C");
   P1 = await plot("P1", A.site);
-  M1 = await plot("M1", P1, { subdivisionReason: "shade" });
+  M1 = await plot("M1", P1, { motivoDeLaSeleccion: "shade" });
   Q1 = await plot("Q1", B.site);
   admin = await cuenta("Platform Admin", { scopeType: "platform", scopeRefId: null });
   managerA = await cuenta("Farm Manager", { scopeType: "location", scopeRefId: A.site });
@@ -284,8 +284,8 @@ describe("crear parcelas", () => {
   }, 20000);
 
   it("una microparcela tampoco repite nombre dentro de su parcela", async () => {
-    await createMicrolot(managerA, { parentLocationId: P1, name: `Sombra (${RUN})`, subdivisionReason: "shade" });
-    await expect(createMicrolot(managerA, { parentLocationId: P1, name: `SOMBRA (${RUN})`, subdivisionReason: "shade" })).rejects.toThrow(
+    await createMicrolot(managerA, { parentLocationId: P1, name: `Sombra (${RUN})`, motivoDeLaSeleccion: "shade" });
+    await expect(createMicrolot(managerA, { parentLocationId: P1, name: `SOMBRA (${RUN})`, motivoDeLaSeleccion: "shade" })).rejects.toThrow(
       /nombre_repetido/,
     );
   }, 20000);

@@ -79,7 +79,7 @@ describe("una bodega es configuración del beneficio", () => {
   it("no se subdivide en microlotes", async () => {
     const b = await crearBodega(f.jefeA, { parentLocationId: finca, name: `TEST micro ${f.run}` });
     await expect(
-      createMicrolot(f.jefeA, { parentLocationId: b.id, name: `TEST m ${f.run}`, subdivisionReason: "other", subdivisionReasonNote: "x" } as never),
+      createMicrolot(f.jefeA, { parentLocationId: b.id, name: `TEST m ${f.run}`, motivoDeLaSeleccion: "other", notaDelMotivoDeLaSeleccion: "x" } as never),
     ).rejects.toThrow(new LocationValidationError("bodega_no_se_subdivide"));
   });
 
