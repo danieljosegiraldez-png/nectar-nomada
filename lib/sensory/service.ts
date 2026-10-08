@@ -12,6 +12,7 @@
  * which the "Sensory Judge" Role Profile does not hold — see
  * lib/rbac/catalog.ts.
  */
+import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
@@ -470,8 +471,8 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
                       equipment: { select: { name: true } },
                       roaster: { select: { displayName: true } },
                       transformations: { select: {
-                        inputs: { select: { lot: { select: { lotCode: true } } } },
-                        outputs: { select: { lot: { select: { lotCode: true, lotType: true } } } },
+                        inputs: { select: { lot: { select: { lotCode: true, projectId: true, locationId: true, classification: true } } } },
+                        outputs: { select: { lot: { select: { lotCode: true, lotType: true, projectId: true, locationId: true, classification: true } } } },
                       } },
                       recipeVersion: { include: { recipe: { select: { name: true } } } },
                     },
@@ -490,6 +491,24 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
     },
   });
 
+  for (const flight of session.flights) {
+    for (const blindSample of flight.blindSamples) {
+      for (const transformation of blindSample.blindMapping?.roastSession?.transformations ?? []) {
+        const visibleInputs = [];
+        for (const input of transformation.inputs) {
+          try { await requireLotAccess(userAccountId, "view", [input.lot]); visibleInputs.push(input); }
+          catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
+        }
+        const visibleOutputs = [];
+        for (const output of transformation.outputs) {
+          try { await requireLotAccess(userAccountId, "view", [output.lot]); visibleOutputs.push(output); }
+          catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
+        }
+        transformation.inputs = visibleInputs;
+        transformation.outputs = visibleOutputs;
+      }
+    }
+  }
   return session;
 }
 

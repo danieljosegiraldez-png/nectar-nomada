@@ -26,7 +26,7 @@
  * `report_version` concern, not built here.
  */
 import { prisma } from "../db";
-import { getLotDetail, TraceabilityAccessError } from "./lots";
+import { getLotDetail, requireLotAccess, TraceabilityAccessError } from "./lots";
 import { getRoastSessionDetail } from "./roasting";
 
 /**
@@ -150,12 +150,27 @@ export async function getReportRoastPreparations(userAccountId: string, sampleId
         authorizedRoasts.set(mapping.roastSessionId, authorizedRoast);
       }
       const roast = await authorizedRoast;
+      const sourceLotCodes: string[] = [];
+      const roastCodes: string[] = [];
+      for (const transformation of roast.transformations ?? []) {
+        for (const [kind, rows] of [["source", transformation.inputs], ["output", transformation.outputs]] as const) {
+          for (const { lot } of rows) {
+            if (kind === "output" && lot.lotType !== "roast") continue;
+            try {
+              await requireLotAccess(userAccountId, "view", [lot]);
+              (kind === "source" ? sourceLotCodes : roastCodes).push(lot.lotCode);
+            } catch (error) {
+              if (!(error instanceof TraceabilityAccessError)) throw error;
+            }
+          }
+        }
+      }
       preparations.push({
         sampleId: mapping.sampleId, sessionId: mapping.blindSample.flight.sessionId,
         roastId: roast.id, startedAt: roast.startedAt, endedAt: roast.endedAt,
         roastLevel: roast.roastLevel,
-        roastCodes: (roast.transformations ?? []).flatMap((transformation) => transformation.outputs.filter((output) => output.lot.lotType === "roast").map((output) => output.lot.lotCode)),
-        sourceLotCodes: (roast.transformations ?? []).flatMap((transformation) => transformation.inputs.map((input) => input.lot.lotCode)),
+        roastCodes,
+        sourceLotCodes,
         roasterName: roast.roaster?.displayName ?? null,
         equipmentName: roast.equipment?.name ?? roast.equipmentNote ?? null,
         chargeWeightKg: roast.chargeWeightKg?.toString() ?? null,

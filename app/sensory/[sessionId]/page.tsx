@@ -111,7 +111,7 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                         <span>{t("servedRoaster", { value: preparacion.roaster?.displayName ?? t("roastDataNotRecorded") })}</span>
                         <span>{t("servedRoastDate", { date: preparacion.startedAt.toISOString().slice(0, 10) })}</span>
                         <span>{preparacion.recipeVersion ? `${preparacion.recipeVersion.recipe.name} · v${preparacion.recipeVersion.version}` : t("sampleRoastNoProfile")}</span>
-                        <span>{preparacion.equipment?.name ?? t("sampleRoastNoEquipment")}</span>
+                        <span>{preparacion.equipment?.name ?? preparacion.equipmentNote ?? t("roastDataNotRecorded")}</span>
                         <span style={{ overflowWrap: "anywhere" }}>{t("sampleRoastReference", { reference: preparacion.id })}</span>
                         {edadDelTueste ? (
                           <span className={edadDelTueste.fuera ? "nn-roast-age-warning" : undefined}>

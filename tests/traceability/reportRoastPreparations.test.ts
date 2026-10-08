@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ mappings: vi.fn(), roast: vi.fn() }));
+const mocks = vi.hoisted(() => ({ mappings: vi.fn(), roast: vi.fn(), access: vi.fn() }));
 vi.mock("../../lib/db", () => ({ prisma: { sensoryBlindMapping: { findMany: mocks.mappings } } }));
 vi.mock("../../lib/traceability/roasting", () => ({ getRoastSessionDetail: mocks.roast }));
-vi.mock("../../lib/traceability/lots", () => ({ TraceabilityAccessError: class extends Error {} }));
+vi.mock("../../lib/traceability/lots", () => ({ TraceabilityAccessError: class extends Error {}, requireLotAccess: mocks.access }));
 import { getReportRoastPreparations } from "../../lib/traceability/reports";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 beforeEach(() => { vi.resetAllMocks(); });
@@ -49,4 +49,13 @@ it("conserva identidad y autoría del tueste autorizado sin enviar datos persona
   const [row]=await getReportRoastPreparations("operator",["sample"]);
   expect(row).toMatchObject({roastCodes:["PE-86-T01"],sourceLotCodes:["PE-86"],roasterName:"Tostador",equipmentName:"Equipo"});
   expect(JSON.stringify(row)).not.toContain("private");
+});
+
+it("omite códigos de lotes relacionados denegados sin perder la preparación autorizada", async () => {
+  mocks.mappings.mockResolvedValue([{sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId:"session"}}}]);
+  mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date(),transformations:[{inputs:[{lot:{lotCode:"visible"}},{lot:{lotCode:"secret"}}],outputs:[{lot:{lotCode:"secret",lotType:"roast"}}]}]});
+  mocks.access.mockImplementation(async (_user,_action,[lot])=>{if(lot.lotCode==="secret")throw new TraceabilityAccessError("denied");});
+  const [row]=await getReportRoastPreparations("operator",["sample"]);
+  expect(row?.sourceLotCodes).toEqual(["visible"]);expect(row?.roastCodes).toEqual([]);
+  expect(JSON.stringify(row)).not.toContain("secret");
 });
