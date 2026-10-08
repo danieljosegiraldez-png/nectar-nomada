@@ -13,8 +13,8 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**634 operaciones** que tocan la base, en **172 archivos** — las **625 en 170** son de la medición del
-2026-10-05, y las nueve operaciones y los dos archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`: ver las notas de abajo); medido con
+**636 operaciones** que tocan la base, en **173 archivos** — las **625 en 170** son de la medición del
+2026-10-05, y las once operaciones y los tres archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`; tarea 14, `lib/recetas/catalogosDelEditor.ts` y `crearRecetaEnBorrador`: ver las notas de abajo); medido con
 `node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
 **el árbol fusionado** con `origin/main` (`a8f50df709`). El 2026-10-04 daban **624 en 170** sobre
 `origin/main` (`966ada98d1`): la de más es **`situacionesDeLaFinca`** en
@@ -32,12 +32,23 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
 | **397** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **67** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
+| **68** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **100** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **101** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **El editor de recetas por pasos (Parte 2a, tarea 14): 634→636, 172→173 archivos, «guardia transitivo» 67→68 y «depende del llamador» 100→101; «guardia directo» no se mueve (397).**
+> `crearRecetaEnBorrador` (en `lib/recetas/versiones.ts`) pide sólo `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso del Coffee Process
+> Manager en alguna ubicación de la organización de la receta —una plantilla, sólo con alcance de plataforma—), que guarda en su archivo y **se
+> importa**: por eso sale **«guardia transitivo»**, como `nuevaVersionBorrador` y `derivarReceta` en la tarea anterior. **El plan de la tarea 14 la daba
+> por «guardia directo»** (+1 en esa fila y «transitivo» sin moverse) **y es la misma lectura que ya midieron falsa las tareas 3 y 4**; lo midió el
+> script (`node scripts/inventario-de-acceso.mjs --json`, con `derivarReceta` como control, también «guardia transitivo») y lo comprueba
+> `cifras-del-inventario`: la autorización es la misma, y la clase sólo dice si el guardia vive en el archivo o se importa.
+> `lib/recetas/catalogosDelEditor.ts` es nuevo y `catalogosDelEditor` **depende del llamador** y está en el allowlist: lee el vocabulario de los
+> desplegables del editor (valores canónicos de catálogo, no dato de nadie) y las pantallas que la llaman ya pasaron por `getRecipeForEditor` y
+> `puedeAutoriaDeReceta`.
 
 > **`abrirProceso` valida la versión que se le pasa (Parte 2a, tarea 5a): ninguna cifra cambia.** Sigue en «guardia directo»
 > (`loteGestionable`). Lo nuevo —que la versión, si se pasa, exista y esté publicada, su receta viva y sea de la organización del lote o

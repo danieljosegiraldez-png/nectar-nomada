@@ -690,6 +690,10 @@
     {
       "archivo": "lib/recetas/versiones.ts",
       "razon": "Parte 2a, tarea 4: versiones y plantillas de una receta con pasos (diseño §3.3–§3.4). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/recetas/catalogosDelEditor.ts",
+      "razon": "Parte 2a, tarea 14: el vocabulario de los desplegables del editor de recetas (valores de catálogo). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     }
   ],
   "reciben_transaccion": [
@@ -1538,6 +1542,12 @@
       "operacion": "copiarContenidoDeVersion",
       "razon": "Copia lo que cuelga de una versión de receta a otra recién creada —pasos con sus adiciones, fines y requisitos; metas de paso con el paso remapeado al nuevo; metas de versión si se piden; y las fases sólo si el origen no tiene pasos (diseño §3.1)— dentro de la transacción del llamador. No recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (mismo archivo) después de `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta, o de plataforma si es una plantilla), y `createRecipeVersion` (lib/traceability/processTargets.ts) después de esa misma regla. Devuelve cuántas filas copió, no filas.",
       "verificado": "2026-10-06"
+    },
+    {
+      "archivo": "lib/recetas/catalogosDelEditor.ts",
+      "operacion": "catalogosDelEditor",
+      "razon": "Lee los valores canónicos de diez catálogos (tipo de paso, estado de la fruta, oxígeno, temperatura, fuente microbiana, medio, físico, sustrato, levadura y capacidad) para los desplegables del formulario de un paso. No recibe principal y no filtra por nadie: es vocabulario, no dato de una organización. La llaman sólo `app/recipes/[id]/pasos/datosDelFormulario.ts`, después de `getRecipeForEditor` (que abre la receta a quien puede escribirla o a quien opera un lote de su organización: Ruling C4) y de `puedeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16), que responde 404 a quien no puede.",
+      "verificado": "2026-10-08"
     }
   ]
 }

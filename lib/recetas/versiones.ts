@@ -153,6 +153,67 @@ export async function derivarReceta(
 }
 
 /**
+ * Una receta NUEVA, con su versión 1 en BORRADOR y sin pasos ni metas: lo que el editor (`/recipes/new`) crea y donde después se
+ * escriben los pasos (`agregarPaso`). Parte 2a, tarea 14 (2026-10-03).
+ *
+ * La puerta de recetas que había en `processTargets.ts` no servía para esto: exigía al menos una meta con su fase (`validateTargets`), porque nació cuando la
+ * receta SE DECLARABA con metas. Una receta con pasos declara sus números en cada paso, y hacerle teclear una meta de versión a
+ * quien sólo quiere ponerle nombre la dejaría con una meta que ningún paso posee. La receta nace «activa» como las de siempre
+ * (de su estado sólo se lee `archived`); lo que nace borrador es su versión, y hasta que `publicarVersion` la fije el selector de
+ * abrir un proceso no la ofrece.
+ *
+ * **Quién escribe (V16, Ruling A): `exigeAutoriaDeReceta`**, la ÚNICA regla —el permiso del Coffee Process Manager en la organización, o con
+ * alcance de plataforma si es una plantilla—, como `nuevaVersionBorrador` y `derivarReceta`. `edit_beneficio` ya no basta, y ya no se pide
+ * ningún lote. Un nombre repetido en la organización sale como `nombre_repetido`, no como un P2002 ilegible.
+ */
+export async function crearRecetaEnBorrador(
+  userAccountId: string,
+  input: { name: string; description?: string | null; organizationId: string | null },
+): Promise<{ recipeId: string; versionId: string }> {
+  const nombre = input.name.trim();
+  if (!nombre) throw new RecipeError("nombre_requerido");
+  await exigeAutoriaDeReceta(userAccountId, input.organizationId);
+
+  return prisma.$transaction(async (tx) => {
+    const receta = await tx.processRecipe
+      .create({
+        data: {
+          name: nombre,
+          description: input.description?.trim() || null,
+          organizationId: input.organizationId,
+          status: "approved",
+          createdBy: userAccountId,
+        },
+      })
+      .catch((error: unknown) => {
+        // Atado al `create`: aquí un P2002 sólo puede ser `@@unique([organizationId, name])`.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new RecipeError("nombre_repetido");
+        }
+        throw error;
+      });
+    const version = await tx.processRecipeVersion.create({
+      data: { recipeId: receta.id, version: 1, status: "draft", createdBy: userAccountId },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "process_recipe.create",
+        entityType: "process_recipe",
+        entityId: receta.id,
+        after: { ...receta, versionId: version.id },
+        reason: "receta_en_borrador",
+        sourceInterface: "recetas.versiones",
+      },
+      tx,
+    );
+
+    return { recipeId: receta.id, versionId: version.id };
+  });
+}
+
+/**
  * La fila sin las claves que se nombran; lo demás, entero. El porqué, en la cabecera de la copia que sigue.
  */
 function sinClaves<T extends object, K extends keyof T>(fila: T, claves: readonly K[]): Omit<T, K> {
