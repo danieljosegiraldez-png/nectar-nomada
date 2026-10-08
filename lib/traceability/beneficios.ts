@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import { LocationAccessError, exigeEditarBeneficioSiLoEs, puedeEditarBeneficioEn, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess, resolveOrganizationForLocation } from "./locations";
+import { LocationAccessError, exigeEditarBeneficioSiLoEs, puedeEditarBeneficioEn, puedeGestionarAtributosDeUbicacion, requireLocationAttributeAccess } from "./locations";
 
 export class BeneficioError extends Error {}
 
@@ -96,9 +96,8 @@ export async function crearBeneficio(userAccountId: string, input: { name: strin
   // **El beneficio lleva SU organización, y sin ella no nace** (ADR-198, PR 1). Antes se copiaba
   // `padre.organizationId` sin mirar si era nulo, y un sitio sin organización daba un beneficio sin
   // dueño: lo dejan fuera los filtros `organizationId: { not: null }` de equipos, catálogos,
-  // inventario y bandejas, sin ningún error. Se resuelve igual que el resto del código
-  // (`resolveOrganizationForLocation`: la propia o la del ancestro) y, si no hay, se rechaza.
-  const organizationId = padre.organizationId ?? (await resolveOrganizationForLocation(padre.id));
+  // inventario y bandejas, sin ningún error. Se toma la del sitio y, si no tiene, se rechaza.
+  const organizationId = padre.organizationId;
   if (!organizationId) throw new BeneficioError("organizacion_requerida");
   return prisma.$transaction(async (tx) => {
     const after = await tx.location.create({ data: {
