@@ -1,7 +1,7 @@
 # Farm-to-green — Fase 2: el ADR y la lista de tickets
 
-**Fecha:** 2026-10-08 · **Estado:** diseño aprobado por Daniel por partes en sesión; pendiente de su lectura
-del documento entero · **Sale de:** `docs/reference/farm-management/AUDIT_2026-10-04.md` (Fase 1) y las
+**Fecha:** 2026-10-08 · **Estado:** aprobado por Daniel (por partes en sesión y el documento entero, el
+2026-10-08); su ADR es el **ADR-197** de `docs/architecture/DECISIONS.md` · **Sale de:** `docs/reference/farm-management/AUDIT_2026-10-04.md` (Fase 1) y las
 24 respuestas de Daniel en su §8 · **Medido sobre:** `origin/main = 099a9330`.
 
 Es la Fase 2 del prompt `docs/reference/farm-management/00_CLAUDE_CODE_PROMPT.md`: un ADR y una lista de
@@ -24,8 +24,8 @@ tickets. **No implementa nada.** Cada ticket tendrá su propio diseño, sus nomb
 
 ## 2. El ADR — borrador
 
-> Se añade a `docs/architecture/DECISIONS.md` en el mismo PR que este documento, cuando Daniel lo
-> apruebe. **Número tentativo: ADR-197** — el último en `main` es el 196 y ninguna rama abierta reclama el
+> **Ya está en `docs/architecture/DECISIONS.md` como ADR-197**, añadido en el mismo PR que este documento
+> tras la aprobación de Daniel. El número se midió así — el último en `main` es el 196 y ninguna rama abierta reclama el
 > 197 (medido el 2026-10-08 sobre `recetas-parte-2a`, `beneficio-sin-finca` y
 > `codex/apiario-reporte-completo`). Se vuelve a medir al fusionar: el guardia
 > `tests/arquitectura/numeros-de-adr-unicos.test.ts` lo exige.
