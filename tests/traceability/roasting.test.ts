@@ -498,6 +498,16 @@ describe("serie automática por lote de origen", () => {
       await prisma.lot.update({where:{id:greenLotId},data:{lotCode:`${RUN_ID}-green`}});
     }
   });
+  it("no agota la serie por un lote ajeno con un prefijo extendido", async () => {
+    const unrelated=await prisma.lot.create({data:{lotCode:`${RUN_ID}-green-TOTHER-T99`,lotType:"roast",organizationId,projectId}});
+    outputLotIds.push(unrelated.id);
+    const result=await recordRoastSession(authorizedUserAccountId,{
+      purpose:"sample",lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
+    });
+    outputLotIds.push(result.outputLot.id);
+    expect(result.outputLot.lotCode).toMatch(/-green-T[0-9]{2}$/);
+    expect(result.outputLot.lotCode).not.toContain("TOTHER");
+  });
   it("no reinicia ni llena huecos al llegar a T99", async () => {
     const reserved=await prisma.lot.create({data:{lotCode:`${RUN_ID}-green-T99`,lotType:"roast",organizationId,projectId}});
     outputLotIds.push(reserved.id);

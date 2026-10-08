@@ -175,19 +175,25 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     if (input.purpose === "sample") {
       // One series per origin lot, shared by all its extracted samples.
       // Hold the parent before the sample lock to keep lock ordering stable.
-      await tx.$queryRaw`SELECT id FROM traceability.lot WHERE id = ${sourceLot.id}::uuid FOR UPDATE`;
-      const prefix = `${sourceLot.lotCode}-T`;
-      const assigned = await tx.lot.findMany({
-        where: { OR: [
-          { organizationId: sourceLot.organizationId, lotCode: { startsWith: prefix } },
-          { transformationOutputs: { some: { transformation: {
-            roastSession: { purpose: "sample" }, inputs: { some: { lotId: sourceLot.id } },
-          } } } },
-        ] },
+      const [lockedLot] = await tx.$queryRaw<{ lotCode: string }[]>`
+        SELECT lot_code AS "lotCode" FROM traceability.lot WHERE id = ${sourceLot.id}::uuid FOR UPDATE`;
+      if (!lockedLot) throw new TraceabilityAccessError("lot_not_found");
+      const prefix = `${lockedLot.lotCode}-T`;
+      const occupied = await tx.lot.findMany({
+        where: { organizationId: sourceLot.organizationId, lotCode: { startsWith: prefix } },
         select: { lotCode: true },
       });
-      const numbers = assigned.map((lot) => /-T([0-9]{2})$/.exec(lot.lotCode)?.[1])
+      const historical = await tx.lot.findMany({
+        where: { transformationOutputs: { some: { transformation: {
+          roastSession: { purpose: "sample" }, inputs: { some: { lotId: sourceLot.id } },
+        } } } },
+        select: { lotCode: true },
+      });
+      const exactNumbers = occupied.map((lot) => lot.lotCode.slice(prefix.length))
+        .filter((suffix) => /^[0-9]{2}$/.test(suffix)).map(Number);
+      const historicalNumbers = historical.map((lot) => /-T([0-9]{2})$/.exec(lot.lotCode)?.[1])
         .filter((suffix): suffix is string => suffix != null).map(Number);
+      const numbers = [...exactNumbers, ...historicalNumbers];
       const next = Math.max(0, ...numbers) + 1;
       if (next > 99) throw new RoastSessionValidationError("sample_roast_series_exhausted");
       outputLotCode = `${prefix}${String(next).padStart(2, "0")}`;
