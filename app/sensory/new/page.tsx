@@ -56,7 +56,7 @@ export default async function NuevaSesionPage() {
           catar. Son dos faltas distintas y se dicen por separado. */}
       {protocolos.length === 0 ? (
         <p className="nn-muted">{t("noProtocolsAvailable")}</p>
-      ) : muestras.length === 0 ? (
+      ) : muestras.length === 0 && !hayMas ? (
         <p className="nn-muted">{t(hayMuestrasSinTueste ? "noRoastedSamplesAvailable" : "noSamplesAvailable")}</p>
       ) : (
         <CrearSesionForm protocolos={protocolos} muestras={muestras} hayMas={hayMas} />
@@ -70,6 +70,6 @@ function textosDePreparacion(t: Awaited<ReturnType<typeof getTranslations<"Senso
     sinPerfil: t("sampleRoastNoProfile"),
     sinEquipo: t("sampleRoastNoEquipment"),
     linajeDemasiadoHondo: t("sampleLineageTooDeep"),
-    describirTueste: (datos: { date: string; profile: string; equipment: string }) => t("sampleRoastOption", datos),
+    describirTueste: (datos: { date: string; profile: string; equipment: string; reference: string }) => t("sampleRoastOption", datos),
   };
 }

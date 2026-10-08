@@ -675,6 +675,7 @@ export async function recordRoastSessionAction(
       // Sin valor por defecto aquí tampoco: si la pantalla no lo manda, el
       // servicio debe quejarse, no adivinar.
       purpose: String(formData.get("purpose") ?? "") as never,
+      roasterPersonId: emptyToNull(formData.get("roasterPersonId")),
       sourceSampleId: emptyToNull(formData.get("sourceSampleId")),
       recipeVersionId: emptyToNull(formData.get("recipeVersionId")),
       roastLevel: emptyToNull(formData.get("roastLevel")),

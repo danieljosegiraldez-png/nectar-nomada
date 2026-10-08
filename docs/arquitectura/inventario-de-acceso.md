@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**625 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-05 con
+**626 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-05 con
 `node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
 **el árbol fusionado** con `origin/main` (`a8f50df709`). El 2026-10-04 daban **624 en 170** sobre
 `origin/main` (`966ada98d1`): la de más es **`situacionesDeLaFinca`** en
@@ -30,7 +30,7 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **397** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **398** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **59** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
@@ -1298,3 +1298,5 @@ sale como **guardia directo** y la compuerta pasa en verde. `GUARDIAS` reconoce
 resolver el símbolo hasta el servicio de autorización de verdad. No se hace
 aquí. Se deja escrito, con la mutación que lo demuestra, para que nadie lea
 «208 operaciones inventariadas» como «208 operaciones autorizadas».
+
+> Medición local del 2026-10-07: 626 operaciones en 170 archivos. El informe de preparación ahora llama directamente a `requireLotAccess` para cada código relacionado: 398 guardias directos y 59 transitivos; total sin cambio. Esta medición corresponde a esta rama, no a main.

@@ -528,7 +528,28 @@ describe("getSensoryLinkageForSamples — T12 boundary (ADR-043)", () => {
     // The type itself is the primary guarantee (SensoryLinkageEntry has no
     // field for any of these) — this is a belt-and-suspenders regression
     // check against a future field addition widening what's returned.
-    expect(Object.keys(entry).sort()).toEqual(["overallResult", "revealed", "sessionId", "sessionName", "sessionStatus"].sort());
+    //
+    // `roastSessionId` ES una ampliación deliberada, y se declara aquí para que
+    // nadie la añada sin pasar por esta línea (decisión de Daniel, 2026-10-08):
+    //
+    //  - NO es ninguna de las tres cosas que ADR-043 prohíbe: no es el código
+    //    ciego, no es el id del mapping, no es la identidad de un evaluador. Es
+    //    una FK a una sesión de tueste, que es dato del lado del LOTE.
+    //  - Los cuatro llamadores de producción son todos de ámbito de lote
+    //    —`getLotDetail`, `getTreatmentBatchDetail`, el export y el informe—, y
+    //    ninguno es un camino de juez. Medido el 2026-10-08. OJO: eso es por
+    //    LLAMADOR, no por usuario. Quien ve lotes puede ser también juez —medido
+    //    en producción el 2026-10-08: Bob Huerbsch es Farm Manager y Sensory
+    //    Judge—, así que el id sólo sale con la cata revelada o cerrada
+    //    (`tuesteVisible`, probado en `vinculoDeCataTueste.test.ts`).
+    //  - La clave hace falta: una misma muestra puede ir DOS veces en la misma
+    //    sesión con tuestes distintos, y sin ella el informe no puede decir qué
+    //    resultado salió de qué tueste. El detalle del tueste sí pasa por su
+    //    propia puerta, en `getReportRoastPreparations`.
+    //
+    // Lo que NO se comprobó: un barrido exhaustivo de todos los caminos de
+    // lectura. Se midieron los cuatro llamadores, no el árbol entero.
+    expect(Object.keys(entry).sort()).toEqual(["overallResult", "revealed", "roastSessionId", "sessionId", "sessionName", "sessionStatus"].sort());
     expect(serialized).not.toContain("BC1"); // the blind code itself
     expect(serialized).not.toContain(blindSampleId);
   });

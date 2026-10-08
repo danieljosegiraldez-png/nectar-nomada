@@ -2592,6 +2592,19 @@ that turns out to be the wrong call in practice, it is a one-line `can()`
 addition, not a schema change — noted here, not resolved, since no
 concrete case has required it yet.
 
+**Enmienda 2026-10-08 (informe de preparaciones de tueste).** La función devuelve ahora el id del
+tueste de cada muestra (`roastSessionId`), para que el informe del lote ponga junto a cada
+resultado la preparación exacta que se catió. Eso ensancha lo que `lot:view` revela de
+`SensoryBlindMapping`, y el caso que lo hace real es concreto: medido en producción el 2026-10-08,
+**Bob Huerbsch tiene a la vez Farm Operator/Farm Manager (ve lotes) y Sensory Judge**. Decisión de
+Daniel: el tueste sólo sale **cuando el mapeo se reveló o la sesión ya cerró** (`completed` o
+`locked`); con la cata en `draft`, `blind_coding` o `in_progress` y sin revelar, `roastSessionId`
+es `null` y el informe no arma la preparación. La regla vive en `lib/traceability/tuesteVisible.ts`
+y se prueba en `tuesteVisible.test.ts`, `vinculoDeCataTueste.test.ts` y
+`reportRoastPreparations.test.ts`. La lista de campos permitidos de `lots.test.ts` se amplió a
+propósito con `roastSessionId`. El código ciego, el id del mapeo y la identidad del evaluador siguen
+sin salir de aquí.
+
 ---
 
 ## ADR-044 — Amendment to ADR-039: the capture-or-lose-it clause;
