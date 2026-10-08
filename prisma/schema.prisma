@@ -835,7 +835,7 @@ enum GridOrigin {
 /// selección misma), no en la madre, y sólo tiene sentido cuando `parentLocationId`
 /// está puesto; nulo en cualquier otro caso, como el resto de atributos de F1 §2.
 /// `other` va siempre con su nota: la regla de «valor tipado + nota libre» (§1).
-enum SubdivisionReason {
+enum MotivoDeSeleccion {
   altitude
   shade
   slope
@@ -979,8 +979,8 @@ model Location {
   // F1 §2 — only meaningful when parentLocationId is set (this Location
   // *is* a microlot). Nullable everywhere else, same as every attribute
   // above.
-  subdivisionReason     SubdivisionReason? @map("subdivision_reason")
-  subdivisionReasonNote String?            @map("subdivision_reason_note")
+  motivoDeLaSeleccion        MotivoDeSeleccion? @map("motivo_de_la_seleccion")
+  notaDelMotivoDeLaSeleccion String?            @map("nota_del_motivo_de_la_seleccion")
 
   // RO1 (34_RO1_RESEARCH_OS.md §3a) — same F1 attribute pattern as sun
   // exposure above, only meaningful for a drying-room Location. "El nivel
