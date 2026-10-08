@@ -241,8 +241,8 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
           <h2>{t("sensoryHeading")}</h2>
           <ul>
             {samples.flatMap((s) =>
-              (sensoryLinkage[s.id] ?? []).map((entry) => (
-                <li key={`${s.id}-${entry.sessionId}-${entry.roastSessionId ?? "historical"}`}>
+              (sensoryLinkage[s.id] ?? []).map((entry, index) => (
+                <li key={`${s.id}-${entry.sessionId}-${index}`}>
                   {s.sampleCode} — {entry.sessionName}
                   {entry.overallResult ? (
                     <>: {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}</>

@@ -1,7 +1,7 @@
 "use client";
 
 import { CampoNumerico } from "../CampoNumerico";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordRoastSessionAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
@@ -45,7 +45,12 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
   const [purpose, setPurpose] = useState("sample");
 
   return (
-    <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      // Dispatch explicitly: a returned domain error must not reset the form.
+      startTransition(() => formAction(data));
+    }} className="nn-form" style={{ maxWidth: 480 }}>
       {/* Sin esto `parseLocalDateTime` lanza `timezone_offset_missing`: se
           niega a adivinar la zona, que es como se guardaba un instante
           equivocado con aspecto de correcto. */}

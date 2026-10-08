@@ -32,3 +32,11 @@ it("no oculta fallos inesperados como si fueran denegaciones de acceso", async (
   mocks.roast.mockRejectedValue(new Error("database unavailable"));
   await expect(getReportRoastPreparations("operator", ["sample"])).rejects.toThrow("database unavailable");
 });
+
+it("reutiliza la autorización del mismo tueste en dos sesiones sin perder sus vínculos", async () => {
+  mocks.mappings.mockResolvedValue(["session-a", "session-b"].map((sessionId) => ({sampleId:"sample",roastSessionId:"roast",blindSample:{flight:{sessionId}}})));
+  mocks.roast.mockResolvedValue({id:"roast",startedAt:new Date("2026-10-07T12:00Z"),endedAt:null,roastLevel:null,chargeWeightKg:null,dischargeWeightKg:null});
+  const result=await getReportRoastPreparations("operator",["sample"]);
+  expect(result.map((row)=>row.sessionId)).toEqual(["session-a","session-b"]);
+  expect(mocks.roast).toHaveBeenCalledTimes(1);
+});
