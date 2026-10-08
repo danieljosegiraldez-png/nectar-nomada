@@ -43,10 +43,20 @@ const names: string[] = [];
 const accountIds: string[] = [];
 const personIds: string[] = [];
 const scopeIds: string[] = [];
+const orgIds: string[] = [];
 function nombre() { const n = `TEST-BEN-${randomUUID()}`; names.push(n); return n; }
 
-async function sitio() {
-  return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal" } });
+// **El sitio lleva organización por defecto, y es lo que hace que las pruebas de abajo midan algo.**
+// Hasta el PR 1 de ADR-198 este fixture lo creaba sin ella, así que `expect(ben.organizationId)
+// .toBe(finca.organizationId)` comparaba `null` con `null` y pasaba con la copia quitada.
+async function sitio(opts: { sinOrganizacion?: boolean } = {}) {
+  let organizationId: string | null = null;
+  if (!opts.sinOrganizacion) {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    organizationId = org.id;
+  }
+  return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId } });
 }
 async function parcela(parentLocationId: string) {
   return prisma.location.create({ data: { name: nombre(), locationType: "plot", classification: "internal", parentLocationId } });
@@ -91,7 +101,9 @@ afterEach(async () => {
   await prisma.scope.deleteMany({ where: { id: { in: scopeIds } } });
   await prisma.userAccount.deleteMany({ where: { id: { in: accountIds } } });
   await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+  await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
   names.length = 0;
+  orgIds.length = 0;
   accountIds.length = 0;
   personIds.length = 0;
   scopeIds.length = 0;
@@ -104,8 +116,25 @@ describe("crearBeneficio", () => {
     const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id });
     expect(ben.locationType).toBe("beneficio");
     expect(ben.parentLocationId).toBe(finca.id);
+    // Control de que la comparación mide: el sitio SÍ tiene organización. Sin esta línea,
+    // `null === null` también pasa (el fixture viejo), y quitar la copia no haría caer nada.
+    expect(finca.organizationId).not.toBeNull();
     expect(ben.organizationId).toBe(finca.organizationId);
     expect(ben.classification).toBe(finca.classification);
+  });
+
+  it("un sitio SIN organización no da un beneficio sin dueño: se rechaza y no se crea nada", async () => {
+    const huerfano = await sitio({ sinOrganizacion: true });
+    const jefe = await cuenta(huerfano.id, "Farm Manager");
+    const n = nombre();
+    await expect(crearBeneficio(jefe, { name: n, parentLocationId: huerfano.id }))
+      .rejects.toThrow(new BeneficioError("organizacion_requerida"));
+    expect(await prisma.location.count({ where: { name: n } })).toBe(0);
+    // Control positivo: el mismo jefe, con el mismo permiso, SÍ crea bajo un sitio con organización.
+    const conOrg = await sitio();
+    const jefe2 = await cuenta(conOrg.id, "Farm Manager");
+    const ok = await crearBeneficio(jefe2, { name: nombre(), parentLocationId: conOrg.id });
+    expect(ok.organizationId).toBe(conOrg.organizationId);
   });
 
   it("un capataz NO puede, aunque gestione el sitio", async () => {

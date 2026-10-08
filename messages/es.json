@@ -3346,6 +3346,7 @@
     "error_sin_acceso": "No tienes permiso para configurar un beneficio aquí.",
     "error_datos_invalidos": "El nombre es obligatorio y no puede pasar de 120 caracteres.",
     "error_padre_invalido": "Un beneficio cuelga de un sitio, no de una parcela ni de otra instalación.",
+    "error_organizacion_requerida": "El sitio elegido no tiene organización, y un beneficio necesita la suya. Asigna una organización al sitio primero.",
     "error_tipo_invalido": "Esa ubicación no es un beneficio.",
     "error_no_encontrado": "Ese beneficio ya no existe.",
     "concesionesTitulo": "Quién puede editar este beneficio",

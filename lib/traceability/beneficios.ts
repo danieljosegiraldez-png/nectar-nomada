@@ -93,10 +93,16 @@ export async function crearBeneficio(userAccountId: string, input: { name: strin
   const padre = await exigePoderCrearBajo(userAccountId, input.parentLocationId);
   if (padre.locationType !== "site") throw new BeneficioError("padre_invalido");
   const name = exigeNombre(input.name);
+  // **El beneficio lleva SU organización, y sin ella no nace** (ADR-198, PR 1). Antes se copiaba
+  // `padre.organizationId` sin mirar si era nulo, y un sitio sin organización daba un beneficio sin
+  // dueño: lo dejan fuera los filtros `organizationId: { not: null }` de equipos, catálogos,
+  // inventario y bandejas, sin ningún error. Se toma la del sitio y, si no tiene, se rechaza.
+  const organizationId = padre.organizationId;
+  if (!organizationId) throw new BeneficioError("organizacion_requerida");
   return prisma.$transaction(async (tx) => {
     const after = await tx.location.create({ data: {
       name, locationType: "beneficio", parentLocationId: padre.id,
-      organizationId: padre.organizationId, classification: padre.classification,
+      organizationId, classification: padre.classification,
       timezone: padre.timezone, createdBy: userAccountId,
     } });
     await recordAuditEvent({
