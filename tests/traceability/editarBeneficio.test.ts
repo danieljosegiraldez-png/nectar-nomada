@@ -164,11 +164,11 @@ describe("subdividir un beneficio (createMicrolot)", () => {
     const finca = await sitio();
     const ben = await hijo(finca.id, "beneficio");
     const jefe = await cuenta(finca.id, "Farm Manager");
-    await expect(createMicrolot(jefe, { parentLocationId: ben.id, name: nombre(), subdivisionReason: "other" }))
+    await expect(createMicrolot(jefe, { parentLocationId: ben.id, name: nombre(), motivoDeLaSeleccion: "other" }))
       .rejects.toThrow(new LocationValidationError("beneficio_no_se_subdivide"));
     // Control positivo: el mismo Farm Manager subdivide una parcela.
     const parc = await hijo(finca.id, "plot");
-    const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), subdivisionReason: "other" });
+    const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), motivoDeLaSeleccion: "other" });
     expect(micro.locationType).toBe("plot");
   });
 
@@ -176,11 +176,11 @@ describe("subdividir un beneficio (createMicrolot)", () => {
     const finca = await sitio();
     const inst = await hijo(finca.id, "drying_facility");
     const jefe = await cuenta(finca.id, "Farm Manager");
-    await expect(createMicrolot(jefe, { parentLocationId: inst.id, name: nombre(), subdivisionReason: "other" }))
+    await expect(createMicrolot(jefe, { parentLocationId: inst.id, name: nombre(), motivoDeLaSeleccion: "other" }))
       .rejects.toThrow(new LocationValidationError("secado_no_se_subdivide"));
     // Control positivo: el mismo Farm Manager subdivide una parcela.
     const parc = await hijo(finca.id, "plot");
-    const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), subdivisionReason: "other" });
+    const micro = await createMicrolot(jefe, { parentLocationId: parc.id, name: nombre(), motivoDeLaSeleccion: "other" });
     expect(micro.locationType).toBe("plot");
   });
 });

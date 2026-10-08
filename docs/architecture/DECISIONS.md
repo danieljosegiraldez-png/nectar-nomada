@@ -2592,6 +2592,19 @@ that turns out to be the wrong call in practice, it is a one-line `can()`
 addition, not a schema change — noted here, not resolved, since no
 concrete case has required it yet.
 
+**Enmienda 2026-10-08 (informe de preparaciones de tueste).** La función devuelve ahora el id del
+tueste de cada muestra (`roastSessionId`), para que el informe del lote ponga junto a cada
+resultado la preparación exacta que se catió. Eso ensancha lo que `lot:view` revela de
+`SensoryBlindMapping`, y el caso que lo hace real es concreto: medido en producción el 2026-10-08,
+**Bob Huerbsch tiene a la vez Farm Operator/Farm Manager (ve lotes) y Sensory Judge**. Decisión de
+Daniel: el tueste sólo sale **cuando el mapeo se reveló o la sesión ya cerró** (`completed` o
+`locked`); con la cata en `draft`, `blind_coding` o `in_progress` y sin revelar, `roastSessionId`
+es `null` y el informe no arma la preparación. La regla vive en `lib/traceability/tuesteVisible.ts`
+y se prueba en `tuesteVisible.test.ts`, `vinculoDeCataTueste.test.ts` y
+`reportRoastPreparations.test.ts`. La lista de campos permitidos de `lots.test.ts` se amplió a
+propósito con `roastSessionId`. El código ciego, el id del mapeo y la identidad del evaluador siguen
+sin salir de aquí.
+
 ---
 
 ## ADR-044 — Amendment to ADR-039: the capture-or-lose-it clause;
@@ -12783,3 +12796,32 @@ archivo, y las plantas en `lib/traceability/specimens.ts`. Las cuatro lecturas q
 —`listSoilProfilesForLocation`, `listLandAssets`, `listSamplesForLocation`, `listFieldSessions`— se
 quedan como están, y tienen guardia propio: el lado de «no enrolla» es el que una sesión futura rompe
 por simetría.
+
+### El vocabulario, porque hoy enseña lo contrario
+
+Tres nombres decían que una selección parte a su madre, que es justo lo que esta decisión niega:
+
+- **`subdivisionReason` pasa a `motivoDeLaSeleccion`** y **`SubdivisionReason` a
+  `MotivoDeSeleccion`**, con sus cuatro valores intactos (`altitude`, `shade`, `slope`, `other`). Es
+  el motivo por el que se **selecciona** un trozo, no por el que se parte. El campo hermano
+  `subdivisionReasonNote` lo acompaña como `notaDelMotivoDeLaSeleccion`: el propio comentario del
+  esquema los ataba —«`other` always pairs with subdivisionReasonNote»— y renombrar uno solo partiría
+  el vocabulario en dos.
+- **El comentario de `PlotBlock` decía que un bloque «es una ZONA, no una lista de plantas».** Es
+  falso: sus rangos son coordenadas **de la parcela** —hilera y planta—, o sea una lista de plantas
+  expresada por tramos, y no le restan nada a la parcela. El comentario cita esta decisión.
+- **`micro_plot` se declara MUERTO y se queda en el enum.** Nada en producción lo escribe: los seis
+  sitios de `lib/` que lo nombran sólo lo leen o lo filtran, y el único camino que podría
+  reproducirlo es `locations.ts` copiando el tipo del padre. Se queda porque quitarlo no es gratis:
+  `core.location` tiene **5** disparadores con `UPDATE OF "location_type"`
+  (`location_bodega_padre`, `location_con_ambiente_quieto`, `location_arbol_de_estante`,
+  `location_rejilla_solo_en_parcela`, `location_rejilla_al_retipar_el_padre`) y en 203 migraciones no
+  hay **ningún** `DROP TRIGGER`, o sea ningún precedente de soltarlos y recrearlos. Un guardia
+  sostiene que siga muerto, con la lista de los seis sitios de lectura declarada.
+
+**Y esto revoca una decisión anterior que no tenía ADR.** La migración `20260911230000` introdujo
+`micro_plot` con una decisión del 2026-09-11 según la cual una microparcela **era** esa Location. El
+2026-09-19 Daniel decidió lo contrario —una microparcela es una Location `plot` hija de otra `plot`,
+creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía sólo en comentarios. Queda
+dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
+verificación, así que esta es la enmienda.

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
+import { getLotSummary, getObserverCandidates, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
 import { listGreenSamplesForRoast } from "../../../../../lib/traceability/roasting";
 import { RoastSessionForm } from "../../../../components/traceability/RoastSessionForm";
@@ -43,9 +43,10 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
     id: v.id,
     label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
   }));
-  const [muestras, equiposVisibles] = await Promise.all([
+  const [muestras, equiposVisibles, { people, selfPersonId }] = await Promise.all([
     listGreenSamplesForRoast(user.userAccountId, id),
     listarEquipos(user.userAccountId),
+    getObserverCandidates(user.userAccountId, [{ projectId: lot.projectId, locationId: lot.locationId }]),
   ]);
   const muestrasVerdes = muestras;
   const equipos = equiposVisibles
@@ -59,7 +60,7 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
       </Link>
       <h1>{t("recordRoastButton")}</h1>
       <p className="nn-muted">{t("recordRoastIntro")}</p>
-      <RoastSessionForm lotId={lot.id} perfiles={perfiles} muestras={muestrasVerdes} equipos={equipos} />
+      <RoastSessionForm lotId={lot.id} perfiles={perfiles} muestras={muestrasVerdes} equipos={equipos} personas={people} selfPersonId={selfPersonId} />
     </div>
   );
 }

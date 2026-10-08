@@ -37,7 +37,7 @@ beforeAll(async () => {
   hija = await createMicrolot(usuario.userAccountId, {
     name: `TEST Micro sin enrollar (${Date.now()})`,
     parentLocationId: madre.id,
-    subdivisionReason: "other",
+    motivoDeLaSeleccion: "other",
   });
 }, 30000);
 
