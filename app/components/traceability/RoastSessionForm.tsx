@@ -45,7 +45,7 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
   const [purpose, setPurpose] = useState("sample");
 
   return (
-    <form onSubmit={(event) => {
+    <form method="post" onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       // Dispatch explicitly: a returned domain error must not reset the form.
