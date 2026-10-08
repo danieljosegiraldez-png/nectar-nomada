@@ -1180,10 +1180,18 @@ export interface SensoryLinkageEntry {
  * must stay hidden from the operator of the lot that produced them
  * forever. This function only ever returns an aggregate `PanelResult`
  * (mean/min/max/responseCount) and the session's own name/status; it never
- * returns `blindCode`, the mapping row itself, or any individual
+ * returns `blindCode`, the mapping row, or any individual
  * Assessment/evaluator identity — Farm Operator (the actual caller here)
  * holds neither `blind_mapping:view` nor any `sensory:*` permission, and
  * none is needed for this specific, narrow exposure.
+ *
+ * **La única excepción, y se nombra porque esta promesa ya fue falsa una vez:**
+ * `roastSessionId` sí sale del mapping. Es una FK a una sesión de tueste —dato
+ * del lado del lote, no del lado ciego— y existe porque una muestra puede ir dos
+ * veces en la misma sesión con tuestes distintos: sin ella el informe no puede
+ * decir qué resultado salió de qué tueste. El DETALLE del tueste no viaja aquí;
+ * pasa por `getReportRoastPreparations`, que sí recibe usuario. La lista blanca
+ * del guardia en `tests/traceability/lots.test.ts` la declara con su razón.
  *
  * Also deliberately does not apply a `classification:clear_*` check
  * against SensorySession (which defaults to `internal`) — the ticket's own
