@@ -37,20 +37,27 @@ function codigoDe(f: FormData): string | null {
   }
 }
 
-/** Lo que manda un secado con todo lleno, tal como lo escribe el formulario. */
+/**
+ * Lo que manda un secado con todo lleno, tal como lo escribe el formulario.
+ *
+ * «Todo lleno» incluye los cuatro ejes de catálogo que un secado no usa (oxígeno, fuente microbiana, medio, físico), cada uno con un
+ * valor DISTINTO: el parseo no comprueba a qué tipo de paso aplica cada eje (eso es del servicio), y sólo con valores propios se ve un
+ * eje leído del campo de otro o descartado en silencio. Con esos cuatro en blanco, nueve mutaciones de `formularioDePaso.ts` sobrevivían
+ * a los 26 casos (ronda de arreglo de T14B, H1).
+ */
 const SECADO: Record<string, string | readonly string[]> = {
   stepTypeValueId: "tipo-secado",
   intencion: "  Secar en cama africana  ",
   opcional: "on",
   estadoFrutoValueId: "ef-1",
   mucilagoObjetivo: "0",
-  oxigenoValueId: "",
+  oxigenoValueId: "ox-1",
   temperaturaValueId: "te-1",
   temperaturaMinC: "18.5",
   temperaturaMaxC: "30",
-  fuenteMicrobianaValueId: "",
-  medioValueId: "",
-  fisicoValueId: "",
+  fuenteMicrobianaValueId: "fm-1",
+  medioValueId: "me-1",
+  fisicoValueId: "fi-1",
   modoSecado: "african_bed_outdoor",
   horasMin: "120",
   horasSugeridas: "168",
@@ -87,13 +94,13 @@ const SECADO_PARSEADO: PasoEditable = {
   opcional: true,
   estadoFrutoValueId: "ef-1",
   mucilagoObjetivo: 0,
-  oxigenoValueId: null,
+  oxigenoValueId: "ox-1",
   temperaturaValueId: "te-1",
   temperaturaMinC: 18.5,
   temperaturaMaxC: 30,
-  fuenteMicrobianaValueId: null,
-  medioValueId: null,
-  fisicoValueId: null,
+  fuenteMicrobianaValueId: "fm-1",
+  medioValueId: "me-1",
+  fisicoValueId: "fi-1",
   modoSecado: "african_bed_outdoor",
   horasMin: 120,
   horasSugeridas: 168,
@@ -249,6 +256,16 @@ describe("pasoDeFormulario — lo que no se puede leer se rechaza con el código
     ["fines[0][valor]", "x", "fin_invalido", "12"],
     ["metas[0][targetValue]", "x", "rango_invalido", "12"],
     ["metas[0][everyHours]", "1.x", "horas_invalidas", "12"],
+    // Los seis campos numéricos restantes (ronda de arreglo de T14B, H2): cada uno con SU código, que no es el de su vecino de al lado
+    // (horasMin/horasMax/horasSugeridas/volteo → horas; temperaturas y rangos de meta → rango; humedades → porcentaje). Sin su fila,
+    // cambiar el código de uno de ellos al de otro campo no lo veía ninguna prueba.
+    ["horasMin", "dos", "horas_invalidas", "12"],
+    // «1e999» es un numeral bien escrito que no es finito (`Number("1e999")` es `Infinity`): tampoco pasa.
+    ["horasMax", "1e999", "horas_invalidas", "12"],
+    ["temperaturaMaxC", "caliente", "rango_invalido", "12"],
+    ["humedadMinPct", "poca", "porcentaje_fuera_de_rango", "12"],
+    ["metas[0][minValue]", "bajo", "rango_invalido", "12"],
+    ["metas[0][maxValue]", "alto", "rango_invalido", "12"],
   ];
   it.each(ILEGIBLES)("un número ilegible en %s («%s») se rechaza con %s; uno bien escrito («%s») pasa", (campo, ilegible, codigo, bueno) => {
     // Control: el MISMO campo con un número pasa el parseo (un `NaN` no es un caso que `Number.isFinite` deje pasar).
@@ -271,6 +288,54 @@ describe("pasoDeFormulario — lo que no se puede leer se rechaza con el código
   it("una condición de fin sin valor se rechaza: no se vuelve un cero", () => {
     expect(codigoDe(formulario({ ...BASE, "fines[0][valor]": "" }))).toBe("fin_invalido");
     expect(codigoDe(formulario({ ...BASE, "fines[0][valor]": "3.9" }))).toBeNull();
+  });
+});
+
+describe("pasoDeFormulario — el tope de filas de cada colección", () => {
+  // Ronda de arreglo de T14B, H3. Esto FIJA lo que hay, no lo defiende: el tope de 50 filas es el que `parseTargetRows` tuvo desde ADR-100 y
+  // el formulario heredó, y de la fila 51 en adelante se descarta SIN aviso (el servicio no se entera de que hubo más). Cambiar el tope, o hacer
+  // que avise, pide una decisión de Daniel: si alguien lo toca, estas pruebas caen por su nombre y lo dicen, que es lo que se busca.
+  const TOPE = 50;
+
+  /** [colección, prefijo del identificador de cada fila, los campos de la fila `i` con ese identificador, lo que el paso leyó]. */
+  const COLECCIONES: [string, string, (i: number, id: string) => Record<string, string>, (p: PasoEditable) => string[]][] = [
+    [
+      "adiciones",
+      "a",
+      (i, id) => ({ [`adiciones[${i}][categoriaValueId]`]: id, [`adiciones[${i}][momento]`]: "pre_green" }),
+      (p) => (p.adiciones ?? []).map((a) => a.categoriaValueId),
+    ],
+    [
+      "fines",
+      "v",
+      (i, id) => ({ [`fines[${i}][variable]`]: id, [`fines[${i}][operador]`]: "lte", [`fines[${i}][valor]`]: "1" }),
+      (p) => (p.fines ?? []).map((f) => f.variable),
+    ],
+    [
+      "metas",
+      "m",
+      (i, id) => ({ [`metas[${i}][variable]`]: id, [`metas[${i}][moment]`]: "final" }),
+      (p) => (p.metas ?? []).map((m) => m.variable),
+    ],
+  ];
+
+  /** Un formulario con `n` filas válidas de una colección, cada una con su identificador `<prefijo><i>`. */
+  function conFilas(n: number, prefijo: string, fila: (i: number, id: string) => Record<string, string>): FormData {
+    const campos: Record<string, string> = { stepTypeValueId: "t" };
+    for (let i = 0; i < n; i++) Object.assign(campos, fila(i, `${prefijo}${i}`));
+    return formulario(campos);
+  }
+
+  it.each(COLECCIONES)("con 50 filas de %s se leen las 50, en orden", (_coleccion, prefijo, fila, leer) => {
+    const esperadas = Array.from({ length: TOPE }, (_, i) => `${prefijo}${i}`);
+    expect(leer(pasoDeFormulario(conFilas(TOPE, prefijo, fila)))).toEqual(esperadas);
+  });
+
+  it.each(COLECCIONES)("la fila 51 de %s se descarta sin aviso: se leen exactamente 50 (el tope heredado de parseTargetRows)", (_coleccion, prefijo, fila, leer) => {
+    // Control: la fila 51 es VÁLIDA (si no, el rechazo sería suyo y no del tope), y la lectura no lanza: descarta, no avisa.
+    const leidas = leer(pasoDeFormulario(conFilas(TOPE + 1, prefijo, fila)));
+    expect(leidas).toHaveLength(TOPE);
+    expect(leidas).toEqual(Array.from({ length: TOPE }, (_, i) => `${prefijo}${i}`));
   });
 });
 
@@ -329,6 +394,23 @@ describe("valoresDelFormulario — lo que el formulario de edición precarga", (
     expect(v.horasMax).toBe("");
     expect(v.intencion).toBe("");
     expect(v.modoSecado).toBe("");
+  });
+
+  it("precarga cada eje de catálogo con su propio valor: ninguno se lee del campo de otro ni se pierde", () => {
+    // Ronda de arreglo de T14B, H1: oxígeno, fuente microbiana, medio y físico, cada uno con un valor distinto (con los cuatro vacíos, leer
+    // uno del campo de otro o dejarlo en blanco daba el mismo resultado).
+    const v = valoresDelFormulario(
+      pasoGuardado({ oxigenoValueId: "ox-1", fuenteMicrobianaValueId: "fm-1", medioValueId: "me-1", fisicoValueId: "fi-1" }),
+    );
+    expect({ oxigeno: v.oxigenoValueId, fuenteMicrobiana: v.fuenteMicrobianaValueId, medio: v.medioValueId, fisico: v.fisicoValueId }).toEqual({
+      oxigeno: "ox-1",
+      fuenteMicrobiana: "fm-1",
+      medio: "me-1",
+      fisico: "fi-1",
+    });
+    // Control: sin valor guardado los cuatro quedan vacíos, para que guardar sin tocar no invente uno.
+    const vacio = valoresDelFormulario(pasoGuardado());
+    expect([vacio.oxigenoValueId, vacio.fuenteMicrobianaValueId, vacio.medioValueId, vacio.fisicoValueId]).toEqual(["", "", "", ""]);
   });
 
   it("precarga la lectura de cierre de cada condición de fin y no comparte las listas con el paso", () => {
