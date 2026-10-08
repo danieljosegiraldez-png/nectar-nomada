@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { crearMicroparcelaAction, type FincasActionState } from "../../actions/fincas";
-import { MOTIVOS_DE_SUBDIVISION } from "../../../lib/traceability/motivosDeSubdivision";
+import { MOTIVOS_DE_SELECCION } from "../../../lib/traceability/motivosDeSeleccion";
 
 const inicial: FincasActionState = {};
 
@@ -26,7 +26,7 @@ export function NuevaMicroparcelaForm({ parentLocationId }: { parentLocationId: 
         <label htmlFor="micro-motivo">{t("motivo")}</label>
         <select id="micro-motivo" name="motivo" required defaultValue="">
           <option value="" disabled />
-          {MOTIVOS_DE_SUBDIVISION.map((m) => (
+          {MOTIVOS_DE_SELECCION.map((m) => (
             <option key={m} value={m}>
               {t(`motivo_${m}`)}
             </option>
