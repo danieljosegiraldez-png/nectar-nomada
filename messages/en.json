@@ -246,6 +246,7 @@
     "servedRoastCode": "Roast: {value}",
     "servedSourceLot": "Source lot: {value}",
     "servedRoaster": "Roasted by: {value}",
+    "roastDataUnavailable": "Not available",
     "roastDataNotRecorded": "Not recorded",
 
     "badge": "Sensory",
@@ -437,6 +438,7 @@
   "Traceability": {
     "reportRoastCodeLabel": "Roast code",
     "reportRoastSourceLabel": "Source lot",
+    "roastDataUnavailable": "Not available",
     "roastDataNotRecorded": "Not recorded",
 
     "badge": "Operator Workbench",

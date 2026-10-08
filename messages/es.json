@@ -246,6 +246,7 @@
     "servedRoastCode": "Tueste: {value}",
     "servedSourceLot": "Lote de origen: {value}",
     "servedRoaster": "Quién tostó: {value}",
+    "roastDataUnavailable": "No disponible",
     "roastDataNotRecorded": "No registrado",
 
     "badge": "Sensorial",
@@ -437,6 +438,7 @@
   "Traceability": {
     "reportRoastCodeLabel": "Código de tueste",
     "reportRoastSourceLabel": "Lote de origen",
+    "roastDataUnavailable": "No disponible",
     "roastDataNotRecorded": "No registrado",
 
     "badge": "Panel del Operador",
