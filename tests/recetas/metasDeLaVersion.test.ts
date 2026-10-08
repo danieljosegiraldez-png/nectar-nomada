@@ -259,12 +259,9 @@ afterAll(async () => {
   if (fallos.length > 0) process.stdout.write(`\n[FUGA] la limpieza de ${RUN} dejó filas: ${fallos.join(" | ")}\n`);
 
   // La limpieza se AFIRMA, no se supone, y se cuenta lo que ESTA corrida creó (por su RUN), no un recuento global: un total que no se mueve
-  // no distingue «limpió» de «no creó nada». El control positivo va ANTES de los ceros: la corrida sí creó lotes, procesos, corridas, personas,
-  // cuentas, sitios y ámbitos; sin eso los ceros de abajo no miran nada.
+  // no distingue «limpió» de «no creó nada». El control positivo va ANTES de los ceros: la corrida sí creó lotes, personas,
+  // cuentas, sitios y ámbitos (valen para cualquier subconjunto: con `-t` hay describes sin procesos ni corridas); sin eso los ceros de abajo no miran nada.
   expect(lotes.length).toBeGreaterThan(0);
-  expect(procesos.length).toBeGreaterThan(0);
-  expect(secados.length).toBeGreaterThan(0);
-  expect(fermentaciones.length).toBeGreaterThan(0);
   expect(personas.length).toBeGreaterThan(0);
   expect(cuentas.length).toBe(personas.length);
   expect(sitios.length).toBeGreaterThan(0);
