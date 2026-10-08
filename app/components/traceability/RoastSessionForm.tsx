@@ -1,5 +1,6 @@
 "use client";
 
+import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
 import { startTransition, useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -18,7 +19,8 @@ const initialState: TraceabilityActionState = {};
  * es la misma forma que ya usa la cosecha. Lo dice el propio servicio en su
  * cabecera; esta pantalla no lo reinterpreta.
  *
- * **Sólo dos campos obligatorios:** el código del lote tostado y cuándo empezó.
+ * **Fecha real obligatoria:** muestras reciben código automático; producción requiere código.
+ * Una muestra vinculada exige peso de carga.
  * Todo lo demás —niveles, pesos, cracks, equipo— es opcional, porque un tostador
  * que acaba de descargar tiene las manos ocupadas y la alternativa a un formulario
  * corto no es un formulario completo: es ningún registro.
@@ -37,8 +39,9 @@ interface PerfilOption {
 interface Opcion { id: string; label: string }
 interface MuestraOption extends Opcion { disponibleKg: number | null }
 
-export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
+export function RoastSessionForm({ lotId, perfiles, muestras, equipos, personas, selfPersonId }: {
   lotId: string; perfiles: PerfilOption[]; muestras: MuestraOption[]; equipos: Opcion[];
+  personas: OpcionDePersona[]; selfPersonId: string | null;
 }) {
   const [state, formAction, pending] = useActionState(recordRoastSessionAction, initialState);
   const t = useTranslations("Traceability");
@@ -65,6 +68,15 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
           <option value="sample">{t("roastPurpose_sample")}</option>
           <option value="production">{t("roastPurpose_production")}</option>
         </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="r-roasterPersonId">{t("roastPersonLabel")}</label>
+        <select id="r-roasterPersonId" name="roasterPersonId" defaultValue="">
+          <option value="">{t("roastPersonUnknown")}</option>
+          <OpcionesDePersona personas={personas} selfPersonId={selfPersonId} />
+        </select>
+        <small className="nn-muted">{t("roastPersonHelp")}</small>
       </div>
 
       {purpose === "sample" && muestras.length > 0 ? (
