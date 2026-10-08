@@ -30,8 +30,8 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **397** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **60** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
+| **398** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **59** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -1298,3 +1298,5 @@ sale como **guardia directo** y la compuerta pasa en verde. `GUARDIAS` reconoce
 resolver el símbolo hasta el servicio de autorización de verdad. No se hace
 aquí. Se deja escrito, con la mutación que lo demuestra, para que nadie lea
 «208 operaciones inventariadas» como «208 operaciones autorizadas».
+
+> Medición local del 2026-10-07:626operaciones/170archivos. El informe de preparación ahora llama directamente a requireLotAccess para cada código relacionado:398guardias directos y59transitivos; total sin cambio. Esta medición corresponde a esta rama, no a main.
