@@ -1687,6 +1687,7 @@
     "visitColoniesAliveLabel": "Colonias vivas al salir (opcional)",
     "visitColoniesAliveHelp": "Sin este número no se puede ver «pérdida sin reposición».",
     "visitCompleteNotesLabel": "Notas de cierre (opcional)",
+    "visitAlreadyNoted": "Ya anotado: {valor}. Si lo dejas vacío, se conserva.",
     "visitCompleteReasonLabel": "Por qué se completó así (opcional)",
     "visitCompleteButton": "Completar visita",
     "valueLabelWithUnit": "Valor ({unit})",

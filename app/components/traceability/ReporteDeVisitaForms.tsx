@@ -204,9 +204,24 @@ export function EnlacesPublicados({
  * Las dos son opcionales: una visita que no se puede completar porque falta un
  * dato que nadie tomó es peor que una completada sin él.
  */
-export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string }) {
+/**
+ * Lo que la visita ya tiene anotado antes de cerrarse: los vitales que se anotaron en el sitio
+ * (ADR-157) y las notas de cuando se abrió. Se enseña al lado de su campo porque **dejar ese campo
+ * vacío lo conserva** (revisión de Apiario del 2026-10-08, V-1): sin verlo, quien cierra no sabe
+ * que ya hay algo, ni que escribir encima lo corrige.
+ */
+export interface YaAnotadoEnLaVisita {
+  coloniesAliveCount: number | null;
+  hivesPresentCount: number | null;
+  weatherObserved: string | null;
+  notes: string | null;
+}
+
+export function CompletarVisitaForm({ fieldSessionId, anotado }: { fieldSessionId: string; anotado?: YaAnotadoEnLaVisita }) {
   const [estado, accion, pending] = useActionState(completarVisitaAction, inicial);
   const t = useTranslations("Traceability");
+  const yaAnotado = (valor: string | number | null | undefined) =>
+    valor == null || valor === "" ? null : <p className="nn-muted">{t("visitAlreadyNoted", { valor: String(valor) })}</p>;
 
   return (
     <form action={accion} className="nn-form" style={{ maxWidth: 520 }}>
@@ -223,6 +238,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <label htmlFor="cv-colonies">{t("visitColoniesAliveLabel")}</label>
         <CampoNumerico id="cv-colonies" name="coloniesAliveCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitColoniesAliveHelp")}</p>
+        {yaAnotado(anotado?.coloniesAliveCount)}
       </div>
 
       {/* Las CAJAS, al lado de las colonias y no en su lugar: una caja puede estar ahí vacía
@@ -232,6 +248,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
         <label htmlFor="cv-hives">{t("visitHivesPresentLabel")}</label>
         <CampoNumerico id="cv-hives" name="hivesPresentCount" inputMode="numeric" min="0" step="1" />
         <p className="nn-muted">{t("visitHivesPresentHelp")}</p>
+        {yaAnotado(anotado?.hivesPresentCount)}
       </div>
 
       {/* Clima OBSERVADO, no pronosticado (ADR-152). Los cuatro valores salen del protocolo, no
@@ -246,6 +263,11 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
             </option>
           ))}
         </select>
+        {yaAnotado(
+          anotado?.weatherObserved && (CLIMAS_OBSERVADOS as readonly string[]).includes(anotado.weatherObserved)
+            ? t(`weatherObserved_${anotado.weatherObserved as (typeof CLIMAS_OBSERVADOS)[number]}`)
+            : anotado?.weatherObserved,
+        )}
       </div>
 
       <CondicionDelSitioCampo prefijo="cv" />
@@ -253,6 +275,7 @@ export function CompletarVisitaForm({ fieldSessionId }: { fieldSessionId: string
       <div className="nn-field">
         <label htmlFor="cv-notes">{t("visitCompleteNotesLabel")}</label>
         <textarea id="cv-notes" name="notes" rows={3} />
+        {yaAnotado(anotado?.notes)}
       </div>
 
       {/* **Las tres de casa.** El protocolo las marca `stage: close`, y el §7 dice por qué:
