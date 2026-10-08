@@ -36,7 +36,7 @@ beforeAll(async () => {
     parentLocationId: madre.id,
     // Obligatorio en `CreateMicrolotInput`. `other` porque a este guardia el
     // motivo le da igual: lo que mide es el enrollado, no por qué se seleccionó.
-    subdivisionReason: "other",
+    motivoDeLaSeleccion: "other",
   });
 }, 30000);
 

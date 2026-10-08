@@ -206,14 +206,14 @@ describe("createMicrolot", () => {
       createMicrolot(wrongLocationUserAccountId, {
         parentLocationId: locationId,
         name: `TEST Microlot (${RUN_ID})`,
-        subdivisionReason: "altitude",
+        motivoDeLaSeleccion: "altitude",
       }),
     ).rejects.toThrow(LocationAccessError);
   });
 
   it("rejects an empty name", async () => {
     await expect(
-      createMicrolot(authorizedUserAccountId, { parentLocationId: locationId, name: "  ", subdivisionReason: "altitude" }),
+      createMicrolot(authorizedUserAccountId, { parentLocationId: locationId, name: "  ", motivoDeLaSeleccion: "altitude" }),
     ).rejects.toThrow(LocationValidationError);
   });
 
@@ -221,14 +221,14 @@ describe("createMicrolot", () => {
     const microlot = await createMicrolot(authorizedUserAccountId, {
       parentLocationId: locationId,
       name: `TEST Microlot Alto (${RUN_ID})`,
-      subdivisionReason: "altitude",
-      subdivisionReasonNote: "upper third sits 100m higher than the lower third",
+      motivoDeLaSeleccion: "altitude",
+      notaDelMotivoDeLaSeleccion: "upper third sits 100m higher than the lower third",
     });
     microlotId = microlot.id;
     expect(microlot.parentLocationId).toBe(locationId);
     expect(microlot.organizationId).toBe(organizationId);
     expect(microlot.locationType).toBe("plot");
-    expect(microlot.subdivisionReason).toBe("altitude");
+    expect(microlot.motivoDeLaSeleccion).toBe("altitude");
 
     const fetched = await prisma.location.findUniqueOrThrow({ where: { id: microlotId } });
     expect(fetched.parentLocationId).toBe(locationId);
