@@ -42,6 +42,9 @@ import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
 import { RecipeError, claveDeErrorDeReceta } from "../../lib/recetas/errorDeReceta";
+import { agregarPaso, actualizarPaso, quitarPaso, moverPaso, publicarVersion } from "../../lib/recetas/pasos";
+import { crearRecetaEnBorrador, nuevaVersionBorrador, derivarReceta } from "../../lib/recetas/versiones";
+import { pasoDeFormulario, posicionDeFormulario } from "../../lib/recetas/formularioDePaso";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
@@ -1386,6 +1389,198 @@ export async function createRecipeVersionAction(
   revalidatePath(`/recipes/${recipeId}`);
   revalidatePath("/recipes");
   redirect(`/recipes/${recipeId}?ok=versioned`);
+}
+
+// --- La receta con pasos: el editor (Parte 2a, tarea 14, 2026-10-03) ----------------------------------------------------
+//
+// Ocho acciones sobre `lib/recetas/pasos` y `lib/recetas/versiones`. Cada una autentica, llama a su servicio dentro del `try` y traduce lo que el
+// servicio rechace con `friendlyError` (que ya conoce `RecipeError`, tarea 3). **El `redirect` va FUERA del `try`**: Next lo implementa lanzando,
+// y dentro lo atraparía el `catch`. El id de la receta que sale a la URL es el del formulario donde la receta ya existía y el del SERVICIO donde
+// el servicio la crea (`crearRecetaAction`, `derivarRecetaAction`): un formulario manipulado no puede mandar a otra receta lo que un servicio acaba de crear.
+// Quitar y mover no redirigen: la lista cambiada es la confirmación, y volver a pintar la página evita un mensaje por cada flecha.
+
+/** Una receta nueva, en borrador y sin pasos: los pasos se escriben en el editor (`/recipes/[id]`). */
+export async function crearRecetaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  let recipeId: string;
+  try {
+    const creada = await crearRecetaEnBorrador(user.userAccountId, {
+      name: String(formData.get("name") ?? ""),
+      description: emptyToNull(formData.get("description")),
+      organizationId: emptyToNull(formData.get("organizationId")),
+    });
+    recipeId = creada.recipeId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=receta_creada`);
+}
+
+/** Añadir un paso a un borrador, detrás del paso que dice el formulario (o al principio). */
+export async function agregarPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await agregarPaso(user.userAccountId, {
+      recipeVersionId: String(formData.get("recipeVersionId") ?? ""),
+      despuesDeSeq: posicionDeFormulario(formData, "despuesDeSeq"),
+      paso: pasoDeFormulario(formData),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  redirect(`/recipes/${recipeId}?ok=paso_agregado`);
+}
+
+/** Guardar los cambios de un paso de un borrador: reemplaza sus columnas y sus hijas, y conserva su lugar. */
+export async function actualizarPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await actualizarPaso(user.userAccountId, {
+      stepId: String(formData.get("stepId") ?? ""),
+      paso: pasoDeFormulario(formData),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  redirect(`/recipes/${recipeId}?ok=paso_guardado`);
+}
+
+/** Quitar un paso de un borrador, con sus hijas. */
+export async function quitarPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await quitarPaso(user.userAccountId, String(formData.get("stepId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  // Sin redirect: la lista cambiada es la confirmación.
+  return {};
+}
+
+/** Subir o bajar un paso de un borrador: el botón dice a qué lugar (`aSeq`), de 1 a n. */
+export async function moverPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await moverPaso(user.userAccountId, {
+      stepId: String(formData.get("stepId") ?? ""),
+      // Sin posición no se inventa una: el servicio recibe `NaN` y lo rechaza con `posicion_invalida`.
+      aSeq: posicionDeFormulario(formData, "aSeq") ?? Number.NaN,
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  return {};
+}
+
+/** Publicar un borrador: desde ahí no se edita (diseño §3.3). */
+export async function publicarVersionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await publicarVersion(user.userAccountId, String(formData.get("recipeVersionId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=version_publicada`);
+}
+
+/** Empezar la versión siguiente de una receta: un borrador con una copia de la versión que dice el formulario. */
+export async function nuevaVersionBorradorAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await nuevaVersionBorrador(user.userAccountId, String(formData.get("desdeVersionId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=borrador_creado`);
+}
+
+/** Derivar una copia propia de una plantilla, en borrador, a la organización que dice el formulario. */
+export async function derivarRecetaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  let recipeId: string;
+  try {
+    const derivada = await derivarReceta(user.userAccountId, {
+      plantillaVersionId: String(formData.get("plantillaVersionId") ?? ""),
+      organizationId: String(formData.get("organizationId") ?? ""),
+      nombre: String(formData.get("nombre") ?? ""),
+    });
+    recipeId = derivada.recipeId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=receta_derivada`);
 }
 
 // --- Atributos de un lote de terreno (F1 §1 / P1 §3) ---------------------
