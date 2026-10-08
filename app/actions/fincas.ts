@@ -11,7 +11,7 @@ import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { JornadaError } from "../../lib/traceability/jornadasDeCosecha";
 import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
 import { FincaLogoValidationError, finalizeFincaLogoUpload, requestFincaLogoUpload } from "../../lib/traceability/fincaLogo";
-import { MOTIVOS_DE_SUBDIVISION } from "../../lib/traceability/motivosDeSubdivision";
+import { MOTIVOS_DE_SELECCION } from "../../lib/traceability/motivosDeSeleccion";
 
 /**
  * Spec fincas y parcelas §3.1 — elegir la finca. Guarda el sitio elegido, o «todas», en una
@@ -128,15 +128,15 @@ export async function crearMicroparcelaAction(_prev: FincasActionState, formData
   if (!user) redirect("/login");
   const parentLocationId = String(formData.get("parentLocationId") ?? "");
   const motivo = String(formData.get("motivo") ?? "");
-  if (!(MOTIVOS_DE_SUBDIVISION as readonly string[]).includes(motivo)) return traducir(new FincaError("motivo_invalido"));
+  if (!(MOTIVOS_DE_SELECCION as readonly string[]).includes(motivo)) return traducir(new FincaError("motivo_invalido"));
   const nota = String(formData.get("nota") ?? "").trim() || null;
   if (motivo === "other" && !nota) return traducir(new FincaError("otro_sin_nota"));
   try {
     await createMicrolot(user.userAccountId, {
       parentLocationId,
       name: String(formData.get("nombre") ?? ""),
-      subdivisionReason: motivo as (typeof MOTIVOS_DE_SUBDIVISION)[number],
-      subdivisionReasonNote: nota,
+      motivoDeLaSeleccion: motivo as (typeof MOTIVOS_DE_SELECCION)[number],
+      notaDelMotivoDeLaSeleccion: nota,
     });
   } catch (error) {
     return traducir(error);

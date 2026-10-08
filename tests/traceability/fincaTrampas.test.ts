@@ -130,7 +130,7 @@ describe("getFincaTrampas", () => {
     const microparcela = await createMicrolot(operador.userAccountId, {
       parentLocationId: parcela.id,
       name: `TEST Microparcela (${Date.now()})`,
-      subdivisionReason: "altitude",
+      motivoDeLaSeleccion: "altitude",
     });
     locationIds.push(microparcela.id);
     // El camino real produce `plot`, nunca `micro_plot` — afirmarlo, no sólo

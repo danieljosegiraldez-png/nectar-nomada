@@ -140,7 +140,7 @@ const microlote = (name: string, extra: Record<string, unknown> = {}) =>
   createMicrolot(usuario.userAccountId, {
     parentLocationId: parcela.id,
     name,
-    subdivisionReason: "altitude",
+    motivoDeLaSeleccion: "altitude",
     ...extra,
   } as never);
 

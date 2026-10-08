@@ -284,7 +284,7 @@ describe("bloques de una parcela", () => {
     const microparcela = await createMicrolot(userAccountId, {
       parentLocationId: parcela.id,
       name: `TEST Microparcela (${Date.now()})`,
-      subdivisionReason: "altitude",
+      motivoDeLaSeleccion: "altitude",
     });
     locationIds.push(microparcela.id);
     // El camino real produce una Location `plot`, no `micro_plot` — es la

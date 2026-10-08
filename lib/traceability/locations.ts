@@ -16,7 +16,7 @@ import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import { validarRango, type RangoInvalido } from "../territorio/rejilla";
 import type { ScopeTarget } from "../rbac/types";
-import type { Aspect, GridOrigin, LocationType, Prisma, ShadePercentageBracket, SubdivisionReason, SunExposure } from "../../generated/prisma/client";
+import type { Aspect, GridOrigin, LocationType, MotivoDeSeleccion, Prisma, ShadePercentageBracket, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
 
@@ -618,8 +618,8 @@ export interface CreateMicrolotInput {
   parentLocationId: string;
   name: string;
   slug?: string | null;
-  subdivisionReason: SubdivisionReason;
-  subdivisionReasonNote?: string | null;
+  motivoDeLaSeleccion: MotivoDeSeleccion;
+  notaDelMotivoDeLaSeleccion?: string | null;
   // Donde esta la microparcela DENTRO de la rejilla de su parcela (D3). Los
   // cuatro juntos o ninguno; es opcional, porque una microparcela puede
   // declararse antes de que nadie mida sus hileras.
@@ -692,8 +692,8 @@ export async function createMicrolot(userAccountId: string, input: CreateMicrolo
         locationType: parent.locationType,
         parentLocationId: parent.id,
         organizationId: parent.organizationId,
-        subdivisionReason: input.subdivisionReason,
-        subdivisionReasonNote: input.subdivisionReasonNote ?? null,
+        motivoDeLaSeleccion: input.motivoDeLaSeleccion,
+        notaDelMotivoDeLaSeleccion: input.notaDelMotivoDeLaSeleccion ?? null,
         createdBy: userAccountId,
         // **D2: se copia al crear, y desde ahi es suyo.** Decision de Daniel,
         // 2026-10-01. No se hereda en vivo: una microparcela que leyera del padre
