@@ -63,7 +63,8 @@
     "data:medir-fases": "tsx scripts/medir-fases-de-objetivos.ts",
     "data:gestores-de-finca": "tsx scripts/alta-gestores-de-finca.ts",
     "data:kiva-no-es-demo": "tsx scripts/kiva-estate-ya-no-es-demo.ts",
-    "data:kiva-geografia": "tsx scripts/kiva-geografia-y-finca-1.ts"
+    "data:kiva-geografia": "tsx scripts/kiva-geografia-y-finca-1.ts",
+    "data:beneficio-organizacion": "tsx scripts/beneficio-organizacion-propia.ts"
   },
   "keywords": [],
   "author": "",

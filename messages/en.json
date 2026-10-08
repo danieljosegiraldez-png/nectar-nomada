@@ -3346,6 +3346,7 @@
     "error_sin_acceso": "You do not have permission to configure a mill here.",
     "error_datos_invalidos": "The name is required and cannot exceed 120 characters.",
     "error_padre_invalido": "A mill hangs from a site, not from a plot or another facility.",
+    "error_organizacion_requerida": "The chosen site has no organization, and a mill needs its own. Assign an organization to the site first.",
     "error_tipo_invalido": "That location is not a mill.",
     "error_no_encontrado": "That mill no longer exists.",
     "concesionesTitulo": "Who can edit this mill",
