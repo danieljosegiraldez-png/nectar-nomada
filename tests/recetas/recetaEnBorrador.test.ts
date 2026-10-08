@@ -47,7 +47,11 @@ async function crear(name: string, organizacion: string | null = organizationId,
   return r;
 }
 
-/** Borra todo lo de las recetas que cumplan `donde`, en orden de claves ajenas. Devuelve los ids, para contar después. */
+/**
+ * Borra todo lo de las recetas que cumplan `donde`, en orden de claves ajenas. Devuelve los ids, para contar después. Quien llama busca
+ * también por ORGANIZACIÓN, no sólo por el nombre del RUN: una regresión que dejara pasar un nombre en blanco crearía una receta que el
+ * nombre no encuentra y cuya organización (FK RESTRICT) ya no se podría borrar.
+ */
 async function borrarRecetas(donde: Prisma.ProcessRecipeWhereInput) {
   const recetaIds = (await prisma.processRecipe.findMany({ where: assertDefinedWhere(donde), select: { id: true } })).map((r) => r.id);
   const versionIds = (
@@ -88,7 +92,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const ids = await borrarRecetas({ name: { contains: RUN } });
+  const ids = await borrarRecetas({ OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] });
   // Las cuentas, DESPUÉS de las recetas que firmaron.
   await cuentas.limpiar();
   if (lotes.length) await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotes } }) });
@@ -104,7 +108,7 @@ afterAll(async () => {
 
 describe("crearRecetaEnBorrador", () => {
   afterEach(async () => {
-    await borrarRecetas({ name: { contains: RUN } });
+    await borrarRecetas({ OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }] });
   });
 
   it("crea la receta de la organización con su versión 1 en borrador, sin pasos ni metas, y el selector no la ofrece", async () => {
@@ -163,7 +167,7 @@ describe("crearRecetaEnBorrador — la autoría es del Coffee Process Manager (V
   afterEach(async () => {
     // En orden de claves ajenas: las recetas (y su auditoría) antes que las cuentas que las firmaron; asignaciones antes que sus
     // ámbitos (la fábrica los borra en ese orden); la finca antes que su organización.
-    await borrarRecetas({ name: { contains: RUN } });
+    await borrarRecetas({ OR: [{ name: { contains: RUN } }, { organizationId: { in: [...organizaciones, ...orgsDeFinca] } }] });
     await cuentasDeFinca.limpiar();
     if (lugares.length) await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: lugares } }) });
     if (orgsDeFinca.length) await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgsDeFinca } }) });
