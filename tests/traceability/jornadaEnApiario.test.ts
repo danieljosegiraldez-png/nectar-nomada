@@ -19,6 +19,7 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
+import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import {
   emitirReporteDeVisita,
@@ -142,6 +143,13 @@ afterAll(async () => {
   // sin esta linea el borrado de la colonia falla y el archivo entero sale en rojo con
   // las 37 pruebas en verde.
   await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  // Las cosechas de A9.2 crean un lote de miel cada una; la cosecha cuelga de la colonia y el lote
+  // de la cosecha, así que van en este orden y antes de borrar la colonia.
+  const lotesDeCosecha = await prisma.lot.findMany({ where: { lotCode: { startsWith: RUN_ID } }, select: { id: true } });
+  const lotIds = lotesDeCosecha.map((l) => l.id);
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
+  await prisma.apiaryHarvestEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
   // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
@@ -263,6 +271,41 @@ describe("A9.2 — una visita agrupa lo que se registra durante ella", () => {
 
     const inspeccion = await inspeccionar(apicultorConManejo, `TEST cerrada (${RUN_ID})`);
     expect(await eventoDe(inspeccion.id)).toBeNull();
+  });
+
+  // Revisión de Apiario del 2026-10-08, V-2. El informe ya sabía nombrar una cosecha ligada
+  // (`reporteDeVisita.ts`), pero `recordApiaryHarvest` no escribía el vínculo: una visita de
+  // cosecha salía en el informe sin la cosecha.
+  const eventoDeCosecha = (apiaryHarvestEventId: string) =>
+    prisma.fieldEvent.findFirst({ where: { apiaryHarvestEventId }, select: { id: true, fieldSessionId: true } });
+
+  it("una cosecha hecha con la visita abierta queda dentro de ella", async () => {
+    const visita = await startFieldSession(apicultorConManejo, visita_(apiarioId));
+    const { harvestEvent } = await recordApiaryHarvest(apicultorConManejo, {
+      lotCode: `${RUN_ID}-cosecha-dentro`,
+      colonyId,
+      occurredAt: new Date("2026-09-02T15:00:00Z"),
+      framesHarvested: 4,
+      provenanceClass: "direct_observation",
+    });
+
+    const evento = await eventoDeCosecha(harvestEvent.id);
+    expect(evento, "la cosecha no quedó ligada a la visita abierta").not.toBeNull();
+    expect(evento!.fieldSessionId).toBe(visita.id);
+
+    await endFieldSession(apicultorConManejo, { fieldSessionId: visita.id, endedAt: new Date() });
+  });
+
+  it("sin visita abierta, la cosecha se registra igual y queda suelta", async () => {
+    const { harvestEvent } = await recordApiaryHarvest(apicultorConManejo, {
+      lotCode: `${RUN_ID}-cosecha-suelta`,
+      colonyId,
+      occurredAt: new Date("2026-09-02T15:00:00Z"),
+      framesHarvested: 4,
+      provenanceClass: "direct_observation",
+    });
+    expect(harvestEvent.id).toBeTruthy();
+    expect(await eventoDeCosecha(harvestEvent.id)).toBeNull();
   });
 });
 
