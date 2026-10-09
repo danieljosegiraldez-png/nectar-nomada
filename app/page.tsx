@@ -10,7 +10,7 @@ export default async function HomePage() {
       <h1>{tHome("title")}</h1>
       <p>{tHome("description")}</p>
       <p style={{ marginTop: "1.5rem" }}>
-        <Link href="/discover" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+        <Link href="/discover" className="nn-button">
           {tDiscover("exploreCta")}
         </Link>
       </p>
