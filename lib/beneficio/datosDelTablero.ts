@@ -445,8 +445,13 @@ export async function datosDelTablero(
     const proceso = lotId ? procesoPorLote.get(lotId) : null;
     return proceso?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
   };
+  // Parte 2c §4.6: una bandeja de secado es un `vessel` con `trayTypeId`, no un tanque. Contarla aquí inflaba «N de TOTAL
+  // tanques libres y sanos»: una bandeja vacía nunca tiene una fermentación apuntándole, así que salía libre y sana.
+  // `listarEquipos` la sigue devolviendo —es el inventario, y `instrumentos` de abajo lee la lista entera— y el filtro vive
+  // donde se CUENTAN tanques. Efecto observable, a propósito: una corrida cuyo `vesselEquipmentId` fuera una bandeja (nada
+  // en la base lo impide) deja de ocupar un «tanque» y `ocupacionDelSitio` la cuenta como `ajenas`.
   const tanquesVisibles: UnidadDelSitio[] = equipos
-    .filter((e) => e.kind === "vessel")
+    .filter((e) => e.kind === "vessel" && e.trayTypeId === null)
     .map((e) => ({
       id: e.id,
       nombre: e.name,

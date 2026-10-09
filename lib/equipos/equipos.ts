@@ -748,6 +748,13 @@ export interface EquipoEnLista {
   id: string;
   name: string;
   kind: EquipmentKind;
+  /**
+   * Sólo en una bandeja de secado: su tipo (`DryingTrayType`). **`null` = no es una bandeja.** Es la columna tal cual y no un
+   * booleano derivado, para que quien filtre compare lo mismo que dicen los CHECK de la base (`equipment_bandeja_tipo_y_numero`).
+   * `listarEquipos` NO filtra por él —es el inventario de todas las clases—: filtra quien cuenta TANQUES (`tanquesVisibles` del
+   * tablero, `disponibilidadDeRecipientes`). Parte 2c §4.6.
+   */
+  trayTypeId: string | null;
   lifecycleStatus: "active" | "retired" | "disposed";
   /** Del último traslado. `null` = registrado y todavía sin ubicar. */
   ubicacion: { id: string; name: string } | null;
@@ -797,6 +804,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
       id: e.id,
       name: e.name,
       kind: e.kind,
+      trayTypeId: e.trayTypeId,
       lifecycleStatus: e.lifecycleStatus,
       ubicacion: ultimo ? { id: ultimo.toLocation.id, name: ultimo.toLocation.name } : null,
       condicion: informe ? { condition: informe.condition, occurredAt: informe.occurredAt } : null,
@@ -871,7 +879,10 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
  */
 export async function disponibilidadDeRecipientes(userAccountId: string) {
   const equipos = await prisma.equipment.findMany({
-    where: { kind: "vessel", lifecycleStatus: { not: "disposed" } },
+    // Una bandeja de secado es un `vessel` con `trayTypeId` y nunca ocupa un tanque de fermentación: contarla aquí
+    // la daba por «libre y sana» e inflaba la «Capacidad ahora» (Parte 2c §4.6). `listarEquipos`, que es el
+    // inventario de todas las clases, sí la sigue listando.
+    where: { kind: "vessel", trayTypeId: null, lifecycleStatus: { not: "disposed" } },
     include: {
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
