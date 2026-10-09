@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { listarBeneficios, sitiosParaBeneficio } from "../../../lib/traceability/beneficios";
+import { listarBeneficios, organizacionesParaBeneficio, sitiosParaBeneficio } from "../../../lib/traceability/beneficios";
 import { personasDelBeneficio } from "../../../lib/traceability/concesiones";
 import { LocationAccessError } from "../../../lib/traceability/locations";
 import { FormularioBeneficio } from "./FormularioBeneficio";
@@ -29,12 +29,17 @@ export default async function AjustesDelBeneficioPage({
   // «Crear» no se ofrece), distinto de `[]` (`sitiosParaBeneficio` nunca lo
   // devuelve: lanza en vez de una lista vacía).
   let sitios: Awaited<ReturnType<typeof sitiosParaBeneficio>> | null = null;
+  // Las organizaciones donde se puede crear un beneficio SIN finca (ADR-198, PR 2). Antes esta
+  // pantalla vivía sólo de los sitios: una organización con beneficio y sin finca daba 404, idéntico
+  // al de «no tienes permiso». Esta lectura no lanza: lista vacía = no se ofrece la opción.
+  const organizaciones = await organizacionesParaBeneficio(user.userAccountId);
   try { sitios = await sitiosParaBeneficio(user.userAccountId); }
   catch (error) {
     if (!(error instanceof LocationAccessError)) throw error;
     // Un mundo sin ningún sitio no es una negativa de permiso: decirlo,
-    // en vez del mismo 404 mudo que usa la falta de acceso.
-    if (error.message === "no_sites_exist") {
+    // en vez del mismo 404 mudo que usa la falta de acceso. Salvo que pueda crear
+    // un beneficio sin finca: entonces la pantalla sirve igual.
+    if (error.message === "no_sites_exist" && !organizaciones.length) {
       return <div>
         <h1>{t("ajustesTitulo")}</h1>
         <p className="nn-muted">{t("sinSitios")}</p>
@@ -48,7 +53,7 @@ export default async function AjustesDelBeneficioPage({
   const beneficios = await listarBeneficios(user.userAccountId);
   // Quien no puede ni crear ni editar nada no ve la pantalla: 404, como
   // `/equipos/[id]`. Una página vacía diría qué hay dentro.
-  if (sitios === null && !beneficios.some((b) => b.puedeEditar)) notFound();
+  if (sitios === null && !organizaciones.length && !beneficios.some((b) => b.puedeEditar)) notFound();
 
   const personasPorBeneficio = new Map<string, Awaited<ReturnType<typeof personasDelBeneficio>>>();
   for (const b of beneficios) {
@@ -58,6 +63,7 @@ export default async function AjustesDelBeneficioPage({
   return <div className="nn-mill-page">
     <header className="nn-mill-header"><div><h1>{t("ajustesTitulo")}</h1><p>{t("ajustesIntro")}</p></div></header>
     {ok === "guardado" && <p className="nn-notice nn-notice-success" role="status">{t("okGuardado")}</p>}
+    {ok === "creado_sin_finca" && <p className="nn-notice nn-notice-success" role="status">{t("okCreadoSinFinca")}</p>}
     {ok === "concedido" && <p className="nn-notice nn-notice-success" role="status">{t("okConcedido")}</p>}
     {ok === "retirado" && <p className="nn-notice nn-notice-success" role="status">{t("okRetirado")}</p>}
     <NavegacionBeneficio userAccountId={user.userAccountId} actual="/beneficio/ajustes" />
@@ -65,7 +71,7 @@ export default async function AjustesDelBeneficioPage({
     {!beneficios.length && <p>{t("sinBeneficios")}</p>}
     <div className="nn-mill-records">{beneficios.map((b) => <section key={b.id} className="nn-mill-record">
       <h3>{b.name}</h3>
-      <p className="nn-muted">{b.sitio ? t("enSitio", { sitio: b.sitio.name }) : t("sitioNoVisible")}</p>
+      <p className="nn-muted">{b.sitio ? t("enSitio", { sitio: b.sitio.name }) : b.sinFinca ? t("sinFinca", { organizacion: b.organizacion ?? "—" }) : t("sitioNoVisible")}</p>
       {b.puedeEditar && <>
         <details><summary>{t("renombrar")}</summary>
           <FormularioBeneficio existente={{ id: b.id, name: b.name }} />
@@ -73,10 +79,10 @@ export default async function AjustesDelBeneficioPage({
         <Concesiones beneficioId={b.id} personas={personasPorBeneficio.get(b.id) ?? []} />
       </>}
     </section>)}</div></section>
-    {sitios && <>
+    {(sitios || organizaciones.length > 0) && <>
       <details className="nn-disclosure nn-mill-task">
         <summary><span>{t("crear")}</span><small>{t("crearAyuda")}</small></summary>
-        <div className="nn-disclosure-body"><FormularioBeneficio padres={sitios} /></div>
+        <div className="nn-disclosure-body"><FormularioBeneficio padres={sitios ?? undefined} organizaciones={organizaciones} /></div>
       </details>
     </>}
   </div>;
