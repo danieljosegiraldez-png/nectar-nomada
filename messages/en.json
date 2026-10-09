@@ -2053,6 +2053,8 @@
     "colonyStatus_dead": "Dead",
     "colonyStatus_absconded": "Absconded",
     "colonyStatus_combined": "Combined into another",
+    "reportAssessment": "Technician assessment",
+    "reportNotRecorded": "Not recorded",
     "inspectionHeading": "Inspection",
     "inspectionNothingUnusualButton": "Nothing unusual",
     "inspectionRecordDetailsButton": "Record details",
