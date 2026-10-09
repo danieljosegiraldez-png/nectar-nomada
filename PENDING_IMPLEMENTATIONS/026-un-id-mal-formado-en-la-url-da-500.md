@@ -8,8 +8,9 @@ arreglarlo.
 
 Toda tabla de este esquema tiene el `id` como `@db.Uuid`. Cuando una página pasa el segmento de la
 URL a una consulta sin mirar su forma, Postgres rechaza la conversión («invalid input syntax for type
-uuid»), Prisma lanza `P2007`, y la página —que sólo convierte en `notFound()` su propia clase de «no
-existe»— deja subir el error. Quien abre `/plots/no-es-un-id` recibe un 500 donde tocaba un 404.
+uuid») y Prisma lanza `P2007`. Ninguna página atrapa ese error: la mayoría convierte en `notFound()`
+sólo su propia clase de «no existe», algunas redirigen a su lista y otras no atrapan nada. Quien abre
+`/plots/no-es-un-id` recibe un 500 donde tocaba un 404.
 
 Con el PR #691 (pantallas de error) el 500 se ve más amable, pero sigue siendo un 500 y sigue diciendo
 «algo falló» de una dirección que simplemente no existe.
@@ -34,6 +35,9 @@ de ellos (`fincas/[siteId]/destino`, `finca/jornadas/[id]`, `field-sessions/[id]
 `informe/[token]`) se **volvieron a medir sobre `045f384a`**: mismos estados, y las líneas de abajo
 son las de ese árbol. Los demás archivos citados no cambiaron entre los dos commits.
 
+Los manejadores de API no entran: de los 11 `route.ts`, el único con segmento dinámico es
+`api/auth/[...nextauth]`, que es de Auth.js.
+
 **Fila patrón:** el lote DEMO `DCL-2027-BATCH-A` da **200** y su código aparece en el HTML, así que el
 servidor hablaba con la base sembrada y la sesión funcionaba.
 
@@ -45,7 +49,15 @@ administra.
 
 ## Las 31 que dan 500 por `P2007`, agrupadas por la función donde revienta
 
-Arreglar la función arregla todas las páginas de su fila.
+La función es **la primera que reventó** en cada página, no necesariamente la única que recibe el
+id. Arreglarla basta cuando es la única lectura del id antes de lo que la página atrapa; donde la
+página lanza varias en paralelo, hay que cubrirlas todas. Medido: `apiaries/[id]` manda el id a la
+vez a `getApiaryDetail`, a `listFieldSessions` —que lo consulta en `requireFieldSessionAccess`,
+`lib/traceability/jornadaDeCampo.ts:34`— y a `getObserverCandidates`, y **no atrapa nada**: con el id
+basura reventó en `hives.ts:619` y con el UUID inexistente en `jornadaDeCampo.ts:40`. Ahí la
+comprobación va en la página. (`getProjectWorkspace` también lanza cuatro consultas en paralelo
+—`lib/partner/workspace.ts:118`—, pero todas dentro de la misma función, así que una guarda al
+principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-09.
 
 | función (archivo:línea donde revienta) | páginas |
 |---|---|
@@ -115,7 +127,8 @@ Total: 31 + 1 (`ruedas`) + 20 = 52.
 El patrón del PR de `/lots`: en el servicio, antes de la consulta,
 `if (!UUID.test(id)) throw new <la clase de «no existe» que la página ya atrapa>`, con la constante
 de `lib/validation/uuid.ts`. Así no se atrapa ningún error de Prisma y cualquier otro sigue subiendo.
-Si una función no tiene una clase así, la alternativa es la misma comprobación en la página, justo
+Si una función no tiene una clase así, o la página lanza varias lecturas del id en paralelo, o no
+atrapa nada (`apiaries/[id]`, `apiaries/[id]/hives/[hiveId]`), la comprobación va en la página, justo
 después de `await params`, con `notFound()`.
 
 Para las siete de la segunda tabla: que la página atrape la clase de «no existe» que ya se lanza, y
