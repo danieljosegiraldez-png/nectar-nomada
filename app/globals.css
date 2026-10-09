@@ -635,9 +635,12 @@ a.nn-button {
 
 /* Ya como cajas, dos que no caben en una línea quedan una encima de otra sin
    ningún hueco: la línea mide lo mismo que el botón. 0,25 rem arriba y abajo dan
-   los 0,5 rem que separan las filas flex de botones. Sólo dentro de un `<p>`: en
-   un contenedor flex, el margen haría estirarse a los hermanos del enlace. */
-p > a.nn-button {
+   los 0,5 rem que separan las filas flex de botones.
+   Sólo en un `<p>` con DOS O MÁS de estos enlaces, que es el único sitio donde
+   pueden apilarse. La primera versión decía `p > a.nn-button` y daba por hecho
+   que un `<p>` no es flex: el de /lots lo es, y a 1280 px el margen estiraba a
+   sus hermanos de 46 a 54 px (2026-10-09). */
+p:has(> a.nn-button ~ a.nn-button) > a.nn-button {
   margin-block: 0.25rem;
 }
 
