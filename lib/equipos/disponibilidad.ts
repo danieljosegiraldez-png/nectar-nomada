@@ -84,14 +84,22 @@ export interface ResumenDeDisponibilidad {
  * columnas no da el total. Es correcto: un tanque ocupado y averiado aparece en
  * las dos porque son dos hechos que piden dos acciones distintas. Forzar que
  * sumen obligaría a elegir uno, que es el colapso que §4 rechaza.
+ *
+ * **Un equipo retirado cuenta en el total y en ninguna columna** (Parte 2c §4.5):
+ * «requiere intervención» es lo que alguien tiene que ir a arreglar, y un equipo
+ * que se retiró a propósito no se arregla; tampoco está «en uso» ni «libre». Y
+ * eso vale aunque traiga además `CONDICION` o `EN_USO`: por eso las tres
+ * columnas se cuentan sobre `vigentes`, no sobre la lista entera. `clasificar`
+ * sigue emitiendo `RETIRADO` —lo leen la liberación de una unidad y el mapa del
+ * tablero—; lo que no hace es sumarlo aquí.
  */
 export function resumir(clasificaciones: readonly Clasificacion[]): ResumenDeDisponibilidad {
+  // Un retirado cuenta en el total y en NINGUNA columna, traiga o no también EN_USO o CONDICION (Parte 2c §4.5).
+  const vigentes = clasificaciones.filter((c) => !c.motivos.includes("RETIRADO"));
   return {
     total: clasificaciones.length,
-    libresYSanos: clasificaciones.filter((c) => c.libreYSano).length,
-    enUso: clasificaciones.filter((c) => c.motivos.includes("EN_USO")).length,
-    requierenIntervencion: clasificaciones.filter((c) =>
-      c.motivos.some((m) => m === "CONDICION" || m === "RETIRADO"),
-    ).length,
+    libresYSanos: vigentes.filter((c) => c.libreYSano).length,
+    enUso: vigentes.filter((c) => c.motivos.includes("EN_USO")).length,
+    requierenIntervencion: vigentes.filter((c) => c.motivos.includes("CONDICION")).length,
   };
 }
