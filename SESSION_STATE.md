@@ -80,6 +80,11 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-09 · Un enlace con `.nn-button` ya no se parte ni pisa la línea de arriba en el teléfono (#686)
+
+`.nn-button` no declaraba `display`, así que sobre un `<a>` era `inline`: medía 39 px y no 44, y al partirse una etiqueta su segundo trozo pintaba el fondo encima de la línea anterior. Se vio en «Últimas jornadas» de la parcela a 390 px; la pestaña Trampas tenía lo mismo. Hoy `a.nn-button` es `inline-flex` sin subrayado, y `p > a.nn-button` deja 8 px entre filas; `<button>` y el único `<summary>` no cambian. Flip-test a 390×844 sobre una base desechable: solape 1.211 y 2.354 px² → 0. La CSS viva de producción lleva las dos reglas.
+**Queda:** siete pantallas conservan un `style={{ display: "inline-block", textDecoration: "none" }}` que ya sobra —se ven igual; quitarlo es limpieza—, y `/lots/[id]` no se pudo mirar con la cuenta DEMO.
+
 ### 2026-10-06 · Kiva Estate tiene su geografía y sus dos fincas, y Luis, Kenis y Chris sus permisos (#668, #670)
 
 Producción, **sin ningún borrado**, cada cifra releída por una lectura independiente. `Panamá → Coclé → Penonomé → Toabre → {Finca 1, Finca 2}` (provincias 2→3, localidades 4→6): el `site` que se llamaba como su organización es **Finca 1** y **Finca 2** se creó con `crearFinca` (`151f91e2…`). Bob y Robert Huerbsch eran la misma persona y quedaron unidos (Huerbsch 4→3, personas 19→18, las 14 asignaciones intactas); Chris, el 5-10. Luis: Farm Manager en las dos fincas. Kenis: sus dos apiarios — el guion pedía `Apiario Finca Rosina` y `Apiario Las Nubes`, nombres a los que los llevaría un renombrado **que nunca se aplicó**; hoy son `Apiario 1/2 — Finca Rosina` (#668). A Chris se le retiró su Platform Admin **global** con `revokeRole` (la fila queda `revoked`); conserva Café, Apiario y Cerro Azul.

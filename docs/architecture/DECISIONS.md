@@ -12825,3 +12825,26 @@ Tres nombres decían que una selección parte a su madre, que es justo lo que es
 creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía sólo en comentarios. Queda
 dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
 verificación, así que esta es la enmienda.
+
+## ADR-198 — Un beneficio puede existir sin finca propia
+
+**Fecha:** 2026-10-08 · **Spec:** `docs/superpowers/specs/2026-10-06-beneficio-sin-finca-design.md`
+
+**Contexto.** Hoy un beneficio debe colgar de un `site` (`lib/traceability/beneficios.ts`) y su
+organización se copia del padre. Daniel, 2026-10-06: «una organización puede tener un beneficio y no
+tener finca, que sólo compran», y `Las Nubes` puede procesar cereza de una finca ajena. Medido en
+producción ese día: `Las Nubes` tiene `organization_id` nulo aunque su padre lo tiene, así que el
+invariante en el que se apoyan varios filtros ya no se cumple.
+
+**Decisión.** El beneficio puede nacer **sin padre**, y **la organización es su ancla**; el que ya
+tiene padre lo conserva (variante opcional). Quien crea uno sin padre es quien administra la
+organización dueña. Un gestor de finca elige como destino de su cosecha los beneficios de su
+organización y los que se le hayan concedido de forma explícita. Kiva Estate crea el suyo por
+pantalla cuando el PR 2 esté en `main`, no a mano.
+
+**Consecuencias.** Tres PR, en este orden y cada uno útil solo: (1) la organización del beneficio
+deja de salir de su padre — incluye poner la de `Las Nubes`, escritura en producción que hace
+Daniel; (2) se relaja la regla y se hacen alcanzables las pantallas, reescribiendo el test que hoy
+afirma lo contrario; (3) permisos y procedencia. Sin padre se pierde la jerarquía de permisos y la
+geografía: es el precio de la variante, y sólo lo pagan los beneficios que nacen así.
+`lib/rbac/resolve.ts` queda sin leer y el PR 3 empieza por ahí.

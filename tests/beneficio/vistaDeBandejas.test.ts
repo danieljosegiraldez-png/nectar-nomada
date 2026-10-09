@@ -152,23 +152,40 @@ describe("F5 (RULING): un tipo que falla con un error NO de acceso degrada su fi
   });
 });
 
-describe("A5: sólo organizaciones con al menos un `site`", () => {
-  it("una organización sin ningún `site` no aparece, aunque alguien pueda editar su beneficio", async () => {
+describe("A5: sólo organizaciones con al menos un `site` o un `beneficio`", () => {
+  it("una organización con beneficio y SIN ningún `site` SÍ aparece (ADR-198: el beneficio puede nacer sin finca)", async () => {
     const org = await prisma.organization.create({ data: { organizationType: "farm", name: nombre("org-a5"), status: "approved", classification: "internal" } });
     orgIds.push(org.id);
-    // Un `beneficio` sin ningún `site` en la organización: no debería pasar en
-    // la práctica (el beneficio cuelga de un sitio), pero es exactamente el
-    // caso que separa "tiene edit_beneficio en algún lugar" de "tiene un site".
+    // Un `beneficio` sin ningún `site` en la organización. Hasta el PR 2 de ADR-198 este test afirmaba
+    // que NO aparecía, y habría seguido verde si sólo se relajaba el servicio: guardaba el defecto.
     const beneficio = await prisma.location.create({ data: { locationType: "beneficio", name: nombre("beneficio-a5"), organizationId: org.id, status: "approved", classification: "internal" } });
     locationIds.push(beneficio.id);
     const gerente = await cuenta("gerente-a5");
     await asignar(gerente, "Farm Manager", beneficio.id);
 
-    // Control: SIN el filtro de A5 esta organización pasaría (edit_beneficio sí lo da).
+    // Control: quien mira SÍ puede editar el beneficio de esta organización (edit_beneficio lo da).
     expect(await puedeEditarBeneficioEnOrganizacion(gerente, org.id)).toBe(true);
 
     const secciones = await vistaDeBandejas(gerente);
+    expect(secciones.find((s) => s.org.id === org.id)).toBeDefined();
+  });
+
+  it("una organización sin `site` NI `beneficio` sigue sin aparecer: A5 conserva su propósito", async () => {
+    const org = await prisma.organization.create({ data: { organizationType: "roaster", name: nombre("org-a5-tostadora"), status: "approved", classification: "internal" } });
+    orgIds.push(org.id);
+    // Platform Admin ve todas las organizaciones, así que si el filtro no excluyera ésta, saldría.
+    const admin = await cuenta("admin-a5-tostadora");
+    const perfilAdmin = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Platform Admin" } });
+    const ambitoPlataforma = await prisma.scope.findFirst({ where: { scopeType: "platform" } });
+    const ambito = ambitoPlataforma ?? (await prisma.scope.create({ data: { scopeType: "platform" } }));
+    if (!ambitoPlataforma) scopeIds.push(ambito.id); // sólo se borra el que esta corrida creó
+    await prisma.assignment.create({ data: { userAccountId: admin, scopeId: ambito.id, roleProfileId: perfilAdmin.id } });
+    const secciones = await vistaDeBandejas(admin);
     expect(secciones.find((s) => s.org.id === org.id)).toBeUndefined();
+    // Control positivo del mismo lector: con un `site` además, esa misma organización aparece.
+    const sitio = await prisma.location.create({ data: { locationType: "site", name: nombre("sitio-a5-tostadora"), organizationId: org.id, status: "approved", classification: "internal" } });
+    locationIds.push(sitio.id);
+    expect((await vistaDeBandejas(admin)).find((s) => s.org.id === org.id)).toBeDefined();
   });
 
   it("control positivo: la misma organización, con un site además del beneficio, sí aparece", async () => {

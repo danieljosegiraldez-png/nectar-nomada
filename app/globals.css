@@ -616,6 +616,31 @@ button[type="submit"] {
   transform: translateY(1px);
 }
 
+/* Un .nn-button que es un ENLACE no es un botón para el navegador: `<a>` es
+   `inline`, y en un elemento inline el padding vertical no ocupa sitio en la
+   línea y `min-height` no actúa (medían 39 px, no 44). Cuando la etiqueta no
+   cabe y se parte, cada trozo pinta su fondo encima de la línea de arriba: en la
+   portada de la parcela, a 390 px, el segundo trozo de «Ir a la ronda de
+   trampas» tapaba el subrayado de «Abrir un» (2026-10-08). Siete pantallas lo
+   esquivaban con un `style` en línea, enlace por enlace.
+   `inline-flex`, como .nn-button-quiet, y no `inline-block`: con éste, el enlace
+   de padding pequeño de /research/[protocolId] quedaría en una caja de 44 px con
+   el texto pegado arriba. Sólo `a`: `<button>` ya es `inline-block` para el
+   navegador, y `<summary>` es `list-item` y perdería su marcador. */
+a.nn-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* Ya como cajas, dos que no caben en una línea quedan una encima de otra sin
+   ningún hueco: la línea mide lo mismo que el botón. 0,25 rem arriba y abajo dan
+   los 0,5 rem que separan las filas flex de botones. Sólo dentro de un `<p>`: en
+   un contenedor flex, el margen haría estirarse a los hermanos del enlace. */
+p > a.nn-button {
+  margin-block: 0.25rem;
+}
+
 /* Secondary actions. Same tap floor as a primary, visually subordinate.
    InspectionForm is the case that forced this: it deliberately offers a
    one-tap "nothing unusual" primary — the common case standing at a hive —
