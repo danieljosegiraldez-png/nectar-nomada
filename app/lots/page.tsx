@@ -86,7 +86,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             phone. A test asserts it stays at eight or fewer, and it was right
             to refuse a ninth. */}
         {canManageLots ? (
-          <Link href="/recipes" className="nn-button-quiet" style={{ display: "inline-block", textDecoration: "none" }}>
+          <Link href="/recipes" className="nn-button-quiet">
             {t("recipesTitle")}
           </Link>
         ) : null}
@@ -106,7 +106,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and
           // then have nowhere to put it.
-          <a href="/api/export" className="nn-button-quiet" style={{ textDecoration: "none" }}>
+          <a href="/api/export" className="nn-button-quiet">
             {t("exportButton")}
           </a>
         ) : null}

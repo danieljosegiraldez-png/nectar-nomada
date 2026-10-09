@@ -670,6 +670,14 @@ p:has(> a.nn-button ~ a.nn-button) > a.nn-button {
   border-color: var(--nn-brand);
 }
 
+/* Como a.nn-button: un botón que es enlace no se subraya. Los tres que hay
+   (/lots y /lots/[id]) lo quitaban con un `style` en línea, y uno de ellos
+   añadía `display: inline-block`, que pisaba el `inline-flex` de arriba y dejaba
+   el texto pegado al borde de arriba de «Recetas de proceso». */
+a.nn-button-quiet {
+  text-decoration: none;
+}
+
 /* --- filter chips ------------------------------------------------------
    The lot-type filters were bare links with no hit area, and the active
    one was marked with .nn-price — a commerce class reused for state,
