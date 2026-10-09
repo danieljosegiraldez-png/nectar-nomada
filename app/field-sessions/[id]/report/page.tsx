@@ -1,5 +1,6 @@
 import { fechaDelReporte, detalleDelReporte } from "../../../../lib/traceability/presentacionDelReporte";
 import { DetallesDelReporte } from "../../../components/traceability/DetallesDelReporte";
+import { seManejaEnCuadros } from "../../../../lib/apiary/sitioDeAbejas";
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -126,7 +127,7 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
-                <DetallesDelReporte registro={r} />
+                <DetallesDelReporte registro={r} enCuadros={seManejaEnCuadros(snapshot.sitio.tipo)} />
               </li>
             ))}
           </ul>
