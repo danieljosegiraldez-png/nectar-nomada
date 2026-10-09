@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { abrirJornada, agregarRecolector, beneficiosDeDestino, cambiarDestinoDeJornada, JornadaError } from "../../lib/traceability/jornadasDeCosecha";
-import { declararDestinoDeFinca } from "../../lib/traceability/destinoDeFinca";
+import { declararDestinoDeFinca, fincaParaDestino } from "../../lib/traceability/destinoDeFinca";
 import { anotarEntrega, anularEntrega } from "../../lib/traceability/entregasDeCosecha";
 
 const RUN = `dest-${Date.now()}`;
@@ -28,6 +28,10 @@ let beneficio: string;
 let beneficio2: string;
 let otraFinca: string;
 let beneficioAjeno: string;
+// ADR-198, PR 3: beneficios SIN padre. Los tres llevan su organización (el PR 1 exige que la lleven).
+let beneficioDeLaCasa: string;
+let beneficioSinPadreAjeno: string;
+let beneficioDeLaCasaConfidencial: string;
 let manager: string;
 let receptor: string;
 let recolector: string;
@@ -64,6 +68,12 @@ beforeAll(async () => {
   beneficio2 = await bajo(finca, "Beneficio 2", "beneficio");
   otraFinca = await sitio("Otra finca");
   beneficioAjeno = await bajo(otraFinca, "Beneficio ajeno", "beneficio");
+  const orgDe = async (id: string) => (await prisma.location.findUniqueOrThrow({ where: { id }, select: { organizationId: true } })).organizationId!;
+  const sinPadre = async (n: string, organizationId: string, classification: "internal" | "confidential") =>
+    (await prisma.location.create({ data: { name: `TEST ${n} (${RUN})`, locationType: "beneficio", organizationId, classification } })).id;
+  beneficioDeLaCasa = await sinPadre("Beneficio de la casa", await orgDe(finca), "internal");
+  beneficioSinPadreAjeno = await sinPadre("Beneficio sin padre ajeno", await orgDe(otraFinca), "internal");
+  beneficioDeLaCasaConfidencial = await sinPadre("Beneficio de la casa confidencial", await orgDe(finca), "confidential");
   manager = await cuenta("Farm Manager", finca);
   receptor = await cuenta("Farm Operator", finca);
   recolector = await persona("Recolector");
@@ -88,8 +98,8 @@ afterAll(async () => {
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: { in: personas } }) });
   // La FK del destino es RESTRICT: sin soltarlo, borrar el beneficio lanza y —siendo el
   // `afterAll` una cadena— abandona los borrados de abajo.
-  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: { in: [beneficio, beneficio2, beneficioAjeno] } }), data: { beneficioDestinoId: null } });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, beneficioAjeno] } }) });
+  await prisma.location.updateMany({ where: assertDefinedWhere({ beneficioDestinoId: { in: [beneficio, beneficio2, beneficioAjeno, beneficioDeLaCasa, beneficioSinPadreAjeno, beneficioDeLaCasaConfidencial] } }), data: { beneficioDestinoId: null } });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [parcela, beneficio, beneficio2, beneficioAjeno, beneficioDeLaCasa, beneficioSinPadreAjeno, beneficioDeLaCasaConfidencial] } }) });
   await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [finca, otraFinca] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
@@ -187,4 +197,63 @@ describe("la entrega recibida no se anula desde la finca", () => {
     const anulada = await anularEntrega(manager, { entregaId: libre.id, motivo: "pesada dos veces" });
     expect(anulada.estado).toBe("anulada");
   }, 20000);
+});
+
+/**
+ * ADR-198, PR 3: una finca elige como destino los beneficios de SU organización aunque no cuelguen de
+ * ella (un beneficio puede nacer sin finca). Antes sólo llegaban los que `lot:view` alcanzaba por los
+ * ancestros, y el beneficio de Kiva —sin padre— no se podía elegir.
+ */
+describe("el destino puede ser un beneficio sin padre de la misma organización", () => {
+  it("control: quien gestiona la finca NO ve ese beneficio — la regla nueva es lo único que lo alcanza", async () => {
+    const lo_que_ve = (await beneficiosDeDestino(manager)).map((b) => b.id);
+    expect(lo_que_ve).toContain(beneficio); // el colgado de la finca sí
+    expect(lo_que_ve).not.toContain(beneficioDeLaCasa); // el sin padre no
+  }, 20000);
+
+  it("se acepta al declararlo, y la jornada lo copia", async () => {
+    await declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioDeLaCasa });
+    expect((await prisma.location.findUniqueOrThrow({ where: { id: finca } })).beneficioDestinoId).toBe(beneficioDeLaCasa);
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+    expect(j.beneficioId).toBe(beneficioDeLaCasa);
+  }, 20000);
+
+  it("el de OTRA organización, sin padre, se rechaza; el de la casa pasa en la misma llamada", async () => {
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioSinPadreAjeno })).rejects.toThrow(/beneficio_no_valido/);
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioDeLaCasa })).resolves.toBeUndefined();
+  }, 20000);
+
+  it("la clasificación del beneficio sigue mandando: uno confidencial de la casa se rechaza", async () => {
+    // Farm Manager no tiene `classification:clear_confidential` (lib/rbac/catalog.ts).
+    await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: beneficioDeLaCasaConfidencial })).rejects.toThrow(/beneficio_no_valido/);
+  }, 20000);
+
+  it("la regla nueva no sustituye a lot:manage sobre la finca: quien gestiona OTRA finca no la usa", async () => {
+    const jefeAjeno = await cuenta("Farm Manager", otraFinca);
+    // Sobre la finca de la casa: no la gestiona.
+    await expect(declararDestinoDeFinca(jefeAjeno, { fincaSiteId: finca, beneficioId: beneficioDeLaCasa })).rejects.toThrow();
+    // Sobre la suya: el beneficio es de OTRA organización que la finca, así que no es «de la casa».
+    await expect(declararDestinoDeFinca(jefeAjeno, { fincaSiteId: otraFinca, beneficioId: beneficioDeLaCasa })).rejects.toThrow(/beneficio_no_valido/);
+    // Control positivo: con el beneficio de SU organización, sí.
+    await expect(declararDestinoDeFinca(jefeAjeno, { fincaSiteId: otraFinca, beneficioId: beneficioSinPadreAjeno })).resolves.toBeUndefined();
+  }, 20000);
+
+  it("cambiarDestinoDeJornada lo acepta igual (es el mismo destino, en la jornada)", async () => {
+    await prisma.location.update({ where: { id: finca }, data: { beneficioDestinoId: null } });
+    const j = await abrirJornada(manager, { fincaSiteId: finca, fecha: hoy, asignaciones: [{ locationId: parcela, personId: recolector }] });
+    expect(j.beneficioId).toBeNull();
+    await cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficioDeLaCasa });
+    expect((await prisma.jornadaDeCosecha.findUniqueOrThrow({ where: { id: j.id } })).beneficioId).toBe(beneficioDeLaCasa);
+    await expect(cambiarDestinoDeJornada(manager, { jornadaId: j.id, beneficioId: beneficioSinPadreAjeno })).rejects.toThrow(/beneficio_no_valido/);
+  }, 20000);
+
+  it("la pantalla ofrece exactamente lo que el servicio acepta", async () => {
+    const f = await fincaParaDestino(manager, finca);
+    const ids = f!.beneficios.map((b) => b.id);
+    expect(ids).toContain(beneficioDeLaCasa);
+    expect(ids).not.toContain(beneficioSinPadreAjeno);
+    expect(ids).not.toContain(beneficioDeLaCasaConfidencial);
+    // Y todo lo que ofrece, el servicio lo acepta (la lista nunca promete lo que se rechaza).
+    for (const id of ids) await expect(declararDestinoDeFinca(manager, { fincaSiteId: finca, beneficioId: id })).resolves.toBeUndefined();
+  }, 30000);
 });
