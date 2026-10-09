@@ -31,12 +31,7 @@ import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent, CerezaError } from "../../lib/traceability/harvest";
 import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError, CODIGOS_DE_TUESTE_CON_FRASE } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
-import {
-  createRecipeWithVersion,
-  createRecipeVersion,
-  updateRecipeMetadata,
-  ProcessTargetError,
-} from "../../lib/traceability/processTargets";
+import { updateRecipeMetadata, ProcessTargetError } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
@@ -1266,78 +1261,6 @@ export async function recordMaterialConsumptionEntryFormAction(
   return {};
 }
 
-/**
- * Create a recipe and its first version — ADR-100.
- *
- * The targets arrive as `targets[0][variable]`, `targets[0][moment]`… because
- * the count is not known in advance. Parsed by walking indices until one comes
- * up empty rather than trusting a hidden count field, which a truncated POST
- * would make wrong.
- */
-export async function createRecipeAction(
-  _prevState: TraceabilityActionState,
-  formData: FormData,
-): Promise<TraceabilityActionState> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  const t = await getTranslations("Traceability");
-
-  const targets = parseTargetRows(formData);
-
-  try {
-    await createRecipeWithVersion(user.userAccountId, {
-      name: String(formData.get("name") ?? ""),
-      description: emptyToNull(formData.get("description")),
-      organizationId: emptyToNull(formData.get("organizationId")),
-      expectedHours: emptyToNullNumber(formData.get("expectedHours")),
-      targets,
-    });
-  } catch (error) {
-    return { error: await friendlyError(t, error) };
-  }
-
-  revalidatePath("/recipes");
-  redirect("/recipes?ok=1");
-}
-
-/** Shared by both recipe forms — the target rows arrive the same way. */
-function parseTargetRows(formData: FormData) {
-  const targets: {
-    variable: string;
-    moment: "initial" | "during" | "final";
-    phase: "fermentation" | "drying";
-    unit: string;
-    targetValue: number | null;
-    minValue: number | null;
-    maxValue: number | null;
-    everyHours: number | null;
-    note: string | null;
-  }[] = [];
-  for (let i = 0; i < 50; i++) {
-    const variable = formData.get(`targets[${i}][variable]`);
-    if (typeof variable !== "string" || variable === "") break;
-    targets.push({
-      variable,
-      moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
-      // La fase por defecto es fermentación, que es lo que toda receta existente describe: un
-      // formulario viejo o una llamada sin el campo sigue significando lo que significaba. Lo que
-      // NO se admite es una fase inventada, así que cualquier otra cosa cae a fermentación y el
-      // servicio la valida igual.
-      phase: formData.get(`targets[${i}][phase]`) === "drying" ? "drying" : "fermentation",
-      unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
-      targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
-      minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
-      maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
-      // El formulario sólo pinta este campo con `moment: during` y lo limpia al
-      // cambiar de momento, pero la acción no se fía de eso: se puede invocar
-      // sin pasar por la pantalla, y `validateTargets` rechaza el caso.
-      everyHours: emptyToNullNumber(formData.get(`targets[${i}][everyHours]`)),
-      note: emptyToNull(formData.get(`targets[${i}][note]`)),
-    });
-  }
-  return targets;
-}
-
 /** Rename a recipe, or reword its description — ADR-102. Never its targets. */
 export async function updateRecipeAction(
   _prevState: TraceabilityActionState,
@@ -1360,35 +1283,6 @@ export async function updateRecipeAction(
   revalidatePath(`/recipes/${recipeId}`);
   revalidatePath("/recipes");
   redirect(`/recipes/${recipeId}?ok=renamed`);
-}
-
-/** A new version — the only way targets ever change (ADR-102). */
-export async function createRecipeVersionAction(
-  _prevState: TraceabilityActionState,
-  formData: FormData,
-): Promise<TraceabilityActionState> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  const t = await getTranslations("Traceability");
-  const recipeId = String(formData.get("recipeId") ?? "");
-
-  try {
-    await createRecipeVersion(
-      user.userAccountId,
-      recipeId,
-      parseTargetRows(formData),
-      emptyToNull(formData.get("notes")),
-      // Sin esto, publicar una v2 dejaba la version vigente sin duracion
-      // esperada aunque la v1 la tuviera. Lo cazo la revision de Codex.
-      emptyToNullNumber(formData.get("expectedHours")),
-    );
-  } catch (error) {
-    return { error: await friendlyError(t, error) };
-  }
-
-  revalidatePath(`/recipes/${recipeId}`);
-  revalidatePath("/recipes");
-  redirect(`/recipes/${recipeId}?ok=versioned`);
 }
 
 // --- La receta con pasos: el editor (Parte 2a, tarea 14, 2026-10-03) ----------------------------------------------------

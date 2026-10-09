@@ -28,12 +28,12 @@
  */
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
-import { requireLotAccess } from "./lots";
+import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/client";
-import { puedeEditarBeneficioEnOrganizacion } from "./locations";
+import { puedeAutoriaDeReceta } from "../recetas/autoria";
 import { exigeAutoriaDeReceta } from "../recetas/autoria";
 import { RecipeError } from "../recetas/errorDeReceta";
 import { copiarContenidoDeVersion } from "../recetas/versiones";
@@ -510,30 +510,73 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
  * una frase de disculpa. Para omitir el enlace hay que poder preguntarlo antes.
  *
  * **Es la MISMA decisión que toma `app/recipes/new/page.tsx`**, movida aquí y usada por
- * las dos pantallas: una organización propia donde `edit_beneficio` alcance, o la receta
- * compartida (`null`). Si divergieran, el enlace volvería a mentir — que es el defecto
- * que esto arregla.
+ * las dos pantallas: una organización propia donde alcance el permiso de autoría de recetas
+ * —el del Coffee Process Manager, V16, 2026-10-04: `puedeAutoriaDeReceta`, la gemela de
+ * `exigeAutoriaDeReceta`, que es la regla de los servicios—, o la receta compartida
+ * (`null`). `edit_beneficio` ya no basta. Si divergieran, el enlace volvería a mentir — que
+ * es el defecto que esto arregla.
  */
 export async function puedeCrearRecetaEnAlguna(userAccountId: string): Promise<boolean> {
-  if (await puedeEditarBeneficioEnOrganizacion(userAccountId, null)) return true;
+  if (await puedeAutoriaDeReceta(userAccountId, null)) return true;
   for (const org of await listRecipeOrganizations(userAccountId)) {
-    if (await puedeEditarBeneficioEnOrganizacion(userAccountId, org.id)) return true;
+    if (await puedeAutoriaDeReceta(userAccountId, org.id)) return true;
   }
   return false;
 }
 
-export async function listRecipes(userAccountId: string) {
-  const anyLot = await prisma.lot.findFirst({ where: {} });
-  if (!anyLot) return [];
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+/**
+ * Los ámbitos de los lotes de una organización —o de todas, con `null`—: cada combinación distinta de proyecto, ubicación y clasificación, una
+ * sola vez. Es todo lo que la guardia de acceso pide de un lote, y esa guardia aprueba en cuanto UNO de sus candidatos pasa: dársela con los
+ * ámbitos de todos los lotes pregunta «¿opera esta cuenta ALGÚN lote de la organización?», sin traerlos uno a uno y sin depender de cuál devuelva
+ * la base primero. R7 (2026-10-05): `listRecipes` autorizaba con «un lote cualquiera de toda la base» y `getRecipeForEditor` con el primero de la
+ * organización, y un operario de una sola parcela pasaba o no según el orden en que la base respondiera.
+ */
+async function ambitosDeLosLotes(organizationId: string | null) {
+  return prisma.lot.groupBy({
+    by: ["projectId", "locationId", "classification"],
+    where: organizationId === null ? {} : { organizationId },
+  });
+}
 
-  return prisma.processRecipe.findMany({
+export async function listRecipes(userAccountId: string) {
+  // R8 (2026-10-05): una Libre es lo que ocurrió en UN lote (diseño §5.2), no un catálogo: no se lista, para nadie. Es filtro del SERVICIO y no sólo
+  // de la pantalla —que lo repite—: su nombre lleva el código del lote y su descripción, lo que el operario escribió, y una lista pedida por otro
+  // camino no puede traerlas. Se lee por `getRecipeForEditor`, que la autoriza por el lote.
+  const recetas = await prisma.processRecipe.findMany({
+    where: { esLibre: false },
     include: {
       organization: { select: { name: true } },
       versions: { include: { targets: { orderBy: { displayOrder: "asc" } } }, orderBy: { version: "desc" } },
     },
     orderBy: { name: "asc" },
   });
+
+  // R7 (2026-10-05): cada receta se decide por SU organización, para quien opera y para quien escribe. Antes, pasar la guardia contra «un lote cualquiera de
+  // la base» devolvía todas las recetas de todas las organizaciones, y un Coffee Process Manager con un perfil operativo de más eludía el filtro de
+  // la autoría. Ahora: la ve quien opera ALGÚN lote de la organización o quien puede escribir sus recetas (Ruling C4, V16). Una plantilla (organización
+  // nula) la ve quien opera algún lote en cualquier parte o tiene la autoría de plataforma, como hasta hoy: el Process Manager de una finca no
+  // (ver «Dudas», 2). Una pregunta por organización, no por receta; un error que no sea de acceso a lotes se relanza.
+  const opera = async (organizationId: string | null): Promise<boolean> => {
+    try {
+      await requireLotAccess(userAccountId, "manage", await ambitosDeLosLotes(organizationId));
+      return true;
+    } catch (error) {
+      if (error instanceof TraceabilityAccessError) return false;
+      throw error;
+    }
+  };
+  const puede = new Map<string | null, boolean>();
+  for (const { organizationId } of recetas) {
+    if (puede.has(organizationId)) continue;
+    puede.set(organizationId, (await opera(organizationId)) || (await puedeAutoriaDeReceta(userAccountId, organizationId)));
+  }
+  const visibles = recetas.filter((r) => puede.get(r.organizationId));
+  if (visibles.length > 0) return visibles;
+
+  // Sin ninguna a la vista: lista vacía si esta cuenta opera algún lote o puede escribir recetas en alguna parte (la primera visita de un Process
+  // Manager cuya organización todavía no tiene recetas), y la negativa de siempre —la del acceso a lotes— si no.
+  if ((await opera(null)) || (await puedeCrearRecetaEnAlguna(userAccountId))) return visibles;
+  throw new TraceabilityAccessError("no_lot_access");
 }
 
 /** Organizations this account may create a recipe for. */
@@ -549,13 +592,18 @@ export async function listRecipeOrganizations(userAccountId: string) {
   for (const org of organizations) {
     const sample = await prisma.lot.findFirst({ where: { organizationId: org.id } });
     if (!sample) continue;
+    let alcanza = false;
     try {
       await requireLotAccess(userAccountId, "manage", [sample]);
-      reachable.push(org);
+      alcanza = true;
     } catch {
       // Not an error: an organization this account cannot operate is simply
       // not offered.
     }
+    // Ruling C4 (2026-10-04): quien puede ESCRIBIR las recetas de la organización también la ve, aunque no opere ninguno de sus lotes
+    // (el Coffee Process Manager no lleva `lot:manage`). La organización sigue necesitando algún lote: el filtro de arriba no cambia.
+    if (!alcanza && (await puedeAutoriaDeReceta(userAccountId, org.id))) alcanza = true;
+    if (alcanza) reachable.push(org);
   }
   return reachable.sort((a, b) => compareNames(a.name, b.name));
 }
@@ -586,9 +634,33 @@ export async function getRecipeForEditor(userAccountId: string, recipeId: string
   // the same rule a stale id gets everywhere else (ADR-081).
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  // R8 (2026-10-05): una receta Libre es lo que ocurrió en un lote (diseño §5.2): su nombre lleva el código del lote y su descripción, lo que el
+  // operario escribió. Se abre a quien puede VER el lote cuyo proceso la usa —cada uno, si una división la copió a varios: quien ve uno solo no la
+  // lee— y NO a quien sólo puede escribir recetas de la organización (el Coffee Process Manager no lleva `lot:view`): por eso va ANTES de la rama
+  // de la autoría y no la deja pasar. Se pregunta por la VERSIÓN, no por el lote («qué procesos usan esta receta»: no es «qué proceso cubre a este
+  // lote», que es del resolvedor). Sin ningún proceso que la use no hay lote por el que autorizar, y no se abre a nadie.
+  if (recipe.esLibre) {
+    const usos = await prisma.lotProcess.findMany({
+      where: { processRecipeVersionId: { in: recipe.versions.map((v) => v.id) } },
+      select: { lot: { select: { id: true, projectId: true, locationId: true, classification: true } } },
+    });
+    const lotes = [...new Map(usos.map((u) => [u.lot.id, u.lot] as const)).values()];
+    if (lotes.length === 0) throw new TraceabilityAccessError("no_lot_access");
+    // Uno por uno: la guardia aprueba en cuanto UNO de los candidatos pasa, y aquí hacen falta todos.
+    for (const lote of lotes) await requireLotAccess(userAccountId, "view", [lote]);
+    return recipe;
+  }
+
+  // Ruling C4 (2026-10-04): quien puede ESCRIBIR esta receta puede abrirla, sin operar ningún lote ni haber registrado ninguno en la
+  // organización (el Coffee Process Manager no lleva `lot:manage`). Primero, y no después del «sin lotes»: ese rechazo es de quien necesita un
+  // lote por el que pasar, y la autoría no lo necesita. Una plantilla (organización nula) se abre así sólo con alcance de plataforma.
+  if (await puedeAutoriaDeReceta(userAccountId, recipe.organizationId)) return recipe;
+
+  // R7 (2026-10-05): quien opera ALGÚN lote de la organización —o de cualquiera, si es una plantilla—, el mismo criterio que `listRecipes`: lo que la lista
+  // ofrece, esta lectura lo abre. Antes se miraba el primer lote que devolviera la base.
+  const ambitos = await ambitosDeLosLotes(recipe.organizationId);
+  if (ambitos.length === 0) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", ambitos);
 
   return recipe;
 }

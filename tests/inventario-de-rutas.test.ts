@@ -229,7 +229,10 @@ describe("el inventario del router", () => {
     // 117 → 118 al fusionar: las dos ramas añadieron una ruta el mismo día, y cada una escribió
     // 117. Medido sobre el árbol fusionado, no sumado: `node scripts/inventario-de-rutas.mjs`
     // dice 119 entradas (108 páginas, 11 handlers).
-    expect(salida).toContain("119 entradas");
+    // 119 → 121 (Parte 2a, tarea 14): /recipes/[id]/pasos/nuevo y /recipes/[id]/pasos/[stepId], las dos pantallas de un paso
+    // (las dos 404 sin el permiso de autoría de recetas). Medido con `node scripts/inventario-de-rutas.mjs`: 121 entradas
+    // (110 páginas, 11 handlers). El plan decía 118 → 120; la rama traía ya 119 (otras dos rutas llegaron con `main`).
+    expect(salida).toContain("121 entradas");
     expect(codigo, salida).toBe(0);
   });
 

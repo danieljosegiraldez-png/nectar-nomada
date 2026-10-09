@@ -2,10 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { puedeEditarBeneficioEnOrganizacion } from "../../../lib/traceability/locations";
+import { puedeAutoriaDeReceta } from "../../../lib/recetas/autoria";
 import { listRecipeOrganizations } from "../../../lib/traceability/processTargets";
-import { listVariableDefinitions } from "../../../lib/traceability/units";
-import { RecipeForm } from "../../components/traceability/RecipeForm";
+import { RecetaNuevaForm } from "../../components/traceability/RecetaNuevaForm";
 
 export const dynamic = "force-dynamic";
 
@@ -22,27 +21,25 @@ export default async function NewRecipePage() {
   // to. Refusing here beats rendering a form whose first field is empty.
   if (allOrganizations.length === 0) redirect("/recipes");
 
-  // Configurar una receta es configurar el beneficio (spec #370 §4.3): sólo se
-  // ofrecen las organizaciones donde el servidor vaya a aceptar el guardado,
-  // más la opción de receta compartida si pasa con `null` (Task 3, plan 3).
+  // Escribir una receta es del Coffee Process Manager (V16, 2026-10-04: `exigeAutoriaDeReceta`, que ya no es `edit_beneficio`): sólo se
+  // ofrecen las organizaciones donde el servidor vaya a aceptar el guardado, más la
+  // opción de receta compartida si pasa con `null` (Task 3, plan 3).
   const organizations = [];
   for (const org of allOrganizations) {
-    if (await puedeEditarBeneficioEnOrganizacion(user.userAccountId, org.id)) organizations.push(org);
+    if (await puedeAutoriaDeReceta(user.userAccountId, org.id)) organizations.push(org);
   }
-  const permiteCompartida = await puedeEditarBeneficioEnOrganizacion(user.userAccountId, null);
+  const permiteCompartida = await puedeAutoriaDeReceta(user.userAccountId, null);
 
-  // Daniel, 2026-09-27: sin `edit_beneficio` en ninguna organización esta pantalla no existe —
+  // Daniel, 2026-09-27: sin el permiso de autoría de recetas en ninguna organización esta pantalla no existe —
   // 404, sin explicar. El enlace de `/recipes` ya no la ofrece; esto cubre la dirección escrita a mano.
   if (organizations.length === 0 && !permiteCompartida) notFound();
-
-  const variables = listVariableDefinitions("proceso_de_cafe");
 
   return (
     <div>
       <Link href="/recipes" className="nn-back-link">{t("recipesBackLink")}</Link>
       <h1>{t("recipeNewTitle")}</h1>
       <p className="nn-muted">{t("recipeNewIntro")}</p>
-      <RecipeForm organizations={organizations} variables={variables} permiteCompartida={permiteCompartida} />
+      <RecetaNuevaForm organizations={organizations} permiteCompartida={permiteCompartida} />
     </div>
   );
 }

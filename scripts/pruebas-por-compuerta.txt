@@ -203,6 +203,8 @@ tests/traceability/recipeAuthoring.test.ts
 tests/traceability/recipeVersions.test.ts
 tests/recetas/versiones.test.ts
 tests/recetas/recetaEnBorrador.test.ts
+tests/recetas/puedeCrearReceta.test.ts
+tests/recetas/lecturasDeRecetas.test.ts
 tests/recetas/autoria.test.ts
 tests/recetas/pasos.test.ts
 tests/recetas/esquemaDePasos.test.ts

@@ -6,11 +6,7 @@ import { listRecipes, ProcessTargetError, puedeCrearRecetaEnAlguna } from "../..
 
 export const dynamic = "force-dynamic";
 
-export default async function RecipesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ ok?: string }>;
-}) {
+export default async function RecipesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -25,16 +21,18 @@ export default async function RecipesPage({
     throw error;
   }
 
-  const [t, params] = await Promise.all([getTranslations("Traceability"), searchParams]);
+  const t = await getTranslations("Traceability");
   const puedeCrearReceta = await puedeCrearRecetaEnAlguna(user.userAccountId);
+  // Una receta «Libre» es lo que ocurrió en UN lote (diseño §5.2), no un catálogo: no se lista. Si se convierte en receta de la organización
+  // (§5.3), la copia sí es una receta y sale aquí, en borrador. `listRecipes` ya no las trae (R8: es filtro del servicio); esta línea es la segunda red, y por eso su
+  // prueba le da una lista con una Libre dentro: el servicio no se la daría.
+  const visibles = recipes.filter((r) => !r.esLibre);
 
   return (
     <div>
       <span className="nn-badge">{t("recipesBadge")}</span>
       <h1>{t("recipesTitle")}</h1>
       <p className="nn-muted">{t("recipesIntro")}</p>
-
-      {params.ok ? <p className="nn-ok" role="status">{t("recipeCreatedOk")}</p> : null}
 
       <p style={{ marginTop: "1rem" }}>
         {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Se
@@ -48,42 +46,26 @@ export default async function RecipesPage({
       </p>
 
       <section className="nn-section">
-        {recipes.length === 0 ? (
+        {visibles.length === 0 ? (
           <p className="nn-muted">{t("recipesEmpty")}</p>
         ) : (
-          recipes.map((r) => {
-            const latest = r.versions[0];
+          visibles.map((r) => {
+            const publicada = r.versions.find((v) => v.status === "approved");
+            const borrador = r.versions.find((v) => v.status === "draft");
             return (
               <div key={r.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
                 <h3 style={{ margin: 0 }}>
                   <Link href={`/recipes/${r.id}`}>{r.name}</Link>
                 </h3>
                 <p className="nn-detail-meta">
-                  {r.organization ? <span>{r.organization.name}</span> : null}
+                  <span>{r.organization ? r.organization.name : t("recetaEditor_plantilla")}</span>
                   <span>{t("recipeVersionCount", { count: r.versions.length })}</span>
+                  <span>
+                    {publicada ? t("recetaEditor_listaPublicada", { version: publicada.version }) : t("recetaEditor_listaSinPublicar")}
+                  </span>
+                  {borrador ? <span>{t("recetaEditor_listaBorrador", { version: borrador.version })}</span> : null}
                 </p>
                 {r.description ? <p className="nn-muted">{r.description}</p> : null}
-
-                {latest ? (
-                  <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem" }}>
-                    {latest.targets.map((tg) => (
-                      <li key={tg.id}>
-                        {t(`variable_${tg.variable}` as "variable_ph", { fallback: tg.variable })}
-                        {" · "}
-                        {t(`moment_${tg.moment}` as "moment_initial")}
-                        {" · "}
-                        {tg.targetValue !== null
-                          ? `${tg.targetValue.toString()} ${tg.unit}`
-                          : t("targetsRange", {
-                              min: tg.minValue?.toString() ?? "—",
-                              max: tg.maxValue?.toString() ?? "—",
-                              unit: tg.unit,
-                            })}
-                        {tg.note ? ` — ${tg.note}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
             );
           })
