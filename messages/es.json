@@ -1995,6 +1995,7 @@
     "recetaEditor_derivarIntro": "Esta plantilla es de todas las organizaciones y no se edita aquí. Haz una copia propia, en borrador, y cámbiala a tu manera.",
     "recetaEditor_derivarNombre": "Nombre de la copia",
     "recetaEditor_derivarBoton": "Derivar copia",
+    "recetaEditor_nombrePlaceholder": "Lavado tradicional",
     "recetaEditor_metasDeVersionHeading": "Metas de la versión (de antes de los pasos)",
     "recetaEditor_verPasos": "{count, plural, one {Ver el paso} other {Ver los # pasos}}",
     "recetaEditor_okRecetaCreada": "Receta creada como borrador. Añade sus pasos y publícala.",

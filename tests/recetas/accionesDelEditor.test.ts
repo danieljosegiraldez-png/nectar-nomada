@@ -6,9 +6,14 @@
  * `instanceof` de `friendlyError` compararía contra una clase inventada por la propia prueba y pasaría aunque la rama no existiera
  * (`accionesQueNoCapturaban.test.ts`). `getTranslations` devuelve la clave, así que se afirma sobre la clave.
  *
- * Tres cosas se vigilan por clase: que el `redirect` va DESPUÉS del `try` (el segundo caso de cada acción comprueba que un error de validación sigue
- * devolviendo estado en vez de saltar), que lo que llega al servicio es lo que el formulario dice, y que la acción no se fía del formulario para el id
- * de la receta que sale a la URL.
+ * Tres cosas se vigilan por clase: que un error del servicio vuelve como estado en vez de saltar (el segundo caso de cada acción), que lo que llega al
+ * servicio es lo que el formulario dice (cada campo de `crearRecetaAction` con un valor propio, y los vacíos como nulos), y que la acción no se fía del
+ * formulario para el id de la receta que sale a la URL ni para las rutas que refresca (el `revalidatePath` de cada acción está afirmado).
+ *
+ * **Lo que NO se vigila, dicho para que nadie lo cuente por vigilado: que el `redirect` vaya FUERA del `try`.** Es la convención de la casa (Next implementa
+ * `redirect` lanzando, y dentro de un `try` lo atraparía el `catch`), pero hoy meter `revalidatePath` y `redirect` de `agregarPasoAction` dentro del `try` es
+ * inocuo: `friendlyError` relanza lo que no conoce (su último `throw error`, en `app/actions/traceability.ts`), así que el `catch` devuelve al llamador lo mismo
+ * que se lanzó, y ninguna prueba de este archivo lo distingue. No se escribe una prueba que no distingue; si `friendlyError` dejara de relanzar, esto cambia.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -99,6 +104,14 @@ describe("crearRecetaAction", () => {
     expect(deps.revalidate).toHaveBeenCalledWith("/recipes");
   });
 
+  it("manda cada campo con su valor: el nombre, la descripción y la organización que el formulario dice (los vacíos del caso anterior llegan nulos)", async () => {
+    // Control del caso anterior: allí descripción y organización van en blanco y llegan nulas; aquí van llenas y tienen que llegar tal cual. Con
+    // sólo el caso de los vacíos, un `null` fijo en cualquiera de los dos campos pasaba (medido en la revisión de T14C, H3).
+    const f = formulario({ name: "Lavado", description: "x", organizationId: "org1" });
+    await expect(crearRecetaAction({}, f)).rejects.toThrow("redirect:/recipes/r-nueva?ok=receta_creada");
+    expect(deps.crear).toHaveBeenCalledWith("actor", { name: "Lavado", description: "x", organizationId: "org1" });
+  });
+
   it("y un error del servicio vuelve como estado, sin saltar a ninguna parte", async () => {
     deps.crear.mockRejectedValue(new RecipeError("nombre_repetido"));
     // Control del caso anterior: si esto también lanzara `redirect:`, el primero estaría pasando por el mero hecho de que la acción lanza algo.
@@ -157,6 +170,7 @@ describe("actualizarPasoAction", () => {
       stepId: "p9",
       paso: expect.objectContaining({ stepTypeValueId: "tipo-lavado", horasSugeridas: 6 }),
     });
+    expect(deps.revalidate.mock.calls.map((c) => c[0])).toEqual(["/recipes/r1"]);
   });
 });
 
@@ -192,6 +206,8 @@ describe("publicar, versión nueva y derivar", () => {
       "redirect:/recipes/r1?ok=version_publicada",
     );
     expect(deps.publicar).toHaveBeenCalledWith("actor", "v2");
+    // La receta y la lista (la publicada aparece en la lista): las dos, en cualquier orden.
+    expect(deps.revalidate.mock.calls.map((c) => c[0]).sort()).toEqual(["/recipes", "/recipes/r1"]);
   });
 
   it("publicar un borrador sin pasos vuelve con su frase como estado y no navega: el servicio exige al menos un paso", async () => {
@@ -212,12 +228,16 @@ describe("publicar, versión nueva y derivar", () => {
       "redirect:/recipes/r1?ok=borrador_creado",
     );
     expect(deps.nuevaVersion).toHaveBeenCalledWith("actor", "v1");
+    // La receta (gana un borrador) y la lista (lo enseña): las dos, en cualquier orden.
+    expect(deps.revalidate.mock.calls.map((c) => c[0]).sort()).toEqual(["/recipes", "/recipes/r1"]);
   });
 
   it("derivar lleva a la copia que devolvió el servicio, no a la plantilla del formulario", async () => {
     const f = formulario({ plantillaVersionId: "vp", organizationId: "org1", nombre: "Mi lavado", recipeId: "r-plantilla" });
     await expect(derivarRecetaAction({}, f)).rejects.toThrow("redirect:/recipes/r-copia?ok=receta_derivada");
     expect(deps.derivar).toHaveBeenCalledWith("actor", { plantillaVersionId: "vp", organizationId: "org1", nombre: "Mi lavado" });
+    // Sólo la lista: la copia es una receta nueva, y la plantilla de la que sale no cambia (su `recipeId` del formulario no se usa).
+    expect(deps.revalidate.mock.calls.map((c) => c[0])).toEqual(["/recipes"]);
   });
 });
 

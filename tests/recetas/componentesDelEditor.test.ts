@@ -7,12 +7,18 @@
  * tomada de la tabla y no supuesta), qué trae cada referencia del paquete con su marca, y que **un paso nuevo nace con los campos vacíos** aunque
  * el paquete traiga referencias (regla 3 del paquete: el lavado genérico nunca precarga; regla 7: nada de dosis ni de recomendaciones).
  * Cada afirmación lleva al lado su control, para que no pase vacía.
+ *
+ * **Ida y vuelta (ronda de arreglo de T14C, H1).** Los casos sueltos miran un campo cada uno y dejaban once mutaciones de «no precarga» vivas (45 pruebas en
+ * verde). La última prueba pinta un paso COMPLETO de cada uno de los 24 tipos, arma el `FormData` de su HTML como lo haría un navegador (`formDataDeHtml`,
+ * que tiene sus propias pruebas con entradas escritas a mano) y exige que `pasoDeFormulario` devuelva el paso de origen: un campo que el formulario no precargue,
+ * lea del de otro o mande con otro nombre, cae.
  */
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CatalogosDelEditor, ValorDeCatalogo } from "../../lib/recetas/catalogosDelEditor";
-import { pasoEnBlanco, type PasoInicial } from "../../lib/recetas/formularioDePaso";
+import { pasoDeFormulario, pasoEnBlanco, valoresDelFormulario, type PasoInicial } from "../../lib/recetas/formularioDePaso";
+import type { PasoConDetalle, PasoEditable } from "../../lib/recetas/pasos";
 import { referenciasDelTipo, SINONIMOS_ENTRE_CATALOGOS } from "../../lib/recetas/referencias";
 import {
   EJES_POR_TIPO_DE_PASO,
@@ -22,7 +28,7 @@ import {
   type EjeDelPaso,
   type TipoDePaso,
 } from "../../lib/recetas/vocabulario";
-import { aTexto, campos, opciones, tieneCampo } from "../helpers/htmlDePrueba";
+import { aTexto, campos, formDataDeHtml, opciones, tieneCampo } from "../helpers/htmlDePrueba";
 
 vi.mock("next-intl", async () => {
   const { traductorDePrueba } = await import("../helpers/traductorDePrueba");
@@ -431,5 +437,213 @@ describe("AccionesDelPaso", () => {
     expect(aSeq).toEqual(["1", "3"]);
     expect(campos(html, "stepId").every((c) => /value="p2"/.test(c))).toBe(true);
     expect(campos(html, "recipeId").every((c) => /value="r1"/.test(c))).toBe(true);
+  });
+});
+
+describe("formDataDeHtml — lo que un navegador mandaría de un formulario ya pintado", () => {
+  // El lector que une la prueba de un componente con la de su acción es un analizador: se le dan entradas escritas a mano, no sólo el HTML real.
+  const form = (cuerpo: string): string => `<div><form action="/x">${cuerpo}</form><form action="/y"><input name="otro" value="2"/></form></div>`;
+  const pares = (f: FormData): [string, string][] => [...f.entries()].map(([k, v]) => [k, String(v)]);
+
+  it("manda cada control con su name y su value, en el orden del documento, deshaciendo las entidades que React escribe", () => {
+    const f = formDataDeHtml(form(`<input type="hidden" name="a" value="x &amp; &quot;y&quot; &lt;z&gt; &#x27;w&#x27;"/><input name="b" value="2"/><input name="c"/>`));
+    expect(pares(f)).toEqual([
+      ["a", `x & "y" <z> 'w'`],
+      ["b", "2"],
+      ["c", ""],
+    ]);
+  });
+
+  it("una casilla sólo se manda marcada, con su value o, sin él, con «on»; varias del mismo nombre llegan en orden", () => {
+    const f = formDataDeHtml(
+      form(
+        `<input type="checkbox" name="k" value="1"/><input type="checkbox" name="k" value="2" checked=""/><input type="checkbox" name="k" value="3" checked=""/>` +
+          `<input type="checkbox" name="solo" checked=""/><input type="checkbox" name="nada"/>`,
+      ),
+    );
+    expect(f.getAll("k")).toEqual(["2", "3"]);
+    expect(f.get("solo")).toBe("on");
+    expect(f.has("nada")).toBe(false);
+  });
+
+  it("no manda lo apagado, lo que no tiene nombre ni los botones", () => {
+    const f = formDataDeHtml(
+      form(`<input name="a" value="1" disabled=""/><input value="2"/><button type="submit" name="b" value="3">x</button><input type="submit" name="c" value="4"/><input name="ok" value="5"/>`),
+    );
+    expect(pares(f)).toEqual([["ok", "5"]]);
+  });
+
+  it("un desplegable manda su opción marcada; sin ninguna marcada, la primera que no esté apagada; con la apagada marcada, nada", () => {
+    const f = formDataDeHtml(
+      form(
+        `<select name="marcada"><option value="a">A</option><option value="b" selected="">B</option><option value="c">C</option></select>` +
+          `<select name="ninguna"><option value="x" disabled="">X</option><option value="y">Y</option><option value="z">Z</option></select>` +
+          `<select name="apagada"><option value="" disabled="" selected="">— elige —</option><option value="q">Q</option></select>` +
+          `<select name="sinValue"><option>Texto</option></select>`,
+      ),
+    );
+    expect(pares(f)).toEqual([
+      ["marcada", "b"],
+      ["ninguna", "y"],
+      ["sinValue", "Texto"],
+    ]);
+  });
+
+  it("`elige` toca el campo como lo hace el operario: un desplegable por su rótulo, un campo de texto tecleando; lo que no existe revienta", () => {
+    const html = form(`<select name="s"><option value="id1">Uno</option><option value="id2">Dos</option><option value="id3" disabled="">Tres</option></select><input name="t" value="viejo"/>`);
+    expect(pares(formDataDeHtml(html, 0, { s: "Dos", t: "nuevo" }))).toEqual([
+      ["s", "id2"],
+      ["t", "nuevo"],
+    ]);
+    // Control: sin tocar nada, lo pintado.
+    expect(pares(formDataDeHtml(html))).toEqual([
+      ["s", "id1"],
+      ["t", "viejo"],
+    ]);
+    expect(() => formDataDeHtml(html, 0, { s: "id2" }), "se elige por el rótulo, no por el value").toThrow("no ofrece");
+    expect(() => formDataDeHtml(html, 0, { s: "Tres" })).toThrow("apagada");
+    expect(() => formDataDeHtml(html, 0, { inventado: "x" })).toThrow("ningún campo");
+  });
+
+  it("pide el formulario que dice, y revienta si no hay tantos", () => {
+    const html = form(`<input name="a" value="1"/>`);
+    expect(pares(formDataDeHtml(html, 0))).toEqual([["a", "1"]]);
+    expect(pares(formDataDeHtml(html, 1))).toEqual([["otro", "2"]]);
+    expect(() => formDataDeHtml(html, 2)).toThrow("tiene 2 formularios");
+  });
+});
+
+describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navegador manda de vuelta", () => {
+  // Cada eje con TRES valores y el paso eligiendo el segundo o el tercero: con uno solo, «no precarga» y «precarga el primero» mandan lo mismo.
+  const varios = (prefijo: string, nombres: string[]): ValorDeCatalogo[] => nombres.map((n, i) => valor(`${prefijo}-${i + 1}`, n));
+  const CATALOGOS_VARIOS: CatalogosDelEditor = {
+    tipos: [],
+    estadoFruto: varios("ef", ["entera", "despulpada", "despulpada_con_mucilago"]),
+    oxigeno: varios("ox", ["aerobico", "anaerobico", "microaerobico"]),
+    temperatura: varios("te", ["ambiente", "controlada", "frio"]),
+    fuenteMicrobiana: varios("fm", ["ninguna", "nativa", "inoculada"]),
+    medio: varios("me", ["agua_limpia", "mosto_propio", "mosto_de_otro_lote"]),
+    fisico: varios("fi", ["ninguno", "agitacion", "presion"]),
+    sustrato: varios("su", ["doble_mosto", "pulpa", "miel"]),
+    levadura: varios("le", ["MP72", "SafCafe"]),
+    capacidad: varios("ca", ["sellable", "oscuridad", "frio"]),
+  };
+  const MODOS = [
+    { valor: "open_patio", etiqueta: "Patio abierto" },
+    { valor: "african_bed_outdoor", etiqueta: "Cama africana" },
+    { valor: "mechanical_dryer", etiqueta: "Secadora mecánica" },
+  ];
+
+  /**
+   * Un paso con TODO lo que la fila de su tipo admite, cada dato con un valor propio y distinto de los demás (los catálogos, el segundo o el tercero;
+   * las cifras, todas distintas). Lo que el tipo no admite va nulo, que es lo que el servicio exige. Las tres colecciones llevan varias filas, con
+   * campos llenos en una y vacíos en otra. En la recepción, la única meta es la que ese tipo compara (Brix, al llegar).
+   */
+  function pasoCompleto(tipo: TipoDePaso): PasoConDetalle {
+    const tiene = (eje: EjeDelPaso): boolean => EJES_POR_TIPO_DE_PASO[tipo].includes(eje);
+    const secado = FASE_DEL_TIPO[tipo] === "drying";
+    return {
+      id: "p1",
+      seq: 1,
+      tipo,
+      stepTypeValueId: `tipo-${tipo}`,
+      // Con comillas, ampersand y ángulos: React los escapa al pintar y `formDataDeHtml` los tiene que deshacer.
+      intencion: `Qué busca «${tipo}» & "todo" <bien>`,
+      opcional: true,
+      estadoFrutoValueId: tiene("estadoFruto") ? "ef-2" : null,
+      mucilagoObjetivo: tiene("mucilagoObjetivo") ? 25 : null,
+      oxigenoValueId: tiene("oxigeno") ? "ox-2" : null,
+      temperaturaValueId: tiene("temperatura") ? "te-3" : null,
+      temperaturaMinC: tiene("temperatura") ? 12.5 : null,
+      temperaturaMaxC: tiene("temperatura") ? 18 : null,
+      fuenteMicrobianaValueId: tiene("fuenteMicrobiana") ? "fm-3" : null,
+      medioValueId: tiene("medio") ? "me-2" : null,
+      fisicoValueId: tiene("fisico") ? "fi-3" : null,
+      modoSecado: tiene("modoSecado") ? "african_bed_outdoor" : null,
+      horasMin: 6,
+      horasSugeridas: 48,
+      horasMax: 72,
+      volteoCadaHoras: secado ? 3 : null,
+      humedadMinPct: secado ? 10 : null,
+      humedadMaxPct: secado ? 12 : null,
+      finPorTiempo: true,
+      reglaDeFin: "all",
+      adiciones: tiene("adiciones")
+        ? [
+            { categoriaValueId: "su-2", cantidad: 2.5, unidad: "g/kg", momento: "post_green" },
+            { categoriaValueId: tipo === "inoculation" ? "le-2" : "su-3", cantidad: null, unidad: null, momento: "pre_green" },
+          ]
+        : [],
+      fines: [
+        { variable: "moisture", operador: "lte", valor: 11.5, unidad: "%", desdeLecturaId: "lectura-1" },
+        { variable: "ph", operador: "gte", valor: 3.8, unidad: "pH", desdeLecturaId: null },
+      ],
+      capacidadesRequeridas: ["ca-2", "ca-3"],
+      metas:
+        tipo === "reception"
+          ? [{ variable: "brix", moment: "initial", unit: "Bx", targetValue: 20, minValue: 19, maxValue: 21, note: "al llegar", everyHours: null }]
+          : [
+              { variable: "ph", moment: "during", unit: "pH", targetValue: 3.8, minValue: 3.5, maxValue: 4.2, note: "cada seis horas", everyHours: 6 },
+              { variable: "brix", moment: "initial", unit: "Bx", targetValue: null, minValue: 18, maxValue: null, note: null, everyHours: null },
+              { variable: "moisture", moment: "final", unit: "%", targetValue: 11, minValue: null, maxValue: 12, note: null, everyHours: null },
+            ],
+    };
+  }
+
+  /** El paso tal como lo escribe el servicio: sin lo que sólo tiene el paso ya guardado (su id, su lugar y su tipo resuelto). */
+  function sinIdentidad(paso: PasoConDetalle): PasoEditable {
+    const editable: Record<string, unknown> = { ...paso };
+    for (const k of ["id", "seq", "tipo"]) delete editable[k];
+    return editable as unknown as PasoEditable;
+  }
+
+  /** Pinta el formulario de edición de ese paso y devuelve lo que un navegador mandaría sin tocar nada, leído por `pasoDeFormulario`. */
+  const vuelta = (paso: PasoConDetalle): PasoEditable =>
+    pasoDeFormulario(
+      formDataDeHtml(pintar({ modo: "editar", stepId: "p1", inicial: valoresDelFormulario(paso), catalogos: CATALOGOS_VARIOS, modosDeSecado: MODOS })),
+    );
+
+  it("para cada tipo, un paso con todo lo que su fila admite se pinta y se reenvía idéntico: ningún campo se pierde ni se lee del de otro", () => {
+    expect(TIPOS_DE_PASO.length, "control: son 24 tipos").toBe(24);
+    const mal: string[] = [];
+    for (const tipo of TIPOS_DE_PASO) {
+      const esperado = sinIdentidad(pasoCompleto(tipo));
+      const recibido = vuelta(pasoCompleto(tipo));
+      for (const campo of Object.keys(esperado) as (keyof PasoEditable)[]) {
+        if (JSON.stringify(recibido[campo]) !== JSON.stringify(esperado[campo])) {
+          mal.push(`${tipo}/${campo}: ${JSON.stringify(esperado[campo])} → ${JSON.stringify(recibido[campo])}`);
+        }
+      }
+    }
+    expect(mal).toEqual([]);
+  });
+
+  it("control: entre los 24 tipos se llenan los veinticinco campos del paso y cada subcampo de adiciones, fines y metas", () => {
+    const blanco = pasoEnBlanco();
+    const llenos = new Set<string>();
+    const subcampos = new Set<string>();
+    const lleno = (x: unknown): boolean => x !== "" && x !== false && !(Array.isArray(x) && x.length === 0);
+    for (const tipo of TIPOS_DE_PASO) {
+      const v = valoresDelFormulario(pasoCompleto(tipo));
+      // Distinto de lo que nace en blanco (`reglaDeFin` nace en «first», que no es un campo vacío pero tampoco está probado por serlo).
+      for (const k of Object.keys(blanco) as (keyof PasoInicial)[]) if (JSON.stringify(v[k]) !== JSON.stringify(blanco[k])) llenos.add(k);
+      for (const coleccion of ["adiciones", "fines", "metas"] as const) {
+        for (const fila of v[coleccion]) for (const [k, x] of Object.entries(fila)) if (lleno(x)) subcampos.add(`${coleccion}.${k}`);
+      }
+    }
+    expect(Object.keys(blanco).length, "control: son veinticinco").toBe(25);
+    expect([...llenos].sort()).toEqual(Object.keys(blanco).sort());
+    // 4 de adiciones + 5 de fines + 8 de metas.
+    expect(subcampos.size).toBe(17);
+  });
+
+  it("control: la ida y vuelta se entera cuando el HTML dice otra cosa que el paso (no pasa vacía)", () => {
+    const paso = pasoCompleto("fermentation");
+    expect(vuelta(paso)).toEqual(sinIdentidad(paso));
+    // Se pinta OTRO paso y se compara con el original: tiene que salir distinto en cada cosa que se cambió.
+    const otro: PasoConDetalle = { ...paso, oxigenoValueId: "ox-3", reglaDeFin: "first", metas: [{ ...paso.metas[0]!, targetValue: 9 }, ...paso.metas.slice(1)] };
+    const recibido = vuelta(otro);
+    expect(recibido).not.toEqual(sinIdentidad(paso));
+    expect([recibido.oxigenoValueId, recibido.reglaDeFin, recibido.metas?.[0]?.targetValue]).toEqual(["ox-3", "first", 9]);
   });
 });

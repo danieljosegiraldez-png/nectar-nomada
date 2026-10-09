@@ -25,7 +25,7 @@ export function RecetaNuevaForm({
     <form className="nn-form" action={formAction} style={{ maxWidth: 520 }}>
       <div className="nn-field">
         <label htmlFor="recipe-name">{t("recipeNameLabel")}</label>
-        <input id="recipe-name" name="name" required maxLength={120} placeholder="Lavado tradicional" />
+        <input id="recipe-name" name="name" required maxLength={120} placeholder={t("recetaEditor_nombrePlaceholder")} />
       </div>
       <div className="nn-field">
         <label htmlFor="recipe-description">{t("recipeDescriptionLabel")}</label>

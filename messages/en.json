@@ -1995,6 +1995,7 @@
     "recetaEditor_derivarIntro": "This template belongs to every organization and is not edited here. Make your own copy, as a draft, and change it your way.",
     "recetaEditor_derivarNombre": "Name of the copy",
     "recetaEditor_derivarBoton": "Derive copy",
+    "recetaEditor_nombrePlaceholder": "Traditional washed",
     "recetaEditor_metasDeVersionHeading": "Version targets (from before steps existed)",
     "recetaEditor_verPasos": "{count, plural, one {See the step} other {See the # steps}}",
     "recetaEditor_okRecetaCreada": "Recipe created as a draft. Add its steps and publish it.",
