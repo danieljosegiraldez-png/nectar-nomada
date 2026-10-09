@@ -489,7 +489,13 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
 export async function getHive(userAccountId: string, hiveId: string) {
   const hive = await prisma.hive.findUnique({
     where: { id: hiveId },
-    include: { colonies: { include: { assets: true, originSource: { select: { value: true } } } }, assets: true },
+    include: {
+      colonies: { include: { assets: true, originSource: { select: { value: true } } } },
+      assets: true,
+      // El tipo de sitio decide si se pregunta por cuadros (`seManejaEnCuadros`): la especie
+      // no esta en la colmena ni en la colonia, vive aqui.
+      location: { select: { locationType: true } },
+    },
   });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "view", [{ projectId: hive.projectId, locationId: hive.locationId }]);
