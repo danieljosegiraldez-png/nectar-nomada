@@ -549,7 +549,8 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
       stepTypeValueId: `tipo-${tipo}`,
       // Con comillas, ampersand y ángulos: React los escapa al pintar y `formDataDeHtml` los tiene que deshacer.
       intencion: `Qué busca «${tipo}» & "todo" <bien>`,
-      opcional: true,
+      // Los dos booleanos alternan por tipo y en fase contraria: entre los 24 hay verdadero y falso de cada uno, y «siempre marcada» no pasa.
+      opcional: TIPOS_DE_PASO.indexOf(tipo) % 2 === 0,
       estadoFrutoValueId: tiene("estadoFruto") ? "ef-2" : null,
       mucilagoObjetivo: tiene("mucilagoObjetivo") ? 25 : null,
       oxigenoValueId: tiene("oxigeno") ? "ox-2" : null,
@@ -566,7 +567,7 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
       volteoCadaHoras: secado ? 3 : null,
       humedadMinPct: secado ? 10 : null,
       humedadMaxPct: secado ? 12 : null,
-      finPorTiempo: true,
+      finPorTiempo: TIPOS_DE_PASO.indexOf(tipo) % 2 === 1,
       reglaDeFin: "all",
       adiciones: tiene("adiciones")
         ? [

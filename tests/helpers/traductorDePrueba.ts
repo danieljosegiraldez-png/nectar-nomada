@@ -9,7 +9,7 @@
  * con los textos en español, un literal en español y su traducción dicen lo mismo, y sólo el inglés los distingue.
  *
  * **Riesgo aceptado (decisión del controlador, ronda de arreglo de T14C, H8).** `intl-messageformat` es una dependencia TRANSITIVA de `next-intl`: la trae
- * `use-intl` (`^11.1.0` en `package-lock.json`, instalada la 11.2.13), que a su vez trae `next-intl`. No está en `package.json`, y este archivo la importa en
+ * `use-intl` (`^11.1.0` en `package-lock.json`, instalada la 11.2.13), y `next-intl` trae `use-intl`. No está en `package.json`, y este archivo la importa en
  * estático. Se acepta a propósito en vez de declararla (tocar `package.json` y el lock arriesga `npm ci`). Si una actualización de `next-intl` dejara de
  * traerla, estas pruebas romperían A LA VISTA —un error de importación al cargar este archivo—, no en silencio: ningún `expect` de las pruebas que lo
  * usan puede pasar sin él.
