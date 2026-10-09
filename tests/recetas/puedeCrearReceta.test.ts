@@ -7,8 +7,8 @@
  * Farm Manager: su respuesta de ayer era «sí» (`puedeEditarBeneficioEnOrganizacion`), así que el «no» de hoy es del cambio y no de una cuenta sin acceso a nada.
  *
  * **Lo que NO prueba, y se dice:** que un Coffee Process Manager de una finca, SIN `lot:manage`, llegue a `/recipes`. Ese camino pasa por las tres lecturas de la pantalla, que
- * el paso 32c ensancha para que acepten también la autoría (Ruling C4), y lo prueba `tests/recetas/lecturasDeRecetas.test.ts` (también `puedeCrearRecetaEnAlguna` para ese perfil). Aquí
- * se prueba el predicado con los perfiles que llegan ya en este paso: el Process Manager de plataforma, la persona con los dos perfiles (V14), el Farm Manager y el capataz.
+ * aceptan también la autoría (Ruling C4), y lo prueba `tests/recetas/lecturasDeRecetas.test.ts` (también `puedeCrearRecetaEnAlguna` para ese perfil). Aquí
+ * se prueba el predicado con perfiles que no necesitan esa ampliación: el Process Manager de plataforma, la persona con los dos perfiles (V14), el Farm Manager y el capataz.
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

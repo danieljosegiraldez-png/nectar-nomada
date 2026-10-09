@@ -8,7 +8,9 @@
  *
  * Lo que se vigila es la regla de Daniel del 2026-09-27 («si no tengo un permiso, no me muestres botones ni expliques»), que cada confirmación `?ok=` tenga su
  * rama y su texto (también la de convertir una Libre, cuya acción es de la tarea 13, en el PR-B), que una Libre no salga en la lista y se vea de sólo lectura, y que las metas de versión de antes de los pasos se
- * enseñen sin controles. Cada afirmación lleva su control, para que no pase vacía.
+ * enseñen sin controles — también las de las versiones ANTERIORES del historial —. Y qué pasa cuando la lectura de la receta o de la lista lanza: una receta que ya no
+ * existe (`ProcessTargetError`) vuelve a la lista desde la receta y desde las dos pantallas de un paso, y cualquier otro error sube tal cual, sin disfrazarse de redirección.
+ * Cada afirmación lleva su control, para que no pase vacía.
  */
 import type { ReactElement } from "react";
 import { renderToReadableStream } from "react-dom/server";
@@ -25,6 +27,10 @@ const estado = vi.hoisted(() => ({
   recetas: [] as unknown[],
   puedeCrear: true,
   catalogos: null as unknown,
+  /** Lo que `getRecipeForEditor` lanza en vez de devolver la receta (nulo: la devuelve). */
+  fallaAlLeer: null as Error | null,
+  /** Lo que `listRecipes` lanza en vez de devolver la lista (nulo: la devuelve). */
+  fallaAlListar: null as Error | null,
 }));
 
 vi.mock("next-intl/server", async () => {
@@ -48,8 +54,14 @@ vi.mock("../../lib/recetas/autoria", () => ({
   puedeAutoriaDeReceta: async (_cuenta: string, organizacion: string | null) => estado.puede(organizacion),
 }));
 vi.mock("../../lib/traceability/processTargets", () => ({
-  getRecipeForEditor: async () => estado.receta,
-  listRecipes: async () => estado.recetas,
+  getRecipeForEditor: async () => {
+    if (estado.fallaAlLeer) throw estado.fallaAlLeer;
+    return estado.receta;
+  },
+  listRecipes: async () => {
+    if (estado.fallaAlListar) throw estado.fallaAlListar;
+    return estado.recetas;
+  },
   listRecipeOrganizations: async () => estado.organizaciones,
   puedeCrearRecetaEnAlguna: async () => estado.puedeCrear,
   ProcessTargetError: class ProcessTargetError extends Error {},
@@ -78,6 +90,7 @@ import EditarPasoPage from "../../app/recipes/[id]/pasos/[stepId]/page";
 import NuevoPasoPage from "../../app/recipes/[id]/pasos/nuevo/page";
 import NewRecipePage from "../../app/recipes/new/page";
 import RecipesPage from "../../app/recipes/page";
+import { ProcessTargetError } from "../../lib/traceability/processTargets";
 
 async function pintar(jsx: ReactElement): Promise<string> {
   const flujo = await renderToReadableStream(jsx);
@@ -181,6 +194,8 @@ beforeEach(() => {
   estado.recetas = [];
   estado.puedeCrear = true;
   estado.catalogos = catalogosDePrueba();
+  estado.fallaAlLeer = null;
+  estado.fallaAlListar = null;
 });
 
 describe("la pantalla de una receta (/recipes/[id])", () => {
@@ -354,6 +369,41 @@ describe("la pantalla de una receta (/recipes/[id])", () => {
     expect(texto).toContain("Secado");
     expect(texto).not.toContain("Editar paso");
   });
+
+  it("el historial enseña las metas de versión de una versión anterior, y no las de un paso", async () => {
+    const decimal = (n: string) => ({ toString: () => n });
+    // La vigente (v2) no lleva metas de versión: todo lo que salga con cifras es del historial. La v1 lleva una meta de versión y una de un paso.
+    estado.receta = receta([
+      version("v2", 2, "approved"),
+      version("v1", 1, "approved", {
+        targets: [
+          { id: "t1", variable: "ph", moment: "final", unit: "pH", targetValue: decimal("3.8"), minValue: null, maxValue: null, note: null, recipeStepId: null },
+          { id: "t2", variable: "moisture", moment: "final", unit: "%", targetValue: decimal("11.5"), minValue: null, maxValue: null, note: null, recipeStepId: "p9" },
+        ],
+      }),
+    ]);
+    estado.pasos.set("v2", [paso("p1", 1, "washing")]);
+    estado.pasos.set("v1", []);
+    const texto = aTexto(await pintarReceta());
+    expect(texto).not.toContain("Metas de la versión (de antes de los pasos)");
+    expect(texto, "la tarjeta de la versión 1, del historial").toContain("Versión 1");
+    expect(texto).toContain("3.8 pH");
+    // Control: la meta de un paso no es de la versión, tampoco en el historial.
+    expect(texto).not.toContain("11.5");
+  });
+
+  it("una receta que ya no existe vuelve a la lista, y un error de otra clase sube tal cual", async () => {
+    estado.fallaAlLeer = new ProcessTargetError("recipe_not_found");
+    await expect(pintarReceta()).rejects.toThrow("redirect:/recipes");
+    // Control: lo que no es un `ProcessTargetError` no se disfraza de «la receta no existe».
+    const otro = new Error("la base no responde");
+    estado.fallaAlLeer = otro;
+    await expect(pintarReceta()).rejects.toBe(otro);
+    // Control: sin fallo, la misma pantalla se pinta.
+    estado.fallaAlLeer = null;
+    estado.receta = receta([version("v1", 1, "approved")]);
+    expect(aTexto(await pintarReceta())).toContain("Lavado tradicional");
+  });
 });
 
 describe("la lista de recetas (/recipes)", () => {
@@ -392,6 +442,18 @@ describe("la lista de recetas (/recipes)", () => {
     expect(texto).toContain("Plantilla (todas las organizaciones)");
     // La Libre es lo que ocurrió en un lote, no un catálogo (diseño §5.2).
     expect(texto).not.toContain("Libre — probar anaeróbico");
+  });
+
+  it("lo que lance listRecipes sube tal cual: la pantalla no lo convierte en una redirección", async () => {
+    // Quien no opera lotes ni escribe recetas recibe de `listRecipes` el rechazo de acceso, y la pantalla no lo atrapa (ve la página de error); un error de cualquier
+    // otra clase, tampoco. La pantalla tuvo un `catch` que mandaba a `/lots` ante un `ProcessTargetError` que `listRecipes` no lanza nunca: por eso entran los dos.
+    for (const error of [new Error("no_lot_access"), new ProcessTargetError("recipe_not_found")]) {
+      estado.fallaAlListar = error;
+      await expect(RecipesPage(), error.constructor.name).rejects.toBe(error);
+    }
+    // Control: sin fallo, la misma pantalla se pinta.
+    estado.fallaAlListar = null;
+    expect(aTexto(await pintar(await RecipesPage()))).toContain("Todavía no hay recetas.");
   });
 
   it("«Nueva receta» sólo se ofrece a quien puede crear una", async () => {
@@ -476,6 +538,21 @@ describe("las pantallas de un paso (/recipes/[id]/pasos/…)", () => {
     expect(campos(html, "intencion")[0]).toMatch(/value="Fermentar sellado"/);
     expect(campos(html, "stepId")[0]).toMatch(/value="p7"/);
     expect(campos(html, "despuesDeSeq")).toEqual([]);
+  });
+
+  it("añadir y editar: una receta que ya no existe vuelve a la lista, y un error de otra clase sube tal cual", async () => {
+    estado.fallaAlLeer = new ProcessTargetError("recipe_not_found");
+    await expect(nuevo()).rejects.toThrow("redirect:/recipes");
+    await expect(editar("p7")).rejects.toThrow("redirect:/recipes");
+    // Control: lo que no es un `ProcessTargetError` no se disfraza de «la receta no existe».
+    const otro = new Error("la base no responde");
+    estado.fallaAlLeer = otro;
+    await expect(nuevo()).rejects.toBe(otro);
+    await expect(editar("p7")).rejects.toBe(otro);
+    // Control: sin fallo, la misma pantalla se pinta.
+    estado.fallaAlLeer = null;
+    estado.receta = receta([version("v2", 2, "draft")]);
+    expect(aTexto(await pintar(await nuevo()))).toContain("Añadir un paso");
   });
 
   it("editar: sin permiso es un 404, y con una versión ya publicada, de vuelta a la receta", async () => {

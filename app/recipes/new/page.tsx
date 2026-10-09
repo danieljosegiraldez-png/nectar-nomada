@@ -23,7 +23,7 @@ export default async function NewRecipePage() {
 
   // Escribir una receta es del Coffee Process Manager (V16, 2026-10-04: `exigeAutoriaDeReceta`, que ya no es `edit_beneficio`): sólo se
   // ofrecen las organizaciones donde el servidor vaya a aceptar el guardado, más la
-  // opción de receta compartida si pasa con `null` (Task 3, plan 3).
+  // opción de receta compartida si pasa con `null`.
   const organizations = [];
   for (const org of allOrganizations) {
     if (await puedeAutoriaDeReceta(user.userAccountId, org.id)) organizations.push(org);

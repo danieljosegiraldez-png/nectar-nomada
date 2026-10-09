@@ -554,8 +554,8 @@ export async function listRecipes(userAccountId: string) {
   // R7 (2026-10-05): cada receta se decide por SU organización, para quien opera y para quien escribe. Antes, pasar la guardia contra «un lote cualquiera de
   // la base» devolvía todas las recetas de todas las organizaciones, y un Coffee Process Manager con un perfil operativo de más eludía el filtro de
   // la autoría. Ahora: la ve quien opera ALGÚN lote de la organización o quien puede escribir sus recetas (Ruling C4, V16). Una plantilla (organización
-  // nula) la ve quien opera algún lote en cualquier parte o tiene la autoría de plataforma, como hasta hoy: el Process Manager de una finca no
-  // (ver «Dudas», 2). Una pregunta por organización, no por receta; un error que no sea de acceso a lotes se relanza.
+  // nula) la ve quien opera algún lote en cualquier parte o tiene la autoría de plataforma, como hasta hoy: el Process Manager de una sola finca no las ve
+  // (decisión de Daniel). Una pregunta por organización, no por receta; un error que no sea de acceso a lotes se relanza.
   const opera = async (organizationId: string | null): Promise<boolean> => {
     try {
       await requireLotAccess(userAccountId, "manage", await ambitosDeLosLotes(organizationId));

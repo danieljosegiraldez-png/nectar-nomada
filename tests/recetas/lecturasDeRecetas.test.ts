@@ -23,7 +23,7 @@
  * capataz sí; el visor ve el lote y no lo opera. Sin ese control, «el Process Manager abre la receta» podría ser un permiso operativo que se coló en el perfil.
  *
  * **Lo que NO prueba, y se dice:** que `listRecipeOrganizations` —y por tanto `puedeCrearRecetaEnAlguna`— ya mire TODOS los lotes de una organización: sigue mirando uno
- * de muestra (ver «Dudas», 1); ni que `pasosDeLaVersion` (tarea 3) cierre los pasos de una Libre a quien no ve el lote (ver «Dudas», 9).
+ * de muestra por organización; ni que `pasosDeLaVersion` (tarea 3) cierre los pasos de una Libre a quien no ve el lote.
  *
  * **Limpieza:** `afterAll`, en orden de claves ajenas —los procesos que abrió la prueba, las recetas (y su auditoría), las cuentas, los lotes, las ubicaciones y las
  * organizaciones—, con `assertDefinedWhere`. Nada de lo que crea un `it` queda fuera de ella: cada `it` sólo LEE, salvo uno que marca una receta suya como Libre, y esa

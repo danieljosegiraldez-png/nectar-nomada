@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
-import { listRecipes, ProcessTargetError, puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
+import { listRecipes, puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
 
@@ -10,16 +10,10 @@ export default async function RecipesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let recipes;
-  try {
-    recipes = await listRecipes(user.userAccountId);
-  } catch (error) {
-    // Someone who cannot manage any batch has no business here, and the nav
-    // does not offer it to them — but the page refuses regardless
-    // (SECURITY.md §2).
-    if (error instanceof ProcessTargetError) redirect("/lots");
-    throw error;
-  }
+  // Quien no opera ningún lote ni puede escribir recetas recibe aquí el rechazo de `listRecipes` (`TraceabilityAccessError`) y la pantalla no lo atrapa: ve la
+  // página de error. Ningún menú le ofrece el enlace, pero la pantalla se niega igual (SECURITY.md §2). Tampoco hay nada que atrapar de otra clase:
+  // `listRecipes` no lanza `ProcessTargetError` (sus únicos rechazos son los de acceso a lotes), así que lo que lance sube tal cual.
+  const recipes = await listRecipes(user.userAccountId);
 
   const t = await getTranslations("Traceability");
   const puedeCrearReceta = await puedeCrearRecetaEnAlguna(user.userAccountId);
