@@ -61,7 +61,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 
 | función (archivo:línea donde revienta) | páginas |
 |---|---|
-| `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8, arregladas en #696**: las seis de `plots` dan 404, y `bodegas` e `instalaciones` su «sin permiso» (ver las rarezas) |
+| `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8, arregladas en #696**: las ocho dan 404 |
 | `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` |
 | `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` |
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` |
@@ -106,13 +106,12 @@ nada—, pero es la frontera de seguridad y merece su propia prueba, no un arreg
 
 ## Rarezas vistas de camino, que no son 500
 
-- `bodegas/[id]` e `instalaciones/[id]` con un UUID que no existe responden **200** con el cuerpo de
-  «sin permiso», no 404 — y desde #696 también con un id basura, porque es lo que esas dos páginas
-  contestan a «no existe». El texto engaña: se lo dice a un Platform Admin, que tiene todos los
-  permisos («No tienes permiso para crear ni administrar ninguna bodega»). **No se cambió a propósito.**
-  Separar «no existe» (404) de «sin permiso» en esas dos páginas diría a quien no tiene acceso qué ids
-  existen; las de `plots` no lo dicen porque contestan 404 a las dos cosas. Elegir entre las dos
-  respuestas es decisión de Daniel.
+- ~~`bodegas/[id]` e `instalaciones/[id]` respondían **200** con un aviso de «sin permiso» a todo
+  `LocationAccessError`: a quien no tenía acceso, a un id que no existía y a uno mal formado. Y se lo
+  decían también a un Platform Admin.~~ **Decidido y hecho el 2026-10-09 (#696):** Daniel eligió 404
+  en los dos casos, como en `plots/[id]`. Separar «no existe» de «sin permiso» diría a quien no tiene
+  acceso qué ids existen. Medido con la cuenta DEMO de socio, sin acceso: la bodega y la instalación
+  reales dan 404 y su nombre no aparece en la respuesta. Con la versión anterior daban 200 y el aviso.
 - `content/[id]` y `recipes/[id]` con un UUID que no existe redirigen a su lista.
 - `admin/users/[assignmentId]/permisos` redirige a `/admin/users?error=no_access` con las dos entradas:
   su `catch {}` lo atrapa **todo**, así que no da 500 pero tampoco dejaría ver un fallo real.
