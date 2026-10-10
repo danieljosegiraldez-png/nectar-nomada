@@ -483,11 +483,13 @@ export async function listRecipeOrganizations(userAccountId: string) {
 
   const reachable: { id: string; name: string }[] = [];
   for (const org of organizations) {
-    const sample = await prisma.lot.findFirst({ where: { organizationId: org.id } });
-    if (!sample) continue;
+    // F1-12 (revisión final del PR-A): los ámbitos de TODOS los lotes de la organización, como `listRecipes` y `getRecipeForEditor` (R7). Antes se autorizaba con «el primer lote que
+    // devolviera la base» (`findFirst` sin orden): un operario de una sola parcela veía ofrecida la organización o no según el orden físico de las filas.
+    const ambitos = await ambitosDeLosLotes(org.id);
+    if (ambitos.length === 0) continue;
     let alcanza = false;
     try {
-      await requireLotAccess(userAccountId, "manage", [sample]);
+      await requireLotAccess(userAccountId, "manage", ambitos);
       alcanza = true;
     } catch {
       // Not an error: an organization this account cannot operate is simply

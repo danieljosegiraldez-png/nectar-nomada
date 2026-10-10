@@ -22,8 +22,11 @@
  * **Quién pasa por qué camino, dicho en la primera prueba** (el control que importa): el Process Manager de la finca NO pasa la guardia de operar un lote y el
  * capataz sí; el visor ve el lote y no lo opera. Sin ese control, «el Process Manager abre la receta» podría ser un permiso operativo que se coló en el perfil.
  *
- * **Lo que NO prueba, y se dice:** que `listRecipeOrganizations` —y por tanto `puedeCrearRecetaEnAlguna`— ya mire TODOS los lotes de una organización: sigue mirando uno
- * de muestra por organización; ni que `pasosDeLaVersion` (tarea 3) cierre los pasos de una Libre a quien no ve el lote.
+ * **F1-12 (revisión final del PR-A): `listRecipeOrganizations` mira los ámbitos de TODOS los lotes de cada organización, como las otras dos lecturas.** Autorizaba con «el primer lote que
+ * devolviera la base» (`findFirst` sin orden), y un operario de una sola parcela de la organización D se la veía ofrecida o no según el orden físico de las filas. D tiene sus lotes en dos parcelas
+ * y DOS operarios, uno por parcela: el lote que la base devuelva primero es de la una o de la otra, así que una lectura que mire «el primero» deja fuera a uno de los dos en cualquier orden.
+ *
+ * **Lo que NO prueba, y se dice:** que `pasosDeLaVersion` (tarea 3) cierre los pasos de una Libre a quien no ve el lote.
  *
  * **Limpieza:** `afterAll`, en orden de claves ajenas —los procesos que abrió la prueba, las recetas (y su auditoría), las cuentas, los lotes, las ubicaciones y las
  * organizaciones—, con `assertDefinedWhere`. Nada de lo que crea un `it` queda fuera de ella: cada `it` sólo LEE, salvo uno que marca una receta suya como Libre, y esa
@@ -63,6 +66,8 @@ let capataz: string;
 let visor: string;
 /** Farm Operator en la parcela 2 de la organización D: opera esa parcela y no la 1. */
 let capatazD: string;
+/** Farm Operator en la parcela 1 de la organización D: opera esa parcela y no la 2 (F1-12: el reverso de `capatazD`). */
+let capatazD1: string;
 /** Coffee Process Manager en la finca A Y Farm Operator en la parcela 2 de D: escribe las recetas de A y opera D (el «perfil operativo de más» de R7). */
 let mixto: string;
 
@@ -188,6 +193,7 @@ beforeAll(async () => {
   visor = await cuentas.cuenta("Project Viewer", { locationId: fincaA.lugarId });
   // Antes que `mixto`: crea el ámbito de la parcela 2 de D, que `mixto` reusa.
   capatazD = await cuentas.cuenta("Farm Operator", { locationId: fincaD.lugar2 });
+  capatazD1 = await cuentas.cuenta("Farm Operator", { locationId: fincaD.lugar1 });
   mixto = await cuentas.cuenta("Coffee Process Manager", { locationId: fincaA.lugarId });
   const ambitoDeD2 = await prisma.scope.findFirstOrThrow({ where: { scopeType: "location", scopeRefId: fincaD.lugar2 }, select: { id: true } });
   const perfilOperario = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" }, select: { id: true } });
@@ -240,6 +246,9 @@ describe("control: por qué camino pasa cada cuenta y qué ve cada una de los lo
     const parcela1 = { locationId: fincaD.lugar1, classification: "internal" as const };
     await expect(requireLotAccess(capatazD, "manage", [parcela2])).resolves.toBeUndefined();
     await expect(requireLotAccess(capatazD, "manage", [parcela1])).rejects.toBeInstanceOf(TraceabilityAccessError);
+    // El reverso (F1-12): el operario de la parcela 1 opera ésa y no la 2.
+    await expect(requireLotAccess(capatazD1, "manage", [parcela1])).resolves.toBeUndefined();
+    await expect(requireLotAccess(capatazD1, "manage", [parcela2])).rejects.toBeInstanceOf(TraceabilityAccessError);
     // El «perfil operativo de más»: `mixto` opera la parcela 2 de D, no la finca A, y aun así escribe las recetas de A (lo que prueban las listas de abajo).
     await expect(requireLotAccess(mixto, "manage", [parcela2])).resolves.toBeUndefined();
     await expect(requireLotAccess(mixto, "manage", [lote])).rejects.toBeInstanceOf(TraceabilityAccessError);
@@ -330,6 +339,31 @@ describe("listRecipeOrganizations: ofrece la organización a quien puede escribi
     const deVisor = await ids(visor);
     expect(deVisor).not.toContain(fincaA.orgId);
     expect(deVisor).not.toContain(fincaB.orgId);
+  });
+});
+
+describe("listRecipeOrganizations: el operario de UNA parcela ve su organización sea cual sea el lote que la base devuelva primero (F1-12)", () => {
+  const ids = async (cuenta: string) => (await listRecipeOrganizations(cuenta)).map((o) => o.id);
+
+  it("D tiene sus lotes en dos parcelas y un operario por parcela: a los dos se les ofrece D, y a ninguno una organización ajena", async () => {
+    // Control del fixture: es el caso del orden. El lote 1 (parcela 1) se creó primero y los lotes 2 y 3 (parcela 2) después; cada operario opera una parcela y no la otra.
+    expect(await prisma.lot.count({ where: { organizationId: fincaD.orgId } }), "control: D tiene tres lotes").toBe(3);
+    // Un operario cuyo lote «primero» fuera de la otra parcela no se la veía ofrecida: al menos uno de los dos fallaba, según el orden físico de la tabla.
+    expect(await ids(capatazD), "el de la parcela 2").toContain(fincaD.orgId);
+    expect(await ids(capatazD1), "el de la parcela 1").toContain(fincaD.orgId);
+    // Control: la organización ajena sigue cerrada para los dos.
+    for (const cuenta of [capatazD, capatazD1]) {
+      const lista = await ids(cuenta);
+      expect(lista).not.toContain(fincaA.orgId);
+      expect(lista).not.toContain(fincaB.orgId);
+    }
+    // Control: el administrador, que opera todo, las ve todas, D incluida.
+    expect(await ids(admin)).toEqual(expect.arrayContaining([fincaA.orgId, fincaB.orgId, fincaD.orgId]));
+  });
+
+  it("la organización de un solo lote sigue ofreciéndose al que lo opera (el camino de siempre) y no al que sólo lo ve", async () => {
+    expect(await ids(capataz)).toContain(fincaA.orgId);
+    expect(await ids(visor)).not.toContain(fincaA.orgId);
   });
 });
 
