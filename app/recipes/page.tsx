@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
+import { puedeAutoriaDeReceta } from "../../lib/recetas/autoria";
 import { listRecipes, puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,13 @@ export default async function RecipesPage() {
   // (§5.3), la copia sí es una receta y sale aquí, en borrador. `listRecipes` ya no las trae (R8: es filtro del servicio); esta línea es la segunda red, y por eso su
   // prueba le da una lista con una Libre dentro: el servicio no se la daría.
   const visibles = recipes.filter((r) => !r.esLibre);
+  // F2-0 (ronda 2 de la revisión final del PR-A): el borrador es de quien puede escribir la receta, como en el detalle (F1-6) —que pregunta con esta misma
+  // `puedeAutoriaDeReceta` por la organización de la receta—: a los demás la lista ni lo pinta ni lo cuenta, para que las dos pantallas no se contradigan («2
+  // versión(es)» aquí y «1» allí). Una pregunta por organización, no por receta; una plantilla se pregunta con organización nula.
+  const puedeAutorar = new Map<string | null, boolean>();
+  for (const { organizationId } of visibles) {
+    if (!puedeAutorar.has(organizationId)) puedeAutorar.set(organizationId, await puedeAutoriaDeReceta(user.userAccountId, organizationId));
+  }
 
   return (
     <div>
@@ -45,8 +53,9 @@ export default async function RecipesPage() {
           <p className="nn-muted">{puedeCrearReceta ? t("recipesEmpty") : t("recipesEmptyLector")}</p>
         ) : (
           visibles.map((r) => {
-            const publicada = r.versions.find((v) => v.status === "approved");
-            const borrador = r.versions.find((v) => v.status === "draft");
+            const versiones = puedeAutorar.get(r.organizationId) ? r.versions : r.versions.filter((v) => v.status !== "draft");
+            const publicada = versiones.find((v) => v.status === "approved");
+            const borrador = versiones.find((v) => v.status === "draft");
             return (
               <div key={r.id} className="nn-card" style={{ maxWidth: "none", marginBottom: "1rem" }}>
                 <h3 style={{ margin: 0 }}>
@@ -54,7 +63,7 @@ export default async function RecipesPage() {
                 </h3>
                 <p className="nn-detail-meta">
                   <span>{r.organization ? r.organization.name : t("recetaEditor_plantilla")}</span>
-                  <span>{t("recipeVersionCount", { count: r.versions.length })}</span>
+                  <span>{t("recipeVersionCount", { count: versiones.length })}</span>
                   <span>
                     {publicada ? t("recetaEditor_listaPublicada", { version: publicada.version }) : t("recetaEditor_listaSinPublicar")}
                   </span>

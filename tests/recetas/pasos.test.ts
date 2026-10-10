@@ -216,8 +216,9 @@ afterAll(async () => {
   }
   // Las cuentas, DESPUÉS de las recetas que firmaron.
   await cuentas.limpiar();
-  // Lo que quede es basura de ESTA corrida. El control: la corrida sí creó pasos; si no, los ceros de abajo no miran nada.
-  expect(pasosCreados.length).toBeGreaterThan(0);
+  // Lo que quede es basura de ESTA corrida. El control de que la corrida sí creó pasos —sin él, los ceros de abajo no miran nada— NO va aquí sino en el último `it`
+  // del archivo (F2-10): en el `afterAll` rompía cualquier corrida filtrada con `-t` que no crea pasos (`-t "cada id de TIPOS_DE_PASO"` salía con
+  // «expected 0 to be greater than 0»), y de un subconjunto que no crea nada no hay basura que contar ni control que exigir.
   expect(await prisma.processRecipe.count({ where: { name: { contains: RUN } } })).toBe(0);
   expect(await prisma.processRecipeStep.count({ where: { id: { in: ids.pasoIds } } })).toBe(0);
   expect(await prisma.processTarget.count({ where: { recipeVersionId: { in: ids.versionIds } } })).toBe(0);
@@ -1030,7 +1031,7 @@ describe("§3.2 — metas por paso", () => {
     }
   });
 
-  it("un paso de recepción sólo vigila el Brix inicial: cualquier otra meta se rechaza (I9)", async () => {
+  it("en un paso de recepción sólo cabe la meta de Brix inicial: cualquier otra meta se rechaza (I9)", async () => {
     const { versionId } = await borrador("recepcion");
     const brixInicial = { variable: "brix", moment: "initial" as const, unit: "Bx", minValue: 18, maxValue: 24 };
     const phInicial = { variable: "ph", moment: "initial" as const, unit: "pH", minValue: 4.5, maxValue: 5.5 };
@@ -1461,5 +1462,13 @@ describe("R24 — los pasos de una receta Libre se leen por el lote de su proces
     expect(await tipos(admin, versionId)).toEqual(["washing"]);
     await marcarLibre(recipeId, true);
     await expect(pasosDeLaVersion(admin, versionId)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  });
+});
+
+describe("control de la limpieza (se corre el último: ve todos los pasos que creó el archivo)", () => {
+  it("la corrida creó pasos, así que los ceros del afterAll miran algo", () => {
+    // Sólo tiene sentido con el archivo entero: `pasosCreados` lo llenan los demás `it`, que corren antes. Una corrida filtrada que no lo selecciona no lo ejecuta, y
+    // por eso este control ya no tumba el `afterAll` de un `-t` que no crea pasos.
+    expect(pasosCreados.length).toBeGreaterThan(0);
   });
 });

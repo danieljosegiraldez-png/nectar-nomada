@@ -30,7 +30,8 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { deleteTestOrganizations } from "../helpers/testOrganization";
 
-const RUN = `pasos-${Date.now()}`;
+// Prefijo PROPIO (F2-10): `pasos-` es el de `pasos.test.ts`, y los dos archivos corren en paralelo; en el mismo milisegundo el `afterAll` de uno (`contains: RUN`) borraba lo del otro.
+const RUN = `esquema-${Date.now()}`;
 const AHORA = new Date("2026-03-02T12:00:00Z");
 type Tx = Prisma.TransactionClient;
 

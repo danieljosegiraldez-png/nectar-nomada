@@ -560,6 +560,82 @@ describe("la lista de recetas (/recipes)", () => {
     estado.puedeCrear = false;
     expect(aTexto(await pintar(await RecipesPage()))).not.toContain("Nueva receta");
   });
+
+  describe("el borrador se pinta y se cuenta sólo a quien puede escribir esa receta, como en el detalle (F2-0)", () => {
+    /** Una receta como la devuelve `listRecipes`: con su organización escalar y sus versiones, la más alta primero. */
+    const recetaDeLista = (id: string, organizationId: string | null, versions: { id: string; version: number; status: string }[]) => ({
+      id,
+      name: `Receta ${id}`,
+      description: null,
+      esLibre: false,
+      organizationId,
+      organization: organizationId === null ? null : { name: `Finca ${organizationId}` },
+      versions,
+    });
+    const DOS = [{ id: "a2", version: 2, status: "draft" }, { id: "a1", version: 1, status: "approved" }];
+
+    it("v2 borrador + v1 publicada: el lector sin autoría no ve «Borrador» ni lo cuenta, y el autor sí; y la cuenta es la que da el detalle de la misma receta", async () => {
+      estado.recetas = [recetaDeLista("a", "org1", DOS)];
+      estado.puede = () => false;
+      const lector = aTexto(await pintar(await RecipesPage()));
+      expect(lector).toContain("Publicada: v1");
+      expect(lector).not.toContain("Borrador");
+      expect(lector).toContain("1 versión(es)");
+      expect(lector).not.toContain("2 versión(es)");
+
+      estado.puede = () => true;
+      const autor = aTexto(await pintar(await RecipesPage()));
+      expect(autor).toContain("Publicada: v1");
+      expect(autor).toContain("Borrador: v2");
+      expect(autor).toContain("2 versión(es)");
+
+      // La misma receta en el detalle dice la misma cuenta, para el lector y para el autor: la lista y el detalle ya no se contradicen.
+      estado.receta = receta([version("v2", 2, "draft"), version("v1", 1, "approved")]);
+      estado.puede = () => false;
+      expect(aTexto(await pintarReceta())).toContain("1 versión(es)");
+      estado.puede = () => true;
+      expect(aTexto(await pintarReceta())).toContain("2 versión(es)");
+    });
+
+    it("sólo un borrador: el lector lo ve «sin versión publicada», sin borrador y con 0 versiones; el autor lo ve con su borrador", async () => {
+      estado.recetas = [recetaDeLista("b", "org1", [{ id: "b1", version: 1, status: "draft" }])];
+      estado.puede = () => false;
+      const lector = aTexto(await pintar(await RecipesPage()));
+      expect(lector).toContain("Receta b");
+      expect(lector).toContain("Sin versión publicada");
+      expect(lector).not.toContain("Borrador");
+      expect(lector).toContain("0 versión(es)");
+      estado.puede = () => true;
+      const autor = aTexto(await pintar(await RecipesPage()));
+      expect(autor).toContain("Borrador: v1");
+      expect(autor).toContain("1 versión(es)");
+    });
+
+    it("se decide por la organización de CADA receta: la que puede escribir ve su borrador y la de otra organización no (y una plantilla se pregunta con organización nula)", async () => {
+      estado.recetas = [
+        recetaDeLista("propia", "org1", DOS),
+        recetaDeLista("ajena", "org2", DOS),
+        recetaDeLista("plantilla", null, DOS),
+      ];
+      const preguntadas: (string | null)[] = [];
+      estado.puede = (organizacion) => {
+        preguntadas.push(organizacion);
+        return organizacion === "org1";
+      };
+      const html = aTexto(await pintar(await RecipesPage()));
+      // Una tarjeta por receta: se parte el texto por el nombre y se mira cada trozo.
+      const trozos = html.split(/(?=Receta (?:propia|ajena|plantilla))/);
+      const de = (nombre: string) => trozos.find((t) => t.startsWith(`Receta ${nombre}`)) ?? "";
+      expect(de("propia")).toContain("Borrador: v2");
+      expect(de("propia")).toContain("2 versión(es)");
+      expect(de("ajena")).not.toContain("Borrador");
+      expect(de("ajena")).toContain("1 versión(es)");
+      expect(de("plantilla")).not.toContain("Borrador");
+      expect(de("plantilla")).toContain("1 versión(es)");
+      // Se preguntó por las tres organizaciones (la de la plantilla es nula): la decisión no sale de una sola respuesta para toda la lista.
+      expect([...new Set(preguntadas)].sort()).toEqual([null, "org1", "org2"]);
+    });
+  });
 });
 
 describe("la receta nueva (/recipes/new)", () => {
