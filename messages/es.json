@@ -4210,5 +4210,9 @@
     "yo": "Yo ({name})",
     "deEstaFinca": "De esta finca",
     "equipoNectarNomada": "Equipo Néctar Nómada"
+  },
+  "SinConexion": {
+    "versionGuardada": "Sin conexión. Esto es lo que se guardó el {cuando}; puede haber cambiado.",
+    "versionGuardadaSinHora": "Sin conexión. Esto es una versión guardada; puede haber cambiado."
   }
 }

@@ -4210,5 +4210,9 @@
     "yo": "Me ({name})",
     "deEstaFinca": "From this farm",
     "equipoNectarNomada": "Néctar Nómada team"
+  },
+  "SinConexion": {
+    "versionGuardada": "Offline. This is what was saved on {cuando}; it may have changed.",
+    "versionGuardadaSinHora": "Offline. This is a saved version; it may have changed."
   }
 }

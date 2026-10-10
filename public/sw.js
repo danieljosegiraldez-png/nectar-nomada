@@ -34,7 +34,11 @@ const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.pn
 // agrupa el trabajo del día no abre sin señal, que es justo cuando se usa.
 // `/plots` llevaba fuera desde antes y es del café: esa página tiene OCHO
 // formularios de captura, y `/lots` —que sí estaba— es otra cosa.
-const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/field-sessions", "/lots", "/plots"];
+//
+// `/beneficio` entró con R2 del plan farm-to-green (ADR-197, 2026-10-09) y no por capturar: el
+// jefe de beneficio la LEE en el patio, sin red. Va declarada aparte en la misma prueba. Sus
+// formularios siguen necesitando red: esto sólo hace la página alcanzable.
+const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/beneficio", "/field-sessions", "/lots", "/plots"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -108,8 +112,38 @@ async function networkFirstNavigation(request) {
     return response;
   } catch {
     const cached = await caches.match(request, { cacheName: PAGE_CACHE });
-    if (cached) return cached;
+    if (cached) return servirComoGuardada(cached);
     const offline = await caches.match(OFFLINE_URL, { cacheName: SHELL_CACHE });
     return offline || Response.error();
   }
+}
+
+/**
+ * Una página guardada se sirve MARCADA — R2 del plan farm-to-green (ADR-197), 2026-10-09. Hasta
+ * entonces se enseñaba sin red como si fuera la actual. La hora sale de la cabecera `date` que el
+ * servidor puso al responder, que es cuándo se generó lo que se ve; sin ella, la marca va vacía y
+ * el aviso dice «una versión guardada» sin inventar cuándo.
+ *
+ * `content-length` y `content-encoding` se quitan: el cuerpo cambia de largo y ya viene
+ * descomprimido.
+ */
+async function servirComoGuardada(cached) {
+  const fecha = new Date(cached.headers.get("date") || "");
+  const guardadaEl = Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+  const html = marcarComoGuardada(await cached.text(), guardadaEl);
+  const headers = new Headers(cached.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  return new Response(html, { status: cached.status, statusText: cached.statusText, headers });
+}
+
+/**
+ * Pone `<meta name="nn-guardada-el" content="<ISO>">` justo después del primer `<head>`. Sólo una
+ * fecha ISO llega al HTML; cualquier otra cosa se escribe vacía. El reemplazo es una FUNCIÓN y no
+ * una cadena, para que un `$` del HTML no se interprete. Lo prueba `tests/sync/versionGuardada.test.ts`.
+ */
+function marcarComoGuardada(html, guardadaEl) {
+  const valor =
+    typeof guardadaEl === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(guardadaEl) ? guardadaEl : "";
+  return html.replace(/<head(\s[^>]*)?>/i, (cabecera) => `${cabecera}<meta name="nn-guardada-el" content="${valor}">`);
 }

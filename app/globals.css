@@ -1291,6 +1291,13 @@ a.nn-card-link:active {
   background: var(--nn-accent-bg);
 }
 
+/* Página servida SIN RED desde lo guardado — R2 (ADR-197). Los mismos tonos de aviso que ya
+   usan otros mensajes de la casa: no es un error, es un dato que puede estar viejo. */
+.nn-notice-viejo {
+  border-color: var(--nn-warn-border, #e0c07a);
+  background: var(--nn-warn-bg, #fdf6e6);
+}
+
 .nn-installation-overview {
   margin-block: 1.5rem;
   padding: clamp(1rem, 3vw, 1.5rem);
