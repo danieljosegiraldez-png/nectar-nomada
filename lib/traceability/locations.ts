@@ -16,6 +16,7 @@ import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import { validarRango, type RangoInvalido } from "../territorio/rejilla";
 import type { ScopeTarget } from "../rbac/types";
+import { UUID } from "../validation/uuid";
 import type { Aspect, GridOrigin, LocationType, MotivoDeSeleccion, Prisma, ShadePercentageBracket, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
@@ -186,6 +187,12 @@ export async function requireLocationAttributeAccess(userAccountId: string, loca
   // A location that does not exist is refused rather than treated as public:
   // defaulting a missing record to the most permissive level is how a gate
   // gets bypassed by a bad id.
+  //
+  // Y un id sin forma de UUID tampoco llega a la base: Postgres rechazaría la
+  // conversión y Prisma lanzaría `P2007`, que ninguna de las ocho páginas que
+  // entran por aquí atrapa — daban 500 (PENDING_IMPLEMENTATIONS/026). Se trata
+  // como lo que es, una ubicación que no existe.
+  if (!UUID.test(locationId)) throw new LocationAccessError("location_not_found");
   const location = await prisma.location.findUnique({
     where: { id: locationId },
     select: { classification: true },
