@@ -89,7 +89,7 @@ export default async function EquiposPage({
             formulario, así que el enlace no puede prometer lo que el destino niega. */}
         {puedeRegistrarEquipo ? (
           <>
-            <Link href="/equipos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+            <Link href="/equipos/nuevo" className="nn-button">
               {t("botonNuevo")}
             </Link>{" "}
           </>

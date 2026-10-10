@@ -76,7 +76,7 @@ export default async function ProtocolDetailPage({ params }: { params: Promise<{
               {version.status !== "active" ? (
                 <ActivateVersionForm protocolId={protocol.id} protocolVersionId={version.id} />
               ) : null}
-              <Link href={`/research/execute/${version.id}`} className="nn-button" style={{ textDecoration: "none", fontSize: "0.85rem", padding: "0.25rem 0.6rem" }}>
+              <Link href={`/research/execute/${version.id}`} className="nn-button" style={{ fontSize: "0.85rem", padding: "0.25rem 0.6rem" }}>
                 {t("executeButton")}
               </Link>
             </div>

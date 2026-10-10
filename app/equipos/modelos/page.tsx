@@ -93,7 +93,7 @@ export default async function ModelosPage({
         {/* Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica. Mismos dos
             predicados que usa `/equipos/modelos/nuevo` para decidir si pinta su formulario. */}
         {puedeCrearModelo ? (
-        <Link href="/equipos/modelos/nuevo" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+        <Link href="/equipos/modelos/nuevo" className="nn-button">
           {t("modeloNuevo")}
         </Link>
         ) : null}
