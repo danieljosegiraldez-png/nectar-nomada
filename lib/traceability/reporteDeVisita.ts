@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
+import { ZONA_POR_DEFECTO } from "../time/mostrarInstante";
 import { recordAuditEvent } from "../audit";
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
 import { FieldSessionValidationError } from "./fieldSessions";
@@ -35,7 +36,24 @@ export interface EmitirReporteInput {
 
 /** Lo que se congela. Deliberadamente plano y sin ids internos donde se puede. */
 export interface SnapshotDeVisita {
-  sitio: { nombre: string; tipo: string; zona?: string | null };
+  sitio: {
+    nombre: string;
+    tipo: string;
+    /**
+     * **La zona en que se leen las horas, congelada al emitir** (PR-1 de la revisión del #674,
+     * Daniel, 2026-10-10): la del sitio o, si no la declara, `ZONA_POR_DEFECTO`. Hasta entonces se
+     * congelaba la del sitio tal cual, y un apiario dado de alta desde la aplicación —que no tiene
+     * zona— imprimía su informe en UTC: una visita a las 19:30 salía «día siguiente 00:30».
+     *
+     * Opcional porque lo ya emitido puede no traerla, y esos se siguen leyendo en UTC rotulado
+     * (`fechaDelReporte`): no se sabe en qué zona se emitieron, y un documento entregado no se
+     * reinterpreta.
+     */
+    zona?: string | null;
+    /** Si la zona la declaró el sitio (`true`) o es el respaldo de la casa (`false`). Falta en lo
+     *  emitido antes de que existiera. */
+    zonaDeclarada?: boolean;
+  };
   visita: {
     inicio: string;
     fin: string | null;
@@ -166,7 +184,12 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
   });
 
   const snapshot: SnapshotDeVisita = {
-    sitio: { nombre: visita.location.name, tipo: visita.location.locationType, zona: visita.location.timezone },
+    sitio: {
+      nombre: visita.location.name,
+      tipo: visita.location.locationType,
+      zona: visita.location.timezone ?? ZONA_POR_DEFECTO,
+      zonaDeclarada: visita.location.timezone != null,
+    },
     visita: {
       inicio: visita.startedAt.toISOString(),
       fin: visita.endedAt?.toISOString() ?? null,

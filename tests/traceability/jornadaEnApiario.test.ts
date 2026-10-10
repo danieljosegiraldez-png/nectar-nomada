@@ -18,6 +18,7 @@ import {
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
+import { fechaDelReporte } from "../../lib/traceability/presentacionDelReporte";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import {
@@ -445,6 +446,43 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     const guardado = await prisma.reportVersion.findUniqueOrThrow({ where: { id: version.id } });
     const congelado = guardado.renderedSnapshot as unknown as { visita: { notas: string } };
     expect(congelado.visita.notas, "el snapshot siguió a los datos vivos: no está congelado").toBe("notas originales");
+  });
+
+  it("UN SITIO SIN ZONA emite el informe en la hora de Panamá, anotada como zona por defecto", async () => {
+    // PR-1 de la revisión del #674 (Daniel, 2026-10-10). Un apiario dado de alta desde la
+    // aplicación no tiene zona, y su informe imprimía las horas en UTC: una visita a las 19:30 de
+    // Panamá salía «día siguiente 00:30». Este fixture tampoco la tiene, que es justo el caso.
+    const sitio = await prisma.location.findUniqueOrThrow({ where: { id: apiarioId }, select: { timezone: true } });
+    expect(sitio.timezone, "el caso exige un sitio SIN zona").toBeNull();
+    // Hora propia, única en el archivo: 00:30 UTC del 7 es el 6 a las 19:30 en Panamá.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-07T00:30:00Z") });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se lee lo CONGELADO, no lo que devolvió la emisión.
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido?.snapshot.sitio.zona).toBe("America/Panama");
+    expect(leido?.snapshot.sitio.zonaDeclarada, "la zona no la declaró el sitio: es el respaldo").toBe(false);
+    expect(fechaDelReporte(leido!.snapshot.visita.inicio, leido!.snapshot.sitio.zona)).toBe("2026-09-06 19:30 (America/Panama)");
+  });
+
+  it("y un sitio CON zona usa la suya, anotada como declarada", async () => {
+    // Control de la de arriba: sin él, congelar siempre «America/Panama» la pasaría. La zona de
+    // prueba tiene OTRO desfase que Panamá (UTC−6 contra UTC−5), para que la hora también lo diga.
+    await prisma.location.update({ where: { id: apiarioId }, data: { timezone: "America/Costa_Rica" } });
+    try {
+      const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-08T00:30:00Z") });
+      await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+      await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+      const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+      expect(leido?.snapshot.sitio.zona).toBe("America/Costa_Rica");
+      expect(leido?.snapshot.sitio.zonaDeclarada).toBe(true);
+      expect(fechaDelReporte(leido!.snapshot.visita.inicio, leido!.snapshot.sitio.zona)).toBe("2026-09-07 18:30 (America/Costa_Rica)");
+    } finally {
+      // El sitio es de todo el archivo: se devuelve sin zona aunque la prueba falle.
+      await prisma.location.update({ where: { id: apiarioId }, data: { timezone: null } });
+    }
   });
 
   it("congela masa de alimento y unidad sin inventar volumen de jarabe", async () => {
