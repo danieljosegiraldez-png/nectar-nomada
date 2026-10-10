@@ -72,6 +72,26 @@ export interface SnapshotDeVisita {
       temperamento: string | null;
       nota: string | null;
       valoracion: string | null;
+      /**
+       * **La sanidad, congelada** (PR-2 de la revisión del #674, Daniel, 2026-10-10). Hasta entonces
+       * el informe no guardaba nada de esto, y si después se corregía la inspección, el documento
+       * entregado no tenía cómo decir lo que se vio aquel día.
+       *
+       * Las irregularidades van **por su nombre**, no por su id: el informe es plano y se lee sin
+       * consultar el catálogo, que puede cambiar. `otraSenal` es el texto libre del «Otro» con que
+       * termina esa lista (`pestDiseaseFlags`).
+       *
+       * **Opcionales, y ausente no es vacío.** Lo emitido antes no los trae y la pantalla no pinta
+       * esas filas; lo emitido después los trae siempre, con `null` o `[]` cuando no se registraron,
+       * y la pantalla dice «Sin registrar».
+       */
+      irregularidades?: string[];
+      otraSenal?: string | null;
+      celdasReales?: { tipo: string | null; cuantas: number | null };
+      criaDeZangano?: boolean | null;
+      marcosNegros?: number | null;
+      mielJuntoACria?: boolean | null;
+      polenJuntoACria?: boolean | null;
     };
     alimentacion?: { tipo: string | null; material: string | null; cantidad: string | null; unidad: string | null };
   }>;
@@ -146,7 +166,9 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       // listado de tipos de fila. El identificador NO es un id interno: es justo el dato con
       // el que el cliente sigue su servicio.
       inspection: {
-        select: { outcome: true, population: true, beeCoveredFrames: true, queenSighted: true, broodPattern: true, broodStages: true, honeyStoresLevel: true, pollenStoresLevel: true, temperament: true, note: true, assessment: true, colony: { select: { hive: { select: { identifier: true } } } } },
+        select: { outcome: true, population: true, beeCoveredFrames: true, queenSighted: true, broodPattern: true, broodStages: true, honeyStoresLevel: true, pollenStoresLevel: true, temperament: true, note: true, assessment: true, colony: { select: { hive: { select: { identifier: true } } } },
+          irregularities: { select: { value: { select: { value: true, displayOrder: true } } } },
+          pestDiseaseFlags: true, queenCellKind: true, queenCellCount: true, droneBroodPresent: true, darkFrames: true, honeyNextToBrood: true, pollenNextToBrood: true },
       },
       colonyEvent: {
         select: {
@@ -199,6 +221,16 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         temperamento: e.inspection.temperament,
         nota: e.inspection.note,
         valoracion: e.inspection.assessment,
+        // En el orden del formulario, que es el del catálogo.
+        irregularidades: [...e.inspection.irregularities]
+          .sort((a, b) => a.value.displayOrder - b.value.displayOrder || a.value.value.localeCompare(b.value.value))
+          .map((i) => i.value.value),
+        otraSenal: e.inspection.pestDiseaseFlags,
+        celdasReales: { tipo: e.inspection.queenCellKind, cuantas: e.inspection.queenCellCount },
+        criaDeZangano: e.inspection.droneBroodPresent,
+        marcosNegros: e.inspection.darkFrames,
+        mielJuntoACria: e.inspection.honeyNextToBrood,
+        polenJuntoACria: e.inspection.pollenNextToBrood,
       } } : {}),
       ...(e.colonyEvent?.eventType === "feeding" ? { alimentacion: {
         tipo: e.colonyEvent.feedingMaterialKind,
