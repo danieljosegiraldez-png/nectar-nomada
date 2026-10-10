@@ -21,10 +21,11 @@ import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
 const RUN = `puedecrear-${Date.now()}`;
 const cuentas = fabricaDeCuentas("PuedeCrear");
+/** Cada organización, apenas se crea (F2-4): el `afterAll` no puede heredar las variables de un `beforeAll` que pudo morir a medias. */
+const organizaciones: string[] = [];
 
 let orgId: string;
 let lugarId: string;
-let loteId: string;
 let gestor: string;
 let jefe: string;
 let capataz: string;
@@ -33,14 +34,14 @@ let ambos: string;
 beforeAll(async () => {
   const org = await prisma.organization.create({ data: { name: `PUEDECREAR Org ${RUN}`, organizationType: "farm" } });
   orgId = org.id;
+  organizaciones.push(org.id);
   const lugar = await prisma.location.create({
     data: { name: `TEST-PUEDECREAR-${randomUUID()}`, locationType: "site", classification: "internal", organizationId: org.id },
   });
   lugarId = lugar.id;
-  const lote = await prisma.lot.create({
+  await prisma.lot.create({
     data: { lotCode: `PUEDECREAR-${RUN}`, lotType: "cherry", organizationId: org.id, locationId: lugar.id, classification: "internal" },
   });
-  loteId = lote.id;
   gestor = await cuentas.cuenta("Coffee Process Manager", "plataforma");
   jefe = await cuentas.cuenta("Farm Manager", { locationId: lugarId });
   capataz = await cuentas.cuenta("Farm Operator", { locationId: lugarId });
@@ -52,12 +53,20 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Las cuentas (y sus asignaciones, también la que se añadió a mano: la fábrica borra por cuenta) antes que la finca; el lote antes que la organización.
+  // Las cuentas (y sus asignaciones, también la que se añadió a mano: la fábrica borra por cuenta, y el ámbito de la finca que creó) antes que la finca.
   await cuentas.limpiar();
-  await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [loteId] } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [lugarId] } }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: [orgId] } }) });
+  // Todo lo demás se DESCUBRE —por las organizaciones registradas al crearlas y por el RUN—, no se hereda de las variables del `beforeAll` (F2-4): si éste moría después de crear
+  // la organización o la ubicación y antes de asignar el lote, `assertDefinedWhere([loteId])` abortaba la limpieza entera y dejaba esas filas. En orden de claves ajenas: lotes,
+  // ubicaciones, organizaciones.
+  const delRun = (await prisma.organization.findMany({ where: assertDefinedWhere({ name: { contains: RUN } }), select: { id: true } })).map((o) => o.id);
+  const orgs = [...new Set([...organizaciones, ...delRun])];
+  await prisma.lot.deleteMany({ where: assertDefinedWhere({ OR: [{ organizationId: { in: orgs } }, { lotCode: { contains: RUN } }] }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ organizationId: { in: orgs } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: orgs } }) });
+  // Lo que quede es basura de ESTA corrida: se cuenta por el RUN y por las organizaciones, las mismas dos vías con las que se descubrió.
   expect(await prisma.organization.count({ where: { name: { contains: RUN } } })).toBe(0);
+  expect(await prisma.lot.count({ where: { OR: [{ organizationId: { in: orgs } }, { lotCode: { contains: RUN } }] } })).toBe(0);
+  expect(await prisma.location.count({ where: { organizationId: { in: orgs } } })).toBe(0);
 });
 
 describe("puedeCrearRecetaEnAlguna sigue al permiso de autoría de recetas (V16)", () => {

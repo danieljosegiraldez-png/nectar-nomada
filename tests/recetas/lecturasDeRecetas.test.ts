@@ -12,7 +12,7 @@
  * Process Manager con un perfil operativo de más eludía además el filtro de la autoría. Ahora la ve quien opera ALGÚN lote de la organización o quien puede
  * escribir sus recetas, y las plantillas las ve quien opera algún lote en cualquier parte o tiene la autoría de plataforma. Las pruebas usan cuatro organizaciones
  * (A y D con recetas y con lotes, B con lotes y sin recetas, S con receta y sin lotes) y una organización de DOS parcelas (D), cuyo lote de la parcela 1 se crea
- * primero: es el que una lectura que mirara «el primer lote» encontraría, y el operario de la parcela 2 tiene que abrir igual.
+ * primero: es el que una lectura que mirara «el primer lote» encontraría. **F2-3:** hay un operario por parcela y los dos tienen que abrir y ver las recetas de D: lo que decide qué lote devuelve la base primero es el orden físico de las filas, que no se fija, así que con un solo operario una lectura que mire un único ámbito pasaba o no según ese orden.
  *
  * **R8: una Libre es lo que ocurrió en un lote.** `listRecipes` no trae ninguna, y `getRecipeForEditor` la abre sólo a quien VE el lote cuyo proceso la usa —y, si
  * una división la copió a varios lotes, a quien los ve todos—; quien sólo escribe recetas de la organización y no ve el lote no la lee (el perfil no lleva
@@ -283,10 +283,15 @@ describe("getRecipeForEditor: cada receta se lee por su organización, y una Lib
     await expect(getRecipeForEditor(gestorA, plantilla)).rejects.toBeInstanceOf(TraceabilityAccessError);
   });
 
-  it("el operario de UNA de las parcelas de una organización abre sus recetas, aunque la base devuelva primero el lote de la otra (R7)", async () => {
-    expect((await getRecipeForEditor(capatazD, recetaD)).id).toBe(recetaD);
-    // Control: la otra organización sigue cerrada para él.
-    await expect(getRecipeForEditor(capatazD, recetaA)).rejects.toBeInstanceOf(TraceabilityAccessError);
+  it("el operario de CADA una de las dos parcelas de una organización abre sus recetas, sea cual sea el lote que la base devuelva primero (R7, F2-3)", async () => {
+    // Antes sólo abría el de la parcela 2, y eso depende del orden en que Postgres devuelva los grupos de lotes (que no fija): una lectura que mirara un solo candidato
+    // (`ambitos.slice(0, 1)`, `slice(-1)`) sobrevivía 7 de 7 y 3 de 8. Con un operario por parcela, cualquier lectura que mire UN solo ámbito deja fuera a uno de los dos
+    // en cualquier orden, así que cae siempre.
+    expect(await prisma.lot.count({ where: { organizationId: fincaD.orgId } }), "control: D tiene tres lotes, en dos parcelas").toBe(3);
+    expect((await getRecipeForEditor(capatazD, recetaD)).id, "el de la parcela 2").toBe(recetaD);
+    expect((await getRecipeForEditor(capatazD1, recetaD)).id, "el de la parcela 1").toBe(recetaD);
+    // Control: la otra organización sigue cerrada para los dos.
+    for (const operario of [capatazD, capatazD1]) await expect(getRecipeForEditor(operario, recetaA)).rejects.toBeInstanceOf(TraceabilityAccessError);
   });
 
   it("una receta Libre la lee quien ve el lote cuyo proceso la usa; quien sólo escribe recetas de la organización y no ve el lote, no (R8)", async () => {
@@ -384,11 +389,14 @@ describe("listRecipes: cada cuenta ve las recetas de las organizaciones donde op
     expect(detodas).toEqual(expect.arrayContaining([recetaA, recetaD, recetaS, plantilla]));
   });
 
-  it("el operario de UNA de las parcelas de una organización ve sus recetas, aunque la base devuelva primero el lote de la otra (R7)", async () => {
-    const ids = (await listRecipes(capatazD)).map((r) => r.id);
-    expect(ids).toContain(recetaD);
-    expect(ids, "la de A es de otra organización").not.toContain(recetaA);
-    expect(ids, "la de S es de otra organización").not.toContain(recetaS);
+  it("el operario de CADA una de las dos parcelas de una organización ve sus recetas, sea cual sea el lote que la base devuelva primero (R7, F2-3)", async () => {
+    // La misma asimetría que tenía `getRecipeForEditor` (gemela de clase): con un solo operario, una lectura que mirara un único ámbito pasaba o no según el orden de la base.
+    for (const operario of [capatazD, capatazD1]) {
+      const ids = (await listRecipes(operario)).map((r) => r.id);
+      expect(ids).toContain(recetaD);
+      expect(ids, "la de A es de otra organización").not.toContain(recetaA);
+      expect(ids, "la de S es de otra organización").not.toContain(recetaS);
+    }
   });
 
   it("quien escribe recetas en una organización y opera otra ve las de las dos y ninguna más (R7)", async () => {
