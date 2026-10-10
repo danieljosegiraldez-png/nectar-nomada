@@ -15,7 +15,10 @@
  * - `leerReporteDeVisita` — `field-sessions/[id]/report`, que además sólo atrapaba `LocationAccessError`:
  *   con un UUID que no existe también daba 500;
  * - `requireFieldSessionAccess`, que hoy no es la primera en reventar en ninguna página pero recibe
- *   ids de fuera por `listFieldSessions` y por dos acciones.
+ *   ids de fuera por `listFieldSessions` y por dos acciones;
+ * - `fincaParaDestino` y `fincaParaLogotipo` — `fincas/[siteId]/destino` y `fincas/[siteId]/logotipo`.
+ *   Consultan la finca antes de llegar a `requireLocationAttributeAccess`, así que la guarda de ésta
+ *   no las cubría. A «no existe» contestan `null`, y la página da 404.
  *
  * **Las filas de cada función, y ninguna sobra:**
  *
@@ -35,6 +38,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../../lib/db";
 import { can } from "../../lib/rbac/service";
+import { fincaParaDestino } from "../../lib/traceability/destinoDeFinca";
+import { fincaParaLogotipo } from "../../lib/traceability/fincaLogo";
 import { puedeSubdividirParcela } from "../../lib/traceability/fincas";
 import { FieldSessionValidationError, getFieldSessionTimeline } from "../../lib/traceability/fieldSessions";
 import { contextoDeManejo } from "../../lib/traceability/intervenciones";
@@ -259,5 +264,23 @@ describe("leerReporteDeVisita con un id de la URL", () => {
 
   it("control: la jornada que existe, sin reporte emitido, devuelve null y no lanza", async () => {
     await expect(leerReporteDeVisita(usuario.userAccountId, jornadaId)).resolves.toBeNull();
+  });
+});
+
+describe.each([
+  ["fincaParaDestino", (id: string) => fincaParaDestino(usuario.userAccountId, id)],
+  ["fincaParaLogotipo", (id: string) => fincaParaLogotipo(usuario.userAccountId, id)],
+] as const)("%s con un id de la URL", (_nombre, leer) => {
+  it.each(IDS_BASURA)("«%s» contesta null, como a una finca que no existe", async (id) => {
+    await expect(leer(id)).resolves.toBeNull();
+  });
+
+  it("control: un UUID bien formado que no existe contesta lo mismo", async () => {
+    await expect(leer(randomUUID())).resolves.toBeNull();
+  });
+
+  it("control: la finca que existe se devuelve", async () => {
+    const finca = await leer(parcela.parentLocationId ?? "");
+    expect(finca?.id).toBe(parcela.parentLocationId);
   });
 });

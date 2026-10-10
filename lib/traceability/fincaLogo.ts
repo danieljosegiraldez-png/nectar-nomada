@@ -22,6 +22,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess, puedeGestionarAtributosDeUbicacion, LocationAccessError } from "./locations";
+import { UUID } from "../validation/uuid";
 
 export class FincaLogoValidationError extends Error {}
 
@@ -153,7 +154,10 @@ export async function urlDelLogotipo(logoAssetId: string | null): Promise<string
  * cambiarle el logotipo. `null` en cualquier otro caso — la página responde 404 sin distinguir.
  */
 export async function fincaParaLogotipo(userAccountId: string, siteId: string): Promise<{ id: string; name: string } | null> {
-  const sitio = await prisma.location.findUnique({ where: { id: siteId }, select: { id: true, name: true, locationType: true } });
+  // El id llega de la URL, y esta consulta va antes que `requireLocationAttributeAccess`, así que la
+  // guarda de ésa no la cubre. Sin forma de UUID, `P2007` y un 500 (PENDING_IMPLEMENTATIONS/026).
+  if (!UUID.test(siteId)) return null;
+  const sitio =await prisma.location.findUnique({ where: { id: siteId }, select: { id: true, name: true, locationType: true } });
   if (!sitio || sitio.locationType !== "site") return null;
   try {
     await requireLocationAttributeAccess(userAccountId, siteId);
