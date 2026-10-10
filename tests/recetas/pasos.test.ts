@@ -60,6 +60,7 @@ import {
   type TipoDePaso,
 } from "../../lib/recetas/vocabulario";
 import { requireLotAccess, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { boundsFor } from "../../lib/traceability/units";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -711,6 +712,162 @@ describe("§3.5 — cada tipo admite sólo sus ejes, y cada valor sale de su cat
     await rechaza(intenta(await conFin({ variable: "moisture", operador: "lte", valor: 150, unidad: "%" })), "fin_invalido");
     // Control.
     await agregar(versionId, null, await conFin({ variable: "moisture", operador: "lte", valor: 11, unidad: "%" }));
+  });
+});
+
+/**
+ * F2-5 (ronda 2 de la revisión final del PR-A): reglas de `validarPaso` y de `completar` que el servicio aplica y ninguna prueba ejercía. Se midió QUITANDO cada comprobación
+ * (69 mutantes de las dos funciones, contra este archivo, que es el único que ejecuta el `validarPaso` real; las demás pruebas simulan `pasos.ts`): 30 sobrevivían, 29 de ellas
+ * reglas de verdad. Estas pruebas cierran las de más riesgo —las que protegen un dato que llega a la base o a una lectura—, y cada una lleva su control al lado (el valor limpio, o
+ * el borde exacto, SÍ pasa), para que el rechazo no pase vacío. Los límites físicos salen de `boundsFor` (el registro de unidades), no se copian aquí.
+ */
+describe("F2-5 — bordes de validarPaso y completar que ninguna prueba ejercía", () => {
+  const intentaEn = (versionId: string) => (paso: PasoEditable) => agregarPaso(gestor, { recipeVersionId: versionId, despuesDeSeq: null, paso });
+  const sinPasos = async (versionId: string, mensaje: string) =>
+    expect(await prisma.processRecipeStep.count({ where: { recipeVersionId: versionId } }), mensaje).toBe(0);
+
+  it("la banda de humedad lleva sus dos extremos o ninguno: un máximo solo se rechaza igual que un mínimo solo", async () => {
+    const { versionId } = await borrador("f25-banda");
+    const intenta = intentaEn(versionId);
+    await rechaza(intenta(await pasoDe("drying", { humedadMaxPct: 12 })), "rango_invalido");
+    await rechaza(intenta(await pasoDe("drying", { humedadMinPct: 10 })), "rango_invalido");
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: la banda entera entra, y se lee igual.
+    await agregar(versionId, null, await pasoDe("drying", { humedadMinPct: 10, humedadMaxPct: 12 }));
+    const [guardado] = await pasosDeLaVersion(gestor, versionId);
+    expect([guardado!.humedadMinPct, guardado!.humedadMaxPct]).toEqual([10, 12]);
+  });
+
+  it("la temperatura del paso cabe en lo que una lectura puede valer: por debajo del mínimo y por encima del máximo, en el mínimo y en el máximo del paso; los límites exactos entran", async () => {
+    const limites = boundsFor("temperature");
+    expect(limites, "precondición: el registro de unidades conoce la temperatura").not.toBeNull();
+    const { min, max } = limites!;
+    const { versionId } = await borrador("f25-temperatura");
+    const intenta = intentaEn(versionId);
+    const tipo = tipoCon("temperatura");
+    // Cuatro casos, uno por campo y por lado: quitar un solo lado, o mirar un solo campo, deja pasar el suyo.
+    for (const [campo, valor] of [["temperaturaMinC", min - 1], ["temperaturaMaxC", min - 1], ["temperaturaMinC", max + 1], ["temperaturaMaxC", max + 1]] as const) {
+      await rechaza(intenta(await pasoDe(tipo, { [campo]: valor })), "rango_invalido");
+    }
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: los límites exactos entran —el borde es de ellos—, y se leen igual.
+    await agregar(versionId, null, await pasoDe(tipo, { temperaturaMinC: min, temperaturaMaxC: max }));
+    const [guardado] = await pasosDeLaVersion(gestor, versionId);
+    expect([guardado!.temperaturaMinC, guardado!.temperaturaMaxC]).toEqual([min, max]);
+  });
+
+  it("una condición de fin lleva un valor finito y posible: NaN y lo que queda por debajo del mínimo se rechazan (como lo que pasa del máximo); los dos extremos exactos entran", async () => {
+    const limites = boundsFor("moisture");
+    expect(limites, "precondición: el registro de unidades conoce la humedad").not.toBeNull();
+    const { min, max, canonicalUnit } = limites!;
+    const { versionId } = await borrador("f25-fin-valor");
+    const intenta = intentaEn(versionId);
+    const conValor = (valor: number) => pasoDe("drying", { fines: [{ variable: "moisture", operador: "lte", valor, unidad: canonicalUnit }] });
+    // `NaN` compara falso con todo: sin la comprobación de finitud, `valor < min || valor > max` lo deja pasar a la base.
+    for (const malo of [Number.NaN, min - 1, max + 1]) await rechaza(intenta(await conValor(malo)), "fin_invalido");
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: los extremos exactos entran, y el cero se lee como cero.
+    await agregar(versionId, null, await conValor(min));
+    await agregar(versionId, 1, await conValor(max));
+    expect((await pasosDeLaVersion(gestor, versionId)).flatMap((p) => p.fines.map((f) => f.valor))).toEqual([min, max]);
+  });
+
+  it("una condición de fin lleva un operador que existe: gte o lte", async () => {
+    const { versionId } = await borrador("f25-fin-operador");
+    const conOperador = (operador: "gte" | "lte") => pasoDe("drying", { fines: [{ variable: "moisture", operador, valor: 11, unidad: "%" }] });
+    await rechaza(intentaEn(versionId)(await conOperador("eq" as never)), "fin_invalido");
+    await sinPasos(versionId, "el rechazo no dejó un paso");
+    await agregar(versionId, null, await conOperador("gte"));
+    await agregar(versionId, 1, await conOperador("lte"));
+    expect((await pasosDeLaVersion(gestor, versionId)).flatMap((p) => p.fines.map((f) => f.operador))).toEqual(["gte", "lte"]);
+  });
+
+  it("una lectura de cierre en blanco es «no cita ninguna»: el fin se guarda sin lectura, también si son espacios", async () => {
+    const { versionId } = await borrador("f25-fin-lectura");
+    for (const blanco of ["", "   "]) {
+      await agregar(versionId, null, await pasoDe("drying", { fines: [{ variable: "moisture", operador: "lte", valor: 11, unidad: "%", desdeLecturaId: blanco }] }));
+    }
+    expect((await pasosDeLaVersion(gestor, versionId)).flatMap((p) => p.fines.map((f) => f.desdeLecturaId))).toEqual([null, null]);
+  });
+
+  it("una cantidad y su unidad van juntas en los dos sentidos: la unidad en blanco (o de espacios) con cantidad, y la unidad sin cantidad, se rechazan; una unidad con espacios se guarda recortada", async () => {
+    const { versionId } = await borrador("f25-adicion-unidad");
+    const intenta = intentaEn(versionId);
+    const doble = await valor("sustrato_anadido", "doble_mosto");
+    const conAdicion = (cantidad: number | null, unidad: string | null) =>
+      pasoDe("addition", { adiciones: [{ categoriaValueId: doble, cantidad, unidad, momento: "pre_green" }] });
+    for (const unidad of ["", "   "]) await rechaza(intenta(await conAdicion(2, unidad)), "adicion_invalida");
+    await rechaza(intenta(await conAdicion(null, "L")), "adicion_invalida");
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: ni cantidad ni unidad entra (una adición sin medir), y la unidad con espacios se recorta.
+    await agregar(versionId, null, await conAdicion(null, null));
+    await agregar(versionId, 1, await conAdicion(2, "  L  "));
+    expect((await pasosDeLaVersion(gestor, versionId)).flatMap((p) => p.adiciones.map((a) => [a.cantidad, a.unidad]))).toEqual([[null, null], [2, "L"]]);
+  });
+
+  it("una adición lleva su categoría y su momento: una categoría vacía y un momento que no es pre_green ni post_green se rechazan con adicion_invalida", async () => {
+    const { versionId } = await borrador("f25-adicion-datos");
+    const intenta = intentaEn(versionId);
+    const doble = await valor("sustrato_anadido", "doble_mosto");
+    const conAdicion = (categoriaValueId: string, momento: "pre_green" | "post_green") =>
+      pasoDe("addition", { adiciones: [{ categoriaValueId, momento }] });
+    for (const vacia of ["", "   "]) await rechaza(intenta(await conAdicion(vacia, "pre_green")), "adicion_invalida");
+    await rechaza(intenta(await conAdicion(doble, "otro" as never)), "adicion_invalida");
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: los dos momentos que existen entran.
+    for (const momento of ["pre_green", "post_green"] as const) await agregar(versionId, null, await conAdicion(doble, momento));
+    expect((await pasosDeLaVersion(gestor, versionId)).flatMap((p) => p.adiciones.map((a) => a.momento)).sort()).toEqual(["post_green", "pre_green"]);
+  });
+
+  it("las horas van en orden en los tres pares: la sugerida contra la máxima, y la mínima contra la máxima cuando falta la sugerida; los iguales entran", async () => {
+    const { versionId } = await borrador("f25-horas-orden");
+    const intenta = intentaEn(versionId);
+    await rechaza(intenta(await pasoDe("drying", { horasSugeridas: 100, horasMax: 50 })), "horas_invalidas");
+    await rechaza(intenta(await pasoDe("drying", { horasMin: 100, horasMax: 50 })), "horas_invalidas");
+    // El tercer par: la mínima por debajo de la sugerida, y la sugerida por encima de la máxima.
+    await rechaza(intenta(await pasoDe("drying", { horasMin: 10, horasSugeridas: 100, horasMax: 50 })), "horas_invalidas");
+    await sinPasos(versionId, "los rechazos no dejaron un paso");
+    // Control: en orden entran, y los iguales también (la base dice `<=`).
+    await agregar(versionId, null, await pasoDe("drying", { horasMin: 10, horasSugeridas: 50, horasMax: 100 }));
+    await agregar(versionId, null, await pasoDe("drying", { horasSugeridas: 50, horasMax: 50 }));
+  });
+
+  it("lo que no se dice se guarda con su valor por omisión: reglaDeFin «first», sin fin por tiempo y no opcional; lo que se dice, tal cual", async () => {
+    const { versionId } = await borrador("f25-omisiones");
+    await agregar(versionId, null, await pasoDe("washing"));
+    await agregar(versionId, 1, await pasoDe("washing", { reglaDeFin: "all", finPorTiempo: true, horasSugeridas: 4, opcional: true }));
+    const [sinDecir, dicho] = await pasosDeLaVersion(gestor, versionId);
+    expect([sinDecir!.reglaDeFin, sinDecir!.finPorTiempo, sinDecir!.opcional]).toEqual(["first", false, false]);
+    expect([dicho!.reglaDeFin, dicho!.finPorTiempo, dicho!.opcional]).toEqual(["all", true, true]);
+  });
+
+  it("un id de eje en blanco —o de espacios— es «no declarado»: no dispara eje_no_aplica en un tipo que no admite el eje, y el paso se guarda sin valor", async () => {
+    const { versionId } = await borrador("f25-ids-en-blanco");
+    for (const [campo, , , eje] of CATALOGOS_DE_CAMPO) {
+      for (const blanco of ["", "   "]) {
+        await agregar(versionId, null, await pasoDe(tipoSin(eje), { [campo]: blanco } as DatoDeEje));
+      }
+    }
+    const guardados = await pasosDeLaVersion(gestor, versionId);
+    expect(guardados.length, "doce pasos: seis campos, dos blancos cada uno").toBe(12);
+    for (const [campo] of CATALOGOS_DE_CAMPO) {
+      expect(guardados.map((p) => p[campo as keyof PasoEditable]).filter((v) => v !== null), `${campo} quedó sin valor en todos`).toEqual([]);
+    }
+  });
+
+  it("la intención en blanco es «no declarada» (nula, no una cadena vacía), y la que trae espacios se guarda recortada", async () => {
+    const { versionId } = await borrador("f25-intencion");
+    await agregar(versionId, null, await pasoDe("washing", { intencion: "   " }));
+    await agregar(versionId, 1, await pasoDe("washing", { intencion: "  lavar sin prisa  " }));
+    expect((await pasosDeLaVersion(gestor, versionId)).map((p) => p.intencion)).toEqual([null, "lavar sin prisa"]);
+  });
+
+  it("las capacidades requeridas se recortan, se ignoran las en blanco y no se repiten", async () => {
+    const { versionId } = await borrador("f25-capacidades");
+    const capacidad = await primerValor("capacidad");
+    await agregar(versionId, null, await pasoDe("washing", { capacidadesRequeridas: [`  ${capacidad}  `, capacidad, "", "   "] }));
+    const [guardado] = await pasosDeLaVersion(gestor, versionId);
+    expect(guardado!.capacidadesRequeridas).toEqual([capacidad]);
   });
 });
 
