@@ -24,6 +24,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { rotuloDeVersion } from "../../../../lib/recetas/rotuloDeVersion";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError, puedeGestionarLote } from "../../../../lib/traceability/lots";
 import {
@@ -108,7 +109,7 @@ export default async function ProcesoDeLotePage({ params }: { params: Promise<{ 
   // llame igual en las dos pantallas.
   const recetas = (await listRecipeVersionsForLot(user.userAccountId, lot.id)).map((v) => ({
     id: v.id,
-    label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
+    label: rotuloDeVersion(v, t),
   }));
 
   // Parte 1, R7: el proceso que CUBRE al lote, que puede vivir en un ancestro. Una mezcla no tiene vigente.

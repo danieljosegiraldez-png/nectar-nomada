@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { rotuloDeVersion } from "../../../../../lib/recetas/rotuloDeVersion";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../../../../lib/traceability/processTargets";
@@ -41,7 +42,7 @@ export default async function NewRoastPage({ params }: { params: Promise<{ id: s
   // — filtra por eso y nada más—, así que sirve tal cual.
   const perfiles = (await listRecipeVersionsForLot(user.userAccountId, id)).map((v) => ({
     id: v.id,
-    label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
+    label: rotuloDeVersion(v, t),
   }));
   const [muestras, equiposVisibles] = await Promise.all([
     listGreenSamplesForRoast(user.userAccountId, id),

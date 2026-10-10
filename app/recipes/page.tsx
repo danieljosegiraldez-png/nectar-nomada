@@ -41,7 +41,8 @@ export default async function RecipesPage() {
 
       <section className="nn-section">
         {visibles.length === 0 ? (
-          <p className="nn-muted">{t("recipesEmpty")}</p>
+          // F1-8: «crea una, añádele pasos y publícala» explica un acto que sólo hace quien puede crear recetas; a los demás, sólo que no hay ninguna.
+          <p className="nn-muted">{puedeCrearReceta ? t("recipesEmpty") : t("recipesEmptyLector")}</p>
         ) : (
           visibles.map((r) => {
             const publicada = r.versions.find((v) => v.status === "approved");

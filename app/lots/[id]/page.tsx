@@ -5,6 +5,7 @@ import { inspeccionesParaMedicion } from "../../../lib/traceability/measurements
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { rotuloDeVersion } from "../../../lib/recetas/rotuloDeVersion";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
 import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
@@ -216,7 +217,7 @@ export default async function LotDetailPage({
     esVerde && puedeRegistrar
       ? (await listRecipeVersionsForLot(user.userAccountId, lot.id)).map((v) => ({
           id: v.id,
-          label: `${v.recipe.name} · v${v.version} · ${v.targets.length} ${t("targetsCountSuffix")}`,
+          label: rotuloDeVersion(v, t),
         }))
       : [];
 

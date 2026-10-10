@@ -61,10 +61,12 @@ describe("los tipos de paso", () => {
     expect(definicion("tipo_paso", "fermentation")).toMatch(/resultados, no métodos/);
   });
 
-  it("la recepción dice cuándo se compara: al leer la ficha, no al abrir el proceso (diseño §4.5, registro D5)", () => {
-    // El aviso de la recepción no se guarda ni se calcula al abrir: se calcula al leer, desde la recepción y la versión.
-    expect(definicion("tipo_paso", "reception")).toMatch(/se compara, al leer la ficha, con las recepciones del lote/);
-    expect(definicion("tipo_paso", "reception"), "la frase vieja («al abrir el proceso») no vuelve").not.toMatch(/al abrir el proceso/);
+  it("la recepción no promete una comparación que todavía no existe: dice que ningún registro del proceso la cumple (diseño §4.5, F1-4)", () => {
+    // El aviso de la recepción (compararla, al leer la ficha, con las recepciones del lote) es del PR-B: la definición sembrada no lo cuenta como hecho.
+    const reception = definicion("tipo_paso", "reception");
+    expect(reception).toMatch(/Ningún registro del proceso la cumple\./);
+    expect(reception, "la comparación con las recepciones del lote es del PR-B").not.toMatch(/se compara|recepciones del lote/);
+    expect(reception, "la frase vieja («al abrir el proceso») no vuelve").not.toMatch(/al abrir el proceso/);
   });
 });
 

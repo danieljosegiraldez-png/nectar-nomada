@@ -538,6 +538,22 @@ describe("la lista de recetas (/recipes)", () => {
     expect(aTexto(await pintar(await RecipesPage()))).toContain("Todavía no hay recetas.");
   });
 
+  it("sin recetas, quien puede crear lee cómo se hace; quien no puede, sólo que no hay ninguna (F1-8)", async () => {
+    estado.recetas = [];
+    estado.puedeCrear = true;
+    const conPermiso = aTexto(await pintar(await RecipesPage()));
+    expect(conPermiso).toContain("Todavía no hay recetas. Crea una, añádele pasos y publícala");
+    // Quien no puede crear no lee un acto que no puede hacer (regla de Daniel, 2026-09-27: lo que no puedes hacer no se muestra ni se explica).
+    estado.puedeCrear = false;
+    const sinPermiso = aTexto(await pintar(await RecipesPage()));
+    expect(sinPermiso).toContain("Todavía no hay recetas.");
+    expect(sinPermiso).not.toMatch(/Crea una|añádele pasos|publícala/);
+    expect(sinPermiso).not.toContain("Nueva receta");
+    // Control: con recetas en la lista no sale ninguno de los dos textos de «vacío».
+    estado.recetas = [{ id: "a", name: "Lavado tradicional", description: null, esLibre: false, organization: { name: "Finca A" }, versions: [{ id: "a1", version: 1, status: "approved" }] }];
+    expect(aTexto(await pintar(await RecipesPage()))).not.toContain("Todavía no hay recetas.");
+  });
+
   it("«Nueva receta» sólo se ofrece a quien puede crear una", async () => {
     estado.puedeCrear = true;
     expect(aTexto(await pintar(await RecipesPage()))).toContain("Nueva receta");

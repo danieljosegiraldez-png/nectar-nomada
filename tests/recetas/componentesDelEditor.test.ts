@@ -28,6 +28,7 @@ import {
   type EjeDelPaso,
   type TipoDePaso,
 } from "../../lib/recetas/vocabulario";
+import { traductorDePrueba } from "../helpers/traductorDePrueba";
 import { aTexto, campos, controlesFueraDelFieldset, fieldsetDeshabilitado, formDataDeHtml, opciones, tieneCampo } from "../helpers/htmlDePrueba";
 
 vi.mock("next-intl", async () => {
@@ -293,6 +294,20 @@ describe("FormularioDePaso — lo que manda y lo que precarga", () => {
     expect(campos(durante, "metas[0][unit]")[0]).toMatch(/value="pH"/);
   });
 
+  it("la ayuda del ritmo de una meta dice lo que es cierto con sólo el PR-A: se guarda con el paso, y ninguna pantalla del lote avisa con él (F1-3)", () => {
+    const meta = { variable: "ph", targetValue: "3.8", minValue: "", maxValue: "", everyHours: "", note: "", unit: "pH" };
+    const durante = aTexto(conTipo("fermentation", { metas: [{ ...meta, moment: "during" }] }));
+    expect(durante).toContain("Se guarda con el paso; todavía ninguna pantalla del lote lo usa para avisar de lecturas.");
+    // La promesa vieja —«la lista dice si el lote te debe una lectura»— no vuelve: la cola, el tablero y el objetivo-contra-real leen sólo las metas SIN paso.
+    expect(durante).not.toMatch(/te debe una lectura|no puede decir si/);
+    // Control: sin «durante» no hay campo de ritmo y tampoco su ayuda.
+    expect(aTexto(conTipo("fermentation", { metas: [{ ...meta, moment: "final" }] }))).not.toContain("Se guarda con el paso");
+    // En inglés, lo mismo.
+    const ayuda = traductorDePrueba("Traceability", "en")("recetaEditor_metaCadaHorasAyuda");
+    expect(ayuda).toContain("saved with the step");
+    expect(ayuda).not.toMatch(/owes you a reading|cannot say/);
+  });
+
   it("las variables se rotulan con su texto, también las del panel que hasta esta tarea no lo tenían", () => {
     const html = conTipo("cold_hold", { metas: [{ variable: "cold_hold_plateau_duration", moment: "during", unit: "h", targetValue: "", minValue: "", maxValue: "", everyHours: "", note: "" }] });
     const textos = opciones(html, "metas[0][variable]");
@@ -383,7 +398,7 @@ describe("FormularioDePaso — los sinónimos del paquete se muestran en la ayud
   });
 });
 
-describe("FormularioDePaso — la recepción sólo vigila el Brix al llegar (I9)", () => {
+describe("FormularioDePaso — la recepción lleva una sola meta, la del Brix al llegar (I9)", () => {
   const fila = (variable: string, moment: "initial" | "during" | "final") => ({
     variable,
     moment,
@@ -396,7 +411,7 @@ describe("FormularioDePaso — la recepción sólo vigila el Brix al llegar (I9)
   });
 
   it("en una recepción cada meta lleva brix e «inicial» fijos, sin desplegables y con su unidad, y no se ofrece una segunda", () => {
-    // Una meta que alguien dejó como pH final se pinta —y se manda— como lo único que la recepción compara.
+    // Una meta que alguien dejó como pH final se pinta —y se manda— como la única que cabe en una recepción.
     const html = conTipo("reception", { metas: [fila("ph", "final")] });
     expect(campos(html, "metas[0][variable]")).toHaveLength(1);
     expect(campos(html, "metas[0][variable]")[0]).toMatch(/type="hidden"/);
@@ -405,7 +420,13 @@ describe("FormularioDePaso — la recepción sólo vigila el Brix al llegar (I9)
     expect(campos(html, "metas[0][moment]")[0]).toMatch(/value="initial"/);
     expect(campos(html, "metas[0][unit]")[0]).toMatch(/value="Bx"/);
     expect(tieneCampo(html, "metas[0][everyHours]")).toBe(false);
-    expect(aTexto(html)).toContain("En la recepción sólo se vigila el Brix al llegar");
+    // F1-4: el texto dice lo que cabe (una sola meta, la del Brix al llegar) y no promete que algo la compare o la vigile: esa lectura es del PR-B.
+    expect(aTexto(html)).toContain("En una recepción la meta es el Brix al llegar, y es una sola.");
+    expect(aTexto(html)).not.toMatch(/vigila|compara/);
+    // En inglés, lo mismo.
+    const ayudaEn = traductorDePrueba("Traceability", "en")("recetaEditor_metasDeRecepcionAyuda");
+    expect(ayudaEn).toContain("Brix on arrival");
+    expect(ayudaEn).not.toMatch(/watch|compar/i);
     expect(aTexto(html)).not.toContain("Añadir objetivo");
     // Control: sin ninguna meta sí se ofrece añadir la del Brix.
     expect(aTexto(conTipo("reception"))).toContain("Añadir objetivo");
@@ -414,7 +435,7 @@ describe("FormularioDePaso — la recepción sólo vigila el Brix al llegar (I9)
     expect(campos(fermentacion, "metas[0][variable]")[0]).toMatch(/^<select/);
     expect(opciones(fermentacion, "metas[0][moment]")).toHaveLength(3);
     expect(aTexto(fermentacion)).toContain("Añadir objetivo");
-    expect(aTexto(fermentacion)).not.toContain("En la recepción sólo se vigila el Brix");
+    expect(aTexto(fermentacion)).not.toContain("En una recepción la meta es el Brix");
   });
 });
 

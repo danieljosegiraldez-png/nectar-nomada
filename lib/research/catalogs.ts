@@ -789,7 +789,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "reception",
         definition:
-          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple: se compara, al leer la ficha, con las recepciones del lote.",
+          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple.",
       },
       {
         value: "sorting_flotation",

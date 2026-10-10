@@ -83,7 +83,7 @@ interface FilaDeMeta {
  * la NOTA del paquete (I6): a veces es la salvedad que impide leer la referencia como un hecho.
  *
  * **El mucílago es lo que QUEDA, en seis tramos** (Ruling M: 0 = Lavado, 100 = Honey): un desplegable, no un número libre. **Los sinónimos del paquete** (I7) salen en la
- * ayuda del eje cuyo catálogo es el de su destino. **En una recepción** (I9) las metas llevan `brix` e «inicial» fijos y es una sola: es lo único que la recepción compara.
+ * ayuda del eje cuyo catálogo es el de su destino. **En una recepción** (I9) las metas llevan `brix` e «inicial» fijos y es una sola: es lo único que cabe en ella.
  *
  * **Editar no puede perder datos.** Todo campo del paso se precarga (`inicial`), y la lectura de cierre de cada condición de fin se reenvía en un campo
  * oculto aunque no se enseñe: sin eso, guardar sin tocar nada se la llevaba. `tests/arquitectura/campos-con-dos-puertas.test.ts` exige que cada campo de `PasoEditable`
@@ -591,7 +591,7 @@ function CuerpoDelFormulario({
                 <input type="hidden" name={`metas[${i}][unit]`} value={unidadDe(variableFila)} />
                 {esRecepcion ? (
                   <>
-                    {/* I9: la recepción sólo compara el Brix inicial. Se manda fijo, sin desplegables. */}
+                    {/* I9: en una recepción sólo cabe el Brix inicial. Se manda fijo, sin desplegables. */}
                     <input type="hidden" name={`metas[${i}][variable]`} value="brix" />
                     <input type="hidden" name={`metas[${i}][moment]`} value="initial" />
                     <p style={{ margin: "0 0 0.5rem" }}>
@@ -686,7 +686,7 @@ function CuerpoDelFormulario({
                       onChange={(e) => cambiarMeta(m.key, { everyHours: e.target.value })}
                     />
                     <p className="nn-muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85em" }}>
-                      {t("recipeEveryHoursHint")}
+                      {t("recetaEditor_metaCadaHorasAyuda")}
                     </p>
                   </div>
                 ) : null}
