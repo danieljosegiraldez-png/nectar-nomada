@@ -825,7 +825,7 @@
     },
     {
       "archivo": "lib/recetas/versiones.ts",
-      "razon": "Parte 2a, tarea 4: `copiarContenidoDeVersion` recibe el cliente de la transacción de quien la llama (`nuevaVersionBorrador`, `derivarReceta` y `createRecipeVersion`) y copia dentro de ella pasos, adiciones, fines, requisitos, metas y fases de una versión a otra. No abre conexión ni transacción propia, y no autoriza: sus llamadores ya pidieron `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16)."
+      "razon": "Parte 2a, tarea 4: `copiarContenidoDeVersion` recibe el cliente de la transacción de quien la llama (`nuevaVersionBorrador` y `derivarReceta`, y —desde el PR-B— la conversión de una Libre de la tarea 11) y copia dentro de ella pasos, adiciones, fines, requisitos, metas y fases de una versión a otra. No abre conexión ni transacción propia, y no autoriza: sus llamadores ya pidieron `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16)."
     }
   ],
   "operaciones_sin_patron": [
@@ -1540,7 +1540,7 @@
     {
       "archivo": "lib/recetas/versiones.ts",
       "operacion": "copiarContenidoDeVersion",
-      "razon": "Copia lo que cuelga de una versión de receta a otra recién creada —pasos con sus adiciones, fines y requisitos; metas de paso con el paso remapeado al nuevo; metas de versión si se piden; y las fases sólo si el origen no tiene pasos (diseño §3.1)— dentro de la transacción del llamador. No recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (mismo archivo) después de `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta, o de plataforma si es una plantilla), y `createRecipeVersion` (lib/traceability/processTargets.ts) después de esa misma regla. Devuelve cuántas filas copió, no filas.",
+      "razon": "Copia lo que cuelga de una versión de receta a otra recién creada —pasos con sus adiciones, fines y requisitos; metas de paso con el paso remapeado al nuevo; metas de versión si se piden; y las fases sólo si el origen no tiene pasos (diseño §3.1)— dentro de la transacción del llamador. No recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (mismo archivo) después de `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta, o de plataforma si es una plantilla), y —desde el PR-B— la conversión de una Libre (`lib/recetas/convertir.ts`, tarea 11) después de esa misma regla. Devuelve cuántas filas copió, no filas.",
       "verificado": "2026-10-06"
     },
     {

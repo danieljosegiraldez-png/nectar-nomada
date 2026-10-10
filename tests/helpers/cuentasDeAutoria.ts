@@ -2,9 +2,9 @@
  * Cuentas de prueba con un perfil y un ámbito — Parte 2a, tarea 3 (2026-10-04).
  *
  * **Para qué existe.** Desde V16 escribir una receta es del Coffee Process Manager, y las pruebas de autoría (`pasos`,
- * `versiones`, `autoria`, `recipeAuthoring`, `recipeVersions`, `editarBeneficio`) necesitan la MISMA fila de preguntas: «una
- * cuenta de este perfil, en esta ubicación o en la plataforma». Cada una escribía su copia de `cuenta()`; seis copias son seis
- * sitios donde la limpieza se desvía. Aquí viven juntas la creación y la limpieza.
+ * `versiones`, `autoria`, `editarBeneficio`; hasta la Parte E de la tarea 14 también `recipeAuthoring` y `recipeVersions`)
+ * necesitan la MISMA fila de preguntas: «una cuenta de este perfil, en esta ubicación o en la plataforma». Cada una escribía su
+ * copia de `cuenta()`; seis copias eran seis sitios donde la limpieza se desvía. Aquí viven juntas la creación y la limpieza.
  *
  * - **Ámbito de plataforma:** el compartido (`ambitoDePlataforma`), que NUNCA se borra desde aquí.
  * - **Ámbito de ubicación:** único por (tipo, referencia). Se reutiliza si ya existe, y sólo se borra el que creó esta fábrica.

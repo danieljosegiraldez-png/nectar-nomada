@@ -35,15 +35,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
-import type { Prisma } from "../../generated/prisma/client";
-import {
-  createRecipeVersion,
-  createRecipeWithVersion,
-  listRecipeVersionsForLot,
-  ProcessTargetError,
-  validateTargets,
-  type CreateRecipeInput,
-} from "../../lib/traceability/processTargets";
+import type { Prisma, ProcessPhase } from "../../generated/prisma/client";
+import { listRecipeVersionsForLot, ProcessTargetError, validateTargets } from "../../lib/traceability/processTargets";
+import { crearRecetaEnBorrador } from "../../lib/recetas/versiones";
 import {
   actualizarPaso,
   agregarPaso,
@@ -79,10 +73,6 @@ const lotes: string[] = [];
 const organizaciones: string[] = [];
 /** Cada paso que se creó, también los que una prueba quitó después: su auditoría cuelga de su id. */
 const pasosCreados: string[] = [];
-
-const OBJETIVO: CreateRecipeInput["targets"] = [
-  { variable: "ph", moment: "final", phase: "fermentation", unit: "pH", targetValue: 3.8 },
-];
 
 async function valor(catalogo: string, value: string): Promise<string> {
   return (
@@ -122,15 +112,26 @@ function tipoSin(eje: EjeDelPaso): TipoDePaso {
 /** Una receta de la organización de prueba con su v1 en borrador (desde esta tarea, toda versión nace así). */
 async function borrador(
   nombre: string,
-  extra: { fases?: CreateRecipeInput["fases"]; organizationId?: string | null; autor?: string } = {},
+  extra: {
+    /** Filas de fase ya escritas en la versión, como las de una receta anterior a la 2a: sólo `publicarVersion` las reemplaza o las deja. */
+    fases?: readonly {
+      phase: ProcessPhase;
+      expectedHours?: number;
+      turnEveryHours?: number;
+      targetMoistureMinPct?: number;
+      targetMoistureMaxPct?: number;
+    }[];
+    organizationId?: string | null;
+    autor?: string;
+  } = {},
 ) {
-  const r = await createRecipeWithVersion(extra.autor ?? gestor, {
+  const r = await crearRecetaEnBorrador(extra.autor ?? gestor, {
     name: `PASOS ${nombre} ${RUN}`,
     organizationId: extra.organizationId === undefined ? organizationId : extra.organizationId,
-    targets: OBJETIVO,
-    fases: extra.fases,
   });
-  return { recipeId: r.id, versionId: r.versions[0]!.id };
+  // Un servicio que escribiera estas filas ya no existe (la tarea 14 borró el que las escribía): se escriben crudas, que es lo que eran —datos de antes—.
+  for (const f of extra.fases ?? []) await prisma.processRecipePhase.create({ data: { recipeVersionId: r.versionId, ...f } });
+  return r;
 }
 
 /** `agregarPaso`, guardando el id para la limpieza de la auditoría. */
@@ -234,14 +235,6 @@ describe("control: el vocabulario de la tarea 2 está en la base", () => {
 });
 
 describe("§3.3 — una versión nace borrador, y sólo un borrador se edita", () => {
-  it("createRecipeWithVersion deja la v1 en borrador, y createRecipeVersion la nueva también", async () => {
-    const { recipeId, versionId } = await borrador("nace");
-    expect((await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: versionId } })).status).toBe("draft");
-    const v2 = await createRecipeVersion(gestor, recipeId, OBJETIVO);
-    expect(v2.version).toBe(2);
-    expect(v2.status).toBe("draft");
-  });
-
   it("un borrador se edita por los cuatro caminos; publicado, por ninguno, y no se publica dos veces", async () => {
     const { versionId } = await borrador("publicada");
     // Control: en borrador, los cuatro caminos pasan.
@@ -922,6 +915,11 @@ describe("§3.2 — metas por paso", () => {
     expect(FASE_DEL_TIPO.prefermentacion, "precondición (tarea 2)").toBe("fermentation");
     expect(FASE_DEL_TIPO.fermentation, "precondición (tarea 2)").toBe("fermentation");
     const { versionId } = await borrador("metas");
+    // Una meta de la VERSIÓN (el pH final): el ayudante `borrador` la ponía de relleno mientras existió `createRecipeWithVersion`, y esta
+    // prueba la necesita para afirmar al final que las dos clases de meta conviven.
+    await prisma.processTarget.create({
+      data: { recipeVersionId: versionId, variable: "ph", moment: "final", phase: "fermentation", unit: "pH", targetValue: 3.8 },
+    });
     await agregar(versionId, null, await pasoDe("prefermentacion", { metas: [phInicial] }));
     await agregar(versionId, 1, await pasoDe("fermentation", { metas: [{ ...phInicial, minValue: 4.0, maxValue: 4.8 }] }));
     const delPaso = await prisma.processTarget.findMany({
@@ -1111,13 +1109,6 @@ describe("§3.3 — concurrencia: la versión y la receta se bloquean dentro de 
     ).toBe(1);
   }, 20000);
 
-  it("tres versiones nuevas a la vez se numeran 2, 3 y 4, sin choque", async () => {
-    const { recipeId } = await borrador("carrera-versiones");
-    const r = await Promise.allSettled([1, 2, 3].map(() => createRecipeVersion(gestor, recipeId, OBJETIVO)));
-    expect(r.map((x) => x.status)).toEqual(["fulfilled", "fulfilled", "fulfilled"]);
-    const numeros = r.flatMap((x) => (x.status === "fulfilled" ? [x.value.version] : [])).sort((a, b) => a - b);
-    expect(numeros).toEqual([2, 3, 4]);
-  }, 20000);
 });
 
 describe("cada escritura deja su evento", () => {
@@ -1231,8 +1222,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const capataz = await cuentasDePermisos.cuenta("Farm Operator", { locationId: lugar.id });
     const gestorDeFinca = await cuentasDePermisos.cuenta("Coffee Process Manager", { locationId: lugar.id });
     // La receta la escribe el gestor de plataforma de este archivo: lo que se mide es quién la TOCA después.
-    const receta = await createRecipeWithVersion(gestor, { name: nombre("de la finca"), organizationId: org.id, targets: OBJETIVO });
-    const versionId = receta.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("de la finca"), organizationId: org.id });
     const paso = await pasoDe("washing");
     const sinPermiso = [jefe, capataz];
     for (const quien of sinPermiso) {
@@ -1258,8 +1248,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const jefe = await cuentasDePermisos.cuenta("Farm Manager", { locationId: lugar.id });
     const capataz = await cuentasDePermisos.cuenta("Farm Operator", { locationId: lugar.id });
     const visor = await cuentasDePermisos.cuenta("Project Viewer", { locationId: lugar.id });
-    const receta = await createRecipeWithVersion(gestor, { name: nombre("a leer"), organizationId: org.id, targets: OBJETIVO });
-    const versionId = receta.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("a leer"), organizationId: org.id });
     await agregar(versionId, null, await pasoDe("washing"));
     // El gestor de la finca no lleva `lot:manage` y lee con su permiso de autoría; el jefe y el capataz, con `lot:manage` sobre el
     // lote de su finca (lo que pide hoy `getRecipeForEditor`).
@@ -1274,8 +1263,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const { org, lugar } = await finca(false);
     const gestorDeFinca = await cuentasDePermisos.cuenta("Coffee Process Manager", { locationId: lugar.id });
     const capataz = await cuentasDePermisos.cuenta("Farm Operator", { locationId: lugar.id });
-    const receta = await createRecipeWithVersion(gestor, { name: nombre("sin lotes"), organizationId: org.id, targets: OBJETIVO });
-    const versionId = receta.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("sin lotes"), organizationId: org.id });
     await agregar(versionId, null, await pasoDe("washing"));
     expect((await pasosDeLaVersion(gestorDeFinca, versionId)).length).toBe(1);
     await rechaza(pasosDeLaVersion(capataz, versionId), "organizacion_sin_lotes");
@@ -1285,8 +1273,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const { lugar } = await finca(true);
     const jefe = await cuentasDePermisos.cuenta("Farm Manager", { locationId: lugar.id });
     const gestorDeFinca = await cuentasDePermisos.cuenta("Coffee Process Manager", { locationId: lugar.id });
-    const plantilla = await createRecipeWithVersion(gestor, { name: nombre("plantilla"), organizationId: null, targets: OBJETIVO });
-    const versionId = plantilla.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("plantilla"), organizationId: null });
     const paso = await pasoDe("washing");
     await rechaza(agregarPaso(jefe, { recipeVersionId: versionId, despuesDeSeq: null, paso }), "sin_permiso_de_autoria");
     await rechaza(agregarPaso(gestorDeFinca, { recipeVersionId: versionId, despuesDeSeq: null, paso }), "sin_permiso_de_autoria");
@@ -1314,8 +1301,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
 
   it("H3 — quien gestiona un solo lote de la organización lee los pasos de su receta, haya o no otro lote suyo que no gestiona (sin depender del orden de las filas)", async () => {
     const { org, jefeA, jefeB } = await dosJefesDeUnaFincaConDosLotes();
-    const receta = await createRecipeWithVersion(gestor, { name: nombre("de una finca con dos lotes"), organizationId: org.id, targets: OBJETIVO });
-    const versionId = receta.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("de una finca con dos lotes"), organizationId: org.id });
     await agregar(versionId, null, await pasoDe("washing"));
     for (const quien of [jefeA, jefeB]) {
       expect((await pasosDeLaVersion(quien, versionId)).map((p) => p.tipo)).toEqual(["washing"]);
@@ -1326,8 +1312,7 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const { jefeA, jefeB } = await dosJefesDeUnaFincaConDosLotes();
     const ajena = await finca(true);
     const jefeAjeno = await cuentasDePermisos.cuenta("Farm Manager", { locationId: ajena.lugar.id });
-    const plantilla = await createRecipeWithVersion(gestor, { name: nombre("plantilla a leer"), organizationId: null, targets: OBJETIVO });
-    const versionId = plantilla.versions[0]!.id;
+    const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre("plantilla a leer"), organizationId: null });
     await agregar(versionId, null, await pasoDe("washing"));
     for (const quien of [jefeA, jefeB, jefeAjeno]) {
       expect((await pasosDeLaVersion(quien, versionId)).map((p) => p.tipo)).toEqual(["washing"]);
@@ -1339,8 +1324,8 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     const visor = await cuentasDePermisos.cuenta("Project Viewer", { locationId: lugarA.id });
     const ajena = await finca(true);
     const jefeAjeno = await cuentasDePermisos.cuenta("Farm Manager", { locationId: ajena.lugar.id });
-    const deLaOrg = (await createRecipeWithVersion(gestor, { name: nombre("de la organización"), organizationId: org.id, targets: OBJETIVO })).versions[0]!.id;
-    const plantilla = (await createRecipeWithVersion(gestor, { name: nombre("plantilla cerrada"), organizationId: null, targets: OBJETIVO })).versions[0]!.id;
+    const deLaOrg = (await crearRecetaEnBorrador(gestor, { name: nombre("de la organización"), organizationId: org.id })).versionId;
+    const plantilla = (await crearRecetaEnBorrador(gestor, { name: nombre("plantilla cerrada"), organizationId: null })).versionId;
     await agregar(deLaOrg, null, await pasoDe("washing"));
     await agregar(plantilla, null, await pasoDe("washing"));
     // Control: quien sí gestiona un lote de la organización la lee; sin esto los rechazos de abajo no distinguen nada.

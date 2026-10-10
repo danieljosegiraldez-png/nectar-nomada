@@ -13,8 +13,8 @@
  * mientras existe —el selector de recetas y el control de parecido de la Libre (tarea 10) la verían desde otros archivos
  * que corren a la vez—, así que cada `it` crea las suyas y el `afterEach` las borra.
  *
- * Cuentas (V16, 2026-10-04: escribir una receta es del Coffee Process Manager): el Platform Admin sembrado (como
- * `recipeVersions.test.ts`; aquí no se cuenta nada global) y las que crea `fabricaDeCuentas` —un Coffee Process Manager de la finca
+ * Cuentas (V16, 2026-10-04: escribir una receta es del Coffee Process Manager): el Platform Admin sembrado (aquí no se
+ * cuenta nada global) y las que crea `fabricaDeCuentas` —un Coffee Process Manager de la finca
  * de la organización propia del archivo (`gestor`), otro de plataforma (`gestorDePlataforma`, el de las plantillas), un Farm Manager
  * (`jefe`: lleva `edit_beneficio` y NO escribe recetas), un Farm Operator (`capataz`) y el Coffee Process Manager de una SEGUNDA
  * organización (`gestorAjeno`, con su finca)—. La regla de autoría no pide ningún lote.
@@ -45,7 +45,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { derivarReceta, nuevaVersionBorrador } from "../../lib/recetas/versiones";
 import { RecipeError } from "../../lib/recetas/errorDeReceta";
-import { createRecipeVersion } from "../../lib/traceability/processTargets";
+import { getRecipeForEditor, listRecipeVersionsForLot } from "../../lib/traceability/processTargets";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
@@ -231,6 +231,10 @@ async function borrarRecetasDeLaCorrida() {
     await prisma.processRecipeStep.findMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }), select: { id: true } })
   ).map((p) => p.id);
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...recipeIds, ...versionIds] } }) });
+  // Una corrida que usa una versión de la corrida (la de «cuántas corridas usa cada versión»), antes que su versión: la clave de la corrida
+  // es `SET NULL`, así que borrar la receta no falla, y la corrida se quedaría huérfana de su versión hasta el `afterAll`. Se descubre por
+  // la versión, no por una variable de la prueba.
+  await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ processRecipeVersionId: { in: versionIds } }) });
   // En orden de FK: las metas primero (la de paso apunta al paso por la FK compuesta), lo que cuelga del paso, los pasos,
   // las fases.
   await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
@@ -592,26 +596,37 @@ describe("plantillas (§3.4): sólo se versionan con alcance de plataforma; una 
   });
 });
 
-describe("R8 extendido — la puerta vieja (`createRecipeVersion`) tampoco pierde los pasos", () => {
-  it("createRecipeVersion copia los pasos con sus metas remapeadas, deja las metas de versión al llamador y no copia las fases", async () => {
-    const v1 = await receta({ organizationId: orgId, conPasos: true });
-    const antes = await contenido(v1.versionId);
-    const v2 = await createRecipeVersion(gestor, v1.recipeId, [
-      { variable: "moisture", moment: "final", phase: "drying" as const, unit: "%", minValue: 10.5, maxValue: 11.5 },
-    ]);
-    const d = await contenido(v2.id);
-    expect(forma(d)).toEqual(forma(antes));
-    const cd = colgantes(d);
-    const ca = colgantes(antes);
-    expect([cd.adiciones, cd.fines, cd.requisitos, cd.metasDePaso]).toEqual([ca.adiciones, ca.fines, ca.requisitos, ca.metasDePaso]);
-    const ids = new Set(d.pasos.map((p) => p.id));
-    for (const m of d.metas.filter((x) => x.recipeStepId !== null)) expect(ids.has(m.recipeStepId!)).toBe(true);
-    // Las de versión son las que mandó el llamador, no las de la v1: una sola, con los límites que mandó (la v1 tenía 10 y 12).
-    expect(cd.metasDeVersion).toHaveLength(1);
-    expect(JSON.parse(cd.metasDeVersion[0]!)).toMatchObject({ variable: "moisture", moment: "final", phase: "drying", unit: "%", minValue: "10.5", maxValue: "11.5" });
-    // §3.1: con pasos, ninguna fase.
-    expect(d.fases).toEqual([]);
-    // Lo que devuelve es la versión releída, con lo copiado: tres metas de paso y la de versión.
-    expect(v2.targets).toHaveLength(4);
+/**
+ * Lo que protegía `recipeVersions.test.ts` (ADR-102) y que la Parte E de la tarea 14 no podía dejar caer con el servicio que esa prueba usaba
+ * (`createRecipeVersion`): son dos lecturas que siguen vivas, y las dos se leían sólo ahí. La versión nueva se pide ahora con
+ * `nuevaVersionBorrador`; las lecturas son las mismas.
+ */
+describe("dos lecturas de las versiones que nadie más probaba (ADR-102)", () => {
+  it("a un proceso nuevo se le ofrece sólo la versión PUBLICADA más nueva de cada receta: un borrador no esconde a la v1, y una v2 publicada sí", async () => {
+    const lote = await prisma.lot.findFirstOrThrow({ where: { lotCode: `${RUN}-LOTE` }, select: { id: true } });
+    const v1 = await receta({ organizationId: orgId, conPasos: false });
+    const v2 = await nuevaVersionBorrador(gestor, v1.versionId);
+    // Sólo las versiones de ESTA receta: las plantillas de otros archivos pueden salir en la misma lista.
+    const ofrecidas = async () =>
+      (await listRecipeVersionsForLot(admin, lote.id)).filter((v) => v.recipeId === v1.recipeId).map((v) => v.version);
+    expect(await ofrecidas(), "con la v2 en borrador, sigue la v1").toEqual([1]);
+    await prisma.processRecipeVersion.update({ where: { id: v2.id }, data: { status: "approved" } });
+    // Antes de la Parte 2a «devolvía todas las aprobadas, que era lo mismo porque sólo había una»: con dos publicadas, ofrecer las dos
+    // le pide al operario saber cuál es la vigente.
+    expect(await ofrecidas(), "publicada la v2, sólo ella").toEqual([2]);
+  });
+
+  it("el editor cuenta cuántas corridas usa cada versión, para poder negarse a tratar como borrador una que ya se usó", async () => {
+    const v1 = await receta({ organizationId: orgId, conPasos: false });
+    const v2 = await nuevaVersionBorrador(gestor, v1.versionId);
+    await prisma.fermentationRun.create({
+      data: { startedAt: new Date(), vesselNote: `TEST VERS ${RUN} corrida`, processRecipeVersionId: v1.versionId },
+    });
+    const editor = await getRecipeForEditor(admin, v1.recipeId);
+    const corridasDe = (numero: number) => editor.versions.find((v) => v.version === numero)?._count.fermentationRuns;
+    expect(editor.versions.map((v) => v.id).sort(), "control: el editor trae las dos versiones").toEqual([v1.versionId, v2.id].sort());
+    expect(corridasDe(1), "la v1 la usa una corrida").toBe(1);
+    expect(corridasDe(2), "la v2 no la usa ninguna").toBe(0);
   });
 });
+

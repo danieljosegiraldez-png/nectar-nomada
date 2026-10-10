@@ -23,7 +23,8 @@ import { prisma } from "../../lib/db";
 import { exigeAutoriaDeReceta, puedeAutoriaDeReceta } from "../../lib/recetas/autoria";
 import { RecipeError } from "../../lib/recetas/errorDeReceta";
 import { exigeEditarBeneficioEnOrganizacion } from "../../lib/traceability/locations";
-import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
+import { crearRecetaEnBorrador } from "../../lib/recetas/versiones";
+import { updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
 
@@ -35,12 +36,7 @@ const organizaciones: string[] = [];
 /** En orden de creación (el padre antes que el hijo): se borran al revés. */
 const ubicaciones: string[] = [];
 
-const OBJETIVO = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
-const receta = (organizationId: string | null) => ({
-  name: `AUTORIA ${randomUUID().slice(0, 8)} ${RUN}`,
-  organizationId,
-  targets: OBJETIVO,
-});
+const nombreDeReceta = () => `AUTORIA ${randomUUID().slice(0, 8)} ${RUN}`;
 
 /** Rechaza con un `RecipeError` de ESE código: la clase y el mensaje, no sólo el mensaje. */
 async function rechaza(promesa: Promise<unknown>, codigo = "sin_permiso_de_autoria") {
@@ -202,29 +198,48 @@ describe("puedeAutoriaDeReceta: la gemela que pregunta", () => {
   });
 });
 
-describe("las tres puertas de processTargets.ts pasan por la regla", () => {
-  it("createRecipeWithVersion: el Farm Manager no crea y no deja nada; el Process Manager sí, aunque la organización no tenga lotes", async () => {
+describe("la puerta de processTargets.ts que queda, updateRecipeMetadata, pasa por la regla", () => {
+  it("updateRecipeMetadata: el Farm Manager no; el Process Manager sí", async () => {
     const { orgId, finca } = await organizacionConFinca();
     const gestor = await cuentas.cuenta("Coffee Process Manager", { locationId: finca.id });
     const jefe = await cuentas.cuenta("Farm Manager", { locationId: finca.id });
-    expect(await prisma.lot.count({ where: { organizationId: orgId } }), "control: la organización no tiene lotes").toBe(0);
-    const rechazada = receta(orgId);
-    await rechaza(createRecipeWithVersion(jefe, rechazada));
-    expect(await prisma.processRecipe.count({ where: { name: rechazada.name } })).toBe(0);
-    const creada = await createRecipeWithVersion(gestor, receta(orgId));
-    expect(creada.versions.length).toBe(1);
+    const nombre = nombreDeReceta();
+    const creada = await crearRecetaEnBorrador(gestor, { name: nombre, organizationId: orgId });
+    await rechaza(updateRecipeMetadata(jefe, creada.recipeId, { name: nombre, description: "cambio del jefe" }));
+    await expect(updateRecipeMetadata(gestor, creada.recipeId, { name: nombre, description: "cambio del gestor" })).resolves.toBeDefined();
+    // El rechazo no tocó nada: la descripción es la del gestor, y la del jefe no entró.
+    expect((await prisma.processRecipe.findUniqueOrThrow({ where: { id: creada.recipeId } })).description).toBe("cambio del gestor");
   });
 
-  it("updateRecipeMetadata y createRecipeVersion: el Farm Manager no; el Process Manager sí", async () => {
+  // Lo que protegía `recipeVersions.test.ts` (ADR-102) antes de que la Parte E la borrara con el servicio que la usaba: un nombre es una etiqueta y se
+  // edita; lo que una corrida persiguió, no. Y el cambio deja su huella con las dos caras, para que se pueda ver qué decía antes.
+  it("renombrar cambia la etiqueta y no toca ninguna versión ni sus metas, y se audita con el nombre de antes y el de después", async () => {
     const { orgId, finca } = await organizacionConFinca();
     const gestor = await cuentas.cuenta("Coffee Process Manager", { locationId: finca.id });
-    const jefe = await cuentas.cuenta("Farm Manager", { locationId: finca.id });
-    const original = receta(orgId);
-    const creada = await createRecipeWithVersion(gestor, original);
-    await rechaza(updateRecipeMetadata(jefe, creada.id, { name: original.name, description: "cambio del jefe" }));
-    await expect(updateRecipeMetadata(gestor, creada.id, { name: original.name, description: "cambio del gestor" })).resolves.toBeDefined();
-    await rechaza(createRecipeVersion(jefe, creada.id, OBJETIVO));
-    await expect(createRecipeVersion(gestor, creada.id, OBJETIVO)).resolves.toBeDefined();
-    expect(await prisma.processRecipeVersion.count({ where: { recipeId: creada.id } }), "v1 y la del gestor; la del jefe no").toBe(2);
+    const antes = nombreDeReceta();
+    const despues = nombreDeReceta();
+    const { recipeId, versionId } = await crearRecetaEnBorrador(gestor, { name: antes, organizationId: orgId });
+    // Una versión publicada con una meta, como la que una corrida ya persigue: lo que un renombre no puede reescribir.
+    await prisma.processTarget.create({
+      data: { recipeVersionId: versionId, variable: "ph", moment: "final", phase: "fermentation", unit: "pH", targetValue: 3.8 },
+    });
+    await prisma.processRecipeVersion.update({ where: { id: versionId }, data: { status: "approved" } });
+    const versiones = async () =>
+      JSON.stringify(await prisma.processRecipeVersion.findMany({ where: { recipeId }, include: { targets: true }, orderBy: { version: "asc" } }));
+    const versionesAntes = await versiones();
+    expect(versionesAntes, "control: la versión trae su meta y está publicada").toContain('"status":"approved"');
+    expect(versionesAntes).toContain('"variable":"ph"');
+
+    await updateRecipeMetadata(gestor, recipeId, { name: despues, description: "corregido" });
+
+    expect((await prisma.processRecipe.findUniqueOrThrow({ where: { id: recipeId } })).name, "control: el nombre sí cambió").toBe(despues);
+    expect(await versiones(), "renombrar no toca la versión ni su meta").toBe(versionesAntes);
+    const evento = await prisma.auditEvent.findFirst({
+      where: { entityId: recipeId, operation: "process_recipe.update" },
+      orderBy: { occurredAt: "desc" },
+    });
+    expect(evento, "no hay fila de auditoría del renombre").not.toBeNull();
+    expect((evento!.before as { name?: string } | null)?.name, "la auditoría no guarda el nombre de antes").toBe(antes);
+    expect((evento!.after as { name?: string } | null)?.name, "la auditoría no guarda el nombre de después").toBe(despues);
   });
 });

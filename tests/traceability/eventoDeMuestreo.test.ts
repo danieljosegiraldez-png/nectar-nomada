@@ -20,7 +20,7 @@ const scopeIds: string[] = [];
 let actorId: string;
 
 beforeAll(async () => {
-  // Mismo actor sembrado que processTargets.test.ts y recipeAuthoring.test.ts.
+  // Mismo actor sembrado que processTargets.test.ts y tests/recetas/versiones.test.ts.
   actorId = (await prisma.assignment.findFirstOrThrow({
     where: { status: "active", roleProfile: { name: "Platform Admin" }, scope: { scopeType: "platform" } },
     select: { userAccountId: true },

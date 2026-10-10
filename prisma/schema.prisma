@@ -4576,8 +4576,12 @@ model ProcessTarget {
   /// **La grieta que esto abre, dicha.** La unicidad de las metas sin paso lleva la fase dentro (el
   /// índice parcial `process_target_unica_sin_paso`, ver abajo), y en Postgres dos
   /// nulos no chocan: dos objetivos heredados con la misma variable y momento podrían coexistir donde
-  /// antes no. Se acepta porque **nada escribe ya una fase nula** —`createRecipeWithVersion` la exige—
-  /// así que el hueco sólo alcanza a filas que ninguna escritura nueva puede crear.
+  /// antes no. Se acepta porque **ninguna escritura nueva crea una meta de VERSIÓN con la fase nula**: las
+  /// dos puertas que escribían metas de versión exigían la fase y ya no existen (la Parte 2a las retiró), y la
+  /// copia de una versión (`nuevaVersionBorrador`) conserva lo que había. **La fase nula SÍ se escribe hoy**,
+  /// en las metas de un PASO cuyo tipo no tiene fase —un lavado: `FASE_DEL_TIPO`—, y esas no abren la grieta:
+  /// su unicidad es por paso (`process_target_unica_por_paso`) y la fase no entra en ella. El hueco sigue
+  /// alcanzando sólo a metas de versión anteriores a los pasos.
   phase            ProcessPhase?        @map("phase")
 
   /// **Parte 2a (2026-10-03), §3.2: el paso al que pertenece esta meta.** Nulo = meta de la versión,

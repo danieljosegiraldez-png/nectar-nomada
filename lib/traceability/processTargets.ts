@@ -36,7 +36,6 @@ import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/c
 import { puedeAutoriaDeReceta } from "../recetas/autoria";
 import { exigeAutoriaDeReceta } from "../recetas/autoria";
 import { RecipeError } from "../recetas/errorDeReceta";
-import { copiarContenidoDeVersion } from "../recetas/versiones";
 
 export class ProcessTargetError extends Error {}
 
@@ -283,64 +282,12 @@ export interface CreateRecipeInput {
 }
 
 /**
- * A recipe and its first version, created together.
- *
- * There is no such thing as a useful recipe with no version — a name with no
- * targets declares nothing — so the two are one operation rather than a
- * two-step flow that can be abandoned halfway.
- */
-/**
  * Every rule a set of targets must satisfy, in one place — ADR-102.
  *
  * Extracted when creating a *version* joined creating a *recipe* as a way to
  * declare targets. Two copies of these checks would eventually disagree, and
  * the one that drifted would be the one nobody was reading.
  */
-export function validateExpectedHours(expectedHours: number | null | undefined) {
-  if (expectedHours == null) return; // no declararlo es legitimo
-  if (!Number.isInteger(expectedHours) || expectedHours <= 0) {
-    throw new ProcessTargetError("expected_hours_must_be_positive");
-  }
-}
-
-/**
- * Las reglas de las filas de fase. Viven aquí y **no en la base** por la misma razón que la del ritmo
- * de medición: un importador o un SQL directo se las salta, y eso se dice en vez de llamarlo
- * estructural.
- */
-export function validateFases(fases: CreateRecipeInput["fases"]) {
-  if (!fases?.length) return;
-  const vistas = new Set<ProcessPhase>();
-  for (const f of fases) {
-    if (vistas.has(f.phase)) throw new ProcessTargetError("duplicate_phase");
-    vistas.add(f.phase);
-
-    // Un volteo sólo existe en el secado. En fermentación no hay nada que revolver, y guardarlo
-    // sería un número que nadie puede leer sin equivocarse.
-    if (f.turnEveryHours != null && f.phase !== "drying") {
-      throw new ProcessTargetError("turn_cadence_only_in_drying");
-    }
-    for (const [valor, error] of [
-      [f.expectedHours, "expected_hours_must_be_positive"],
-      [f.turnEveryHours, "turn_cadence_must_be_positive_hours"],
-    ] as const) {
-      if (valor != null && (!Number.isInteger(valor) || valor <= 0)) throw new ProcessTargetError(error);
-    }
-
-    // Los dos o ninguno: un mínimo sin máximo no es un rango, y la pantalla no podría decir «cerca
-    // del objetivo» con la mitad de una banda.
-    const min = f.targetMoistureMinPct ?? null;
-    const max = f.targetMoistureMaxPct ?? null;
-    if ((min == null) !== (max == null)) throw new ProcessTargetError("moisture_range_needs_both_ends");
-    if (min != null && max != null) {
-      if (min > max) throw new ProcessTargetError("moisture_range_inverted");
-      for (const v of [min, max]) {
-        if (!(v > 0 && v <= 100)) throw new ProcessTargetError("moisture_range_out_of_physical_range");
-      }
-    }
-  }
-}
-
 /**
  * Las reglas de una meta: la de la versión y, desde la Parte 2a, la de un paso (tarea 3, diseño §3.2).
  *
@@ -417,83 +364,6 @@ export function validateTargets(
     if (seen.has(key)) throw new ProcessTargetError("duplicate_variable_and_moment");
     seen.add(key);
   }
-}
-
-export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
-  const name = input.name.trim();
-  if (!name) throw new ProcessTargetError("name_required");
-  validateTargets(input.targets);
-  validateFases(input.fases);
-  validateExpectedHours(input.expectedHours);
-
-  // V16 (Parte 2a, tarea 3, 2026-10-04): escribir recetas es del Coffee Process Manager, y la regla es UNA sola
-  // (`lib/recetas/autoria.ts`). Hasta hoy aquí se pedía `lot:manage` sobre un lote de la organización y `edit_beneficio`
-  // (spec #370 §4.3); ni uno ni otro bastan ya, y la organización ya no necesita ningún lote.
-  await exigeAutoriaDeReceta(userAccountId, input.organizationId);
-
-  const recipe = await prisma.$transaction(async (tx) => {
-    const recipe = await tx.processRecipe.create({
-      data: {
-        name,
-        description: input.description?.trim() || null,
-        organizationId: input.organizationId,
-        // La RECETA nace activa: de su estado sólo se lee `archived` (`abrirProceso`). Lo que nace borrador es su versión.
-        status: "approved",
-        createdBy: userAccountId,
-        versions: {
-          create: {
-            version: 1,
-            // Parte 2a (tarea 3, diseño §3.3): la v1 nace BORRADOR. Se le escriben los pasos (`lib/recetas/pasos.ts`) y la
-            // publica `publicarVersion`; hasta entonces el selector (`listRecipeVersionsForLot`) no la ofrece.
-            status: "draft",
-            expectedHours: input.expectedHours ?? null,
-            createdBy: userAccountId,
-            targets: {
-              create: input.targets.map((t, i) => ({
-                variable: t.variable,
-                moment: t.moment,
-                unit: t.unit,
-                targetValue: t.targetValue ?? null,
-                minValue: t.minValue ?? null,
-                maxValue: t.maxValue ?? null,
-                note: t.note?.trim() || null,
-                everyHours: t.everyHours ?? null,
-                phase: t.phase,
-                displayOrder: i,
-              })),
-            },
-            fases: input.fases?.length
-              ? {
-                  create: input.fases.map((f) => ({
-                    phase: f.phase,
-                    expectedHours: f.expectedHours ?? null,
-                    turnEveryHours: f.turnEveryHours ?? null,
-                    targetMoistureMinPct: f.targetMoistureMinPct ?? null,
-                    targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
-                  })),
-                }
-              : undefined,
-          },
-        },
-      },
-      include: { versions: { include: { targets: true, fases: true } } },
-    });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "process_recipe.create",
-        entityType: "process_recipe",
-        entityId: recipe.id,
-        after: recipe,
-        sourceInterface: "traceability.processTargets",
-      },
-      tx,
-    );
-
-    return recipe;
-  });
-  return recipe;
 }
 
 /**
@@ -715,139 +585,3 @@ export async function updateRecipeMetadata(
   return after;
 }
 
-/**
- * A new version of an existing recipe — the only way targets ever change.
- *
- * The number is `max + 1` rather than `count + 1`: those differ the moment a
- * version is ever removed, and the second would silently reuse a number that
- * runs already point at.
- */
-export async function createRecipeVersion(
-  userAccountId: string,
-  recipeId: string,
-  targets: CreateRecipeInput["targets"],
-  notes?: string | null,
-  /**
-   * **Sin esto, publicar una v2 le borraba el ritmo a la receta en silencio.**
-   * Lo cazó la revisión independiente de Codex el 2026-09-13: hay DOS caminos
-   * que escriben objetivos —crear receta y crear versión— y el primer intento
-   * sólo cerró uno. La versión vigente quedaba sin duración esperada aunque la
-   * v1 la tuviera, y nada lo decía.
-   */
-  expectedHours?: number | null,
-  /**
-   * R8 (Parte 1, 2026-09-30), extendido en la Parte 2a (tarea 4, 2026-10-03): las fases de la versión. **Sin pasarlas
-   * (`undefined`), la versión nueva trae las de la anterior** —la pantalla todavía no las edita, y publicar una v2 desde
-   * ella las borraba en silencio, el mismo fallo que con las horas el 2026-09-13—, **pero sólo si la anterior no tiene
-   * pasos**: con pasos, las fases las deriva `publicarVersion` (diseño §3.1). Un arreglo explícito, vacío incluido, las
-   * sustituye. **Los pasos se copian siempre**, con sus adiciones, fines, requisitos y metas de paso remapeadas
-   * (`copiarContenidoDeVersion`, `lib/recetas/versiones.ts`): esta puerta no los edita, y perderlos sería el mismo
-   * borrado en silencio que R8 cerró para las fases.
-   */
-  fases?: CreateRecipeInput["fases"],
-) {
-  const recipe = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
-  if (!recipe) throw new ProcessTargetError("recipe_not_found");
-
-  // V16 (Parte 2a, tarea 3, 2026-10-04): la misma regla única de autoría que al crearla.
-  await exigeAutoriaDeReceta(userAccountId, recipe.organizationId);
-
-  validateTargets(targets);
-  validateExpectedHours(expectedHours);
-  if (fases !== undefined) validateFases(fases);
-  // Sólo las que llegan. Las de la versión anterior —si no llegan y la anterior no tiene pasos— las copia
-  // `copiarContenidoDeVersion` dentro de la transacción, junto con los pasos (Parte 2a, tarea 4).
-  const fasesDeLaVersion = (fases ?? []).map((f) => ({
-    phase: f.phase,
-    expectedHours: f.expectedHours ?? null,
-    turnEveryHours: f.turnEveryHours ?? null,
-    targetMoistureMinPct: f.targetMoistureMinPct ?? null,
-    targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
-  }));
-
-  const version = await prisma.$transaction(async (tx) => {
-    // Parte 2a (tarea 3, diseño §3.3): el número sale DENTRO de la transacción, con la receta en `FOR UPDATE`. Calculado fuera
-    // y sin bloqueo, dos versiones a la vez leían el mismo máximo y la segunda chocaba con `@@unique([recipeId, version])`: un
-    // P2002 que ninguna acción traduce (reconocimiento u1, S7). Con la fila bloqueada, la segunda espera y lee el número que
-    // dejó la primera. `max + 1`, no `count + 1`, por lo que dice la cabecera de esta función.
-    await tx.$queryRaw`SELECT id FROM traceability.process_recipe WHERE id = ${recipeId}::uuid FOR UPDATE`;
-    const ultima = await tx.processRecipeVersion.findFirst({
-      where: { recipeId },
-      orderBy: { version: "desc" },
-      select: { id: true, version: true },
-    });
-    const nextVersion = (ultima?.version ?? 0) + 1;
-
-    const version = await tx.processRecipeVersion.create({
-      data: {
-        recipeId,
-        version: nextVersion,
-        notes: notes?.trim() || null,
-        // Parte 2a (tarea 3, diseño §3.3): nace BORRADOR. La publica `publicarVersion` (`lib/recetas/pasos.ts`); hasta
-        // entonces el selector (`listRecipeVersionsForLot`, que sólo ofrece `approved`) no la ofrece.
-        status: "draft",
-        expectedHours: expectedHours ?? null,
-        createdBy: userAccountId,
-        targets: {
-          create: targets.map((t, i) => ({
-            variable: t.variable,
-            moment: t.moment,
-            unit: t.unit,
-            targetValue: t.targetValue ?? null,
-            minValue: t.minValue ?? null,
-            maxValue: t.maxValue ?? null,
-            everyHours: t.everyHours ?? null,
-            // La SEGUNDA puerta. El guardia `campos-con-dos-puertas` existe por esto: cuando se
-            // añadieron `everyHours` y `expectedHours` se cerró sólo `createRecipeWithVersion`, y
-            // publicar la v2 le borraba el ritmo a la receta en silencio.
-            phase: t.phase,
-            note: t.note?.trim() || null,
-            displayOrder: i,
-          })),
-        },
-        fases: fasesDeLaVersion.length
-          ? {
-              create: fasesDeLaVersion.map((f) => ({
-                phase: f.phase,
-                expectedHours: f.expectedHours,
-                turnEveryHours: f.turnEveryHours,
-                targetMoistureMinPct: f.targetMoistureMinPct,
-                targetMoistureMaxPct: f.targetMoistureMaxPct,
-              })),
-            }
-          : undefined,
-      },
-      include: { targets: true, fases: true },
-    });
-
-    // R8 extendido (Parte 2a, tarea 4): lo que la versión anterior declaraba y esta puerta no edita viaja a la nueva
-    // —pasos con adiciones, fines, requisitos y metas de paso remapeadas; sus fases sólo si no llegaron otras y no tiene
-    // pasos—. Las metas de versión no: son las que manda el formulario (`targets`).
-    if (ultima) {
-      await copiarContenidoDeVersion(tx, ultima.id, version.id, { metasDeVersion: false, fases: fases === undefined });
-    }
-    // Releída: lo copiado entró después del `create`, y lo que se audita y se devuelve es la versión entera.
-    const completa = await tx.processRecipeVersion.findUniqueOrThrow({
-      where: { id: version.id },
-      include: { targets: true, fases: true },
-    });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "process_recipe_version.create",
-        entityType: "process_recipe_version",
-        entityId: version.id,
-        after: completa,
-        // The fact worth searching the audit log for later: which version
-        // superseded which, and when.
-        reason: `supersedes_version_${ultima?.version ?? "none"}`,
-        sourceInterface: "traceability.processTargets",
-      },
-      tx,
-    );
-
-    return completa;
-  });
-  return version;
-}

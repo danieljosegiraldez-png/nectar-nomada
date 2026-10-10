@@ -32,7 +32,7 @@ import { RecipeError } from "./errorDeReceta";
 /**
  * La versión siguiente de una receta, en BORRADOR, copiada de `desdeVersionId` (§3.3). Lo que se edita después son sus
  * pasos (tarea 3), y `publicarVersion` la fija. Se copia la versión que se elige, no necesariamente la última; el número
- * es siempre el siguiente al más alto («max + 1», como `createRecipeVersion`).
+ * es siempre el siguiente al más alto («max + 1»: distinto de «cuántas hay», que repetiría un número que una corrida ya cita).
  *
  * **A lo sumo un borrador por receta** (`ya_hay_un_borrador`). Dos borradores de la misma receta divergirían, y publicar
  * el segundo borraría en silencio lo que cambió el primero. Pedirlo desde un borrador también se rechaza: ese borrador ES
@@ -116,8 +116,8 @@ export async function derivarReceta(
           name: nombre,
           description: plantilla.recipe.description,
           organizationId: input.organizationId,
-          // El estado que manda es el de la VERSIÓN (§3.3). La receta, como contenedor, nace como las de
-          // `createRecipeWithVersion`.
+          // El estado que manda es el de la VERSIÓN (§3.3). La receta, como contenedor, nace «activa» como todas
+          // (`crearRecetaEnBorrador`): de su estado sólo se lee `archived`.
           status: "approved",
           derivadaDeVersionId: plantilla.id,
           createdBy: userAccountId,
@@ -224,8 +224,8 @@ function sinClaves<T extends object, K extends keyof T>(fila: T, claves: readonl
 
 /**
  * Copia lo que cuelga de una versión a otra recién creada, dentro de la transacción de quien la llama. No autoriza ni
- * recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (arriba) y `createRecipeVersion`, las tres después
- * de autorizar la receta (inventario: «depende del llamador»).
+ * recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (arriba) y, desde el PR-B, la conversión de una Libre (tarea 11), las tres
+ * después de autorizar la receta (inventario: «depende del llamador»).
  *
  * - **Pasos**, siempre, con todas sus columnas: la fila se copia ENTERA salvo sus claves, para que una columna que se
  *   añada mañana viaje sin que nadie tenga que acordarse de nombrarla aquí (la lección de `campos-con-dos-puertas`: un

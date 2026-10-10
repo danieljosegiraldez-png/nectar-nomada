@@ -4,7 +4,7 @@
  * Diseño `docs/superpowers/specs/2026-10-02-parte-2a-la-receta-con-pasos-design.md`: §3 (el paso), §3.1 (las fases quedan
  * como compatibilidad), §3.2 (metas por paso) y §3.3 (borrador y publicada).
  *
- * **Sólo un borrador se edita.** Una versión nace `draft` (`createRecipeWithVersion` y `createRecipeVersion`), se le agregan,
+ * **Sólo un borrador se edita.** Una versión nace `draft` (`crearRecetaEnBorrador` y `nuevaVersionBorrador`), se le agregan,
  * cambian, quitan y mueven pasos, y `publicarVersion` la pasa a `approved`. Desde ahí no se toca —CLAUDE.md §3: una versión
  * aprobada no se sobreescribe en silencio—: cambiarla es otra versión.
  *
@@ -258,7 +258,7 @@ function validarPaso(tipo: TipoDePaso, paso: PasoCompleto): void {
   if (FASE_DEL_TIPO[tipo] !== "drying" && (volteoCadaHoras != null || humedadMinPct != null || humedadMaxPct != null)) {
     throw new RecipeError("solo_en_secado");
   }
-  // La banda: los dos extremos o ninguno, como `validateFases`, porque la fase derivada tiene que cumplir sus mismas reglas.
+  // La banda: los dos extremos o ninguno, porque la fase que `publicarVersion` deriva tiene que cumplir las mismas reglas (`ProcessRecipePhase`).
   if ((humedadMinPct == null) !== (humedadMaxPct == null)) throw new RecipeError("rango_invalido");
   for (const v of [humedadMinPct, humedadMaxPct]) {
     if (v != null && !(v > 0 && v <= 100)) throw new RecipeError("porcentaje_fuera_de_rango");

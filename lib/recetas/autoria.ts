@@ -8,7 +8,7 @@
  * (V13); quien lleva los dos perfiles hace las dos cosas (V14).
  *
  * **Toda escritura de autoría pasa por aquí** (registro del plan 2a, Ruling A): crear una receta, cambiarle el nombre, una
- * versión nueva (`createRecipeWithVersion`, `updateRecipeMetadata`, `createRecipeVersion`), agregar, cambiar, quitar y mover un
+ * versión nueva (`crearRecetaEnBorrador`, `updateRecipeMetadata`, `nuevaVersionBorrador`), agregar, cambiar, quitar y mover un
  * paso, publicar (`lib/recetas/pasos.ts`), y las que añadan las tareas 4, 11 y 14 (derivar, versionar, convertir una Libre).
  * **Abrir un proceso, también con la receta Libre, NO es autoría** (V13: `lot:manage`).
  *
