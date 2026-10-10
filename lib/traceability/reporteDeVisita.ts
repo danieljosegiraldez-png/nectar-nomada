@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
 import { FieldSessionValidationError } from "./fieldSessions";
+import { UUID } from "../validation/uuid";
 
 /**
  * A9.6 (D7) — emitir el reporte de una visita, congelado.
@@ -293,6 +294,9 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
  * blanco que parecería un reporte real.
  */
 export async function leerReporteDeVisita(userAccountId: string, fieldSessionId: string) {
+  // El id llega de la URL de `field-sessions/[id]/report`. Sin forma de UUID, Prisma lanzaba `P2007`
+  // y la página daba 500 (PENDING_IMPLEMENTATIONS/026); es una jornada que no existe.
+  if (!UUID.test(fieldSessionId)) throw new FieldSessionValidationError("session_not_found");
   const visita = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
     select: { locationId: true },

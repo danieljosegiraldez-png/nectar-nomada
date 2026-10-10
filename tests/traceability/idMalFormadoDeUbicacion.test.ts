@@ -12,6 +12,8 @@
  *   `plots/[id]/manejo/[interventionId]` y `plots/[id]/manejo/nuevo`. Las dos hacen falta: con un
  *   Platform Admin, `can()` pasa y `contextoDeManejo` consulta el mismo id en la línea siguiente;
  * - `getFieldSessionTimeline` — `field-sessions/[id]`;
+ * - `leerReporteDeVisita` — `field-sessions/[id]/report`, que además sólo atrapaba `LocationAccessError`:
+ *   con un UUID que no existe también daba 500;
  * - `requireFieldSessionAccess`, que hoy no es la primera en reventar en ninguna página pero recibe
  *   ids de fuera por `listFieldSessions` y por dos acciones.
  *
@@ -36,6 +38,7 @@ import { can } from "../../lib/rbac/service";
 import { puedeSubdividirParcela } from "../../lib/traceability/fincas";
 import { FieldSessionValidationError, getFieldSessionTimeline } from "../../lib/traceability/fieldSessions";
 import { contextoDeManejo } from "../../lib/traceability/intervenciones";
+import { leerReporteDeVisita } from "../../lib/traceability/reporteDeVisita";
 import { requireFieldSessionAccess } from "../../lib/traceability/jornadaDeCampo";
 import {
   LocationAccessError,
@@ -233,5 +236,26 @@ describe("getFieldSessionTimeline con un id de la URL", () => {
   it("control: la jornada que existe se devuelve", async () => {
     const { session } = await getFieldSessionTimeline(usuario.userAccountId, jornadaId);
     expect(session.id).toBe(jornadaId);
+  });
+});
+
+describe("leerReporteDeVisita con un id de la URL", () => {
+  /** Lo que `field-sessions/[id]/report` convierte en `notFound()`. */
+  async function esJornadaQueNoExiste(promesa: Promise<unknown>) {
+    const error = await loQueLanza(promesa);
+    expect(error).toBeInstanceOf(FieldSessionValidationError);
+    expect((error as Error).message).toBe("session_not_found");
+  }
+
+  it.each(IDS_BASURA)("«%s» se trata como una jornada que no existe", async (id) => {
+    await esJornadaQueNoExiste(leerReporteDeVisita(usuario.userAccountId, id));
+  });
+
+  it("control: un UUID bien formado que no existe da lo mismo", async () => {
+    await esJornadaQueNoExiste(leerReporteDeVisita(usuario.userAccountId, randomUUID()));
+  });
+
+  it("control: la jornada que existe, sin reporte emitido, devuelve null y no lanza", async () => {
+    await expect(leerReporteDeVisita(usuario.userAccountId, jornadaId)).resolves.toBeNull();
   });
 });
