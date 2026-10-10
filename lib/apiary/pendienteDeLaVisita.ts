@@ -1,4 +1,7 @@
+import type { VisitPurpose } from "../../generated/prisma/client";
 import { prisma } from "../db";
+import { ACTIVIDADES, LO_QUE_PIDE, type Actividad } from "./actividadDeVisita";
+import { mostrarFecha, ZONA_POR_DEFECTO } from "../time/mostrarInstante";
 import { retirosPendientes, type RetiroPendiente } from "./cierreDeEvento";
 
 /**
@@ -38,9 +41,28 @@ export interface ColmenaSinTocar {
   poblada: boolean;
 }
 
+export interface PendienteDelProposito {
+  proposito: VisitPurpose;
+  /** Cajas del sitio sin el registro que este propósito pide. Vacío para el montaje. */
+  faltan: ColmenaSinTocar[];
+  /** De esas, cuántas tienen colonia viva. */
+  faltanPobladas: number;
+}
+
 export interface PendienteDeLaVisita {
   fieldSessionId: string;
   locationId: string;
+  /** Cajas que había en el sitio el día de la visita, cada una contada una vez. */
+  total: number;
+  /** Cuántas cajas recibieron cada actividad. Una caja con dos cosas sale en las dos filas. */
+  porActividad: Record<Actividad, number>;
+  /** Cajas sin ningún registro de esta visita. */
+  sinActividad: number;
+  /**
+   * El pendiente de cada propósito declarado, en el orden del enum. **`null` si la visita no
+   * declaró ninguno** —las anteriores a la pregunta—: ahí el pendiente es `sinTocar`, como siempre.
+   */
+  porProposito: PendienteDelProposito[] | null;
   /** Cajas del sitio sin ningun evento de ESTA jornada. */
   sinTocar: ColmenaSinTocar[];
   /** De esas, cuantas tienen colonia viva. Es la cifra que importa al salir. */
@@ -50,37 +72,47 @@ export interface PendienteDeLaVisita {
   retiros: RetiroPendiente[];
 }
 
+const DIA_MS = 24 * 3600_000;
+
 export async function pendientesDeLaVisita(
   fieldSessionId: string,
   ahora: Date = new Date(),
 ): Promise<PendienteDeLaVisita | null> {
   const visita = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
-    select: { id: true, locationId: true, startedAt: true },
+    select: { id: true, locationId: true, startedAt: true, purposes: true, location: { select: { timezone: true } } },
   });
   if (!visita) return null;
 
-  // Los tres caminos por los que un evento de campo apunta a una colmena. Las tres FK las
-  // anadio A9.1 para poder leer la visita entera desde su rastro, y aqui se usan al reves:
-  // de los eventos a las cajas que tocaron.
+  // Los cuatro caminos por los que un evento de campo apunta a una colmena. Las FK las anadio
+  // A9.1 para poder leer la visita entera desde su rastro, y aqui se usan al reves: de los
+  // eventos a las cajas que tocaron. **La varroa faltaba** aunque `registrarConteoDeVarroa` la
+  // liga a la visita igual que sus hermanos (V-3).
   const eventos = await prisma.fieldEvent.findMany({
     where: { fieldSessionId },
     select: {
       inspection: { select: { colony: { select: { hiveId: true } } } },
-      colonyEvent: { select: { colony: { select: { hiveId: true } } } },
+      colonyEvent: { select: { eventType: true, colony: { select: { hiveId: true } } } },
       apiaryHarvestEvent: { select: { colony: { select: { hiveId: true } } } },
+      varroaCount: { select: { colony: { select: { hiveId: true } } } },
     },
   });
 
-  const tocadas = new Set<string>();
+  /** Por caja, lo que se le hizo en esta visita. */
+  const hecho = new Map<string, Set<Actividad>>();
+  const anotar = (hiveId: string | undefined, a: Actividad) => {
+    if (!hiveId) return;
+    if (!hecho.has(hiveId)) hecho.set(hiveId, new Set());
+    hecho.get(hiveId)!.add(a);
+  };
   for (const e of eventos) {
-    for (const id of [
-      e.inspection?.colony.hiveId,
-      e.colonyEvent?.colony.hiveId,
-      e.apiaryHarvestEvent?.colony.hiveId,
-    ]) {
-      if (id) tocadas.add(id);
+    anotar(e.inspection?.colony.hiveId, "inspeccion");
+    if (e.colonyEvent) {
+      const t = e.colonyEvent.eventType;
+      anotar(e.colonyEvent.colony.hiveId, t === "feeding" ? "alimentacion" : t === "treatment" ? "tratamiento" : "otro");
     }
+    anotar(e.apiaryHarvestEvent?.colony.hiveId, "cosecha");
+    anotar(e.varroaCount?.colony.hiveId, "varroa");
   }
 
   // Las cajas que estaban en el sitio CUANDO SE VISITO.
@@ -100,56 +132,76 @@ export async function pendientesDeLaVisita(
   //
   // La regla es **no excluir salvo que el registro diga que estaba en OTRO sitio**:
   //
-  //   1. toda caja con una colocacion EN ESTE SITIO que cubre el instante; mas
-  //   2. las que hoy apuntan aqui y NO tienen una colocacion en otro sitio cubriendo el instante.
+  //   1. toda caja cuya colocacion de ESE DIA es en este sitio; mas
+  //   2. las que hoy apuntan aqui y no tienen NINGUNA colocacion ese dia.
   //
   // El (2) cubre ademas un estado medido y no una hipotesis: el comentario de
   // `crearColocacionInicial` registra *"10 de 29 colmenas sin ninguna colocacion"* sobre los datos
   // reales el 2026-09-15 — las diez de Apiario Las Nubes, por un guion que no la abria. Una
   // consulta que mire solo colocaciones devuelve CERO para esas diez.
-  const instante = visita.startedAt;
-  const cubreElInstante = { startedAt: { lte: instante }, OR: [{ endedAt: null }, { endedAt: { gt: instante } }] };
+  //
+  // **Se mide el DIA de la visita, no el instante** (V-4/V-H2, Daniel, 2026-10-08). El traslado es
+  // de dia (ADR-112): cierra la colocacion de origen y abre la de destino a medianoche UTC del dia
+  // que se teclea. #685 miraba la colocacion que cubre el instante de inicio, y con eso una visita
+  // al origen la manana del traslado ya no veia la caja, y una al destino si. La regla de Daniel es
+  // la contraria: **la caja sigue en el origen todo ese dia y cuenta en el destino desde el
+  // siguiente.** Asi que, de las colocaciones que tocan el dia, manda la mas antigua. El dia es el
+  // del sitio, en su zona (Panama si no la declara).
+  const dia = new Date(`${mostrarFecha(visita.startedAt, visita.location.timezone ?? ZONA_POR_DEFECTO)}T00:00:00.000Z`);
+  const tocaElDia = { startedAt: { lt: new Date(dia.getTime() + DIA_MS) }, OR: [{ endedAt: null }, { endedAt: { gte: dia } }] };
 
-  const aqui = await prisma.hivePlacement.findMany({
-    where: { locationId: visita.locationId, ...cubreElInstante },
-    select: { hiveId: true },
-  });
-  const idsAqui = aqui.map((c) => c.hiveId);
-
-  const apuntanAqui = await prisma.hive.findMany({
-    where: { locationId: visita.locationId },
-    select: { id: true },
-  });
-  const sinColocacionAqui = apuntanAqui.map((h) => h.id).filter((id) => !idsAqui.includes(id));
-
-  const enOtroSitio = sinColocacionAqui.length
+  const [aqui, apuntanAqui] = await Promise.all([
+    prisma.hivePlacement.findMany({ where: { locationId: visita.locationId, ...tocaElDia }, select: { hiveId: true } }),
+    prisma.hive.findMany({ where: { locationId: visita.locationId }, select: { id: true } }),
+  ]);
+  const candidatas = [...new Set([...aqui.map((c) => c.hiveId), ...apuntanAqui.map((h) => h.id)])];
+  const colocacionesDelDia = candidatas.length
     ? await prisma.hivePlacement.findMany({
-        where: { hiveId: { in: sinColocacionAqui }, locationId: { not: visita.locationId }, ...cubreElInstante },
-        select: { hiveId: true },
+        where: { hiveId: { in: candidatas }, ...tocaElDia },
+        orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+        select: { hiveId: true, locationId: true },
       })
     : [];
-  const idsEnOtroSitio = new Set(enOtroSitio.map((c) => c.hiveId));
+  const sitioDelDia = new Map<string, string>();
+  for (const c of colocacionesDelDia) if (!sitioDelDia.has(c.hiveId)) sitioDelDia.set(c.hiveId, c.locationId);
+  const apuntan = new Set(apuntanAqui.map((h) => h.id));
+  const ids = candidatas.filter((id) => (sitioDelDia.has(id) ? sitioDelDia.get(id) === visita.locationId : apuntan.has(id)));
 
-  const cajas = await prisma.hive.findMany({
-    where: { id: { in: [...idsAqui, ...sinColocacionAqui.filter((id) => !idsEnOtroSitio.has(id))] } },
-    orderBy: { identifier: "asc" },
-    select: { id: true, identifier: true, colonies: { where: { endedAt: null }, select: { status: true } } },
-  });
+  const cajas = (
+    await prisma.hive.findMany({
+      where: { id: { in: ids } },
+      orderBy: { identifier: "asc" },
+      select: { id: true, identifier: true, colonies: { where: { endedAt: null }, select: { status: true } } },
+    })
+  ).map((c) => ({ hiveId: c.id, identifier: c.identifier, poblada: c.colonies.some((k) => k.status === "active") }));
 
-  const sinTocar = cajas
-    .filter((c) => !tocadas.has(c.id))
-    .map((c) => ({
-      hiveId: c.id,
-      identifier: c.identifier,
-      poblada: c.colonies.some((k) => k.status === "active"),
-    }));
+  const sinTocar = cajas.filter((c) => !hecho.has(c.hiveId));
+  const porActividad = Object.fromEntries(
+    ACTIVIDADES.map((a) => [a, cajas.filter((c) => hecho.get(c.hiveId)?.has(a)).length]),
+  ) as Record<Actividad, number>;
+
+  // En el orden del enum y no en el que se declararon: la pantalla sale igual en toda visita.
+  const declarados = new Set(visita.purposes);
+  const porProposito = visita.purposes.length
+    ? (Object.keys(LO_QUE_PIDE) as VisitPurpose[])
+        .filter((p) => declarados.has(p))
+        .map((proposito) => {
+          const pide: readonly Actividad[] = LO_QUE_PIDE[proposito];
+          const faltan = pide.length ? cajas.filter((c) => !pide.some((a) => hecho.get(c.hiveId)?.has(a))) : [];
+          return { proposito, faltan, faltanPobladas: faltan.filter((c) => c.poblada).length };
+        })
+    : null;
 
   return {
     fieldSessionId: visita.id,
     locationId: visita.locationId,
+    total: cajas.length,
+    porActividad,
+    sinActividad: sinTocar.length,
+    porProposito,
     sinTocar,
     sinTocarPobladas: sinTocar.filter((c) => c.poblada).length,
-    tocadas: cajas.filter((c) => tocadas.has(c.id)).length,
+    tocadas: cajas.length - sinTocar.length,
     retiros: await retirosPendientes(visita.locationId, ahora),
   };
 }
