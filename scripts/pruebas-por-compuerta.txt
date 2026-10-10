@@ -154,6 +154,7 @@ tests/traceability/idMalFormadoDeUbicacion.test.ts
 tests/apiary/idMalFormadoDeApiario.test.ts
 tests/idMalFormadoYFindUniqueOrThrow.test.ts
 tests/research/idMalFormado.test.ts
+tests/idMalFormadoRestantes.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
 tests/inventario/materiales.test.ts

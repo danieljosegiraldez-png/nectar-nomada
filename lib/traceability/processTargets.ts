@@ -27,6 +27,7 @@
  * what preserves that.
  */
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { Prisma } from "../../generated/prisma/client";
 import { requireLotAccess } from "./lots";
 import { exigeEditarBeneficioEnOrganizacion } from "./locations";
@@ -532,6 +533,9 @@ export async function listRecipeOrganizations(userAccountId: string) {
  * quietly rewrite what those runs were aiming for.
  */
 export async function getRecipeForEditor(userAccountId: string, recipeId: string) {
+  // El id llega de la URL de `recipes/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la página
+  // daba 500 (PENDING_IMPLEMENTATIONS/026); es una receta que no existe.
+  if (!UUID.test(recipeId)) throw new ProcessTargetError("recipe_not_found");
   const recipe = await prisma.processRecipe.findUnique({
     where: { id: recipeId },
     include: {

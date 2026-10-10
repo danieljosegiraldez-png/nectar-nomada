@@ -14,6 +14,7 @@
  * spec, no un arreglo de mecanismo.
  */
 import { prisma } from "../db";
+import { SensoryWheelDomain } from "../../generated/prisma/client";
 import { permissionKeysAnywhere } from "../rbac/service";
 
 const PERMISOS_SENSORIALES = new Set(["sensory:submit_assessment", "sensory:manage_session", "competition:manage"]);
@@ -55,6 +56,10 @@ export async function listarRuedasSensoriales(userAccountId?: string | null) {
 }
 
 export async function obtenerRuedaSensorial(domain: string, userAccountId?: string | null) {
+  // El dominio llega de la URL de `ruedas/[wheel]` y va al filtro de un enum: con un valor que no está
+  // en `SensoryWheelDomain`, Prisma lanzaba un error de validación y la página daba 500
+  // (PENDING_IMPLEMENTATIONS/026). Un dominio que no existe es una rueda que no existe.
+  if (!(Object.values(SensoryWheelDomain) as string[]).includes(domain)) throw new RuedaSensorialNoEncontrada();
   const internas = await puedeVerBorradores(userAccountId);
   const rueda = await prisma.sensoryWheel.findFirst({
     where: { domain: domain as never, ...(internas ? {} : { isPublic: true }) },
