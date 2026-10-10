@@ -18,8 +18,20 @@
  * opens to *something* instead of the browser's own offline error page.
  */
 const SHELL_CACHE = "nn-shell-v1";
-const PAGE_CACHE = "nn-pages-v1";
+// v2 desde el 2026-10-09: las páginas guardadas llevan su hora y no
+// sobreviven a la sesión (ver más abajo y `lib/offline/paginasGuardadas.ts`,
+// que borra esta misma caché al cerrar sesión). Cambiar el nombre hace que el
+// `activate` borre la v1 en cada teléfono al actualizarse, que es como
+// desaparecen las páginas que ya se habían guardado sin hora y sin dueño.
+const PAGE_CACHE = "nn-pages-v2";
 const OFFLINE_URL = "/offline.html";
+
+// Sin red, una página guardada no se sirve pasado lo que dura una sesión
+// (`DURACION_DE_SESION_S`, en `lib/auth/duracionDeSesion.ts`): quien la
+// guardó ya no tendría sesión. Va escrito a mano porque este archivo no puede
+// importar; `tests/offline/service-worker.test.ts` comprueba que coincidan.
+const MAX_EDAD_DE_PAGINA_MS = 7 * 24 * 60 * 60 * 1000;
+const CABECERA_GUARDADA = "x-nn-guardada";
 
 const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
@@ -103,13 +115,36 @@ async function networkFirstNavigation(request) {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(PAGE_CACHE);
-      cache.put(request, response.clone());
+      cache.put(request, conHora(response.clone()));
     }
     return response;
   } catch {
-    const cached = await caches.match(request, { cacheName: PAGE_CACHE });
+    const cached = await paginaVigente(request);
     if (cached) return cached;
     const offline = await caches.match(OFFLINE_URL, { cacheName: SHELL_CACHE });
     return offline || Response.error();
   }
+}
+
+/** La misma respuesta, con la hora a la que se guardó. El cuerpo pasa como flujo: no se espera a leerlo. */
+function conHora(response) {
+  const headers = new Headers(response.headers);
+  headers.set(CABECERA_GUARDADA, String(Date.now()));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/**
+ * La página guardada, si se guardó hace menos de lo que dura una sesión. Una
+ * sin hora —de antes de la v2— o más vieja no se sirve, y se borra.
+ */
+async function paginaVigente(request) {
+  const cache = await caches.open(PAGE_CACHE);
+  const cached = await cache.match(request);
+  if (!cached) return undefined;
+  // `Number(null)` es 0 y `Number("x")` es NaN: los dos dan una edad que no
+  // pasa la comparación, así que una hora ausente o rota no se sirve.
+  const edad = Date.now() - Number(cached.headers.get(CABECERA_GUARDADA));
+  if (edad <= MAX_EDAD_DE_PAGINA_MS) return cached;
+  await cache.delete(request);
+  return undefined;
 }
