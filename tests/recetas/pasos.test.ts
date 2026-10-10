@@ -37,7 +37,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import type { Prisma, ProcessPhase } from "../../generated/prisma/client";
 import { listRecipeVersionsForLot, ProcessTargetError, validateTargets } from "../../lib/traceability/processTargets";
-import { crearRecetaEnBorrador } from "../../lib/recetas/versiones";
+import { crearRecetaEnBorrador, nuevaVersionBorrador } from "../../lib/recetas/versiones";
 import {
   actualizarPaso,
   agregarPaso,
@@ -45,6 +45,7 @@ import {
   pasosDeLaVersion,
   publicarVersion,
   quitarPaso,
+  type PasoConDetalle,
   type PasoEditable,
 } from "../../lib/recetas/pasos";
 import { RecipeError } from "../../lib/recetas/errorDeReceta";
@@ -1125,6 +1126,89 @@ describe("§3.1 — publicar deriva UNA fase por tipo, del primer paso de esa fa
   });
 });
 
+describe("§3.3 — la cadena versionar → editar la copia → publicar deja INTACTA la versión publicada de antes (F2-2)", () => {
+  /**
+   * Todo lo que una versión tiene, TAL COMO ESTÁ en la base, con sus ids y sus marcas de tiempo: los pasos con sus hijas y sus metas (lo que lee la pantalla), las metas y las
+   * fases como filas crudas, y la fila de la versión. «Intacta» es que dos fotos idénticas — una fila borrada y vuelta a escribir cambia su id.
+   */
+  async function foto(versionId: string) {
+    return JSON.parse(
+      JSON.stringify({
+        version: await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: versionId } }),
+        pasos: await pasosDeLaVersion(gestor, versionId),
+        metas: await prisma.processTarget.findMany({ where: { recipeVersionId: versionId }, orderBy: { displayOrder: "asc" } }),
+        // Por nombre de fase: el orden del enum de la base no es el alfabético, y la prueba lo nombra.
+        fases: (await prisma.processRecipePhase.findMany({ where: { recipeVersionId: versionId } })).sort((a, b) => a.phase.localeCompare(b.phase)),
+      }),
+    ) as { version: { status: string }; pasos: PasoConDetalle[]; metas: { recipeStepId: string | null }[]; fases: { phase: string; expectedHours: number | null }[] };
+  }
+
+  it("publicar la v2 —sin un paso, con otro cambiado— deja la v1 publicada con los mismos pasos, metas y fases, y la v2 refleja lo editado", async () => {
+    const { versionId: v1 } = await borrador("cadena");
+    // Una meta de la VERSIÓN (de antes de los pasos): también tiene que sobrevivir.
+    await prisma.processTarget.create({
+      data: { recipeVersionId: v1, variable: "moisture", moment: "final", phase: "drying", unit: "%", minValue: 10, maxValue: 12, displayOrder: 0 },
+    });
+    await agregar(v1, null, await pasoDe("pulping", { intencion: "despulpar el mismo día", horasSugeridas: 2 }));
+    await agregar(
+      v1,
+      1,
+      await pasoDe("fermentation", {
+        horasSugeridas: 36,
+        metas: [
+          { variable: "ph", moment: "initial", unit: "pH", minValue: 4.5, maxValue: 5.5 },
+          { variable: "ph", moment: "final", unit: "pH", maxValue: 3.9 },
+        ],
+      }),
+    );
+    await agregar(
+      v1,
+      2,
+      await pasoDe("drying", {
+        horasSugeridas: 192,
+        volteoCadaHoras: 4,
+        humedadMinPct: 10,
+        humedadMaxPct: 12,
+        metas: [{ variable: "moisture", moment: "final", unit: "%", minValue: 10, maxValue: 12 }],
+      }),
+    );
+    await publicarVersion(gestor, v1);
+
+    const antes = await foto(v1);
+    // Fila patrón: la v1 tiene de verdad pasos, metas de los dos tipos y fases. Sin esto, «la v1 sigue igual» compararía dos fotos vacías.
+    expect(antes.version.status).toBe("approved");
+    expect(antes.pasos.map((p) => p.tipo)).toEqual(["pulping", "fermentation", "drying"]);
+    expect(antes.metas.filter((m) => m.recipeStepId !== null), "metas de paso").toHaveLength(3);
+    expect(antes.metas.filter((m) => m.recipeStepId === null), "metas de versión").toHaveLength(1);
+    expect(antes.fases.map((f) => [f.phase, f.expectedHours])).toEqual([["drying", 192], ["fermentation", 36]]);
+
+    // La cadena: la v2 nace de la v1, se le quita un paso, se cambia otro (horas y una meta) y se publica.
+    const v2 = await nuevaVersionBorrador(gestor, v1);
+    const pasosV2 = await pasosDeLaVersion(gestor, v2.id);
+    const fermentacionV2 = pasosV2.find((p) => p.tipo === "fermentation")!;
+    await quitarPaso(gestor, pasosV2.find((p) => p.tipo === "pulping")!.id);
+    await actualizarPaso(gestor, {
+      stepId: fermentacionV2.id,
+      paso: { ...fermentacionV2, horasSugeridas: 60, metas: [{ variable: "ph", moment: "initial", unit: "pH", minValue: 4, maxValue: 4.8 }] },
+    });
+    await publicarVersion(gestor, v2.id);
+
+    // La v1 sigue igual, fila por fila.
+    expect(await foto(v1), "la v1 publicada quedó intacta").toEqual(antes);
+
+    // Y la v2 es lo editado: sin el despulpado, con la fermentación cambiada, publicada, con SUS fases derivadas y sus metas apuntando a SUS pasos.
+    const despues = await foto(v2.id);
+    expect(despues.version.status).toBe("approved");
+    expect(despues.pasos.map((p) => [p.seq, p.tipo, p.horasSugeridas])).toEqual([[1, "fermentation", 60], [2, "drying", 192]]);
+    expect(despues.pasos[0]!.metas.map((m) => [m.variable, m.moment, m.minValue, m.maxValue])).toEqual([["ph", "initial", 4, 4.8]]);
+    expect(despues.fases.map((f) => [f.phase, f.expectedHours])).toEqual([["drying", 192], ["fermentation", 60]]);
+    const idsV2 = new Set(despues.pasos.map((p) => p.id));
+    for (const m of despues.metas.filter((m) => m.recipeStepId !== null)) expect(idsV2.has(m.recipeStepId!), "la meta de paso de la v2 apunta a un paso de la v2").toBe(true);
+    const idsV1 = new Set(antes.pasos.map((p) => p.id));
+    expect(despues.pasos.filter((p) => idsV1.has(p.id)), "la v2 no comparte ningún paso con la v1").toEqual([]);
+  });
+});
+
 describe("§3.3 — concurrencia: la versión y la receta se bloquean dentro de su transacción", () => {
   it("dos publicaciones a la vez: una gana, y la otra encuentra la versión ya publicada", async () => {
     const { versionId } = await borrador("carrera-publicar");
@@ -1271,6 +1355,34 @@ describe("permisos (V16): quién escribe una receta, y quién lee sus pasos", ()
     await publicarVersion(gestorDeFinca, versionId);
     expect((await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: versionId } })).status).toBe("approved");
   });
+
+  // F2-1 (G). `versionParaEscribir` comprueba la autoría ANTES de que la transacción mire si la versión es un borrador (`version_no_es_borrador`); permutarlas dejaba todo en verde, porque
+  // las pruebas de «una publicada no se edita» las hace el gestor, que tiene la autoría con cualquier orden. Aquí lo intentan quienes NO la tienen, por cada una de las cinco escrituras.
+  it.each(["agregarPaso", "actualizarPaso", "moverPaso", "quitarPaso", "publicarVersion"] as const)(
+    "F2-1 (G) — %s sobre una versión ya PUBLICADA: quien no puede escribir recetas recibe sin_permiso_de_autoria y no se entera de que no era un borrador; el Coffee Process Manager, version_no_es_borrador",
+    async (operacion) => {
+      const { org, lugar } = await finca(true);
+      const jefe = await cuentasDePermisos.cuenta("Farm Manager", { locationId: lugar.id });
+      const capataz = await cuentasDePermisos.cuenta("Farm Operator", { locationId: lugar.id });
+      const gestorDeFinca = await cuentasDePermisos.cuenta("Coffee Process Manager", { locationId: lugar.id });
+      const { versionId } = await crearRecetaEnBorrador(gestor, { name: nombre(`publicada ${operacion}`), organizationId: org.id });
+      const creado = await agregar(versionId, null, await pasoDe("washing"));
+      await publicarVersion(gestor, versionId);
+      const paso = await pasoDe("pulping");
+      const intenta = (quien: string) =>
+        ({
+          agregarPaso: () => agregarPaso(quien, { recipeVersionId: versionId, despuesDeSeq: null, paso }),
+          actualizarPaso: () => actualizarPaso(quien, { stepId: creado.id, paso }),
+          moverPaso: () => moverPaso(quien, { stepId: creado.id, aSeq: 1 }),
+          quitarPaso: () => quitarPaso(quien, creado.id),
+          publicarVersion: () => publicarVersion(quien, versionId),
+        })[operacion]();
+      for (const sinPermiso of [jefe, capataz]) await rechaza(intenta(sinPermiso), "sin_permiso_de_autoria");
+      // Control: quien SÍ puede escribir recetas de la finca recibe el otro código. Lo que paraba a los otros dos era la autoría, no el estado de la versión.
+      await rechaza(intenta(gestorDeFinca), "version_no_es_borrador");
+      expect((await pasosDeLaVersion(gestor, versionId)).map((p) => p.tipo), "ni los rechazos ni el control cambiaron la versión").toEqual(["washing"]);
+    },
+  );
 
   it("los pasos los lee quien puede escribir la receta, sin ser operario, y quien opera los lotes de su organización; un Project Viewer no", async () => {
     const { org, lugar } = await finca(true);

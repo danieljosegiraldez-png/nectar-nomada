@@ -503,6 +503,21 @@ describe("una receta Libre no se versiona (I14, diseño §5.2–§5.3)", () => {
     const comun = await receta({ organizationId: orgId, conPasos: true, esLibre: false });
     await expect(nuevaVersionBorrador(gestor, comun.versionId)).resolves.toMatchObject({ version: 2 });
   });
+
+  it("F2-1 (E) — la autoría se pregunta ANTES de decir que es Libre: quien no puede escribir recetas recibe sin_permiso_de_autoria y no se entera de cuáles lo son", async () => {
+    // El comentario de `nuevaVersionBorrador` lo promete («después de la autoría: quien no puede escribir recetas no se entera de cuáles son Libres») y permutar las dos líneas dejaba todo
+    // en verde: la prueba de arriba sólo la intenta el gestor, que pasa la autoría con cualquier orden. Aquí la intentan quienes NO la tienen, sobre la Libre y sobre una común.
+    const libre = await receta({ organizationId: orgId, conPasos: false, esLibre: true });
+    const comun = await receta({ organizationId: orgId, conPasos: false, esLibre: false });
+    for (const sinPermiso of [jefe, capataz]) {
+      await expect(nuevaVersionBorrador(sinPermiso, libre.versionId), "sobre la Libre").rejects.toThrow(new RecipeError("sin_permiso_de_autoria"));
+      await expect(nuevaVersionBorrador(sinPermiso, comun.versionId), "sobre la común").rejects.toThrow(new RecipeError("sin_permiso_de_autoria"));
+    }
+    // Control: quien SÍ puede escribir recetas recibe el otro código sobre la Libre, y la común sale. Lo que paraba a los otros dos era la autoría, no la marca.
+    await expect(nuevaVersionBorrador(gestor, libre.versionId)).rejects.toThrow(new RecipeError("receta_libre_no_se_versiona"));
+    await expect(nuevaVersionBorrador(gestor, comun.versionId)).resolves.toMatchObject({ version: 2 });
+    expect(await prisma.processRecipeVersion.count({ where: { recipeId: libre.recipeId } }), "la Libre sigue con su única versión").toBe(1);
+  });
 });
 
 describe("plantillas (§3.4): sólo se versionan con alcance de plataforma; una organización deriva su copia", () => {
@@ -566,6 +581,28 @@ describe("plantillas (§3.4): sólo se versionan con alcance de plataforma; una 
     await expect(pide(enBorrador.versionId, "TEST VERS de borrador")).rejects.toThrow(new RecipeError("version_no_publicada"));
     // Control: de una publicada, sale.
     await expect(pide(publicada.versionId, "TEST VERS de publicada")).resolves.toBeDefined();
+  });
+
+  // F2-1 (F). El comentario de `derivarReceta` dice que pide la autoría «ANTES de leer la plantilla», y permutar el orden dejaba las pruebas en verde: las de arriba derivan con el
+  // gestor, que la tiene. Quien NO la tiene no debe enterarse de si la versión existe, de si es de una organización o de si está en borrador. Un caso por cada rechazo de la lectura,
+  // para que cada permutación (la autoría detrás de uno, de dos o de los tres) tumbe su caso por su nombre.
+  it.each([
+    ["una versión que no existe", "version_no_encontrada"],
+    ["la versión de una receta de organización", "no_es_plantilla"],
+    ["una plantilla en borrador", "version_no_publicada"],
+  ] as const)("F2-1 (F) — derivar %s: quien no puede escribir recetas recibe sin_permiso_de_autoria; el Coffee Process Manager, %s", async (que, codigo) => {
+    const plantillaVersionId = {
+      "una versión que no existe": randomUUID(),
+      "la versión de una receta de organización": (await receta({ organizationId: orgId, conPasos: false })).versionId,
+      "una plantilla en borrador": (await receta({ organizationId: null, conPasos: false, status: "draft" })).versionId,
+    }[que];
+    const nombre = `TEST VERS sin lectura ${RUN}`;
+    for (const sinPermiso of [jefe, capataz]) {
+      await expect(derivarReceta(sinPermiso, { plantillaVersionId, organizationId: orgId, nombre })).rejects.toThrow(new RecipeError("sin_permiso_de_autoria"));
+    }
+    // Control: el gestor de esa finca, con la misma versión y el mismo nombre, recibe el código de la plantilla. Lo que paraba a los otros dos era la autoría.
+    await expect(derivarReceta(gestor, { plantillaVersionId, organizationId: orgId, nombre })).rejects.toThrow(new RecipeError(codigo));
+    expect(await prisma.processRecipe.count({ where: { name: nombre } }), "los rechazos no dejaron receta").toBe(0);
   });
 
   it("una organización en blanco no se deriva —ni a «ninguna»—: sin permiso de autoría, también con alcance de plataforma, y nunca un error de uuid (F1-11)", async () => {
