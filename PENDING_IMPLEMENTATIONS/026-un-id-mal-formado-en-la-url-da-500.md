@@ -1,8 +1,8 @@
 # 026 · Treinta y una páginas dan 500 con un id mal formado en la URL
 
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
-diez subrutas, las ocho de `requireLocationAttributeAccess`, y las tres de `puedeSubdividirParcela` y
-`conAncestros`. Quedan 20 de las 31.** Es un defecto, no
+diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
+`conAncestros`, y las tres de `getApiaryDetail` y `getHive`. Quedan 17 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -56,7 +56,8 @@ página lanza varias en paralelo, hay que cubrirlas todas. Medido: `apiaries/[id
 vez a `getApiaryDetail`, a `listFieldSessions` —que lo consulta en `requireFieldSessionAccess`,
 `lib/traceability/jornadaDeCampo.ts:34`— y a `getObserverCandidates`, y **no atrapa nada**: con el id
 basura reventó en `hives.ts:619` y con el UUID inexistente en `jornadaDeCampo.ts:40`. Ahí la
-comprobación va en la página. (`getProjectWorkspace` también lanza cuatro consultas en paralelo
+comprobación va en la página. **Hecho en #696:** la página llama primero a `getApiaryDetail`, sola y dentro
+de un `try`, y después a las otras tres en paralelo. (`getProjectWorkspace` también lanza cuatro consultas en paralelo
 —`lib/partner/workspace.ts:118`—, pero todas dentro de la misma función, así que una guarda al
 principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-09.
 
@@ -65,8 +66,8 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8, arregladas en #696**: las ocho dan 404 |
 | `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` — **arreglada en #696**: contesta `false`, como a una parcela que no existe, y la página da 404 |
 | `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` — **arregladas en #696**, con una segunda guarda en `contextoDeManejo` (ver abajo); las dos dan 404 |
-| `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` |
-| `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` |
+| `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` — **arregladas en #696**: guarda en la función y, en `apiaries/[id]`, la página la llama primero y atrapa `ApiaryAccessError`; las dos dan 404 |
+| `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` — **arreglada en #696**: guarda en la función, y la página atrapa `ApiaryAccessError`; da 404 |
 | `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` |
 | `getCalibrationSessionDetail` (`lib/sensory/calibration.ts:78`) | `calibration/[calibrationSessionId]` |
 | `getEditionDetail` (`lib/competitions/service.ts:40`) | `competitions/[editionId]` |
@@ -99,15 +100,15 @@ que sí, igual que antes con un UUID inexistente. La prueba fija las dos cosas:
 id en la línea siguiente. Lleva su propia guarda, que lanza `TraceabilityAccessError("no_lot_access")`,
 lo que ya lanzaba para una ubicación ausente.
 
-## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto
+## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (quedan cinco)
 
 Éstas no las arregla una guarda de forma: el id es válido, la fila no existe, y lo que sube no es
 `P2007`.
 
 | página | lo que sube | dónde |
 |---|---|---|
-| `apiaries/[id]` | `location_not_found` | `requireFieldSessionAccess`, `lib/traceability/jornadaDeCampo.ts:40`, en el `Promise.all` de la página |
-| `apiaries/[id]/hives/[hiveId]` | `hive_not_found` | `getHive`, `lib/apiary/hives.ts:500`; la página no atrapa nada |
+| ~~`apiaries/[id]`~~ | `location_not_found` | `requireFieldSessionAccess`, `lib/traceability/jornadaDeCampo.ts:40`, en el `Promise.all` de la página — **arreglada en #696** con el `try` de la página |
+| ~~`apiaries/[id]/hives/[hiveId]`~~ | `hive_not_found` | `getHive`, `lib/apiary/hives.ts:500`; la página no atrapaba nada — **arreglada en #696** con el `try` de la página |
 | `calibration/[calibrationSessionId]` | `P2025` | `findUniqueOrThrow` en `lib/sensory/calibration.ts:78` |
 | `competitions/[editionId]` | `P2025` | `findUniqueOrThrow` en `lib/competitions/service.ts:40` |
 | `partner/[projectId]` | `P2025` | `findUniqueOrThrow` en `lib/partner/workspace.ts:119` |
@@ -156,5 +157,10 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
+
+**Las de apiario, medidas el 2026-10-09 contra el servidor.**
+- *Con Platform Admin:* `apiaries/[id]`, `etiquetas` y `hives/[hiveId]` dan 404 con el id basura y con el UUID que no existe. El apiario y la colmena DEMO reales dan 200.
+- *Con la cuenta DEMO de socio, sin acceso:* las tres reales dan 404, sin el nombre.
+- *Flip:* volviendo a las páginas anteriores, con las guardas del servicio puestas, las seis de `apiaries/[id]` y `hives/[hiveId]` daban 500, incluido el apiario real sin permiso. Las guardas solas no bastaban; el `try` de la página hacía falta.
