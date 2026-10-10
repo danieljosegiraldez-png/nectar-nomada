@@ -232,6 +232,20 @@ describe("publicar, versión nueva y derivar", () => {
     expect(deps.revalidate.mock.calls.map((c) => c[0]).sort()).toEqual(["/recipes", "/recipes/r1"]);
   });
 
+  it("derivar con la organización en blanco la manda como null, no como cadena vacía (F1-11): el servicio la rechaza con nombre en vez de un error de uuid", async () => {
+    for (const blanco of ["", "   "]) {
+      deps.derivar.mockClear();
+      await expect(derivarRecetaAction({}, formulario({ plantillaVersionId: "vp", organizationId: blanco, nombre: "Mi lavado" }))).rejects.toThrow(
+        "redirect:/recipes/r-copia?ok=receta_derivada",
+      );
+      expect(deps.derivar).toHaveBeenCalledWith("actor", { plantillaVersionId: "vp", organizationId: null, nombre: "Mi lavado" });
+    }
+    // Control: con la organización, la misma acción la manda tal cual.
+    deps.derivar.mockClear();
+    await expect(derivarRecetaAction({}, formulario({ plantillaVersionId: "vp", organizationId: "org1", nombre: "Mi lavado" }))).rejects.toThrow();
+    expect(deps.derivar).toHaveBeenCalledWith("actor", { plantillaVersionId: "vp", organizationId: "org1", nombre: "Mi lavado" });
+  });
+
   it("derivar lleva a la copia que devolvió el servicio, no a la plantilla del formulario", async () => {
     const f = formulario({ plantillaVersionId: "vp", organizationId: "org1", nombre: "Mi lavado", recipeId: "r-plantilla" });
     await expect(derivarRecetaAction({}, f)).rejects.toThrow("redirect:/recipes/r-copia?ok=receta_derivada");

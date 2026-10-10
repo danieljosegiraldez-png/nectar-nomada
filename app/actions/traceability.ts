@@ -31,7 +31,7 @@ import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent, CerezaError } from "../../lib/traceability/harvest";
 import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError, CODIGOS_DE_TUESTE_CON_FRASE } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
-import { updateRecipeMetadata, ProcessTargetError } from "../../lib/traceability/processTargets";
+import { updateRecipeMetadata, ProcessTargetError, claveDeErrorDeMeta } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
@@ -324,6 +324,9 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   // de detalle, queda para un código que no tenga el suyo.
   const claveDeReceta = claveDeErrorDeReceta(error);
   if (claveDeReceta) return t(claveDeReceta as "error_receta_version_no_es_borrador");
+  // F1-7: las reglas de una meta de paso (`validateTargets`) tienen su texto; el genérico, con el código de detalle, queda para los demás `ProcessTargetError`.
+  const claveDeMeta = claveDeErrorDeMeta(error);
+  if (claveDeMeta) return t(claveDeMeta);
   if (error instanceof RecipeError) return t("error_process_target", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
@@ -1465,7 +1468,8 @@ export async function derivarRecetaAction(
   try {
     const derivada = await derivarReceta(user.userAccountId, {
       plantillaVersionId: String(formData.get("plantillaVersionId") ?? ""),
-      organizationId: String(formData.get("organizationId") ?? ""),
+      // En blanco es `null`, no una cadena vacía: la vacía llegaba al `uuid` de la base como un error crudo (F1-11). El servicio la rechaza con nombre.
+      organizationId: emptyToNull(formData.get("organizationId")),
       nombre: String(formData.get("nombre") ?? ""),
     });
     recipeId = derivada.recipeId;

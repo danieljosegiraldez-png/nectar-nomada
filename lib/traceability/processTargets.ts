@@ -36,8 +36,36 @@ import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/c
 import { puedeAutoriaDeReceta } from "../recetas/autoria";
 import { exigeAutoriaDeReceta } from "../recetas/autoria";
 import { RecipeError } from "../recetas/errorDeReceta";
+import { MAX_HORAS } from "../recetas/vocabulario";
 
 export class ProcessTargetError extends Error {}
+
+/**
+ * Los códigos de `ProcessTargetError` que lanza `validateTargets` ante lo que el editor de recetas puede mandar, con su texto propio en `Traceability.error_<código>` (es y en).
+ * Revisión final de la Parte 2a, F1-7: sin esto salían por el genérico con el código crudo en inglés («No se pudo guardar la receta: target_needs_a_number»). **Es una lista
+ * CERRADA a propósito**, como `CODIGOS_DE_RECETA_TRADUCIDOS`: un código nuevo de `validateTargets` entra aquí con su texto en el mismo cambio, o se declara sin entrada en
+ * `tests/recetas/mensajesDeReceta.test.ts`, que cruza la lista con lo que la función lanza. Los códigos de este archivo que no son de una meta (`recipe_not_found`…) siguen por el genérico.
+ */
+export const CODIGOS_DE_META_TRADUCIDOS = [
+  "target_needs_a_number",
+  "range_inverted",
+  "unknown_variable",
+  "wrong_unit_for_variable",
+  "target_out_of_physical_range",
+  "cadence_only_while_running",
+  "cadence_must_be_positive_hours",
+  "duplicate_variable_and_moment",
+] as const;
+
+export type CodigoDeMetaTraducido = (typeof CODIGOS_DE_META_TRADUCIDOS)[number];
+
+/** La clave de `Traceability` de un `ProcessTargetError` de la lista, o null. Mira la clase Y el código: un `Error` cualquiera con ese mensaje no es de una meta. */
+export function claveDeErrorDeMeta(error: unknown): `error_${CodigoDeMetaTraducido}` | null {
+  if (error instanceof ProcessTargetError && (CODIGOS_DE_META_TRADUCIDOS as readonly string[]).includes(error.message)) {
+    return `error_${error.message as CodigoDeMetaTraducido}`;
+  }
+  return null;
+}
 
 export interface Reading {
   id: string;
@@ -338,8 +366,9 @@ export function validateTargets(
       throw new ProcessTargetError("cadence_only_while_running");
     }
     // Cero no es «sin ritmo» —para eso está el nulo— y un negativo no es nada.
-    // Sin esto, un 0 dividiría por cero al calcular cuántas lecturas se deben.
-    if (t.everyHours != null && (!Number.isInteger(t.everyHours) || t.everyHours <= 0)) {
+    // Sin esto, un 0 dividiría por cero al calcular cuántas lecturas se deben. Y tampoco más de MAX_HORAS: la columna es INTEGER y un número enorme llegaba a la
+    // base como un error crudo (F1-11).
+    if (t.everyHours != null && (!Number.isInteger(t.everyHours) || t.everyHours <= 0 || t.everyHours > MAX_HORAS)) {
       throw new ProcessTargetError("cadence_must_be_positive_hours");
     }
   }

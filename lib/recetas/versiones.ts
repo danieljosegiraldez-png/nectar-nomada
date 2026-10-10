@@ -95,10 +95,13 @@ export async function nuevaVersionBorrador(userAccountId: string, desdeVersionId
  */
 export async function derivarReceta(
   userAccountId: string,
-  input: { plantillaVersionId: string; organizationId: string; nombre: string },
+  input: { plantillaVersionId: string; organizationId: string | null; nombre: string },
 ): Promise<{ recipeId: string; versionId: string }> {
   const nombre = input.nombre.trim();
   if (!nombre) throw new RecipeError("nombre_requerido");
+  // Derivar es a una ORGANIZACIÓN. En blanco —un formulario que no la mandó— no es «una plantilla» (para la autoría, `null` lo es, y dejaría pasar a quien escribe plantillas hacia una
+  // copia que sería otra plantilla) ni un id que consultar (una cadena vacía llegaba al `uuid` de la base como un error crudo): no hay dónde crear la copia, y nadie tiene permiso sobre «ninguna».
+  if (!input.organizationId) throw new RecipeError("sin_permiso_de_autoria");
   await exigeAutoriaDeReceta(userAccountId, input.organizationId);
 
   const plantilla = await prisma.processRecipeVersion.findUnique({

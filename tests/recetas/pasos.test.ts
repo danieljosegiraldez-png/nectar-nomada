@@ -51,6 +51,8 @@ import { RecipeError } from "../../lib/recetas/errorDeReceta";
 import {
   EJES_POR_TIPO_DE_PASO,
   FASE_DEL_TIPO,
+  MAX_CANTIDAD_DE_ADICION,
+  MAX_HORAS,
   TIPOS_DE_PASO,
   TRAMOS_DE_MUCILAGO,
   type EjeDelPaso,
@@ -668,6 +670,33 @@ describe("§3.5 — cada tipo admite sólo sus ejes, y cada valor sale de su cat
     await agregar(versionId, null, await sec({ horasSugeridas: 96, volteoCadaHoras: 4, humedadMinPct: 10, humedadMaxPct: 12 }));
     await agregar(versionId, null, await pasoDe("addition", { adiciones: [{ categoriaValueId: doble, cantidad: 2, unidad: "L", momento: "pre_green" }] }));
     await agregar(versionId, null, await pasoDe("fermentation", { metas: [{ variable: "ph", moment: "final", unit: "pH", targetValue: 3.8 }] }));
+  });
+
+  it("horas y cantidades con tope: el tope exacto se guarda, lo siguiente se rechaza con su código, y no queda el paso a medias (F1-11)", async () => {
+    // La columna de las horas es INTEGER y la de la cantidad `numeric(12,4)`: un número mayor llegaba a la base y volvía como un error crudo. El tope lo pone `validarPaso`.
+    const { versionId } = await borrador("topes");
+    const intenta = (paso: PasoEditable) => agregarPaso(gestor, { recipeVersionId: versionId, despuesDeSeq: null, paso });
+    const sec = (extra: Omit<PasoEditable, "stepTypeValueId">) => pasoDe("drying", extra);
+    const doble = await valor("sustrato_anadido", "doble_mosto");
+    const conCantidad = (cantidad: number) => pasoDe("addition", { adiciones: [{ categoriaValueId: doble, cantidad, unidad: "L", momento: "pre_green" }] });
+    expect(MAX_HORAS, "control: el tope de las horas").toBe(100000);
+    expect(MAX_CANTIDAD_DE_ADICION, "control: lo que cabe en numeric(12,4)").toBe(99999999.9999);
+    for (const campo of ["horasMin", "horasSugeridas", "horasMax", "volteoCadaHoras"] as const) {
+      for (const malo of [MAX_HORAS + 1, 2 ** 31]) {
+        await rechaza(intenta(await sec({ [campo]: malo })), "horas_invalidas");
+      }
+    }
+    for (const mala of [100000000, 99999999.99995, Number.MAX_VALUE]) {
+      await rechaza(intenta(await conCantidad(mala)), "adicion_invalida");
+    }
+    expect(await prisma.processRecipeStep.count({ where: { recipeVersionId: versionId } }), "ningún rechazo dejó un paso").toBe(0);
+    // Control: el tope EXACTO entra, y la base lo guarda tal cual (si no, «se rechaza lo siguiente» podría ser un tope que rechaza todo).
+    await agregar(versionId, null, await sec({ horasMin: MAX_HORAS, horasSugeridas: MAX_HORAS, horasMax: MAX_HORAS, volteoCadaHoras: MAX_HORAS }));
+    await agregar(versionId, null, await conCantidad(MAX_CANTIDAD_DE_ADICION));
+    const guardados = await pasosDeLaVersion(gestor, versionId);
+    const secado = guardados.find((p) => p.tipo === "drying");
+    expect([secado?.horasMin, secado?.horasSugeridas, secado?.horasMax, secado?.volteoCadaHoras]).toEqual([MAX_HORAS, MAX_HORAS, MAX_HORAS, MAX_HORAS]);
+    expect(guardados.flatMap((p) => p.adiciones.map((a) => a.cantidad))).toEqual([MAX_CANTIDAD_DE_ADICION]);
   });
 
   it("una condición de fin: variable conocida, su unidad y un valor posible", async () => {

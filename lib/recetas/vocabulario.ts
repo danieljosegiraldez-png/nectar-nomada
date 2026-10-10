@@ -181,3 +181,14 @@ export const FASE_DEL_TIPO: Readonly<Partial<Record<TipoDePaso, "fermentation" |
   immersion_cold: "fermentation",
   drying: "drying",
 };
+
+/**
+ * Los topes de lo que una receta declara con un número (F1-11 de la revisión final de la Parte 2a). Sin tope, un número enorme llegaba a la base y volvía como un error
+ * crudo: las horas son `INTEGER` (el máximo, 2 147 483 647 h, son 245 000 años) y la cantidad de una adición `numeric(12,4)`.
+ *
+ * **`MAX_HORAS`**: las horas de un paso (`horasMin`, `horasSugeridas`, `horasMax`, `volteoCadaHoras`) y el ritmo de una meta (`everyHours`). Cien mil horas son once años y medio:
+ * más que cualquier proceso del beneficio, y muy por debajo de lo que la columna guarda. **`MAX_CANTIDAD_DE_ADICION`**: lo que cabe en `numeric(12,4)`, ocho enteros y cuatro
+ * decimales; el valor justo por encima redondea a 100 000 000 en la base y revienta, y por eso se compara con `>` contra ESTE número y no contra 10^8.
+ */
+export const MAX_HORAS = 100000;
+export const MAX_CANTIDAD_DE_ADICION = 99999999.9999;

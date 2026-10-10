@@ -45,6 +45,8 @@ import { RecipeError } from "./errorDeReceta";
 import {
   EJES_POR_TIPO_DE_PASO,
   FASE_DEL_TIPO,
+  MAX_CANTIDAD_DE_ADICION,
+  MAX_HORAS,
   TIPOS_DE_PASO,
   TRAMOS_DE_MUCILAGO,
   type EjeDelPaso,
@@ -239,12 +241,13 @@ function validarPaso(tipo: TipoDePaso, paso: PasoCompleto): void {
   const noFinito = (n: number | null | undefined) => n != null && !Number.isFinite(n);
   if ([paso.temperaturaMinC, paso.temperaturaMaxC].some(noFinito)) throw new RecipeError("rango_invalido");
   if (paso.adiciones.some((a) => noFinito(a.cantidad))) throw new RecipeError("adicion_invalida");
+  // (La cantidad de una adición tiene además su tope, MAX_CANTIDAD_DE_ADICION, en el recorrido de las adiciones de más abajo.)
 
-  // Las horas: enteras y mayores que cero —un cero no es «sin dato», para eso está el nulo—, y mínima ≤ sugerida ≤ máxima
-  // entre las que se declaren.
+  // Las horas: enteras, mayores que cero —un cero no es «sin dato», para eso está el nulo— y no más de MAX_HORAS (la columna es INTEGER: un número enorme llegaba a la base
+  // como un error crudo, F1-11), y mínima ≤ sugerida ≤ máxima entre las que se declaren.
   const { horasMin, horasSugeridas, horasMax, volteoCadaHoras } = paso;
   for (const h of [horasMin, horasSugeridas, horasMax, volteoCadaHoras]) {
-    if (h != null && !(Number.isInteger(h) && h > 0)) throw new RecipeError("horas_invalidas");
+    if (h != null && !(Number.isInteger(h) && h > 0 && h <= MAX_HORAS)) throw new RecipeError("horas_invalidas");
   }
   const declaradas = [horasMin, horasSugeridas, horasMax].filter((h): h is number => h != null);
   for (let i = 1; i < declaradas.length; i++) {
@@ -283,7 +286,7 @@ function validarPaso(tipo: TipoDePaso, paso: PasoCompleto): void {
   for (const a of paso.adiciones) {
     if (!a.categoriaValueId) throw new RecipeError("adicion_invalida");
     if ((a.cantidad == null) !== (a.unidad == null)) throw new RecipeError("adicion_invalida");
-    if (a.cantidad != null && !(a.cantidad > 0)) throw new RecipeError("adicion_invalida");
+    if (a.cantidad != null && !(a.cantidad > 0 && a.cantidad <= MAX_CANTIDAD_DE_ADICION)) throw new RecipeError("adicion_invalida");
     if (a.momento !== "pre_green" && a.momento !== "post_green") throw new RecipeError("adicion_invalida");
   }
 

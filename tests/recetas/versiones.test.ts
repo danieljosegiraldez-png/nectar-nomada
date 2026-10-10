@@ -568,6 +568,23 @@ describe("plantillas (§3.4): sólo se versionan con alcance de plataforma; una 
     await expect(pide(publicada.versionId, "TEST VERS de publicada")).resolves.toBeDefined();
   });
 
+  it("una organización en blanco no se deriva —ni a «ninguna»—: sin permiso de autoría, también con alcance de plataforma, y nunca un error de uuid (F1-11)", async () => {
+    // El formulario manda `organizationId` vacío cuando el desplegable no se llenó. Una cadena vacía llegaba al `uuid` de la base como un error crudo, y `null` —que para la
+    // autoría es «una plantilla»— lo habría dejado pasar a quien escribe plantillas y creado una copia que es otra plantilla.
+    const p = await receta({ organizationId: null, conPasos: false });
+    const nombre = `TEST VERS sin organizacion ${RUN}`;
+    for (const quien of [gestor, gestorDePlataforma]) {
+      for (const blanco of [null, ""]) {
+        await expect(derivarReceta(quien, { plantillaVersionId: p.versionId, organizationId: blanco, nombre }), `${quien === gestor ? "gestor" : "plataforma"} con ${JSON.stringify(blanco)}`).rejects.toThrow(
+          new RecipeError("sin_permiso_de_autoria"),
+        );
+      }
+    }
+    expect(await prisma.processRecipe.count({ where: { name: nombre } }), "los rechazos no dejaron receta").toBe(0);
+    // Control: con la organización, el mismo gestor deriva.
+    await expect(derivarReceta(gestor, { plantillaVersionId: p.versionId, organizationId: orgId, nombre })).resolves.toBeDefined();
+  });
+
   it("el nombre es obligatorio y no se repite en la organización", async () => {
     const p = await receta({ organizationId: null, conPasos: false });
     const nombre = `TEST VERS repetida ${RUN}`;

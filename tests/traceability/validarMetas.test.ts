@@ -7,6 +7,7 @@
  * la clave por paso, `NaN`) las prueba `tests/recetas/pasos.test.ts`.
  */
 import { describe, expect, it } from "vitest";
+import { MAX_HORAS } from "../../lib/recetas/vocabulario";
 import { ProcessTargetError, validateTargets } from "../../lib/traceability/processTargets";
 
 type Meta = Parameters<typeof validateTargets>[0][number];
@@ -64,6 +65,17 @@ describe("validateTargets — las reglas de una meta", () => {
       expect(codigo([meta({ moment: "during", everyHours: malo })]), `con ${malo} h`).toBe("cadence_must_be_positive_hours");
     }
     expect(codigo([meta({ moment: "during", everyHours: 6 })])).toBeNull();
+  });
+
+  it("el ritmo tiene tope: MAX_HORAS pasa y una hora más se rechaza con el mismo código, también un entero que la columna INTEGER no guarda (F1-11)", () => {
+    expect(MAX_HORAS, "control: el tope de la receta").toBe(100000);
+    expect(codigo([meta({ moment: "during", everyHours: MAX_HORAS })])).toBeNull();
+    for (const malo of [MAX_HORAS + 1, 2 ** 31, Number.MAX_SAFE_INTEGER]) {
+      expect(codigo([meta({ moment: "during", everyHours: malo })]), `con ${malo} h`).toBe("cadence_must_be_positive_hours");
+    }
+    // Control: el extremo de abajo sigue siendo 1.
+    expect(codigo([meta({ moment: "during", everyHours: 1 })])).toBeNull();
+    expect(codigo([meta({ moment: "during", everyHours: 0 })])).toBe("cadence_must_be_positive_hours");
   });
 
   it("la misma variable y el mismo momento dos veces se rechazan; en otra fase no es un duplicado (son dos cosas distintas)", () => {

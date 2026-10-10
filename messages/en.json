@@ -734,6 +734,8 @@
     "recipeRenamedOk": "Name updated.",
     "error_recipe_not_found": "That recipe was not found.",
     "error_duplicate_variable_and_moment": "Two targets share the same variable and moment.",
+    "error_cadence_only_while_running": "A measuring rhythm can only be declared on a “during” target.",
+    "error_cadence_must_be_positive_hours": "How often to measure must be a whole number of hours, from 1 to 100000.",
     "selectionHeading": "Cherry selection",
     "selectionHint": "Sort the cherry and record each stream with its weight. Rejects become real lots — they can be stored, sold or reprocessed.",
     "selectionInputQuantityLabel": "Weight in ({unit})",
