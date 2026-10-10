@@ -4210,5 +4210,13 @@
     "yo": "Yo ({name})",
     "deEstaFinca": "De esta finca",
     "equipoNectarNomada": "Equipo Néctar Nómada"
+  },
+  "Estados": {
+    "cargando": "Cargando…",
+    "errorTitulo": "Algo falló al abrir esta pantalla.",
+    "errorCuerpo": "Puedes reintentar, o volver al inicio.",
+    "reintentar": "Reintentar",
+    "volverAlInicio": "Volver al inicio",
+    "codigo": "Código del error: {digest}"
   }
 }

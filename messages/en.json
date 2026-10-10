@@ -4210,5 +4210,13 @@
     "yo": "Me ({name})",
     "deEstaFinca": "From this farm",
     "equipoNectarNomada": "Néctar Nómada team"
+  },
+  "Estados": {
+    "cargando": "Loading…",
+    "errorTitulo": "Something went wrong while opening this screen.",
+    "errorCuerpo": "You can retry, or go back to the start.",
+    "reintentar": "Retry",
+    "volverAlInicio": "Back to start",
+    "codigo": "Error code: {digest}"
   }
 }
