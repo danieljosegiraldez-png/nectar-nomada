@@ -13,6 +13,7 @@
  * vigilar dos entradas del router para un flujo que nunca se usa a medias.
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
+import { negativaDelAparato } from "../../../../../lib/sync/deviceTokens";
 import {
   requestFieldMediaUpload,
   finalizeFieldMedia,
@@ -33,6 +34,10 @@ export async function POST(request: Request) {
   // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
   const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  // Los dos pasos escriben —uno firma una subida, el otro crea la foto—, así que
+  // un aparato revocado no pasa de aquí aunque su access siga vigente.
+  const negativa = await negativaDelAparato(user.deviceId);
+  if (negativa) return Response.json({ error: negativa }, { status: 403 });
 
   const paso = new URL(request.url).searchParams.get("paso");
   if (paso !== "solicitar" && paso !== "finalizar") {

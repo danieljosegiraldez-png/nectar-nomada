@@ -19,15 +19,24 @@
  * **Cada rechazo tiene al lado su control que sí escribe** —mismo arnés, el
  * aparato que toca—, porque un 403 que también saliera con el aparato correcto
  * diría que el arnés no llega a escribir, no que la ruta compare.
+ *
+ * **Y la segunda mitad, vista el 2026-10-10: el aparato revocado con su PROPIO
+ * id.** Con el cuerpo ya atado al token, `field-media` (los dos pasos) y
+ * `POST /api/v1/devices` seguían escribiendo con el access vigente de un aparato
+ * revocado: 200 con una foto nueva, y 201 con otro aparato dado de alta. Sus
+ * servicios no miran `revokedAt` —`pushFieldEvents` sí—, y el último `describe`
+ * lo vigila con el mismo arnés.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const cookie = vi.hoisted(() => ({ usuario: vi.fn() }));
 vi.mock("../../lib/auth/session", () => ({ getCurrentUser: cookie.usuario }));
 
 import { prisma } from "../../lib/db";
 import { hashPassword } from "../../lib/auth/password";
+import { objectStorageProvider } from "../../lib/integrations/storage";
 import { registrarAparato } from "../../lib/sync/deviceTokens";
+import { POST as postAparatos } from "../../app/api/v1/devices/route";
 import { POST as postEventos } from "../../app/api/v1/sync/field-events/route";
 import { POST as postMedios } from "../../app/api/v1/sync/field-media/route";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -190,5 +199,64 @@ describe("field-media: la foto finalizada es del aparato del token", () => {
     const res = await postMedios(peticion(RUTA, foto(undefined, "med-cookie")));
     expect(res.status).toBe(200);
     expect(await filasDe("med-cookie")).toEqual([{ deviceId: null }]);
+  });
+});
+
+// El 403 se afirma con su `error` porque la ruta de medios tiene OTROS 403
+// —`device_mismatch`, el de la ubicación—, y uno cualquiera pasaría por éste.
+describe("un aparato revocado no escribe por ninguna ruta, aunque su access siga vigente", () => {
+  const SOLICITAR = "/api/v1/sync/field-media?paso=solicitar";
+  const FINALIZAR = "/api/v1/sync/field-media?paso=finalizar";
+  const subida = () => ({ fieldSessionId: sesionId, originalFilename: "foto.jpg", contentType: "image/jpeg" });
+  const firmar = () =>
+    vi.spyOn(objectStorageProvider, "putObject").mockResolvedValue({ uploadUrl: "https://firmada.test/put" });
+  const aparatosConEtiqueta = (etiqueta: string) => prisma.device.count({ where: { label: `TEST ${etiqueta} ${RUN_ID}` } });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  // Su control es el de arriba: «con el token y su propio id, la foto queda atribuida».
+  it("field-media, finalizar: la foto con el propio id del aparato revocado no se crea", async () => {
+    const x = await alta("x-med-revocado");
+    await revocar(x.device.id);
+    const res = await postMedios(peticion(FINALIZAR, foto(x.device.id, "med-revocado"), x.accessToken));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("device_revoked");
+    expect(await filasDe("med-revocado"), "ni FieldEvent ni Asset").toEqual([]);
+  });
+
+  it("control: field-media, solicitar con un aparato vivo firma la URL", async () => {
+    const espia = firmar();
+    const y = await alta("y-sol-ok");
+    const res = await postMedios(peticion(SOLICITAR, subida(), y.accessToken));
+    expect(res.status).toBe(200);
+    expect(espia).toHaveBeenCalledTimes(1);
+  });
+
+  it("field-media, solicitar: un aparato revocado no obtiene URL firmada", async () => {
+    const espia = firmar();
+    const x = await alta("x-sol-revocado");
+    await revocar(x.device.id);
+    const res = await postMedios(peticion(SOLICITAR, subida(), x.accessToken));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("device_revoked");
+    expect(espia).not.toHaveBeenCalled();
+  });
+
+  it("control: POST /devices con el token de un aparato vivo da de alta otro", async () => {
+    const y = await alta("y-dev-ok");
+    const res = await postAparatos(peticion("/api/v1/devices",
+      { label: `TEST nuevo-ok ${RUN_ID}`, platform: "android" }, y.accessToken));
+    expect(res.status).toBe(201);
+    expect(await aparatosConEtiqueta("nuevo-ok")).toBe(1);
+  });
+
+  it("POST /devices: un aparato revocado no da de alta otro", async () => {
+    const x = await alta("x-dev-revocado");
+    await revocar(x.device.id);
+    const res = await postAparatos(peticion("/api/v1/devices",
+      { label: `TEST nuevo-revocado ${RUN_ID}`, platform: "android" }, x.accessToken));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("device_revoked");
+    expect(await aparatosConEtiqueta("nuevo-revocado")).toBe(0);
   });
 });
