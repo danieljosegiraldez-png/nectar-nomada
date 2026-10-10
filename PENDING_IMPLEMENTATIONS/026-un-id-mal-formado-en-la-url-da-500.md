@@ -1,8 +1,8 @@
 # 026 · Treinta y una páginas dan 500 con un id mal formado en la URL
 
-**Estado: medido el 2026-10-09, sin construir — salvo `/lots/[id]` y sus diez subrutas, arregladas en
-el PR que trae esta ficha.** Es un defecto, no una decisión: no hace falta preguntar nada para
-arreglarlo.
+**Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
+diez subrutas, y las ocho de `requireLocationAttributeAccess`. Quedan 23 de las 31.** Es un defecto, no
+una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
 
@@ -61,7 +61,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 
 | función (archivo:línea donde revienta) | páginas |
 |---|---|
-| `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8** |
+| `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8, arregladas en #696**: las seis de `plots` dan 404, y `bodegas` e `instalaciones` su «sin permiso» (ver las rarezas) |
 | `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` |
 | `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` |
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` |
@@ -107,7 +107,12 @@ nada—, pero es la frontera de seguridad y merece su propia prueba, no un arreg
 ## Rarezas vistas de camino, que no son 500
 
 - `bodegas/[id]` e `instalaciones/[id]` con un UUID que no existe responden **200** con el cuerpo de
-  «sin permiso», no 404.
+  «sin permiso», no 404 — y desde #696 también con un id basura, porque es lo que esas dos páginas
+  contestan a «no existe». El texto engaña: se lo dice a un Platform Admin, que tiene todos los
+  permisos («No tienes permiso para crear ni administrar ninguna bodega»). **No se cambió a propósito.**
+  Separar «no existe» (404) de «sin permiso» en esas dos páginas diría a quien no tiene acceso qué ids
+  existen; las de `plots` no lo dicen porque contestan 404 a las dos cosas. Elegir entre las dos
+  respuestas es decisión de Daniel.
 - `content/[id]` y `recipes/[id]` con un UUID que no existe redirigen a su lista.
 - `admin/users/[assignmentId]/permisos` redirige a `/admin/users?error=no_access` con las dos entradas:
   su `catch {}` lo atrapa **todo**, así que no da 500 pero tampoco dejaría ver un fallo real.
@@ -139,5 +144,7 @@ cambiar `findUniqueOrThrow` por `findUnique` + la clase propia.
 Por función, una prueba como `tests/traceability/idMalFormado.test.ts`: el id basura da la clase de
 «no existe», **un UUID válido inexistente da exactamente lo mismo** y uno existente se devuelve — y el
 flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por página, la medición de
-arriba: las 52 con los dos ids, contando cuántas dan 500. Hoy son **32** con el id basura y **7** con
-el UUID que no existe.
+arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
+eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
+`requireLocationAttributeAccess`, **24** y **7**. Se volvieron a medir sus ocho páginas; las otras 24
+no, pero ninguna reventaba en esa función, sino antes, en la suya.
