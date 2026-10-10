@@ -25,6 +25,7 @@ import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../lib/traceability/processTargets";
 import type { Prisma } from "../../generated/prisma/client";
+import { RecordStatus } from "../../generated/prisma/enums";
 import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -51,7 +52,7 @@ async function tipoDePaso(valor: string): Promise<string> {
 /** Una receta con su versión 1, cruda y con el estado que pide la prueba. */
 async function receta(
   nombre: string,
-  datos: { organizationId: string | null; receta?: "approved" | "archived"; version?: "approved" | "draft"; esLibre?: boolean },
+  datos: { organizationId: string | null; receta?: "approved" | "archived"; version?: RecordStatus; esLibre?: boolean },
 ) {
   const r = await prisma.processRecipe.create({
     data: {
@@ -245,6 +246,30 @@ describe("Parte 2a, §3.3 — la versión que se pasa a abrir tiene que estar pu
     await prisma.processRecipeVersion.update({ where: { id: versionId }, data: { status: "approved" } });
     expect((await abrir(l, versionId)).processRecipeVersionId).toBe(versionId);
   });
+
+  // F2-8 (ronda 2 de la revisión final del PR-A): el enum `RecordStatus` tiene siete estados y sólo se probaba el borrador, así que aflojar `!== "approved"` a `=== "draft"` en la puerta dejaba
+  // pasar una versión «incompleta», «pendiente de revisión», «verificada», «archivada» o «rechazada» y ninguna prueba caía. Los estados salen del enum GENERADO, no de una lista escrita
+  // a mano: un estado nuevo entra solo en la prueba.
+  const ESTADOS_QUE_NO_ABREN = Object.values(RecordStatus).filter((estado) => estado !== "approved");
+
+  it("control: los estados que no abren salen del enum generado (todos menos «approved»), y entre ellos está el borrador", () => {
+    expect(Object.values(RecordStatus), "el enum trae «approved»").toContain("approved");
+    expect(ESTADOS_QUE_NO_ABREN, "y el borrador").toContain("draft");
+    expect(ESTADOS_QUE_NO_ABREN.length, "y los demás: el enum tiene siete estados").toBeGreaterThanOrEqual(6);
+  });
+
+  it.each(ESTADOS_QUE_NO_ABREN)(
+    "una versión en estado «%s» no abre (`version_no_publicada`) y no deja nada escrito; la misma versión, publicada, abre",
+    async (estado) => {
+      const { versionId } = await receta(`Estado ${estado}`, { organizationId: orgId, version: estado });
+      const l = await lote(`ESTADO-${estado.toUpperCase()}`);
+      await expect(abrir(l, versionId)).rejects.toThrow(new LotProcessError("version_no_publicada"));
+      expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+      // Control: lo único que cambia es el estado de la versión.
+      await prisma.processRecipeVersion.update({ where: { id: versionId }, data: { status: "approved" } });
+      expect((await abrir(l, versionId)).processRecipeVersionId).toBe(versionId);
+    },
+  );
 
   it("una receta ARCHIVADA no abre (`recipe_archived`) aunque su versión esté publicada; la misma receta, viva, abre", async () => {
     // `recipe_archived` existía desde la Parte 1 y no tenía ninguna prueba (medido: 0 apariciones en `tests/`).

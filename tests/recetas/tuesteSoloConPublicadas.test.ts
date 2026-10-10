@@ -18,6 +18,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
+import { RecordStatus } from "../../generated/prisma/enums";
 import { recordRoastSession, elegirPerfilDeTueste, getPerfilDeTuesteElegido, RoastSessionValidationError } from "../../lib/traceability/roasting";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
@@ -25,7 +26,7 @@ const RUN = `tueste-publicadas-${Date.now()}`;
 let orgId: string, otraOrgId: string, plotId: string, scopeId: string, cuenta: string, verdeId: string;
 
 /** Una receta con su versión 1, cruda y con el estado que pide la prueba. */
-async function receta(nombre: string, datos: { organizationId: string; version?: "approved" | "draft"; esLibre?: boolean }) {
+async function receta(nombre: string, datos: { organizationId: string; version?: RecordStatus; esLibre?: boolean }) {
   const r = await prisma.processRecipe.create({
     data: {
       name: `TEST ${nombre} ${RUN}`,
@@ -171,4 +172,38 @@ describe("Parte 2a — elegir el perfil óptimo de un lote: sólo uno publicado 
     await elegirPerfilDeTueste(cuenta, { lotId: verdeId, recipeVersionId: versionId });
     expect((await getPerfilDeTuesteElegido(cuenta, verdeId))?.recipeVersionId).toBe(versionId);
   });
+});
+
+// F2-8 (ronda 2 de la revisión final del PR-A): el enum `RecordStatus` tiene siete estados y sólo se probaba el borrador, así que aflojar `!== "approved"` a `=== "draft"` en la puerta
+// del tueste dejaba pasar una versión «incompleta», «pendiente de revisión», «verificada», «archivada» o «rechazada» y ninguna prueba caía. Los estados salen del enum GENERADO, no de una lista
+// escrita a mano: un estado nuevo entra solo en la prueba.
+describe("Parte 2a — el tueste y el perfil óptimo rechazan cualquier estado de la versión que no sea «approved» (F2-8)", () => {
+  const ESTADOS_QUE_NO_SIGUEN = Object.values(RecordStatus).filter((estado) => estado !== "approved");
+
+  it("control: los estados que no siguen salen del enum generado (todos menos «approved»), y entre ellos está el borrador", () => {
+    expect(Object.values(RecordStatus), "el enum trae «approved»").toContain("approved");
+    expect(ESTADOS_QUE_NO_SIGUEN, "y el borrador").toContain("draft");
+    expect(ESTADOS_QUE_NO_SIGUEN.length, "y los demás: el enum tiene siete estados").toBeGreaterThanOrEqual(6);
+  });
+
+  it.each(ESTADOS_QUE_NO_SIGUEN)(
+    "una versión en estado «%s»: registrar el tueste y elegirla como perfil óptimo se rechazan (`version_no_publicada`) y no escriben nada; la misma versión, publicada, se sigue en las dos",
+    async (estado) => {
+      const { versionId } = await receta(`estado ${estado}`, { organizationId: orgId, version: estado });
+      const tuestesAntes = await tuestesDeLaCuenta();
+      const perfilesAntes = await perfilesDelLote();
+      await expect(recordRoastSession(cuenta, tueste(versionId))).rejects.toThrow(new RoastSessionValidationError("version_no_publicada"));
+      await expect(elegirPerfilDeTueste(cuenta, { lotId: verdeId, recipeVersionId: versionId })).rejects.toThrow(
+        new RoastSessionValidationError("version_no_publicada"),
+      );
+      expect(await tuestesDeLaCuenta(), "un rechazo dejó un tueste escrito").toBe(tuestesAntes);
+      expect(await perfilesDelLote(), "un rechazo dejó un perfil elegido").toBe(perfilesAntes);
+      // Control: lo único que cambia es el estado de la versión.
+      await prisma.processRecipeVersion.update({ where: { id: versionId }, data: { status: "approved" } });
+      const { roastSession } = await recordRoastSession(cuenta, tueste(versionId));
+      expect(roastSession.recipeVersionId).toBe(versionId);
+      await elegirPerfilDeTueste(cuenta, { lotId: verdeId, recipeVersionId: versionId });
+      expect((await getPerfilDeTuesteElegido(cuenta, verdeId))?.recipeVersionId).toBe(versionId);
+    },
+  );
 });
