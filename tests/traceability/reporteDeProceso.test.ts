@@ -396,4 +396,31 @@ describe("la cadena entera se puede unir", () => {
     expect(r.faltan.procesosConTueste).toBe(1);
     expect(r.faltan.procesosConPuntaje).toBe(1);
   });
+
+  /**
+   * F2-6 (ronda 2 de la revisión final del PR-A). Desde la Parte 2a `lot_process_intervention.catalog_value_id` es anulable: el acto es el tipo de paso, y la base exige uno de los dos
+   * (`lot_process_intervention_catalogo_o_tipo`). El reporte se adaptó —nombra el «cómo» si se declaró y, si no, el acto— y esa línea no tenía prueba: el día que el PR-B escriba una
+   * intervención sólo con tipo de paso, volver a leer `i.catalogValue.value` sin guarda reventaría el reporte ENTERO (no sólo esa fila). La intervención se crea cruda —ningún servicio
+   * escribe todavía una sin valor de catálogo— y se borra al terminar la prueba, para no cambiar lo que miden las demás.
+   */
+  it("una intervención sin valor de catálogo se nombra por su tipo de paso, y la que lo lleva por su «cómo» (F2-6)", async () => {
+    const proceso = await prisma.lotProcess.findFirstOrThrow({ where: { lotId: loteDesnudo }, select: { id: true } });
+    const acto = await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "washing", catalog: { key: "tipo_paso" } }, select: { id: true } });
+    try {
+      // El «cómo» es cualquier valor de catálogo (aquí el grado de este archivo, que lleva el RUN); el acto, el tipo de paso «washing», que siembra la tarea 2.
+      await prisma.lotProcessIntervention.create({
+        data: { lotProcessId: proceso.id, occurredAt: new Date("2026-03-03T10:00:00Z"), catalogValueId: gradoNaturalId, createdBy: gestor },
+      });
+      await prisma.lotProcessIntervention.create({
+        data: { lotProcessId: proceso.id, occurredAt: new Date("2026-03-03T11:00:00Z"), stepTypeValueId: acto.id, createdBy: gestor },
+      });
+      const r = await reporteDeProceso(gestor);
+      const fila = r.filas.find((f) => f.lotCode.startsWith("DESNUDO"));
+      expect(fila, "control: el lote de la intervención salió en el reporte").toBeDefined();
+      // En el orden en que ocurrieron: el «cómo» a las 10, el acto a las 11.
+      expect(fila!.intervenciones).toEqual([`TEST Natural ${RUN}`, "washing"]);
+    } finally {
+      await prisma.lotProcessIntervention.deleteMany({ where: assertDefinedWhere({ lotProcessId: proceso.id }) });
+    }
+  });
 });
