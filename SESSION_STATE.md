@@ -80,6 +80,14 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-09 · ADR-198 completo: un beneficio puede existir sin finca, y `Las Nubes` ya tiene su organización (#672, #684, #687, #692)
+
+**Cuatro PR.** #672 aprobó el diseño (ADR **198**: el 197 lo reservó #675, abierto). **#684**: `crearBeneficio` ya no copia `padre.organizationId` a ciegas y rechaza con `organizacion_requerida`; su test comparaba `null` con `null` porque el fixture creaba el sitio sin organización. **#687**: se crea sin padre diciendo la organización («Sin finca propia» en ajustes); la vista de bandejas acepta organizaciones con `beneficio` sin `site` (su test viejo afirmaba lo contrario y se **reescribió**). **#692**: una finca elige como destino los beneficios de **su organización** aunque no cuelguen de ella; la clasificación del beneficio manda y nunca concede ver sus lotes.
+**No hay ámbito de organización en el RBAC**: «quien administra» se deriva de `manage_attributes` + `create_site` sobre una ubicación de esa organización, o plataforma. Quien lo crea sin padre **no lo ve** hasta tener una asignación sobre él mismo; la pantalla lo avisa.
+**Producción:** `Las Nubes` (`9495b317…`) tenía `organization_id` nulo y ahora es **Finca Rosina** (`e43fd7ae…`); lo aplicó Daniel con `npm run data:beneficio-organizacion`. La relectura es del propio guion, no independiente.
+**Lo que enseñó:** el flip-test destapó un respaldo por ancestros que ninguna prueba ejercía; una prueba mía suponía que el Farm Operator no tiene `lot:manage` sobre la finca, y **sí lo tiene**; el guardia del inventario paró el PR por **+2 operaciones** (626→628).
+**Queda tuyo:** crear el beneficio de Kiva, asignar a Luis sobre él (`data:gestores-de-finca`) y declararlo destino de Finca 1 y 2. **En el ADR-198 para el primer caso de cereza ajena:** la concesión estrecha a un beneficio de otra organización y la procedencia en la etiqueta de cata.
+
 ### 2026-10-09 · El informe técnico de Apiario, y cuatro de los seis hallazgos de su revisión (#674, #677, #685, #690, #694)
 
 El #674 trae el informe con los detalles de la inspección dentro, su fecha y la zona en el snapshot. La revisión interna que pediste —con la skill `beekeeping`, y entregada **antes** de tocar o fusionar nada— dio seis hallazgos priorizados; se cerraron cuatro.
@@ -108,7 +116,7 @@ Producción, **sin ningún borrado**, cada cifra releída por una lectura indepe
 
 **Lo que enseñó:** un `tsc` en un worktree sin `node_modules` sale 0 sin comprobar nada; y las filas «repetidas» de Chris eran **tres ámbitos distintos** —mi `join` imprimía `(plataforma)` donde el proyecto no resolvía—: casi retiro justo las que describían lo que Daniel quería.
 
-**Queda tuyo:** aprobar el diseño del #672 (un beneficio sin finca) y su ADR-197; **`Las Nubes` tiene `organization_id` nulo en producción**, y siete guiones de datos llevan `Lote N` donde un renombrado dirá `Parcela N`, tres de ellos **crean una parcela nueva en vez de abortar**.
+**Queda tuyo:** aprobar el diseño del #672 y su ADR **(hecho: ADR-198, ver arriba)**; **`Las Nubes` tenía `organization_id` nulo en producción (resuelto el 2026-10-09, ver arriba)**, y siete guiones de datos llevan `Lote N` donde un renombrado dirá `Parcela N`, tres de ellos **crean una parcela nueva en vez de abortar**.
 
 ### 2026-10-06 · El cierre y la alarma de backup mentían, y los dos del lado que tranquiliza (#659, #661, #663, #666)
 
@@ -197,9 +205,9 @@ que miden es justo la data que se va.
 la operó —35 de 35 con `operator_person_id` nulo, porque la acción no manda un campo que el
 servicio sí guarda—. Es trabajo, no decisión: `PENDING_IMPLEMENTATIONS/024`.
 
-#### Kiva Estate: falta su beneficio, y `Apiario NN-04-TOABRE-KIVAEST` sigue sin padre
+#### Kiva Estate: falta crear su beneficio, y `Apiario NN-04-TOABRE-KIVAEST` sigue sin padre
 
-Sus dos fincas ya existen bajo Toabre (2026-10-06, arriba). **El beneficio no se puede crear todavía**: `crearBeneficio` exige que el padre sea un `site` (`beneficios.ts:94`), y Daniel decidió que un beneficio puede existir sin finca. El diseño está en #672 con sus tres decisiones tomadas; **falta su aprobación y el ADR-197**. El apiario de Toabre cuelga de nada y nadie lo pidió: re-colgarlo cambia el alcance de cualquier asignación sobre él por ADR-144.
+Sus dos fincas ya existen bajo Toabre (2026-10-06). **El beneficio ya se puede crear** por la pantalla de ajustes con «Sin finca propia» (ADR-198, 2026-10-09, arriba); **falta crearlo**, asignar a Luis sobre él con `data:gestores-de-finca` y declararlo destino de Finca 1 y Finca 2. El apiario de Toabre cuelga de nada y nadie lo pidió: re-colgarlo cambia el alcance de cualquier asignación sobre él por ADR-144.
 
 
 #### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
