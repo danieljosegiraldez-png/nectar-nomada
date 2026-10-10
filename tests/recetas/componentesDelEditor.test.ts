@@ -599,6 +599,8 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
       fines: [
         { variable: "moisture", operador: "lte", valor: 11.5, unidad: "%", desdeLecturaId: "lectura-1" },
         { variable: "ph", operador: "gte", valor: 3.8, unidad: "pH", desdeLecturaId: null },
+        // F2-9: un cero es un cero. Precargarlo como vacío (`String(f.valor)` con una guarda de «verdadero») sobrevivía a toda la prueba, y guardar el paso sin tocarlo daba `fin_invalido`.
+        { variable: "moisture", operador: "gte", valor: 0, unidad: "%", desdeLecturaId: null },
       ],
       capacidadesRequeridas: ["ca-2", "ca-3"],
       metas:
@@ -608,6 +610,8 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
               { variable: "ph", moment: "during", unit: "pH", targetValue: 3.8, minValue: 3.5, maxValue: 4.2, note: "cada seis horas", everyHours: 6 },
               { variable: "brix", moment: "initial", unit: "Bx", targetValue: null, minValue: 18, maxValue: null, note: null, everyHours: null },
               { variable: "moisture", moment: "final", unit: "%", targetValue: 11, minValue: null, maxValue: 12, note: null, everyHours: null },
+              // F2-9: la meta con cero (el valor, el mínimo y el máximo) tiene que volver como cero y no como «no declarado». En la recepción, la única meta que cabe es la del Brix inicial: sin cero.
+              { variable: "ph", moment: "final", unit: "pH", targetValue: 0, minValue: 0, maxValue: 0, note: null, everyHours: null },
             ],
     };
   }
@@ -638,6 +642,22 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
       }
     }
     expect(mal).toEqual([]);
+  });
+
+  it("un cero es un cero: el mucílago 0 (el Lavado), un fin con valor 0 y una meta con 0 se pintan como «0» y vuelven como 0, no como «no declarado» (F2-9)", () => {
+    const paso: PasoConDetalle = { ...pasoCompleto("washing"), mucilagoObjetivo: 0 };
+    const v = valoresDelFormulario(paso);
+    expect(v.mucilagoObjetivo, "el Lavado precarga «0»").toBe("0");
+    expect(v.fines.map((f) => f.valor), "el fin con cero precarga «0»").toContain("0");
+    expect(v.metas.map((m) => [m.targetValue, m.minValue, m.maxValue])).toContainEqual(["0", "0", "0"]);
+    const vuelto = vuelta(paso);
+    expect(vuelto.mucilagoObjetivo).toBe(0);
+    expect(vuelto.fines?.map((f) => f.valor)).toContain(0);
+    expect(vuelto.metas?.map((m) => [m.targetValue, m.minValue, m.maxValue])).toContainEqual([0, 0, 0]);
+    // Control: «no declarado» sigue siendo vacío y vuelve nulo (el cero no se confunde con la ausencia en la otra dirección).
+    const sinDeclarar = valoresDelFormulario({ ...pasoCompleto("washing"), mucilagoObjetivo: null });
+    expect(sinDeclarar.mucilagoObjetivo).toBe("");
+    expect(vuelta({ ...pasoCompleto("washing"), mucilagoObjetivo: null }).mucilagoObjetivo).toBeNull();
   });
 
   it("control: entre los 24 tipos se llenan los veinticinco campos del paso y cada subcampo de adiciones, fines y metas", () => {
