@@ -24,7 +24,7 @@ export function CerrarSesion() {
     <form action={accion}>
       <BotonDeEnvio className="nn-link-button">{t("signOut")}</BotonDeEnvio>
       {estado.sinRed ? (
-        <p className="nn-error" role="alert">
+        <p className="nn-error nn-nav-cuenta-aviso" role="alert">
           {t("signOutOffline")}
         </p>
       ) : null}
