@@ -31,6 +31,7 @@ import { exigeClaseDeCausa } from "../../lib/apiary/causaDePerdida";
 import { recordApiaryHarvest } from "../../lib/apiary/harvest";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent, registrarEventoEnLote, ColonyEventValidationError } from "../../lib/apiary/colonyEvents";
+import { leerManejoEnLote } from "../../lib/apiary/manejoEnLoteForm";
 import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/apiary/media";
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
@@ -594,41 +595,13 @@ export async function aplicarManejoEnLoteFormAction(formData: FormData): Promise
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const apiaryId = String(formData.get("apiaryId") ?? "");
-  const colonyIds = formData.getAll("colonyIds").map((v) => String(v)).filter((v) => v.length > 0);
-  const eventType = String(formData.get("eventType") ?? "");
-
-  const dia = fechaDeDia(String(formData.get("occurredAt") ?? ""), "occurredAt");
-  const cobertura = fechaDeDia(String(formData.get("coverageUntil") ?? ""), "coverageUntil");
-
-  const numero = (clave: string) => {
-    const bruto = String(formData.get(clave) ?? "").trim();
-    if (bruto === "") return null;
-    const n = Number(bruto);
-    return Number.isFinite(n) ? n : null;
-  };
-  const texto = (clave: string) => {
-    const bruto = String(formData.get(clave) ?? "").trim();
-    return bruto === "" ? null : bruto;
-  };
+  // La lectura del formulario vive en `lib/apiary/manejoEnLoteForm.ts`, donde se prueba sin sesión
+  // ni base. Ahí está también el material de alimentación, que esta acción no leía (revisión de
+  // Apiario del 2026-10-08, V-5): cada colonia del lote quedaba sin decir si fue azúcar o jarabe.
+  const { apiaryId, ...entrada } = leerManejoEnLote(formData);
 
   await registrarEventoEnLote(user.userAccountId, {
-    colonyIds,
-    eventType: eventType as "feeding" | "treatment",
-    occurredAt: dia ?? new Date(),
-    feedingMaterial: texto("feedingMaterial"),
-    feedingQuantity: numero("feedingQuantity"),
-    feedingUnit: texto("feedingUnit"),
-    feedingMethod: texto("feedingMethod"),
-    coverageUntil: cobertura,
-    treatmentProduct: texto("treatmentProduct"),
-    treatmentBatchLabel: texto("treatmentBatchLabel"),
-    treatmentWithdrawalDays: numero("treatmentWithdrawalDays"),
-    treatmentTarget: texto("treatmentTarget"),
-    treatmentRoute: texto("treatmentRoute"),
-    treatmentDose: numero("treatmentDose"),
-    treatmentDoseUnit: texto("treatmentDoseUnit"),
-    note: texto("note"),
+    ...entrada,
     loteDeClienteId: `lote-${crypto.randomUUID()}`,
   });
 
