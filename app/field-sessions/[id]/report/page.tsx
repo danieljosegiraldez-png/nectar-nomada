@@ -127,7 +127,7 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
                 {r.sujeto ? ` · ${r.sujeto}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
-                <DetallesDelReporte registro={r} enCuadros={seManejaEnCuadros(snapshot.sitio.tipo)} />
+                <DetallesDelReporte registro={r} enCuadros={seManejaEnCuadros(snapshot.sitio.tipo)} paraCliente={false} />
               </li>
             ))}
           </ul>
