@@ -81,4 +81,21 @@ describe("contraste de los tokens de color", () => {
     expect(contraste(token("nn-error"), token("nn-bg"))).toBeGreaterThanOrEqual(4.5);
     expect(contraste(token("nn-error"), token("nn-surface"))).toBeGreaterThanOrEqual(4.5);
   });
+
+  /**
+   * R3 del plan farm-to-green (ADR-197), 2026-10-09. `--nn-warn`, `--nn-danger` y `--nn-muted` no
+   * existían en ninguna parte: la cola de secado caía a sus valores de respaldo, y «Le toca volteo»
+   * (#a8741a) daba 3.79:1 sobre --nn-bg, por debajo incluso del texto normal. El paquete pide ≥ 7:1
+   * para los valores críticos, porque se leen a pleno sol (`09` §12). `token()` lanza si una falta,
+   * así que esto también exige que estén definidas.
+   */
+  it("los estados críticos del beneficio se leen al sol (7:1), y el gris de estado cumple AA", () => {
+    for (const critico of ["nn-warn", "nn-danger"]) {
+      for (const fondo of ["nn-bg", "nn-surface"]) {
+        expect(contraste(token(critico), token(fondo)), `${critico} sobre ${fondo}`).toBeGreaterThanOrEqual(7);
+      }
+    }
+    expect(contraste(token("nn-muted"), token("nn-bg"))).toBeGreaterThanOrEqual(4.5);
+    expect(contraste(token("nn-muted"), token("nn-surface"))).toBeGreaterThanOrEqual(4.5);
+  });
 });

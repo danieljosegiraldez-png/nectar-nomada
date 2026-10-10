@@ -131,7 +131,6 @@ export default async function ColaDeSecadoPage({
                           value={u.dryingRunId}
                           defaultChecked={u.estado === "le toca volteo"}
                           aria-label={t("colaCasillaDe", { unidad: u.nombre })}
-                          style={{ width: "26px", height: "26px" }}
                         />
                       </td>
                       <th scope="row">{u.nombre}</th>
