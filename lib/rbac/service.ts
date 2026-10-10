@@ -176,8 +176,9 @@ async function conAncestros(target: ScopeTarget): Promise<ScopeTarget[]> {
   // Un id sin forma de UUID no tiene padres que buscar, igual que uno que no existe: se devuelve
   // el objetivo solo, que es lo que el bucle devolvería para una ubicación ausente. Sin esto,
   // `findUnique` daba `P2007` y `can()` reventaba en vez de contestar (PENDING_IMPLEMENTATIONS/026).
-  // No concede nada nuevo: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación
-  // puede casar con ese id, y el resolutor decide igual que para un UUID que no existe.
+  // Lo que cambia es que `can()` contesta en vez de lanzar, y contesta lo mismo que para un UUID
+  // que no existe: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación casa con ese
+  // id y sólo un ámbito de plataforma dice que sí. Ningún ámbito acotado gana nada.
   if (!UUID.test(target.scopeRefId)) return [target];
 
   const cadena: ScopeTarget[] = [target];

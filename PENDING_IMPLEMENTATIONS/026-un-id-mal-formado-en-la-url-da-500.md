@@ -68,7 +68,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` — **arreglada en #696**: contesta `false`, como a una parcela que no existe, y la página da 404 |
 | `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` — **arregladas en #696**, con una segunda guarda en `contextoDeManejo` (ver abajo); las dos dan 404 |
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` — **arregladas en #696**: guarda en la función y, en `apiaries/[id]`, la página la llama primero y atrapa `ApiaryAccessError`; las dos dan 404 |
-| `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` — **arreglada en #696**: guarda en la función, y la página atrapa `ApiaryAccessError`; da 404 |
+| `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` — **arreglada en #696**: guarda en la función, y la página atrapa `ApiaryAccessError`; da 404. **Límite:** la página no consulta el segmento `[id]` del apiario, así que un apiario basura con una colmena válida pinta la colmena (ya pasaba antes y no da 500; lo señaló Codex) |
 | `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` |
 | `getCalibrationSessionDetail` (`lib/sensory/calibration.ts:78`) | `calibration/[calibrationSessionId]` |
 | `getEditionDetail` (`lib/competitions/service.ts:40`) | `competitions/[editionId]` |
@@ -90,9 +90,10 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 **`conAncestros`, hecho el 2026-10-09 en #696, y con su propia prueba.** Está dentro de `can()`, así que
 la guarda cambia el servicio de RBAC entero. Con un `scopeRefId` de ubicación mal formado ya no busca
 padres: devuelve el objetivo solo, que es lo que el bucle devuelve para una ubicación que no existe.
-`can()` contesta entonces lo mismo que con un UUID inexistente. **No concede nada nuevo**: `scope.scope_ref_id`
-es `uuid`, así que ningún ámbito de ubicación puede casar con ese id, y sólo un ámbito de plataforma dice
-que sí, igual que antes con un UUID inexistente. La prueba fija las dos cosas:
+`can()` contesta entonces lo mismo que con un UUID inexistente. **Lo que cambia, dicho con precisión**
+(lo afinó la segunda revisión de Codex): con un id basura, `can()` pasa de lanzar `P2007` a contestar, y
+un ámbito de plataforma contesta que sí, igual que con un UUID inexistente. Ningún ámbito acotado gana
+nada: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación puede casar con ese id. La prueba fija las dos cosas:
 - un operario con ámbito en la finca no puede sobre el id basura, y sigue alcanzando la parcela que
   cuelga de ella;
 - el Platform Admin recibe lo mismo con el id basura que con un UUID que no existe.

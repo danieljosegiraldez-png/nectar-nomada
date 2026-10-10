@@ -88,8 +88,10 @@ beforeAll(async () => {
 /**
  * Lo del administrador y la parcela, como `tests/territorio/rejillaEnGetPlotDetail.test.ts`, que usa
  * los mismos ayudantes. El ámbito de plataforma que devuelve `crearUsuarioConAcceso` es el compartido
- * y no se borra. Lo del operario se descubre por el `RUN_ID`, así que una corrida que murió a mitad
- * del `beforeAll` se limpia igual. Estas lecturas no escriben auditoría.
+ * y no se borra. Lo del operario se descubre por el `RUN_ID`, así que se limpia aunque el `beforeAll`
+ * muera después de crearlo. Lo que crean `crearUsuarioConAcceso` y `crearParcela` sólo se borra si el
+ * ayudante llegó a devolverlo: su marca no es el `RUN_ID` de este archivo. Estas lecturas no escriben
+ * auditoría.
  */
 afterAll(async () => {
   const operarios = await prisma.person.findMany({

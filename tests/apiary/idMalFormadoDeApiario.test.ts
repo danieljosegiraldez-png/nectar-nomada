@@ -49,8 +49,10 @@ beforeAll(async () => {
 });
 
 /**
- * Todo se descubre por el `RUN_ID`, así que una corrida que murió a mitad del `beforeAll` se limpia
- * igual. El ámbito de plataforma que devuelve `crearUsuarioConAcceso` es el compartido y no se borra.
+ * El apiario, su colmena y la organización se descubren por el `RUN_ID`, así que se limpian aunque el
+ * `beforeAll` muera después de crearlos. Lo que crea `crearUsuarioConAcceso` sólo se borra si el ayudante
+ * llegó a devolverlo: si fallara a mitad, su persona y su cuenta quedarían, porque su marca no es el
+ * `RUN_ID` de este archivo. El ámbito de plataforma que devuelve es el compartido y no se borra.
  */
 afterAll(async () => {
   const apiarios = await prisma.location.findMany({ where: { name: { contains: RUN_ID } }, select: { id: true } });
