@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**628 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-08, con ADR-198 PR 2 sobre `origin/main` (`1a28e5ae`): son **dos más** que las 626 del 2026-10-05, y las dos son de `lib/traceability/beneficios.ts` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`, **guardia transitivo**—, así que esas dos filas suben y las otras cinco no se mueven. Antes, medido el 2026-10-05 con
+**630 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-09 con `node scripts/inventario-de-acceso.mjs` sobre la rama de F1 juntada con `origin/main` (`594d9b5e`): son **cuatro más** que las 626 del 2026-10-05. Dos las trajo `main` con ADR-198 PR 2, de `lib/traceability/beneficios.ts` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`, **guardia transitivo**—; las otras dos son de F1 (la floración con su pantalla), `cerrarFloracion` y `floracionesDeLaPortada` de `lib/traceability/floracion.ts`, las dos **guardia directo** con `requireLotAccess`. Por eso «guardia directo» sube de 398 a 401 y «guardia transitivo» de 59 a 60, y las otras cinco no se mueven. Antes, medido el 2026-10-05 con
 `node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
 **el árbol fusionado** con `origin/main` (`a8f50df709`). El 2026-10-04 daban **624 en 170** sobre
 `origin/main` (`966ada98d1`): la de más es **`situacionesDeLaFinca`** en
@@ -30,7 +30,7 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **399** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **401** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **60** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |

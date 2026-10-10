@@ -2,7 +2,7 @@ import Link from "next/link";
 import { puedeSubdividirParcela } from "../../../lib/traceability/fincas";
 import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
+import { mostrarInstante, mostrarFecha, ZONA_POR_DEFECTO } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { claveDeLaComparacion, getPlotDetail } from "../../../lib/traceability/plantingCohorts";
 import { claveDeLaDensidad } from "../../../lib/traceability/densidadPorMarco";
@@ -14,7 +14,14 @@ import { listVariableDefinitions } from "../../../lib/traceability/units";
 import { listSamplesForLocation, camposDeProtocoloQueFaltan } from "../../../lib/traceability/soilSamples";
 import { listSoilProfilesForLocation, computeAnaerobicSignals } from "../../../lib/traceability/soilProfiles";
 import { listFieldSessions } from "../../../lib/traceability/fieldSessions";
-import { getObserverCandidates } from "../../../lib/traceability/lots";
+import {
+  DEFAULT_NEW_RECORD_CLASSIFICATION,
+  getObserverCandidates,
+  puedeGestionarLote,
+  TraceabilityAccessError,
+} from "../../../lib/traceability/lots";
+import { floracionesDeLaPortada } from "../../../lib/traceability/floracion";
+import { CerrarFloracionForm } from "../../components/traceability/CerrarFloracionForm";
 import { estadosPorCohorte } from "../../../lib/traceability/estadoDeProduccion";
 import { cifrasDelLote } from "../../../lib/traceability/cifrasDelLote";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
@@ -100,12 +107,26 @@ export default async function PlotDetailPage({
   // diferencia de la lista de arriba (para avisos), aquí sólo importan las
   // propias: es el historial de manejo de la parcela, no de sus emparentadas.
   const manejosVigentes = (await listarIntervenciones(user.userAccountId, id)).filter((i) => i.correcciones.length === 0);
+  // F1 — la floración de la parcela y de sus microparcelas, con `lot:view` como el manejo. Quien no
+  // lo tiene no ve la sección (`null`), en vez de que la portada entera reviente por ella.
+  const floraciones = await floracionesDeLaPortada(user.userAccountId, id).catch((error: unknown) => {
+    if (error instanceof TraceabilityAccessError) return null;
+    throw error;
+  });
+  // Registrar y «Terminó» exigen `lot:manage`, el mismo que `registrarFloracion`: lo que no se
+  // puede hacer no se ofrece (Daniel, 2026-09-27).
+  const puedeRegistrarFloracion = await puedeGestionarLote(user.userAccountId, {
+    locationId: id,
+    classification: DEFAULT_NEW_RECORD_CLASSIFICATION,
+  });
 
   const activas = cohorts.filter((c) => c.status === "active");
   const estados = estadosPorCohorte(activas.map((c) => c.id), eventosDeProduccion);
   const cifras = cifrasDelLote(activas, estados);
   const ahora = new Date();
   const hoy = diaDeHoy(ahora, location.timezone);
+  // Sólo el valor inicial de «Terminó»: se propone un día, no se afirma (ver `floracion/nueva`).
+  const hoyDelFormulario = diaDeHoy(ahora, location.timezone ?? ZONA_POR_DEFECTO);
   const pendiente = pendienteDeLaParcela({
     hoy,
     zona: location.timezone,
@@ -199,6 +220,8 @@ export default async function PlotDetailPage({
       {ok === "aplicacion" && <p className="nn-notice nn-notice-success" role="status">{t("okAplicacion")}</p>}
       {ok === "liberacion" && <p className="nn-notice nn-notice-success" role="status">{t("okLiberacion")}</p>}
       {ok === "manejo_cultural" && <p className="nn-notice nn-notice-success" role="status">{t("okManejoCultural")}</p>}
+      {ok === "floracion" && <p className="nn-notice nn-notice-success" role="status">{t("okFloracion")}</p>}
+      {ok === "floracion_cerrada" && <p className="nn-notice nn-notice-success" role="status">{t("okFloracionCerrada")}</p>}
       {organizationName ? <p className="nn-detail-meta">{organizationName}</p> : null}
       {location.description ? <p className="nn-muted">{location.description}</p> : null}
       <p>
@@ -495,6 +518,53 @@ export default async function PlotDetailPage({
           </Link>
         </p>
       </section>
+
+      {/* F1 — al lado de Manejo porque es Manejo quien la usa: el aviso de polinizadores de
+          `/manejo/nuevo` salta con lo que se anota aquí. Las fechas son campos de DÍA y se pintan
+          en UTC (`toISOString().slice(0, 10)`): en la zona de la finca saldrían un día antes. */}
+      {floraciones ? (
+        <section className="nn-section">
+          <h2>{t("plotDashboardFloracionHeading")}</h2>
+          {floraciones.length === 0 ? (
+            <p className="nn-muted">{t("plotDashboardFloracionNone")}</p>
+          ) : (
+            <ul className="nn-detail-meta">
+              {floraciones.map((f) => (
+                <li key={f.id}>
+                  {f.startsAt.toISOString().slice(0, 10)}
+                  {" → "}
+                  {f.endsAt ? f.endsAt.toISOString().slice(0, 10) : <strong>{t("floracionEnCurso")}</strong>}
+                  {" · "}
+                  {f.plotBlock ? f.plotBlock.name : t("floracionTodaLaParcela")}
+                  {f.esDeEstaParcela ? null : <> · {t("floracionEnMicroparcela", { nombre: f.location.name })}</>}
+                  {f.observer ? <> · {t("floracionVistaPor", { nombre: f.observer.displayName })}</> : null}
+                  {f.notes ? (
+                    <>
+                      <br />
+                      <span className="nn-muted">{f.notes}</span>
+                    </>
+                  ) : null}
+                  {f.endsAt === null && puedeRegistrarFloracion ? (
+                    <CerrarFloracionForm
+                      plotBloomId={f.id}
+                      portadaId={location.id}
+                      inicio={f.startsAt.toISOString().slice(0, 10)}
+                      hoy={hoyDelFormulario}
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {puedeRegistrarFloracion ? (
+            <p>
+              <Link href={`/plots/${location.id}/floracion/nueva`} className="nn-button">
+                {t("plotDashboardFloracionRegisterButton")}
+              </Link>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="nn-section">
         <h2>{t("plotDashboardRecentSessions")}</h2>
