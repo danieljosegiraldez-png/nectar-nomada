@@ -7,14 +7,15 @@
  * precisamente lo que §26 del audit pide — un cliente real contra un protocolo
  * real, sin la incertidumbre del nativo encima.
  *
- * Se autentica por la sesión de cookie existente, sin tocarla. El carril de
- * tokens de §2 no está construido (ver el ADR de esta rebanada): hoy no tendría
- * llamador, y unos endpoints de token sin cliente son la forma que ADR-107
- * rechazó.
+ * Se autentica por la cookie de sesión o por el token de un aparato ya
+ * registrado (`resolverPrincipal`, P4 §2). Este párrafo decía que el carril de
+ * tokens no estaba construido; dejó de ser cierto cuando la ruta pasó a
+ * `resolverPrincipal`.
  *
  * Toda la validación vive en `lib/sync/devices.ts`: aquí sólo se traduce HTTP.
  */
 import { resolverPrincipal } from "../../../../lib/sync/requestPrincipal";
+import { negativaDelAparato } from "../../../../lib/sync/deviceTokens";
 import { registerDevice, DeviceValidationError } from "../../../../lib/sync/devices";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
   // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
   const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  // Un aparato revocado no da de alta otro con el access que aún le queda.
+  const negativa = await negativaDelAparato(user.deviceId);
+  if (negativa) return Response.json({ error: negativa }, { status: 403 });
 
   let body: unknown;
   try {
