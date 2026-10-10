@@ -80,10 +80,10 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-10-09 · Un enlace con `.nn-button` ya no se parte ni pisa la línea de arriba en el teléfono (#686)
+### 2026-10-09 · Un enlace con `.nn-button` ya no se parte ni pisa la línea de arriba en el teléfono (#686, #693)
 
 `.nn-button` no declaraba `display`, así que sobre un `<a>` era `inline`: medía 39 px y no 44, y al partirse una etiqueta su segundo trozo pintaba el fondo encima de la línea anterior. Se vio en «Últimas jornadas» de la parcela a 390 px; la pestaña Trampas tenía lo mismo. Hoy `a.nn-button` es `inline-flex` sin subrayado, y `p > a.nn-button` deja 8 px entre filas; `<button>` y el único `<summary>` no cambian. Flip-test a 390×844 sobre una base desechable: solape 1.211 y 2.354 px² → 0. La CSS viva de producción lleva las dos reglas.
-**Queda:** siete pantallas conservan un `style={{ display: "inline-block", textDecoration: "none" }}` que ya sobra —se ven igual; quitarlo es limpieza—, y `/lots/[id]` no se pudo mirar con la cuenta DEMO.
+**Después, en #693:** ese `p > a.nn-button` daba por hecho que un `<p>` no es flex, y el de `/lots` lo es —en escritorio estiraba su fila de 46 a 54 px—; ahora el margen sólo va en un `<p>` con dos o más botones-enlace. Y fuera los `style` en línea que suplían a estas reglas: siete de `.nn-button`, tres de `.nn-button-quiet` —con su regla propia, que además centra «Recetas de proceso»— y el resto de `/research/[protocolId]`. No queda nada pendiente de esta entrada.
 
 ### 2026-10-06 · Kiva Estate tiene su geografía y sus dos fincas, y Luis, Kenis y Chris sus permisos (#668, #670)
 
