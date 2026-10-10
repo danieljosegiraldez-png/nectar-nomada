@@ -2,7 +2,8 @@
 
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
 diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
-`conAncestros`, y las tres de `getApiaryDetail` y `getHive`. Quedan 17 de las 31.** Es un defecto, no
+`conAncestros`, las tres de `getApiaryDetail` y `getHive`, y la de `getFieldSessionTimeline`. Quedan 16 de
+las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -74,7 +75,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `getStoryForEditor` (`lib/content/stories.ts:111`) | `content/[id]` |
 | `instrumentoParaVerificar` (`lib/equipos/equipos.ts:822`) | `equipos/[id]` |
 | `modeloParaFicha` (`lib/equipos/modelos.ts:412`) | `equipos/modelos/[id]` |
-| `getFieldSessionTimeline` (`lib/traceability/fieldSessions.ts:613`) | `field-sessions/[id]` |
+| `getFieldSessionTimeline` (`lib/traceability/fieldSessions.ts:613`) | `field-sessions/[id]` — **arreglada en #696**: lanza `FieldSessionValidationError("session_not_found")`, y la página da 404 |
 | `leerReporteDeVisita` (`lib/traceability/reporteDeVisita.ts:296`) | `field-sessions/[id]/report` |
 | `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` |
 | `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` |
@@ -157,10 +158,20 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
 - *Con Platform Admin:* `apiaries/[id]`, `etiquetas` y `hives/[hiveId]` dan 404 con el id basura y con el UUID que no existe. El apiario y la colmena DEMO reales dan 200.
 - *Con la cuenta DEMO de socio, sin acceso:* las tres reales dan 404, sin el nombre.
 - *Flip:* volviendo a las páginas anteriores, con las guardas del servicio puestas, las seis de `apiaries/[id]` y `hives/[hiveId]` daban 500, incluido el apiario real sin permiso. Las guardas solas no bastaban; el `try` de la página hacía falta.
+
+**`requireFieldSessionAccess` lleva también su guarda desde #696**, aunque hoy no es la primera en reventar
+en ninguna página de esta ficha: la de `apiaries/[id]` ya la resolvió el `try` de la página. Lanza
+`LocationAccessError("location_not_found")`, lo mismo que para una ubicación ausente, y cubre a
+`listFieldSessions` y a las dos acciones que le pasan un id de fuera.
+
+**`field-sessions/[id]`, medida el 2026-10-09 contra el servidor** con Platform Admin: 404 con el id basura
+y con el UUID que no existe, y 200 con una jornada real creada en la base desechable. Su reporte,
+`field-sessions/[id]/report`, sigue dando 500 con el id basura: revienta en `leerReporteDeVisita`, que no se
+ha tocado.
