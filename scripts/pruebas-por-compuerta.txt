@@ -151,6 +151,7 @@ tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/historialDelLote.test.ts
 tests/traceability/idMalFormado.test.ts
 tests/traceability/idMalFormadoDeUbicacion.test.ts
+tests/apiary/idMalFormadoDeApiario.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
 tests/inventario/materiales.test.ts
