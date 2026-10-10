@@ -2,8 +2,8 @@
 
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
 diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
-`conAncestros`, las tres de `getApiaryDetail` y `getHive`, y la de `getFieldSessionTimeline`. Quedan 16 de
-las 31.** Es un defecto, no
+`conAncestros`, las tres de `getApiaryDetail` y `getHive`, y las de `getFieldSessionTimeline` y
+`leerReporteDeVisita`. Quedan 15 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -76,7 +76,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `instrumentoParaVerificar` (`lib/equipos/equipos.ts:822`) | `equipos/[id]` |
 | `modeloParaFicha` (`lib/equipos/modelos.ts:412`) | `equipos/modelos/[id]` |
 | `getFieldSessionTimeline` (`lib/traceability/fieldSessions.ts:613`) | `field-sessions/[id]` — **arreglada en #696**: lanza `FieldSessionValidationError("session_not_found")`, y la página da 404 |
-| `leerReporteDeVisita` (`lib/traceability/reporteDeVisita.ts:296`) | `field-sessions/[id]/report` |
+| `leerReporteDeVisita` (`lib/traceability/reporteDeVisita.ts:296`) | `field-sessions/[id]/report` — **arreglada en #696**: guarda en la función, y la página atrapa también `FieldSessionValidationError`; da 404 |
 | `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` |
 | `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` |
 | `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` |
@@ -101,7 +101,7 @@ que sí, igual que antes con un UUID inexistente. La prueba fija las dos cosas:
 id en la línea siguiente. Lleva su propia guarda, que lanza `TraceabilityAccessError("no_lot_access")`,
 lo que ya lanzaba para una ubicación ausente.
 
-## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (quedan cinco)
+## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (quedan cuatro)
 
 Éstas no las arregla una guarda de forma: el id es válido, la fila no existe, y lo que sube no es
 `P2007`.
@@ -113,7 +113,7 @@ lo que ya lanzaba para una ubicación ausente.
 | `calibration/[calibrationSessionId]` | `P2025` | `findUniqueOrThrow` en `lib/sensory/calibration.ts:78` |
 | `competitions/[editionId]` | `P2025` | `findUniqueOrThrow` en `lib/competitions/service.ts:40` |
 | `partner/[projectId]` | `P2025` | `findUniqueOrThrow` en `lib/partner/workspace.ts:119` |
-| `field-sessions/[id]/report` | `FieldSessionValidationError("session_not_found")` | `lib/traceability/reporteDeVisita.ts:300`; la página sólo atrapa `LocationAccessError` |
+| ~~`field-sessions/[id]/report`~~ | `FieldSessionValidationError("session_not_found")` | `lib/traceability/reporteDeVisita.ts:300`; la página sólo atrapaba `LocationAccessError` — **arreglada en #696**: ahora atrapa las dos |
 | `sensory/herramientas/ruedas/[wheel]` | `PrismaClientValidationError` del enum `domain` | `obtenerRuedaSensorial`, `lib/sensory/ruedas.ts:59` — aquí el segmento no es un id sino un dominio, y **cualquier** valor que no esté en el enum da 500 |
 
 ## Rarezas vistas de camino, que no son 500
@@ -158,7 +158,7 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
@@ -172,6 +172,9 @@ en ninguna página de esta ficha: la de `apiaries/[id]` ya la resolvió el `try`
 `listFieldSessions` y a las dos acciones que le pasan un id de fuera.
 
 **`field-sessions/[id]`, medida el 2026-10-09 contra el servidor** con Platform Admin: 404 con el id basura
-y con el UUID que no existe, y 200 con una jornada real creada en la base desechable. Su reporte,
-`field-sessions/[id]/report`, sigue dando 500 con el id basura: revienta en `leerReporteDeVisita`, que no se
-ha tocado.
+y con el UUID que no existe, y 200 con una jornada real creada en la base desechable.
+
+**`field-sessions/[id]/report`, medida igual.** Da 404 con el id basura y con el UUID que no existe, y 200
+con la misma jornada, completada y con su reporte emitido. *Flip:* volviendo al `catch` anterior de la
+página, con la guarda del servicio puesta, el id basura y el UUID inexistente daban 500 y la jornada real
+seguía en 200. Las dos mitades hacían falta.
