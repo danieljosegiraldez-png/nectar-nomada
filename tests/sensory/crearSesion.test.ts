@@ -25,7 +25,7 @@ import { retirarMuestra } from "../../lib/traceability/samples";
 
 const RUN = `cata-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
-let gestor: string, sinPermiso: string;
+let gestor: string, sinPermiso: string, acotado: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
 let m1: string, m2: string, m3: string, m3Code: string;
 let roast1: string, roast2: string;
@@ -65,7 +65,9 @@ beforeAll(async () => {
 
   gestor = await cuenta("Gestor");
   sinPermiso = await cuenta("SinPermiso");
-  scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
+  // Junto a las otras dos, no donde se le asigna: el `afterAll` borra por `ids`, y un `undefined` ahí lo aborta entero.
+  acotado = await cuenta("Acotado");
+  scopeId =(await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
   await prisma.assignment.create({ data: { userAccountId: sinPermiso, roleProfileId: farm.id, scopeId } });
@@ -78,7 +80,17 @@ beforeAll(async () => {
     (await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } }));
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: admin.id, scopeId: plataforma.id } });
 
-  versionOk = await protocolo("protocolo bueno", 3, "active");
+  // **Para leer la lista SIN filtro, una cuenta que sólo ve SU parcela, nunca el admin** (2026-10-10, P2025 en el carril
+  // con base del PR #699). La lista del admin recorre las muestras de TODA la base compartida y pide el grado del proceso
+  // de cada una: si otro archivo que corre en paralelo borra ese proceso entre las dos lecturas de
+  // `procesosParaEntrada`, salta P2025. Reproducido con un archivo vecino que crea y borra procesos en bucle: con el admin
+  // caían esta lista y la de los tapones; con esta cuenta, ninguna. Monta catas (Head Judge, en plataforma) y ve muestras
+  // por Farm Operator de la parcela, la misma combinación que `juez` más abajo.
+  const juezJefe = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Head Judge" } });
+  await prisma.assignment.create({ data: { userAccountId: acotado, roleProfileId: juezJefe.id, scopeId: plataforma.id } });
+  await prisma.assignment.create({ data: { userAccountId: acotado, roleProfileId: farm.id, scopeId } });
+
+  versionOk =await protocolo("protocolo bueno", 3, "active");
   versionSinAtributos = await protocolo("protocolo vacío", 0, "active");
   versionArchivada = await protocolo("protocolo retirado", 3, "archived");
 
@@ -120,7 +132,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const ids = [gestor, sinPermiso];
+  const ids = [gestor, sinPermiso, acotado];
   const sesiones = await prisma.sensorySession.findMany({ where: assertDefinedWhere({ createdBy: { in: ids } }), select: { id: true } });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
   await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: { in: tuestesDePrueba } }) });
@@ -281,8 +293,11 @@ describe("crear una sesión de cata", () => {
    */
 
   it("no ofrece una muestra retirada en el listado para cata", async () => {
-    const listado = await listarMuestrasParaCata(gestor);
-    expect(listado.map((m) => m.id)).not.toContain(m3);
+    const ids = (await listarMuestrasParaCata(acotado)).map((m) => m.id);
+    // Exacta y no sólo «no contiene m3»: una lista vacía, o cortada en 200 antes de llegar a `M3-`, tampoco la contiene.
+    // Y exacta también afirma el aislamiento: si la cuenta vuelve a ver la base entera, entran las muestras sembradas.
+    expect(ids, "las dos sin retirar de su parcela, y nada más").toEqual([m1, m2]);
+    expect(ids).not.toContain(m3);
   });
 
   it("no la encuentra tampoco por búsqueda", async () => {
@@ -430,12 +445,16 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
 
   it("control: la lista inicial NO la enseña", async () => {
     expect(tapon, "fila patrón: se crearon las 201").toHaveLength(201);
-    const ids = (await listarMuestrasParaCata(gestor)).map((m) => m.id);
+    const ids = (await listarMuestrasParaCata(acotado)).map((m) => m.id);
+    // `acotado` sólo ve esta parcela, así que la lista son los tapones: es el tope lo que esconde a la lejana, y no que
+    // la cuenta no vea nada.
+    expect(ids, "control positivo: la lista se llenó, y con tapones").toHaveLength(200);
+    expect(ids.every((id) => tapon.includes(id))).toBe(true);
     expect(ids).not.toContain(lejana);
   });
 
   it("y aun así la cata la acepta", async () => {
-    const s = await crearSesionDeCata(gestor, {
+    const s = await crearSesionDeCata(acotado, {
       name: `Lejana ${RUN}`,
       protocolVersionId: versionOk,
       muestras: [lejana],
