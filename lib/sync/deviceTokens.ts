@@ -40,7 +40,9 @@ import { verifyPassword } from "../auth/password";
  * primaria en cada escritura, ninguna en cada lectura. El audit §19 pide que lo
  * de un aparato revocado se rechace al sincronizar, no que se le corte la
  * lectura. **Una ruta nueva que escriba por Bearer tiene que llamar a
- * `negativaDelAparato`**, porque ningún guardia lo exige.
+ * `negativaDelAparato`** y devolver si niega. Lo exige
+ * `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`, que
+ * descubre esas rutas solo y no las enumera.
  *
  * **Sin rotación de refresh en esta versión.** Rotar es una mitigación real
  * contra el robo del token, pero obliga a resolver la carrera de dos refrescos
