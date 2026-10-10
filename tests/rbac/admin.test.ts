@@ -24,10 +24,31 @@ const created = {
   scopeIds: [] as string[],
   userAccountIds: [] as string[],
   personIds: [] as string[],
+  locationIds: [] as string[],
+  projectIds: [] as string[],
 };
 
 let adminAccountId: string;
 let subjectAccountId: string;
+/**
+ * Un sitio PROPIO para colgar las concesiones de ámbito de ubicación.
+ *
+ * **El incidente, 2026-10-03 (`PENDING_IMPLEMENTATIONS/022`).** Esto era
+ * `prisma.location.findFirstOrThrow({ select: { id: true } })` — sin `where` y sin
+ * `orderBy`, o sea «la ubicación que la base devuelva primero», que puede ser de
+ * cualquiera. `grantRole` reutiliza el `Scope` de ese sitio, así que esta suite
+ * dejaba un `Assignment` suyo colgado del ámbito de OTRA suite mientras corría. Las
+ * 208 pruebas de `base-sembrada` corren en paralelo contra la misma base, y
+ * `fixturesDeCatalogo.limpiar()` borra los ámbitos de sus propios sitios: el
+ * `RESTRICT` de `assignment_scope_id_fkey` ponía ROJO el carril entero por basura
+ * que no era suya — y con `Tests … passed` y cero `×`, porque la suite moría en su
+ * limpieza y eso sólo sale en `Test Files`.
+ *
+ * Con un sitio propio, el ámbito que `grantRole` cree es de esta suite y nadie más
+ * puede estar colgado de él. La prueba afirma lo mismo: el caso mide que revocar
+ * marca y audita, y la ubicación es incidental.
+ */
+let sitioPropio: string;
 let projectViewerRoleId: string;
 let projectId: string;
 
@@ -57,7 +78,36 @@ beforeAll(async () => {
   created.assignmentIds.push(a.id);
 
   projectViewerRoleId = (await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Project Viewer" } })).id;
-  projectId = (await prisma.project.findFirstOrThrow({ select: { id: true } })).id;
+  // **Un proyecto PROPIO, por la misma razón que el sitio de arriba.** Esto era
+  // `prisma.project.findFirstOrThrow({ select: { id: true } })` —sin `where` y sin `orderBy`—, y de
+  // ese proyecto ajeno cuelgan tres concesiones de ámbito `project`. Es la gemela del defecto de
+  // arriba, y estaba latente sólo porque hoy nada borra los ámbitos de un proyecto sembrado: no
+  // había con quién chocar. Se cierra igual — **arreglar una instancia y dejar su gemela al lado**
+  // es una clase que esta casa ya pagó.
+  //
+  // **Y cuesta una línea, al contrario de lo que yo escribí al dejarlo abierto:** la ficha 022 decía
+  // que crear un `Project` propio «arrastra más campos obligatorios y es un cambio mayor». Medido el
+  // 2026-10-06 sobre `model Project`: exige **uno**, `name`. La frase era falsa y queda corregida
+  // en la ficha.
+  //
+  // **Además deja exacta una aserción de esta misma suite.** «reuses the existing scope rather than
+  // minting a duplicate» cuenta los ámbitos de este proyecto y espera **1**: sobre un proyecto
+  // compartido, otra suite que concediera ahí la rompería sin que nada lo explicara; sobre el
+  // propio, el 1 no depende de vecinos.
+  const proyecto = await prisma.project.create({ data: { name: `ADMINTEST proyecto ${RUN}` } });
+  created.projectIds.push(proyecto.id);
+  projectId = proyecto.id;
+
+  const sitio = await prisma.location.create({
+    data: {
+      locationType: "plot",
+      name: `ADMINTEST sitio ${RUN}`,
+      status: "approved",
+      classification: "internal",
+    },
+  });
+  created.locationIds.push(sitio.id);
+  sitioPropio = sitio.id;
 });
 
 afterAll(async () => {
@@ -73,6 +123,35 @@ afterAll(async () => {
   if (created.personIds.length) await prisma.person.deleteMany({ where: w(created.personIds) });
   // Scopes created by grantRole are shared by design, so they are deliberately
   // not deleted — removing one could orphan a real Assignment.
+  //
+  // **Con una excepción, y es la del sitio propio de esta suite:** ese `Scope` cuelga
+  // de una ubicación que esta suite creó y que nadie más conoce, así que no hay
+  // ningún `Assignment` ajeno que pueda quedar huérfano. Dejarlo acumularía basura:
+  // la base compartida llegó a tener 284 `Scope` huérfanos por no borrar los propios
+  // (CLAUDE.md, 2026-09-xx). Va DESPUÉS de los `Assignment`, por el `RESTRICT`.
+  if (created.locationIds.length) {
+    // `findMany` no es destructivo, así que no pasa por `assertDefinedWhere`: ese helper
+    // devuelve `T` y ensancha `scopeType` a `string`, que no es un `ScopeWhereInput`. El
+    // filtro no puede quedar vacío porque el `if` de arriba exige que haya ubicaciones.
+    const propios = await prisma.scope.findMany({
+      where: { scopeType: "location", scopeRefId: { in: created.locationIds } },
+      select: { id: true },
+    });
+    if (propios.length) {
+      await prisma.scope.deleteMany({ where: w(propios.map((s) => s.id)) });
+    }
+    await prisma.location.deleteMany({ where: w(created.locationIds) });
+  }
+  if (created.projectIds.length) {
+    // Mismo razonamiento que con el sitio: el proyecto es nuevo y nadie más puede tener un ámbito
+    // sobre él, así que borrarlo no deja huérfana ninguna asignación ajena.
+    const propios = await prisma.scope.findMany({
+      where: { scopeType: "project", scopeRefId: { in: created.projectIds } },
+      select: { id: true },
+    });
+    if (propios.length) await prisma.scope.deleteMany({ where: w(propios.map((x) => x.id)) });
+    await prisma.project.deleteMany({ where: w(created.projectIds) });
+  }
 });
 
 describe("who may administer permissions", () => {
@@ -155,7 +234,7 @@ describe("revoking", () => {
       userAccountId: subjectAccountId,
       roleProfileId: projectViewerRoleId,
       scopeType: "location",
-      scopeRefId: (await prisma.location.findFirstOrThrow({ select: { id: true } })).id,
+      scopeRefId: sitioPropio,
     });
     created.assignmentIds.push(grant.id);
 

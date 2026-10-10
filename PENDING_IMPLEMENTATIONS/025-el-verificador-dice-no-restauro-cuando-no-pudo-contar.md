@@ -1,8 +1,9 @@
 # 025 · El verificador de backup dice «no restauró» cuando lo que no pudo fue CONTAR
 
-**Estado: medido el 2026-10-06, sin construir.** Es un defecto de la alarma de P-A, no una
-decisión — pero cambiar la semántica de un fallo de alarma conviene que sea deliberado, así que la
-ficha se escribe y el arreglo espera el visto bueno de Daniel.
+**Estado: HECHO el 2026-10-06.** Y el diagnóstico que esta ficha traía era **más flojo que la
+realidad**: decía que el censo falló. Midiéndolo para arreglarlo salió que el fallo estaba **dentro
+de la rama PASS**, después de que el `diff` ya hubiera probado que la copia era idéntica. Ver «Lo
+que resultó ser, al arreglarlo» al final.
 
 ## El incidente
 
@@ -106,3 +107,63 @@ Lo que sigue desfasado es el rastro: `BACKUP-FAILED.txt` del 2026-10-05 sigue en
 log no tiene línea de veredicto para el set del 06 porque la verificación se corrió a mano y no por
 `run-scheduled.sh`. El marcador lo borra solo la siguiente corrida programada que salga bien
 (`run-scheduled.sh:106`, vía `clear_failure_marker`).
+
+---
+
+## Lo que resultó ser, al arreglarlo — 2026-10-06
+
+**El fallo no estaba en el censo: estaba DESPUÉS de que el censo ya hubiera coincidido.** El `wc`
+que murió es el de la línea 173, **dentro de la rama PASS**, calculando las cifras de adorno del
+mensaje de éxito —y leyéndolas del `rowcounts.tsv` del **destino**, que vive en Google Drive—.
+
+**Probado con dos hechos, no deducido:**
+
+- `row_census` (`pg-tools.sh:136-150`) **no contiene ningún `wc`**, así que el `wc` del log no pudo
+  venir de ahí.
+- La rama `FAIL` escribe `census-mismatch.diff` (`verify-restore.sh:193`), y ese archivo **no
+  existe** en el set del 2026-10-05. Luego el `diff` había pasado y se estaba en la rama `PASS`.
+
+O sea: **el backup del 2026-10-05 ya se había demostrado idéntico, y la alarma dijo «did NOT
+restore».** Peor de lo que esta ficha describía.
+
+## Cómo quedó
+
+1. **Las cifras del mensaje se leen de la copia LOCAL**, que el `diff` acaba de probar idéntica, en
+   vez del fichero del destino. El Drive sale del camino del éxito.
+2. **Y aunque esa lectura falle, el veredicto no cambia:** son cifras de adorno, con su valor por
+   defecto. Un fallo al formatear no puede volver rojo lo que ya está verde.
+3. **El censo se reintenta 3 veces** y, si de verdad no se puede calcular, sale con **código 2** y
+   escribe `verified_result: SIN VEREDICTO` — en vez de dejar que `set -e` lo convierta en un
+   código genérico.
+4. **`run-scheduled.sh` distingue el 2** y dice «a backup was written and RESTORED, but its census
+   could not be computed — unverified, not broken». **El `/fail` se manda igual** en los dos casos:
+   no poder comprobar un backup merece alarma tanto como no poder restaurarlo. Lo único que cambia
+   es que deja de afirmar cuál de los dos fue cuando no lo sabe.
+
+## El flip, con sus tres mundos y un cuarto que casi se colÓ
+
+| mundo | salida | qué dice |
+|---|---|---|
+| el backup real, sin mutar | **0** | `PASS — 216 tables, 15315 rows, every count identical` |
+| la cifra de adorno ilegible (lo que mató al guion el 05) | **0** | `PASS — (no se pudo contar) tables, 15315 rows` |
+| el censo imposible (3 intentos) | **2** | `SIN VEREDICTO — la copia restauró, pero el censo no se pudo calcular` |
+
+Y la traducción de `run-scheduled.sh`, ejercida con los tres códigos: 2 → «census could not be
+computed», 1 → «did NOT restore», 0 → no anuncia nada.
+
+**El cuarto, y es el que más enseña: la primera versión del arreglo estaba ROTA y repetía el
+defecto que venía a arreglar.** Capturaba el código con `$?` **dentro del `then` de un `if ! cmd`**,
+y ahí `$?` vale **0** —la negación es lo que tuvo éxito—, así que habría caído siempre en el `else`
+y dicho «did NOT restore». Reproducido antes de corregirlo: `if ! bash -c "exit 2"` da `$? = 0`;
+`bash -c "exit 2" || c=$?` da **2**. Es la familia del `echo` que tapa el código de salida, que la
+memoria de esta máquina ya tiene escrita, reincidida dentro del arreglo de un defecto de la misma
+forma.
+
+## Higiene
+
+Las corridas del flip escriben en el `MANIFEST.txt` del set que verifican. Dos de las mías
+acabaron en el **real** —una con el texto de un guion mutado, `PASS ((no se pudo contar) tables)`,
+que es una entrada engañosa en el registro de un backup— y se quitaron: de **7** líneas
+`verified_result` a **5**, conservando la verificación legítima de las 04:48 y con el checksum del
+dump **idéntico** antes y después. El resto del flip se corrió contra una **copia** del set en
+`/tmp`, no contra el original.

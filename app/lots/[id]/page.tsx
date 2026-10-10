@@ -630,7 +630,6 @@ export default async function LotDetailPage({
               key={action}
               href={href}
               className={action === sugerida ? "nn-button" : "nn-button-quiet"}
-              style={{ textDecoration: "none" }}
             >
               {label}
             </Link>

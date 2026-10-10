@@ -21,6 +21,7 @@ import { resolveFarmSiteId } from "./fincas";
 import { celdasDelRango, type Rango } from "../territorio/rejilla";
 import { celdasDeLaForma, tableroDe } from "./formaDeLaParcela";
 import { densidadDelLote } from "./densidadPorMarco";
+import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 import { can } from "../rbac/service";
 import type { ScopeTarget } from "../rbac/types";
 import type { EventoDeProduccion } from "./estadoDeProduccion";
@@ -650,8 +651,15 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // here with nothing means the row vanished between the two queries.
   if (!location) throw new LocationAccessError("location_not_found");
 
+  // **ADR-196: una selección no resta.** El lote responde por lo que ocurre en sus
+  // selecciones, así que lo que se siembra o entra en producción en una
+  // microparcela cuenta en la ficha de su madre. Hacia los DESCENDIENTES
+  // solamente —`soloDescendientes`—: al revés, la ficha de una microparcela
+  // mostraría las cosechas de su madre y contaría dos veces el mismo café.
+  const emparentadas = await ubicacionesEmparentadas(locationId, prisma, { soloDescendientes: true });
+
   const cohorts = await prisma.plantingCohort.findMany({
-    where: { locationId },
+    where: { locationId: { in: emparentadas } },
     include: { cultivarValue: { select: { id: true, value: true } } },
     orderBy: [{ status: "asc" }, { plantedAt: "desc" }],
   });
@@ -662,8 +670,15 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // uno ahí. Contar por el principal atribuiría todo el peso a un bloque y cero
   // a los demás.
   const harvestContributions = await prisma.harvestEventSource.findMany({
-    where: { locationId },
-    select: { cherryWeightKg: true, harvestEvent: { select: { harvestedAt: true } } },
+    where: { locationId: { in: emparentadas } },
+    select: {
+      // Las dos columnas nuevas son lo que hace el total desarmable (§4): sin
+      // ellas el rendimiento crece y nadie puede decir de dónde vino.
+      locationId: true,
+      location: { select: { name: true } },
+      cherryWeightKg: true,
+      harvestEvent: { select: { harvestedAt: true } },
+    },
   });
 
   // Las variedades que el formulario puede ofrecer. Del catálogo, no de una
@@ -680,7 +695,7 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // (ver el comentario de arriba): no se reutiliza
   // `listPlantingEventsForLocation`, que protege con `lot:view`.
   const eventosDeProduccionCrudos = await prisma.plantingEvent.findMany({
-    where: { locationId, eventType: "entered_production", plantingCohortId: { not: null } },
+    where: { locationId: { in: emparentadas }, eventType: "entered_production", plantingCohortId: { not: null } },
     select: {
       id: true,
       plantingCohortId: true,
@@ -731,7 +746,10 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
   // día: `observedAt` es un día a las 00:00Z.
   const trampasCrudas = puedeVerTrampas
     ? await prisma.specimen.findMany({
-        where: { locationId, specimenType: "trap" },
+        // ADR-196: las trampas de una selección son del lote. La compuerta de
+        // arriba (`puedeVerTrampas`) va sobre ESTA Location y el enrollado viene
+        // después, igual que en floración, cosecha e intervenciones.
+        where: { locationId: { in: emparentadas }, specimenType: "trap" },
         select: {
           id: true,
           trapNumber: true,
@@ -925,8 +943,13 @@ export async function getPlotDetail(userAccountId: string, locationId: string) {
         harvestedAt: c.harvestEvent.harvestedAt,
         cherryWeightKg: c.cherryWeightKg,
       })),
+      // **ADR-196 §2.1 — el divisor es el área de ESTA Location, nunca la suma
+      // con la de sus selecciones.** La microparcela está DENTRO, no al lado:
+      // sumarlas sería tratarla como una parte, que es el error que la regla
+      // existe para impedir. Lo único que crece con el enrollado es el numerador.
       location.areaHectares,
     ),
+    rendimientoPorSeleccion: desgloseDeRendimiento(harvestContributions, locationId),
     // The farm's own name is usually on the parent site, not the plot: eleven
     // of Finca Rosina's locations carry a null `organizationId` and inherit it
     // through the hierarchy. Reading only the plot's own column would show a
@@ -1164,6 +1187,45 @@ export interface PlotYearYield {
 export type PlotYield =
   | { status: "ok"; hectares: number | null; years: PlotYearYield[] }
   | { status: "sin_cosechas" };
+
+/**
+ * El mismo total, desarmable por origen — **ADR-196 §4: «un total no es una
+ * medición si no se puede desarmar»**.
+ *
+ * Va aparte de `computePlotYield` a propósito: esa función es pura, no recibe
+ * `locationId` y tiene sus propias pruebas; meterle el origen sería cambiarla
+ * para dos cosas a la vez. Y por ser pura, ésta se prueba en el carril
+ * HERMÉTICO, sin base de datos.
+ *
+ * Un aporte sin pesar cuenta **0 kg en una selección que SÍ aparece**, que es
+ * distinto de no aparecer: una selección con cosechas sin pesar existe (ADR-080,
+ * sin registrar y cero son hechos distintos).
+ */
+export function desgloseDeRendimiento(
+  contribuciones: ReadonlyArray<{
+    locationId: string;
+    cherryWeightKg: Prisma.Decimal | number | null;
+    location: { name: string };
+  }>,
+  locationIdPropio: string,
+): { propio: number; porSeleccion: Array<{ locationId: string; nombre: string; cherryWeightKg: number }> } {
+  let propio = 0;
+  const porOrigen = new Map<string, { locationId: string; nombre: string; cherryWeightKg: number }>();
+
+  for (const c of contribuciones) {
+    const kg = c.cherryWeightKg == null ? 0 : Number(c.cherryWeightKg);
+    if (c.locationId === locationIdPropio) {
+      propio += kg;
+      continue;
+    }
+    const acc = porOrigen.get(c.locationId)
+      ?? { locationId: c.locationId, nombre: c.location.name, cherryWeightKg: 0 };
+    acc.cherryWeightKg += kg;
+    porOrigen.set(c.locationId, acc);
+  }
+
+  return { propio, porSeleccion: [...porOrigen.values()] };
+}
 
 export function computePlotYield(
   contributions: ReadonlyArray<{ harvestedAt: Date; cherryWeightKg: Prisma.Decimal | number | null }>,

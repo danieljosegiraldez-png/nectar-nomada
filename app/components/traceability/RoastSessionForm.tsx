@@ -1,7 +1,8 @@
 "use client";
 
+import { OpcionesDePersona, type OpcionDePersona } from "../OpcionesDePersona";
 import { CampoNumerico } from "../CampoNumerico";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordRoastSessionAction, type TraceabilityActionState } from "../../actions/traceability";
 import { TimezoneOffsetField } from "../TimezoneOffsetField";
@@ -18,7 +19,8 @@ const initialState: TraceabilityActionState = {};
  * es la misma forma que ya usa la cosecha. Lo dice el propio servicio en su
  * cabecera; esta pantalla no lo reinterpreta.
  *
- * **Sólo dos campos obligatorios:** el código del lote tostado y cuándo empezó.
+ * **Fecha real obligatoria:** muestras reciben código automático; producción requiere código.
+ * Una muestra vinculada exige peso de carga.
  * Todo lo demás —niveles, pesos, cracks, equipo— es opcional, porque un tostador
  * que acaba de descargar tiene las manos ocupadas y la alternativa a un formulario
  * corto no es un formulario completo: es ningún registro.
@@ -37,15 +39,21 @@ interface PerfilOption {
 interface Opcion { id: string; label: string }
 interface MuestraOption extends Opcion { disponibleKg: number | null }
 
-export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
+export function RoastSessionForm({ lotId, perfiles, muestras, equipos, personas, selfPersonId }: {
   lotId: string; perfiles: PerfilOption[]; muestras: MuestraOption[]; equipos: Opcion[];
+  personas: OpcionDePersona[]; selfPersonId: string | null;
 }) {
   const [state, formAction, pending] = useActionState(recordRoastSessionAction, initialState);
   const t = useTranslations("Traceability");
   const [purpose, setPurpose] = useState("sample");
 
   return (
-    <form action={formAction} className="nn-form" style={{ maxWidth: 480 }}>
+    <form method="post" onSubmit={(event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      // Dispatch explicitly: a returned domain error must not reset the form.
+      startTransition(() => formAction(data));
+    }} className="nn-form" style={{ maxWidth: 480 }}>
       {/* Sin esto `parseLocalDateTime` lanza `timezone_offset_missing`: se
           niega a adivinar la zona, que es como se guardaba un instante
           equivocado con aspecto de correcto. */}
@@ -60,6 +68,15 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
           <option value="sample">{t("roastPurpose_sample")}</option>
           <option value="production">{t("roastPurpose_production")}</option>
         </select>
+      </div>
+
+      <div className="nn-field">
+        <label htmlFor="r-roasterPersonId">{t("roastPersonLabel")}</label>
+        <select id="r-roasterPersonId" name="roasterPersonId" defaultValue="">
+          <option value="">{t("roastPersonUnknown")}</option>
+          <OpcionesDePersona personas={personas} selfPersonId={selfPersonId} />
+        </select>
+        <small className="nn-muted">{t("roastPersonHelp")}</small>
       </div>
 
       {purpose === "sample" && muestras.length > 0 ? (
@@ -95,10 +112,10 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos }: {
         </div>
       ) : null}
 
-      <div className="nn-field">
+      {purpose === "sample" ? <p className="nn-muted">{t("sampleRoastAutomaticCodeHelp")}</p> : <div className="nn-field">
         <label htmlFor="r-outputLotCode">{t("roastOutputLotCodeLabel")}</label>
         <input id="r-outputLotCode" name="outputLotCode" type="text" required />
-      </div>
+      </div>}
       <div className="nn-field">
         <label htmlFor="r-startedAt">{t("roastStartedAtLabel")}</label>
         <input id="r-startedAt" name="startedAt" type="datetime-local" required />

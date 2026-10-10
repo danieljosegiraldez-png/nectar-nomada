@@ -111,3 +111,35 @@ describe("ubicacionesEmparentadas", () => {
     expect(llamadas).toBeLessThanOrEqual(3);
   });
 });
+
+/**
+ * ADR-196 — la dirección del enrollado. `soloDescendientes` existe porque el
+ * rendimiento, las cohortes, los eventos de producción y los especímenes sólo
+ * enrollan hacia ABAJO: una ficha de microparcela que mostrara las cosechas de
+ * su madre contaría dos veces el mismo café. La carencia sigue necesitando las
+ * dos direcciones, y por eso es una opción y no el comportamiento por omisión.
+ *
+ * Nota de forma, para que nadie infiera de más de este archivo: el `microA1` del
+ * montaje es `locationType: "micro_plot"`, y a esta función le da igual el tipo —
+ * sólo recorre `parentLocationId`. Pero una microparcela de VERDAD es un `plot`
+ * hijo de otro `plot`, creada con `createMicrolot` (decisión de Daniel del
+ * 2026-09-19, escrita en `prisma/schema.prisma`): el valor `micro_plot` del enum
+ * existe y nada en producción lo produce.
+ */
+describe("ubicacionesEmparentadas con soloDescendientes (ADR-196)", () => {
+  it("desde la microparcela: sólo ella, sin subir a la parcela ni a la finca", async () => {
+    const conOpcion = await ubicacionesEmparentadas(microA1, undefined, { soloDescendientes: true });
+    expect(new Set(conOpcion)).toEqual(new Set([microA1]));
+
+    // CONTROL POSITIVO, y es lo que hace que la aserción de arriba mida: sin la
+    // opción, la parcela y la finca SÍ salen. Sin esta mitad, una implementación
+    // que devolviera [] siempre pasaría.
+    const sinOpcion = await ubicacionesEmparentadas(microA1);
+    expect(new Set(sinOpcion)).toEqual(new Set([microA1, parcelaA, finca]));
+  });
+
+  it("desde la parcela: ella y su microparcela; NI la finca NI la hermana", async () => {
+    const r = await ubicacionesEmparentadas(parcelaA, undefined, { soloDescendientes: true });
+    expect(new Set(r)).toEqual(new Set([parcelaA, microA1]));
+  });
+});

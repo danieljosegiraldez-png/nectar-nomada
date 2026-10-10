@@ -19,12 +19,13 @@ import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
 import { idsBajoLaFinca } from "./fincas";
 import { can } from "../rbac/service";
+import type { ClassificationLevel } from "../rbac/types";
 import { recepcionDeEntregas } from "./recepcionesDeCereza";
 
 export class JornadaError extends Error {}
 
 async function sitioDeFinca(fincaSiteId: string) {
-  const sitio = await prisma.location.findUnique({ where: { id: fincaSiteId }, select: { id: true, locationType: true, classification: true } });
+  const sitio = await prisma.location.findUnique({ where: { id: fincaSiteId }, select: { id: true, locationType: true, classification: true, organizationId: true } });
   if (!sitio || sitio.locationType !== "site") throw new JornadaError("finca_no_encontrada");
   return sitio;
 }
@@ -109,24 +110,57 @@ export async function recolectoresDeFinca(userAccountId: string, fincaSiteId: st
  * beneficio que cuelga de su sitio). **No** `listarBeneficios`, que filtra por
  * `location:manage_attributes`, y un capataz no lo tiene.
  */
-export async function beneficiosDeDestino(userAccountId: string) {
+/** La finca cuyo destino se elige. Sólo hacen falta su id y su organización. */
+export type FincaDeDestino = { readonly id: string; readonly organizationId: string | null };
+
+/**
+ * **Los beneficios de la MISMA organización que la finca** (ADR-198, PR 3; decisión de Daniel,
+ * 2026-10-06: «los de su organización y los que se le hayan concedido»). Un beneficio sin padre no
+ * cuelga de ninguna finca, así que `lot:view` no le llega subiendo por los ancestros y, sin esto, el
+ * gestor de Kiva no podría elegir el beneficio de Kiva.
+ *
+ * **La clasificación del beneficio sigue mandando:** se comprueba `manage` sobre la FINCA con la
+ * clasificación del BENEFICIO, así que un beneficio que exige una autorización que quien gestiona no
+ * tiene no se ofrece. Lo que se salta es sólo el ámbito, y sólo entre dos ubicaciones de la misma
+ * organización. Nunca concede ver los lotes del beneficio: es elegir un destino, no mirar.
+ */
+async function esDeLaOrganizacionDeLaFinca(
+  userAccountId: string,
+  beneficio: { organizationId: string | null; classification: ClassificationLevel },
+  finca: FincaDeDestino,
+): Promise<boolean> {
+  if (!finca.organizationId || beneficio.organizationId !== finca.organizationId) return false;
+  return can(userAccountId, "manage", "lot", { scopeType: "location", scopeRefId: finca.id }, beneficio.classification);
+}
+
+/**
+ * Sin `finca` (la pantalla de recepción) son los beneficios que quien mira PUEDE VER: ahí decide qué
+ * beneficio abre, y eso sí exige `lot:view` real. Con `finca` (elegir destino) se suman los de su
+ * organización, aunque no cuelguen de ella.
+ */
+export async function beneficiosDeDestino(userAccountId: string, finca?: FincaDeDestino) {
   const filas = await prisma.location.findMany({
     where: { locationType: "beneficio" },
-    select: { id: true, name: true, classification: true },
+    select: { id: true, name: true, classification: true, organizationId: true },
     orderBy: { name: "asc" },
   });
   const salida: { id: string; name: string }[] = [];
   for (const f of filas) {
-    if (await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: f.id }, f.classification)) salida.push({ id: f.id, name: f.name });
+    if (
+      (await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: f.id }, f.classification))
+      || (finca && (await esDeLaOrganizacionDeLaFinca(userAccountId, f, finca)))
+    ) salida.push({ id: f.id, name: f.name });
   }
   return salida;
 }
 
 /** Igual que la de arriba: la comparte `declararDestinoDeFinca`, que exige exactamente esto. */
-export async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string) {
-  const b = beneficioId ? await prisma.location.findUnique({ where: { id: beneficioId }, select: { id: true, locationType: true, classification: true } }) : null;
+export async function exigeBeneficioDeDestino(userAccountId: string, beneficioId: string, finca?: FincaDeDestino) {
+  const b = beneficioId ? await prisma.location.findUnique({ where: { id: beneficioId }, select: { id: true, locationType: true, classification: true, organizationId: true } }) : null;
   if (!b || b.locationType !== "beneficio") throw new JornadaError("beneficio_no_valido");
-  if (!(await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: b.id }, b.classification))) throw new JornadaError("beneficio_no_valido");
+  if (await can(userAccountId, "view", "lot", { scopeType: "location", scopeRefId: b.id }, b.classification)) return;
+  if (finca && (await esDeLaOrganizacionDeLaFinca(userAccountId, b, finca))) return;
+  throw new JornadaError("beneficio_no_valido");
 }
 
 export interface AbrirJornadaInput {
@@ -232,8 +266,8 @@ export async function cerrarJornada(userAccountId: string, jornadaId: string) {
 export async function cambiarDestinoDeJornada(userAccountId: string, input: { jornadaId: string; beneficioId: string }) {
   const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: input.jornadaId } });
   if (!jornada) throw new JornadaError("jornada_no_encontrada");
-  await exigeGestionarFinca(userAccountId, jornada.fincaSiteId);
-  await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
+  const finca = await exigeGestionarFinca(userAccountId, jornada.fincaSiteId);
+  await exigeBeneficioDeDestino(userAccountId, input.beneficioId, finca);
   return prisma.$transaction(async (tx) => {
     // La misma fila que bloquea `recibirCereza` antes de comparar el destino: uno espera al otro.
     await tx.$queryRaw`SELECT "id" FROM "traceability"."jornada_de_cosecha" WHERE "id" = ${input.jornadaId}::uuid FOR UPDATE`;

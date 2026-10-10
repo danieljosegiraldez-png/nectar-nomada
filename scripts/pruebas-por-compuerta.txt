@@ -16,6 +16,8 @@
 # @grupo: base-sembrada
 tests/territorio/rejillaEnLaBase.test.ts
 tests/territorio/microparcelaConRango.test.ts
+tests/territorio/la-seleccion-no-resta.test.ts
+tests/territorio/lo-que-no-enrolla.test.ts
 tests/territorio/rangosDeBloque.test.ts
 tests/territorio/plantonEnLaRejilla.test.ts
 tests/territorio/formaDelLote.test.ts
@@ -167,6 +169,7 @@ tests/traceability/export.test.ts
 tests/traceability/plotBlocks.test.ts
 tests/traceability/traps.test.ts
 tests/traceability/trapRules.test.ts
+tests/traceability/cosechaConOperario.test.ts
 tests/traceability/recordTrapCheckFormAction.test.ts
 tests/traceability/fincaTrampas.test.ts
 tests/traceability/f1.test.ts

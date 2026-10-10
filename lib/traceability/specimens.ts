@@ -23,6 +23,7 @@ import { recordAuditEvent } from "../audit";
 import { celdaCabeEnLaRejilla } from "../territorio/rejilla";
 // El nombre de origen es mas estrecho que la funcion: toma un `locationId`.
 import { rejillaDelBloque as rejillaDelSitio } from "./plotBlocks";
+import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 import type { ScopeTarget } from "../rbac/types";
 import type {
   DataQuality,
@@ -242,10 +243,15 @@ export async function getTrapCheckSeries(userAccountId: string, specimenId: stri
  * marcada, el área es la parcela entera.
  */
 export async function listPlantSpecimens(userAccountId: string, locationId: string) {
+  // **La compuerta va sobre la ubicación que se pide, y el enrollado DESPUÉS, y
+  // es deliberado (ADR-196).** Una selección está *dentro*, no al lado: ver el
+  // lote implica ver dentro de él. Es el mismo orden que `floracion`, `harvest` e
+  // `intervenciones`, y se escribe aquí para que no se lea como un hueco.
   await requireSpecimenAccess(userAccountId, "view", locationId);
 
+  const emparentadas = await ubicacionesEmparentadas(locationId, prisma, { soloDescendientes: true });
   return prisma.specimen.findMany({
-    where: { locationId, specimenType: "plant", status: "active" },
+    where: { locationId: { in: emparentadas }, specimenType: "plant", status: "active" },
     select: { id: true, commonName: true },
     orderBy: { commonName: "asc" },
   });

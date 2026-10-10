@@ -13,8 +13,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**634 operaciones** que tocan la base, en **173 archivos** — las **625 en 170** son de la medición del
-2026-10-05; sobre ellas, las once operaciones y los tres archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`; tarea 14, `lib/recetas/catalogosDelEditor.ts` y `crearRecetaEnBorrador`: ver las notas de abajo), y las dos operaciones de menos son las que la Parte E de la tarea 14 retiró (`createRecipeWithVersion` y `createRecipeVersion`: 625 + 11 − 2 = 634; `processTargets.ts` sigue teniendo operaciones, así que el archivo no baja); medido con
+**637 operaciones** que tocan la base, en **173 archivos** — medido el 2026-10-10, al unir `origin/main`
+(`a2f269b5`) en la rama de la Parte 2a: son **tres más** que las 634 en 173 de la rama antes de unir, y las tres
+vienen de `main` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`,
+**guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #684), y
+`getReportRoastPreparations`, **guardia directo**, de `lib/traceability/reports.ts` (#679)—, así que
+«guardia directo» sube de 397 a 399, «guardia transitivo» de 66 a 67 y las otras cinco filas no se mueven
+(ninguna operación de la rama cambia de clase al unir: medido comparando, fila por fila, el inventario de la
+rama antes de unir con el de la unión). **La cuenta cuadra con `main` solo:** `a2f269b5` mide 628 operaciones en 170 archivos, y
+628 + 11 − 2 = 637 y 170 + 3 = 173 con lo que la Parte 2a añade y retira (abajo). Las **634 en 173** de la rama
+eran: las **625 en 170** de la medición del 2026-10-05; sobre ellas, las once operaciones y los tres archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`; tarea 14, `lib/recetas/catalogosDelEditor.ts` y `crearRecetaEnBorrador`: ver las notas de abajo), y las dos operaciones de menos son las que la Parte E de la tarea 14 retiró (`createRecipeWithVersion` y `createRecipeVersion`: 625 + 11 − 2 = 634; `processTargets.ts` sigue teniendo operaciones, así que el archivo no baja. Y `main` solo, medido el 2026-10-08 con
+ADR-198 PR 2 sobre `origin/main` (`1a28e5ae`), daba 628 operaciones en 170 archivos: **dos más** que las 626 del
+2026-10-05, las dos de `lib/traceability/beneficios.ts`, así que esas dos filas subían y las otras cinco no se
+movían. Antes, medido el 2026-10-05 con
 `node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
 **el árbol fusionado** con `origin/main` (`a8f50df709`). El 2026-10-04 daban **624 en 170** sobre
 `origin/main` (`966ada98d1`): la de más es **`situacionesDeLaFinca`** en
@@ -31,8 +42,8 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **397** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **66** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
+| **399** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **67** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **101** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
@@ -1364,3 +1375,5 @@ sale como **guardia directo** y la compuerta pasa en verde. `GUARDIAS` reconoce
 resolver el símbolo hasta el servicio de autorización de verdad. No se hace
 aquí. Se deja escrito, con la mutación que lo demuestra, para que nadie lea
 «208 operaciones inventariadas» como «208 operaciones autorizadas».
+
+> Medición local del 2026-10-07: 626 operaciones en 170 archivos. El informe de preparación ahora llama directamente a `requireLotAccess` para cada código relacionado: 398 guardias directos y 59 transitivos; total sin cambio. Esta medición corresponde a esta rama, no a main.

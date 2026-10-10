@@ -953,6 +953,59 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     });
   });
 
+  // **C3: una lectura que el motor de veredictos excluye se DIBUJA y no sostiene nada.**
+  describe("la procedencia decide qué puede sostener una lectura, no si se dibuja", () => {
+    // `PENDING_IMPLEMENTATIONS/021`, decisión de Daniel del 2026-10-02: «dibujarla marcada, y nunca
+    // interpretarla». Dibujar el registro y usarlo como fundamento de una interpretación requieren
+    // juicios distintos — el registro es autoritativo (§3 de `CLAUDE.md`), la interpretación no.
+    //
+    // **Las dos mitades hacen falta**, y por separado ninguna mide: «no cita» pasaría con una
+    // pantalla que no pinta nada, y «dibuja el punto» pasaría con una que cita igual. El control
+    // positivo de las dos es la MISMA cifra con instrumento verificado.
+    const con = (confianza: "VALIDATED" | "REVISION_VENCIDA" | "UNCALIBRATED" | undefined, value: number) =>
+      pintarCurva(curvaDeLote({ lecturas: [{ occurredAt: t(10), value: 4.0 }, { occurredAt: t(11), value, confianza }], objetivos: [BANDA], ...LIENZO }));
+
+    it("instrumento que falló su contraste: el punto se pinta MARCADO, con su leyenda, y no cita nada", async () => {
+      const html = await con("UNCALIBRATED", 3.0);
+      // mitad 1 — no sostiene la cita, que en esta banda es «Daño consumado», de grado CRITICAL
+      expect(bloqueDeRiesgo(html)).toBeNull();
+      expect(aTexto(html)).not.toContain("Daño consumado");
+      // mitad 2 — y el registro SÍ está en la pantalla, marcado y dicho
+      expect(html).toContain("nn-curva-punto-sin-verificar");
+      expect(aTexto(html)).toContain("Instrumento sin verificar");
+      // MUTACIÓN: quitar `sostieneLaCita` del cálculo de `riesgo` en CurvaDeLote.tsx → cita y cae.
+    });
+
+    it("control positivo: la MISMA cifra con instrumento verificado sí cita, y sin marca", async () => {
+      // Sin esta prueba, la de arriba pasaría con una pantalla que no pinta ningún bloque de riesgo.
+      const html = await con("VALIDATED", 3.0);
+      expect(aTexto(bloqueDeRiesgo(html)!)).toContain("Daño consumado");
+      expect(html).not.toContain("nn-curva-punto-sin-verificar");
+      expect(aTexto(html)).not.toContain("Instrumento sin verificar");
+    });
+
+    it("revisión vencida: sostiene la de grado WARNING y NO la CRITICAL — las dos direcciones", async () => {
+      // La regla de Daniel del 2026-09-14, que `confianzaPorVerificacion` ya llevaba escrita:
+      // «alimenta curvas y puede avisar. No confirma una crítica». Con una sola de las dos
+      // direcciones, una compuerta que negara TODO a una revisión vencida pasaría igual.
+      const critica = await con("REVISION_VENCIDA", 3.0); // `< 3.30` → CRITICAL
+      expect(bloqueDeRiesgo(critica)).toBeNull();
+      const aviso = await con("REVISION_VENCIDA", 3.6); // `[3.50, 3.80)` → WARNING
+      expect(aTexto(bloqueDeRiesgo(aviso)!)).toContain("sobrefermentación");
+      // Y no se marca: una revisión vencida no es un instrumento que falló.
+      expect(aviso).not.toContain("nn-curva-punto-sin-verificar");
+    });
+
+    it("sin instrumento declarado NO degrada nada, y eso sostiene la pantalla de hoy", async () => {
+      // `measurement.instrument_id` acaba de existir y nadie lo ha rellenado: si el hueco se tratara
+      // como avería, esta pantalla quedaría muda en TODOS los lotes el día que se despliegue. Ese
+      // defecto está nombrado en `desdeElLote.ts`; esta prueba es la que lo impide.
+      const html = await con(undefined, 3.0);
+      expect(aTexto(bloqueDeRiesgo(html)!)).toContain("Daño consumado");
+      expect(html).not.toContain("nn-curva-punto-sin-verificar");
+    });
+  });
+
   describe("«ninguna frase ordena»: las frases de entrada son TEXTOS FIJOS, el resto del bloque un vocabulario cerrado, y lo pintado no lleva nada a mano", () => {
     // Tres capas, y el LÍMITE que queda escrito aquí porque un guardia cuyo alcance no está escrito se cuenta dos veces:
     //
@@ -993,6 +1046,13 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
         "decisión", "frase", "entre", "comillas", "cita", "literal", "del", "documento", "tal", "como", "está", "escrita",
         // «perfil»: `curvaRiesgoFuente` nombra el perfil de la matriz («…de la matriz de pH del perfil {perfil} de {documento}»). Es un nombre.
         "perfil",
+        // `curvaRiesgoSinVerificar` («Instrumento sin verificar: se registra, no se interpreta.»), añadidas
+        // A PROPÓSITO el 2026-10-06 con `PENDING_IMPLEMENTATIONS/021`. Redacción de Daniel.
+        // **«registra» e «interpreta» sirven también de imperativo en castellano**, que es justo por lo
+        // que «sugiere» y «estanca» NO están en este léxico. Se aceptan porque no mandan nada sobre el
+        // lote: dicen qué hace el PROGRAMA con la lectura —la conserva y no la usa para afirmar—, que
+        // es lo contrario de una orden al productor. Es el límite de léxico que la cabecera ya declara.
+        "instrumento", "sin", "verificar", "se", "registra", "interpreta",
       ]),
       en: new Set([
         "néctar", "nómada", "criterion", "where", "this", "comes", "from", "band", "of", "the", "ph", "matrix", "in", "it", "is", "a",
@@ -1000,6 +1060,8 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
         "spanish", "and", "left", "untranslated",
         // «profile»: `curvaRiesgoFuente` nombra el perfil de la matriz («…of the {perfil} profile in {documento}»). Es un nombre.
         "profile",
+        // `curvaRiesgoSinVerificar` («Unverified instrument: recorded, not interpreted.»), mismas razones.
+        "unverified", "instrument", "recorded", "interpreted",
       ]),
     } as const;
     /** Frases enteras permitidas, que se quitan ANTES de mirar palabras: su verbo no vale suelto en ninguna otra parte. */
@@ -1042,7 +1104,7 @@ describe("CurvaDeLote — qué sugiere el dato si se espera (rúbrica 22): sólo
     it("las otras cuatro claves, en los dos idiomas, sólo usan su vocabulario cerrado; y ninguna clave curvaRiesgo* queda sin vigilar", () => {
       const claves = clavesDelBloque();
       // Control: se descubrieron las seis. Un patrón que dejara de casar daría `[]` y «ninguna fuera del vocabulario» se leería como «todo bien».
-      expect(claves).toEqual(["curvaRiesgoCitaLiteral", "curvaRiesgoDeDondeSale", "curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca", "curvaRiesgoFuente", "curvaRiesgoMarca"]);
+      expect(claves).toEqual(["curvaRiesgoCitaLiteral", "curvaRiesgoDeDondeSale", "curvaRiesgoDice", "curvaRiesgoDiceSiSeEstanca", "curvaRiesgoFuente", "curvaRiesgoMarca", "curvaRiesgoSinVerificar"]);
       for (const idioma of ["es", "en"] as const) {
         const m = leerMensajes(idioma);
         // Y ninguna `curvaRiesgo*` de los mensajes queda sin vigilar porque el componente no la pida con `t("…")` literal.

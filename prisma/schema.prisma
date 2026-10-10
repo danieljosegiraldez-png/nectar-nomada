@@ -697,6 +697,13 @@ enum LocationType {
   // locationType = plot and parentLocationId pointing at the farm's own
   // site-typed row, not a new entity family.
   plot
+  /// **MUERTO (ADR-196).** Ninguna escritura de producción lo produce: una
+  /// microparcela es una Location `plot` hija de otra `plot`, creada con
+  /// `createMicrolot` (decisión de Daniel, 2026-09-19, que revocó la del
+  /// 2026-09-11 con la que este valor nació). Se queda en el enum porque
+  /// quitarlo exige el intercambio de tipo y `core.location` tiene 5
+  /// disparadores con `UPDATE OF "location_type"`. Lo sostiene
+  /// `tests/arquitectura/vocabulario-de-la-seleccion.test.ts`.
   micro_plot
   // A1 (22_APIARY_V1_SCOPING_REPORT.md §2) — an Apiary is not a new table,
   // it's a place holding hives, the same relationship a farm has to its
@@ -811,11 +818,6 @@ enum Aspect {
   @@schema("core")
 }
 
-// F1 §2 — the reason a microlot was subdivided, recorded on the *child*
-// Location (the microlot itself), not the parent. Only meaningful when
-// parentLocationId is set; nullable everywhere else, same as every other
-// F1 attribute. `other` always pairs with subdivisionReasonNote — the
-// "typed value + free note" rule (§1) applies here too.
 /// Desde qué esquina se cuenta la rejilla de una parcela (diseño §4.1, D3).
 /// **Catálogo cerrado y no texto libre:** «noroeste» escrito de cuatro maneras
 /// no es un origen, y una coordenada que no se puede comparar no nombra una
@@ -829,7 +831,13 @@ enum GridOrigin {
   @@schema("core")
 }
 
-enum SubdivisionReason {
+/// El motivo por el que un trozo de parcela se **selecciona** y se maneja aparte
+/// (ADR-196) — no el motivo por el que la parcela se parte, que es lo que el nombre
+/// viejo `SubdivisionReason` daba a entender. Se registra en la Location HIJA (la
+/// selección misma), no en la madre, y sólo tiene sentido cuando `parentLocationId`
+/// está puesto; nulo en cualquier otro caso, como el resto de atributos de F1 §2.
+/// `other` va siempre con su nota: la regla de «valor tipado + nota libre» (§1).
+enum MotivoDeSeleccion {
   altitude
   shade
   slope
@@ -973,8 +981,8 @@ model Location {
   // F1 §2 — only meaningful when parentLocationId is set (this Location
   // *is* a microlot). Nullable everywhere else, same as every attribute
   // above.
-  subdivisionReason     SubdivisionReason? @map("subdivision_reason")
-  subdivisionReasonNote String?            @map("subdivision_reason_note")
+  motivoDeLaSeleccion        MotivoDeSeleccion? @map("motivo_de_la_seleccion")
+  notaDelMotivoDeLaSeleccion String?            @map("nota_del_motivo_de_la_seleccion")
 
   // RO1 (34_RO1_RESEARCH_OS.md §3a) — same F1 attribute pattern as sun
   // exposure above, only meaningful for a drying-room Location. "El nivel
@@ -5335,8 +5343,8 @@ model PlotIntervention {
 /// La floración de una parcela — decisión de Daniel, 2026-10-01: «parcela, microparcela o bloque».
 ///
 /// **Misma forma que una intervención, y por el mismo motivo**: se dirige por `locationId` —que es
-/// un `plot` o un `micro_plot`— y se acota opcionalmente a un bloque. No es una familia de
-/// entidades nueva, igual que un bloque no lo es.
+/// un `plot` (una microparcela también lo es: es una `plot` hija de otra, ADR-196)— y se acota
+/// opcionalmente a un bloque. No es una familia de entidades nueva, igual que un bloque no lo es.
 ///
 /// **Por qué una VENTANA y no tres eventos sueltos.** El dato que hace falta es «¿esta parcela
 /// estaba en floración el día X?», y eso con eventos `inicio`/`pico`/`fin` obliga a emparejarlos y
@@ -7459,9 +7467,13 @@ enum PlotBlockType {
 }
 
 /// Subdivisión con nombre de una parcela — «bloque», término aprobado por el dueño
-/// (F2 §3). Es una ZONA, no una lista de plantas: sirve para saber en qué parte del
-/// lote está cada trampa y comparar bloques a lo largo del tiempo. Opcional en los
-/// dos sentidos: una parcela puede no tener bloques y una trampa puede no tener bloque.
+/// (F2 §3). Sirve para saber en qué parte del lote está cada trampa y comparar
+/// bloques a lo largo del tiempo. Opcional en los dos sentidos: una parcela puede
+/// no tener bloques y una trampa puede no tener bloque.
+///
+/// **No le resta nada a su parcela, y no es una zona opuesta a una lista de plantas**
+/// (ADR-196): sus rangos son coordenadas DE la parcela —hilera y planta—, o sea una
+/// lista de plantas expresada por tramos. El comentario anterior decía lo contrario.
 model PlotBlock {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   locationId String   @map("location_id") @db.Uuid

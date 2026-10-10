@@ -65,6 +65,40 @@ afterAll(async () => {
   try {
     await prisma.plotBloom.deleteMany({ where: { location: { name: { contains: RUN_ID } } } });
     await prisma.plotBlock.deleteMany({ where: { name: { contains: RUN_ID } } });
+
+    // **Y lo que `deleteTestOrganizations` NO se lleva, que era casi todo.** Medido el 2026-10-06:
+    // esta suite había dejado **38 ubicaciones huérfanas** del 1 de octubre en la base compartida,
+    // seis de ellas con `location_type = 'micro_plot'` —el valor que el esquema declara muerto—, más
+    // 8 personas y 8 cuentas. Y no falló nunca en rojo:
+    // **`location_organization_id_fkey` es `ON DELETE SET NULL`** (el SQL de
+    // `20260810002142_foundational_entities:153`, y `confdeltype='n'` en la base viva), así que
+    // borrar la organización **pone a NULL** el `organization_id` de sus ubicaciones en vez de
+    // negarse. La organización desaparece y sus ubicaciones se quedan, huérfanas e invisibles a
+    // cualquier limpieza que vaya por la organización. Es la clase que `CLAUDE.md` ya tiene escrita:
+    // «un recuento de filas no puede ver un UPDATE, y SET NULL borra sin fallar».
+    //
+    // **Se DESCUBRE lo que hay que borrar, no se hereda de las variables del `beforeAll`**: así una
+    // corrida que murió a mitad —antes de asignar `microparcela`, por ejemplo— se limpia igual. Es
+    // la lección de `PENDING_IMPLEMENTATIONS/022`.
+    const mias = await prisma.location.findMany({ where: { name: { contains: RUN_ID } }, select: { id: true } });
+    const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
+    const cuentas = await prisma.userAccount.findMany({ where: { personId: { in: personas.map((x) => x.id) } }, select: { id: true } });
+
+    // El orden lo manda el `RESTRICT`: `assignment` → `scope` → `location` → `userAccount` →
+    // `person`. **36 tablas referencian `core.location` con RESTRICT**, así que si esta suite
+    // ganara algún día una fila en cualquiera de ellas, el borrado de abajo fallaría a gritos — que
+    // es lo correcto, y mejor que el silencio del `SET NULL`.
+    if (cuentas.length) await prisma.assignment.deleteMany({ where: { userAccountId: { in: cuentas.map((x) => x.id) } } });
+    if (mias.length) {
+      // **Sólo los ámbitos de SUS ubicaciones.** `cuenta()` los reutiliza con `findFirst ?? create`,
+      // pero el sitio es nuevo en cada corrida, así que nadie más puede estar colgado de ellos.
+      // Borrar un ámbito compartido es justo lo que puso rojo el carril en la ficha 022.
+      await prisma.scope.deleteMany({ where: { scopeType: "location", scopeRefId: { in: mias.map((x) => x.id) } } });
+      await prisma.location.deleteMany({ where: { id: { in: mias.map((x) => x.id) } } });
+    }
+    if (cuentas.length) await prisma.userAccount.deleteMany({ where: { id: { in: cuentas.map((x) => x.id) } } });
+    if (personas.length) await prisma.person.deleteMany({ where: { id: { in: personas.map((x) => x.id) } } });
+
     // Toma UN runId, no una lista: las dos organizaciones comparten el prefijo, así que
     // `RUN_ID` las barre a las dos —la `-b` lo lleva dentro—.
     await deleteTestOrganizations(RUN_ID);

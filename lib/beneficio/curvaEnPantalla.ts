@@ -20,7 +20,7 @@
  *    recorta en silencio. Sin esta capa, un valor 50 veces mayor pintaría por encima del resto de
  *    la página o se saldría del dibujo sin dejar rastro.
  */
-import { indiceDeLaUnicaEnElExtremo, type AlcanceDeLaBanda, type Curva } from "./curvaDeLote";
+import { indiceDeLaUnicaEnElExtremo, type AlcanceDeLaBanda, type Curva, type PuntoDeCurva } from "./curvaDeLote";
 
 /** El lienzo en que se pide la curva. El `viewBox` real lo amplía `margenVertical`. */
 export const LIENZO_DE_CURVA = { ancho: 480, alto: 200 } as const;
@@ -47,6 +47,12 @@ export interface PuntoColocado {
   readonly fueraDeBanda: boolean | null;
   /** Anclado al borde porque no cabe ni en el margen: se marca, no se esconde. */
   readonly fuera: "arriba" | "abajo" | null;
+  /**
+   * La confianza de la lectura, tal cual viene del punto de la curva. Viaja hasta aquí porque la
+   * pantalla marca el punto cuyo instrumento no está verificado: se dibuja —el registro es
+   * autoritativo— y no sostiene ninguna afirmación (`PENDING_IMPLEMENTATIONS/021`).
+   */
+  readonly confianza?: PuntoDeCurva["confianza"];
 }
 
 /**
@@ -93,6 +99,7 @@ export function colocarPuntos(curva: Curva, margen: number = margenVertical(curv
       // qué juzgar: `null`, no `false`. `false` diría «dentro» de un rango que no distingue nada.
       fueraDeBanda: arriba === null || abajo === null || !laJuzga ? null : p.y < arriba || p.y > abajo,
       fuera,
+      confianza: p.confianza,
     };
   });
 }

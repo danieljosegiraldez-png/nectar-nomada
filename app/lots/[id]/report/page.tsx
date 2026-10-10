@@ -56,6 +56,8 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
    * contado, y un informe se imprime y se comparte. Ver
    * `lib/time/mostrarInstante.ts`.
    */
+  const supersededMeasurementIds = new Set(measurements.map((m) => m.correctsId).filter((id): id is string => id != null));
+
   const formatDate = (date: Date) => mostrarInstante(date, lot.location?.timezone ?? null);
 
   return (
@@ -211,6 +213,8 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
             {measurements.map((m) => (
               <li key={m.id}>
                 {m.variable}: {m.value.toString()} {m.unit} — {formatDate(m.occurredAt)}
+                {m.correctsId ? ` (${t("correctionLabel")})` : ""}
+                {supersededMeasurementIds.has(m.id) ? <> · <strong>{t("supersededLabel")}</strong></> : null}
               </li>
             ))}
           </ul>
@@ -237,14 +241,30 @@ export default async function LotReportPage({ params }: { params: Promise<{ id: 
           <h2>{t("sensoryHeading")}</h2>
           <ul>
             {samples.flatMap((s) =>
-              (sensoryLinkage[s.id] ?? []).map((entry) => (
-                <li key={`${s.id}-${entry.sessionId}`}>
+              (sensoryLinkage[s.id] ?? []).map((entry, index) => (
+                <li key={`${s.id}-${entry.sessionId}-${index}`}>
                   {s.sampleCode} — {entry.sessionName}
                   {entry.overallResult ? (
                     <>: {t("sensoryOverallScoreLabel", { mean: entry.overallResult.meanValue, count: entry.overallResult.responseCount })}</>
                   ) : (
                     <> — {t("sensoryAwaitingResultLabel")}</>
                   )}
+                  {(report.roastPreparations ?? []).filter((preparation) =>
+                    preparation.sampleId === s.id && preparation.sessionId === entry.sessionId && preparation.roastId === entry.roastSessionId,
+                  ).map((preparation) => (
+                    <p className="nn-muted" key={preparation.roastId}>
+                      {t("reportRoastCodeLabel")}: {preparation.roastCodes?.join(", ") || t("roastDataUnavailable")}<br />
+                      {t("reportRoastSourceLabel")}: {preparation.sourceLotCodes?.join(", ") || t("roastDataUnavailable")}<br />
+                      {t("roastPersonLabel")}: {preparation.roasterName ?? t("roastDataNotRecorded")}<br />
+                      {t("roastEquipmentLabel")}: {preparation.equipmentName ?? t("roastDataNotRecorded")}<br />
+                      {t("reportRoastReferenceLabel")}: {preparation.roastId}<br />
+                      {t("roastStartedAtLabel")}: {formatDate(preparation.startedAt)}
+                      {preparation.endedAt ? <> · {t("roastEndedAtLabel")}: {formatDate(preparation.endedAt)}</> : null}
+                      {preparation.roastLevel ? <> · {t("roastLevelLabel")}: {preparation.roastLevel}</> : null}
+                      {preparation.chargeWeightKg != null ? <> · {t("roastChargeWeightLabel")}: {preparation.chargeWeightKg}</> : null}
+                      {preparation.dischargeWeightKg != null ? <> · {t("roastDischargeWeightLabel")}: {preparation.dischargeWeightKg}</> : null}
+                    </p>
+                  ))}
                 </li>
               )),
             )}

@@ -34,6 +34,8 @@ flip-test el 2026-08-28, en ambas direcciones.
 
 **Heredadas de dos entregas archivadas el 2026-10-05**, que seguían abiertas y el histórico no dirige trabajo: si **dos corridas abiertas en una cama** son conflicto de datos y si una receta de fermentación debe **obligar** a medir pH (#603/#605); si la **coordenada de un plantón** exige tablero, los dos puntos sin resolver de tu lego del 2026-10-03 (`docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`), y si el rango de la microparcela sigue «opcional a propósito» o pasa a obligatorio como pide #621 §3.2.
 
+**Heredada de la entrega archivada el 2026-10-10** (el cierre y la alarma de backup, #659–#666): **borrar la data**. Había punto de restauración verificado el 2026-10-06 —PASS, 216 tablas y 15.315 filas idénticas—, y la recomendación era dejar `core.user_account` fuera, porque borrar cuentas pone a NULL, en silencio, el actor de 4.922 filas de auditoría. Nada en el repositorio dice que se haya hecho; el detalle está en `docs/SESSION_STATE_ARCHIVE.md`.
+
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
 en un ADR de `docs/architecture/DECISIONS.md` que contenga literalmente la frase
 de su prueba. Sin ese sitio nombrado, ninguna búsqueda distinguiría «sin hacer»
@@ -57,10 +59,16 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 2. **Las páginas 2-4 de Bralic**, donde está su tabla. Esta máquina no tiene ninguna herramienta de PDF
    y el visor nativo sólo rinde la primera; los otros caminos devolvieron nada **y su control también**.
 3. **Cuál de los DOS productos de abamectina** está en la bodega: sus reingresos son **24 h** y **48 h**,
-   que es la diferencia entre dejar entrar a alguien al lote o no.
+   que es la diferencia entre dejar entrar a alguien al lote o no. **Para el catálogo ya no bloquea** —el
+   2026-10-06 decidiste dar de alta las dos—, pero sigue bloqueando **registrar una aplicación**: ahí hay
+   que elegir una, y el reingreso que la pantalla haga valer sale de esa elección.
 4. **Las imágenes de Beauveria**, perdidas al compactarse la conversación del 2026-09-30.
-5. **Cantidad y lote del fabricante** de los seis. Sin eso, darlos de alta afirma existencias que nadie
-   contó — y el alta va atada a recibir un frasco, así que no hay camino de catálogo sin existencias.
+5. **Cantidad y lote del fabricante** de los seis, si se quieren registrar EXISTENCIAS. **CORREGIDO EL
+   2026-10-06: esta línea decía «no hay camino de catálogo sin existencias», y es falso.** `crearMaterial`
+   (`lib/inventario/materiales.ts:131`) crea el material solo, y su comentario dice por qué: «sin identidad
+   no hay existencias» — la identidad va primero. Lo que no hay es **pantalla**, así que hoy se hace por
+   guion. Dar de alta sin existencias **sigue siendo decisión tuya**, y el 2026-10-06 la tomaste para las
+   dos abamectinas: `npm run data:abamectinas` (simula; `-- --apply` escribe).
 
 #### Preguntas tuyas rescatadas de entregas archivadas el 2026-10-04
 
@@ -74,38 +82,50 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
-### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
+### 2026-10-09 · ADR-198 completo: un beneficio puede existir sin finca, y `Las Nubes` ya tiene su organización (#672, #684, #687, #692)
 
-**Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
-**Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» estaba vacío en los 108, no en 105** —las 3 filas con `entity_id` de un lote son de `entity_type = 'lot'`, un sexto tipo que la consulta ni pedía—; **arreglado en #648**, con 104 de 108 estrenando historial.
-**Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
-### 2026-10-04 · El inventario de acceso lee el programa, no el texto (#639)
+**Cuatro PR.** #672 aprobó el diseño (ADR **198**: el 197 lo reservó #675, abierto). **#684**: `crearBeneficio` ya no copia `padre.organizationId` a ciegas y rechaza con `organizacion_requerida`; su test comparaba `null` con `null` porque el fixture creaba el sitio sin organización. **#687**: se crea sin padre diciendo la organización («Sin finca propia» en ajustes); la vista de bandejas acepta organizaciones con `beneficio` sin `site` (su test viejo afirmaba lo contrario y se **reescribió**). **#692**: una finca elige como destino los beneficios de **su organización** aunque no cuelguen de ella; la clasificación del beneficio manda y nunca concede ver sus lotes.
+**No hay ámbito de organización en el RBAC**: «quien administra» se deriva de `manage_attributes` + `create_site` sobre una ubicación de esa organización, o plataforma. Quien lo crea sin padre **no lo ve** hasta tener una asignación sobre él mismo; la pantalla lo avisa.
+**Producción:** `Las Nubes` (`9495b317…`) tenía `organization_id` nulo y ahora es **Finca Rosina** (`e43fd7ae…`); lo aplicó Daniel con `npm run data:beneficio-organizacion`. La relectura es del propio guion, no independiente.
+**Lo que enseñó:** el flip-test destapó un respaldo por ancestros que ninguna prueba ejercía; una prueba mía suponía que el Farm Operator no tiene `lot:manage` sobre la finca, y **sí lo tiene**; el guardia del inventario paró el PR por **+2 operaciones** (626→628).
+**Queda tuyo:** crear el beneficio de Kiva, asignar a Luis sobre él (`data:gestores-de-finca`) y declararlo destino de Finca 1 y 2. **En el ADR-198 para el primer caso de cereza ajena:** la concesión estrecha a un beneficio de otra organización y la procedencia en la etiqueta de cata.
 
-**Las fichas `007` (los dos escalones) y el primer dominio de la `005`.** 618 → 624 operaciones en 170 archivos, **cero bajas**, con el detector sobre el AST. Seis no existían —su cliente se llama `db` y la fila se descartaba entera—, entre ellas `ubicacionesEmparentadas`. De 14 cambios de clase, **doce venían de un comentario**: `lots.ts:683` nombra `can()` y el detector lo contaba como llamada. `guardia transitivo` pasó de **0 a 59**: la clase era inalcanzable por construcción.
-**Lo que enseñó, y es contra mí:** usé un instrumento de **archivo** para una pregunta de **camino** y escribí tres razones falsas en el allowlist; `--llamadores` responde ahora por unidad (`OK` 48 → 32). Y un flip-test destapó que la compuerta de cifras dejaba **quitar la fila de una clase** sin ponerse roja.
+### 2026-10-09 · El informe técnico de Apiario, y cuatro de los seis hallazgos de su revisión (#674, #677, #685, #690, #694)
 
-### 2026-10-05 · El Historial del lote: la lectura preguntaba por el id del lote (#648)
+El #674 trae el informe con los detalles de la inspección dentro, su fecha y la zona en el snapshot. La revisión interna que pediste —con la skill `beekeeping`, y entregada **antes** de tocar o fusionar nada— dio seis hallazgos priorizados; se cerraron cuatro.
+**#677 · la clave de la población se llamaba como el valor** (`population_apiñada`): lo arregló otra sesión actuando sobre la entrega, con su guardia.
+**#685 · una visita pasada se medía con las cajas de hoy.** El diseño obvio era falso y lo dijo una medición: `crearColocacionInicial` abre la colocación en `installedAt ?? createdAt`, y `createdAt` es *cuándo alguien tecleó la colmena*, así que un solapamiento estricto haría desaparecer de su visita a las colmenas registradas después. Su propio comentario registra **10 de 29 colmenas sin ninguna colocación** sobre datos reales. Hoy sólo se excluye a la que el registro sitúa **en otro sitio** en ese instante.
+**#690 y #694 · a un meliponario no se le pregunta por cuadros**, ni en el formulario ni en el informe. La especie no está en `Colony` ni en `Hive` —medido— sino en el **tipo de sitio**, y el esquema explica por qué citando a ANSA/INTA: las cajas y sus medidas cambian por especie. El predicado vive en `lib/apiary/sitioDeAbejas.ts` como `Record` total, así que **añadir un tipo de sitio de abejas deja de compilar** hasta que alguien decida. El informe lo calcula desde el **snapshot congelado**: un documento ya emitido no cambia de preguntas si el sitio se reclasifica.
+**Dos reincidencias mías, con la regla cargada:** una prueba que **falló su propio control positivo** (los campos de detalle viven tras `showDetails`, que un render estático no abre) y una mutación de flip que **no mutó** (el ancla aparecía cuatro veces: `sha` idéntico, 8 pruebas verdes). Las dos clases ya están en `CLAUDE.md`; lo que se anota es la reincidencia.
+**Puerta abierta, medida en `39901dff`:** `lib/apiary/inspections.ts` y `lib/sync/pushFieldEvents.ts` siguen aceptando `beeCoveredFrames` para cualquier colonia —**0** menciones de `seManejaEnCuadros` en los dos, con sus 13 KB y 46 KB leídos como control—. Hoy no pasa nadie por ella; cerrarla es una regla de dominio sin aprobar.
+**Queda tuyo, y son los tres que la revisión no puede decidir:** qué se pregunta en un meliponario **en lugar** de los cuadros (hoy no se pregunta nada — es honesto, no completo); si las recomendaciones de un informe se vuelven Tareas con responsable, fecha y evidencia de cumplimiento; y si un informe **ya emitido** puede cambiar su texto cuando mejora el formato de fecha. El bloque de §3 que pide **tu** reporte de visita sigue abierto y ahora pesa más: el #674 construyó el nuestro.
 
-`getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
-**Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
-**Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
+### 2026-10-09 · Un enlace con `.nn-button` ya no se parte ni pisa la línea de arriba en el teléfono (#686, #693)
+
+`.nn-button` no declaraba `display`, así que sobre un `<a>` era `inline`: medía 39 px y no 44, y al partirse una etiqueta su segundo trozo pintaba el fondo encima de la línea anterior. Se vio en «Últimas jornadas» de la parcela a 390 px; la pestaña Trampas tenía lo mismo. Hoy `a.nn-button` es `inline-flex` sin subrayado, y `p > a.nn-button` deja 8 px entre filas; `<button>` y el único `<summary>` no cambian. Flip-test a 390×844 sobre una base desechable: solape 1.211 y 2.354 px² → 0. La CSS viva de producción lleva las dos reglas.
+**Después, en #693:** ese `p > a.nn-button` daba por hecho que un `<p>` no es flex, y el de `/lots` lo es —en escritorio estiraba su fila de 46 a 54 px—; ahora el margen sólo va en un `<p>` con dos o más botones-enlace. Y fuera los `style` en línea que suplían a estas reglas: siete de `.nn-button`, tres de `.nn-button-quiet` —con su regla propia, que además centra «Recetas de proceso»— y el resto de `/research/[protocolId]`. No queda nada pendiente de esta entrada.
+
+### 2026-10-08 · El vocabulario de la selección, y la entrega local de Codex integrada (#676, #678)
+
+**#678 ejecuta el plan del #660** (§3.3 del diseño que entró con el #657). Tres nombres decían que una selección parte a su madre, que es justo lo que ADR-196 niega: `subdivisionReason` → `motivoDeLaSeleccion`, `subdivisionReasonNote` → `notaDelMotivoDeLaSeleccion`, `SubdivisionReason` → `MotivoDeSeleccion`, y las dos columnas con una migración escrita a mano con tres `RENAME`. **Los cuatro valores del enum quedan intactos** —son el `value` de los `<option>`, el sufijo de las claves i18n y las etiquetas del tipo de PostgreSQL—. ADR-196 gana su sección de vocabulario, y hay un guardia hermético nuevo de 8 pruebas cuyas tres mutaciones caen cada una en la prueba que le toca, por su nombre. `tsc` hizo **3 → 16 → 0**, que es el flip-test regalado del renombrado. `micro_plot` **no** se quita del enum (tu decisión del 2026-10-06): `core.location` tiene 5 disparadores con `UPDATE OF "location_type"` y en 203 migraciones no hay ni un `DROP TRIGGER`.
+**Cuatro defectos del propio plan, encontrados al ejecutarlo**, y se anotan porque los cuatro devolvían un número plausible: un control positivo que esperaba **1** y vale **2** (`model PlotBlockRange` casa con el mismo patrón, y ya valía 2 antes de tocar nada); un paso que esperaba **0** y vale **1**, que es la línea que el propio plan mandó escribir; un paso que esperaba `tsc` en **0** y da **16**, porque las pruebas las arregla la tarea siguiente; y una consulta de comprobación con un `or` sin paréntesis, que busca en **toda** la base en vez de en `core.location` —aquí acertó por casualidad—.
+**#676 es la entrega local de Codex** —muestra, tueste y cata—, medida contra el `main` de ese día. Su carril con base salió en rojo por una razón que no era de forma: `roastSessionId` en `SensoryLinkageEntry` chocaba con la lista blanca de ADR-043, el límite de la evaluación a ciegas. Tu decisión fue **ensanchar la lista con su razón escrita dentro del guardia**, dejando intactas las dos aserciones que cazan una fuga real, y corregir el doc de la función, que prometía no devolver nunca el mapping — una promesa que ya era falsa.
+**Y corrigió una regla de `~/.claude/CLAUDE.md`:** tras un *squash* `ahead_by` **no discrimina** — cuatro PR fusionados dieron 7, 3, 5 y 6 y uno sin fusionar dio 2, o sea el veredicto invertido. Lo que lo dice es el **contenido**.
+
+### 2026-10-06 · Kiva Estate tiene su geografía y sus dos fincas, y Luis, Kenis y Chris sus permisos (#668, #670)
+
+Producción, **sin ningún borrado**, cada cifra releída por una lectura independiente. `Panamá → Coclé → Penonomé → Toabre → {Finca 1, Finca 2}` (provincias 2→3, localidades 4→6): el `site` que se llamaba como su organización es **Finca 1** y **Finca 2** se creó con `crearFinca` (`151f91e2…`). Bob y Robert Huerbsch eran la misma persona y quedaron unidos (Huerbsch 4→3, personas 19→18, las 14 asignaciones intactas); Chris, el 5-10. Luis: Farm Manager en las dos fincas. Kenis: sus dos apiarios — el guion pedía `Apiario Finca Rosina` y `Apiario Las Nubes`, nombres a los que los llevaría un renombrado **que nunca se aplicó**; hoy son `Apiario 1/2 — Finca Rosina` (#668). A Chris se le retiró su Platform Admin **global** con `revokeRole` (la fila queda `revoked`); conserva Café, Apiario y Cerro Azul.
+
+**Lo que enseñó:** un `tsc` en un worktree sin `node_modules` sale 0 sin comprobar nada; y las filas «repetidas» de Chris eran **tres ámbitos distintos** —mi `join` imprimía `(plataforma)` donde el proyecto no resolvía—: casi retiro justo las que describían lo que Daniel quería.
+
+**Queda tuyo:** aprobar el diseño del #672 y su ADR **(hecho: ADR-198, ver arriba)**; **`Las Nubes` tenía `organization_id` nulo en producción (resuelto el 2026-10-09, ver arriba)**, y siete guiones de datos llevan `Lote N` donde un renombrado dirá `Parcela N`, tres de ellos **crean una parcela nueva en vez de abortar**.
+
 
 ## 3. Bloqueado, y en qué
 
 > **Auditado bloque por bloque el 2026-10-04:** once afirmaciones ciertas (listadas con su control en
 > `docs/SESSION_STATE_ARCHIVE.md`, «Auditoría de §3»), una falsa —archivada— y ocho con cifras rancias, corregidas aquí con su fecha.
 
-
-#### Chris Huerbsch sigue partido en dos fichas, y lo cierra un comando de Daniel
-
-El guion está arreglado y en `main` (#593, #594, #595) y **la consolidación no se ha aplicado**: la
-ficha del 13-08 tiene la membresía a Finca Rosina y la del 17-09 el correo y la cuenta activa con su
-Platform Admin. El ensayo contra producción confirma el plan: 2 asignaciones a mover, la duplicada
-referenciada sólo por su cuenta en 52 columnas. Falta que Daniel corra la misma línea con `--aplicar`
-y lea lo que el ensayo ahora imprime: el desglose «N propias + 2 movidas» y **las referencias a la
-cuenta que va a borrar**. Si esa cuenta tiene historia el guion se niega a propósito — borrarla
-pondría a NULL el actor de su auditoría (`ON DELETE SET NULL`), que es lo que §35 prohíbe. Lo que no
-tiene es prueba de conducta: los guardias leen la fuente y lo dicen en su cabecera.
 
 #### El aviso de floración está construido y no se puede alcanzar (PR #587, #590)
 
@@ -137,10 +157,7 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
 
 - **El paso 2, capacidad con migración: sin plan propio** — re-medido el 2026-10-04: hay **47** planes (decía 39) y **ninguno se llama** «capacidad», aunque **5** mencionan «paso 2» y «capacidad» de pasada.
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
-  2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 **no** estaba hecha: su cierre del
-  2026-10-03 tenía las tres comprobaciones ciertas y las tres miran artefactos, no conducta;
-  cerrada de verdad en #648. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
+- **`PENDING_IMPLEMENTATIONS`: abiertas 014 y 023 (tuyas), 022 y 024 (defectos medidos, sin empezar)** — re-medido el 2026-10-09 **contra las fichas**, porque esta línea listaba la **021 como tuya y está HECHA desde el 2026-10-06**. La **023** es la pregunta que dejó el #648, hoy archivado: si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial. La **024**, que la cosecha no registra quién la operó. Fusionadas el 2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010; la 009 cerró de verdad en #648, porque su cierre del 2026-10-03 tenía las tres comprobaciones ciertas y las tres miran artefactos, no conducta.
 - **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
   la receta en vez de la plantilla del perfil; «Daño consumado» contra la literatura que el propio
   documento cita; y que el bloque de riesgo hable en la hora 0 de todo lote sano y **calle en la
@@ -170,29 +187,21 @@ Movido aquí al archivar la entrada de la jornada de cosecha (PR #431): dar el p
 perfil `Recolector` **existe** (1 de 14) y `/mis-entregas` **existe**, pero están a **cero las seis
 tablas** de esa familia: `jornada_de_cosecha`, `asignacion_de_jornada`, `entrega_de_cosecha`,
 `recepcion_de_cereza`, `lote_desde_recepcion` y `merma_de_recepcion`. Una entrega cuelga de una
-jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil. Daniel da los
-nombres; hay **23 cuentas activas** contra las que cruzarlos.
+jornada, así que sin jornada abierta no hay nada que anotar aunque tengan el perfil.
+
+**PARADO POR DECISIÓN DE DANIEL, 2026-10-06:** va a **borrar esta data y empezar de cero**, así que
+los nombres de los recolectores «no son necesarios ahora». Cuando vuelva a hacer falta había 23
+cuentas activas contra las que cruzarlos — y las seis cifras de arriba estarán caducadas, porque lo
+que miden es justo la data que se va.
 
 
 **Y un defecto DISTINTO, que no hay que confundir con lo de arriba:** la cosecha no registra quién
 la operó —35 de 35 con `operator_person_id` nulo, porque la acción no manda un campo que el
 servicio sí guarda—. Es trabajo, no decisión: `PENDING_IMPLEMENTATIONS/024`.
 
-#### Kiva Estate: crear sus DOS terrenos (de Daniel)
+#### Kiva Estate: falta crear su beneficio, y `Apiario NN-04-TOABRE-KIVAEST` sigue sin padre
 
-Movido aquí al archivar la entrada de fincas y parcelas (PR #425): crear los **dos** terrenos de **Kiva
-Estate**: el primero desde `/fincas` → «sin terreno», el segundo desde
-`/fincas/nueva?organizacion=<id>`.
-
-
-**Lo que sigue siendo de Daniel:** crear los dos terrenos, y correr `data:kiva-no-es-demo`,
-`data:gestores-de-finca` y el `rbac:grant` de Chris Huerbsch. Los cuatro van contra producción y **sólo dos
-ensayan**: los dos `data:*` simulan y escriben con `--apply`; **`rbac:grant` NO simula** —sin
-argumentos lista, con argumentos concede en el acto—. Medido el 2026-10-05: 0 banderas de ensayo en
-`scripts/grant-role.ts` contra 4 en cada uno de los otros dos, y escribe vía `grantRole()`, no con un
-`prisma.*.create` que un grep de escrituras vería. Si la descripción «DEMO placeholder» sigue o no en esa fila
-**no se ha medido** —leer producción de Neon está prohibido desde aquí—: el guión la comprueba él
-mismo y **aborta sin escribir** si alguien puso otro texto, que es por qué se puede correr a ciegas.
+Sus dos fincas ya existen bajo Toabre (2026-10-06). **El beneficio ya se puede crear** por la pantalla de ajustes con «Sin finca propia» (ADR-198, 2026-10-09, arriba); **falta crearlo**, asignar a Luis sobre él con `data:gestores-de-finca` y declararlo destino de Finca 1 y Finca 2. El apiario de Toabre cuelga de nada y nadie lo pidió: re-colgarlo cambia el alcance de cualquier asignación sobre él por ADR-144.
 
 
 #### «Mis pedidos» no dice de qué lote salió el frasco (espera a Daniel)
@@ -243,10 +252,6 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
 - **Sin constar: si se cargó `protocolos/miel-competencia-100.json`** (#213). Salió de la
   fila de §4 del protocolo de cata: §4 es «lo que NO se vuelve a proponer» y una duda
   abierta ahí se entierra. Lo encontró otra sesión revisando el PR.
-- **Queda el acceso de Kenis Abdiel Rodríguez Núñez** (`rodriguezkenis907@gmail.com`,
-  perfil `Apiary Colony Event Recorder` sobre los dos apiarios de Finca Rosina: guion
-  `data:kenis-apicultor`). Sherry y Chris siguen sin correo. **Antes de pedirle a
-  Daniel que corra algo, buscarlo aquí** — y lo ya hecho está en §4, no aquí.
 - **Área y rendimiento: bloqueado en el dueño, no en construir nada** (dos viñetas fundidas y
   **re-medidas el 2026-10-04** contra la base compartida; las cifras viejas decían «seis lotes» y
   «0 de 8», y ninguna de las dos era la cuenta). `area_hectares` vive en `core.location`, y **de
@@ -271,6 +276,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   protegida ya existe desde el 2026-09-18: decisión aparte. Detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
+- **La Decisión 3 de ADR-096 — «las secciones vacías de la ficha del lote se quedan», sin revisar.** Rescatado del #641–#645 al archivarlo el 2026-10-09, y re-leído entonces: su propia condición, «once the sections are routinely full», **no se cumple** — medición del 2026-10-05: mediciones 9 %, muestras 1 %, fotos 0 %. Darla por revisada o cambiarla es tuyo.
 - **La pantalla de tueste no la ha abierto nadie en un navegador** — las
   acciones de servidor no las ejerce ninguna prueba —**no por la sesión**, que nueve
   pruebas de otras acciones simulan: nadie la ha escrito— y un worktree no tiene `.env`. Construida el 2026-09-06; detalle en

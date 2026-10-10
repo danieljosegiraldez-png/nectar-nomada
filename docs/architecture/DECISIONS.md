@@ -2592,6 +2592,19 @@ that turns out to be the wrong call in practice, it is a one-line `can()`
 addition, not a schema change — noted here, not resolved, since no
 concrete case has required it yet.
 
+**Enmienda 2026-10-08 (informe de preparaciones de tueste).** La función devuelve ahora el id del
+tueste de cada muestra (`roastSessionId`), para que el informe del lote ponga junto a cada
+resultado la preparación exacta que se catió. Eso ensancha lo que `lot:view` revela de
+`SensoryBlindMapping`, y el caso que lo hace real es concreto: medido en producción el 2026-10-08,
+**Bob Huerbsch tiene a la vez Farm Operator/Farm Manager (ve lotes) y Sensory Judge**. Decisión de
+Daniel: el tueste sólo sale **cuando el mapeo se reveló o la sesión ya cerró** (`completed` o
+`locked`); con la cata en `draft`, `blind_coding` o `in_progress` y sin revelar, `roastSessionId`
+es `null` y el informe no arma la preparación. La regla vive en `lib/traceability/tuesteVisible.ts`
+y se prueba en `tuesteVisible.test.ts`, `vinculoDeCataTueste.test.ts` y
+`reportRoastPreparations.test.ts`. La lista de campos permitidos de `lots.test.ts` se amplió a
+propósito con `roastSessionId`. El código ciego, el id del mapeo y la identidad del evaluador siguen
+sin salir de aquí.
+
 ---
 
 ## ADR-044 — Amendment to ADR-039: the capture-or-lose-it clause;
@@ -12743,3 +12756,121 @@ hoy» es peor que una ausencia declarada.
 - Las cifras de `docs/arquitectura/inventario-de-acceso.md` **no se mueven** (596 operaciones, 165
   archivos): el script cuenta por función, no por consulta. La razón de la allowlist sí cambió, de
   «cinco recuentos» a «tres».
+
+## ADR-196 — Una selección no resta
+
+**Fecha:** 2026-10-05 · **Spec:** `docs/superpowers/specs/2026-10-03-la-seleccion-no-resta-design.md`
+
+**Contexto.** Un microlote, un bloque o una planta nombran **parte de la rejilla de su lote**, y el
+lote sigue respondiendo por lo que ocurre en ellos. Lo que cambia entre niveles es el **nivel de
+atención, acción e impacto**, no la identidad: la misma planta es «hilera 12, planta 30» del lote
+mire quien mire. De Daniel, 2026-10-03, con la metáfora del lego: «microparcela o microlote **no
+como una parte del lote, es una selección del lote**», y «el lote sigue relevante».
+
+**Decisión.** El lote enrolla los hechos de sus selecciones, y lo hace **hacia los descendientes**.
+
+**Corolario que caza errores: las áreas no se suman.** Si el rendimiento del lote incluye el de su
+microlote, el divisor sigue siendo las hectáreas **del lote**. La microparcela está *dentro*, no *al
+lado*; sumar las dos áreas sería tratarla como una parte, que es el error que esta regla existe para
+impedir.
+
+**Qué enrolla el lote, y qué no.** Decisión de Daniel, 2026-10-03: lo que cruza físicamente el
+límite, más la producción y las plantas.
+
+| hecho | ¿el lote responde por su microparcela? |
+|---|---|
+| intervenciones y su carencia, floración, cosecha | sí |
+| rendimiento, cohortes de siembra, eventos de producción | sí |
+| especímenes y trampas | sí |
+| muestras, calicatas de suelo, fotos, jornadas de campo | **no** — se toman en un punto y son de ese punto |
+| bloques | **no** — un bloque es una selección de SU parcela; listarlo en la madre lo haría parecer suyo |
+
+Las tres primeras son las tres donde algo cruza: un producto aplicado y su carencia, una floración,
+un residuo. Las que no, son observaciones de un punto. **Esta frontera se escribe aquí porque antes
+no estaba dicha en ninguna parte, y por eso parecía un olvido en vez de una decisión.**
+
+**La dirección es hacia abajo, y es una decisión aparte** (Daniel, 2026-10-05).
+`ubicacionesEmparentadas` devuelve también ascendientes, a propósito, porque la carencia los
+necesita: «una cosecha de la parcela madre puede llevar café de la microparcela tratada, y al revés».
+Para el rendimiento, las cohortes, los eventos de producción y los especímenes **no**: una ficha de
+microparcela que mostrara las cosechas de su madre contaría dos veces el mismo café. Se pide con
+`{ soloDescendientes: true }` sobre la misma función, no con una función nueva: duplicar el recorrido
+es cómo se pierde la regla.
+
+**Un hecho heredado se marca, nunca se mezcla.** El rendimiento del lote distingue lo propio de lo de
+cada selección, con su nombre. **Un total no es una medición si no se puede desarmar** — la misma
+regla que esta casa aplica en `loteNoVisible` y la que cerró `PENDING_IMPLEMENTATIONS/019`.
+
+**Consecuencias.** Cinco consultas pasan de `locationId` pelado a los descendientes: cohortes,
+rendimiento y eventos de producción en `lib/traceability/plantingCohorts.ts`, las trampas en el mismo
+archivo, y las plantas en `lib/traceability/specimens.ts`. Las cuatro lecturas que **no** enrollan
+—`listSoilProfilesForLocation`, `listLandAssets`, `listSamplesForLocation`, `listFieldSessions`— se
+quedan como están, y tienen guardia propio: el lado de «no enrolla» es el que una sesión futura rompe
+por simetría.
+
+### El vocabulario, porque hoy enseña lo contrario
+
+Tres nombres decían que una selección parte a su madre, que es justo lo que esta decisión niega:
+
+- **`subdivisionReason` pasa a `motivoDeLaSeleccion`** y **`SubdivisionReason` a
+  `MotivoDeSeleccion`**, con sus cuatro valores intactos (`altitude`, `shade`, `slope`, `other`). Es
+  el motivo por el que se **selecciona** un trozo, no por el que se parte. El campo hermano
+  `subdivisionReasonNote` lo acompaña como `notaDelMotivoDeLaSeleccion`: el propio comentario del
+  esquema los ataba —«`other` always pairs with subdivisionReasonNote»— y renombrar uno solo partiría
+  el vocabulario en dos.
+- **El comentario de `PlotBlock` decía que un bloque «es una ZONA, no una lista de plantas».** Es
+  falso: sus rangos son coordenadas **de la parcela** —hilera y planta—, o sea una lista de plantas
+  expresada por tramos, y no le restan nada a la parcela. El comentario cita esta decisión.
+- **`micro_plot` se declara MUERTO y se queda en el enum.** Nada en producción lo escribe: los seis
+  sitios de `lib/` que lo nombran sólo lo leen o lo filtran, y el único camino que podría
+  reproducirlo es `locations.ts` copiando el tipo del padre. Se queda porque quitarlo no es gratis:
+  `core.location` tiene **5** disparadores con `UPDATE OF "location_type"`
+  (`location_bodega_padre`, `location_con_ambiente_quieto`, `location_arbol_de_estante`,
+  `location_rejilla_solo_en_parcela`, `location_rejilla_al_retipar_el_padre`) y en 203 migraciones no
+  hay **ningún** `DROP TRIGGER`, o sea ningún precedente de soltarlos y recrearlos. Un guardia
+  sostiene que siga muerto, con la lista de los seis sitios de lectura declarada.
+
+**Y esto revoca una decisión anterior que no tenía ADR.** La migración `20260911230000` introdujo
+`micro_plot` con una decisión del 2026-09-11 según la cual una microparcela **era** esa Location. El
+2026-09-19 Daniel decidió lo contrario —una microparcela es una Location `plot` hija de otra `plot`,
+creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía sólo en comentarios. Queda
+dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
+verificación, así que esta es la enmienda.
+
+## ADR-198 — Un beneficio puede existir sin finca propia
+
+**Fecha:** 2026-10-08 · **Spec:** `docs/superpowers/specs/2026-10-06-beneficio-sin-finca-design.md`
+
+**Contexto.** Hoy un beneficio debe colgar de un `site` (`lib/traceability/beneficios.ts`) y su
+organización se copia del padre. Daniel, 2026-10-06: «una organización puede tener un beneficio y no
+tener finca, que sólo compran», y `Las Nubes` puede procesar cereza de una finca ajena. Medido en
+producción ese día: `Las Nubes` tiene `organization_id` nulo aunque su padre lo tiene, así que el
+invariante en el que se apoyan varios filtros ya no se cumple.
+
+**Decisión.** El beneficio puede nacer **sin padre**, y **la organización es su ancla**; el que ya
+tiene padre lo conserva (variante opcional). Quien crea uno sin padre es quien administra la
+organización dueña. Un gestor de finca elige como destino de su cosecha los beneficios de su
+organización y los que se le hayan concedido de forma explícita. Kiva Estate crea el suyo por
+pantalla cuando el PR 2 esté en `main`, no a mano.
+
+**Consecuencias.** Tres PR, en este orden y cada uno útil solo: (1) la organización del beneficio
+deja de salir de su padre — incluye poner la de `Las Nubes`, escritura en producción que hace
+Daniel; (2) se relaja la regla y se hacen alcanzables las pantallas, reescribiendo el test que hoy
+afirma lo contrario; (3) permisos y procedencia. Sin padre se pierde la jerarquía de permisos y la
+geografía: es el precio de la variante, y sólo lo pagan los beneficios que nacen así.
+`lib/rbac/resolve.ts` queda sin leer y el PR 3 empieza por ahí.
+
+**Actualización 2026-10-09 — qué entra en el PR 3 y qué no (decisión de Daniel).** Entra **sólo** que una
+finca pueda elegir como destino de su cosecha los beneficios **de su misma organización** aunque no cuelguen
+de ella (`beneficiosDeDestino` y `exigeBeneficioDeDestino` con `finca`), con la clasificación del beneficio
+mandando y sin conceder nunca ver sus lotes. Sobre `resolveOrganizationForLocation`/`resolve.ts`: el
+resolutor es puro y exacto para ubicaciones, y la subida por ancestros vive en `can()`; **un beneficio sin
+padre sólo se alcanza con una asignación sobre él mismo**, y con ella las listas de lotes ya lo incluyen
+(`resolveLotVisibility`), sin código nuevo.
+
+**Pendiente, anotado para el primer caso real de cereza ajena** (hoy no existe ninguno en los datos):
+(1) una **concesión estrecha** «esta finca puede mandarme cereza» a un beneficio de OTRA organización — dar
+`lot:view` sobre el beneficio ajeno sería una fuga (la finca vería todos sus lotes); pide tabla, servicio y
+pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
+del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
+recepción → entrega → jornada → finca.

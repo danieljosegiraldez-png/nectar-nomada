@@ -58,6 +58,49 @@
  * se solapan entre sí.
  */
 
+import type { DataConfidence } from "./ph";
+
+/**
+ * El grado que la columna «Acción del software» de `10_ph_fermentation.md` §1 nombra para una banda.
+ * `null` cuando la celda no nombra ninguno — `[3.80, 4.50)` dice «Trazar curva de descenso», que no
+ * afirma nada alarmante.
+ *
+ * **No es una escala de este módulo: son las palabras de la celda.** Que lo que aquí se diga sea lo
+ * que el documento dice, en las dos direcciones, lo obliga `tests/beneficio/cita-por-severidad.test.ts`.
+ */
+export type SeveridadDelSoftware = "INFO" | "WARNING" | "CRITICAL";
+
+/**
+ * Si una lectura con esa confianza puede sostener una cita de ese grado.
+ *
+ * **La regla es de Daniel, 2026-09-14**, y `confianzaPorVerificacion` ya la lleva escrita:
+ * `REVISION_VENCIDA` «alimenta curvas y puede avisar. **No confirma una crítica**». Esto es el otro
+ * lado: hasta que la matriz dijo de qué grado es cada cita, nada podía aplicarla.
+ *
+ * Tres cosas que parecen detalles y no lo son:
+ *
+ * - **`null` de confianza NO degrada.** Es lo que `confianzaPorVerificacion` devuelve para
+ *   `SIN_INSTRUMENTO`, que es el estado de **todas** las lecturas de hoy: `measurement.instrument_id`
+ *   acaba de existir y nadie lo ha rellenado. Tratar el hueco como avería apagaría esta pantalla
+ *   entera el día que se despliegue — el mismo defecto que `desdeElLote.ts` ya nombra.
+ * - **`null` de severidad lo sostiene cualquiera.** Negar «Ninguno. Desarrollo ideal de precursores»
+ *   a una lectura excluida no protege a nadie: borraría de la pantalla la única banda que dice que
+ *   todo va bien.
+ * - **Las confianzas intermedias pasan.** `RETROSPECTIVE`, `TEMP_DRIFT_RISK` y `TEMP_UNCOMPENSATED`
+ *   salen de la procedencia o de la temperatura, no de la verificación, y esta compuerta es sólo
+ *   sobre la verificación. Combinarlas es otro eje y tiene su función: `peorConfianza`.
+ */
+export function sostieneLaCita(
+  confianza: DataConfidence | null,
+  severidad: SeveridadDelSoftware | null,
+): boolean {
+  if (severidad === null) return true;
+  if (confianza === null) return true;
+  if (confianza === "UNCALIBRATED") return false;
+  if (confianza === "REVISION_VENCIDA") return severidad !== "CRITICAL";
+  return true;
+}
+
 export interface Riesgo {
   /**
    * El perfil de protocolo al que pertenece la matriz de donde sale la cita (`WASHED_STANDARD`):
@@ -69,6 +112,18 @@ export interface Riesgo {
   readonly banda: string;
   /** La columna «Riesgo / vector», literal del documento. */
   readonly riesgo: string;
+  /**
+   * El grado de la columna «Acción del software» para esta banda, o `null` si la celda no nombra
+   * ninguno. Quien pinta la cita lo usa con `sostieneLaCita` para no colgarle una afirmación a una
+   * lectura cuyo instrumento no la sostiene (`PENDING_IMPLEMENTATIONS/021`).
+   *
+   * **La banda `[4.50, 5.20)` lleva `CRITICAL` aunque su celda diga «`INFO` antes de
+   * `ph_stall_grace_hours`; `CRITICAL` (con confirmación) después»:** este módulo no ve la
+   * tendencia, y la pantalla cita esa fila **condicionada** —«si el pH se estanca…»—, que es el
+   * caso crítico. Clasificarla como `INFO` dejaría que una lectura vencida sostuviera la frase que
+   * de hecho se pinta.
+   */
+  readonly severidad: SeveridadDelSoftware | null;
   /**
    * La columna «Qué hace el operario» de la misma tabla, literal, **si Daniel ya la rellenó**. Hoy
    * ninguna de las ocho celdas lo está: ninguna fila la lleva, `riesgoDeEsperar` no la devuelve y
@@ -106,11 +161,13 @@ export const PERFIL_DE_LA_MATRIZ = "WASHED_STANDARD";
 const FILAS_DE_PH: readonly FilaDePh[] = [
   {
     banda: "fuera de [2.50, 8.00]",
+    severidad: "WARNING",
     riesgo: "Electrodo dañado o fuera de rango medible",
     cae: (v) => v < 2.5 || v > 8,
   },
   {
     banda: "[6.50, 8.00]",
+    severidad: "WARNING",
     riesgo:
       "El mucílago fresco no supera pH ~6.0. Un valor mayor sugiere agua de enjuague, electrodo fuera del líquido o descalibración",
     cae: (v) => v >= 6.5 && v <= 8,
@@ -118,31 +175,37 @@ const FILAS_DE_PH: readonly FilaDePh[] = [
   },
   {
     banda: "[5.20, 6.50)",
+    severidad: "INFO",
     riesgo: "Inactividad microbiológica si se prolonga",
     cae: (v) => v >= 5.2 && v < 6.5,
   },
   {
     banda: "[4.50, 5.20)",
+    severidad: "CRITICAL",
     riesgo: "Proliferación butírica y mohos → defecto *stinker*",
     cae: (v) => v >= 4.5 && v < 5.2,
   },
   {
     banda: "[3.80, 4.50)",
+    severidad: null,
     riesgo: "Ninguno. Desarrollo ideal de precursores",
     cae: (v) => v >= 3.8 && v < 4.5,
   },
   {
     banda: "[3.50, 3.80)",
+    severidad: "WARNING",
     riesgo: "Aproximación a sobrefermentación",
     cae: (v) => v >= 3.5 && v < 3.8,
   },
   {
     banda: "[3.30, 3.50)",
+    severidad: "CRITICAL",
     riesgo: "Degradación ácida, decoloración del pergamino",
     cae: (v) => v >= 3.3 && v < 3.5,
   },
   {
     banda: "< 3.30",
+    severidad: "CRITICAL",
     riesgo: "Daño consumado",
     cae: (v) => v < 3.3,
   },
@@ -166,5 +229,5 @@ export function riesgoDeEsperar(variable: string, valor: number, perfil: string 
   // La fila retirada SE ENCUENTRA y se descarta aquí, a propósito: saltarla en el `find` dejaría el
   // rango a merced de lo que alguna fila posterior casara por omisión.
   if (!fila || fila.retiradaPor) return null;
-  return { perfil: PERFIL_DE_LA_MATRIZ, banda: fila.banda, riesgo: fila.riesgo };
+  return { perfil: PERFIL_DE_LA_MATRIZ, banda: fila.banda, riesgo: fila.riesgo, severidad: fila.severidad };
 }

@@ -151,7 +151,7 @@ describe("alta de trampa", () => {
     const microparcela = await createMicrolot(userAccountId, {
       parentLocationId: parcela.id,
       name: `TEST Microparcela (${Date.now()})`,
-      subdivisionReason: "altitude",
+      motivoDeLaSeleccion: "altitude",
     });
     locationIds.push(microparcela.id);
     // El camino real produce `plot`, nunca `micro_plot` (mismo hallazgo que
@@ -706,7 +706,7 @@ describe("getPlotDetail — lo que necesitan los avisos de trampas", () => {
     const microparcela = await createMicrolot(userAccountId, {
       parentLocationId: parcela.id,
       name: `TEST Microparcela (${Date.now()})`,
-      subdivisionReason: "altitude",
+      motivoDeLaSeleccion: "altitude",
     });
     locationIds.push(microparcela.id);
     expect(microparcela.parentLocationId).not.toBe(sitio);
