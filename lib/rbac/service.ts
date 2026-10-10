@@ -10,6 +10,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { can as resolveCan, resolvePermissions as resolvePermissionsPure } from "./resolve";
 import { permissionKey } from "./types";
+import { UUID } from "../validation/uuid";
 export { CLASSIFICATION_GATE_DEFERRED, CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
 
@@ -172,6 +173,12 @@ const PROFUNDIDAD_MAXIMA_DE_UBICACION = 12;
 
 async function conAncestros(target: ScopeTarget): Promise<ScopeTarget[]> {
   if (target.scopeType !== "location" || !target.scopeRefId) return [target];
+  // Un id sin forma de UUID no tiene padres que buscar, igual que uno que no existe: se devuelve
+  // el objetivo solo, que es lo que el bucle devolvería para una ubicación ausente. Sin esto,
+  // `findUnique` daba `P2007` y `can()` reventaba en vez de contestar (PENDING_IMPLEMENTATIONS/026).
+  // No concede nada nuevo: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación
+  // puede casar con ese id, y el resolutor decide igual que para un UUID que no existe.
+  if (!UUID.test(target.scopeRefId)) return [target];
 
   const cadena: ScopeTarget[] = [target];
   const vistos = new Set<string>([target.scopeRefId]);
