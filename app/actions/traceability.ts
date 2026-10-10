@@ -60,6 +60,7 @@ import {
   recordFieldEvent,
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
+import { leerCompletarVisita } from "../../lib/traceability/completarVisitaForm";
 import { registrarVitalesEnSitio, VitalesEnSitioInvalido } from "../../lib/apiary/vitalesEnSitio";
 // Las cinco siguientes se importan SÓLO para nombrarlas en `friendlyError`.
 // Ninguna acción llama a estos módulos: llegan aquí a través de los servicios
@@ -2795,39 +2796,12 @@ export async function completarVisitaAction(
   const t = await getTranslations("Traceability");
 
   const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
-  const proximaCruda = String(formData.get("nextVisitDueAt") ?? "").trim();
-  const coloniasCrudas = String(formData.get("coloniesAliveCount") ?? "").trim();
-  const cajasCrudas = String(formData.get("hivesPresentCount") ?? "").trim();
-  // Cadena, validada por el servicio. El vacio es `null` --nadie mirO el cielo-- y NO
-  // «despejado»: el protocolo la marca opcional.
-  const climaCrudo = String(formData.get("weatherObserved") ?? "").trim();
-  const costoCrudo = String(formData.get("travelCostUsd") ?? "").trim();
 
   try {
-    await completarVisita(user.userAccountId, {
-      fieldSessionId,
-      // Día, no instante: «cuándo toca volver» es una fecha de calendario. Se
-      // trata como los demás campos de día — medianoche UTC — y NO se convierte
-      // con el desfase del dispositivo, que la movería un día.
-      nextVisitDueAt: proximaCruda === "" ? null : new Date(`${proximaCruda}T00:00:00Z`),
-      coloniesAliveCount: coloniasCrudas === "" ? null : Number(coloniasCrudas),
-      // Vacío es `null` —«nadie contó»— y NO cero: un apiario vaciado se cuenta como cero, y
-      // ese cero es un dato distinto de no haber contado (ADR-080).
-      hivesPresentCount: cajasCrudas === "" ? null : Number(cajasCrudas),
-      weatherObserved: climaCrudo === "" ? null : climaCrudo,
-      // Sin ninguna casilla marcada NO se toca: las casillas no pueden decir «lo de antes», y
-      // borrar lo que se anotó en el sitio por no volver a marcarlo al cerrar sería perderlo.
-      ...(formData.getAll("siteConditions").length === 0
-        ? {}
-        : { siteConditions: formData.getAll("siteConditions").map(String), siteConditionOtherNote: emptyToNull(formData.get("siteConditionOtherNote")) }),
-      notes: emptyToNull(formData.get("notes")),
-      // Las tres de casa (`stage: close`). El vacío es `null` —«no se anotó»— y NO cero: una
-      // visita sin viáticos anotados no es una visita que costó cero.
-      travelCostUsd: costoCrudo === "" ? null : Number(costoCrudo),
-      probableCause: emptyToNull(formData.get("probableCause")),
-      recommendation: emptyToNull(formData.get("recommendation")),
-      reason: emptyToNull(formData.get("reason")),
-    });
+    // **El vacío del cierre no borra lo ya anotado** (revisión de Apiario del 2026-10-08, V-1):
+    // colonias, cajas, clima y notas vacíos quedan sin tocar. La lectura vive en
+    // `lib/traceability/completarVisitaForm.ts`, donde se prueba sin sesión ni base.
+    await completarVisita(user.userAccountId, leerCompletarVisita(formData));
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }

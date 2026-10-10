@@ -1706,6 +1706,7 @@
     "visitColoniesAliveLabel": "Colonies alive on leaving (optional)",
     "visitColoniesAliveHelp": "Without this number there is no way to see loss without replacement.",
     "visitCompleteNotesLabel": "Closing notes (optional)",
+    "visitAlreadyNoted": "Already noted: {valor}. Leave it empty to keep it.",
     "visitCompleteReasonLabel": "Why it was completed this way (optional)",
     "visitCompleteButton": "Complete visit",
     "valueLabelWithUnit": "Value ({unit})",
