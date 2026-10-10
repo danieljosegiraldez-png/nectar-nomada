@@ -17,7 +17,7 @@ import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CatalogosDelEditor, ValorDeCatalogo } from "../../lib/recetas/catalogosDelEditor";
-import { pasoDeFormulario, pasoEnBlanco, valoresDelFormulario, type PasoInicial } from "../../lib/recetas/formularioDePaso";
+import { MAX_FILAS, pasoDeFormulario, pasoEnBlanco, valoresDelFormulario, type PasoInicial } from "../../lib/recetas/formularioDePaso";
 import type { PasoConDetalle, PasoEditable } from "../../lib/recetas/pasos";
 import { referenciasDelTipo, SINONIMOS_ENTRE_CATALOGOS } from "../../lib/recetas/referencias";
 import {
@@ -28,7 +28,7 @@ import {
   type EjeDelPaso,
   type TipoDePaso,
 } from "../../lib/recetas/vocabulario";
-import { aTexto, campos, formDataDeHtml, opciones, tieneCampo } from "../helpers/htmlDePrueba";
+import { aTexto, campos, controlesFueraDelFieldset, fieldsetDeshabilitado, formDataDeHtml, opciones, tieneCampo } from "../helpers/htmlDePrueba";
 
 vi.mock("next-intl", async () => {
   const { traductorDePrueba } = await import("../helpers/traductorDePrueba");
@@ -638,6 +638,58 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
     expect(subcampos.size).toBe(17);
   });
 
+  // F1-2 (revisión final de la Parte 2a): una receta PUBLICADA enseñaba por paso sólo el tipo, las horas y CONTEOS; los valores sólo vivían en el formulario, que exigía un borrador.
+  // El mismo formulario se abre ahora de sólo lectura. Lo que se afirma es lo que el operario ve (cada dato del paso, el mismo que se mandaría de vuelta) y lo que no puede hacer
+  // (ningún control habilitado, ningún botón: ni guardar, ni añadir filas, ni quitarlas).
+  describe("en sólo lectura (F1-2)", () => {
+    const leer = (tipo: TipoDePaso, soloLectura: boolean): string =>
+      pintar({ modo: "editar", stepId: "p1", soloLectura, inicial: valoresDelFormulario(pasoCompleto(tipo)), catalogos: CATALOGOS_VARIOS, modosDeSecado: MODOS });
+
+    it("para cada tipo, el paso se pinta entero dentro de un fieldset deshabilitado: todo lo que declaró se ve y nada se puede enviar", () => {
+      expect(TIPOS_DE_PASO.length, "control: son 24 tipos").toBe(24);
+      const mal: string[] = [];
+      for (const tipo of TIPOS_DE_PASO) {
+        const html = leer(tipo, true);
+        if (!fieldsetDeshabilitado(html)) mal.push(`${tipo}: no hay un fieldset deshabilitado`);
+        const fuera = controlesFueraDelFieldset(html);
+        if (fuera.length > 0) mal.push(`${tipo}: ${fuera.length} control(es) fuera del fieldset: ${fuera[0]}`);
+        const botones = [...html.matchAll(/<button\b[^>]*>/g)].length;
+        if (botones > 0) mal.push(`${tipo}: ${botones} botón(es) (ni guardar, ni añadir, ni quitar filas)`);
+        // Lo que se ve es lo que el paso declaró: el mismo recorrido de la ida y vuelta, ahora sobre la pantalla de sólo lectura.
+        const esperado = sinIdentidad(pasoCompleto(tipo));
+        const visto = pasoDeFormulario(formDataDeHtml(html));
+        for (const campo of Object.keys(esperado) as (keyof PasoEditable)[]) {
+          if (JSON.stringify(visto[campo]) !== JSON.stringify(esperado[campo])) mal.push(`${tipo}/${campo}: ${JSON.stringify(esperado[campo])} → ${JSON.stringify(visto[campo])}`);
+        }
+      }
+      expect(mal).toEqual([]);
+    });
+
+    it("control: el mismo paso, editable, no lleva fieldset deshabilitado y sí guardar, añadir y quitar", () => {
+      const editable = leer("fermentation", false);
+      expect(fieldsetDeshabilitado(editable)).toBe(false);
+      expect(controlesFueraDelFieldset(editable).length, "sin fieldset, todos los controles quedan fuera").toBeGreaterThan(10);
+      const texto = aTexto(editable);
+      for (const boton of ["Guardar paso", "Añadir objetivo", "Añadir condición de fin", "Quitar"]) expect(texto, boton).toContain(boton);
+      const lectura = leer("fermentation", true);
+      for (const boton of ["Guardar paso", "Añadir objetivo", "Añadir condición de fin", "Quitar"]) expect(aTexto(lectura), boton).not.toContain(boton);
+      // Lo que se ve no cambia: el mismo dato sale en las dos.
+      expect(campos(lectura, "intencion")[0]).toMatch(/value="Qué busca «fermentation»/);
+      expect(campos(lectura, "intencion")[0]).toBe(campos(editable, "intencion")[0]);
+    });
+
+    it("las dos ayudas de prueba saben lo que dicen: un fieldset sin `disabled` no cuenta, y un control fuera se nombra", () => {
+      expect(fieldsetDeshabilitado('<fieldset><input name="a"/></fieldset>')).toBe(false);
+      expect(fieldsetDeshabilitado('<fieldset disabled=""><input name="a"/></fieldset>')).toBe(true);
+      expect(fieldsetDeshabilitado('<fieldset style="x" disabled><input name="a"/></fieldset>')).toBe(true);
+      // `disabled` en un control no es un fieldset deshabilitado.
+      expect(fieldsetDeshabilitado('<fieldset><input disabled="" name="a"/></fieldset>')).toBe(false);
+      const html = '<input name="antes"/><fieldset disabled=""><input name="dentro"/><button>x</button></fieldset><select name="despues"></select>';
+      expect(controlesFueraDelFieldset(html)).toEqual(['<input name="antes"/>', '<select name="despues">']);
+      expect(controlesFueraDelFieldset('<input name="a"/>').length, "sin fieldset, todos quedan fuera").toBe(1);
+    });
+  });
+
   it("control: la ida y vuelta se entera cuando el HTML dice otra cosa que el paso (no pasa vacía)", () => {
     const paso = pasoCompleto("fermentation");
     expect(vuelta(paso)).toEqual(sinIdentidad(paso));
@@ -646,5 +698,73 @@ describe("FormularioDePaso — ida y vuelta: lo que se pinta es lo que un navega
     const recibido = vuelta(otro);
     expect(recibido).not.toEqual(sinIdentidad(paso));
     expect([recibido.oxigenoValueId, recibido.reglaDeFin, recibido.metas?.[0]?.targetValue]).toEqual(["ox-3", "first", 9]);
+  });
+});
+
+/** La etiqueta de apertura del botón que lleva ese rótulo, entera (`<button …>`): lo que un navegador ve para decidir si se puede pulsar. */
+function botonDe(html: string, rotulo: string): string {
+  const botones = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map((m) => m[0]);
+  const encontrado = botones.filter((b) => aTexto(b) === rotulo);
+  if (encontrado.length !== 1) throw new Error(`se esperaba un solo botón «${rotulo}» y hay ${encontrado.length} (de ${botones.length} botones)`);
+  return /^<button\b[^>]*>/.exec(encontrado[0]!)![0];
+}
+const apagado = (etiqueta: string): boolean => /\sdisabled(=""|\s|>)/.test(etiqueta);
+
+describe("FormularioDePaso — el tope de filas: el formulario no deja añadir lo que el servidor descartaría (F1-1)", () => {
+  // `pasoDeFormulario` lee como mucho MAX_FILAS filas de cada colección y la siguiente se pierde en silencio, así que el botón de añadir se apaga al llegar.
+  const adicion = { categoriaValueId: "su-mosto", cantidad: "1", unidad: "kg", momento: "pre_green" as const };
+  const fin = { variable: "ph", operador: "lte" as const, valor: "4", unidad: "pH", desdeLecturaId: "" };
+  const meta = { variable: "ph", moment: "final" as const, unit: "pH", targetValue: "3.8", minValue: "", maxValue: "", note: "", everyHours: "" };
+  const filas = <T,>(fila: T, cuantas: number): T[] => Array.from({ length: cuantas }, () => fila);
+
+  it("control: el tope que el componente respeta es el que lee el servidor (50 filas entran y la 51 no)", () => {
+    expect(MAX_FILAS).toBe(50);
+    const html = conTipo("addition", { adiciones: filas(adicion, MAX_FILAS), fines: filas(fin, MAX_FILAS), metas: filas(meta, MAX_FILAS) });
+    const leido = pasoDeFormulario(formDataDeHtml(html));
+    expect([leido.adiciones?.length, leido.fines?.length, leido.metas?.length]).toEqual([MAX_FILAS, MAX_FILAS, MAX_FILAS]);
+  });
+
+  it.each([
+    ["adiciones", "Añadir adición", adicion],
+    ["fines", "Añadir condición de fin", fin],
+    ["metas", "Añadir objetivo", meta],
+  ] as const)("%s: con el tope de filas el botón «%s» sale apagado, y con una menos, encendido", (coleccion, rotulo, fila) => {
+    const lleno = conTipo("addition", { [coleccion]: filas(fila, MAX_FILAS) });
+    const justo = conTipo("addition", { [coleccion]: filas(fila, MAX_FILAS - 1) });
+    expect(apagado(botonDe(lleno, rotulo)), `con ${MAX_FILAS} filas`).toBe(true);
+    // Control: con una menos se puede añadir la última, así que «apagado» no es un botón que nunca se enciende.
+    expect(apagado(botonDe(justo, rotulo)), `con ${MAX_FILAS - 1} filas`).toBe(false);
+    // Y sin ninguna fila, también.
+    expect(apagado(botonDe(conTipo("addition"), rotulo)), "sin filas").toBe(false);
+  });
+
+  it("llenar una colección no apaga el botón de las otras", () => {
+    const html = conTipo("addition", { adiciones: filas(adicion, MAX_FILAS) });
+    expect(apagado(botonDe(html, "Añadir adición"))).toBe(true);
+    expect(apagado(botonDe(html, "Añadir condición de fin"))).toBe(false);
+    expect(apagado(botonDe(html, "Añadir objetivo"))).toBe(false);
+  });
+});
+
+describe("FormularioDePaso — «ninguno» no es una categoría de adición (F1-9)", () => {
+  // «Sin ingrediente añadido» es un valor del catálogo `sustrato_anadido` (lo que se ofrece al abrir una fermentación), pero una ADICIÓN es algo que se añade: ofrecerlo
+  // como categoría dejaba guardar «añadir: sin ingrediente añadido». Se filtra en el selector y no en el vocabulario, que lo sigue teniendo para los otros formularios.
+  const conNinguno: CatalogosDelEditor = {
+    ...CATALOGOS,
+    sustrato: [valor("su-ninguno", "ninguno"), valor("su-mosto", "doble_mosto"), valor("su-cofer", "co_fermentacion")],
+    levadura: [valor("le-mp72", "MP72"), valor("le-ninguna", "ninguno")],
+  };
+  const fila = { categoriaValueId: "", cantidad: "", unidad: "", momento: "pre_green" as const };
+
+  it.each(["addition", "inoculation"] as const)("%s: el desplegable de categoría ofrece los demás valores y no «ninguno»", (tipo) => {
+    const ofrecidas = opciones(conTipo(tipo, { adiciones: [fila] }, { catalogos: conNinguno }), "adiciones[0][categoriaValueId]");
+    expect(ofrecidas).not.toContain("ninguno");
+    // Control: la misma lista sí trae lo demás, y el catálogo sí tenía «ninguno» (si no, «no sale» no dice nada).
+    expect(ofrecidas).toEqual(expect.arrayContaining(["doble_mosto", "co_fermentacion"]));
+    expect(conNinguno.sustrato.map((v) => v.value)).toContain("ninguno");
+  });
+
+  it("en una inoculación, la cepa de levadura sigue ofreciéndose", () => {
+    expect(opciones(conTipo("inoculation", { adiciones: [fila] }, { catalogos: conNinguno }), "adiciones[0][categoriaValueId]")).toContain("MP72");
   });
 });

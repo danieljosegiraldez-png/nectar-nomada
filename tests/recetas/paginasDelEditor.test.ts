@@ -17,7 +17,8 @@ import { renderToReadableStream } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogosDelEditor, ValorDeCatalogo } from "../../lib/recetas/catalogosDelEditor";
 import { TIPOS_DE_PASO } from "../../lib/recetas/vocabulario";
-import { aTexto, campos, opciones } from "../helpers/htmlDePrueba";
+import { pasoDeFormulario } from "../../lib/recetas/formularioDePaso";
+import { aTexto, campos, controlesFueraDelFieldset, fieldsetDeshabilitado, formDataDeHtml, opciones } from "../helpers/htmlDePrueba";
 
 const estado = vi.hoisted(() => ({
   receta: null as unknown,
@@ -236,14 +237,95 @@ describe("la pantalla de una receta (/recipes/[id])", () => {
     expect(aTexto(await pintarReceta())).toContain("Publicar versión");
   });
 
-  it("un borrador, SIN permiso: los pasos se ven, y ningún control ni ninguna disculpa", async () => {
+  it("un borrador, SIN permiso: no se pinta —se ve la versión publicada—, y ningún control ni ninguna disculpa", async () => {
     BORRADOR();
     estado.puede = () => false;
     const texto = aTexto(await pintarReceta());
-    expect(texto).toContain("Despulpar el mismo día");
+    // Los pasos del borrador (v2) no se ven; la sección principal es la de la publicada (v1, con un paso de lavado).
+    expect(texto).not.toContain("Despulpar el mismo día");
+    expect(texto).toContain("Pasos de la versión 1");
+    expect(texto).not.toContain("Pasos de la versión 2");
     for (const control of [...CONTROLES, "Nombre y descripción"]) expect(texto, control).not.toContain(control);
     // Daniel, 2026-09-27: lo que no puedes hacer no se muestra, y no se explica.
     expect(texto).not.toContain("permiso");
+    // Control: con permiso, el MISMO borrador sí se ve (si no, «no se ve» podría ser un borrador que la pantalla nunca pinta).
+    estado.puede = () => true;
+    expect(aTexto(await pintarReceta())).toContain("Despulpar el mismo día");
+  });
+
+  describe("«versión vigente» es la publicada más alta; el borrador se pinta sólo a quien puede escribirlo (F1-6)", () => {
+    it("un borrador v2 encima de una publicada v1: el lector sin autoría ve la v1 como vigente y no ve el borrador; el autor ve el borrador y la v1 como vigente", async () => {
+      BORRADOR();
+      estado.puede = () => false;
+      const lector = aTexto(await pintarReceta());
+      expect(lector).toContain("versión vigente: v1");
+      expect(lector).not.toContain("versión vigente: v2");
+      expect(lector).toContain("Pasos de la versión 1");
+      expect(lector).not.toContain("Pasos de la versión 2");
+      expect(lector, "ni el rótulo ni la tarjeta del historial ni el texto del borrador").not.toMatch(/borrador|Versión 2/i);
+      expect(lector, "sólo cuenta lo que se ve").toContain("1 versión(es)");
+
+      estado.puede = () => true;
+      const autor = aTexto(await pintarReceta());
+      // «Vigente» es la publicada para todos: que la v2 sea la que se está escribiendo no la vuelve vigente.
+      expect(autor).toContain("versión vigente: v1");
+      expect(autor).not.toContain("versión vigente: v2");
+      // El autor tiene delante el borrador, y la v1 en el historial.
+      expect(autor).toContain("Pasos de la versión 2");
+      expect(autor).toContain("Despulpar el mismo día");
+      expect(autor).toContain("Versión 1");
+      expect(autor).toContain("2 versión(es)");
+    });
+
+    it("con una publicada v3, un borrador v2 que no existe a la vista y una v1, el lector ve la v3 arriba y la v1 en el historial, y el autor igual", async () => {
+      estado.receta = receta([version("v3", 3, "approved"), version("v2", 2, "draft"), version("v1", 1, "approved")]);
+      estado.pasos.set("v3", [paso("c1", 1, "drying")]);
+      estado.pasos.set("v2", [paso("b1", 1, "pulping", { intencion: "Solo el borrador" })]);
+      estado.pasos.set("v1", [paso("a1", 1, "washing")]);
+      estado.puede = () => false;
+      const lector = aTexto(await pintarReceta());
+      expect(lector).toContain("versión vigente: v3");
+      expect(lector).toContain("Pasos de la versión 3");
+      expect(lector).toContain("Versión 1");
+      expect(lector).not.toContain("Versión 2");
+      expect(lector).not.toContain("Solo el borrador");
+      expect(lector).toContain("2 versión(es)");
+      // Control: el autor ve las tres, con el borrador en el historial.
+      estado.puede = () => true;
+      const autor = aTexto(await pintarReceta());
+      expect(autor).toContain("versión vigente: v3");
+      expect(autor).toContain("3 versión(es)");
+      expect(autor).toContain("Versión 2");
+    });
+
+    it("sin ninguna versión publicada, el lector sin autoría ve la receta sin versión vigente y sin borrador; el autor ve el borrador", async () => {
+      estado.receta = receta([version("v1", 1, "draft")]);
+      estado.pasos.set("v1", [paso("b1", 1, "pulping", { intencion: "Solo el borrador" })]);
+      estado.puede = () => false;
+      const lector = aTexto(await pintarReceta());
+      expect(lector).toContain("Lavado tradicional");
+      expect(lector).not.toContain("versión vigente");
+      expect(lector).not.toContain("Solo el borrador");
+      expect(lector).not.toMatch(/borrador|Pasos de la versión/i);
+      expect(lector).toContain("0 versión(es)");
+      // Control: el autor sí lo ve (y, sin publicada, no hay «vigente»).
+      estado.puede = () => true;
+      const autor = aTexto(await pintarReceta());
+      expect(autor).toContain("Solo el borrador");
+      expect(autor).toContain("Pasos de la versión 1");
+      expect(autor).not.toContain("versión vigente");
+    });
+
+    it("derivar una plantilla usa la publicada más alta, no el borrador que la encabeza", async () => {
+      estado.receta = receta([version("v2", 2, "draft"), version("v1", 1, "approved")], { organizationId: null, organization: null, name: "Lavado base" });
+      estado.pasos.set("v1", [paso("q1", 1, "washing")]);
+      estado.organizaciones = [{ id: "orgA", name: "Finca A" }];
+      estado.puede = (organizacion) => organizacion === "orgA";
+      // Sin autoría sobre la plantilla (sólo sobre la organización A) el borrador no se ve, y derivar se ofrece desde la v1.
+      const html = await pintarReceta();
+      expect(aTexto(html)).toContain("Derivar copia");
+      expect(campos(html, "plantillaVersionId")[0]).toMatch(/value="v1"/);
+    });
   });
 
   it("una versión publicada, con permiso: «Empezar versión nueva» y ningún control de edición", async () => {
@@ -555,13 +637,151 @@ describe("las pantallas de un paso (/recipes/[id]/pasos/…)", () => {
     expect(aTexto(await pintar(await nuevo()))).toContain("Añadir un paso");
   });
 
-  it("editar: sin permiso es un 404, y con una versión ya publicada, de vuelta a la receta", async () => {
-    estado.receta = receta([version("v2", 2, "draft")]);
+  it("editar: sin permiso es un 404, sea el paso de un borrador o de una versión publicada", async () => {
+    estado.receta = receta([version("v2", 2, "draft"), version("v1", 1, "approved")]);
     estado.pasos.set("v2", [paso("p7", 2, "fermentation")]);
+    estado.pasos.set("v1", [paso("q1", 1, "washing")]);
     estado.puede = () => false;
     await expect(editar("p7")).rejects.toThrow("notFound");
+    // No se amplía quién puede leer: la versión publicada tampoco se abre a quien no puede escribir la receta.
+    await expect(editar("q1")).rejects.toThrow("notFound");
+    // Control: con permiso, las dos pantallas se pintan (el 404 de arriba es de la autorización y no de que el paso no esté).
     estado.puede = () => true;
-    estado.receta = receta([version("v2", 2, "approved")]);
-    await expect(editar("p7")).rejects.toThrow("redirect:/recipes/r1");
+    expect(aTexto(await pintar(await editar("p7")))).toContain("Editar el paso 2");
+    expect(aTexto(await pintar(await editar("q1")))).toContain("Paso 1");
+  });
+
+  describe("el paso de una versión publicada o del historial se abre de sólo lectura (F1-2)", () => {
+    // Un paso con valores de todas las clases: tipo, intención, horas, un eje de catálogo, la temperatura, una adición, una condición de fin, una capacidad y una meta con ritmo.
+    const EXTRA = {
+      intencion: "Fermentar sellado",
+      horasMin: 24,
+      horasSugeridas: 48,
+      horasMax: 72,
+      oxigenoValueId: "ox-aer",
+      temperaturaMinC: 12.5,
+      temperaturaMaxC: 18,
+      adiciones: [{ categoriaValueId: "su-mosto", cantidad: 2.5, unidad: "g/kg", momento: "post_green" }],
+      fines: [{ variable: "ph", operador: "lte", valor: 3.9, unidad: "pH", desdeLecturaId: null }],
+      capacidadesRequeridas: ["ca-sellable"],
+      metas: [{ variable: "ph", moment: "during", unit: "pH", targetValue: 3.8, minValue: 3.5, maxValue: 4.2, note: "cada seis horas", everyHours: 6 }],
+    };
+    const LO_QUE_DECLARO = {
+      stepTypeValueId: "tipo-fermentation",
+      intencion: "Fermentar sellado",
+      horasMin: 24,
+      horasSugeridas: 48,
+      horasMax: 72,
+      oxigenoValueId: "ox-aer",
+      temperaturaMinC: 12.5,
+      temperaturaMaxC: 18,
+      adiciones: [{ categoriaValueId: "su-mosto", cantidad: 2.5, unidad: "g/kg", momento: "post_green" }],
+      fines: [{ variable: "ph", operador: "lte", valor: 3.9, unidad: "pH", desdeLecturaId: null }],
+      capacidadesRequeridas: ["ca-sellable"],
+      metas: [{ variable: "ph", moment: "during", unit: "pH", targetValue: 3.8, minValue: 3.5, maxValue: 4.2, note: "cada seis horas", everyHours: 6 }],
+    };
+
+    it("un paso de la versión publicada se pinta con todos sus valores y deshabilitado, sin guardar", async () => {
+      estado.receta = receta([version("v1", 1, "approved")]);
+      estado.pasos.set("v1", [paso("q3", 3, "fermentation", EXTRA)]);
+      const html = await pintar(await editar("q3"));
+      const texto = aTexto(html);
+      expect(texto).toContain("Paso 3");
+      expect(texto).not.toContain("Editar el paso");
+      expect(texto).toContain("Lavado tradicional · versión 1 (publicada)");
+      expect(texto).toContain("Versión publicada: no se edita.");
+      // Entero y deshabilitado: un fieldset deshabilitado que contiene todos los controles, y ningún botón (ni guardar, ni añadir, ni quitar filas).
+      expect(fieldsetDeshabilitado(html)).toBe(true);
+      expect(controlesFueraDelFieldset(html)).toEqual([]);
+      expect(html).not.toMatch(/<button\b/);
+      expect(texto).not.toContain("Guardar paso");
+      // Todos los valores se ven: lo que un navegador mandaría de vuelta, leído por la acción, es lo que el paso declaró.
+      expect(pasoDeFormulario(formDataDeHtml(html))).toMatchObject(LO_QUE_DECLARO);
+      // Control: la lectura es de la pantalla y no de un valor por omisión (un paso en blanco saldría distinto).
+      expect(pasoDeFormulario(formDataDeHtml(html)).horasSugeridas).toBe(48);
+    });
+
+    it("el mismo paso en un BORRADOR sigue editable: sin fieldset deshabilitado, con «Guardar paso» y con el título de editar (control)", async () => {
+      estado.receta = receta([version("v2", 2, "draft")]);
+      estado.pasos.set("v2", [paso("p3", 3, "fermentation", EXTRA)]);
+      const html = await pintar(await editar("p3"));
+      const texto = aTexto(html);
+      expect(texto).toContain("Editar el paso 3");
+      expect(texto).toContain("Lavado tradicional · versión 2 (borrador)");
+      expect(texto).not.toContain("Versión publicada: no se edita.");
+      expect(fieldsetDeshabilitado(html)).toBe(false);
+      expect(texto).toContain("Guardar paso");
+      // Los mismos valores, editables.
+      expect(pasoDeFormulario(formDataDeHtml(html))).toMatchObject(LO_QUE_DECLARO);
+    });
+
+    it("con un borrador encima, el paso de una versión del historial se abre de sólo lectura con SU versión, y el del borrador, editable", async () => {
+      estado.receta = receta([version("v2", 2, "draft"), version("v1", 1, "approved")]);
+      estado.pasos.set("v2", [paso("p7", 1, "pulping")]);
+      estado.pasos.set("v1", [paso("q1", 1, "washing"), paso("q2", 2, "fermentation", EXTRA)]);
+      const historico = await pintar(await editar("q2"));
+      expect(aTexto(historico)).toContain("Lavado tradicional · versión 1 (publicada)");
+      expect(fieldsetDeshabilitado(historico)).toBe(true);
+      expect(campos(historico, "recipeVersionId")[0]).toMatch(/value="v1"/);
+      expect(pasoDeFormulario(formDataDeHtml(historico))).toMatchObject(LO_QUE_DECLARO);
+      const borrador = await pintar(await editar("p7"));
+      expect(aTexto(borrador)).toContain("Lavado tradicional · versión 2 (borrador)");
+      expect(fieldsetDeshabilitado(borrador)).toBe(false);
+      expect(campos(borrador, "recipeVersionId")[0]).toMatch(/value="v2"/);
+    });
+
+    it("un paso que ninguna versión de ESTA receta tiene vuelve a la receta, aunque exista en otra", async () => {
+      estado.receta = receta([version("v1", 1, "approved")]);
+      estado.pasos.set("v1", [paso("q1", 1, "washing")]);
+      // El paso `ajeno` es de una versión de otra receta: `pasosDeLaVersion` lo devolvería si se le preguntara por esa versión, y nunca se le pregunta.
+      estado.pasos.set("v-de-otra-receta", [paso("ajeno", 1, "drying")]);
+      await expect(editar("ajeno")).rejects.toThrow("redirect:/recipes/r1");
+      // Control: el de esta receta se abre.
+      expect(aTexto(await pintar(await editar("q1")))).toContain("Paso 1");
+    });
+
+    it("añadir sigue pidiendo un borrador: con sólo la versión publicada, de vuelta a la receta", async () => {
+      estado.receta = receta([version("v1", 1, "approved")]);
+      estado.pasos.set("v1", [paso("q1", 1, "washing")]);
+      await expect(nuevo()).rejects.toThrow("redirect:/recipes/r1");
+    });
+  });
+
+  describe("cada paso de una versión publicada o del historial lleva su enlace «Ver el paso», a quien puede abrirlo (F1-2)", () => {
+    const enlaces = (html: string): string[] => [...html.matchAll(/href="(\/recipes\/r1\/pasos\/[^"?]+)"/g)].map((m) => m[1]!).sort();
+
+    it("la publicada y el historial: un enlace por paso hacia su pantalla; el borrador, «Editar paso»", async () => {
+      estado.receta = receta([version("v3", 3, "draft"), version("v2", 2, "approved"), version("v1", 1, "approved")]);
+      estado.pasos.set("v3", [paso("b1", 1, "pulping")]);
+      estado.pasos.set("v2", [paso("p1", 1, "washing")]);
+      estado.pasos.set("v1", [paso("q1", 1, "pulping"), paso("q2", 2, "drying")]);
+      const html = await pintarReceta();
+      const texto = aTexto(html);
+      // Tres enlaces de ver (la v2 y las dos de la v1) y uno de editar (el borrador).
+      expect(enlaces(html)).toEqual(["/recipes/r1/pasos/b1", "/recipes/r1/pasos/p1", "/recipes/r1/pasos/q1", "/recipes/r1/pasos/q2"]);
+      expect(veces(texto, "Editar paso")).toBe(1);
+      expect(html).toMatch(/<a [^>]*href="\/recipes\/r1\/pasos\/b1"[^>]*>Editar paso<\/a>/);
+      for (const id of ["p1", "q1", "q2"]) expect(html).toMatch(new RegExp(`<a [^>]*href="/recipes/r1/pasos/${id}"[^>]*>Ver el paso</a>`));
+    });
+
+    it("quien no puede abrir la pantalla no ve el enlace (no se ofrece lo que daría un 404)", async () => {
+      estado.receta = receta([version("v2", 2, "approved"), version("v1", 1, "approved")]);
+      estado.pasos.set("v2", [paso("p1", 1, "washing")]);
+      estado.pasos.set("v1", [paso("q1", 1, "pulping")]);
+      expect(enlaces(await pintarReceta())).toEqual(["/recipes/r1/pasos/p1", "/recipes/r1/pasos/q1"]);
+      estado.puede = () => false;
+      const sin = await pintarReceta();
+      expect(enlaces(sin)).toEqual([]);
+      // Ni como enlace: «Ver el paso» también es el resumen del historial cuando una versión tiene UN paso, y ese no es un enlace.
+      expect(sin).not.toMatch(/<a [^>]*>Ver el paso<\/a>/);
+      // Control: la pantalla sí se pinta para quien no puede (el historial sigue ahí).
+      expect(aTexto(sin)).toContain("Versión 1");
+    });
+
+    it("una receta Libre, que se ve y no se toca, deja ver el detalle de sus pasos a quien puede escribir recetas", async () => {
+      estado.receta = receta([version("v1", 1, "approved")], { esLibre: true });
+      estado.pasos.set("v1", [paso("q1", 1, "washing")]);
+      expect(enlaces(await pintarReceta())).toEqual(["/recipes/r1/pasos/q1"]);
+    });
   });
 });

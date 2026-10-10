@@ -14,11 +14,15 @@ import { listVariableDefinitions } from "../../../../lib/traceability/units";
  *
  * Las dos hacen lo mismo antes de pintar: cargar la receta (`getRecipeForEditor`: quien puede escribirla, o quien opera un lote suyo; Ruling C4), exigir que quien mira pueda ESCRIBIRLA
  * —`puedeAutoriaDeReceta`, la gemela de la regla que aplican los servicios: el permiso del Coffee Process Manager, V16— (404 si no: lo que no puedes hacer no se
- * muestra, ni se explica; Daniel, 2026-09-27), y exigir que haya un BORRADOR (una versión publicada no se edita: de vuelta a la receta). Después leen el
- * vocabulario, los pasos del borrador, las referencias del paquete y sus sinónimos (I7). Los rótulos de los tipos de paso y de los modos de secado se traducen aquí, en
- * el servidor: el formulario es de cliente y sólo tiene un espacio de textos.
+ * muestra, ni se explica; Daniel, 2026-09-27), y encontrar la versión de la que habla. Después leen el vocabulario, los pasos de esa versión, las referencias del paquete y sus
+ * sinónimos (I7). Los rótulos de los tipos de paso y de los modos de secado se traducen aquí, en el servidor: el formulario es de cliente y sólo tiene un espacio de textos.
+ *
+ * **Sin `stepId` (añadir) la versión es el BORRADOR**, y si no lo hay —una versión publicada no se edita— vuelve a la receta. **Con `stepId` (ver o editar) es la versión que TIENE ese
+ * paso**, buscada sólo entre las de esta receta, el borrador primero (F1-2 de la revisión final de la Parte 2a): si es el borrador, el formulario se edita; si no (la publicada o una del
+ * historial), `soloLectura` es verdadero y el formulario se pinta entero y deshabilitado, porque tras publicar los valores de un paso sólo existían en este formulario. La
+ * autorización es la de siempre —no se amplía quién puede leer—; un paso que ninguna versión de la receta tiene vuelve a la receta.
  */
-export async function cargarFormularioDePaso(userAccountId: string, recipeId: string) {
+export async function cargarFormularioDePaso(userAccountId: string, recipeId: string, stepId?: string) {
   let recipe;
   try {
     recipe = await getRecipeForEditor(userAccountId, recipeId);
@@ -28,15 +32,26 @@ export async function cargarFormularioDePaso(userAccountId: string, recipeId: st
   }
   if (!(await puedeAutoriaDeReceta(userAccountId, recipe.organizationId))) notFound();
 
-  const borrador = recipe.versions.find((v) => v.status === "draft");
-  if (!borrador) redirect(`/recipes/${recipe.id}`);
+  let version: (typeof recipe.versions)[number] | undefined;
+  let pasos: Awaited<ReturnType<typeof pasosDeLaVersion>> = [];
+  if (stepId === undefined) {
+    version = recipe.versions.find((v) => v.status === "draft");
+    if (version) pasos = await pasosDeLaVersion(userAccountId, version.id);
+  } else {
+    // El borrador primero (es lo corriente: editar), y luego las demás, en el orden de la receta. Una a una: en cuanto una tiene el paso, no se leen más.
+    const candidatas = [...recipe.versions].sort((a, b) => Number(b.status === "draft") - Number(a.status === "draft"));
+    for (const candidata of candidatas) {
+      const delasPasos = await pasosDeLaVersion(userAccountId, candidata.id);
+      if (delasPasos.some((p) => p.id === stepId)) {
+        version = candidata;
+        pasos = delasPasos;
+        break;
+      }
+    }
+  }
+  if (!version) redirect(`/recipes/${recipe.id}`);
 
-  const [t, ts, catalogos, pasos] = await Promise.all([
-    getTranslations("Traceability"),
-    getTranslations("Secado"),
-    catalogosDelEditor(),
-    pasosDeLaVersion(userAccountId, borrador.id),
-  ]);
+  const [t, ts, catalogos] = await Promise.all([getTranslations("Traceability"), getTranslations("Secado"), catalogosDelEditor()]);
 
   // Sólo los valores del catálogo que el vocabulario conoce: un valor que ningún tipo del código nombra no se puede ofrecer.
   const conocidos: readonly string[] = TIPOS_DE_PASO;
@@ -52,7 +67,10 @@ export async function cargarFormularioDePaso(userAccountId: string, recipeId: st
 
   return {
     recipe,
-    borrador,
+    /** La versión de la que habla la pantalla: el borrador al añadir; al ver o editar, la que tiene el paso. */
+    version,
+    /** Verdadero si esa versión ya no es un borrador: el formulario se ve y no se envía. */
+    soloLectura: version.status !== "draft",
     pasos,
     catalogos,
     tipos,

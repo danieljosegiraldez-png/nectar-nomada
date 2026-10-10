@@ -33,13 +33,13 @@ export default async function NuevoPasoPage({
       </Link>
       <h1>{t("recetaEditor_nuevoPasoTitle")}</h1>
       <p className="nn-detail-meta">
-        <span>{t("recetaEditor_pasoDeLaReceta", { receta: datos.recipe.name, version: datos.borrador.version })}</span>
+        <span>{t("recetaEditor_pasoDeLaReceta", { receta: datos.recipe.name, version: datos.version.version })}</span>
       </p>
       <p className="nn-muted">{t("recetaEditor_nuevoPasoIntro")}</p>
       <FormularioDePaso
         modo="agregar"
         recipeId={datos.recipe.id}
-        recipeVersionId={datos.borrador.id}
+        recipeVersionId={datos.version.id}
         despuesDeSeq={despuesDeSeq}
         inicial={pasoEnBlanco()}
         tipos={datos.tipos}

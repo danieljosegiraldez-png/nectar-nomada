@@ -27,8 +27,11 @@ import { AMBIENTES_DE_SECADO } from "../traceability/secadoForm";
 import { RecipeError } from "./errorDeReceta";
 import type { AdicionDelPaso, FinDelPaso, MetaDelPaso, PasoConDetalle, PasoEditable } from "./pasos";
 
-/** Cuántas filas de adición, fin o meta se leen como máximo: el mismo tope que `parseTargetRows` tuvo desde ADR-100. */
-const MAX_FILAS = 50;
+/**
+ * Cuántas filas de adición, fin o meta se leen como máximo: el mismo tope que `parseTargetRows` tuvo desde ADR-100. **Lo respeta también el formulario** (revisión final de la
+ * Parte 2a, F1-1): los botones de «añadir» de `FormularioDePaso` se apagan al llegar a él, porque la fila 51 se pintaba, y al guardar se descartaba sin decir nada.
+ */
+export const MAX_FILAS = 50;
 
 const MOMENTOS_DE_ADICION: readonly AdditionMoment[] = ["pre_green", "post_green"];
 const OPERADORES_DE_FIN: readonly StepEndOperator[] = ["gte", "lte"];

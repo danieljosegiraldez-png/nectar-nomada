@@ -19,9 +19,15 @@ type PasoDeLaPagina = Awaited<ReturnType<typeof pasosDeLaVersion>>[number];
 /**
  * Una receta como lista de pasos — diseño §6. Parte 2a, tarea 14 (2026-10-03; integrada el 2026-10-04).
  *
- * Arriba, la versión vigente (la más alta): en un BORRADOR, y sólo con el permiso de autoría, se añaden, mueven, quitan y editan pasos y se publica (con al menos un
+ * Arriba, la versión que se trabaja: en un BORRADOR, y sólo con el permiso de autoría, se añaden, mueven, quitan y editan pasos y se publica (con al menos un
  * paso: el servicio lo exige y el botón no se ofrece sin uno); una versión publicada no se edita, y sólo ofrece empezar la siguiente. Una plantilla (sin organización) se
  * deriva a una organización propia. Abajo, el historial con los pasos de cada versión anterior. Las metas de versión de antes de los pasos se enseñan siempre, sin controles.
+ *
+ * **«Versión vigente» es la publicada más alta, para todos (F1-6 de la revisión final de la Parte 2a)**: es la que se ofrece al abrir un proceso. Antes era la más alta a
+ * secas, y quien no escribe veía «vigente: v2» con los pasos de un borrador como sección principal y la v1 relegada al historial. **El borrador se pinta sólo a quien puede
+ * escribirlo** (`puedeAutorar`): a los demás no se les enseña —ni arriba, ni en el historial, ni en la cuenta de versiones—, que es la regla de abajo con otra cara. Quien lo
+ * escribe trabaja sobre el borrador (arriba) y ve la vigente en la cabecera y en el historial. **Cada paso de una versión que no se edita —la publicada y las del historial— lleva
+ * su enlace «Ver el paso»** (F1-2): su pantalla enseña todos los valores, de sólo lectura, a quien puede abrirla (`autoria`, el mismo predicado de esa pantalla).
  *
  * **Lo que no puedes hacer no se muestra, y no se explica** (Daniel, 2026-09-27): sin `puedeAutorar` no hay controles ni una frase que los disculpe. Pregunta con
  * `puedeAutoriaDeReceta`, la gemela de la regla que aplican los servicios (V16: el permiso del Coffee Process Manager; `edit_beneficio` ya no basta). **Una receta Libre
@@ -51,14 +57,17 @@ export default async function RecipeDetailPage({
     puedeAutoriaDeReceta(user.userAccountId, recipe.organizationId),
   ]);
   const puedeAutorar = autoria && !recipe.esLibre;
+  // F1-6: lo que quien mira puede ver. El borrador es de quien lo escribe: para los demás no se lee ni sus pasos.
+  const versiones = puedeAutorar ? recipe.versions : recipe.versions.filter((v) => v.status !== "draft");
   const pasosPorVersion = new Map<string, PasoDeLaPagina[]>(
-    await Promise.all(recipe.versions.map(async (v) => [v.id, await pasosDeLaVersion(user.userAccountId, v.id)] as const)),
+    await Promise.all(versiones.map(async (v) => [v.id, await pasosDeLaVersion(user.userAccountId, v.id)] as const)),
   );
 
-  const current = recipe.versions[0];
+  // F1-6: «vigente» es la publicada más alta; el borrador se pinta sólo a quien puede escribirlo.
+  const publicada = recipe.versions.find((v) => v.status === "approved");
+  const current = puedeAutorar ? recipe.versions[0] : publicada;
   const esBorrador = current?.status === "draft";
   const editable = esBorrador && puedeAutorar;
-  const publicada = recipe.versions.find((v) => v.status === "approved");
   const pasosActuales = current ? (pasosPorVersion.get(current.id) ?? []) : [];
 
   // Derivar: sólo una plantilla PUBLICADA, y sólo a las organizaciones donde el servidor va a aceptar la copia.
@@ -113,6 +122,10 @@ export default async function RecipeDetailPage({
           <Link href={`/recipes/${recipe.id}/pasos/${p.id}`}>{t("recetaEditor_editarPaso")}</Link>
           <AccionesDelPaso recipeId={recipe.id} stepId={p.id} seq={p.seq} total={total} />
         </div>
+      ) : autoria ? (
+        <div>
+          <Link href={`/recipes/${recipe.id}/pasos/${p.id}`}>{t("recetaEditor_verPaso")}</Link>
+        </div>
       ) : null}
     </li>
   );
@@ -123,8 +136,8 @@ export default async function RecipeDetailPage({
       <h1>{recipe.name}</h1>
       <p className="nn-detail-meta">
         <span>{recipe.organization ? recipe.organization.name : t("recetaEditor_plantilla")}</span>
-        <span>{t("recipeVersionCount", { count: recipe.versions.length })}</span>
-        {current ? <span>{t("recipeCurrentVersion", { version: current.version })}</span> : null}
+        <span>{t("recipeVersionCount", { count: versiones.length })}</span>
+        {publicada ? <span>{t("recipeCurrentVersion", { version: publicada.version })}</span> : null}
       </p>
 
       {query.ok === "renamed" ? <p className="nn-ok" role="status">{t("recipeRenamedOk")}</p> : null}
@@ -204,11 +217,11 @@ export default async function RecipeDetailPage({
         </section>
       ) : null}
 
-      {recipe.versions.length > 1 ? (
+      {versiones.some((v) => v.id !== current?.id) ? (
         <section className="nn-section">
           <h2>{t("recipeHistoryHeading")}</h2>
           <p className="nn-muted">{t("recipeHistoryIntro")}</p>
-          {recipe.versions.slice(1).map((v) => {
+          {versiones.filter((v) => v.id !== current?.id).map((v) => {
             const pasos = pasosPorVersion.get(v.id) ?? [];
             const metas = metasDeVersion(v);
             return (

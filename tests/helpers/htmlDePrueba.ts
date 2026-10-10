@@ -103,3 +103,18 @@ export function formDataDeHtml(html: string, cual = 0, elige: Record<string, str
   if (sobran.length > 0) throw new Error(`el formulario ${cual} no tiene ningún campo «${sobran.join("», «")}»`);
   return datos;
 }
+
+/** ¿Hay un `<fieldset>` con el atributo `disabled`? (Un `disabled` en el texto de una etiqueta no cuenta: se mira sólo la apertura del fieldset.) */
+export const fieldsetDeshabilitado = (html: string): boolean => /<fieldset\b[^>]*\sdisabled(?:=""|\s|\/|>)/.test(html);
+
+/**
+ * Los controles del html (`<input>`, `<select>`, `<textarea>`, `<button>`) que quedan FUERA del primer `<fieldset>…</fieldset>`. Un control dentro de un fieldset deshabilitado
+ * está deshabilitado aunque no lleve el atributo (así lo calcula un navegador), de modo que «no queda ninguno fuera» es lo que dice que la pantalla entera es de sólo lectura. Sin
+ * fieldset, todos quedan fuera.
+ */
+export function controlesFueraDelFieldset(html: string): string[] {
+  const abre = html.search(/<fieldset\b/);
+  const cierra = html.indexOf("</fieldset>");
+  const todos = [...html.matchAll(/<(?:input|select|textarea|button)\b[^>]*>/g)];
+  return todos.filter((m) => abre === -1 || cierra === -1 || m.index < abre || m.index > cierra).map((m) => m[0]);
+}

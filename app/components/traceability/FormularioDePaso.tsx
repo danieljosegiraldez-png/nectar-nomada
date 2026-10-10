@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ComponentProps } from "react";
 import { useTranslations } from "next-intl";
 import { CampoNumerico } from "../CampoNumerico";
 import { actualizarPasoAction, agregarPasoAction, type TraceabilityActionState } from "../../actions/traceability";
 import type { CatalogosDelEditor, ValorDeCatalogo } from "../../../lib/recetas/catalogosDelEditor";
-import type { PasoInicial } from "../../../lib/recetas/formularioDePaso";
+import { MAX_FILAS, type PasoInicial } from "../../../lib/recetas/formularioDePaso";
 import type { ReferenciaDelPaquete } from "../../../lib/recetas/referencias";
 import {
   EJES_POR_TIPO_DE_PASO,
@@ -89,7 +89,7 @@ interface FilaDeMeta {
  * oculto aunque no se enseñe: sin eso, guardar sin tocar nada se la llevaba. `tests/arquitectura/campos-con-dos-puertas.test.ts` exige que cada campo de `PasoEditable`
  * esté aquí.
  */
-export function FormularioDePaso({
+function CuerpoDelFormulario({
   modo,
   recipeId,
   recipeVersionId,
@@ -102,6 +102,7 @@ export function FormularioDePaso({
   variables,
   referencias,
   sinonimos,
+  soloLectura = false,
 }: {
   modo: "agregar" | "editar";
   recipeId: string;
@@ -119,6 +120,8 @@ export function FormularioDePaso({
   referencias: Partial<Record<TipoDePaso, readonly ReferenciaDelPaquete[]>>;
   /** Los sinónimos del paquete (I7), todos: cada eje enseña los de su catálogo. */
   sinonimos: readonly SinonimoDelPaquete[];
+  /** El paso de una versión que ya no es un borrador (publicada o del historial): se VE entero y no se envía. Sin botón de guardar y sin botones de filas; lo deshabilita `FormularioDePaso`. */
+  soloLectura?: boolean;
 }) {
   const t = useTranslations("Traceability");
   const [state, formAction, pending] = useActionState(modo === "agregar" ? agregarPasoAction : actualizarPasoAction, initialState);
@@ -138,7 +141,10 @@ export function FormularioDePaso({
   const ejes: readonly EjeDelPaso[] = tipo === null ? [] : EJES_POR_TIPO_DE_PASO[tipo];
   const esSecado = tipo !== null && FASE_DEL_TIPO[tipo] === "drying";
   const refs: readonly ReferenciaDelPaquete[] = tipo === null ? [] : (referencias[tipo] ?? []);
-  const categoriasDeAdicion: ValorDeCatalogo[] = tipo === "inoculation" ? [...catalogos.sustrato, ...catalogos.levadura] : catalogos.sustrato;
+  // «Ninguno» («Sin ingrediente añadido») es un valor del catálogo, no una categoría de lo que se añade: se filtra aquí, en el selector, y el vocabulario lo conserva.
+  const categoriasDeAdicion: ValorDeCatalogo[] = (tipo === "inoculation" ? [...catalogos.sustrato, ...catalogos.levadura] : catalogos.sustrato).filter(
+    (c) => c.value !== "ninguno",
+  );
   const esRecepcion = tipo === "reception";
   // I9 (diseño §4.5): en una recepción la meta es el Brix inicial, y sólo ésa. `variableDe` y `momentoDe` son lo que se pinta Y lo que se manda, vengan como vengan las filas guardadas.
   const variableDe = (m: FilaDeMeta): string => (esRecepcion ? "brix" : m.variable);
@@ -393,18 +399,23 @@ export function FormularioDePaso({
                       </select>
                     </div>
                   </div>
-                  <button type="button" className="nn-button-quiet" onClick={() => setAdiciones((filas) => filas.filter((f) => f.key !== a.key))}>
-                    {t("recipeRemoveTarget")}
-                  </button>
+                  {soloLectura ? null : (
+                    <button type="button" className="nn-button-quiet" onClick={() => setAdiciones((filas) => filas.filter((f) => f.key !== a.key))}>
+                      {t("recipeRemoveTarget")}
+                    </button>
+                  )}
                 </div>
               ))}
-              <button
-                type="button"
-                className="nn-button-quiet"
-                onClick={() => setAdiciones((filas) => [...filas, { key: nuevaClave(), categoriaValueId: "", cantidad: "", unidad: "", momento: "pre_green" }])}
-              >
-                {t("recetaEditor_adicionAnadir")}
-              </button>
+              {soloLectura ? null : (
+                <button
+                  type="button"
+                  className="nn-button-quiet"
+                  disabled={adiciones.length >= MAX_FILAS}
+                  onClick={() => setAdiciones((filas) => [...filas, { key: nuevaClave(), categoriaValueId: "", cantidad: "", unidad: "", momento: "pre_green" }])}
+                >
+                  {t("recetaEditor_adicionAnadir")}
+                </button>
+              )}
             </>
           ) : null}
 
@@ -528,23 +539,28 @@ export function FormularioDePaso({
                   />
                 </div>
               </div>
-              <button type="button" className="nn-button-quiet" onClick={() => setFines((filas) => filas.filter((x) => x.key !== f.key))}>
-                {t("recipeRemoveTarget")}
-              </button>
+              {soloLectura ? null : (
+                <button type="button" className="nn-button-quiet" onClick={() => setFines((filas) => filas.filter((x) => x.key !== f.key))}>
+                  {t("recipeRemoveTarget")}
+                </button>
+              )}
             </div>
           ))}
-          <button
-            type="button"
-            className="nn-button-quiet"
-            onClick={() =>
-              setFines((filas) => [
-                ...filas,
-                { key: nuevaClave(), variable: variables.find((v) => v.variable === "ph")?.variable ?? variables[0]?.variable ?? "", operador: "lte", valor: "", desdeLecturaId: "" },
-              ])
-            }
-          >
-            {t("recetaEditor_finAnadir")}
-          </button>
+          {soloLectura ? null : (
+            <button
+              type="button"
+              className="nn-button-quiet"
+              disabled={fines.length >= MAX_FILAS}
+              onClick={() =>
+                setFines((filas) => [
+                  ...filas,
+                  { key: nuevaClave(), variable: variables.find((v) => v.variable === "ph")?.variable ?? variables[0]?.variable ?? "", operador: "lte", valor: "", desdeLecturaId: "" },
+                ])
+              }
+            >
+              {t("recetaEditor_finAnadir")}
+            </button>
+          )}
 
           <h3 style={titulo}>{t("recetaEditor_capacidadesHeading")}</h3>
           <p className="nn-muted" style={{ margin: "0 0 0.75rem", fontSize: "0.9em" }}>
@@ -689,17 +705,20 @@ export function FormularioDePaso({
                     {t("recipeBoundsHint", { min: b.min, max: b.max, unit: b.canonicalUnit })}
                   </p>
                 ) : null}
-                <button type="button" className="nn-button-quiet" style={{ marginTop: "0.5rem" }} onClick={() => setMetas((filas) => filas.filter((x) => x.key !== m.key))}>
-                  {t("recipeRemoveTarget")}
-                </button>
+                {soloLectura ? null : (
+                  <button type="button" className="nn-button-quiet" style={{ marginTop: "0.5rem" }} onClick={() => setMetas((filas) => filas.filter((x) => x.key !== m.key))}>
+                    {t("recipeRemoveTarget")}
+                  </button>
+                )}
               </div>
             );
           })}
           {/* I9: una recepción tiene una sola meta, la del Brix inicial: con una ya escrita no se ofrece otra. */}
-          {esRecepcion && metas.length >= 1 ? null : (
+          {soloLectura || (esRecepcion && metas.length >= 1) ? null : (
             <button
               type="button"
               className="nn-button-quiet"
+              disabled={metas.length >= MAX_FILAS}
               onClick={() =>
                 setMetas((filas) => [
                   ...filas,
@@ -727,9 +746,26 @@ export function FormularioDePaso({
           {state.error}
         </p>
       ) : null}
-      <button type="submit" className="nn-button" disabled={pending || tipo === null} style={{ marginTop: "1rem" }}>
-        {pending ? t("recipeSavingButton") : modo === "agregar" ? t("recetaEditor_anadirPaso") : t("recetaEditor_guardarPaso")}
-      </button>
+      {soloLectura ? null : (
+        <button type="submit" className="nn-button" disabled={pending || tipo === null} style={{ marginTop: "1rem" }}>
+          {pending ? t("recipeSavingButton") : modo === "agregar" ? t("recetaEditor_anadirPaso") : t("recetaEditor_guardarPaso")}
+        </button>
+      )}
     </form>
+  );
+}
+
+/**
+ * El formulario de un paso. **De sólo lectura (`soloLectura`, F1-2 de la revisión final de la Parte 2a)** se pinta DENTRO de un `<fieldset disabled>`: un control dentro de un
+ * fieldset deshabilitado está deshabilitado, sea cual sea su tipo y aunque no lleve el atributo, así que no hay campo que se pueda tocar ni nada que enviar; y el cuerpo, además,
+ * no pinta ningún botón. Es como se ve un paso de una versión publicada o del historial: antes sus valores sólo existían en este formulario, que exigía un borrador.
+ */
+export function FormularioDePaso(props: ComponentProps<typeof CuerpoDelFormulario>) {
+  const formulario = <CuerpoDelFormulario {...props} />;
+  if (props.soloLectura !== true) return formulario;
+  return (
+    <fieldset disabled style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      {formulario}
+    </fieldset>
   );
 }

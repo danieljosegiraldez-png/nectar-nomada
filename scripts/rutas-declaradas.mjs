@@ -157,7 +157,7 @@ export const RUTAS = {
   "/recipes/new": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/[id]": { clase: "requiere-sesion", razon: "Recetas y formulación." },
   "/recipes/[id]/pasos/nuevo": { clase: "requiere-sesion", razon: "Añadir un paso a un borrador de receta (diseño de la Parte 2a, §6): exige el permiso de autoría de recetas en la organización de la receta (lot:approve_exception, el del Coffee Process Manager, V16; puedeAutoriaDeReceta), con el que getRecipeForEditor la abre sin que haga falta operar ningún lote (Ruling C4), y responde 404 a quien puede leer la receta pero no escribirla (a quien no puede leerla, la negativa de getRecipeForEditor); con la versión ya publicada vuelve a la receta, y agregarPaso vuelve a exigirlo todo." },
-  "/recipes/[id]/pasos/[stepId]": { clase: "requiere-sesion", razon: "Editar un paso de un borrador de receta: las mismas condiciones que añadirlo; un paso que ya no está vuelve a la receta, y actualizarPaso vuelve a exigirlo todo." },
+  "/recipes/[id]/pasos/[stepId]": { clase: "requiere-sesion", razon: "Editar un paso de un borrador de receta, o VERLO de sólo lectura si su versión ya no es un borrador (publicada o del historial: el formulario entero dentro de un fieldset deshabilitado, sin botón de guardar): las mismas condiciones que añadirlo, sin ampliar quién puede leer; un paso que ninguna versión de la receta tiene vuelve a la receta, y actualizarPaso vuelve a exigirlo todo." },
   "/research": { clase: "requiere-sesion", razon: "Protocolos de investigación." },
   "/research/new": { clase: "requiere-sesion", razon: "Protocolos de investigación." },
   "/research/[protocolId]": { clase: "requiere-sesion", razon: "Protocolos de investigación." },
