@@ -32,7 +32,7 @@ export default async function ContentPage() {
 
       {canCreate ? (
         <p style={{ marginTop: "1rem" }}>
-          <Link href="/content/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+          <Link href="/content/new" className="nn-button">
             {t("newStory")}
           </Link>
         </p>
