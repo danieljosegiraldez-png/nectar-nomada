@@ -13,8 +13,14 @@ import type { SnapshotDeVisita } from "../../../lib/traceability/reporteDeVisita
  *
  * Es la otra mitad del #690, que sólo pudo arreglar el FORMULARIO porque este componente no
  * existía en `main` cuando se escribió.
+ *
+ * **`paraCliente` lo decide cada página, y es obligatorio a propósito** (PR-4 de la revisión del
+ * #674, Daniel, 2026-10-10). En el enlace del cliente no sale la nota de campo de la inspección
+ * —lo que el técnico apunta para sí, a veces una sospecha sin comprobar— y la valoración sale
+ * rotulada «Interpretación del técnico», que es lo que es. El informe interno lo enseña todo. Las
+ * notas de la visita y de cada registro las pinta la página, no esto, y siguen en los dos.
  */
-export async function DetallesDelReporte({ registro, enCuadros }: { registro: SnapshotDeVisita["registros"][number]; enCuadros: boolean }) {
+export async function DetallesDelReporte({ registro, enCuadros, paraCliente }: { registro: SnapshotDeVisita["registros"][number]; enCuadros: boolean; paraCliente: boolean }) {
   const t = await getTranslations("Apiary");
   const r = registro.inspeccion;
   const filas: Array<[string, string | number | null]> = r ? [
@@ -26,8 +32,8 @@ export async function DetallesDelReporte({ registro, enCuadros }: { registro: Sn
     [t("honeyStoresLabel"), r.reservasMiel == null ? null : t(`storesLevel_${r.reservasMiel}`)],
     [t("pollenStoresLabel"), r.reservasPolen == null ? null : t(`storesLevel_${r.reservasPolen}`)],
     [t("temperamentLabel"), r.temperamento == null ? null : t(`temperament_${r.temperamento}`)],
-    [t("noteLabel"), r.nota],
-    [t("reportAssessment"), r.valoracion],
+    ...(paraCliente ? [] : ([[t("noteLabel"), r.nota]] as Array<[string, string | number | null]>)),
+    [t(paraCliente ? "reportAssessmentForClient" : "reportAssessment"), r.valoracion],
   ] : [];
   const a = registro.alimentacion;
   if (a) filas.push([t("feedingMaterialLabel"), [a.tipo ? t(`feedingMaterial_${a.tipo}`) : null, a.material].filter(Boolean).join(" · ") || null], [t("feedingQuantityLabel"), a.cantidad], [t("unitLabel"), a.unidad]);
