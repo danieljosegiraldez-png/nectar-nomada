@@ -228,11 +228,13 @@ export function evaluarSecado(input: {
     return con("OVER_DRIED", "WARNING", "alert.drying.over_dried");
   }
 
-  // **Las dos condiciones, no una.** La humedad porcentual sola no garantiza
-  // estabilidad microbiana; la actividad de agua es la que la gobierna, y un
-  // 11 % con aw 0,68 se enmohece igual.
+  // **Por humedad; la aw, si se midió, sigue pudiendo impedirlo.** C7 (Daniel, 2026-10-06) y
+  // ADR-181 #18: el medidor de la finca no mide actividad de agua, así que exigirla dejaba este
+  // estado inalcanzable. Sin aw, el veredicto declara al lado que no la miró
+  // (`SIN_ACTIVIDAD_DE_AGUA`, `desdeElLote.ts`), que es la marca «sin aw medida». Con aw medida y
+  // por encima del máximo no se llega: un 11 % con aw 0,68 se enmohece igual (vector DR-005).
   if (humedad >= p.targetMoistureLow && humedad <= p.targetMoistureHigh) {
-    if (aw != null && aw <= p.maxWaterActivity) {
+    if (aw == null || aw <= p.maxWaterActivity) {
       return con("TARGET_REACHED", "INFO", "alert.drying.target_reached");
     }
   }
