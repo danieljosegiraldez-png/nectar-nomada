@@ -3318,7 +3318,6 @@
     "nombre": "Name",
     "crear": "Create storage room",
     "padreNoVisible": "Parent without administration access",
-    "sinPermiso": "You don't have permission to create or manage any storage room.",
     "sinBodegas": "There are no storage rooms visible yet.",
     "tipo_site": "farm",
     "tipo_beneficio": "mill",

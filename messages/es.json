@@ -3318,7 +3318,6 @@
     "nombre": "Nombre",
     "crear": "Crear bodega",
     "padreNoVisible": "Padre sin acceso de administración",
-    "sinPermiso": "No tienes permiso para crear ni administrar ninguna bodega.",
     "sinBodegas": "Todavía no hay bodegas visibles.",
     "tipo_site": "finca",
     "tipo_beneficio": "beneficio",
