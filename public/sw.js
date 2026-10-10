@@ -139,8 +139,10 @@ async function servirComoGuardada(cached) {
 
 /**
  * Pone `<meta name="nn-guardada-el" content="<ISO>">` justo después del primer `<head>`. Sólo una
- * fecha ISO llega al HTML; cualquier otra cosa se escribe vacía. El reemplazo es una FUNCIÓN y no
- * una cadena, para que un `$` del HTML no se interprete. Lo prueba `tests/sync/versionGuardada.test.ts`.
+ * fecha ISO llega al HTML; cualquier otra cosa se escribe vacía. Lo prueba
+ * `tests/sync/versionGuardada.test.ts`. El reemplazo es una FUNCIÓN y no una cadena: si algún día el
+ * valor admitiera un `$`, en una cadena se leería como `$&` o `$1`. Hoy la validación ya lo impide, así
+ * que es una segunda red y ninguna prueba la distingue (medido: cambiarla por una cadena no tumba nada).
  */
 function marcarComoGuardada(html, guardadaEl) {
   const valor =

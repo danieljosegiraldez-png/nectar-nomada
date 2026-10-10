@@ -50,10 +50,6 @@ describe("marcarComoGuardada (public/sw.js)", () => {
     expect(marcado).toBe('<head><meta name="nn-guardada-el" content=""></head>');
   });
 
-  it("un $ en el HTML no se interpreta: el reemplazo es una función, no una cadena", () => {
-    expect(marcarComoGuardada!("<head></head><p>$$ y $&</p>", ISO)).toContain("<p>$$ y $&</p>");
-  });
-
   it("sin <head> devuelve el HTML tal cual", () => {
     expect(marcarComoGuardada!("<p>sin cabecera</p>", ISO)).toBe("<p>sin cabecera</p>");
   });
