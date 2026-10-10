@@ -262,22 +262,34 @@ describe("crear una sesión de cata", () => {
   });
 
   /**
-   * **No se puede probar por la interfaz pública, y se dice en vez de fingirlo.**
-   * El servicio SÍ comprueba que cada muestra esté entre las que el llamador
-   * alcanza. Pero para crear una sesión hace falta `sensory:manage_session`, que
-   * hoy sólo tienen `Platform Admin` —que alcanza todo, así que ninguna muestra
-   * le es ajena— y `Sensory Head Judge`, que no tiene NI `lot:view` NI
-   * `sample:manage`, así que no alcanza ninguna y no puede crear nada.
+   * **Quién llega a la comprobación de alcance, y dónde se prueba.** El servicio
+   * comprueba cada muestra por su id contra las que el llamador alcanza
+   * (`puedeVerMuestra`) y rechaza con `sample_not_accessible`. Para llegar ahí
+   * hace falta `sensory:manage_session` en plataforma, y en `lib/rbac/catalog.ts`
+   * lo dan tres perfiles:
    *
-   * Es decir: **hoy sólo un Platform Admin puede montar una cata**, y contra él
-   * esta comprobación no puede fallar. Escribir una prueba con un usuario
-   * fabricado a mano que tuviera manage_session sin acceso a muestras probaría
-   * una combinación que el catálogo de perfiles no produce — un verde sobre un
-   * mundo que no existe.
+   * - `Platform Admin` lo tiene todo, también cada `clear_*`: ninguna muestra le
+   *   es ajena y contra él la comprobación no puede fallar. Es el `gestor` de
+   *   este archivo, así que sus pruebas no la ejercen.
+   * - `Cupping Host` trae `sample:view`. Es como resolvió el dueño, el mismo
+   *   2026-09-06, que dirigir una cata no exigiera ser admin; se prueba en
+   *   `anfitrionDeCata.test.ts`, asignado en plataforma —«alcanza las muestras
+   *   con `sample:view`, sin poder cambiarlas» y «crea la sesión con su propósito
+   *   y su tipo»—. En plataforma alcanza cualquier ubicación, así que tampoco
+   *   ejerce el rechazo.
+   * - `Sensory Head Judge` no trae ningún permiso de `sample`: solo, no alcanza
+   *   ninguna muestra. Con `Farm Operator` de una parcela alcanza sólo esa, y es
+   *   la cuenta `juez` del bloque «buscarMuestrasParaCata», más abajo. **Ahí se
+   *   ejerce la comprobación:** «y la cata rechaza esa muestra aunque llegue en
+   *   el formulario» cae con `sample_not_accessible`, y su control positivo es
+   *   «nunca devuelve una muestra que la cuenta no ve», donde la misma
+   *   `puedeVerMuestra` sí le da la de su parcela.
    *
-   * Queda como decisión del dueño (2026-09-06): o `Sensory Head Judge` recibe
-   * acceso de lectura a muestras, o montar la cata es trabajo de quien tiene
-   * `sample:manage` y entonces el permiso que la gobierna debería ser otro.
+   * **Corregido el 2026-10-10.** Este bloque decía desde el 2026-09-06 que sólo un
+   * Platform Admin podía montar una cata y que esta comprobación no se podía
+   * probar sin fabricar una combinación que el catálogo no produce. `Cupping Host`
+   * entró ese mismo día, y la cuenta `juez`, con perfiles del catálogo, el
+   * 2026-09-18.
    */
 
   it("no ofrece una muestra retirada en el listado para cata", async () => {
