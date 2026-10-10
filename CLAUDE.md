@@ -3273,6 +3273,19 @@ sale de la lista cuando otros dejan N filas que ordenan antes. No falla hasta el
 día que la basura acumulada cruza el tope. Dos casos medidos el 2026-09-18 en
 `PENDING_IMPLEMENTATIONS/012`.
 
+**Y la forma ruidosa: un P2025 que no es del cambio.** 2026-10-10, carril con
+base del PR #699: `crearSesion.test.ts` cayó con `P2025` en `procesosParaEntrada`
+sin que el PR tocara catas ni procesos. La lista de catas sin filtro pide el
+grado de cada muestra visible en dos lecturas —el id del proceso vigente, y
+luego `findUniqueOrThrow`—, y la limpieza de otro archivo borró el proceso entre
+las dos. **No es del producto**: nada en `lib`, `app` ni `scripts` borra un
+`lot_process`, y su FK desde `lot` es `RESTRICT`, así que tampoco se va en
+cascada; sólo lo borran las limpiezas de las pruebas. La base no lo impide: lo
+impide que nadie lo haga. Con un vecino temporal que crea y borra procesos en
+bucle cayeron, por su nombre, las tres llamadas a la lista sin filtro con ámbito
+de plataforma —dos en `crearSesion`, una en `anfitrionDeCata`—: **un `Cupping
+Host` en plataforma también ve la base entera**, no hace falta ser admin.
+
 ### Un `failure` de Actions puede ser el presupuesto, y el job nunca arrancó
 
 **2026-09-14.** Un PR salió con `¿Hay código en este cambio?: FAILURE` y las otras tres
