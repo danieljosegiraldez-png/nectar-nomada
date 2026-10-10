@@ -10,7 +10,10 @@
  * - `puedeSubdividirParcela` — `plots/[id]`, que la llama fuera de su `try`;
  * - `conAncestros`, dentro de `can()`, y detrás `contextoDeManejo` —
  *   `plots/[id]/manejo/[interventionId]` y `plots/[id]/manejo/nuevo`. Las dos hacen falta: con un
- *   Platform Admin, `can()` pasa y `contextoDeManejo` consulta el mismo id en la línea siguiente.
+ *   Platform Admin, `can()` pasa y `contextoDeManejo` consulta el mismo id en la línea siguiente;
+ * - `getFieldSessionTimeline` — `field-sessions/[id]`;
+ * - `requireFieldSessionAccess`, que hoy no es la primera en reventar en ninguna página pero recibe
+ *   ids de fuera por `listFieldSessions` y por dos acciones.
  *
  * **Las filas de cada función, y ninguna sobra:**
  *
@@ -31,7 +34,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { can } from "../../lib/rbac/service";
 import { puedeSubdividirParcela } from "../../lib/traceability/fincas";
+import { FieldSessionValidationError, getFieldSessionTimeline } from "../../lib/traceability/fieldSessions";
 import { contextoDeManejo } from "../../lib/traceability/intervenciones";
+import { requireFieldSessionAccess } from "../../lib/traceability/jornadaDeCampo";
 import {
   LocationAccessError,
   puedeGestionarAtributosDeUbicacion,
@@ -52,6 +57,8 @@ let usuario: Awaited<ReturnType<typeof crearUsuarioConAcceso>>;
 let parcela: Awaited<ReturnType<typeof crearParcela>>;
 /** `Farm Operator` con ámbito en la FINCA de la parcela, no en la parcela: lo que mide es la subida por ancestros. */
 let operarioId: string;
+/** Una jornada en la parcela, para el control positivo de `getFieldSessionTimeline`. */
+let jornadaId: string;
 
 beforeAll(async () => {
   usuario = await crearUsuarioConAcceso();
@@ -66,6 +73,13 @@ beforeAll(async () => {
   const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   const scope = await prisma.scope.create({ data: { scopeType: "location", scopeRefId: parcela.parentLocationId } });
   await prisma.assignment.create({ data: { userAccountId: operarioId, roleProfileId: perfil.id, scopeId: scope.id } });
+
+  // Directa y no con `openFieldSession`, que escribe auditoría: aquí sólo hace falta que exista.
+  jornadaId = (
+    await prisma.fieldSession.create({
+      data: { locationId: parcela.id, operatorPersonId: usuario.personId, startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record" },
+    })
+  ).id;
 });
 
 /**
@@ -86,6 +100,8 @@ afterAll(async () => {
   }
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   if (parcela) {
+    // La jornada antes que la parcela, que la referencia.
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId: parcela.id }) });
     // El `Scope` se borra DESPUÉS del `Assignment`, que lo referencia con RESTRICT.
     await prisma.scope.deleteMany({
       where: assertDefinedWhere({ scopeType: "location" as const, scopeRefId: parcela.parentLocationId ?? parcela.id }),
@@ -120,6 +136,7 @@ async function esNoExiste(promesa: Promise<unknown>) {
 describe.each([
   ["requireLocationAttributeAccess", (id: string) => requireLocationAttributeAccess(usuario.userAccountId, id)],
   ["getPlotDetail", (id: string) => getPlotDetail(usuario.userAccountId, id)],
+  ["requireFieldSessionAccess", (id: string) => requireFieldSessionAccess(usuario.userAccountId, id)],
 ] as const)("%s con un id de la URL", (_nombre, leer) => {
   it.each(IDS_BASURA)("«%s» se trata como una ubicación que no existe", async (id) => {
     await esNoExiste(leer(id));
@@ -194,5 +211,27 @@ describe("can() sobre una ubicación de la URL", () => {
     const conBasura = await puede(usuario.userAccountId, id);
     const conInexistente = await puede(usuario.userAccountId, randomUUID());
     expect(conBasura).toBe(conInexistente);
+  });
+});
+
+describe("getFieldSessionTimeline con un id de la URL", () => {
+  /** Lo que `field-sessions/[id]` convierte en `notFound()`. */
+  async function esJornadaQueNoExiste(promesa: Promise<unknown>) {
+    const error = await loQueLanza(promesa);
+    expect(error).toBeInstanceOf(FieldSessionValidationError);
+    expect((error as Error).message).toBe("session_not_found");
+  }
+
+  it.each(IDS_BASURA)("«%s» se trata como una jornada que no existe", async (id) => {
+    await esJornadaQueNoExiste(getFieldSessionTimeline(usuario.userAccountId, id));
+  });
+
+  it("control: un UUID bien formado que no existe da lo mismo", async () => {
+    await esJornadaQueNoExiste(getFieldSessionTimeline(usuario.userAccountId, randomUUID()));
+  });
+
+  it("control: la jornada que existe se devuelve", async () => {
+    const { session } = await getFieldSessionTimeline(usuario.userAccountId, jornadaId);
+    expect(session.id).toBe(jornadaId);
   });
 });

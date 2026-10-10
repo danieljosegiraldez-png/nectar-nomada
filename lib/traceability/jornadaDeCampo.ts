@@ -3,6 +3,7 @@ import { esSitioDeAbejas } from "../apiary/sitioDeAbejas";
 import { LocationAccessError } from "./locations";
 import { requireLocationAttributeAccess } from "./locations";
 import { requireColonyEventWriteAccess, ApiaryAccessError } from "../apiary/hives";
+import { UUID } from "../validation/uuid";
 
 /**
  * A9.0 — quién puede abrir una jornada de campo, según DÓNDE la abre.
@@ -31,6 +32,10 @@ import { requireColonyEventWriteAccess, ApiaryAccessError } from "../apiary/hive
  * una compuerta sino una sugerencia.
  */
 export async function requireFieldSessionAccess(userAccountId: string, locationId: string) {
+  // `listFieldSessions` y dos acciones le pasan un id de fuera. Sin forma de UUID, Postgres
+  // rechazaba la conversión y Prisma lanzaba `P2007`; es una ubicación que no existe
+  // (PENDING_IMPLEMENTATIONS/026).
+  if (!UUID.test(locationId)) throw new LocationAccessError("location_not_found");
   const location = await prisma.location.findUnique({
     where: { id: locationId },
     select: { locationType: true },
