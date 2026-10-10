@@ -1,11 +1,9 @@
 # 026 · Treinta y una páginas dan 500 con un id mal formado en la URL
 
-**Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
-diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
-`conAncestros`, las tres de `getApiaryDetail` y `getHive`, las de `getFieldSessionTimeline` y
-`leerReporteDeVisita`, las tres de `findUniqueOrThrow`, las dos de fincas, y las tres de investigación.
-Quedan 7 de las 31.** Es un defecto, no
-una decisión: no hace falta preguntar nada para arreglarlo.
+**Estado: CERRADA el 2026-10-10 en el PR #696, el que trae esta ficha.** Medido el 2026-10-09 y vuelto a
+medir al cerrar: de las 52 páginas con segmento dinámico, **ninguna** da 500, ni con un id mal formado ni
+con uno bien formado que no existe (ver «Cómo se comprueba», al final). Las tablas de abajo se conservan
+como el registro de qué se arregló y dónde.
 
 ## El defecto
 
@@ -70,23 +68,23 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` — **arregladas en #696**, con una segunda guarda en `contextoDeManejo` (ver abajo); las dos dan 404 |
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` — **arregladas en #696**: guarda en la función y, en `apiaries/[id]`, la página la llama primero y atrapa `ApiaryAccessError`; las dos dan 404 |
 | `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` — **arreglada en #696**: guarda en la función, y la página atrapa `ApiaryAccessError`; da 404. **Límite:** la página no consulta el segmento `[id]` del apiario, así que un apiario basura con una colmena válida pinta la colmena (ya pasaba antes y no da 500; lo señaló Codex) |
-| `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` |
+| `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente |
 | `getCalibrationSessionDetail` (`lib/sensory/calibration.ts:78`) | `calibration/[calibrationSessionId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
 | `getEditionDetail` (`lib/competitions/service.ts:40`) | `competitions/[editionId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
-| `getStoryForEditor` (`lib/content/stories.ts:111`) | `content/[id]` |
-| `instrumentoParaVerificar` (`lib/equipos/equipos.ts:822`) | `equipos/[id]` |
-| `modeloParaFicha` (`lib/equipos/modelos.ts:412`) | `equipos/modelos/[id]` |
+| `getStoryForEditor` (`lib/content/stories.ts:111`) | `content/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente (vuelve a `/content`) |
+| `instrumentoParaVerificar` (`lib/equipos/equipos.ts:822`) | `equipos/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente |
+| `modeloParaFicha` (`lib/equipos/modelos.ts:412`) | `equipos/modelos/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente |
 | `getFieldSessionTimeline` (`lib/traceability/fieldSessions.ts:613`) | `field-sessions/[id]` — **arreglada en #696**: lanza `FieldSessionValidationError("session_not_found")`, y la página da 404 |
 | `leerReporteDeVisita` (`lib/traceability/reporteDeVisita.ts:296`) | `field-sessions/[id]/report` — **arreglada en #696**: guarda en la función, y la página atrapa también `FieldSessionValidationError`; da 404 |
-| `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` |
+| `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente |
 | `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` — **arreglada en #696**: contesta `null`, como a una finca que no existe; da 404 |
 | `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` — **arreglada en #696**: contesta `null`, como a una finca que no existe; da 404. Su consulta va antes que `requireLocationAttributeAccess`, así que la guarda de ésa no la cubría |
 | `getProjectWorkspace` (`lib/partner/workspace.ts:125`) | `partner/[projectId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
-| `getRecipeForEditor` (`lib/traceability/processTargets.ts:535`) | `recipes/[id]` |
+| `getRecipeForEditor` (`lib/traceability/processTargets.ts:535`) | `recipes/[id]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente (vuelve a `/recipes`) |
 | `getProtocolDetail` (`lib/research/protocols.ts:450`) | `research/[protocolId]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
 | `getProtocolVersionDetail` (`lib/research/protocols.ts:278`) | `research/execute/[protocolVersionId]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
 | `getTreatmentBatchDetail` (`lib/research/treatments.ts:651`) | `research/treatments/[id]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
-| `grantedKeysForSession` (`lib/sensory/service.ts:64`) | `sensory/[sessionId]` |
+| `grantedKeysForSession` (`lib/sensory/service.ts:64`) | `sensory/[sessionId]` — **arreglada en #696**: la función lanza su clase de «no existe», la misma que a uno inexistente |
 
 **`conAncestros`, hecho el 2026-10-09 en #696, y con su propia prueba.** Está dentro de `can()`, así que
 la guarda cambia el servicio de RBAC entero. Con un `scopeRefId` de ubicación mal formado ya no busca
@@ -103,7 +101,7 @@ nada: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación pue
 id en la línea siguiente. Lleva su propia guarda, que lanza `TraceabilityAccessError("no_lot_access")`,
 lo que ya lanzaba para una ubicación ausente.
 
-## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (queda una)
+## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (arregladas las siete)
 
 Éstas no las arregla una guarda de forma: el id es válido, la fila no existe, y lo que sube no es
 `P2007`.
@@ -116,7 +114,7 @@ lo que ya lanzaba para una ubicación ausente.
 | ~~`competitions/[editionId]`~~ | `P2025` | `findUniqueOrThrow` en `lib/competitions/service.ts:40` — **arreglada en #696** |
 | ~~`partner/[projectId]`~~ | `P2025` | `findUniqueOrThrow` en `lib/partner/workspace.ts:119` — **arreglada en #696** |
 | ~~`field-sessions/[id]/report`~~ | `FieldSessionValidationError("session_not_found")` | `lib/traceability/reporteDeVisita.ts:300`; la página sólo atrapaba `LocationAccessError` — **arreglada en #696**: ahora atrapa las dos |
-| `sensory/herramientas/ruedas/[wheel]` | `PrismaClientValidationError` del enum `domain` | `obtenerRuedaSensorial`, `lib/sensory/ruedas.ts:59` — aquí el segmento no es un id sino un dominio, y **cualquier** valor que no esté en el enum da 500 |
+| ~~`sensory/herramientas/ruedas/[wheel]`~~ | `PrismaClientValidationError` del enum `domain` | `obtenerRuedaSensorial`, `lib/sensory/ruedas.ts:59` — aquí el segmento no es un id sino un dominio, y **cualquier** valor que no esté en el enum daba 500. **Arreglada en #696**: el dominio se compara con `SensoryWheelDomain`, el enum generado, y uno que no está lanza `RuedaSensorialNoEncontrada` |
 
 ## Rarezas vistas de camino, que no son 500
 
@@ -150,8 +148,8 @@ atrapa nada (`apiaries/[id]`, `apiaries/[id]/hives/[hiveId]`), la comprobación 
 después de `await params`, con `notFound()`.
 
 Para las siete de la segunda tabla: que la página atrape la clase de «no existe» que ya se lanza, y
-cambiar `findUniqueOrThrow` por `findUnique` + la clase propia. **Hechas en #696 seis de las siete**; queda
-`sensory/herramientas/ruedas/[wheel]`, que no es un id sino un valor de enum.
+cambiar `findUniqueOrThrow` por `findUnique` + la clase propia. **Hechas las siete en #696**; la de
+`sensory/herramientas/ruedas/[wheel]`, que no es un id sino un valor de enum, comparando con el enum.
 
 ## Cómo se comprueba
 
@@ -161,7 +159,7 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**; tras las dos de fincas, **11** y **1**; tras las tres de investigación, **8** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**; tras las dos de fincas, **11** y **1**; tras las tres de investigación, **8** y **1**; tras las ocho últimas, **0** y **0**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
@@ -200,3 +198,14 @@ id basura y con el UUID que no existe, y 200 con un protocolo, una versión y un
 en la base desechable. El log no registra ningún `P20xx`. De paso: `tests/research/ro1-2.test.ts`, del
 grupo `datos-reales`, revienta en una base sembrada por CI al crear un ámbito de plataforma que ya existe
 (`Unique constraint failed on scope_type`, línea 71). Es anterior a este cambio y no lo toca.
+
+**El cierre, medido el 2026-10-10 contra el servidor** con Platform Admin, sobre una base desechable
+sembrada:
+- **Las ocho últimas.** `biochar/[id]`, `content/[id]`, `equipos/[id]`, `equipos/modelos/[id]`,
+  `finca/jornadas/[id]`, `recipes/[id]`, `sensory/[sessionId]` y `sensory/herramientas/ruedas/[wheel]` dan
+  con un valor basura lo mismo que con uno que no existe (404, o la vuelta a su lista en `content` y
+  `recipes`), y 200 con un registro real.
+- **La medición entera repetida.** Las **52** rutas con el id basura y con el UUID inexistente: **0** con 500
+  en cada columna, y ningún error de red.
+- **El log del servidor de esa corrida.** Ni una línea con `PrismaClient` ni con un 500. La misma búsqueda
+  sí encuentra las líneas de 404, así que el buscador mira donde debe.

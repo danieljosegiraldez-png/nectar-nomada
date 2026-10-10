@@ -16,7 +16,6 @@ idea se pierda cuando la respuesta es «ahora no».
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [023](023-el-audit-no-lleva-el-sujeto-de-negocio.md) | Una fila de `core.audit_event` no dice de qué **lote** habla | Decisión de Daniel · ver la ficha |
 | [024](024-la-cosecha-no-registra-quien-la-opero.md) | La cosecha no registra **quién la operó**, aunque el servicio lo guarde | Nada — trabajo pendiente |
-| [026](026-un-id-mal-formado-en-la-url-da-500.md) | **7 páginas siguen dando 500** con un id mal formado en la URL (eran 31; 24 arregladas en #696), y 1 también con un valor que no existe (eran 7) | Nada — trabajo pendiente |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en
@@ -30,6 +29,8 @@ tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de 
 Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
 el mismo día en que se encontró recorriendo la pantalla en un navegador.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
+Y **026 · páginas que daban 500 con un id mal formado en la URL**, cerrada el 2026-10-10 en el PR #696: medidas
+las 52 páginas con segmento dinámico, ninguna da 500 con un id basura ni con uno que no existe.
 Y **025 · el verificador de backup decía «no restauró» cuando lo que no pudo fue contar**, hecha
 el 2026-10-06 — y su diagnóstico original era más flojo que la realidad: el fallo estaba **dentro
 de la rama PASS**, después de que el `diff` ya hubiera probado la copia idéntica. Lo peor que
