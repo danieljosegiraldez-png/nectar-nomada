@@ -16,7 +16,7 @@ idea se pierda cuando la respuesta es «ahora no».
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [023](023-el-audit-no-lleva-el-sujeto-de-negocio.md) | Una fila de `core.audit_event` no dice de qué **lote** habla | Decisión de Daniel · ver la ficha |
 | [024](024-la-cosecha-no-registra-quien-la-opero.md) | La cosecha no registra **quién la operó**, aunque el servicio lo guarde | Nada — trabajo pendiente |
-| [026](026-un-id-mal-formado-en-la-url-da-500.md) | **12 páginas siguen dando 500** con un id mal formado en la URL (eran 31; 19 arregladas en #696), y 1 también con un valor que no existe (eran 7) | Nada — trabajo pendiente |
+| [026](026-un-id-mal-formado-en-la-url-da-500.md) | **10 páginas siguen dando 500** con un id mal formado en la URL (eran 31; 21 arregladas en #696), y 1 también con un valor que no existe (eran 7) | Nada — trabajo pendiente |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en

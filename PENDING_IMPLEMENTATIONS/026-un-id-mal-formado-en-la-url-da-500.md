@@ -3,7 +3,7 @@
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
 diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
 `conAncestros`, las tres de `getApiaryDetail` y `getHive`, las de `getFieldSessionTimeline` y
-`leerReporteDeVisita`, y las tres de `findUniqueOrThrow`. Quedan 12 de las 31.** Es un defecto, no
+`leerReporteDeVisita`, las tres de `findUniqueOrThrow`, y las dos de fincas. Quedan 10 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -78,8 +78,8 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `getFieldSessionTimeline` (`lib/traceability/fieldSessions.ts:613`) | `field-sessions/[id]` — **arreglada en #696**: lanza `FieldSessionValidationError("session_not_found")`, y la página da 404 |
 | `leerReporteDeVisita` (`lib/traceability/reporteDeVisita.ts:296`) | `field-sessions/[id]/report` — **arreglada en #696**: guarda en la función, y la página atrapa también `FieldSessionValidationError`; da 404 |
 | `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` |
-| `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` |
-| `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` |
+| `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` — **arreglada en #696**: contesta `null`, como a una finca que no existe; da 404 |
+| `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` — **arreglada en #696**: contesta `null`, como a una finca que no existe; da 404. Su consulta va antes que `requireLocationAttributeAccess`, así que la guarda de ésa no la cubría |
 | `getProjectWorkspace` (`lib/partner/workspace.ts:125`) | `partner/[projectId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
 | `getRecipeForEditor` (`lib/traceability/processTargets.ts:535`) | `recipes/[id]` |
 | `getProtocolDetail` (`lib/research/protocols.ts:450`) | `research/[protocolId]` |
@@ -160,7 +160,7 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**; tras las dos de fincas, **11** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
@@ -187,3 +187,8 @@ id basura y con el UUID que no existe, y 200 con un registro real. Los dos prime
 desechable; el proyecto es el DEMO de la siembra. El log del servidor no registra ningún `P20xx` en esas
 peticiones. La comprobación de permiso sigue antes que la de existencia: quien no tiene permiso recibe
 «sin permiso», no «no existe».
+
+**Las dos de fincas, medidas el 2026-10-10 contra el servidor** con Platform Admin:
+`fincas/[siteId]/destino` y `fincas/[siteId]/logotipo` dan 404 con el id basura y con el UUID que no
+existe, y 200 con la finca DEMO. En la misma corrida, `bodegas/[id]` volvió a dar 404, 404 y 200 con una
+bodega creada en la base desechable.
