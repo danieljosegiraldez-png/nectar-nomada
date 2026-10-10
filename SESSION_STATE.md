@@ -80,10 +80,27 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-09 · El informe técnico de Apiario, y cuatro de los seis hallazgos de su revisión (#674, #677, #685, #690, #694)
+
+El #674 trae el informe con los detalles de la inspección dentro, su fecha y la zona en el snapshot. La revisión interna que pediste —con la skill `beekeeping`, y entregada **antes** de tocar o fusionar nada— dio seis hallazgos priorizados; se cerraron cuatro.
+**#677 · la clave de la población se llamaba como el valor** (`population_apiñada`): lo arregló otra sesión actuando sobre la entrega, con su guardia.
+**#685 · una visita pasada se medía con las cajas de hoy.** El diseño obvio era falso y lo dijo una medición: `crearColocacionInicial` abre la colocación en `installedAt ?? createdAt`, y `createdAt` es *cuándo alguien tecleó la colmena*, así que un solapamiento estricto haría desaparecer de su visita a las colmenas registradas después. Su propio comentario registra **10 de 29 colmenas sin ninguna colocación** sobre datos reales. Hoy sólo se excluye a la que el registro sitúa **en otro sitio** en ese instante.
+**#690 y #694 · a un meliponario no se le pregunta por cuadros**, ni en el formulario ni en el informe. La especie no está en `Colony` ni en `Hive` —medido— sino en el **tipo de sitio**, y el esquema explica por qué citando a ANSA/INTA: las cajas y sus medidas cambian por especie. El predicado vive en `lib/apiary/sitioDeAbejas.ts` como `Record` total, así que **añadir un tipo de sitio de abejas deja de compilar** hasta que alguien decida. El informe lo calcula desde el **snapshot congelado**: un documento ya emitido no cambia de preguntas si el sitio se reclasifica.
+**Dos reincidencias mías, con la regla cargada:** una prueba que **falló su propio control positivo** (los campos de detalle viven tras `showDetails`, que un render estático no abre) y una mutación de flip que **no mutó** (el ancla aparecía cuatro veces: `sha` idéntico, 8 pruebas verdes). Las dos clases ya están en `CLAUDE.md`; lo que se anota es la reincidencia.
+**Puerta abierta, medida en `39901dff`:** `lib/apiary/inspections.ts` y `lib/sync/pushFieldEvents.ts` siguen aceptando `beeCoveredFrames` para cualquier colonia —**0** menciones de `seManejaEnCuadros` en los dos, con sus 13 KB y 46 KB leídos como control—. Hoy no pasa nadie por ella; cerrarla es una regla de dominio sin aprobar.
+**Queda tuyo, y son los tres que la revisión no puede decidir:** qué se pregunta en un meliponario **en lugar** de los cuadros (hoy no se pregunta nada — es honesto, no completo); si las recomendaciones de un informe se vuelven Tareas con responsable, fecha y evidencia de cumplimiento; y si un informe **ya emitido** puede cambiar su texto cuando mejora el formato de fecha. El bloque de §3 que pide **tu** reporte de visita sigue abierto y ahora pesa más: el #674 construyó el nuestro.
+
 ### 2026-10-09 · Un enlace con `.nn-button` ya no se parte ni pisa la línea de arriba en el teléfono (#686, #693)
 
 `.nn-button` no declaraba `display`, así que sobre un `<a>` era `inline`: medía 39 px y no 44, y al partirse una etiqueta su segundo trozo pintaba el fondo encima de la línea anterior. Se vio en «Últimas jornadas» de la parcela a 390 px; la pestaña Trampas tenía lo mismo. Hoy `a.nn-button` es `inline-flex` sin subrayado, y `p > a.nn-button` deja 8 px entre filas; `<button>` y el único `<summary>` no cambian. Flip-test a 390×844 sobre una base desechable: solape 1.211 y 2.354 px² → 0. La CSS viva de producción lleva las dos reglas.
 **Después, en #693:** ese `p > a.nn-button` daba por hecho que un `<p>` no es flex, y el de `/lots` lo es —en escritorio estiraba su fila de 46 a 54 px—; ahora el margen sólo va en un `<p>` con dos o más botones-enlace. Y fuera los `style` en línea que suplían a estas reglas: siete de `.nn-button`, tres de `.nn-button-quiet` —con su regla propia, que además centra «Recetas de proceso»— y el resto de `/research/[protocolId]`. No queda nada pendiente de esta entrada.
+
+### 2026-10-08 · El vocabulario de la selección, y la entrega local de Codex integrada (#676, #678)
+
+**#678 ejecuta el plan del #660** (§3.3 del diseño que entró con el #657). Tres nombres decían que una selección parte a su madre, que es justo lo que ADR-196 niega: `subdivisionReason` → `motivoDeLaSeleccion`, `subdivisionReasonNote` → `notaDelMotivoDeLaSeleccion`, `SubdivisionReason` → `MotivoDeSeleccion`, y las dos columnas con una migración escrita a mano con tres `RENAME`. **Los cuatro valores del enum quedan intactos** —son el `value` de los `<option>`, el sufijo de las claves i18n y las etiquetas del tipo de PostgreSQL—. ADR-196 gana su sección de vocabulario, y hay un guardia hermético nuevo de 8 pruebas cuyas tres mutaciones caen cada una en la prueba que le toca, por su nombre. `tsc` hizo **3 → 16 → 0**, que es el flip-test regalado del renombrado. `micro_plot` **no** se quita del enum (tu decisión del 2026-10-06): `core.location` tiene 5 disparadores con `UPDATE OF "location_type"` y en 203 migraciones no hay ni un `DROP TRIGGER`.
+**Cuatro defectos del propio plan, encontrados al ejecutarlo**, y se anotan porque los cuatro devolvían un número plausible: un control positivo que esperaba **1** y vale **2** (`model PlotBlockRange` casa con el mismo patrón, y ya valía 2 antes de tocar nada); un paso que esperaba **0** y vale **1**, que es la línea que el propio plan mandó escribir; un paso que esperaba `tsc` en **0** y da **16**, porque las pruebas las arregla la tarea siguiente; y una consulta de comprobación con un `or` sin paréntesis, que busca en **toda** la base en vez de en `core.location` —aquí acertó por casualidad—.
+**#676 es la entrega local de Codex** —muestra, tueste y cata—, medida contra el `main` de ese día. Su carril con base salió en rojo por una razón que no era de forma: `roastSessionId` en `SensoryLinkageEntry` chocaba con la lista blanca de ADR-043, el límite de la evaluación a ciegas. Tu decisión fue **ensanchar la lista con su razón escrita dentro del guardia**, dejando intactas las dos aserciones que cazan una fuga real, y corregir el doc de la función, que prometía no devolver nunca el mapping — una promesa que ya era falsa.
+**Y corrigió una regla de `~/.claude/CLAUDE.md`:** tras un *squash* `ahead_by` **no discrimina** — cuatro PR fusionados dieron 7, 3, 5 y 6 y uno sin fusionar dio 2, o sea el veredicto invertido. Lo que lo dice es el **contenido**.
 
 ### 2026-10-06 · Kiva Estate tiene su geografía y sus dos fincas, y Luis, Kenis y Chris sus permisos (#668, #670)
 
@@ -101,16 +118,6 @@ Producción, **sin ningún borrado**, cada cifra releída por una lectura indepe
 **Fichas nuevas:** `024`, la cosecha no registra quién la operó —35 de 35 nulos, porque la acción no manda un campo que el servicio sí guarda—, y `025`, ya hecha. Y quitados los worktrees `wt-ux` y `recovery-control`: sus 3 commits en un solo disco eran versiones **viejas** de documentos que `main` ya trae corregidos, comparados línea a línea antes de borrar.
 **Queda tuyo:** borrar la data —tienes punto de restauración **verificado**, PASS con 216 tablas y 15.315 filas idénticas, y yo dejaría `core.user_account` fuera, porque borrar cuentas pone a NULL el actor de 4.922 filas de auditoría en silencio—; correr `npm run data:abamectinas -- --apply`; y P-J.
 
-### 2026-10-05 · El módulo de finca: cinco puertas, y dos defectos que sólo se vieron usándolo (#641–#645)
-
-**Las cinco en `main`**, fusionadas tras juntarlas en local y medir el árbol combinado —typecheck 0, hermético 206/2796, con base 206/2581— y comprobar que el `main` resultante es **el mismo árbol byte a byte**. Cierran brecha: la situación del recolector deja de caer en un agujero (#641), el inventario de pedir lo que no ofrece (#642), la cabecera cabe en una fila (#643), la masa extraída se congela en la muestra para que el tueste la lea (#644), y la ficha del lote pone el trabajo arriba y pliega lo que se consulta (#645). En la ficha, a 375 px y con cuenta de **Farm Operator** —no de admin, que ve «todo» y no mide lo que ve un operario—, el primer botón de acción pasó de 512 a **367 px**; pero «Procesamiento» mide **1.778 px él solo**, así que lo que falta está dentro, no en el orden.
-**Dos defectos que ninguna prueba veía, los dos de usar la pantalla:** la ficha **daba un 500** a un operario acotado a un proyecto —el permiso es deliberado, la página lo llamaba sin red; arreglado en #645—, y **«Historial» estaba vacío en los 108, no en 105** —las 3 filas con `entity_id` de un lote son de `entity_type = 'lot'`, un sexto tipo que la consulta ni pedía—; **arreglado en #648**, con 104 de 108 estrenando historial.
-**Qué queda tuyo:** si la Decisión 3 de ADR-096 («las secciones vacías se quedan») se da por revisada —su condición, «once the sections are routinely full», **no se cumple**: mediciones 9 %, muestras 1 %, fotos 0 %—; y recorrer entero el tueste desde muestra, que ya no falla y nadie ha usado.
-### 2026-10-05 · El Historial del lote: la lectura preguntaba por el id del lote (#648)
-
-`getLotDetail` buscaba `core.audit_event` con `entityId = lotId` para cinco tipos cuyas escrituras guardan el id del **propio evento**: **0 de 1.792** filas alcanzables, en los 108 lotes. Y faltaba el sexto, `lot`, el único con el id bueno — así que la **liberación** de un lote tampoco salía. Hoy la lectura resuelve los ids de los hechos y son **nueve** sujetos; las cinco exclusiones van nombradas en el propio bloque con su cifra (`treatment_batch`, 44 vivas, es la mayor). El guardia que faltaba es de **conducta**: `tests/traceability/historialDelLote.test.ts`.
-**Lo que enseñó:** una ficha puede cerrarse con sus tres comprobaciones en verde y el defecto vivo, si las tres miran artefactos. Y la revisión de Codex encontró **tres defectos en el arreglo** que la compuerta no veía — uno ocurrió de verdad una hora después. Las dos lecciones están al final de `CLAUDE.md`.
-**Queda tuyo:** `PENDING_IMPLEMENTATIONS/023` — si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial.
 
 ## 3. Bloqueado, y en qué
 
@@ -148,10 +155,7 @@ esta entrada pedía ya la tomaste: recepción y selección dicen `sin_registro`,
 
 - **El paso 2, capacidad con migración: sin plan propio** — re-medido el 2026-10-04: hay **47** planes (decía 39) y **ninguno se llama** «capacidad», aunque **5** mencionan «paso 2» y «capacidad» de pasada.
 - **El umbral de color de §4.5, decisión tuya:** hoy un lote en «Aviso» deja su etapa en gris.
-- **`PENDING_IMPLEMENTATIONS`: quedan 014 y 021 (tuyas) y la 022 (sin empezar).** Fusionadas el
-  2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010. La 009 **no** estaba hecha: su cierre del
-  2026-10-03 tenía las tres comprobaciones ciertas y las tres miran artefactos, no conducta;
-  cerrada de verdad en #648. La 022 es nueva: un carril que se pone rojo por basura de otra suite.
+- **`PENDING_IMPLEMENTATIONS`: abiertas 014 y 023 (tuyas), 022 y 024 (defectos medidos, sin empezar)** — re-medido el 2026-10-09 **contra las fichas**, porque esta línea listaba la **021 como tuya y está HECHA desde el 2026-10-06**. La **023** es la pregunta que dejó el #648, hoy archivado: si una fila de auditoría debe decir a qué lote pertenece sin consultar la entidad, y si la historia de un ensayo y la del proceso que cubre al lote entran en su historial. La **024**, que la cosecha no registra quién la operó. Fusionadas el 2026-10-04: 015, 016, 017, 018, 019 y las dos partes de la 010; la 009 cerró de verdad en #648, porque su cierre del 2026-10-03 tenía las tres comprobaciones ciertas y las tres miran artefactos, no conducta.
 - **Lo que §4.5 y la rúbrica 22 §1 dejan abierto**, y es decisión tuya: leer los `ProcessTarget` de
   la receta en vez de la plantilla del perfil; «Daño consumado» contra la literatura que el propio
   documento cita; y que el bloque de riesgo hable en la hora 0 de todo lote sano y **calle en la
@@ -270,6 +274,7 @@ al primero; desde el 2026-09-29 ese primero es un punto más de la lista.
   protegida ya existe desde el 2026-09-18: decisión aparte. Detalle en
   `docs/SESSION_STATE_ARCHIVE.md`.
 
+- **La Decisión 3 de ADR-096 — «las secciones vacías de la ficha del lote se quedan», sin revisar.** Rescatado del #641–#645 al archivarlo el 2026-10-09, y re-leído entonces: su propia condición, «once the sections are routinely full», **no se cumple** — medición del 2026-10-05: mediciones 9 %, muestras 1 %, fotos 0 %. Darla por revisada o cambiarla es tuyo.
 - **La pantalla de tueste no la ha abierto nadie en un navegador** — las
   acciones de servidor no las ejerce ninguna prueba —**no por la sesión**, que nueve
   pruebas de otras acciones simulan: nadie la ha escrito— y un worktree no tiene `.env`. Construida el 2026-09-06; detalle en
