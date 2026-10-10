@@ -282,14 +282,8 @@ export interface CreateRecipeInput {
 }
 
 /**
- * Every rule a set of targets must satisfy, in one place — ADR-102.
- *
- * Extracted when creating a *version* joined creating a *recipe* as a way to
- * declare targets. Two copies of these checks would eventually disagree, and
- * the one that drifted would be the one nobody was reading.
- */
-/**
- * Las reglas de una meta: la de la versión y, desde la Parte 2a, la de un paso (tarea 3, diseño §3.2).
+ * Las reglas de una meta: la de la versión y, desde la Parte 2a, la de un paso (tarea 3, diseño §3.2). Están reunidas aquí a propósito
+ * (ADR-102): dos copias de estas comprobaciones acabarían discrepando, y la que se desviara sería la que nadie lee.
  *
  * Una meta de PASO lleva `recipeStepId` y no `phase`: la fase sale del tipo de su paso al escribirla (`lib/recetas/pasos.ts`),
  * o queda nula si el tipo no la tiene (un lavado). Su paso tiene que estar en `pasosDeEstaVersion`, los de la versión que se

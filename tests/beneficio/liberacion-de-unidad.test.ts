@@ -120,9 +120,9 @@ describe("proximaLiberacion", () => {
   });
 
   it("expectedHours 0 o negativo NO es una duración: ni da una hora ni le gana a una declarada (hallazgo 1)", () => {
-    // La cola ya lo trata como inválido (`duracion_esperada_invalida_en_la_base`); la escritura que
-    // lo rechazaba (`expected_hours_must_be_positive`) murió con el último escritor de `expectedHours`
-    // (tarea 14). Aquí cuenta como no declarado, igual que NaN.
+    // La cola ya lo trata como inválido (`duracion_esperada_invalida_en_la_base`); la escritura de recetas lo
+    // rechaza ahora en `validarPaso` (`horas_invalidas`), antes de que `publicarVersion` copie las horas a la fase; esta defensa es para lo que
+    // la base ya traía. Aquí cuenta como no declarado, igual que NaN.
     for (const expectedHours of [0, -5]) {
       const sola = liberacion({
         ahora: AHORA,
