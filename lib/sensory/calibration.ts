@@ -12,6 +12,7 @@
  */
 import { prisma } from "../db";
 import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
+import { UUID } from "../validation/uuid";
 
 export class CalibrationAccessError extends Error {}
 
@@ -75,13 +76,19 @@ export async function getCalibrationSessions(userAccountId: string) {
 
 export async function getCalibrationSessionDetail(userAccountId: string, calibrationSessionId: string) {
   await requireManagePermission(userAccountId);
-  return prisma.calibrationSession.findUniqueOrThrow({
+  // El id llega de la URL. `findUniqueOrThrow` lanzaba `P2025` con un UUID que no existe y `P2007`
+  // con uno mal formado, y la página —que sólo atrapa esta clase— daba 500 en los dos casos
+  // (PENDING_IMPLEMENTATIONS/026). Las dos cosas son una sesión que no existe.
+  if (!UUID.test(calibrationSessionId)) throw new CalibrationAccessError("session_not_found");
+  const session = await prisma.calibrationSession.findUnique({
     where: { id: calibrationSessionId },
     include: {
       conductedByPerson: true,
       results: { include: { evaluatorPerson: true, referenceStandard: true }, orderBy: { id: "asc" } },
     },
   });
+  if (!session) throw new CalibrationAccessError("session_not_found");
+  return session;
 }
 
 export async function createCalibrationSession(
