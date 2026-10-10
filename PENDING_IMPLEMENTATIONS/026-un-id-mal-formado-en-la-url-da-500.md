@@ -2,8 +2,8 @@
 
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
 diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
-`conAncestros`, las tres de `getApiaryDetail` y `getHive`, y las de `getFieldSessionTimeline` y
-`leerReporteDeVisita`. Quedan 15 de las 31.** Es un defecto, no
+`conAncestros`, las tres de `getApiaryDetail` y `getHive`, las de `getFieldSessionTimeline` y
+`leerReporteDeVisita`, y las tres de `findUniqueOrThrow`. Quedan 12 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -70,8 +70,8 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` — **arregladas en #696**: guarda en la función y, en `apiaries/[id]`, la página la llama primero y atrapa `ApiaryAccessError`; las dos dan 404 |
 | `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` — **arreglada en #696**: guarda en la función, y la página atrapa `ApiaryAccessError`; da 404. **Límite:** la página no consulta el segmento `[id]` del apiario, así que un apiario basura con una colmena válida pinta la colmena (ya pasaba antes y no da 500; lo señaló Codex) |
 | `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` |
-| `getCalibrationSessionDetail` (`lib/sensory/calibration.ts:78`) | `calibration/[calibrationSessionId]` |
-| `getEditionDetail` (`lib/competitions/service.ts:40`) | `competitions/[editionId]` |
+| `getCalibrationSessionDetail` (`lib/sensory/calibration.ts:78`) | `calibration/[calibrationSessionId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
+| `getEditionDetail` (`lib/competitions/service.ts:40`) | `competitions/[editionId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
 | `getStoryForEditor` (`lib/content/stories.ts:111`) | `content/[id]` |
 | `instrumentoParaVerificar` (`lib/equipos/equipos.ts:822`) | `equipos/[id]` |
 | `modeloParaFicha` (`lib/equipos/modelos.ts:412`) | `equipos/modelos/[id]` |
@@ -80,7 +80,7 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `detalleDeJornada` (`lib/traceability/jornadasDeCosecha.ts:323`) | `finca/jornadas/[id]` |
 | `fincaParaDestino` (`lib/traceability/destinoDeFinca.ts:111`) | `fincas/[siteId]/destino` |
 | `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` |
-| `getProjectWorkspace` (`lib/partner/workspace.ts:125`) | `partner/[projectId]` |
+| `getProjectWorkspace` (`lib/partner/workspace.ts:125`) | `partner/[projectId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
 | `getRecipeForEditor` (`lib/traceability/processTargets.ts:535`) | `recipes/[id]` |
 | `getProtocolDetail` (`lib/research/protocols.ts:450`) | `research/[protocolId]` |
 | `getProtocolVersionDetail` (`lib/research/protocols.ts:278`) | `research/execute/[protocolVersionId]` |
@@ -102,7 +102,7 @@ nada: `scope.scope_ref_id` es `uuid`, así que ningún ámbito de ubicación pue
 id en la línea siguiente. Lleva su propia guarda, que lanza `TraceabilityAccessError("no_lot_access")`,
 lo que ya lanzaba para una ubicación ausente.
 
-## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (quedan cuatro)
+## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto (queda una)
 
 Éstas no las arregla una guarda de forma: el id es válido, la fila no existe, y lo que sube no es
 `P2007`.
@@ -111,9 +111,9 @@ lo que ya lanzaba para una ubicación ausente.
 |---|---|---|
 | ~~`apiaries/[id]`~~ | `location_not_found` | `requireFieldSessionAccess`, `lib/traceability/jornadaDeCampo.ts:40`, en el `Promise.all` de la página — **arreglada en #696** con el `try` de la página |
 | ~~`apiaries/[id]/hives/[hiveId]`~~ | `hive_not_found` | `getHive`, `lib/apiary/hives.ts:500`; la página no atrapaba nada — **arreglada en #696** con el `try` de la página |
-| `calibration/[calibrationSessionId]` | `P2025` | `findUniqueOrThrow` en `lib/sensory/calibration.ts:78` |
-| `competitions/[editionId]` | `P2025` | `findUniqueOrThrow` en `lib/competitions/service.ts:40` |
-| `partner/[projectId]` | `P2025` | `findUniqueOrThrow` en `lib/partner/workspace.ts:119` |
+| ~~`calibration/[calibrationSessionId]`~~ | `P2025` | `findUniqueOrThrow` en `lib/sensory/calibration.ts:78` — **arreglada en #696** |
+| ~~`competitions/[editionId]`~~ | `P2025` | `findUniqueOrThrow` en `lib/competitions/service.ts:40` — **arreglada en #696** |
+| ~~`partner/[projectId]`~~ | `P2025` | `findUniqueOrThrow` en `lib/partner/workspace.ts:119` — **arreglada en #696** |
 | ~~`field-sessions/[id]/report`~~ | `FieldSessionValidationError("session_not_found")` | `lib/traceability/reporteDeVisita.ts:300`; la página sólo atrapaba `LocationAccessError` — **arreglada en #696**: ahora atrapa las dos |
 | `sensory/herramientas/ruedas/[wheel]` | `PrismaClientValidationError` del enum `domain` | `obtenerRuedaSensorial`, `lib/sensory/ruedas.ts:59` — aquí el segmento no es un id sino un dominio, y **cualquier** valor que no esté en el enum da 500 |
 
@@ -149,7 +149,8 @@ atrapa nada (`apiaries/[id]`, `apiaries/[id]/hives/[hiveId]`), la comprobación 
 después de `await params`, con `notFound()`.
 
 Para las siete de la segunda tabla: que la página atrape la clase de «no existe» que ya se lanza, y
-cambiar `findUniqueOrThrow` por `findUnique` + la clase propia.
+cambiar `findUniqueOrThrow` por `findUnique` + la clase propia. **Hechas en #696 seis de las siete**; queda
+`sensory/herramientas/ruedas/[wheel]`, que no es un id sino un valor de enum.
 
 ## Cómo se comprueba
 
@@ -159,7 +160,7 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
@@ -179,3 +180,10 @@ y con el UUID que no existe, y 200 con una jornada real creada en la base desech
 con la misma jornada, completada y con su reporte emitido. *Flip:* volviendo al `catch` anterior de la
 página, con la guarda del servicio puesta, el id basura y el UUID inexistente daban 500 y la jornada real
 seguía en 200. Las dos mitades hacían falta.
+
+**Las tres de `findUniqueOrThrow`, medidas el 2026-10-10 contra el servidor** con Platform Admin:
+`calibration/[calibrationSessionId]`, `competitions/[editionId]` y `partner/[projectId]` dan 404 con el
+id basura y con el UUID que no existe, y 200 con un registro real. Los dos primeros se crearon en la base
+desechable; el proyecto es el DEMO de la siembra. El log del servidor no registra ningún `P20xx` en esas
+peticiones. La comprobación de permiso sigue antes que la de existencia: quien no tiene permiso recibe
+«sin permiso», no «no existe».
