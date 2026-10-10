@@ -11,6 +11,7 @@ import { JornadaAbiertaBanner } from "./components/JornadaAbiertaBanner";
 import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
+import { AvisoDeVersionGuardada } from "./components/AvisoDeVersionGuardada";
 import { BotonDeEnvio } from "./components/BotonDeEnvio";
 
 /**
@@ -112,7 +113,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               que se cierra.» Va aquí y no en cada página porque «todas» incluye las que
               nadie ha escrito todavía. */}
           {user ? <JornadaAbiertaBanner userAccountId={user.userAccountId} /> : null}
-          <main className="nn-shell nn-main">{children}</main>
+          <main className="nn-shell nn-main">
+            <AvisoDeVersionGuardada />
+            {children}
+          </main>
         </NextIntlClientProvider>
       </body>
     </html>
