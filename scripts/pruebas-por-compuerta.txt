@@ -134,6 +134,7 @@ tests/sensory/descriptors.test.ts
 tests/sensory/informeExterno.test.ts
 tests/sensory/puntajeCalculado.test.ts
 tests/sensory/ruedas.test.ts
+tests/sync/aparatoDelToken.test.ts
 tests/sync/authorizationSnapshot.test.ts
 tests/sync/deviceOperator.test.ts
 tests/sync/deviceTokens.test.ts

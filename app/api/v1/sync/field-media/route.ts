@@ -63,6 +63,13 @@ export async function POST(request: Request) {
       return Response.json(r, { status: 200 });
     }
 
+    // Por token, el aparato lo dice el token: el `deviceId` del cuerpo tiene que
+    // ser el suyo, o la foto quedaría atribuida a un aparato que no la tomó. Por
+    // cookie (`deviceId === null`) no hay aparato propio y sigue siendo opcional.
+    if (user.deviceId !== null && body.deviceId !== user.deviceId) {
+      return Response.json({ error: "device_mismatch" }, { status: 403 });
+    }
+
     const occurredAt = fecha(body.occurredAt);
     if (
       typeof body.storageKey !== "string" || typeof body.mimeType !== "string" ||
