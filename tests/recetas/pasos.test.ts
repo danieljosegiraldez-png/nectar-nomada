@@ -1342,6 +1342,8 @@ describe("§3.3 — la cadena versionar → editar la copia → publicar deja IN
     // La cadena: la v2 nace de la v1, se le quita un paso, se cambia otro (horas y una meta) y se publica.
     const v2 = await nuevaVersionBorrador(gestor, v1);
     const pasosV2 = await pasosDeLaVersion(gestor, v2.id);
+    // Los pasos que copió `nuevaVersionBorrador` no pasan por `agregar`: su id se registra aquí para que el `afterAll` limpie también la auditoría del que se quita.
+    pasosCreados.push(...pasosV2.map((p) => p.id));
     const fermentacionV2 = pasosV2.find((p) => p.tipo === "fermentation")!;
     await quitarPaso(gestor, pasosV2.find((p) => p.tipo === "pulping")!.id);
     await actualizarPaso(gestor, {
