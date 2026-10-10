@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { puedeEditarBeneficioEnOrganizacion } from "../../../lib/traceability/locations";
 import { getRecipeForEditor, ProcessTargetError } from "../../../lib/traceability/processTargets";
+import { TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { listVariableDefinitions } from "../../../lib/traceability/units";
 import { RecipeMetadataForm } from "../../components/traceability/RecipeMetadataForm";
 import { RecipeVersionForm } from "../../components/traceability/RecipeVersionForm";
@@ -26,7 +27,10 @@ export default async function RecipeDetailPage({
   try {
     recipe = await getRecipeForEditor(user.userAccountId, id);
   } catch (error) {
-    if (error instanceof ProcessTargetError) redirect("/recipes");
+    // «No existe», id mal formado y «sin permiso» dan 404, como `plots/[id]` y `bodegas/[id]`
+    // (Daniel, 2026-10-09; PENDING_IMPLEMENTATIONS/026). Antes los dos primeros volvían a la lista
+    // y el tercero —`requireLotAccess` lanza `TraceabilityAccessError`— no lo atrapaba nadie: 500.
+    if (error instanceof ProcessTargetError || error instanceof TraceabilityAccessError) notFound();
     throw error;
   }
 

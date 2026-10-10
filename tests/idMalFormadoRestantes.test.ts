@@ -35,11 +35,17 @@
  *
  * Se mide con un Platform Admin, que pasa todas las comprobaciones de permiso y por eso llega a la
  * consulta.
+ *
+ * **Y una novena, de las rarezas de la misma ficha:** `admin/users/[assignmentId]/permisos` no daba 500
+ * porque su página tenía un `catch {}` que se lo tragaba **todo** —también un fallo real—. Ahora la página
+ * sólo atrapa `UserAdminError`, y por eso `listAssignmentPermissions` necesita su propia guarda: sin ella,
+ * el id basura volvería a dar 500 en cuanto el `catch` dejó de tragárselo.
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../lib/db";
+import { listAssignmentPermissions, UserAdminError } from "../lib/rbac/admin";
 import { ContentAccessError, getStoryForEditor } from "../lib/content/stories";
 import { EquipoError, instrumentoParaVerificar } from "../lib/equipos/equipos";
 import { ModeloError, modeloParaFicha } from "../lib/equipos/modelos";
@@ -60,10 +66,12 @@ const MARCA = `TEST ${RUN_ID}`;
 const IDS_BASURA = ["no-es-un-id", "123", "00000000-0000-0000-0000-00000000000"];
 
 let usuario: Awaited<ReturnType<typeof crearUsuarioConAcceso>>;
-const ids = { biochar: "", historia: "", equipo: "", modelo: "", jornada: "", receta: "", sesion: "", rueda: "" };
+const ids = { biochar: "", historia: "", equipo: "", modelo: "", jornada: "", receta: "", sesion: "", rueda: "", asignacion: "" };
 
 beforeAll(async () => {
   usuario = await crearUsuarioConAcceso();
+  // La asignación de plataforma del propio administrador: es real y la borra la limpieza de `usuario`.
+  ids.asignacion = (await prisma.assignment.findFirstOrThrow({ where: { userAccountId: usuario.userAccountId } })).id;
   const organizationId = await createTestOrganization(RUN_ID);
   const sitio = await prisma.location.create({
     data: { name: MARCA, locationType: "site", organizationId, status: "approved", classification: "internal" },
@@ -172,6 +180,7 @@ const CASOS: readonly Caso[] = [
   ["getSessionForJudge", SensoryAccessError, "no_session_access", (v) => getSessionForJudge(usuario.userAccountId, v), randomUUID, () => ids.sesion, (r) => (r as { session: { id: string } }).session.id],
   // La rueda se busca por dominio, no por id: el «inexistente» es un dominio válido sin rueda.
   ["obtenerRuedaSensorial", RuedaSensorialNoEncontrada, null, (v) => obtenerRuedaSensorial(v, usuario.userAccountId), () => "wine", () => "mead", (r) => (r as { id: string }).id],
+  ["listAssignmentPermissions", UserAdminError, "assignment_not_found", (v) => listAssignmentPermissions(usuario.userAccountId, v), randomUUID, () => ids.asignacion, (r) => (r as { asignacion: { id: string } }).asignacion.id],
 ];
 
 describe.each(CASOS)("%s con un valor de la URL", (nombre, clase, mensaje, leer, inexistente, existente, idDe) => {
