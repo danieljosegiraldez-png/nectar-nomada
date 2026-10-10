@@ -1,7 +1,8 @@
 # 026 · Treinta y una páginas dan 500 con un id mal formado en la URL
 
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
-diez subrutas, y las ocho de `requireLocationAttributeAccess`. Quedan 23 de las 31.** Es un defecto, no
+diez subrutas, las ocho de `requireLocationAttributeAccess`, y las tres de `puedeSubdividirParcela` y
+`conAncestros`. Quedan 20 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -62,8 +63,8 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | función (archivo:línea donde revienta) | páginas |
 |---|---|
 | `requireLocationAttributeAccess` (`lib/traceability/locations.ts:189`) | `bodegas/[id]`, `instalaciones/[id]`, `plots/[id]/{ajustes, fotos/nueva, jornada/nueva, microparcela/nueva, muestras/nueva, suelo/nuevo}` — **8, arregladas en #696**: las ocho dan 404 |
-| `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` |
-| `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` |
+| `puedeSubdividirParcela` (`lib/traceability/fincas.ts:343`), fuera del `try` de la página | `plots/[id]` — **arreglada en #696**: contesta `false`, como a una parcela que no existe, y la página da 404 |
+| `conAncestros`, dentro de `can()` (`lib/rbac/service.ts:181`) | `plots/[id]/manejo/[interventionId]`, `plots/[id]/manejo/nuevo` — **arregladas en #696**, con una segunda guarda en `contextoDeManejo` (ver abajo); las dos dan 404 |
 | `getApiaryDetail` (`lib/apiary/hives.ts:619`) | `apiaries/[id]`, `apiaries/[id]/etiquetas` |
 | `getHive` (`lib/apiary/hives.ts:490`) | `apiaries/[id]/hives/[hiveId]` |
 | `getBiocharBatch` (`lib/traceability/biocharBatches.ts:276`) | `biochar/[id]` |
@@ -84,10 +85,19 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `getTreatmentBatchDetail` (`lib/research/treatments.ts:651`) | `research/treatments/[id]` |
 | `grantedKeysForSession` (`lib/sensory/service.ts:64`) | `sensory/[sessionId]` |
 
-**`conAncestros` merece cuidado antes de tocarlo.** Está dentro de `can()`, así que una guarda ahí
-cambia el servicio de RBAC entero: cualquier `can()` con un `scopeRefId` de ubicación mal formado
-pasaría de lanzar a contestar «no». Probablemente es lo correcto —un ámbito que no existe no autoriza
-nada—, pero es la frontera de seguridad y merece su propia prueba, no un arreglo de paso.
+**`conAncestros`, hecho el 2026-10-09 en #696, y con su propia prueba.** Está dentro de `can()`, así que
+la guarda cambia el servicio de RBAC entero. Con un `scopeRefId` de ubicación mal formado ya no busca
+padres: devuelve el objetivo solo, que es lo que el bucle devuelve para una ubicación que no existe.
+`can()` contesta entonces lo mismo que con un UUID inexistente. **No concede nada nuevo**: `scope.scope_ref_id`
+es `uuid`, así que ningún ámbito de ubicación puede casar con ese id, y sólo un ámbito de plataforma dice
+que sí, igual que antes con un UUID inexistente. La prueba fija las dos cosas:
+- un operario con ámbito en la finca no puede sobre el id basura, y sigue alcanzando la parcela que
+  cuelga de ella;
+- el Platform Admin recibe lo mismo con el id basura que con un UUID que no existe.
+
+**Y no bastaba sola.** A un Platform Admin, `can()` le deja pasar, y `contextoDeManejo` consulta el mismo
+id en la línea siguiente. Lleva su propia guarda, que lanza `TraceabilityAccessError("no_lot_access")`,
+lo que ya lanzaba para una ubicación ausente.
 
 ## Y siete que dan 500 también con un UUID bien formado que no existe — otro defecto
 
@@ -145,5 +155,6 @@ Por función, una prueba como `tests/traceability/idMalFormado.test.ts`: el id b
 flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por página, la medición de
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
-`requireLocationAttributeAccess`, **24** y **7**. Se volvieron a medir sus ocho páginas; las otras 24
-no, pero ninguna reventaba en esa función, sino antes, en la suya.
+`requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
+**7**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+funciones, sino antes, en la suya.
