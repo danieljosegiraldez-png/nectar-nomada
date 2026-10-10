@@ -514,6 +514,80 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     }
   });
 
+  it("LA SANIDAD SE CONGELA: irregularidades por su nombre, celdas reales y lo demás, y no cambia al corregir", async () => {
+    // PR-2 de la revisión del #674 (Daniel, 2026-10-10). Hasta entonces el informe congelado no
+    // guardaba las irregularidades, la señal de plaga escrita a mano, las celdas reales, la cría de
+    // zángano, los marcos negros ni si la miel o el polen estaban junto a la cría: si después se
+    // corregía la inspección, el documento entregado no tenía cómo decir lo que se vio aquel día.
+    const [irr] = await prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "irregularidad_de_inspeccion" }, aliasOfId: null },
+      select: { id: true, value: true },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+      take: 1,
+    });
+    expect(irr, "la semilla no trae el catálogo de irregularidades: la prueba no mediría nada").toBeTruthy();
+    // Hora propia, única en el archivo: la inspección se engancha a la visita abierta más reciente.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-12T15:00:00Z") });
+    const otra = `TEST otra señal (${RUN_ID})`;
+    const inspeccion = await recordInspection(apicultorConManejo, {
+      colonyId,
+      outcome: "issue_observed",
+      irregularidades: [irr!.id],
+      pestDiseaseFlags: otra,
+      queenCellKind: "enjambrazon",
+      queenCellCount: 2,
+      droneBroodPresent: true,
+      darkFrames: 3,
+      honeyNextToBrood: true,
+      pollenNextToBrood: false,
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se corrige la inspección DESPUÉS de emitir: el informe no tiene que enterarse.
+    await prisma.inspectionIrregularity.deleteMany({ where: { inspectionId: inspeccion.id } });
+    await prisma.inspection.update({
+      where: { id: inspeccion.id },
+      data: { pestDiseaseFlags: null, queenCellCount: 5, droneBroodPresent: false, darkFrames: 0, honeyNextToBrood: false, pollenNextToBrood: true },
+    });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    const congelada = leido?.snapshot.registros.find((x) => x.inspeccion)?.inspeccion;
+    expect(congelada, "la inspección no quedó dentro de la visita reportada").toBeTruthy();
+    expect(congelada).toMatchObject({
+      irregularidades: [irr!.value],
+      otraSenal: otra,
+      celdasReales: { tipo: "enjambrazon", cuantas: 2 },
+      criaDeZangano: true,
+      marcosNegros: 3,
+      mielJuntoACria: true,
+      polenJuntoACria: false,
+    });
+  });
+
+  it("y una inspección sin nada de eso congela VACÍOS explícitos, no campos ausentes", async () => {
+    // Ausente quiere decir «informe emitido antes de que esto se congelara»; vacío quiere decir
+    // «se congeló y no se registró». La pantalla los trata distinto, así que el congelado tiene
+    // que distinguirlos.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-12T17:00:00Z") });
+    await recordInspection(apicultorConManejo, { colonyId, outcome: "nothing_unusual" });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    const congelada = leido?.snapshot.registros.find((x) => x.inspeccion)?.inspeccion;
+    expect(congelada, "la inspección no quedó dentro de la visita reportada").toBeTruthy();
+    expect(congelada).toEqual(expect.objectContaining({
+      irregularidades: [],
+      otraSenal: null,
+      celdasReales: { tipo: null, cuantas: null },
+      criaDeZangano: null,
+      marcosNegros: null,
+      mielJuntoACria: null,
+      polenJuntoACria: null,
+    }));
+  });
+
   it("LA VISITA GUARDA A QUÉ SE FUE, y lo valida en la frontera", async () => {
     // Era la única pregunta obligatoria DE PATIO del protocolo sin dónde guardarse (ADR-140).
     const visita = await startFieldSession(apicultorConManejo, {
