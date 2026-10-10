@@ -3,7 +3,8 @@
 **Estado: medido el 2026-10-09. Arregladas en el PR #696, el que trae esta ficha: `/lots/[id]` y sus
 diez subrutas, las ocho de `requireLocationAttributeAccess`, las tres de `puedeSubdividirParcela` y
 `conAncestros`, las tres de `getApiaryDetail` y `getHive`, las de `getFieldSessionTimeline` y
-`leerReporteDeVisita`, las tres de `findUniqueOrThrow`, y las dos de fincas. Quedan 10 de las 31.** Es un defecto, no
+`leerReporteDeVisita`, las tres de `findUniqueOrThrow`, las dos de fincas, y las tres de investigación.
+Quedan 7 de las 31.** Es un defecto, no
 una decisión: no hace falta preguntar nada para arreglarlo.
 
 ## El defecto
@@ -82,9 +83,9 @@ principio de ella sí las cubre.) Lo señaló la revisión de Codex del 2026-10-
 | `fincaParaLogotipo` (`lib/traceability/fincaLogo.ts:156`) | `fincas/[siteId]/logotipo` — **arreglada en #696**: contesta `null`, como a una finca que no existe; da 404. Su consulta va antes que `requireLocationAttributeAccess`, así que la guarda de ésa no la cubría |
 | `getProjectWorkspace` (`lib/partner/workspace.ts:125`) | `partner/[projectId]` — **arreglada en #696**: `findUnique` y su propia clase con un «no existe»; da 404 con id basura y con UUID inexistente |
 | `getRecipeForEditor` (`lib/traceability/processTargets.ts:535`) | `recipes/[id]` |
-| `getProtocolDetail` (`lib/research/protocols.ts:450`) | `research/[protocolId]` |
-| `getProtocolVersionDetail` (`lib/research/protocols.ts:278`) | `research/execute/[protocolVersionId]` |
-| `getTreatmentBatchDetail` (`lib/research/treatments.ts:651`) | `research/treatments/[id]` |
+| `getProtocolDetail` (`lib/research/protocols.ts:450`) | `research/[protocolId]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
+| `getProtocolVersionDetail` (`lib/research/protocols.ts:278`) | `research/execute/[protocolVersionId]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
+| `getTreatmentBatchDetail` (`lib/research/treatments.ts:651`) | `research/treatments/[id]` — **arreglada en #696**: lanza su `ResearchAccessError("…_not_found")`, lo mismo que a un UUID que no existe; da 404 |
 | `grantedKeysForSession` (`lib/sensory/service.ts:64`) | `sensory/[sessionId]` |
 
 **`conAncestros`, hecho el 2026-10-09 en #696, y con su propia prueba.** Está dentro de `can()`, así que
@@ -160,7 +161,7 @@ flip quitando la guarda tiene que tumbar justo las filas del id basura. Y por p�
 arriba: las 52 con los dos ids, contando cuántas dan 500. El 2026-10-09, con `/lots` ya arreglado,
 eran **32** con el id basura y **7** con el UUID que no existe; tras arreglar
 `requireLocationAttributeAccess`, **24** y **7**; tras `puedeSubdividirParcela` y `conAncestros`, **21** y
-**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**; tras las dos de fincas, **11** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
+**7**; tras `getApiaryDetail` y `getHive`, **18** y **5**; tras `getFieldSessionTimeline`, **17** y **5**; tras `leerReporteDeVisita`, **16** y **4**; tras las tres de `findUniqueOrThrow`, **13** y **1**; tras las dos de fincas, **11** y **1**; tras las tres de investigación, **8** y **1**. Cada vez se volvieron a medir las páginas arregladas; las demás no, pero ninguna reventaba en esas
 funciones, sino antes, en la suya.
 
 **Las de apiario, medidas el 2026-10-09 contra el servidor.**
@@ -192,3 +193,10 @@ peticiones. La comprobación de permiso sigue antes que la de existencia: quien 
 `fincas/[siteId]/destino` y `fincas/[siteId]/logotipo` dan 404 con el id basura y con el UUID que no
 existe, y 200 con la finca DEMO. En la misma corrida, `bodegas/[id]` volvió a dar 404, 404 y 200 con una
 bodega creada en la base desechable.
+
+**Las tres de investigación, medidas el 2026-10-10 contra el servidor** con Platform Admin:
+`research/[protocolId]`, `research/execute/[protocolVersionId]` y `research/treatments/[id]` dan 404 con el
+id basura y con el UUID que no existe, y 200 con un protocolo, una versión y un lote de tratamiento creados
+en la base desechable. El log no registra ningún `P20xx`. De paso: `tests/research/ro1-2.test.ts`, del
+grupo `datos-reales`, revienta en una base sembrada por CI al crear un ámbito de plataforma que ya existe
+(`Unique constraint failed on scope_type`, línea 71). Es anterior a este cambio y no lo toca.
