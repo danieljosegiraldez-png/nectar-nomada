@@ -41,9 +41,10 @@ import { verifyPassword } from "../auth/password";
  * primaria en cada escritura, ninguna en cada lectura. El audit §19 pide que lo
  * de un aparato revocado se rechace al sincronizar, no que se le corte la
  * lectura. **Una ruta nueva que escriba por Bearer tiene que llamar a
- * `negativaDelAparato`** y devolver si niega. Lo exige
- * `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`, que
- * descubre esas rutas solo y no las enumera.
+ * `negativaDelAparato`** con el `deviceId` del principal y devolver si niega. Lo
+ * exige `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`:
+ * toma toda ruta que importe `resolverPrincipal`, falla ante una forma de
+ * handler que no sabe leer en vez de callar, y su cabecera dice qué no ve.
  *
  * **Lo que la comprobación NO cierra, dicho para que nadie lo cuente:**
  * - se hace **al empezar** la petición, fuera de la transacción que escribe:
