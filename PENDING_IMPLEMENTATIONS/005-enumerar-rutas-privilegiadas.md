@@ -2,8 +2,8 @@
 
 **Estado: la propiedad que faltaba YA TIENE MECANISMO, y el primer dominio está
 declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
-concretas, las dos nombradas al final: **los otros dominios** (hoy el del lote y,
-desde el 2026-10-11, los de ubicaciones y equipos) y **tus catorce veredictos**, de los que dos son defectos propuestos.
+concretas, las dos nombradas al final: **los otros dominios** (desde el 2026-10-11 están
+declarados los cinco medidos: lote, ubicaciones, equipos, especímenes y muestras) y **tus veredictos**, de los que dos son defectos propuestos.
 
 Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
 debido*— está en la sección «El guardia debido, 2026-10-04».
@@ -241,8 +241,13 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 - **Tus doce veredictos restantes.** Los dos defectos ya están arreglados. La
   compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
   en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
-- **Los otros dominios.** Hay tres desde el 2026-10-11: el del lote, el de ubicaciones y el de
-  equipos. Quedan `specimen` (7 llamadas a `can`) y `sample` (4).
+- **Los otros dominios.** Desde el 2026-10-11 están los cinco que la medición proponía: lote,
+  ubicaciones, equipos, especímenes y muestras. No queda ninguno pendiente por volumen. Los permisos
+  que no tienen dominio (`apiary`, `research`, `sensory`, `field_report`…) son trabajo nuevo, no
+  esta lista.
+
+  **Tus veredictos, en total:** 12 del lote, 9 de ubicaciones, 1 de equipos, 3 de especímenes y 6 de
+  muestras. Todos «propuesto legítimo» salvo uno, que lleva hueco latente (abajo).
 
   **Esta viñeta decía que añadir el siguiente «no toca la compuerta», y era falso.** La compuerta
   leía sólo `declaracion.dominios[0]`. Medido al declarar `location`: con la versión vieja, quitarle
@@ -304,6 +309,26 @@ entero: 207 archivos, 2576 pruebas, salida 0.
   | quitar la exigencia de `const` | «NO se lee: un `let`» |
   | contar el objeto aunque la función no autorice | «NO se lee: una constante pasada a una función que NO autoriza» |
   | no leer ningún objeto | las tres filas «se lee», y el dominio de equipos |
+
+  **Especímenes y muestras** (decisión de Daniel, 2026-10-11), con la compuerta pidiendo ahora «no
+  vacío» en vez de «más de 5 modelos y más de 20 operaciones», que eran las cifras del lote:
+
+  | dominio | modelos | con guardia | exigen su permiso | tus veredictos |
+  |---|---|---|---|---|
+  | `specimen` | `specimen`, `specimenObservation` | 16 | 13 | 3 |
+  | `sample` | `sample`, `samplingEvent`, `externalCoffeeOrigin` | 16 | 10 | 6 |
+
+  La lectura de ambiente a mano usa `sample:manage`, pero es un dato del ambiente y queda fuera.
+
+  **Un hueco latente en `recordMeasurement`, que es tuyo decidir si se cierra.** Si llegan `lotId` y
+  `sampleId` a la vez, `requireLotAccess` recibe los dos ámbitos y sale bien con el **primero** que
+  pase, y nada comprueba que la muestra sea de ese lote. Con permiso sobre tu lote se colgaría una
+  medición de una muestra ajena. Es la forma de los dos defectos del dominio del lote. **No es
+  alcanzable hoy**, leído y no ejecutado: ninguna acción manda `sampleId`. El arreglo es el que ya tiene
+  `recordRoastSession`: exigir que la muestra sea de ese lote (`sample_source_lot_mismatch`).
+
+  Flip: vaciar el dominio de especímenes tumba «no vacío» (y «ninguna excepción sobra»); quitar la
+  excepción de `recordMeasurement` tumba el dominio de muestras.
 - **El `action`: medido el 2026-10-04, y NO hay defecto vivo.** Esta viñeta decía
   «hoy no está medida»; ya lo está, y el resultado es un cero con su flip detrás.
 
