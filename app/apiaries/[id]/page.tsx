@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AvisosDeBotiquin } from "../../components/inventario/AvisosDeBotiquin";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
-import { getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
+import { ApiaryAccessError, getApiaryDetail, getManageableApiaryProjects } from "../../../lib/apiary/hives";
 import { densidadDePolinizacion } from "../../../lib/apiary/polinizacion";
 import { coordenadasPropuestas } from "../../../lib/traceability/coordenadasDelSitio";
 import { coloniasPorIrregularidad } from "../../../lib/apiary/irregularidades";
@@ -59,8 +59,18 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const t = await getTranslations("Apiary");
   const tt = await getTranslations("Traceability");
-  const [apiary, projects, jornadas, { people, selfPersonId }] = await Promise.all([
-    getApiaryDetail(user.userAccountId, id),
+  // `getApiaryDetail` va PRIMERO y sola, no dentro del `Promise.all`: es la que dice si el apiario
+  // existe y si se puede ver, y las otras tres reciben el mismo id de la URL. En paralelo, un id que
+  // no existía —o mal formado— reventaba en cualquiera de ellas con un 500 que esta página no
+  // atrapaba. «No existe» y «sin permiso» dan 404, como en `etiquetas` y en `plots/[id]` (ficha 026).
+  let apiary;
+  try {
+    apiary = await getApiaryDetail(user.userAccountId, id);
+  } catch (error) {
+    if (error instanceof ApiaryAccessError) notFound();
+    throw error;
+  }
+  const [projects, jornadas, { people, selfPersonId }] = await Promise.all([
     getManageableApiaryProjects(user.userAccountId),
     listFieldSessions(user.userAccountId, id),
     getObserverCandidates(user.userAccountId, [{ locationId: id }]),

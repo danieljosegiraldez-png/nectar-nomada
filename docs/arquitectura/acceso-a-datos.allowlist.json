@@ -920,6 +920,12 @@
       "operacion": "dividirProcesoEnTx",
       "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/traceability/processTargets.ts",
+      "operacion": "listRecipes",
+      "razon": "Guarda con `puedeCrearRecetaEnAlguna` (su mismo archivo → `puedeEditarBeneficioEnOrganizacion` y `listRecipeOrganizations` → `puedeGestionarLote` → `can`), que el detector no reconoce porque no tiene forma de guardia y está a varios saltos. Lanza `ProcessTargetError(\"no_recipe_access\")` antes de leer nada. Hasta el 2026-10-10 llamaba a `requireLotAccess` sobre el primer lote de toda la base, sin orden; ahora usa la misma regla que crear una receta, por decisión de Daniel (PENDING_IMPLEMENTATIONS/027).",
+      "verificado": "2026-10-10"
     }
   ],
   "dependen_del_llamador": [

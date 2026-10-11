@@ -12,6 +12,7 @@ import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { recordAuditEvent } from "../audit";
 import { requireResearchAccess, ResearchAccessError } from "./access";
+import { UUID } from "../validation/uuid";
 import { getSensoryLinkageForSamples } from "../traceability/lots";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -648,6 +649,9 @@ export async function listTreatmentBatches(userAccountId: string, filter: ListTr
  * exactly the "reusing the existing chain without new code" §9.4 asks for.
  */
 export async function getTreatmentBatchDetail(userAccountId: string, treatmentBatchId: string) {
+  // El id llega de la URL. Sin forma de UUID, Prisma lanzaba `P2007` y la página daba 500
+  // (PENDING_IMPLEMENTATIONS/026); es un lote de tratamiento que no existe.
+  if (!UUID.test(treatmentBatchId)) throw new ResearchAccessError("treatment_batch_not_found");
   const batch = await prisma.treatmentBatch.findUnique({
     where: { id: treatmentBatchId },
     include: {

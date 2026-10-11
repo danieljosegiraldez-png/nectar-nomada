@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { clearPermissionOverrideFormAction, setPermissionOverrideFormAction } from "../../../../actions/admin";
 import { BotonDeEnvio } from "../../../../components/BotonDeEnvio";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { listAssignmentPermissions } from "../../../../../lib/rbac/admin";
+import { listAssignmentPermissions, UserAdminError } from "../../../../../lib/rbac/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +42,15 @@ export default async function PermisosDeAsignacionPage({
   let datos;
   try {
     datos = await listAssignmentPermissions(user.userAccountId, assignmentId);
-  } catch {
+  } catch (error) {
     // Sin permiso de administración, o asignación inexistente: no se distingue a
     // propósito. Decir «existe pero no puedes» ya es decir algo.
-    redirect("/admin/users?error=no_access");
+    //
+    // Sólo `UserAdminError`, que es lo que lanza el servicio en esos dos casos. Antes
+    // era un `catch {}` que también se tragaba un fallo real —la base caída, un error
+    // de programa— y lo convertía en «sin acceso» (PENDING_IMPLEMENTATIONS/026).
+    if (error instanceof UserAdminError) redirect("/admin/users?error=no_access");
+    throw error;
   }
 
   const { asignacion, permisos, disponibles } = datos;

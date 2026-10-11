@@ -12,6 +12,7 @@
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireResearchAccess, ResearchAccessError } from "./access";
+import { UUID } from "../validation/uuid";
 import type { MeasurementVariable } from "../traceability/units";
 import type { ProtocolVariableValueType } from "../../generated/prisma/client";
 
@@ -275,6 +276,9 @@ export async function listProtocols(userAccountId: string, filter: ListProtocols
 }
 
 export async function getProtocolVersionDetail(userAccountId: string, protocolVersionId: string) {
+  // El id llega de la URL. Sin forma de UUID, Prisma lanzaba `P2007` y la página daba 500
+  // (PENDING_IMPLEMENTATIONS/026); es una versión que no existe.
+  if (!UUID.test(protocolVersionId)) throw new ResearchAccessError("protocol_version_not_found");
   const version = await prisma.protocolVersion.findUnique({
     where: { id: protocolVersionId },
     include: {
@@ -447,6 +451,8 @@ export async function listVariableCatalogs(userAccountId: string) {
 }
 
 export async function getProtocolDetail(userAccountId: string, protocolId: string) {
+  // Lo mismo que `getProtocolVersionDetail`: un id sin forma de UUID es un protocolo que no existe.
+  if (!UUID.test(protocolId)) throw new ResearchAccessError("protocol_not_found");
   const protocol = await prisma.protocol.findUnique({
     where: { id: protocolId },
     include: {

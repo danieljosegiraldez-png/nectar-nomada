@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**628 operaciones** que tocan la base, en **170 archivos** — medido el 2026-10-08, con ADR-198 PR 2 sobre `origin/main` (`1a28e5ae`): son **dos más** que las 626 del 2026-10-05, y las dos son de `lib/traceability/beneficios.ts` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`, **guardia transitivo**—, así que esas dos filas suben y las otras cinco no se mueven. Antes, medido el 2026-10-05 con
+**628 operaciones** que tocan la base, en **170 archivos** — el total no cambia el 2026-10-10, pero sí tres filas, todas de `lib/traceability/processTargets.ts` (`PENDING_IMPLEMENTATIONS/027`, rama sobre `origin/main` `a2f269b5`). Cinco funciones de recetas dejan de llamar a `requireLotAccess` sobre el primer lote que devuelva Postgres y pasan por `puedeGestionarLote`, así que salen de «guardia directo» (399 → 393) y entran en «guardia transitivo» (60 → 65). Y `listRecipes` pasa a «recibía principal sin guardia visible» (22 → 23). Antes, medido el 2026-10-08, con ADR-198 PR 2 sobre `origin/main` (`1a28e5ae`): son **dos más** que las 626 del 2026-10-05, y las dos son de `lib/traceability/beneficios.ts` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`, **guardia transitivo**—, así que esas dos filas suben y las otras cinco no se mueven. Antes, medido el 2026-10-05 con
 `node scripts/inventario-de-acceso.mjs`, ya **sobre el AST** (`PENDING_IMPLEMENTATIONS/007`), sobre
 **el árbol fusionado** con `origin/main` (`a8f50df709`). El 2026-10-04 daban **624 en 170** sobre
 `origin/main` (`966ada98d1`): la de más es **`situacionesDeLaFinca`** en
@@ -30,13 +30,13 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **399** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
-| **60** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
+| **393** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **65** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **99** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+| **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar. Y desde el 2026-10-10, la 23: `listRecipes`, que guarda con `puedeCrearRecetaEnAlguna`, a varios saltos de `can` |
 
 > **DOS MECANISMOS DE AUTORIZACIÓN QUE ESTE INVENTARIO NO VE (2026-10-04).** Los destapó la revisión
 > independiente al mirar las razones nuevas del allowlist, y conviene leerlos antes de apoyarse en una cifra:

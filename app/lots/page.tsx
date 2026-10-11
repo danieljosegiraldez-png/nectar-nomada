@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { getActiveOperations, getLotList, type LotListFilters } from "../../lib/traceability/lots";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,13 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
 
   const t = await getTranslations("Traceability");
   const secado = await getTranslations("Secado");
-  const [operations, lots, granted] = await Promise.all([
+  const [operations, lots, granted, puedeVerRecetas] = await Promise.all([
     getActiveOperations(user.userAccountId),
     getLotList(user.userAccountId, { lotType: filter }),
     permissionKeysAnywhere(user.userAccountId),
+    // La misma regla que `listRecipes` (PENDING_IMPLEMENTATIONS/027): el enlace no promete lo que
+    // la lista rechaza.
+    puedeCrearRecetaEnAlguna(user.userAccountId),
   ]);
   const { items: lotItems, truncated: lotsTruncated, limit: lotLimit } = lots;
   // Una cuenta sin asignaciones ve las mismas listas vacías que una finca sin
@@ -55,7 +59,6 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
   // se dice a quién pedirle el acceso.
   const sinAmbito = lots.sinAmbito && operations.sinAmbito;
   const canExport = granted.has("lot:export");
-  const canManageLots = granted.has("lot:manage");
 
   return (
     <div>
@@ -85,7 +88,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             consolidated that bar from ten entries precisely so it would fit a
             phone. A test asserts it stays at eight or fewer, and it was right
             to refuse a ninth. */}
-        {canManageLots ? (
+        {puedeVerRecetas ? (
           <Link href="/recipes" className="nn-button-quiet">
             {t("recipesTitle")}
           </Link>

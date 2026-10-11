@@ -106,6 +106,11 @@ describe("el guardia se resuelve hasta su símbolo", () => {
    * Si el número crece, la convención se está quedando atrás y conviene saberlo;
    * si baja, alguien las acercó al servicio. Las tres puertas se excluyen porque
    * «alcanzar» es trivial para ellas.
+   *
+   * **El 2026-10-10 subió a tres** con `listRecipes`: ahora guarda con
+   * `puedeCrearRecetaEnAlguna`, la regla de crear recetas que Daniel eligió para la lista
+   * (`PENDING_IMPLEMENTATIONS/027`). Antes llamaba a `requireLotAccess`, pero sobre el primer lote de
+   * toda la base: la convención lo veía, y la regla estaba mal. Su razón está en la allowlist.
    */
   it("y las que autorizan sin que el nombre lo vea están contadas", () => {
     const sinClase = filas.filter((f) => !f.clase.startsWith("guardia"));
@@ -113,6 +118,7 @@ describe("el guardia se resuelve hasta su símbolo", () => {
     expect(callan.sort()).toEqual([
       "lib/equipos/bandejas.ts:registrarBandejas",
       "lib/equipos/modosDeInstrumento.ts:declararModoDeInstrumento",
+      "lib/traceability/processTargets.ts:listRecipes",
     ]);
   });
 

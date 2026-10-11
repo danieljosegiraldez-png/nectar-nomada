@@ -23,6 +23,7 @@ import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION, TraceabilityAccessError } from "./lots";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
 import { resolveOrganizationForLocation, LocationAccessError } from "./locations";
+import { UUID } from "../validation/uuid";
 import { requireOpenFieldSessionForEvent, FieldSessionValidationError } from "./fieldSessions";
 import type { IntervencionParaCarencia } from "./carenciaDeIntervencion";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
@@ -754,6 +755,10 @@ export interface ContextoDeManejo {
  * `location:manage_attributes`, sin cambios.
  */
 export async function contextoDeManejo(userAccountId: string, locationId: string): Promise<ContextoDeManejo> {
+  // Un id sin forma de UUID es una ubicación que no existe: se rechaza como tal antes de ir a la
+  // base. Sin esto, a un Platform Admin `requireLotAccess` le dejaba pasar y la consulta de abajo
+  // daba `P2007`, un 500 en las dos páginas de manejo (PENDING_IMPLEMENTATIONS/026).
+  if (!UUID.test(locationId)) throw new TraceabilityAccessError("no_lot_access");
   await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
   const location = await prisma.location.findUnique({
     where: { id: locationId },

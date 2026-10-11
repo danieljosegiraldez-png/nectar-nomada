@@ -32,6 +32,7 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { recordAuditEvent } from "../audit";
 import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { can } from "../rbac/service";
 import { clasificar, resumir } from "./disponibilidad";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
@@ -819,6 +820,9 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
 
 /** Un instrumento con sus patrones vigentes, para pintar el formulario de verificación. */
 export async function instrumentoParaVerificar(userAccountId: string, equipmentId: string) {
+  // El id llega de la URL de `equipos/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la página
+  // daba 500 (PENDING_IMPLEMENTATIONS/026); es un equipo que no existe.
+  if (!UUID.test(equipmentId)) throw new EquipoError("equipment_not_found");
   const equipo = await prisma.equipment.findUnique({
     where: { id: equipmentId },
     include: {

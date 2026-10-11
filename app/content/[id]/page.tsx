@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../lib/auth/session";
 import {
@@ -31,8 +31,10 @@ export default async function StoryEditorPage({
     loaded = await getStoryForEditor(user.userAccountId, id);
   } catch (error) {
     // A story this account may not see and one that does not exist are the
-    // same answer on purpose (ADR-081/092).
-    if (error instanceof ContentAccessError) redirect("/content");
+    // same answer on purpose (ADR-081/092). That answer is a 404, like
+    // `plots/[id]` and `bodegas/[id]` (Daniel, 2026-10-09; PENDING_IMPLEMENTATIONS/026):
+    // it used to be a redirect to the list, which answered "not found" with a 200.
+    if (error instanceof ContentAccessError) notFound();
     throw error;
   }
   const { story, canEdit, canPublish } = loaded;

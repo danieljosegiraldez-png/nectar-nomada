@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
+import { puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import {
@@ -75,7 +76,7 @@ export default async function BeneficioPage({
   if (!granted.has("lot:view") && !granted.has("lot:manage")) notFound();
 
   const t = await getTranslations("SeccionBeneficio");
-  const destinos = destinosDelBeneficio(granted);
+  const destinos = destinosDelBeneficio(granted, await puedeCrearRecetaEnAlguna(user.userAccountId));
   const { operaciones, consultar, herramientas } = repartirDestinos(destinos);
 
   const { ok, error, lote: loteCrudo, variable: variableCruda } = await searchParams;
