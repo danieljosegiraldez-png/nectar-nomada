@@ -74,6 +74,16 @@ export interface SnapshotDeVisita {
       valoracion: string | null;
     };
     alimentacion?: { tipo: string | null; material: string | null; cantidad: string | null; unidad: string | null };
+    /**
+     * **El tipo de manejo y el conteo de varroa, congelados** (V-7 de la revisión del Apiario,
+     * 2026-10-10). Hasta entonces el informe guardaba del manejo sólo el producto o el alimento
+     * —`sujeto: "evento_de_colonia"`, sin decir cuál—, y un conteo de varroa entraba como una
+     * fila sin caja ni resultado. Opcionales: lo emitido antes no los trae.
+     *
+     * De la varroa se congela LO CONTADO; la infestación se deriva al pintar, como en la ficha.
+     */
+    manejo?: string | null;
+    varroa?: { metodo: string; abejas: number; acaros: number };
   }>;
   /**
    * La lectura del tecnico y lo que le recomienda al cliente. Opcionales por lo mismo que
@@ -162,6 +172,9 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       apiaryHarvestEvent: {
         select: { extractedWeightKg: true, colony: { select: { hive: { select: { identifier: true } } } } },
       },
+      varroaCount: {
+        select: { method: true, sampleBees: true, mitesCounted: true, colony: { select: { hive: { select: { identifier: true } } } } },
+      },
     },
   });
 
@@ -183,6 +196,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         e.inspection?.colony.hive.identifier ??
         e.colonyEvent?.colony.hive.identifier ??
         e.apiaryHarvestEvent?.colony.hive.identifier ??
+        e.varroaCount?.colony.hive.identifier ??
         null,
       // Una linea de lo que paso, con lo que la fila declara y nada mas. Un tratamiento sin
       // producto anotado dice `null`, no una cadena vacia ni un "se aplico algo": el vacio se
@@ -206,6 +220,8 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         cantidad: e.colonyEvent.feedingQuantity?.toString() ?? null,
         unidad: e.colonyEvent.feedingUnit,
       } } : {}),
+      ...(e.colonyEvent ? { manejo: e.colonyEvent.eventType } : {}),
+      ...(e.varroaCount ? { varroa: { metodo: e.varroaCount.method, abejas: e.varroaCount.sampleBees, acaros: e.varroaCount.mitesCounted } } : {}),
       // Qué hecho concreto cuelga de este registro, sin exponer el id interno.
       sujeto:
         e.inspectionId ? "inspeccion"
@@ -213,6 +229,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         : e.apiaryHarvestEventId ? "cosecha"
         : e.measurementId ? "medicion"
         : e.harvestEventId ? "cosecha"
+        : e.varroaCountId ? "conteo_de_varroa"
         : null,
     })),
     causaProbable: visita.probableCause,
