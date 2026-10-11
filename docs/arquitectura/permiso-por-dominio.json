@@ -1,6 +1,6 @@
 {
-  "_nota": "PENDING_IMPLEMENTATIONS/005, la propiedad que faltaba: que el guardia que domina una operacion sea EL DEBIDO, no solo que exista. Esto declara, POR DOMINIO, que modelos gobierna un permiso, y tests/arquitectura/el-permiso-es-el-debido.test.ts falla si una operacion toca uno de esos modelos sin exigir ese permiso y sin estar declarada aqui con su razon. El permiso que exige cada operacion se resuelve por SIMBOLO (escalon 2 de la ficha 007), no por el nombre del guardia: el tercer argumento de `can(userAccountId, action, resourceType, ...)`, propagado desde el envoltorio que lo pasa. La ficha 005 rechazo un token universal para todo Prisma; esto es la otra via que ella misma sugiere, por dominio, empezando por el de mas consecuencia.",
-  "_como_se_anade_un_dominio": "Un bloque mas en `dominios`, con su `permiso`, los `gobierna` y su `porque`. No hace falta tocar la compuerta. Lo que NO se hace es declarar un dominio sin adjudicar sus excepciones: una excepcion sin razon pone la compuerta en rojo, a proposito.",
+  "_nota": "PENDING_IMPLEMENTATIONS/005, la propiedad que faltaba: que el guardia que domina una operacion sea EL DEBIDO, no solo que exista. Esto declara, POR DOMINIO, que modelos gobierna un permiso, y tests/arquitectura/el-guardia-es-un-simbolo.test.ts (describe «el permiso que exige una operacion corresponde al dato que toca») falla si una operacion toca uno de esos modelos sin exigir ese permiso y sin estar declarada aqui con su razon. El permiso que exige cada operacion se resuelve por SIMBOLO (escalon 2 de la ficha 007), no por el nombre del guardia: el tercer argumento de `can(userAccountId, action, resourceType, ...)`, propagado desde el envoltorio que lo pasa. La ficha 005 rechazo un token universal para todo Prisma; esto es la otra via que ella misma sugiere, por dominio, empezando por el de mas consecuencia.",
+  "_como_se_anade_un_dominio": "Un bloque mas en `dominios`, con su `permiso`, los `gobierna`, su `porque` y sus `excepciones`. La compuerta recorre TODOS los bloques. Hasta el 2026-10-11 leia solo `dominios[0]`, y esta misma frase decia que no hacia falta tocarla: un segundo dominio habria quedado sin vigilar y en verde. Lo que NO se hace es declarar un dominio sin adjudicar sus excepciones: una excepcion sin razon pone la compuerta en rojo, a proposito.",
   "dominios": [
     {
       "permiso": "lot",
@@ -168,6 +168,117 @@
           "archivo": "lib/research/treatments.ts",
           "cuando": "2026-10-04",
           "como": "Exige que `sourceLot.projectId === stage.treatmentBatch.projectId`. NO exige `lot:view`, y la razon de la excepcion explica por que: habria obligado a cambiar el modelo de permisos de los perfiles de investigacion. Si Daniel prefiere esa via, el cambio es conceder `[\"lot\", \"view\"]` a `Research Lead` y `Research Contributor` en lib/rbac/catalog.ts, mas una siembra."
+        }
+      ]
+    },
+    {
+      "permiso": "location",
+      "porque": "Los datos que se registran SOBRE una ubicacion: su suelo (perfil, horizontes, muestras), sus muestras foliares, la rejilla de la parcela (bloques, rangos, forma), lo que se planto (cohortes, eventos de siembra), el biocarbon, la regla de trampas de la finca y las rutinas de lugar. Decision de Daniel del 2026-10-11 (ficha 005, opcion B). El modelo `location` mismo NO se declara, y es a proposito: es la entidad canonica que leen todos los dominios. Medido ese dia, 106 operaciones con guardia lo tocan y 59 exigen otro permiso (lot 20, apiary 11, specimen 7, sample 6...), casi todas lecturas de contexto. Declararlo convertiria la compuerta en una lista que se aprende a ignorar. Lo que queda sin vigilar es quien ESCRIBE una ubicacion con el permiso equivocado, y eso es la compuerta por accion que la ficha 005 deja como decision de Daniel. Con estos 13 modelos: 48 operaciones con guardia, 39 exigen `location` y las 9 restantes estan declaradas abajo.",
+      "gobierna": [
+        "soilProfile",
+        "soilHorizon",
+        "soilSample",
+        "foliarSample",
+        "plotBlock",
+        "plotBlockRange",
+        "plotShapeRange",
+        "plantingCohort",
+        "plantingEvent",
+        "biocharBatch",
+        "trapRule",
+        "careRoutine",
+        "careRoutineEvent"
+      ],
+      "excepciones": [
+        {
+          "archivo": "lib/traceability/floracion.ts",
+          "operacion": "registrarFloracion",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la parcela y, si se nombra un bloque, comprueba que sea DE ESA parcela (\"ese bloque es de otra parcela\")."
+        },
+        {
+          "archivo": "lib/traceability/intervenciones.ts",
+          "operacion": "corregirIntervencion",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la parcela de la intervencion original, y `validarReferencias(parcela, input.nueva)` rechaza un bloque o una planta de otra parcela ANTES de que `crearAreas` escriba (lineas 542 y 582, verificado el 2026-10-11)."
+        },
+        {
+          "archivo": "lib/traceability/intervenciones.ts",
+          "operacion": "bloquesDeLaParcela",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Lectura: `lot:view` sobre la parcela y despues los bloques de esa misma parcela. Es la lista que necesita quien registra una intervencion, sin pedirle el permiso de atributos que exige el tablero entero."
+        },
+        {
+          "archivo": "lib/traceability/plantingEvents.ts",
+          "operacion": "recordPlantingEvent",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la ubicacion y escribe el evento de siembra en ESA ubicacion; la persona que opera pasa por `exigirPersonaPermitida`."
+        },
+        {
+          "archivo": "lib/traceability/plantingEvents.ts",
+          "operacion": "listPlantingEventsForLocation",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Lectura: `lot:view` sobre la ubicacion y los eventos de siembra de esa misma ubicacion."
+        },
+        {
+          "archivo": "lib/research/amendments.ts",
+          "operacion": "getGate0Status",
+          "permisos": [
+            "research"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «investigacion sobre el mismo bloque»: autoriza `research:execute_protocol` sobre ESA ubicacion y despues `evaluarGate0` cuenta su perfil de suelo y sus muestras. Solo dice que falta para empezar el protocolo en ese bloque."
+        },
+        {
+          "archivo": "lib/research/amendments.ts",
+          "operacion": "applyAmendment",
+          "permisos": [
+            "research"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «investigacion sobre el mismo bloque»: `research:execute_protocol` sobre la ubicacion (solo la ubicacion, no el proyecto: lo explica su comentario, por la revision del 2026-09-01). El lote de biocarbon que se cita tiene que ser de la MISMA organizacion que el bloque. Una nota, no un defecto: un id de biocarbon ajeno contesta `biochar_batch_from_another_organization` y uno inexistente `biochar_batch_not_found`, asi que la respuesta dice si ese id existe en otra finca. No escribe nada en ese caso, y un UUID no se adivina."
+        },
+        {
+          "archivo": "lib/traceability/traps.ts",
+          "operacion": "createTrap",
+          "permisos": [
+            "specimen"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trampas, con su permiso de especimen»: `requireTrapAccess` autoriza `specimen` sobre la parcela, y si se nombra un bloque tiene que ser DE ESA parcela (`block_not_in_plot`)."
+        },
+        {
+          "archivo": "lib/traceability/fincaTrampas.ts",
+          "operacion": "getFincaTrampas",
+          "permisos": [
+            "specimen"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trampas, con su permiso de especimen»: lanza si no alcanza ningun plot de la finca con permiso de especimen, y despues lee la regla de trampas de esa finca (umbral, dias, accion sugerida) sin pedir `location:manage_attributes`. Lo dice su comentario y es deliberado, igual que en `getPlotDetail`: la regla es configuracion de la finca que necesita quien revisa sus trampas."
         }
       ]
     }
