@@ -194,7 +194,8 @@ describe("qué se puede cargar", () => {
     await expect(intentar((await bandeja("otra-org", { organizationId: otraOrg, alta: sitioDeOtraOrg })).id)).rejects.toThrow("bandeja_de_otra_organizacion");
     await expect(intentar((await bandeja("sin-ver", { alta: otroSitio })).id)).rejects.toThrow("bandeja_sin_acceso");
     const retirada = await bandeja("retirada");
-    await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired" } });
+    // El CHECK `equipment_retiro_completo` (Parte 2c §4.5) exige fecha y motivo a todo equipo retirado.
+    await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired", retiredAt: new Date(), retiroMotivo: "TEST bandeja retirada" } });
     await expect(intentar(retirada.id)).rejects.toThrow("bandeja_retirada");
     await expect(intentar((await bandeja("antes")).id, T("2026-08-31T00:00:00Z"))).rejects.toThrow("fecha_antes_del_secado");
 
@@ -456,7 +457,8 @@ describe("dónde está cada bandeja", () => {
     await cargarBandeja(operador, { dryingRunId: (await secado("ocupa")).id, equipmentId: ocupada.id, desde: T("2026-09-01T11:00:00Z") });
     const instr = await bandeja("instr-disp", { kind: "instrument" });
     const retirada = await bandeja("retirada-disp");
-    await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired" } });
+    // El CHECK `equipment_retiro_completo` (Parte 2c §4.5) exige fecha y motivo a todo equipo retirado.
+    await prisma.equipment.update({ where: { id: retirada.id }, data: { lifecycleStatus: "retired", retiredAt: new Date(), retiroMotivo: "TEST bandeja retirada" } });
     const deOtra = await bandeja("otra-disp", { organizationId: otraOrg, alta: sitioDeOtraOrg });
     const sinVer = await bandeja("sin-ver-disp", { alta: otroSitio });
     // D4: un vessel sin tipo ni número tampoco sale como disponible.
