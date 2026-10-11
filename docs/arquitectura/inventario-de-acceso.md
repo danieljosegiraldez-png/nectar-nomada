@@ -16,13 +16,13 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 **637 operaciones** que tocan la base, en **173 archivos** — medido el 2026-10-10, al unir `origin/main`
 (`a2f269b5`) en la rama de la Parte 2a: son **tres más** que las 634 en 173 de la rama antes de unir, y las tres
 vienen de `main` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`,
-**guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #684), y
+**guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #687), y
 `getReportRoastPreparations`, **guardia directo**, de `lib/traceability/reports.ts` (#679)—, así que
 «guardia directo» sube de 397 a 399, «guardia transitivo» de 66 a 67 y las otras cinco filas no se mueven
 (ninguna operación de la rama cambia de clase al unir: medido comparando, fila por fila, el inventario de la
 rama antes de unir con el de la unión). **La cuenta cuadra con `main` solo:** `a2f269b5` mide 628 operaciones en 170 archivos, y
 628 + 11 − 2 = 637 y 170 + 3 = 173 con lo que la Parte 2a añade y retira (abajo). Las **634 en 173** de la rama
-eran: las **625 en 170** de la medición del 2026-10-05; sobre ellas, las once operaciones y los tres archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`; tarea 14, `lib/recetas/catalogosDelEditor.ts` y `crearRecetaEnBorrador`: ver las notas de abajo), y las dos operaciones de menos son las que la Parte E de la tarea 14 retiró (`createRecipeWithVersion` y `createRecipeVersion`: 625 + 11 − 2 = 634; `processTargets.ts` sigue teniendo operaciones, así que el archivo no baja. Y `main` solo, medido el 2026-10-08 con
+eran: las **625 en 170** de la medición del 2026-10-05; sobre ellas, las once operaciones y los tres archivos de más son de la Parte 2a (tarea 3, `lib/recetas/pasos.ts`; tarea 4, `lib/recetas/versiones.ts`; tarea 14, `lib/recetas/catalogosDelEditor.ts` y `crearRecetaEnBorrador`: ver las notas de abajo), y las dos operaciones de menos son las que la Parte E de la tarea 14 retiró (`createRecipeWithVersion` y `createRecipeVersion`: 625 + 11 − 2 = 634; `processTargets.ts` sigue teniendo operaciones, así que el archivo no baja). Y `main` solo, medido el 2026-10-08 con
 ADR-198 PR 2 sobre `origin/main` (`1a28e5ae`), daba 628 operaciones en 170 archivos: **dos más** que las 626 del
 2026-10-05, las dos de `lib/traceability/beneficios.ts`, así que esas dos filas subían y las otras cinco no se
 movían. Antes, medido el 2026-10-05 con
