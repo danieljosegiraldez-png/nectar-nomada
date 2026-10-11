@@ -32,7 +32,8 @@ Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
 Y **026 · páginas que daban 500 con un id mal formado en la URL**, cerrada el 2026-10-10 en el PR #696: medidas
 las 52 páginas con segmento dinámico, ninguna da 500 con un id basura ni con uno que no existe.
 Y **027 · la lista de recetas daba 500 sin acceso y decidía con un lote cualquiera**, hecha el
-2026-10-10 en el mismo PR, con la regla que Daniel eligió ese día: la de crear recetas.
+2026-10-10 en el mismo PR, con la regla que Daniel eligió ese día: la de crear recetas. Y el mismo
+«lote cualquiera» en los otros cinco sitios de recetas, arreglado también.
 Y **025 · el verificador de backup decía «no restauró» cuando lo que no pudo fue contar**, hecha
 el 2026-10-06 — y su diagnóstico original era más flojo que la realidad: el fallo estaba **dentro
 de la rama PASS**, después de que el `diff` ya hubiera probado la copia idéntica. Lo peor que

@@ -14,8 +14,8 @@ que la lista rechaza; `destinosDelBeneficio` recibe el booleano en vez de deduci
 `edit_beneficio`) deja de ver la lista y sus enlaces. Farm Manager y Platform Admin la conservan, y
 ningún perfil gana acceso. Lo que la lista enseña no cambia: todas las recetas, como antes.
 
-**Lo que NO se tocó, y no está bien: el mismo «lote cualquiera» vive en otros cuatro sitios del
-mismo archivo.** `lib/traceability/processTargets.ts`, medido el 2026-10-10:
+**Y el mismo «lote cualquiera» vivía en otros cinco sitios del mismo archivo. Arreglados también,
+por decisión de Daniel del mismo día.** `lib/traceability/processTargets.ts`, medido el 2026-10-10:
 
 | función | qué lote mira |
 |---|---|
@@ -30,7 +30,13 @@ gestionaba el primer lote de la base, el mismo que el detalle de una receta comp
 lista la ve un Farm Manager de otra organización. Sonda sobre base desechable sembrada (primer lote
 `DCL-2027-CHERRY-01`, de `DEMO Cloudline`): un Farm Manager de su propia finca ve la lista, y en ella una
 receta compartida; abre la de su organización, y la compartida le da `no_lot_access`, o sea **404**.
-Queda pendiente de decisión de Daniel.
+
+**Cómo se arregló:** `gestionaAlgunLote` recorre las combinaciones distintas de proyecto, ubicación y
+clasificación —lo único que mira `requireLotAccess`— y pregunta a `puedeGestionarLote`, el mismo guardia
+que la escritura, overrides incluidos. **No usa `resolveLotVisibility`**, que es más barata pero mira sólo
+los permisos del perfil: un `grant` de `lot:manage` por override habría quedado fuera. Sobre la copia
+restaurada hay 137 lotes y 8 combinaciones en toda la base, así que recorrerlas cuesta poco.
+`exigeLoteGestionable` conserva los dos errores de antes, en el mismo orden.
 
 **Cómo quedó comprobado:**
 
@@ -38,6 +44,15 @@ Queda pendiente de decisión de Daniel.
   rechazados con `ProcessTargetError`, Farm Manager ve la receta de su organización, y un control de que
   la lista y `puedeCrearRecetaEnAlguna` contestan lo mismo para los tres. Con el código anterior caían
   **las 6**, con `no_lot_access`.
+- La misma prueba, para los cinco sitios: dos sitios en una organización, con el lote del A creado
+  primero, y un Farm Manager sólo del B, que ve la lista, abre su receta y la compartida, y renombra la
+  suya. Con el `processTargets.ts` anterior caían **sus 6 filas**. El control negativo —no abre la receta
+  de otra organización— pasa con los dos códigos, como debe.
+- Flip del ayudante: mirar sólo la primera combinación tumba esas 6; decir que sí siempre, o no filtrar
+  por organización, tumba sólo el control negativo. La primera mutación cae porque Prisma devuelve antes
+  la combinación del A: depende del orden, y por eso el rojo que cuenta es el del código anterior.
+- Las siete pruebas que usan estas funciones (`recipeAuthoring`, `recipeVersions`, `editarBeneficio`,
+  entre otras): 7 archivos, 134 pruebas en verde.
 - Flip: quitar la guarda tumba 4 —las dos filas que rechazan y sus dos controles—; volver a una clase
   que la página no atrapa tumba las mismas 4; volver a colgar el índice de `lot:manage` tumba sólo
   «Recetas sale de la regla de crear recetas, no de lot:manage».
