@@ -338,6 +338,106 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
   }
 }
 
+/**
+ * Retirar un equipo (Parte 2c §4.5; decisión D3 de Daniel, 2026-10-04).
+ *
+ * **Tres reglas, las tres suyas.** El **motivo es obligatorio**; la **fecha es la del servidor** (`new Date()`: nadie la
+ * teclea, así que nadie la inventa ni la adelanta); y **es reversible** —`reactivarEquipo`, también con motivo—. Retirar no
+ * borra nada: el equipo conserva sus traslados, sus informes de condición y lo que se midió con él.
+ *
+ * **Un equipo en uso no se retira**: lo lleva una fermentación abierta (`FermentationRun` con `endedAt` nulo y este equipo
+ * como `vesselEquipmentId`), una bandeja con fila abierta (`DryingRunTray` con `hasta` nulo; la base garantiza que una
+ * fila abierta vive en un secado abierto, así que `hasta` nulo basta) o —decisión D7 de Daniel, 2026-10-05— una tostadora
+ * con un tueste abierto (`RoastSession` con `endedAt` nulo y este equipo como `equipmentId`). Retirarlo dejaría a media
+ * corrida un recipiente que ya no se ofrece. Hoy el recipiente de una corrida es `vesselEquipmentId`; el traslado con destino
+ * (§4.2) lo cambiará al «recipiente vigente», y la consulta de la fermentación cambia con él (las otras dos, no).
+ *
+ * **El bloqueo es lo que hace verdadera la comprobación.** Un `UPDATE` toma `FOR NO KEY UPDATE`, que NO choca con el
+ * `FOR KEY SHARE` que toma la clave ajena al insertar una corrida con este tanque: sin un `FOR UPDATE` explícito, retirar
+ * y empezar una fermentación a la vez dejarían un tanque retirado con una corrida abierta, y las dos comprobaciones habrían
+ * salido bien. Con él, quien llega segundo ESPERA, y al despertar **relee** (en READ COMMITTED cada consulta ve lo que el
+ * otro confirmó). Mismo patrón que `moverBandeja`. El estado se lee DENTRO del bloqueo, no antes.
+ *
+ * `disposed` también se rechaza con `equipo_ya_retirado`: está fuera, y esta función no lo trae de vuelta ni lo vuelve a fechar.
+ *
+ * Permiso: el mismo `manage` que el resto de la gestión del equipo (`equipment:manage`, o `location:edit_beneficio` en el
+ * lugar donde está), resuelto por `exigePermiso`. Va ANTES de cualquier otra comprobación, para que quien no puede no se
+ * entere de si el equipo está en uso.
+ */
+export async function retirarEquipo(userAccountId: string, equipmentId: string, motivo: string): Promise<void> {
+  const equipo = await equipoOFalla(equipmentId);
+  await exigePermiso(userAccountId, "manage", equipo);
+  const razon = motivo.trim();
+  if (razon.length === 0) throw new EquipoError("motivo_obligatorio");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "core"."equipment" WHERE "id" = ${equipmentId}::uuid FOR UPDATE`;
+    const antes = await tx.equipment.findUniqueOrThrow({ where: { id: equipmentId } });
+    if (antes.lifecycleStatus !== "active") throw new EquipoError("equipo_ya_retirado");
+    const corrida = await tx.fermentationRun.findFirst({ where: { vesselEquipmentId: equipmentId, endedAt: null }, select: { id: true } });
+    const carga = await tx.dryingRunTray.findFirst({ where: { equipmentId, hasta: null }, select: { id: true } });
+    // D7: un tueste sin hora de fin también es «en uso». Nada lo cierra después de registrado (el campo es opcional en el formulario).
+    const tueste = await tx.roastSession.findFirst({ where: { equipmentId, endedAt: null }, select: { id: true } });
+    if (corrida || carga || tueste) throw new EquipoError("equipo_en_uso");
+
+    const cuando = new Date();
+    await tx.equipment.update({
+      where: { id: equipmentId },
+      data: { lifecycleStatus: "retired", retiredAt: cuando, retiroMotivo: razon },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "equipment",
+        entityId: equipmentId,
+        operation: "equipment.retire",
+        sourceInterface: "lib/equipos/equipos.ts",
+        before: { lifecycleStatus: antes.lifecycleStatus, retiredAt: antes.retiredAt?.toISOString() ?? null, retiroMotivo: antes.retiroMotivo },
+        after: { lifecycleStatus: "retired", retiredAt: cuando.toISOString(), retiroMotivo: razon },
+        reason: razon,
+      },
+      tx,
+    );
+  });
+}
+
+/**
+ * Deshacer un retiro (Parte 2c §4.5; D3 de Daniel: reversible, con motivo obligatorio). Vuelve a `active` y limpia la fecha
+ * y el motivo del retiro: **el motivo de reactivar vive en la auditoría** (`reason`), y el `before` conserva el retiro que se
+ * deshace, así que nada se pierde. Sólo reactiva un equipo `retired`: uno `active` o `disposed` dice `equipo_no_retirado`.
+ * Mismo permiso, mismo bloqueo y misma relectura bajo el bloqueo que `retirarEquipo`.
+ */
+export async function reactivarEquipo(userAccountId: string, equipmentId: string, motivo: string): Promise<void> {
+  const equipo = await equipoOFalla(equipmentId);
+  await exigePermiso(userAccountId, "manage", equipo);
+  const razon = motivo.trim();
+  if (razon.length === 0) throw new EquipoError("motivo_obligatorio");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "core"."equipment" WHERE "id" = ${equipmentId}::uuid FOR UPDATE`;
+    const antes = await tx.equipment.findUniqueOrThrow({ where: { id: equipmentId } });
+    if (antes.lifecycleStatus !== "retired") throw new EquipoError("equipo_no_retirado");
+
+    await tx.equipment.update({
+      where: { id: equipmentId },
+      data: { lifecycleStatus: "active", retiredAt: null, retiroMotivo: null },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "equipment",
+        entityId: equipmentId,
+        operation: "equipment.reactivate",
+        sourceInterface: "lib/equipos/equipos.ts",
+        before: { lifecycleStatus: antes.lifecycleStatus, retiredAt: antes.retiredAt?.toISOString() ?? null, retiroMotivo: antes.retiroMotivo },
+        after: { lifecycleStatus: "active", retiredAt: null, retiroMotivo: null },
+        reason: razon,
+      },
+      tx,
+    );
+  });
+}
+
 /** Un permiso sobre un equipo, para otros módulos (rutinas, documentos). */
 export async function puedeSobreEquipo(
   userAccountId: string,
@@ -876,13 +976,17 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
  *
  * Sólo recipientes: un refractómetro no se «ocupa». Su disponibilidad es otra
  * cosa y la contesta `listarEquipos` con su estado de revisión.
+ *
+ * **Sólo los activos** (Parte 2c §4.5): un tanque retirado no está libre ni en uso, está fuera, y no cuenta en la
+ * «capacidad ahora». `clasificar` sigue sabiendo decir `RETIRADO` para quien sí lo recibe (el tablero, con sus camas
+ * archivadas); esta consulta simplemente no se lo manda.
  */
 export async function disponibilidadDeRecipientes(userAccountId: string) {
   const equipos = await prisma.equipment.findMany({
     // Una bandeja de secado es un `vessel` con `trayTypeId` y nunca ocupa un tanque de fermentación: contarla aquí
     // la daba por «libre y sana» e inflaba la «Capacidad ahora» (Parte 2c §4.6). `listarEquipos`, que es el
     // inventario de todas las clases, sí la sigue listando.
-    where: { kind: "vessel", trayTypeId: null, lifecycleStatus: { not: "disposed" } },
+    where: { kind: "vessel", trayTypeId: null, lifecycleStatus: "active" },
     include: {
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
