@@ -344,8 +344,11 @@ Daniel: «puedo escoger un proceso o inventar un proceso, pero debo mantenerlo d
   - **Honey:** 100 % del mucílago retenido; con menos, semi-lavado.
   - **Fiebre:** cereza entera en sus sacos de cosecha sin sellar, se calienta; prefermentativo por
     intención.
-  - **Láctico, málico, acético:** resultados, no métodos; exigen datos medidos o se publican como
-    perfil buscado.
+  - **Láctico, málico, acético:** el nombre del método se usa libremente en la receta (Daniel,
+    2026-10-06: «fermentación láctica» ya existe como método); pero afirmar ante un comprador que
+    el café «es láctico» exige un dato medido o se publica como perfil buscado. La frase «resultados,
+    no métodos» venía del paquete, no de Daniel, y se matiza así. Málica y acética no existen como
+    proceso en el código.
 
 Antes de añadir cualquier valor, el plan mide la base: qué catálogos y valores existen ese día.
 

@@ -58,7 +58,8 @@ describe("los tipos de paso", () => {
     expect(definicion("tipo_paso", "washing")).toMatch(/le queda el 0 %/);
     expect(definicion("tipo_paso", "prefermentacion")).toMatch(/fiebre/);
     expect(definicion("tipo_paso", "prefermentacion")).toMatch(/sacos de cosecha sin sellar/);
-    expect(definicion("tipo_paso", "fermentation")).toMatch(/resultados, no métodos/);
+    expect(definicion("tipo_paso", "fermentation")).toMatch(/el nombre del método se puede usar en la receta/);
+    expect(definicion("tipo_paso", "fermentation")).toMatch(/dato medido o se publica como perfil buscado/);
   });
 
   it("la recepción no promete una comparación que todavía no existe: dice que ningún registro del proceso la cumple (diseño §4.5, F1-4)", () => {

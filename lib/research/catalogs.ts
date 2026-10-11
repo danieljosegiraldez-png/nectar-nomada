@@ -823,7 +823,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "fermentation",
         definition:
-          "Fermentación (R6 §7.2: temperatura de la masa y del ambiente, pH, °Brix, acidez, gases, presión). Láctico, málico y acético son resultados, no métodos: exigen datos medidos o se publican como perfil buscado (diseño §7).",
+          "Fermentación (R6 §7.2: temperatura de la masa y del ambiente, pH, °Brix, acidez, gases, presión). Láctico, málico y acético: el nombre del método se puede usar en la receta, pero decir ante un comprador que el café lo es exige un dato medido o se publica como perfil buscado (diseño §7).",
       },
       {
         value: "immersion_hot",
