@@ -22,7 +22,8 @@ import { describe, expect, it } from "vitest";
  * un handler envuelto (`withX(handler)`), reexportado o desestructurado sale
  * como NO ANALIZABLE y la compuerta falla. Lo mismo un archivo que importe
  * `interpretarAutorizacion` o `verificarAccess`, el carril del token sin pasar
- * por `resolverPrincipal`. Y la última prueba cierra el mundo: fuera de las
+ * por `resolverPrincipal`, o que llegue al carril de forma opaca: `* as`, por
+ * defecto, `import()` o reexportándolo. Y la última prueba cierra el mundo: fuera de las
  * rutas y de sus dos módulos, nadie llama a esas tres funciones —un ayudante
  * que envolviera `resolverPrincipal` sería un camino que este archivo no ve—.
  *
@@ -109,6 +110,33 @@ function importados(fuente: ts.SourceFile): Map<string, Set<string>> {
     }
   }
   return nombres;
+}
+
+const MODULOS_DEL_CARRIL = /(^|\/)(requestPrincipal|deviceTokens)(\.[cm]?[jt]sx?)?$/;
+
+/**
+ * Formas de llegar al carril del token que no dejan ver qué se llama: `* as`,
+ * por defecto, `import()` dinámico, o reexportarlo. Medido el 2026-10-11 que la
+ * versión anterior devolvía `[]` —en la ruta y en el mundo cerrado— ante
+ * `import * as rp` seguido de `rp.resolverPrincipal(…)`.
+ */
+function accesoOpacoAlCarril(fuente: ts.SourceFile): string | null {
+  const delCarril = (e: ts.Node | undefined) => !!e && ts.isStringLiteral(e) && MODULOS_DEL_CARRIL.test(e.text);
+  for (const st of fuente.statements) {
+    if (ts.isImportDeclaration(st) && delCarril(st.moduleSpecifier)) {
+      if (st.importClause?.name) return "importa por defecto el carril del token";
+      const enlaces = st.importClause?.namedBindings;
+      if (enlaces && ts.isNamespaceImport(enlaces)) return "importa el carril del token con `* as`";
+    }
+    if (ts.isExportDeclaration(st) && delCarril(st.moduleSpecifier)) return "reexporta el carril del token";
+  }
+  let dinamica = false;
+  recorrer(fuente, (n) => {
+    if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword && delCarril(n.arguments[0])) {
+      dinamica = true;
+    }
+  });
+  return dinamica ? "importa el carril del token con `import()`" : null;
 }
 
 const llamaA = (nodo: ts.Node, nombres: Set<string>): nodo is ts.CallExpression =>
@@ -269,6 +297,8 @@ function escriturasPorToken(texto: string, nombre = "route.ts"): Resultado[] {
   if (CARRIL_SIN_RESOLVER.some((n) => nombres.has(n))) {
     return [{ metodo: "*", mira: false, motivo: "no analizable: usa el carril del token sin `resolverPrincipal`" }];
   }
+  const opaco = accesoOpacoAlCarril(fuente);
+  if (opaco) return [{ metodo: "*", mira: false, motivo: `no analizable: ${opaco}` }];
   const resolver = nombres.get("resolverPrincipal");
   if (!resolver) return [];
   const negativa = nombres.get("negativaDelAparato") ?? new Set<string>();
@@ -279,9 +309,14 @@ function escriturasPorToken(texto: string, nombre = "route.ts"): Resultado[] {
   });
 }
 
-/** Quién llama a las tres funciones del carril del token, por nombre original, alias incluidos. */
-function llamadasAlCarril(texto: string, nombre: string): string[] {
+/**
+ * Qué hace un archivo con el carril del token: las llamadas a sus tres
+ * funciones por nombre original (alias incluidos) y, si llega de forma opaca,
+ * por qué. Vacío es que no lo toca.
+ */
+function usoDelCarril(texto: string, nombre: string): string[] {
   const fuente = ts.createSourceFile(nombre, texto, ts.ScriptTarget.Latest, true);
+  const opaco = accesoOpacoAlCarril(fuente);
   const nombres = importados(fuente);
   const locales = new Map<string, string>();
   for (const original of ["resolverPrincipal", ...CARRIL_SIN_RESOLVER]) {
@@ -294,7 +329,7 @@ function llamadasAlCarril(texto: string, nombre: string): string[] {
       salida.push(locales.get(n.expression.text)!);
     }
   });
-  return salida;
+  return opaco ? [...salida, opaco] : salida;
 }
 
 const archivos = (dir: string, acepta: RegExp): string[] => {
@@ -460,6 +495,33 @@ describe("el detector, con formas que no sabe leer: fallan en vez de callar", ()
   it("el carril del token sin pasar por resolverPrincipal", () => noAnalizable(`
     import { interpretarAutorizacion } from "../../../../lib/sync/deviceTokens";
     export async function POST(request: Request) { return escribir(interpretarAutorizacion(null)); }`, "*"));
+
+  it("el carril importado con `* as`, por defecto, con `import()` o reexportado", () => {
+    const POST_OPACO = `export async function POST(request: Request) { const u = await rp.resolverPrincipal(request); return escribir(u); }`;
+    noAnalizable(`import * as rp from "../../../../lib/sync/requestPrincipal";\n${POST_OPACO}`, "*");
+    noAnalizable(`import rp from "../../../../lib/sync/requestPrincipal.ts";\n${POST_OPACO}`, "*");
+    noAnalizable(`export async function POST(request: Request) {
+      const rp = await import("../../../../lib/sync/requestPrincipal");
+      return escribir(await rp.resolverPrincipal(request)); }`, "*");
+    noAnalizable(`export { resolverPrincipal as quien } from "../../../../lib/sync/requestPrincipal";`, "*");
+  });
+});
+
+describe("el mundo cerrado, con lo que tiene que ver fuera de las rutas", () => {
+  it("una llamada con alias, un `* as` y una reexportación", () => {
+    expect(usoDelCarril(`import { resolverPrincipal as quien } from "./requestPrincipal";
+      export const f = (r: Request) => quien(r);`, "lib/x.ts")).toEqual(["resolverPrincipal"]);
+    expect(usoDelCarril(`import * as rp from "./requestPrincipal";
+      export const f = (r: Request) => rp.resolverPrincipal(r);`, "lib/x.ts"))
+      .toEqual(["importa el carril del token con `* as`"]);
+    expect(usoDelCarril(`export { verificarAccess } from "./deviceTokens";`, "lib/x.ts"))
+      .toEqual(["reexporta el carril del token"]);
+  });
+
+  it("control: importar otra cosa del mismo módulo, por nombre, no es usar el carril", () => {
+    expect(usoDelCarril(`import { ACCESS_TTL_SEGUNDOS } from "./deviceTokens";
+      export const ttl = ACCESS_TTL_SEGUNDOS;`, "lib/x.ts")).toEqual([]);
+  });
 });
 
 describe("el detector, con lo que no es suyo", () => {
@@ -514,7 +576,7 @@ describe("el árbol: toda escritura por token mira la revocación", () => {
     for (const archivo of [...archivos(join(RAIZ, "app"), /\.(ts|tsx|js|jsx|mjs)$/),
                            ...archivos(join(RAIZ, "lib"), /\.(ts|tsx|js|jsx|mjs)$/)]) {
       const rel = relative(RAIZ, archivo);
-      const llamadas = llamadasAlCarril(readFileSync(archivo, "utf8"), archivo);
+      const llamadas = usoDelCarril(readFileSync(archivo, "utf8"), archivo);
       if (!llamadas.length) continue;
       if (ES_RUTA.test(rel.split("/").pop()!)) enRutas.push(rel);
       else if (!PROPIOS.has(rel)) fuera.push(`${rel}: ${llamadas.join(", ")}`);
