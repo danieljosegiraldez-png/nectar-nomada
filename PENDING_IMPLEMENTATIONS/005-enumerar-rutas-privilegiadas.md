@@ -3,7 +3,7 @@
 **Estado: la propiedad que faltaba YA TIENE MECANISMO, y el primer dominio está
 declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
 concretas, las dos nombradas al final: **los otros dominios** (hoy el del lote y,
-desde el 2026-10-11, el de ubicaciones) y **tus catorce veredictos**, de los que dos son defectos propuestos.
+desde el 2026-10-11, los de ubicaciones y equipos) y **tus catorce veredictos**, de los que dos son defectos propuestos.
 
 Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
 debido*— está en la sección «El guardia debido, 2026-10-04».
@@ -241,8 +241,8 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 - **Tus doce veredictos restantes.** Los dos defectos ya están arreglados. La
   compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
   en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
-- **Los otros dominios.** Hay dos desde el 2026-10-11: el del lote y el de ubicaciones. Quedan
-  `equipment` (20 llamadas a `can`), `specimen` (7) y `sample` (4).
+- **Los otros dominios.** Hay tres desde el 2026-10-11: el del lote, el de ubicaciones y el de
+  equipos. Quedan `specimen` (7 llamadas a `can`) y `sample` (4).
 
   **Esta viñeta decía que añadir el siguiente «no toca la compuerta», y era falso.** La compuerta
   leía sólo `declaracion.dominios[0]`. Medido al declarar `location`: con la versión vieja, quitarle
@@ -275,6 +275,35 @@ entero: 207 archivos, 2576 pruebas, salida 0.
   | una excepción fantasma | «ninguna excepción declarada sobra» |
   | un modelo inventado | «la declaración nombra un dominio con modelos» |
   | `plotBlock` también en el dominio del lote | «ningún modelo lo gobiernan dos dominios», y el dominio del lote |
+
+  **El dominio de equipos, el núcleo** (decisión de Daniel, 2026-10-11): 9 modelos (el aparato, sus
+  traslados e informes de estado, el catálogo de modelos con su ficha técnica, y los cuatro de
+  verificación de instrumentos). Las bandejas de secado quedan fuera: son tan del lote como del
+  equipo y añadían cuatro excepciones que exigen `lot`. 42 operaciones con guardia, 41 exigen
+  `equipment` y **una** es tu veredicto: `posicionDeBandeja`, «propuesto legítimo, sin llamador de
+  producción». Sólo la usa una prueba, y su comentario dice que la llama `bandejasDeCorrida`, que ya
+  no es cierto. Queda señalado en la declaración, sin tocar el código.
+
+  **Y destapó un punto ciego del resolvedor, arreglado el mismo día.** Ocho de esas 41 salían «sin
+  permiso resuelto»: `lib/equipos/modelos.ts` autoriza con `const GESTIONAR = { resourceType:
+  "equipment", action: "manage" }` pasado a `requireCatalogoAccess`, y `simbolos.mjs` sólo leía un
+  literal en el tercer argumento de `can`. Habrían sido ocho excepciones falsas. Ahora lee:
+  - una constante objeto, y un objeto literal en línea, pasados a una función que autoriza;
+  - `CONSTANTE.resourceType` dentro de `can`.
+
+  Un `let` o un parámetro no se leen. Sobre el árbol: **10 operaciones ganan `equipment`, ninguna
+  pierde nada**, y las de guardia sin permiso resuelto bajan de 28 a 18. Las 18 que quedan son de
+  `lib/partner/workspace.ts` (6), `lib/sensory/*` (8), `lib/catalogos/propiedad.ts` (3, que reciben
+  el permiso por parámetro) y `app/my-nectar/page.tsx` (1), por otras causas, sin mirar todavía.
+
+  `tests/arquitectura/resolvedor-de-permisos.test.ts` lo prueba con entradas escritas a mano en un
+  proyecto de juguete, no sólo contra el árbol. Flip:
+
+  | mutación del resolvedor | cae, por su nombre |
+  |---|---|
+  | quitar la exigencia de `const` | «NO se lee: un `let`» |
+  | contar el objeto aunque la función no autorice | «NO se lee: una constante pasada a una función que NO autoriza» |
+  | no leer ningún objeto | las tres filas «se lee», y el dominio de equipos |
 - **El `action`: medido el 2026-10-04, y NO hay defecto vivo.** Esta viñeta decía
   «hoy no está medida»; ya lo está, y el resultado es un cero con su flip detrás.
 
