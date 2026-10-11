@@ -91,6 +91,10 @@ afterAll(async () => {
   await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIds } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesIds } }) });
   await prisma.device.deleteMany({ where: assertDefinedWhere({ label: { contains: RUN_ID } }) });
+  // Lo que escribieron las rutas lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-11, cuatro por corrida.
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentaIds } }) });
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentaIds } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: locIds } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentaIds } }) });
@@ -221,7 +225,33 @@ describe("un aparato revocado no escribe por ninguna ruta, aunque su access siga
     const res = await postMedios(peticion(FINALIZAR, foto(x.device.id, "med-revocado"), x.accessToken));
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe("device_revoked");
-    expect(await filasDe("med-revocado"), "ni FieldEvent ni Asset").toEqual([]);
+    expect(await filasDe("med-revocado"), "ni FieldEvent").toEqual([]);
+    expect(await prisma.asset.count({ where: { storageKey: foto(x.device.id, "med-revocado").storageKey } }),
+      "ni Asset").toBe(0);
+  });
+
+  // La exención de field-events en el guardia de arquitectura descansa en esto:
+  // con su PROPIO id el cuerpo casa con el token, así que no lo para
+  // `device_mismatch` sino la comprobación de `revokedAt` de `pushFieldEvents`.
+  it("field-events: el aparato revocado con su propio id tampoco escribe", async () => {
+    const x = await alta("x-ev-propio");
+    await revocar(x.device.id);
+    const res = await postEventos(peticion("/api/v1/sync/field-events", lote(x.device.id, "ev-propio"), x.accessToken));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("device_revoked");
+    expect(await filasDe("ev-propio")).toEqual([]);
+  });
+
+  // Un access firmado sobrevive a que su aparato desaparezca de la base. La rama
+  // de `negativaDelAparato` que lo cubre tiene que negar, no dejar pasar.
+  it("POST /devices: el access de un aparato que ya no existe no da de alta otro", async () => {
+    const x = await alta("x-dev-borrado");
+    await prisma.device.delete({ where: { id: x.device.id } });
+    const res = await postAparatos(peticion("/api/v1/devices",
+      { label: `TEST nuevo-borrado ${RUN_ID}`, platform: "android" }, x.accessToken));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("device_not_found");
+    expect(await aparatosConEtiqueta("nuevo-borrado")).toBe(0);
   });
 
   it("control: field-media, solicitar con un aparato vivo firma la URL", async () => {

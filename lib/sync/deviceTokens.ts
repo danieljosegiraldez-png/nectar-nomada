@@ -33,8 +33,9 @@ import { verifyPassword } from "../auth/password";
  *   foto (200) y se daba de alta otro aparato (201). Lo vigila
  *   `tests/sync/aparatoDelToken.test.ts`.
  * - **Las lecturas no se niegan.** Los dos GET (`sync/authorization` y
- *   `sync/field-work`) siguen sin consultar la base, así que en esa hora un
- *   aparato revocado todavía puede LEER lo que ve su cuenta.
+ *   `sync/field-work`) no comprueban la revocación —no consultan `Device`;
+ *   sí leen, claro, los datos que sirven—, así que en esa hora un aparato
+ *   revocado todavía puede LEER lo que ve su cuenta.
  *
  * El reparto es decisión de Daniel del 2026-10-10: una consulta por clave
  * primaria en cada escritura, ninguna en cada lectura. El audit §19 pide que lo
@@ -43,6 +44,15 @@ import { verifyPassword } from "../auth/password";
  * `negativaDelAparato`** y devolver si niega. Lo exige
  * `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`, que
  * descubre esas rutas solo y no las enumera.
+ *
+ * **Lo que la comprobación NO cierra, dicho para que nadie lo cuente:**
+ * - se hace **al empezar** la petición, fuera de la transacción que escribe:
+ *   una revocación que llega con una escritura ya en curso no la detiene. Es la
+ *   misma forma que `pushFieldEvents`, que comprueba una vez por lote;
+ * - una URL de subida firmada **antes** de revocar sigue valiendo sus 300 s
+ *   (`lib/integrations/storage/r2.ts`): con ella se suben bytes a R2, pero el
+ *   `finalizar` posterior se niega, así que no nace ni Asset ni FieldEvent —
+ *   queda un objeto huérfano, el problema de `PENDING_IMPLEMENTATIONS/002`.
  *
  * **Sin rotación de refresh en esta versión.** Rotar es una mitigación real
  * contra el robo del token, pero obliga a resolver la carrera de dos refrescos
@@ -161,8 +171,9 @@ async function emitirAccess(deviceId: string, userAccountId: string) {
 }
 
 /**
- * Canjea un refresh por un access. Aquí sí se consulta la base — es la única
- * petición del carril que lo hace, y por eso es donde la revocación muerde.
+ * Canjea un refresh por un access. Aquí sí se consulta la base, y es donde la
+ * revocación muerde primero: un aparato revocado no obtiene ningún access nuevo.
+ * Las escrituras con el access que ya tenía las niega `negativaDelAparato`.
  */
 export async function refrescarAcceso(refreshToken: string) {
   const device = await prisma.device.findUnique({

@@ -135,8 +135,9 @@ describe("carril de tokens del aparato", () => {
    * expira —eso es inherente a un token sin estado— pero NO sirve para empujar
    * eventos: el push comprueba `revokedAt` en cada lote. Esto prueba el
    * SERVICIO; que la ruta le pase el aparato del token y no el del cuerpo lo
-   * prueba `aparatoDelToken.test.ts`. Y no vale para todas las escrituras: el
-   * comentario del módulo dice cuáles no miran la revocación.
+   * prueba `aparatoDelToken.test.ts`. Las otras escrituras por token
+   * (`field-media` y `POST /api/v1/devices`) la comprueban en su ruta con
+   * `negativaDelAparato`, y también lo prueba ese archivo.
    */
   it("un aparato revocado NO escribe, aunque su access siga vivo", async () => {
     const { accessToken, device } = await alta();
