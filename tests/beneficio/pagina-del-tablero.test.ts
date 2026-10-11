@@ -42,6 +42,8 @@ vi.mock("next-intl/server", async () => {
 });
 vi.mock("../../lib/auth/session", () => ({ getCurrentUser: async () => ({ userAccountId: "cuenta-de-prueba" }) }));
 vi.mock("../../lib/rbac/service", () => ({ permissionKeysAnywhere: async () => new Set(["lot:view"]) }));
+// La página y su barra preguntan si se ofrece Recetas con la regla de la lista (PENDING_IMPLEMENTATIONS/027).
+vi.mock("../../lib/traceability/processTargets", () => ({ puedeCrearRecetaEnAlguna: async () => false }));
 vi.mock("../../lib/traceability/beneficios", () => ({ listarBeneficios: async () => [] }));
 vi.mock("../../lib/beneficio/datosDelTablero", () => ({ datosDelTablero: async () => datosActuales }));
 // Sólo se pintan con beneficios, y `listarBeneficios` devuelve `[]`: fuera, para no arrastrar su base.
