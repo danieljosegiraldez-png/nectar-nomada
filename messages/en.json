@@ -1821,6 +1821,8 @@
     "error_mass_balance": "The quantities do not add up: {detail}",
     "error_subproducto": "Could not record the by-product: {detail}",
     "error_cereza": "Could not record the cherry: {detail}",
+    "error_recipiente_o_nota_obligatorio": "Select a registered tank or write the name of the one you use: a fermentation cannot start without one of the two.",
+    "error_recipiente_no_disponible": "That tank is not available for this lot: it does not exist, it belongs to another organization, it is a tray, it is retired or you cannot see it. Select another one from the list.",
     "error_roast": "Could not save the roast: {detail}",
     "error_roast_sample_must_be_green": "That sample is not green coffee, and a sample roast starts from a green sample.",
     "error_roast_sample_charge_weight_required": "Enter how much coffee went into the roaster: a sample roast starts from a known mass.",

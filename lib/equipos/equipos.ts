@@ -33,7 +33,8 @@ import { recordAuditEvent } from "../audit";
 import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
-import { clasificar, resumir } from "./disponibilidad";
+import { clasificar, resumir, type MotivoNoDisponible } from "./disponibilidad";
+import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
 import { Prisma, type ClassificationLevel, type EquipmentCondition, type EquipmentKind, type ProvenanceClass } from "../../generated/prisma/client";
 
@@ -1024,6 +1025,87 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
     });
   }
   return { filas, resumen: resumir(filas.map((f) => f.clasificacion)) };
+}
+
+/**
+ * Una opción del selector de tanque al empezar una fermentación (Parte 2c, arreglos previos §4.1, 2026-10-04).
+ *
+ * `motivos` son los de `clasificar` que pueden aplicar a un recipiente ACTIVO: `EN_USO` y `CONDICION`. **Un tanque ocupado, o con una
+ * condición sin resolver, se ofrece igual**: C1/E1 —decisión de Daniel— dicen que sólo se avisa, y el aviso lo pinta el formulario con
+ * estos motivos. Quitarlo de la lista por estar ocupado sería decidir por quien opera lo que Daniel decidió que no.
+ */
+export interface OpcionDeRecipiente {
+  id: string;
+  label: string;
+  libreYSano: boolean;
+  motivos: MotivoNoDisponible[];
+}
+
+/**
+ * Qué recipientes pueden recibir la fermentación de un lote de esta organización: un `vessel` que no es una bandeja, activo, y de la
+ * misma organización.
+ *
+ * **Una sola definición para dos preguntas.** La lista que se ofrece (`recipientesParaFermentar`) y la validación al empezar
+ * (`startFermentationRun`) salen de este mismo filtro: si fueran dos, la pantalla podría ofrecer un tanque que el servicio rechaza, o
+ * dejar fuera uno que acepta. Es la forma de `puedeEmpezarCorrida`, que comparte con el servicio su predicado.
+ *
+ * Falta a propósito lo que este filtro no puede decir: que **quien opera lo vea**. Eso lo decide `puedeVerEquipo`, que resuelve el
+ * ámbito por el último traslado y no se expresa como un `where`.
+ */
+export function dondeCandidatoAFermentar(organizationId: string): Prisma.EquipmentWhereInput {
+  return { organizationId, kind: "vessel", trayTypeId: null, lifecycleStatus: "active" };
+}
+
+/**
+ * Los recipientes que `userAccountId` puede elegir para fermentar el lote `lotId` (Parte 2c, §4.1 y D2): los de la organización del
+ * lote que `dondeCandidatoAFermentar` deja pasar **y que quien opera VE**. Libres y sanos primero; luego, por nombre.
+ *
+ * **Primero el lote, y lo comprueba ESTA función** (decisión D11 de Daniel, 2026-10-06): quien no puede ver el lote no recibe la lista
+ * ni se entera de qué tanques tiene su organización. Es el mecanismo de `getLotSummary` y `getLotDetail` (`lib/traceability/lots.ts`):
+ * el lote por id, `TraceabilityAccessError("lot_not_found")` si no existe, y `requireLotAccess(…, "view", …)`, que lanza
+ * `TraceabilityAccessError("no_lot_access")` si no lo ve. Por eso NO hay excepción en `docs/arquitectura/permiso-por-dominio.json`:
+ * la operación toca `lot` y exige `lot`. La página ya pidió `view` con `getLotSummary`; se repite aquí para que la función no dependa
+ * de quién la llama. Después, sólo decide qué equipos ve esa persona: uno que no ve no se nombra ni se cuenta (§5.5).
+ *
+ * **Sin N+1 sobre toda la base:** la consulta se acota por la organización del lote, y por cada candidato hay UN traslado y UN permiso
+ * (`puedeVerEquipo`), que es lo que tiene que cuadrar con la validación del servicio. «En uso» es el de `disponibilidadDeRecipientes`:
+ * una corrida abierta que referencia el tanque por su clave.
+ */
+export async function recipientesParaFermentar(userAccountId: string, lotId: string): Promise<OpcionDeRecipiente[]> {
+  const lote = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { organizationId: true, projectId: true, locationId: true, classification: true },
+  });
+  if (!lote) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [{ projectId: lote.projectId, locationId: lote.locationId, classification: lote.classification }]);
+  const equipos = await prisma.equipment.findMany({
+    where: dondeCandidatoAFermentar(lote.organizationId),
+    select: {
+      id: true,
+      name: true,
+      projectId: true,
+      classification: true,
+      lifecycleStatus: true,
+      conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1, select: { condition: true } },
+      fermentationRuns: { where: { endedAt: null }, take: 1, select: { id: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const opciones: OpcionDeRecipiente[] = [];
+  for (const e of equipos) {
+    if (!(await puedeVerEquipo(userAccountId, e))) continue;
+    const { libreYSano, motivos } = clasificar({
+      id: e.id,
+      lifecycleStatus: e.lifecycleStatus,
+      condicion: e.conditionReports[0]?.condition ?? null,
+      enUso: e.fermentationRuns.length > 0,
+    });
+    opciones.push({ id: e.id, label: e.name, libreYSano, motivos: [...motivos] });
+  }
+  return opciones.sort((a, b) =>
+    a.libreYSano === b.libreYSano ? a.label.localeCompare(b.label, "es") : a.libreYSano ? -1 : 1,
+  );
 }
 
 /**

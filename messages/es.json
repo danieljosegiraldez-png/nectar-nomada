@@ -1821,6 +1821,8 @@
     "error_mass_balance": "Las cantidades no cuadran: {detail}",
     "error_subproducto": "No se pudo registrar el subproducto: {detail}",
     "error_cereza": "No se pudo registrar la cereza: {detail}",
+    "error_recipiente_o_nota_obligatorio": "Elige un tanque registrado o escribe el nombre del que usas: una fermentación no empieza sin uno de los dos.",
+    "error_recipiente_no_disponible": "Ese tanque no está disponible para este lote: no existe, es de otra organización, es una bandeja, está retirado o no lo ves. Elige otro de la lista.",
     "error_roast": "No se pudo guardar el tueste: {detail}",
     "error_roast_sample_must_be_green": "Esa muestra no es de café verde, y un tueste de muestra parte de una muestra verde.",
     "error_roast_sample_charge_weight_required": "Escribe cuánto café entró al tostador: un tueste de muestra sale de una masa conocida.",
