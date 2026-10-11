@@ -19,6 +19,7 @@ import {
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
+import { registrarConteoDeVarroa } from "../../lib/apiary/varroa";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import {
   emitirReporteDeVisita,
@@ -142,6 +143,8 @@ afterAll(async () => {
   // sin esta linea el borrado de la colonia falla y el archivo entero sale en rojo con
   // las 37 pruebas en verde.
   await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  // El conteo de varroa del informe (V-7): su FK a la colonia también es RESTRICT.
+  await prisma.varroaCount.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
   // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
@@ -453,6 +456,35 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
     const { snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
     expect(snapshot.registros.find(r => r.alimentacion)?.alimentacion).toEqual({ tipo: "azucar_blanca", material: null, cantidad: "3", unidad: "lb" });
+  });
+
+  it("EL MANEJO Y LA VARROA SE CONGELAN: el tipo de manejo, y el conteo con su caja", async () => {
+    // V-7 de la revisión del Apiario. Hasta el 2026-10-10 el informe congelaba del manejo sólo el
+    // producto o el alimento —`sujeto: "evento_de_colonia"`, sin decir cuál—, y un conteo de
+    // varroa entraba como una fila sin caja, sin resultado y sin sujeto.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-13T10:00:00Z"),
+    });
+    await recordColonyEvent(apicultorConManejo, {
+      colonyId,
+      eventType: "treatment",
+      treatmentProduct: "Apivar",
+      treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
+      treatmentWithdrawalDays: 14,
+      treatmentTarget: "varroa",
+    });
+    await registrarConteoDeVarroa(apicultorConManejo, { colonyId, method: "alcohol", sampleBees: 300, mitesCounted: 3 });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se lee lo CONGELADO, no lo que devolvió la emisión.
+    const registros = (await leerReporteDeVisita(apicultorConManejo, visita.id))!.snapshot.registros;
+    const manejo = registros.find((r) => r.sujeto === "evento_de_colonia");
+    const conteo = registros.find((r) => r.sujeto === "conteo_de_varroa");
+    expect(manejo?.manejo).toBe("treatment");
+    expect(conteo, "el conteo de varroa no llegó al informe como tal").toBeTruthy();
+    expect(conteo).toMatchObject({ colmena: `${RUN_ID}-H1`, varroa: { metodo: "alcohol", abejas: 300, acaros: 3 } });
   });
 
   it("EL INFORME NOMBRA LA COLMENA Y QUÉ SE HIZO, no sólo la clase del registro", async () => {
