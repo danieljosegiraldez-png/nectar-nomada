@@ -281,6 +281,33 @@
           "razon": "Patron «trampas, con su permiso de especimen»: lanza si no alcanza ningun plot de la finca con permiso de especimen, y despues lee la regla de trampas de esa finca (umbral, dias, accion sugerida) sin pedir `location:manage_attributes`. Lo dice su comentario y es deliberado, igual que en `getPlotDetail`: la regla es configuracion de la finca que necesita quien revisa sus trampas."
         }
       ]
+    },
+    {
+      "permiso": "equipment",
+      "porque": "El equipo y su vida: el aparato, sus traslados, sus informes de estado, el catalogo de modelos con su ficha tecnica y la verificacion de instrumentos (requisitos, verificaciones, resultados, modos de medida). Decision de Daniel del 2026-10-11 (ficha 005): el NUCLEO, sin las bandejas de secado, que son tan del lote como del equipo y anadian cuatro excepciones que exigen `lot`. Las rutinas de lugar (`careRoutine`) ya son del dominio `location`. Medido ese dia: 42 operaciones con guardia, 41 exigen `equipment` y una esta declarada abajo. Ocho de esas 41 salian \"sin permiso resuelto\" hasta que `scripts/inventario/simbolos.mjs` aprendio a leer una constante `{ resourceType }` (el `GESTIONAR` de `lib/equipos/modelos.ts`); sin eso habrian sido ocho excepciones falsas.",
+      "gobierna": [
+        "equipment",
+        "equipmentTransfer",
+        "equipmentConditionReport",
+        "equipmentModel",
+        "equipmentModelSpec",
+        "instrumentCheck",
+        "instrumentCheckRequirement",
+        "instrumentCheckResult",
+        "instrumentMeasurementMode"
+      ],
+      "excepciones": [
+        {
+          "archivo": "lib/traceability/bandejasDelSecado.ts",
+          "operacion": "posicionDeBandeja",
+          "permisos": [
+            "location"
+          ],
+          "veredicto": "propuesto legitimo, sin llamador de produccion",
+          "confirmado_por_daniel": false,
+          "razon": "Lee el ultimo traslado de una bandeja SOLO para saber en que cama estaba, y lo que devuelve -- la posicion -- lo autoriza `resolverPosicion` con `location:manage_attributes` sobre la cama (D1). No exige `equipment` sobre la bandeja. Medido el 2026-10-11: NO tiene llamador en `lib/` ni en `app/`, solo `tests/traceability/bandejasDelSecado.test.ts`. Su comentario dice que la llama `bandejasDeCorrida`, y ya no es cierto: esa funcion hace su propia consulta de traslados despues de `corridaConPermiso(..., \"view\")` y llama a `resolverPosicion` directamente. Si alguien vuelve a usarla desde una pantalla, tiene que llegar con la bandeja ya autorizada."
+        }
+      ]
     }
   ]
 }
