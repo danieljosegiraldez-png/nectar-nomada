@@ -132,8 +132,9 @@ distintos** ni prefermentación + fermentación con parámetros propios. Por eso
 - **Las fases quedan como compatibilidad** para corridas sin paso (históricas y procesos viejos sin
   receta). Una versión con pasos escribe al publicarse **una** fase por tipo, con los valores del
   **primer** paso de esa fase en `seq` — sólo para esos lectores antiguos —.
-  **`ProcessRecipeVersion.expectedHours` no se escribe** (corregido al construir): nadie lo lee, y el
-  registro de decisiones del plan lo dejó fuera por YAGNI. Este texto pedía la suma de `horasSugeridas`
+  **`ProcessRecipeVersion.expectedHours` no se calcula a partir de los pasos** (corregido al construir): al
+  publicar nadie lo escribe y nadie lo lee; las copias (versión nueva y derivar) sólo arrastran el valor de la versión de
+  origen. El registro de decisiones del plan lo dejó fuera por YAGNI. Este texto pedía la suma de `horasSugeridas`
   de los pasos no opcionales.
 - La copia de R8 deja de copiar fases cuando la versión tiene pasos: las fases se derivan, los pasos
   mandan.
