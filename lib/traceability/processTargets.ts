@@ -29,7 +29,7 @@
 import { prisma } from "../db";
 import { UUID } from "../validation/uuid";
 import { Prisma } from "../../generated/prisma/client";
-import { requireLotAccess } from "./lots";
+import { puedeGestionarLote, requireLotAccess, TraceabilityAccessError } from "./lots";
 import { exigeEditarBeneficioEnOrganizacion } from "./locations";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
@@ -377,6 +377,41 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
   }
 }
 
+/**
+ * ¿Gestiona esta cuenta ALGÚN lote de `organizationId`, o de cualquier organización con `null`, que es la
+ * receta compartida? (PENDING_IMPLEMENTATIONS/027)
+ *
+ * **Lo que había, en cinco sitios:** `prisma.lot.findFirst` sin orden y `requireLotAccess` sobre ése. Eso
+ * no pregunta «¿gestiona algún lote?», sino «¿gestiona el lote que Postgres devuelva primero?». Un Farm
+ * Manager de un sitio quedaba fuera si el primero era de otro sitio, y con `organizationId ?? undefined`
+ * Prisma quitaba el filtro: la receta compartida dependía del primer lote de TODA la base.
+ *
+ * Se recorre cada combinación distinta de proyecto, ubicación y clasificación. Son las tres cosas que mira
+ * `requireLotAccess`, así que dos lotes con las tres iguales contestan lo mismo. Y se pregunta a
+ * `puedeGestionarLote`, el mismo guardia que la escritura, con sus overrides y su clasificación. Medido el
+ * 2026-10-10 sobre la copia restaurada: 137 lotes y 8 combinaciones en toda la base.
+ */
+async function gestionaAlgunLote(userAccountId: string, organizationId: string | null): Promise<boolean> {
+  const combinaciones = await prisma.lot.findMany({
+    where: organizationId === null ? {} : { organizationId },
+    distinct: ["projectId", "locationId", "classification"],
+    select: { projectId: true, locationId: true, classification: true },
+  });
+  for (const c of combinaciones) {
+    if (await puedeGestionarLote(userAccountId, c)) return true;
+  }
+  return false;
+}
+
+/** Lo mismo como guardia, con los dos errores de antes: primero si no hay lotes, después si no gestiona ninguno. */
+async function exigeLoteGestionable(userAccountId: string, organizationId: string | null) {
+  const deEsa = organizationId === null ? {} : { organizationId };
+  if (!(await prisma.lot.findFirst({ where: deEsa, select: { id: true } }))) {
+    throw new ProcessTargetError("organization_has_no_lots");
+  }
+  if (!(await gestionaAlgunLote(userAccountId, organizationId))) throw new TraceabilityAccessError("no_lot_access");
+}
+
 export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
@@ -389,11 +424,7 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
   // applied to.
   // A shared recipe (no organization) is gated on any lot the account can
   // manage; an organization's recipe on a lot of that organization.
-  const anyLot = await prisma.lot.findFirst({
-    where: input.organizationId === null ? {} : { organizationId: input.organizationId },
-  });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  await exigeLoteGestionable(userAccountId, input.organizationId);
   // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
   // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
   await exigeEditarBeneficioEnOrganizacion(userAccountId, input.organizationId);
@@ -515,17 +546,10 @@ export async function listRecipeOrganizations(userAccountId: string) {
     select: { id: true, name: true },
   });
 
+  // An organization this account cannot operate is simply not offered.
   const reachable: { id: string; name: string }[] = [];
   for (const org of organizations) {
-    const sample = await prisma.lot.findFirst({ where: { organizationId: org.id } });
-    if (!sample) continue;
-    try {
-      await requireLotAccess(userAccountId, "manage", [sample]);
-      reachable.push(org);
-    } catch {
-      // Not an error: an organization this account cannot operate is simply
-      // not offered.
-    }
+    if (await gestionaAlgunLote(userAccountId, org.id)) reachable.push(org);
   }
   return reachable.sort((a, b) => compareNames(a.name, b.name));
 }
@@ -559,9 +583,7 @@ export async function getRecipeForEditor(userAccountId: string, recipeId: string
   // the same rule a stale id gets everywhere else (ADR-081).
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  await exigeLoteGestionable(userAccountId, recipe.organizationId);
 
   return recipe;
 }
@@ -586,9 +608,7 @@ export async function updateRecipeMetadata(
   const before = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
   if (!before) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: before.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  await exigeLoteGestionable(userAccountId, before.organizationId);
   // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
   // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
   await exigeEditarBeneficioEnOrganizacion(userAccountId, before.organizationId);
@@ -654,9 +674,7 @@ export async function createRecipeVersion(
   });
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  await exigeLoteGestionable(userAccountId, recipe.organizationId);
   // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
   // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
   await exigeEditarBeneficioEnOrganizacion(userAccountId, recipe.organizationId);
