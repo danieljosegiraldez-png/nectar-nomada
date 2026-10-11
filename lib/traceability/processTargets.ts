@@ -486,10 +486,16 @@ export async function puedeCrearRecetaEnAlguna(userAccountId: string): Promise<b
   return false;
 }
 
+/**
+ * **Quién ve la lista: la misma regla que crear una receta** (Daniel, 2026-10-10;
+ * PENDING_IMPLEMENTATIONS/027). Antes la decidía `lot:manage` sobre
+ * `prisma.lot.findFirst({ where: {} })` —el primer lote de toda la base, sin orden ni filtro—, así
+ * que quien gestionaba los lotes de su organización podía quedar fuera por un lote de otra. Y su
+ * rechazo era un `TraceabilityAccessError` que `app/recipes/page.tsx` no atrapaba: 500 en vez de
+ * volver a `/lots`. Ahora rechaza con `ProcessTargetError`, que es lo que la página espera.
+ */
 export async function listRecipes(userAccountId: string) {
-  const anyLot = await prisma.lot.findFirst({ where: {} });
-  if (!anyLot) return [];
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  if (!(await puedeCrearRecetaEnAlguna(userAccountId))) throw new ProcessTargetError("no_recipe_access");
 
   return prisma.processRecipe.findMany({
     include: {

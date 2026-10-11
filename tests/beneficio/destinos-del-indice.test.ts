@@ -9,8 +9,13 @@ import { destinosDelBeneficio, repartirDestinos } from "../../app/beneficio/dest
  * veía quien gestiona lotes (`canManageLots` en `app/lots/page.tsx`), porque
  * `listRecipes` exige `manage` sobre un lote: quien sólo lee lotes llegaba a una
  * pantalla que lo rechaza. Lo encontró la auditoría de Codex.
+ *
+ * **Y desde el 2026-10-10 Recetas ya no cuelga de `lot:manage`** (PENDING_IMPLEMENTATIONS/027): la
+ * lista la decide `puedeCrearRecetaEnAlguna`, y el índice recibe ese mismo booleano en vez de
+ * deducirlo de un permiso suelto. `hrefs` lo deja en `false` salvo que la prueba diga otra cosa.
  */
-const hrefs = (permisos: string[]) => destinosDelBeneficio(new Set(permisos)).map((d) => d.href);
+const hrefs = (permisos: string[], puedeVerRecetas = false) =>
+  destinosDelBeneficio(new Set(permisos), puedeVerRecetas).map((d) => d.href);
 
 describe("los enlaces del índice del beneficio", () => {
   it("quien sólo lee lotes NO ve Recetas", () => {
@@ -55,8 +60,15 @@ describe("los enlaces del índice del beneficio", () => {
     expect(hrefs(["lot:view"])).toContain("/beneficio/recepcion");
   });
 
-  it("quien gestiona lotes sí ve Recetas", () => {
-    expect(hrefs(["lot:manage"])).toContain("/recipes");
+  /**
+   * Recetas sigue la regla de la lista, no un permiso. Las dos mitades hacen falta: con sólo la
+   * primera, quitar el enlace del todo pasaría; con sólo la segunda, volver a `lot:manage` pasaría
+   * si la prueba no le niega la regla a quien tiene ese permiso.
+   */
+  it("Recetas sale de la regla de crear recetas, no de lot:manage", () => {
+    // Un Farm Operator: gestiona lotes y no puede crear una receta en ninguna parte.
+    expect(hrefs(["lot:view", "lot:manage"], false)).not.toContain("/recipes");
+    expect(hrefs(["lot:view"], true)).toContain("/recipes");
   });
 
   it("los demás enlaces siguen con su permiso", () => {
@@ -90,29 +102,29 @@ describe("repartirDestinos", () => {
   ]);
 
   it("el secado es OPERACIÓN, no herramienta", () => {
-    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS));
+    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS, true));
     expect(operaciones.map((d) => d.href)).toContain("/beneficio/secado");
   });
 
   it("recepción y secado son las dos operaciones, y sólo ésas", () => {
-    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS));
+    const { operaciones } = repartirDestinos(destinosDelBeneficio(TODOS, true));
     expect(operaciones.map((d) => d.href)).toEqual(["/beneficio/recepcion", "/beneficio/secado"]);
   });
 
   it("los lotes y el informe son de CONSULTAR, no de configurar", () => {
-    const { consultar } = repartirDestinos(destinosDelBeneficio(TODOS));
+    const { consultar } = repartirDestinos(destinosDelBeneficio(TODOS, true));
     expect(consultar.map((d) => d.href)).toEqual(["/lots", "/reports/proceso"]);
   });
 
   it("los ajustes y el resto de la configuración van abajo", () => {
-    const { herramientas } = repartirDestinos(destinosDelBeneficio(TODOS));
+    const { herramientas } = repartirDestinos(destinosDelBeneficio(TODOS, true));
     expect(herramientas.map((d) => d.href)).toContain("/beneficio/ajustes");
     expect(herramientas.map((d) => d.href)).toContain("/equipos");
     expect(herramientas.map((d) => d.href)).not.toContain("/beneficio/recepcion");
   });
 
   it("ningún destino se pierde ni se duplica en el reparto", () => {
-    const destinos = destinosDelBeneficio(TODOS);
+    const destinos = destinosDelBeneficio(TODOS, true);
     const r = repartirDestinos(destinos);
     const repartidos = [...r.operaciones, ...r.consultar, ...r.herramientas].map((d) => d.href);
     expect(repartidos.length).toBe(destinos.length);
@@ -120,7 +132,7 @@ describe("repartirDestinos", () => {
   });
 
   it("un perfil que no ve equipos ni ajustes reparte lo que le queda, sin huecos", () => {
-    const destinos = destinosDelBeneficio(new Set(["lot:view"]));
+    const destinos = destinosDelBeneficio(new Set(["lot:view"]), false);
     const r = repartirDestinos(destinos);
     const repartidos = [...r.operaciones, ...r.consultar, ...r.herramientas];
     expect(repartidos).toHaveLength(destinos.length);

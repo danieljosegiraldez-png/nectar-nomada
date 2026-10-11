@@ -18,9 +18,10 @@ export default async function RecipesPage({
   try {
     recipes = await listRecipes(user.userAccountId);
   } catch (error) {
-    // Someone who cannot manage any batch has no business here, and the nav
-    // does not offer it to them — but the page refuses regardless
-    // (SECURITY.md §2).
+    // Someone who could not create a recipe anywhere has no business here, and
+    // the nav does not offer it to them — but the page refuses regardless
+    // (SECURITY.md §2). Same rule as creating one (Daniel, 2026-10-10;
+    // PENDING_IMPLEMENTATIONS/027).
     if (error instanceof ProcessTargetError) redirect("/lots");
     throw error;
   }
