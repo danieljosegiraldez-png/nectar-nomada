@@ -191,8 +191,14 @@ describe.each(declaracion.dominios)("el permiso que exige una operación corresp
   );
 
   it("la declaración nombra un dominio con modelos y el inventario lo alcanza", () => {
-    expect(gobernados.size, "un dominio sin modelos no verifica nada").toBeGreaterThan(5);
-    expect(delDominio.length, "si ninguna operación toca el dominio, el verde no mide").toBeGreaterThan(20);
+    /**
+     * **«No vacío», no un tamaño.** Hasta el 2026-10-11 decía «más de 5 modelos» y «más de
+     * 20 operaciones»: eran las cifras del dominio del lote, y la propiedad que protegían es
+     * que el dominio no esté vacío. Los de especímenes y muestras tienen 2 y 3 modelos, con
+     * 16 operaciones cada uno (decisión de Daniel de ese día).
+     */
+    expect(gobernados.size, "un dominio sin modelos no verifica nada").toBeGreaterThan(0);
+    expect(delDominio.length, "si ninguna operación toca el dominio, el verde no mide").toBeGreaterThan(0);
     /**
      * **Cada modelo declarado tiene que EXISTIR en el esquema.** No es ceremonia:
      * la primera versión de esta declaración traía `lotClassification`,

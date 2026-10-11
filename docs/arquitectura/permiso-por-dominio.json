@@ -308,6 +308,125 @@
           "razon": "Lee el ultimo traslado de una bandeja SOLO para saber en que cama estaba, y lo que devuelve -- la posicion -- lo autoriza `resolverPosicion` con `location:manage_attributes` sobre la cama (D1). No exige `equipment` sobre la bandeja. Medido el 2026-10-11: NO tiene llamador en `lib/` ni en `app/`, solo `tests/traceability/bandejasDelSecado.test.ts`. Su comentario dice que la llama `bandejasDeCorrida`, y ya no es cierto: esa funcion hace su propia consulta de traslados despues de `corridaConPermiso(..., \"view\")` y llama a `resolverPosicion` directamente. Si alguien vuelve a usarla desde una pantalla, tiene que llegar con la bandeja ya autorizada."
         }
       ]
+    },
+    {
+      "permiso": "specimen",
+      "porque": "Los especimenes -- plantas, trampas -- y sus observaciones. Decision de Daniel del 2026-10-11 (ficha 005). Medido ese dia: 16 operaciones con guardia, 13 exigen `specimen` y las 3 restantes estan declaradas abajo.",
+      "gobierna": [
+        "specimen",
+        "specimenObservation"
+      ],
+      "excepciones": [
+        {
+          "archivo": "lib/traceability/formaDeLaParcela.ts",
+          "operacion": "quitarTrozoDeForma",
+          "permisos": [
+            "location"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Exige `location:manage_attributes` sobre la parcela (`requireLocationAttributeAccess`) y despues lee las plantas situadas en ESA parcela, o en sus hijas, SOLO para contar las que la forma deja fuera y avisar (spec 7.4: avisa, no rechaza). Devuelve un numero, no las plantas."
+        },
+        {
+          "archivo": "lib/traceability/intervenciones.ts",
+          "operacion": "registrarIntervencion",
+          "permisos": [
+            "apiary",
+            "colony_event",
+            "location",
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela», el mismo del dominio `location`: exige `lot:manage` sobre la parcela, y `validarReferencias` rechaza una planta o una observacion de otra parcela (\"la planta X es de otra parcela\") antes de escribir. Una nota, no un defecto: la respuesta distingue \"no existe la planta\" de \"es de otra parcela\", asi que dice si ese id existe en otra parcela; no escribe nada en ese caso."
+        },
+        {
+          "archivo": "lib/traceability/intervenciones.ts",
+          "operacion": "corregirIntervencion",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Igual que `registrarIntervencion`: `lot:manage` sobre la parcela de la intervencion original, y `validarReferencias(parcela, input.nueva)` antes de `crearAreas` (lineas 542 y 582)."
+        }
+      ]
+    },
+    {
+      "permiso": "sample",
+      "porque": "Las muestras del cafe: la muestra, el evento de muestreo (la inspeccion) y el origen externo de un cafe que entra como muestra. Decision de Daniel del 2026-10-11 (ficha 005). La lectura de ambiente a mano (`dryingAmbientReading`) usa `sample:manage` por decision de su modulo, pero es un dato del ambiente, no una muestra, y queda fuera. Medido ese dia: 16 operaciones con guardia, 10 exigen `sample` y las 6 restantes estan declaradas abajo. Las 6 autorizan con `lot` sobre el lote del que cuelga la muestra: en esta casa la muestra se mide y se tuesta como parte del trabajo del lote.",
+      "gobierna": [
+        "sample",
+        "samplingEvent",
+        "externalCoffeeOrigin"
+      ],
+      "excepciones": [
+        {
+          "archivo": "lib/traceability/lots.ts",
+          "operacion": "getLotDetail",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "`lot:view` sobre el lote y despues las muestras de ESE lote (`sourceLotId: lotId`) para pintar su ficha. Lo que cuelga del lote se lee con el permiso del lote."
+        },
+        {
+          "archivo": "lib/traceability/roasting.ts",
+          "operacion": "listGreenSamplesForRoast",
+          "permisos": [
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "`lot:view` sobre el lote y las muestras verdes de ESE lote (`sourceLotId: lotId, materialState: GREEN`), para elegir cual se tuesta."
+        },
+        {
+          "archivo": "lib/traceability/roasting.ts",
+          "operacion": "recordRoastSession",
+          "permisos": [
+            "equipment",
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "`lot:manage` sobre el lote de origen, y si se cita una muestra comprueba que sea DE ESE lote (`sample_source_lot_mismatch`), verde y con masa en kg. Es la comprobacion que le falta a `recordMeasurement`."
+        },
+        {
+          "archivo": "lib/traceability/measurements.ts",
+          "operacion": "inspeccionesParaMedicion",
+          "permisos": [
+            "location",
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Autoriza el lote y despues comprueba que la corrida de secado tenga ese lote como entrada (`lotTransformation` con `dryingRunId` e `inputs.some.lotId`) antes de listar sus inspecciones; si no, devuelve una lista vacia."
+        },
+        {
+          "archivo": "lib/traceability/measurements.ts",
+          "operacion": "correctMeasurement",
+          "permisos": [
+            "location",
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo",
+          "confirmado_por_daniel": false,
+          "razon": "Autoriza sobre el sujeto de la medicion ORIGINAL (`requireSubjectAccess(userAccountId, original)`) y la correccion hereda su `sampleId`; no acepta uno nuevo."
+        },
+        {
+          "archivo": "lib/traceability/measurements.ts",
+          "operacion": "recordMeasurement",
+          "permisos": [
+            "equipment",
+            "location",
+            "lot"
+          ],
+          "veredicto": "propuesto legitimo hoy, con un hueco latente",
+          "confirmado_por_daniel": false,
+          "razon": "Legitimo para todos sus llamadores de hoy, y con un HUECO LATENTE. Con `sampleId`, autoriza `lot:manage` sobre el ambito de la muestra (`scopeCandidatesForSubject`), que es la regla de la casa. Pero si llegan `lotId` y `sampleId` A LA VEZ, `requireLotAccess` recibe los dos ambitos y sale bien con el PRIMERO que pase, y nada comprueba que la muestra sea de ese lote: con permiso sobre tu lote se colgaria una medicion de una muestra ajena, y se leeria su `materialState`. Es la misma forma que los dos defectos del dominio del lote. NO es alcanzable hoy: `recordMeasurementAction` manda solo `lotId`, `recordLabMeasurementAction` manda un unico sujeto de `biocharBatchId|soilSampleId|foliarSampleId`, y `lib/apiary/cierreDeCosecha.ts` no pasa `sampleId` (medido el 2026-10-11, leyendo, sin ejecutarlo). El arreglo seria el de `recordRoastSession`: exigir `sample.sourceLotId === lotId` cuando vienen los dos."
+        }
+      ]
     }
   ]
 }
