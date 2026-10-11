@@ -560,9 +560,10 @@ export function instrumentosQuePidenAtencion(
  *
  * Hace falta para distinguir «ninguno pide atención» de «no ves ninguno», que es el defecto de
  * 019(a): la pantalla decía lo primero sobre una lista vacía, y lo vacío puede ser que no haya
- * nada que mirar. `DatosDelTablero.instrumentos` lleva **todo el equipo visible** con su `kind`
- * —`datosDelTablero.ts:516` no filtra—, así que contar esa lista haría decir «ninguno pide
- * atención» a una cuenta que ve tanques y **cero instrumentos**: la misma mentira con otra cara.
+ * nada que mirar. `DatosDelTablero.instrumentos` lleva **todo el equipo activo visible** con su `kind`
+ * —`datosDelTablero.ts` filtra el estado (un retirado no entra: D9) pero no la clase—, así que contar esa
+ * lista haría decir «ninguno pide atención» a una cuenta que ve tanques y **cero instrumentos**: la misma
+ * mentira con otra cara.
  * Yo escribí esa versión y una de mis propias pruebas la daba por buena.
  *
  * El filtro de `kind` vive aquí, al lado del otro, para que la regla de qué cuenta como

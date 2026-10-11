@@ -43,6 +43,7 @@ tests/equipos/equipos.test.ts
 tests/equipos/datosDeEquipo.test.ts
 tests/equipos/retiroEnLaBase.test.ts
 tests/equipos/retirarEquipo.test.ts
+tests/equipos/retiroEnElTablero.test.ts
 tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts

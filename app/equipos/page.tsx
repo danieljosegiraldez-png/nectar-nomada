@@ -53,15 +53,28 @@ export default async function EquiposPage({
   const resto = equipos.filter((e) => e.kind !== "instrument");
   // Lo que pide atención primero: un instrumento sin revisar o que falló su
   // contraste, cualquier equipo averiado, y ahora también cualquiera con una
-  // rutina de cuidado vencida.
+  // rutina de cuidado vencida. **Sólo los equipos activos** (Parte 2c, D5): uno retirado
+  // se quitó a propósito, así que nadie tiene que ir a arreglarlo ni a contrastarlo; sigue
+  // en las tablas de abajo, marcado.
   const atencion = equipos.filter(
     (e) =>
-      e.verificacion === "REVISION_VENCIDA" ||
-      e.verificacion === "VERIFICACION_FALLIDA" ||
-      e.verificacion === "SIN_VERIFICACION" ||
-      (e.condicion !== null && e.condicion.condition !== "operational") ||
-      (vencidasPorId.get(e.id) ?? 0) > 0,
+      e.lifecycleStatus === "active" &&
+      (e.verificacion === "REVISION_VENCIDA" ||
+        e.verificacion === "VERIFICACION_FALLIDA" ||
+        e.verificacion === "SIN_VERIFICACION" ||
+        (e.condicion !== null && e.condicion.condition !== "operational") ||
+        (vencidasPorId.get(e.id) ?? 0) > 0),
   );
+
+  // Un equipo retirado sigue en el inventario —no se borra nada— y se dice junto a su nombre (Parte 2c, D5). El texto es el
+  // que ya existía (`motivo_RETIRADO`): no hay clave nueva.
+  const marcaDeRetirado = (e: (typeof equipos)[number]) =>
+    e.lifecycleStatus === "retired" ? (
+      <>
+        {" · "}
+        <strong>{t("motivo_RETIRADO")}</strong>
+      </>
+    ) : null;
 
   const filaModeloYVencidas = (e: (typeof equipos)[number]) => {
     const n = vencidasPorId.get(e.id) ?? 0;
@@ -178,6 +191,7 @@ export default async function EquiposPage({
                 <tr key={e.id}>
                   <td>
                     <Link href={`/equipos/${e.id}`}>{e.name}</Link>
+                    {marcaDeRetirado(e)}
                     {filaModeloYVencidas(e)}
                   </td>
                   <td>{e.ubicacion?.name ?? t("sinUbicar")}</td>
@@ -211,6 +225,7 @@ export default async function EquiposPage({
                 <tr key={e.id}>
                   <td>
                     <Link href={`/equipos/${e.id}`}>{e.name}</Link>
+                    {marcaDeRetirado(e)}
                     {filaModeloYVencidas(e)}
                   </td>
                   <td>{t(`tipo_${e.kind}`)}</td>
