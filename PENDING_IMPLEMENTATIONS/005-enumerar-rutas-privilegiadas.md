@@ -2,8 +2,8 @@
 
 **Estado: la propiedad que faltaba YA TIENE MECANISMO, y el primer dominio está
 declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
-concretas, las dos nombradas al final: **los otros dominios** (hoy sólo el del
-lote) y **tus catorce veredictos**, de los que dos son defectos propuestos.
+concretas, las dos nombradas al final: **los otros dominios** (hoy el del lote y,
+desde el 2026-10-11, el de ubicaciones) y **tus catorce veredictos**, de los que dos son defectos propuestos.
 
 Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
 debido*— está en la sección «El guardia debido, 2026-10-04».
@@ -241,9 +241,40 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 - **Tus doce veredictos restantes.** Los dos defectos ya están arreglados. La
   compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
   en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
-- **Los otros dominios.** Hoy hay uno. Añadir el siguiente es un bloque más en el
-  mismo archivo y **no toca la compuerta**. Los candidatos por volumen, medidos:
-  `location` (34 llamadas a `can`), `equipment` (20), `specimen` (7), `sample` (4).
+- **Los otros dominios.** Hay dos desde el 2026-10-11: el del lote y el de ubicaciones. Quedan
+  `equipment` (20 llamadas a `can`), `specimen` (7) y `sample` (4).
+
+  **Esta viñeta decía que añadir el siguiente «no toca la compuerta», y era falso.** La compuerta
+  leía sólo `declaracion.dominios[0]`. Medido al declarar `location`: con la versión vieja, quitarle
+  una excepción dejaba las 12 pruebas en verde. Ahora un `describe.each` recorre todos, y una
+  prueba impide que un modelo tenga dos dominios.
+
+  **El dominio de ubicaciones, opción B** (decisión de Daniel, 2026-10-11): los 13 modelos de datos
+  que se registran SOBRE una ubicación (suelo, muestras foliares, rejilla de la parcela, siembras,
+  biocarbón, regla de trampas, rutinas de lugar). 48 operaciones con guardia, 39 exigen `location`
+  y **9 son tus veredictos nuevos**, todos «propuesto legítimo», en tres patrones:
+
+  | patrón | cuántas |
+  |---|---|
+  | trabajo de campo con `lot` sobre la misma parcela (el Farm Operator no tiene `location:manage_attributes`) | 5 |
+  | investigación con `research:execute_protocol` sobre el mismo bloque | 2 |
+  | trampas, con su permiso de especimen | 2 |
+
+  Donde quien llama nombra un bloque, el código comprueba que sea de esa parcela (leído en las tres).
+  Una nota en `applyAmendment`: la respuesta distingue un id de biocarbón ajeno de uno inexistente.
+
+  **El modelo `location` mismo queda fuera, a propósito.** Lo tocan 106 operaciones con guardia y
+  59 exigen otro permiso, casi todas lecturas de contexto. Quién ESCRIBE una ubicación con el
+  permiso equivocado lo vería la compuerta por acción de abajo, que es decisión tuya.
+
+  Flip, con el JSON mutado y el sha distinto en cada vuelta:
+
+  | mutación | cae, por su nombre |
+  |---|---|
+  | quitar la excepción de `createTrap` | «toda operación del dominio exige su permiso», del dominio `location` |
+  | una excepción fantasma | «ninguna excepción declarada sobra» |
+  | un modelo inventado | «la declaración nombra un dominio con modelos» |
+  | `plotBlock` también en el dominio del lote | «ningún modelo lo gobiernan dos dominios», y el dominio del lote |
 - **El `action`: medido el 2026-10-04, y NO hay defecto vivo.** Esta viñeta decía
   «hoy no está medida»; ya lo está, y el resultado es un cero con su flip detrás.
 

@@ -179,7 +179,7 @@ it("ningún modelo lo gobiernan dos dominios", () => {
   expect(repetidos, "un modelo con dos dueños exige dos permisos a la vez").toEqual([]);
 });
 
-describe.each(declaracion.dominios)("el permiso que exige una operación corresponde al dato que toca: «$permiso»", (dominio) => {
+describe.each(declaracion.dominios)("el permiso que exige una operación corresponde al dato que toca, dominio $permiso", (dominio) => {
   const gobernados = new Set(dominio.gobierna);
   const permiso = dominio.permiso;
   const declaradas = new Map(
