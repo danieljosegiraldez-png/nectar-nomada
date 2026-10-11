@@ -190,6 +190,14 @@ function handlersDeEscritura(fuente: ts.SourceFile): Handler[] {
   return salida;
 }
 
+const MOTIVO = {
+  argumento: "`negativaDelAparato` no recibe el `deviceId` del principal",
+  forma: "llama a `negativaDelAparato`, pero no con `const negativa = …` y `if (negativa) return …` " +
+    "en el nivel superior del handler",
+  orden: "antes de negar al revocado ya se espera otra cosa (¿se escribe antes de mirar?)",
+  sinLlamada: "no llama a `negativaDelAparato`",
+};
+
 /** La forma canónica de negar al aparato revocado; `null` si está, el motivo si no. */
 function porQueNoNiega(funcion: ts.FunctionLikeDeclaration, resolver: Set<string>, negativa: Set<string>): string | null {
   if (!funcion.body || !ts.isBlock(funcion.body)) return "el cuerpo no es un bloque";
@@ -208,8 +216,22 @@ function porQueNoNiega(funcion: ts.FunctionLikeDeclaration, resolver: Set<string
   const devuelveYa = (s: ts.Statement) =>
     ts.isReturnStatement(s) || (ts.isBlock(s) && s.statements.some(ts.isReturnStatement));
 
+  // El motivo, del más concreto al más general: un mensaje que culpe al orden
+  // cuando falla el argumento manda a buscar en el sitio equivocado.
+  const llamaEnAlgunSitio = sentencias.some((s) => {
+    let hay = false;
+    recorrerSinAnidar(s, (n) => { if (llamaA(n, negativa)) hay = true; });
+    return hay;
+  });
+  let vioLaNegativa = false;
   let llamadaConOtroArgumento = false;
+  const motivo = (chocaConOtraEspera: boolean) =>
+    llamadaConOtroArgumento ? MOTIVO.argumento
+      : vioLaNegativa ? MOTIVO.forma
+        : chocaConOtraEspera && llamaEnAlgunSitio ? MOTIVO.orden
+          : MOTIVO.sinLlamada;
   for (const s of sentencias) {
+    recorrerSinAnidar(s, (n) => { if (llamaA(n, negativa)) vioLaNegativa = true; });
     if (ts.isVariableStatement(s) && (s.declarationList.flags & ts.NodeFlags.Const)) {
       for (const d of s.declarationList.declarations) {
         if (!ts.isIdentifier(d.name)) continue;
@@ -234,11 +256,9 @@ function porQueNoNiega(funcion: ts.FunctionLikeDeclaration, resolver: Set<string
     recorrerSinAnidar(s, (n) => {
       if (ts.isAwaitExpression(n) && !esperaA(n, resolver) && !esperaA(n, negativa)) esperaOtraCosa = true;
     });
-    if (esperaOtraCosa) return "antes de negar al revocado ya se espera otra cosa (¿se escribe antes de mirar?)";
+    if (esperaOtraCosa) return motivo(true);
   }
-  return llamadaConOtroArgumento
-    ? "`negativaDelAparato` no recibe el `deviceId` del principal"
-    : "no hay `if (negativa) return …` en el nivel superior del handler";
+  return motivo(false);
 }
 
 /** Para un archivo de ruta: cada handler de escritura del carril del token, y si niega al revocado. */
@@ -340,8 +360,11 @@ describe("el detector, con formas que SÍ niegan", () => {
 
 describe("el detector, con formas que NO niegan", () => {
   const noNiega = (texto: string, metodo = "POST") => expect(mira(texto)).toEqual([{ metodo, mira: false }]);
+  // El motivo también se afirma donde importa: es lo que lee quien arregla la ruta.
+  const noNiegaPor = (texto: string, motivo: string) =>
+    expect(escriturasPorToken(texto)).toEqual([{ metodo: "POST", mira: false, motivo }]);
 
-  it("sin la llamada", () => noNiega(post(`${PRINCIPAL}\n  return escribir();`)));
+  it("sin la llamada", () => noNiegaPor(post(`${PRINCIPAL}\n  return escribir();`), MOTIVO.sinLlamada));
 
   it("el nombre en un comentario o en una cadena no es una llamada", () => noNiega(post(`${PRINCIPAL}
     // const negativa = await negativaDelAparato(user.deviceId); if (negativa) return x;
@@ -367,17 +390,17 @@ describe("el detector, con formas que NO niegan", () => {
         const negativa = await negativaDelAparato(${arg});
         if (negativa) return new Response(null, { status: 403 });
         return escribir();`));
-      expect(r, arg).toEqual([{ metodo: "POST", mira: false, motivo: "`negativaDelAparato` no recibe el `deviceId` del principal" }]);
+      expect(r, arg).toEqual([{ metodo: "POST", mira: false, motivo: MOTIVO.argumento }]);
     }
   });
 
   it("con la polaridad al revés, comparada con un código, o compuesta", () => {
     for (const cond of ["!negativa", 'negativa === "device_not_found"', "negativa && estricto", "cfg.negativa"]) {
-      noNiega(post(`${PRINCIPAL}
+      noNiegaPor(post(`${PRINCIPAL}
         const estricto = false; const cfg = { negativa: null };
         const negativa = await negativaDelAparato(user.deviceId);
         if (${cond}) return new Response(null, { status: 403 });
-        return escribir();`));
+        return escribir(await request.json());`), MOTIVO.forma);
     }
   });
 
@@ -397,10 +420,10 @@ describe("el detector, con formas que NO niegan", () => {
       return escribir();`));
   });
 
-  it("con la comprobación DESPUÉS de escribir", () => noNiega(post(`${PRINCIPAL}
+  it("con la comprobación DESPUÉS de escribir", () => noNiegaPor(post(`${PRINCIPAL}
     await escribir(await request.json());
     ${NIEGA}
-    return Response.json({ ok: true });`)));
+    return Response.json({ ok: true });`), MOTIVO.orden));
 
   it("con la comprobación sólo en el GET del mismo archivo", () => {
     expect(mira(ruta(`
