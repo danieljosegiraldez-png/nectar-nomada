@@ -124,9 +124,21 @@ lo que ya lanzaba para una ubicación ausente.
   en los dos casos, como en `plots/[id]`. Separar «no existe» de «sin permiso» diría a quien no tiene
   acceso qué ids existen. Medido con la cuenta DEMO de socio, sin acceso: la bodega y la instalación
   reales dan 404 y su nombre no aparece en la respuesta. Con la versión anterior daban 200 y el aviso.
-- `content/[id]` y `recipes/[id]` con un UUID que no existe redirigen a su lista.
-- `admin/users/[assignmentId]/permisos` redirige a `/admin/users?error=no_access` con las dos entradas:
-  su `catch {}` lo atrapa **todo**, así que no da 500 pero tampoco dejaría ver un fallo real.
+- ~~`content/[id]` y `recipes/[id]` con un UUID que no existe redirigen a su lista.~~ **Hecho el
+  2026-10-10 (#696):** «no existe», id mal formado y «sin permiso» dan 404, como `plots/[id]` y
+  `bodegas/[id]`; volver a la lista era contestar «no existe» con un 200. Medirlo con la cuenta DEMO de
+  socio destapó que **`recipes/[id]` daba 500 a quien no tenía acceso**: `requireLotAccess` lanza
+  `TraceabilityAccessError` y la página sólo atrapaba `ProcessTargetError`. Ahora atrapa las dos.
+  Medido: socio, 404 en las siete entradas de las dos páginas; Platform Admin, 404 con id basura o
+  inexistente y 200 con el registro real.
+- ~~`admin/users/[assignmentId]/permisos` redirige a `/admin/users?error=no_access` con las dos entradas:
+  su `catch {}` lo atrapa **todo**, así que no da 500 pero tampoco dejaría ver un fallo real.~~ **Hecho el
+  2026-10-10 (#696):** la redirección se queda —su comentario la declara deliberada—, pero sólo ante
+  `UserAdminError`, y `listAssignmentPermissions` lleva su guarda de forma para que el id basura no
+  vuelva a dar 500. *Flip:* simulando un fallo real en el servicio, la página nueva lo enseña (500) y la
+  vieja lo escondía detrás de «sin acceso» (200 → `/admin/users?error=no_access`).
+- **Y una que no es de esta ficha, encontrada de camino:** la lista `/recipes` da 500 a una cuenta sin
+  acceso a lotes. No tiene segmento dinámico, así que va aparte: `PENDING_IMPLEMENTATIONS/027`.
 
 ## Las que ya están bien (20)
 
