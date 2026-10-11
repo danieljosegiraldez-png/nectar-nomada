@@ -19,9 +19,41 @@ import {
   claveDeColumna,
   peorEstado,
 } from "../../lib/traceability/clasificacionVerde";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearUsuarioConAcceso, crearUsuarioSinAcceso } from "../helpers/traceability";
 
 const RUN = `cv-${Date.now()}`;
+
+/**
+ * Lo que este archivo crea y NO lleva el RUN en el nombre, porque lo crean los ayudantes compartidos
+ * (`acceso-<ts>-<n>` y `sin-acceso-<ts>-<n>`). No se pueden descubrir por el RUN, y descubrirlos por
+ * su prefijo borraría los de OTROS archivos que corren en paralelo contra la misma base.
+ *
+ * **Se guarda el resultado ENTERO, en un solo sitio** (`usuarioConAcceso` y `usuarioSinAcceso`, abajo),
+ * y el `afterAll` saca de ahí cada id. La primera versión anotaba cinco ids sueltos en el cuerpo de la
+ * prueba, y olvidar uno —la organización ajena— dejaba el archivo en verde con una fila de más:
+ * medido con un flip el 2026-10-11. Es un arreglo siempre definido, no una variable que el `beforeAll`
+ * asigna al final. Quedan dos huecos que sólo se cierran con un censo: llamar al ayudante compartido
+ * saltándose estos envoltorios, y que el ayudante muera ENTRE sus propios `create`, antes de devolver.
+ */
+const deLosAyudantes = {
+  conAcceso: [] as Array<Awaited<ReturnType<typeof crearUsuarioConAcceso>>>,
+  sinAcceso: [] as Array<Awaited<ReturnType<typeof crearUsuarioSinAcceso>>>,
+};
+async function usuarioConAcceso() {
+  const usuario = await crearUsuarioConAcceso();
+  deLosAyudantes.conAcceso.push(usuario);
+  return usuario;
+}
+async function usuarioSinAcceso() {
+  const usuario = await crearUsuarioSinAcceso();
+  deLosAyudantes.sinAcceso.push(usuario);
+  return usuario;
+}
+/** Lotes que `createLot` devolvió: la mitad de arriba del control positivo del `afterAll`. */
+let lotesDevueltos = 0;
+/** `true` sólo cuando el `beforeAll` llegó hasta el final: decide si el `afterAll` exige el fixture. */
+let fixtureListo = false;
 
 let userAccountId: string;
 let organizationId: string;
@@ -56,6 +88,7 @@ async function loteVerde(code: string, kg: number) {
   const lot = await createLot(userAccountId, {
     lotCode: `${RUN}-${code}`, lotType: "green", organizationId, projectId, locationId,
   });
+  lotesDevueltos += 1;
   await recordQuantityEvent(userAccountId, {
     lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
     occurredAt: new Date(), provenanceClass: "measured_fact",
@@ -67,6 +100,7 @@ async function loteCereza(code: string, kg: number) {
   const lot = await createLot(userAccountId, {
     lotCode: `${RUN}-${code}`, lotType: "cherry", organizationId, projectId, locationId,
   });
+  lotesDevueltos += 1;
   await recordQuantityEvent(userAccountId, {
     lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
     occurredAt: new Date(), provenanceClass: "measured_fact",
@@ -75,7 +109,7 @@ async function loteCereza(code: string, kg: number) {
 }
 
 beforeAll(async () => {
-  const usuario = await crearUsuarioConAcceso();
+  const usuario = await usuarioConAcceso();
   userAccountId = usuario.userAccountId;
 
   const organization = await prisma.organization.create({
@@ -93,11 +127,142 @@ beforeAll(async () => {
 
   brocaId = await catalogValue("broca", "rechazo_categoria");
   flotadoresId = await catalogValue("flotadores", "rechazo_categoria");
+  fixtureListo = true;
 });
 
+/**
+ * Hasta el 2026-10-11 este `afterAll` sólo desconectaba, y cada corrida dejaba en la base 29 lotes
+ * `cv-<ts>` con sus 39 eventos de cantidad, 10 transformaciones, 19 filas de auditoría y el resto
+ * del fixture. Medido con un censo de las 207 tablas antes y después de una corrida.
+ *
+ * **Todo se DESCUBRE por el RUN, no se hereda de las variables del fixture**: si el `beforeAll`
+ * murió a mitad, esas variables siguen `undefined` y una limpieza que dependa de ellas aborta
+ * (`assertDefinedWhere`) en vez de limpiar. Lo único que no se puede descubrir por nombre son las
+ * filas de los ayudantes compartidos, y esas van en `deLosAyudantes`.
+ *
+ * **Cada paso se intenta aunque el anterior falle:** un `afterAll` es una cadena, y la primera clave
+ * ajena que se queja tira el resto. Los fallos se juntan y se lanzan al final.
+ *
+ * **Y termina CONTANDO** lo que quedó del RUN, porque «0 filas» sólo dice algo si antes se demostró
+ * que el descubrimiento sabe ver filas: el control positivo compara lo hallado con lo que
+ * `createLot` devolvió. Vale para cualquier subconjunto con `-t`: un subconjunto sin lotes exige 0 y
+ * encuentra 0, y el fixture se exige sólo si el `beforeAll` llegó al final.
+ */
 afterAll(async () => {
-  await prisma.$disconnect();
-});
+  const fallos: string[] = [];
+  const intentar = async (paso: string, accion: () => Promise<unknown>) => {
+    try {
+      await accion();
+    } catch (error) {
+      fallos.push(`${paso}: ${error instanceof Error ? error.message.trim().split("\n").pop() : String(error)}`);
+    }
+  };
+  const prefijoDeLote = `${RUN}-`;
+  const { conAcceso, sinAcceso } = deLosAyudantes;
+  const personasDeAyudantes = [...conAcceso, ...sinAcceso].map((u) => u.personId);
+  const cuentasDeAyudantes = [...conAcceso, ...sinAcceso].map((u) => u.userAccountId);
+  // Sólo los de `usuarioSinAcceso`: el `scopeId` de `usuarioConAcceso` es el de plataforma COMPARTIDO.
+  const ambitosDeAyudantes = sinAcceso.map((u) => u.scopeId);
+  const lugaresDeAyudantes = sinAcceso.map((u) => u.locationId);
+  const organizacionesDeAyudantes = sinAcceso.map((u) => u.organizationId);
+  // Entre paréntesis porque así lo escriben todos los nombres de este archivo: `TEST Finca (cv-…)`.
+  const marca = `(${RUN})`;
+
+  try {
+    const lotes = await prisma.lot.findMany({ where: { lotCode: { startsWith: prefijoDeLote } }, select: { id: true } });
+    const idsDeLotes = lotes.map((l) => l.id);
+    const transformaciones = await prisma.lotTransformation.findMany({
+      where: {
+        OR: [
+          { inputs: { some: { lotId: { in: idsDeLotes } } } },
+          { outputs: { some: { lotId: { in: idsDeLotes } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    const idsDeTransformaciones = transformaciones.map((t) => t.id);
+    const cantidades = await prisma.quantityEvent.findMany({ where: { lotId: { in: idsDeLotes } }, select: { id: true } });
+    const idsDeCantidades = cantidades.map((q) => q.id);
+    // `userAccount` en singular: `UserAccount.personId` es `@unique`, la relación es uno a uno.
+    const personas = await prisma.person.findMany({
+      where: { displayName: { contains: marca } },
+      select: { id: true, userAccount: { select: { id: true } } },
+    });
+    const idsDePersonas = [...new Set([...personas.map((p) => p.id), ...personasDeAyudantes])];
+    const idsDeCuentas = [
+      ...new Set([...personas.flatMap((p) => (p.userAccount ? [p.userAccount.id] : [])), ...cuentasDeAyudantes]),
+    ];
+    const lugares = await prisma.location.findMany({ where: { name: { contains: marca } }, select: { id: true } });
+    const idsDeLugares = [...new Set([...lugares.map((l) => l.id), ...lugaresDeAyudantes])];
+    const organizaciones = await prisma.organization.findMany({ where: { name: { contains: marca } }, select: { id: true } });
+    const idsDeOrganizaciones = [...new Set([...organizaciones.map((o) => o.id), ...organizacionesDeAyudantes])];
+    const proyectos = await prisma.project.findMany({ where: { name: { contains: marca } }, select: { id: true } });
+    const idsDeProyectos = proyectos.map((p) => p.id);
+    const idsDeAuditoria = [...idsDeLotes, ...idsDeTransformaciones, ...idsDeCantidades];
+
+    // CONTROL POSITIVO, antes de borrar nada: el descubrimiento tiene que ver lo que se creó.
+    if (idsDeLotes.length < lotesDevueltos) {
+      fallos.push(
+        `control positivo: createLot devolvió ${lotesDevueltos} lotes y el descubrimiento por «${prefijoDeLote}» halló ${idsDeLotes.length}`,
+      );
+    }
+    if (fixtureListo && (organizaciones.length < 1 || proyectos.length < 1 || lugares.length < 1)) {
+      fallos.push(
+        `control positivo: el beforeAll terminó y el descubrimiento halló ${organizaciones.length} organizaciones, ${proyectos.length} proyectos, ${lugares.length} lugares`,
+      );
+    }
+
+    // En orden de claves ajenas: `lot` es RESTRICT hacia casi todo, y una transformación se lleva
+    // por CASCADE sus entradas y salidas.
+    await intentar("auditoría", () =>
+      prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: idsDeAuditoria } }) }),
+    );
+    await intentar("eventos de cantidad", () =>
+      prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: idsDeLotes } }) }),
+    );
+    await intentar("transformaciones", () =>
+      prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeTransformaciones } }) }),
+    );
+    await intentar("lotes", () => prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeLotes } }) }));
+    await intentar("asignaciones", () =>
+      prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: idsDeCuentas } }) }),
+    );
+    // Después de las asignaciones, que lo referencian. `scopeType` es un cinturón: aunque alguien
+    // anote por error el ámbito de plataforma compartido, esta orden no lo toca.
+    await intentar("ámbitos", () =>
+      prisma.scope.deleteMany({
+        where: assertDefinedWhere({ id: { in: ambitosDeAyudantes }, scopeType: "location" as const }),
+      }),
+    );
+    await intentar("cuentas", () => prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeCuentas } }) }));
+    await intentar("personas", () => prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: idsDePersonas } }) }));
+    await intentar("lugares", () => prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeLugares } }) }));
+    await intentar("organizaciones", () =>
+      prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeOrganizaciones } }) }),
+    );
+    await intentar("proyectos", () => prisma.project.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeProyectos } }) }));
+
+    // Y se cuenta lo que quedó, sin fiarse de que los `deleteMany` anteriores hicieran lo suyo.
+    const quedan = {
+      lotes: await prisma.lot.count({ where: { lotCode: { startsWith: prefijoDeLote } } }),
+      cantidades: await prisma.quantityEvent.count({ where: { id: { in: idsDeCantidades } } }),
+      transformaciones: await prisma.lotTransformation.count({ where: { id: { in: idsDeTransformaciones } } }),
+      auditoria: await prisma.auditEvent.count({ where: { entityId: { in: idsDeAuditoria } } }),
+      personas: await prisma.person.count({ where: { id: { in: idsDePersonas } } }),
+      cuentas: await prisma.userAccount.count({ where: { id: { in: idsDeCuentas } } }),
+      lugares: await prisma.location.count({ where: { id: { in: idsDeLugares } } }),
+      organizaciones: await prisma.organization.count({ where: { id: { in: idsDeOrganizaciones } } }),
+      proyectos: await prisma.project.count({ where: { id: { in: idsDeProyectos } } }),
+    };
+    const sobrantes = Object.entries(quedan).filter(([, n]) => n > 0);
+    if (sobrantes.length > 0) {
+      fallos.push(`quedan filas del RUN ${RUN}: ${sobrantes.map(([tabla, n]) => `${tabla}=${n}`).join(", ")}`);
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+  if (fallos.length > 0) throw new Error(`La limpieza de ${RUN} no quedó limpia:\n  - ${fallos.join("\n  - ")}`);
+}, 30000);
 
 describe("peorEstado", () => {
   it("devuelve el peor y no el primero", () => {
@@ -255,7 +420,7 @@ describe("compararClasificacionVerde", () => {
       provenanceClass: "measured_fact",
     });
 
-    const ajeno = await crearUsuarioSinAcceso();
+    const ajeno = await usuarioSinAcceso();
     const r = await compararClasificacionVerde(ajeno.userAccountId);
     expect(r.sinAmbito).toBe(false);
     expect(r.filas.find((f) => f.lotCode === `${RUN}-ajena`)).toBeUndefined();
