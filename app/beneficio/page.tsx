@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { permissionKeysAnywhere } from "../../lib/rbac/service";
-import { puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 import { listarBeneficios } from "../../lib/traceability/beneficios";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import {
@@ -76,7 +75,7 @@ export default async function BeneficioPage({
   if (!granted.has("lot:view") && !granted.has("lot:manage")) notFound();
 
   const t = await getTranslations("SeccionBeneficio");
-  const destinos = destinosDelBeneficio(granted, await puedeCrearRecetaEnAlguna(user.userAccountId));
+  const destinos = destinosDelBeneficio(granted);
   const { operaciones, consultar, herramientas } = repartirDestinos(destinos);
 
   const { ok, error, lote: loteCrudo, variable: variableCruda } = await searchParams;
@@ -101,8 +100,8 @@ export default async function BeneficioPage({
     corridasPorUnidad: datos.corridasPorUnidad,
   });
   const instrumentos = instrumentosQuePidenAtencion(datos.instrumentos);
-  // **Los que esta cuenta VE**, para distinguir «ninguno pide atención» de «no ves ninguno» (019).
-  // No es `datos.instrumentos`: esa lista lleva TODO el equipo visible con su `kind`, así que una
+  // **Los activos que esta cuenta VE**, para distinguir «ninguno pide atención» de «no ves ninguno» (019).
+  // No es `datos.instrumentos`: esa lista lleva TODO el equipo ACTIVO visible con su `kind` (un retirado no entra: D9), así que una
   // cuenta que ve tanques y cero instrumentos saldría como «ninguno pide atención».
   const visibles = instrumentosVisibles(datos.instrumentos);
 
@@ -271,7 +270,7 @@ export default async function BeneficioPage({
           <h2 id="instrumentos-beneficio">{t("instrumentosTitulo")}</h2>
           {/* **Dos motivos para una lista vacía, y no dicen lo mismo**
               (`PENDING_IMPLEMENTATIONS/019`). `instrumentos` son los que PIDEN ATENCIÓN;
-              `datos.instrumentos` son los que esta cuenta VE. Con ámbito de lotes y cero equipos
+              `datos.instrumentos` son los que esta cuenta VE y están activos (D9). Con ámbito de lotes y cero equipos
               visibles, los dos valen `[]` y la pantalla decía «Ningún instrumento pide atención»
               —que se lee como «todos bien»— cuando lo cierto es «no veo ninguno». Es el mismo
               fallo que `sinAmbito` ya guarda una línea más arriba, aplicado a un solo estado.

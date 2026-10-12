@@ -153,6 +153,19 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
   // finca de la jornada o del equipo Néctar Nómada, no cualquier persona de la plataforma.
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: sesion.locationId }]);
 
+  // El aparato del cuerpo, con el mismo criterio que `pushFieldEvents`. Por
+  // cookie no hay aparato propio y éste es el que queda como autor de la foto:
+  // uno revocado no firma una foto nueva, y uno que no existe tiene que decirlo
+  // en vez de reventar contra la clave foránea como un 500. Un aparato vivo de
+  // otra cuenta pasa, como en `field-events` (decisión de Daniel, 2026-10-11).
+  if (input.deviceId != null) {
+    const aparato = await prisma.device.findUnique({
+      where: { id: input.deviceId }, select: { revokedAt: true },
+    });
+    if (!aparato) throw new FieldMediaError("device_not_found");
+    if (aparato.revokedAt) throw new FieldMediaError("device_revoked");
+  }
+
   const cuenta = await prisma.userAccount.findUniqueOrThrow({
     where: { id: userAccountId },
     select: { personId: true },

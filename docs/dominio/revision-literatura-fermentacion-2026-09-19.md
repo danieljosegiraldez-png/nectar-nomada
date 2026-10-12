@@ -87,6 +87,11 @@ pergamino mucilaginoso. El «Semi Wash 50 % / 75 %» de Daniel es el **porcentaj
 antes de la cama (ADR-181): otra cosa, y deliberada. Los porcentajes de honey amarillo/rojo/negro
 **no tienen fuente académica** (◻).
 
+> **Corregido el 2026-10-04 (decisión de Daniel del 2026-10-03):** el «Semi Wash 50 % / 75 %» de Daniel **no** es el
+> porcentaje de mucílago quitado, como decía el párrafo de arriba: es el que **le queda** (75 % = le queda el 75 %; 0 % =
+> Lavado; 100 % = Honey). Sigue siendo otra cosa que el «semi-washed» de la norma, y deliberada. El párrafo se conserva
+> como se escribió; la misma nota está en ADR-181, punto 12.
+
 ## 3. Correcciones que hizo Codex a los informes (no citar lo tachado)
 
 - Informe B: el «ajuste activo del pH con azúcar y harina» en Madrid-Restrepo 2025 **lo añadió el

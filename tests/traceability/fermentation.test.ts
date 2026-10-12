@@ -185,6 +185,8 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     });
 
     await expect(
+      // Sin tanque ni nombre A PROPÓSITO (D2): el acceso al lote se comprueba ANTES que el recipiente, así que quien no gestiona el
+      // lote recibe `TraceabilityAccessError` y no se entera de qué tanques existen. Si alguien invierte el orden, esta prueba cae.
       startFermentationRun(wrongProjectUserAccountId, {
         provenanceClass: "original_record",
         lotId: lot.id,
@@ -203,6 +205,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       lotId: lot.id,
+      vesselNote: "Tanque de prueba",
       startedAt: new Date(),
       provenanceClass: "original_record",
     });
@@ -226,6 +229,7 @@ describe("Fermentation — full start/intervene/measure/end cycle", () => {
     await abrirProcesoDePrueba(authorizedUserAccountId, lot.id);
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       lotId: lot.id,
+      vesselNote: "Tanque de prueba",
       startedAt: new Date(),
       provenanceClass: "original_record",
     });

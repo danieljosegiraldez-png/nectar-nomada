@@ -682,6 +682,18 @@
       "archivo": "lib/traceability/formaDeLaParcela.ts",
       "razon": "Modulo de dominio: la FORMA declarada de un lote, como union de rectangulos (D9, 2026-10-03). La mitad pura —`celdasDeLaForma`, `celdasSinPlantar`, `tableroDe`— no toca la base; las dos que escriben exigen `requireLocationAttributeAccess` sobre la RAIZ de la numeracion ANTES de escribir, no sobre el sitio que pase quien llama: con el permiso de una microparcela no se cambia la forma de su madre (D3). Cada escritura lleva su AuditEvent en la MISMA transaccion (`location.declare_shape_range` y `location.remove_shape_range`). El disparador `plot_shape_range_exigir_forma_en_la_rejilla` de la migracion 20261002210000 es la red en la base: exige que el trozo quepa en el tablero. Quitar un trozo AVISA de las plantas que quedan fuera en vez de rechazar (§7.4), y con la forma vacia devuelve 0 y no «todas», porque «no se sabe» no es «esta vacio» (ADR-080).",
       "verificado": "2026-10-03"
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "razon": "Módulo de dominio: la receta como lista ordenada de pasos (Parte 2a, tarea 3, 2026-10-04). Sus seis operaciones exportadas autorizan antes de leer o escribir —las cinco que escriben, con `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso `lot:approve_exception` del Coffee Process Manager, V16); `pasosDeLaVersion`, con esa misma regla o con `requireLotAccess(manage)` sobre un lote de la organización, como `getRecipeForEditor`, y, si la receta es Libre, con `requireLotAccess(view)` sobre el lote de cada proceso que la usa (R24)—, y `agregarPaso` y `actualizarPaso` piden además `requireLotAccess(view)` sobre el lote de cada lectura de cierre que un fin cita (R6), y toda escritura va en una transacción que bloquea la versión y vuelve a leer su estado."
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "razon": "Parte 2a, tarea 4: versiones y plantillas de una receta con pasos (diseño §3.3–§3.4). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/recetas/catalogosDelEditor.ts",
+      "razon": "Parte 2a, tarea 14: el vocabulario de los desplegables del editor de recetas (valores de catálogo). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     }
   ],
   "reciben_transaccion": [
@@ -805,7 +817,15 @@
     },
     {
       "archivo": "lib/traceability/lotProcess.ts",
-      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote."
+      "razon": "Parte 1, R7 (2026-10-01): `exigeSecadoTerminado(tx, lotId)` recibe el `tx` de la transacción de `moveLotToStorage` para comprobar DENTRO de ella, con el linaje ya bloqueado, que el proceso que cubre al lote esté cerrado por humedad en el objetivo; antes comprobaba con el cliente global y fuera de la transacción, y en el hueco otra petición podía abrir un proceso. Sólo lee el proceso y su medición de cierre, y lanza o no lanza; no escribe nada. Quien llama ya autorizó con `requireLotAccess(manage)` sobre ese mismo lote. Parte 2a, tarea 5a: `exigeRecetaParaAbrir(tx, …)`, privada, recibe el `tx` de `abrirProceso` para bloquear la fila de la versión y la de su receta (`FOR SHARE`) DESPUÉS del linaje y validarlas dentro de la misma transacción —la versión existe y está publicada, la receta no está archivada y es de la organización del lote o compartida—. Sólo lee y lanza; `abrirProceso` ya autorizó con `requireLotAccess(manage)` (`loteGestionable`)."
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "razon": "Parte 2a, tarea 3 (2026-10-04): sus ayudantes privados (`bloquearBorrador`, `idsEnOrden`, `apartar`, `colocar`, `escribirHijos`, `borrarHijos`, `leerPasos`) reciben el `tx` de la transacción que abre la propia operación exportada, después de autorizar; `leerPasos` recibe el cliente global cuando sólo se lee. Ninguno se exporta ni autoriza por su cuenta."
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "razon": "Parte 2a, tarea 4: `copiarContenidoDeVersion` recibe el cliente de la transacción de quien la llama (`nuevaVersionBorrador` y `derivarReceta`, y —desde el PR-B— la conversión de una Libre de la tarea 11) y copia dentro de ella pasos, adiciones, fines, requisitos, metas y fases de una versión a otra. No abre conexión ni transacción propia, y no autoriza: sus llamadores ya pidieron `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16)."
     }
   ],
   "operaciones_sin_patron": [
@@ -920,12 +940,6 @@
       "operacion": "dividirProcesoEnTx",
       "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
       "verificado": "2026-10-01"
-    },
-    {
-      "archivo": "lib/traceability/processTargets.ts",
-      "operacion": "listRecipes",
-      "razon": "Guarda con `puedeCrearRecetaEnAlguna` (su mismo archivo → `puedeEditarBeneficioEnOrganizacion` y `listRecipeOrganizations` → `puedeGestionarLote` → `can`), que el detector no reconoce porque no tiene forma de guardia y está a varios saltos. Lanza `ProcessTargetError(\"no_recipe_access\")` antes de leer nada. Hasta el 2026-10-10 llamaba a `requireLotAccess` sobre el primer lote de toda la base, sin orden; ahora usa la misma regla que crear una receta, por decisión de Daniel (PENDING_IMPLEMENTATIONS/027).",
-      "verificado": "2026-10-10"
     }
   ],
   "dependen_del_llamador": [
@@ -1522,6 +1536,18 @@
       "operacion": "ubicacionesEmparentadas",
       "razon": "INVISIBLE al inventario hasta el 2026-10-04: su cliente se llama `db` y la enumeracion era `prisma|aiPrisma|tx|client`, asi que con cero modelos la fila se descartaba ENTERA. Es la que mas importa de las seis: devuelve la ubicacion dada MAS todos sus ancestros y todos sus descendientes, o sea el conector sobre el que se apoya el rollup de la finca al lote. Recibe un id y no recibe principal. SEIS caminos, medidos POR UNIDAD y no por archivo -- la primera version de esta razon decia que `floracion.ts`, `harvest.ts` e `intervenciones.ts` autorizaban antes, y era FALSO en dos de los tres: el archivo tenia un guardia en OTRA funcion. (1) `harvest.ts` -> `recordHarvestEvent`: llama a `requireLotAccess` en la misma unidad. (2) `intervenciones.ts` -> `validarReferencias`: NO autoriza, pero sus dos unicos llamadores, `registrarIntervencion` y `corregirIntervencion`, si. (3) `floracion.ts` -> `floracionesDeLaParcela`: NO autoriza, y su comentario lo declara; sus dos llamadores son `app/plots/[id]/manejo/nuevo/page.tsx` y `app/plots/[id]/manejo/[interventionId]/page.tsx`, que autorizan atrapando `TraceabilityAccessError` de un servicio que lanza -- un mecanismo que el detector de guardias NO PUEDE VER. (4) `app/plots/[id]/page.tsx`: `getPlotDetail` hace `requireLocationAttributeAccess` sobre el MISMO id que luego pasa. (5) `app/field-sessions/[id]/page.tsx`: `getFieldSessionTimeline` hace `requireFieldSessionAccess(userAccountId, session.locationId)` y pasa ESE mismo id. (6) QUEDA SIN PROBAR, y se dice en vez de taparlo: `app/lots/[id]/page.tsx` autoriza el LOTE con `getLotDetail` y luego pasa `harvestEvent.locationId`, que es otra cosa; que ver el lote implique ver la ubicacion de su cosecha no lo demuestra ninguna medicion de este inventario. Verificado el 2026-10-04.",
       "verificado": "2026-10-04"
+    },
+    {
+      "archivo": "lib/recetas/versiones.ts",
+      "operacion": "copiarContenidoDeVersion",
+      "razon": "Copia lo que cuelga de una versión de receta a otra recién creada —pasos con sus adiciones, fines y requisitos; metas de paso con el paso remapeado al nuevo; metas de versión si se piden; y las fases sólo si el origen no tiene pasos (diseño §3.1)— dentro de la transacción del llamador. No recibe principal: la llaman `nuevaVersionBorrador` y `derivarReceta` (mismo archivo) después de `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager en alguna ubicación de la organización de la receta, o de plataforma si es una plantilla), y —desde el PR-B— la conversión de una Libre (`lib/recetas/convertir.ts`, tarea 11) después de esa misma regla. Devuelve cuántas filas copió, no filas.",
+      "verificado": "2026-10-06"
+    },
+    {
+      "archivo": "lib/recetas/catalogosDelEditor.ts",
+      "operacion": "catalogosDelEditor",
+      "razon": "Lee los valores canónicos de diez catálogos (tipo de paso, estado de la fruta, oxígeno, temperatura, fuente microbiana, medio, físico, sustrato, levadura y capacidad) para los desplegables del formulario de un paso. No recibe principal y no filtra por nadie: es vocabulario, no dato de una organización. La llaman sólo `app/recipes/[id]/pasos/datosDelFormulario.ts`, después de `getRecipeForEditor` (que abre la receta a quien puede escribirla o a quien opera un lote de su organización: Ruling C4) y de `puedeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16), que responde 404 a quien no puede.",
+      "verificado": "2026-10-08"
     }
   ]
 }

@@ -5,11 +5,8 @@
  *
  * `clave` es la del namespace `SeccionBeneficio`: la página pinta `t(clave)` y
  * `t(`${clave}Ayuda`)`.
- *
- * `puedeVerRecetas` es `puedeCrearRecetaEnAlguna`, que la página calcula: Recetas no cuelga de un
- * permiso suelto sino de la misma regla que `listRecipes` (PENDING_IMPLEMENTATIONS/027).
  */
-export function destinosDelBeneficio(granted: Set<string>, puedeVerRecetas: boolean) {
+export function destinosDelBeneficio(granted: Set<string>) {
   return [
     // Spec recepción de cereza §4: la entrada del beneficio. Ver pendientes y lo recibido pide
     // `lot:view` sobre el beneficio; recibir y pedir, `lot:manage`, que exige cada servicio.
@@ -30,10 +27,11 @@ export function destinosDelBeneficio(granted: Set<string>, puedeVerRecetas: bool
     // sección: la cola misma sólo trae lo que la visibilidad de lotes alcanza.
     { href: "/beneficio/secado", clave: "secado", visible: true },
     { href: "/lots", clave: "lotes", visible: true },
-    // Recetas, con el MISMO predicado que la lista: `listRecipes` rechaza a quien no podría crear
-    // una receta en ninguna organización (Daniel, 2026-10-10; PENDING_IMPLEMENTATIONS/027). Antes
-    // colgaba de `lot:manage`, y un Farm Operator veía el enlace a una lista que lo rechaza.
-    { href: "/recipes", clave: "recetas", visible: puedeVerRecetas },
+    // Recetas, sólo quien gestiona lotes (`lot:manage`). Así estaba en la barra de Lotes antes del #383, y el índice lo perdió. Ya no es lo único que abre
+    // `/recipes`: desde la Parte 2a `listRecipes` también la abre a quien puede ESCRIBIR recetas (`puedeAutoriaDeReceta`: el Coffee Process Manager, que no lleva
+    // `lot:manage`). A esa persona este índice no le ofrece el enlace, y el botón de `/lots` tampoco (también pide `lot:manage`): llega a `/recipes` si escribe la
+    // dirección, y ningún menú la lleva ahí. Si se le ofrece es decisión de Daniel.
+    { href: "/recipes", clave: "recetas", visible: granted.has("lot:manage") },
     { href: "/reports/proceso", clave: "informe", visible: true },
     { href: "/instalaciones", clave: "instalaciones", visible: granted.has("location:manage_attributes") },
     { href: "/equipos", clave: "equipos", visible: granted.has("equipment:view") },

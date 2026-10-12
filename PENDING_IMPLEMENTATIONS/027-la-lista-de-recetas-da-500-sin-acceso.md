@@ -1,65 +1,35 @@
 # 027 · La lista de recetas da 500 a quien no tiene acceso, y decide el acceso con un lote cualquiera
 
-**Estado: HECHA el 2026-10-10, en el PR #696.** Lo encontró, de camino, la medición de las rarezas de
-`026` con la cuenta DEMO de socio. No es de aquella ficha: `/recipes` no tiene segmento dinámico.
+**Estado: HECHA el 2026-10-12, en el #696, y no como se construyó primero.** Lo encontró la medición de las
+rarezas de `026` con la cuenta DEMO de socio. No es de aquella ficha: `/recipes` no tiene segmento dinámico.
 
-**La regla la eligió Daniel ese día: quien ve la lista es quien podría crear una receta**
-(`puedeCrearRecetaEnAlguna`: `location:edit_beneficio` en una organización con lotes, o en plataforma
-para la receta compartida). `listRecipes` rechaza con `ProcessTargetError("no_recipe_access")`, que
-`app/recipes/page.tsx` ya convertía en volver a `/lots`. Y los **tres** enlaces a la lista preguntan lo
-mismo —el de `/lots`, el índice de `/beneficio` y la barra `NavegacionBeneficio`—, para no prometer lo
-que la lista rechaza; `destinosDelBeneficio` recibe el booleano en vez de deducirlo de `lot:manage`.
+**Qué pasó.** El 2026-10-10 Daniel eligió una regla para la lista, «la misma que crear una receta», y el #696
+la construyó. El Farm Operator perdía la lista y sus enlaces. Mientras tanto entró en `main` la Parte 2a de
+recetas (#715), que había arreglado por su cuenta el mismo «lote cualquiera» (su R7, del 2026-10-05) y había
+fijado otra regla (su Ruling C4): cada receta la ve quien opera algún lote de su organización o quien puede
+escribir sus recetas. Al juntar `main`, las dos chocaron, y **Daniel eligió el 2026-10-12 la de `main`**.
 
-**La consecuencia, dicha porque cambia lo que ve alguien:** el **Farm Operator** (`lot:manage` sin
-`edit_beneficio`) deja de ver la lista y sus enlaces. Farm Manager y Platform Admin la conservan, y
-ningún perfil gana acceso. Lo que la lista enseña no cambia: todas las recetas, como antes.
+**Lo que queda de esta ficha:**
 
-**Y el mismo «lote cualquiera» vivía en otros cinco sitios del mismo archivo. Arreglados también,
-por decisión de Daniel del mismo día.** `lib/traceability/processTargets.ts`, medido el 2026-10-10:
-
-| función | qué lote mira |
+| defecto | cómo quedó |
 |---|---|
-| `listRecipeOrganizations` — la usa `puedeCrearRecetaEnAlguna`, o sea la regla nueva de la lista | el primero de cada organización, sin orden |
-| `createRecipeWithVersion` | compartida: el primero de **toda la base** (`where: {}`); de organización: el primero de ésa |
-| `getRecipeForEditor` — el detalle `/recipes/[id]` | igual; `organizationId ?? undefined` hace que Prisma **quite el filtro** |
-| `updateRecipeMetadata` y `createRecipeVersion` | igual |
+| **1 · el 500** | `main` lo dejaba a propósito: su comentario decía que quien no tiene acceso «ve la página de error». Daniel decidió el 2026-10-12 que **vuelva a `/lots`**. `app/recipes/page.tsx` atrapa `TraceabilityAccessError`, y sólo esa clase. Lo guarda `tests/traceability/paginaDeRecetas.test.ts`, con el control de que otro error sube tal cual. Flip: sin el `catch` cae la fila de `/lots`. |
+| **2 · el lote cualquiera** | Arreglado en `main` por la Parte 2a: `listRecipes`, `listRecipeOrganizations` y `getRecipeForEditor` preguntan por los ámbitos de TODOS los lotes de la organización (`ambitosDeLosLotes`), y las escrituras pasan por `exigeAutoriaDeReceta`. |
 
-El comentario de `createRecipeWithVersion` dice «gated on any lot the account **can manage**», y el código mira el
-primer lote, lo gestione o no. **Y este PR lo hace visible:** antes, quien veía la lista era quien
-gestionaba el primer lote de la base, el mismo que el detalle de una receta compartida consulta. Ahora la
-lista la ve un Farm Manager de otra organización. Sonda sobre base desechable sembrada (primer lote
-`DCL-2027-CHERRY-01`, de `DEMO Cloudline`): un Farm Manager de su propia finca ve la lista, y en ella una
-receta compartida; abre la de su organización, y la compartida le da `no_lot_access`, o sea **404**.
+**Lo que se descartó del #696 al juntar**, para que nadie lo busque: `listRecipes` decidida por
+`puedeCrearRecetaEnAlguna`; el ayudante `gestionaAlgunLote`; los tres enlaces preguntando ese booleano;
+`tests/traceability/listaDeRecetas.test.ts`; y la entrada de `listRecipes` en la allowlist de acceso, que
+con el código de `main` vuelve a ser «guardia directo».
 
-**Cómo se arregló:** `gestionaAlgunLote` recorre las combinaciones distintas de proyecto, ubicación y
-clasificación —lo único que mira `requireLotAccess`— y pregunta a `puedeGestionarLote`, el mismo guardia
-que la escritura, overrides incluidos. **No usa `resolveLotVisibility`**, que es más barata pero mira sólo
-los permisos del perfil: un `grant` de `lot:manage` por override habría quedado fuera. Sobre la copia
-restaurada hay 137 lotes y 8 combinaciones en toda la base, así que recorrerlas cuesta poco.
-`exigeLoteGestionable` conserva los dos errores de antes, en el mismo orden.
+**Y sobrevive la guarda de la `026`:** un id mal formado en `/recipes/[id]` es «no existe», y el detalle da
+404 a `ProcessTargetError` y a `TraceabilityAccessError`. La página de `main` volvía a atrapar sólo la primera,
+así que el 500 de la receta Libre sin lote visible habría vuelto con el merge.
 
-**Cómo quedó comprobado:**
+**Pendiente, y no de esta ficha:** si el índice de `/beneficio` y `/lots` ofrecen el enlace al Coffee Process
+Manager, que puede ver la lista sin `lot:manage`. Lo dice el comentario de `app/beneficio/destinos.ts`, y es
+decisión de Daniel.
 
-- `tests/traceability/listaDeRecetas.test.ts` (grupo `base-sembrada`): sin asignaciones y Farm Operator
-  rechazados con `ProcessTargetError`, Farm Manager ve la receta de su organización, y un control de que
-  la lista y `puedeCrearRecetaEnAlguna` contestan lo mismo para los tres. Con el código anterior caían
-  **las 6**, con `no_lot_access`.
-- La misma prueba, para los cinco sitios: dos sitios en una organización, con el lote del A creado
-  primero, y un Farm Manager sólo del B, que ve la lista, abre su receta y la compartida, y renombra la
-  suya. Con el `processTargets.ts` anterior caían **sus 6 filas**. El control negativo —no abre la receta
-  de otra organización— pasa con los dos códigos, como debe.
-- Flip del ayudante: mirar sólo la primera combinación tumba esas 6; decir que sí siempre, o no filtrar
-  por organización, tumba sólo el control negativo. La primera mutación cae porque Prisma devuelve antes
-  la combinación del A: depende del orden, y por eso el rojo que cuenta es el del código anterior.
-- Las siete pruebas que usan estas funciones (`recipeAuthoring`, `recipeVersions`, `editarBeneficio`,
-  entre otras): 7 archivos, 134 pruebas en verde.
-- Flip: quitar la guarda tumba 4 —las dos filas que rechazan y sus dos controles—; volver a una clase
-  que la página no atrapa tumba las mismas 4; volver a colgar el índice de `lot:manage` tumba sólo
-  «Recetas sale de la regla de crear recetas, no de lot:manage».
-- Contra `next dev` sobre base desechable sembrada: con el socio, `/recipes` → **307** a `/lots` (antes
-  500), y `/lots` sin enlace a Recetas (control: el del Informe, en la misma barra, sí sale). Con el
-  admin, `/recipes` → 200, y el enlace aparece en `/lots`, en el índice de `/beneficio` y en la barra
-  de `/beneficio/secado`. Ninguna línea de error en el log del servidor.
+**Lo de abajo es la ficha como se escribió el 2026-10-10**, antes de todo esto.
 
 ## Los dos defectos
 

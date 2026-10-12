@@ -11434,6 +11434,11 @@ arreglo de un dano medido.
 
 1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
 2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+   **Corregido el 2026-10-10 (Parte 2a, V16: decisión de Daniel del 2026-10-04):** la autoría de recetas ya no es `edit_beneficio` sino el permiso del Coffee Process Manager
+   (`lot:approve_exception`, nombre provisional; `lib/recetas/autoria.ts`). **`edit_beneficio` ya no basta para escribir, versionar o publicar una receta**, tampoco a un Farm Manager que lo lleva de
+   serie: quien tenía `edit_beneficio` y no tiene el perfil nuevo pierde las recetas y conserva lo demás de este ADR (instalaciones, camas y equipos). Tampoco se pide ya `lot:manage` sobre un lote de la
+   organización: esa autoridad es otra persona. Una plantilla (`organizationId` nulo) sigue escribiéndose sólo con alcance de plataforma. Lo de arriba se conserva como se escribió, y las «Consecuencias» de
+   más abajo —que cuentan las recetas entre lo que exige `edit_beneficio`— quedan corregidas por esta nota.
 3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
 
 **Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
@@ -11996,6 +12001,12 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
+    **Corregido el 2026-10-04 (decisión de Daniel del 2026-10-03, preguntado dos veces con este ADR delante):** la escala es
+    la contraria. **«Semi Wash NN %» = le QUEDA el NN % del mucílago**; 0 % = Lavado, 100 % = Honey. Lo de arriba se
+    conserva como se escribió. Con el 50 % las dos lecturas coinciden; con el 75 % no (antes quedaba el 25 %). Hoy la escala
+    vive en el `mucilagoObjetivo` de cada paso de receta (0, 10, 25, 50, 75, 100; Parte 2a) y en las definiciones de
+    `grado_proceso` de `lib/research/catalogs.ts`. **Cómo se leen los procesos ya registrados con `Semi Wash 50%` o
+    `Semi Wash 75%` lo decide Daniel antes del reimport**: la Parte 2a deja una consulta de sólo lectura que los cuenta.
 13. **Agua y sospecha de dilución**: fuera el 6,5 fijo. **El mosto se compara contra el pH del agua de
     ese lote**, y sólo contra eso: si mide casi lo mismo que el agua que se usó, avisa. Nunca se avisa
     sobre una lectura de agua. Para tenerlo, opción en el beneficio de **medir el pH del agua** cada día
