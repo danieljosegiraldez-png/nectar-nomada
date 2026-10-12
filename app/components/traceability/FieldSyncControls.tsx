@@ -177,18 +177,15 @@ export function ResumenDeSincronizacion({ ultimo }: { ultimo: SyncSummary }) {
           entrar.
 
           Lo que SÍ salió se dice (decisión de Daniel, 2026-10-11): desde que
-          la cola va en tandas, el servidor puede dejar de responder con la
-          primera ya enviada. Sólo si salió algo — «Nada nuevo que enviar» al
-          lado de «no se pudo enviar» sería contradecirse. */}
-      {ultimo.sessionExpired ? (
-        <p className="nn-note" role="status">
-          {t("fieldSyncSessionExpired")}
-        </p>
-      ) : ultimo.serverUnavailable ? (
+          la cola va en tandas, el servidor puede dejar de responder —o la
+          sesión caducar— con la primera ya enviada. Sólo si salió algo:
+          «Nada nuevo que enviar» al lado de «no se pudo enviar» sería
+          contradecirse. */}
+      {ultimo.sessionExpired || ultimo.serverUnavailable ? (
         <>
           {ultimo.applied > 0 ? <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p> : null}
           <p className="nn-note" role="status">
-            {t("fieldSyncUnavailable")}
+            {ultimo.sessionExpired ? t("fieldSyncSessionExpired") : t("fieldSyncUnavailable")}
           </p>
         </>
       ) : (

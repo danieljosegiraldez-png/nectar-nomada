@@ -14,7 +14,8 @@ import type { SyncSummary } from "../../lib/sync/offlineQueue";
  * primera enviada. El resumen lo sabía (`applied: 200`), pero la pantalla
  * escondía el «enviadas» en cuanto había servidor caído —hasta entonces eso
  * implicaba que no había salido nada— y decía sólo «No se pudo enviar». Daniel
- * decidió el 2026-10-11 enseñar también las enviadas.
+ * decidió el 2026-10-11 enseñar también las enviadas, y lo mismo con la sesión
+ * caducada a mitad de la cola.
  *
  * El traductor es el ICU real (`use-intl`) sobre `messages/es.json`: el texto
  * afirmado es el que lee el operador, plurales incluidos, no una clave.
@@ -48,4 +49,22 @@ it("si el servidor no responde y no salió nada, no dice «Nada nuevo que enviar
     nadaNuevo: html.includes("Nada nuevo que enviar"),
     noRespondio: html.includes("el servidor no respondió"),
   }).toEqual({ nadaNuevo: false, noRespondio: true });
+});
+
+// Lo mismo con la sesión caducada a mitad de la cola (decisión de Daniel del
+// mismo día): un 401 en la segunda tanda también deja la primera enviada.
+it("si la sesión caduca con 200 ya enviadas, dice las enviadas Y que la sesión caducó", () => {
+  const html = pintar({ applied: 200, stillPending: 1, sessionExpired: true });
+  expect({
+    enviadas: html.includes("200 anotaciones enviadas"),
+    caduco: html.includes("tu sesión caducó"),
+  }).toEqual({ enviadas: true, caduco: true });
+});
+
+it("si la sesión caducó y no salió nada, no dice «Nada nuevo que enviar»", () => {
+  const html = pintar({ stillPending: 201, sessionExpired: true });
+  expect({
+    nadaNuevo: html.includes("Nada nuevo que enviar"),
+    caduco: html.includes("tu sesión caducó"),
+  }).toEqual({ nadaNuevo: false, caduco: true });
 });
