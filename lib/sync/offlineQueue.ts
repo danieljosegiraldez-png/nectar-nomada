@@ -19,6 +19,8 @@
  */
 
 import { classifyDraftAge, STALE_WARNING_DAYS, STALE_PURGE_DAYS } from "./draftAge";
+import { desenlaceDeUnBorrador, repartirPorCuenta } from "./cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
 
 const DB_NAME = "nectar-field-offline";
 const DB_VERSION = 1;
@@ -41,6 +43,12 @@ export interface FieldEventDraft {
   createdAt: number;
   status: DraftStatus;
   errorMessage?: string;
+  /**
+   * ADR-199 — la huella de la cuenta que lo anotó. Ausente en los guardados antes de que existiera:
+   * ésos los decide el servidor por quien registró el aparato, y quedan apuntados tras su primera
+   * respuesta.
+   */
+  cuenta?: string | null;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -77,7 +85,13 @@ async function write(fn: (store: IDBObjectStore) => void): Promise<void> {
  * no, y que lo ya anotado sobreviva a cerrar el navegador.
  */
 export async function queueFieldEvent(payload: Record<string, unknown>): Promise<FieldEventDraft> {
-  const draft: FieldEventDraft = { id: newDraftId(), payload, createdAt: Date.now(), status: "pending" };
+  const draft: FieldEventDraft = {
+    id: newDraftId(),
+    payload,
+    createdAt: Date.now(),
+    status: "pending",
+    cuenta: cuentaActualDelNavegador(),
+  };
   await write((s) => s.add(draft));
   avisarDeCambio();
   return draft;
@@ -163,6 +177,18 @@ export async function ensureDeviceId(): Promise<string> {
 }
 
 /**
+ * El aparato registrado en este navegador, si lo hay, sin registrar uno nuevo. Lo usan las fotos para
+ * la regla de los borradores sin cuenta (ADR-199): no deben registrar un aparato sólo para preguntar.
+ */
+export function idDeAparatoGuardado(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * P4 §10 — los borradores sin sincronizar no viven para siempre.
  *
  * **Esto BORRA trabajo de campo que no está en ningún otro sitio**, y es
@@ -202,6 +228,8 @@ export interface SyncSummary {
   applied: number;
   duplicate: number;
   rejected: number;
+  /** ADR-199 — de otra cuenta: siguen en el teléfono, sin enviar, hasta que su dueño vuelva. */
+  retenidas: number;
   stillPending: number;
   /** El servidor no pudo responder. Nada se marcó como error: sigue en cola. */
   serverUnavailable: boolean;
@@ -295,7 +323,13 @@ export async function leerJson<T>(res: Response, contexto: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "rejected"; reason?: string };
+type ServerResult = {
+  clientDraftId: string;
+  status: "applied" | "duplicate" | "rejected";
+  reason?: string;
+  /** ADR-199 — en la retención de uno sin cuenta, de quién es según el aparato. */
+  cuentaDelBorrador?: string;
+};
 
 /**
  * Tarea 11, fix round 1 — la mutación que viaja por la red para UN borrador.
@@ -320,10 +354,11 @@ type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "
  */
 export function construirMutacionDesdeBorrador(
   d: FieldEventDraft,
-): Record<string, unknown> & { clientDraftId: string } {
+): Record<string, unknown> & { clientDraftId: string; cuentaDelBorrador: string | null } {
   const propia = d.payload.clientDraftId;
   const clientDraftId = typeof propia === "string" && propia !== "" ? propia : d.id;
-  return { ...d.payload, clientDraftId };
+  // ADR-199 — la cuenta sale del BORRADOR, después del payload: lo que traiga el payload no la pisa.
+  return { ...d.payload, clientDraftId, cuentaDelBorrador: d.cuenta ?? null };
 }
 
 /**
@@ -344,9 +379,16 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   // (la ronda de trampas) necesita reintentar su propia cola cada vez que se
   // intenta ésta, sea cual sea el resultado.
   avisarDeSincronizacion();
-  const drafts = (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error");
+  // ADR-199 — sólo salen los de la cuenta de este navegador y los que no tienen cuenta (ésos los decide
+  // el servidor por el aparato). Los de otra cuenta se quedan en el teléfono, sin tocar, hasta que su
+  // dueño vuelva a entrar.
+  const cuentaActual = cuentaActualDelNavegador();
+  const { enviables: drafts, ajenos } = repartirPorCuenta(
+    (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error"),
+    cuentaActual,
+  );
   if (drafts.length === 0) {
-    return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
+    return { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: 0, serverUnavailable: false };
   }
 
   const deviceId = await ensureDeviceId();
@@ -372,22 +414,28 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   if (decision === "reintentar") {
     // No se toca ni un borrador: nadie ha evaluado su contenido. Quedan
     // pendientes y el operador puede volver a darle a sincronizar.
-    return { applied: 0, duplicate: 0, rejected: 0, stillPending: drafts.length, serverUnavailable: true };
+    return { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: drafts.length, serverUnavailable: true };
   }
   if (decision === "rechazar") {
     const razon = `HTTP ${res.status}`;
     for (const d of drafts) await write((s) => s.put({ ...d, status: "error", errorMessage: razon }));
-    return { applied: 0, duplicate: 0, rejected: drafts.length, stillPending: drafts.length, serverUnavailable: false };
+    return { applied: 0, duplicate: 0, rejected: drafts.length, retenidas: ajenos.length, stillPending: drafts.length, serverUnavailable: false };
   }
 
   const { results } = await leerJson<{ results: ServerResult[] }>(res, "POST /api/v1/sync/field-events");
-  const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false };
+  const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: 0, serverUnavailable: false };
 
   for (const r of results) {
     const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
-    if (r.status === "rejected") {
-      await write((s) => s.put({ ...draft, status: "error", errorMessage: r.reason ?? "rejected" }));
+    const desenlace = desenlaceDeUnBorrador(draft, r, cuentaActual);
+    if (desenlace.tipo === "retenido") {
+      // ADR-199 — sigue pendiente. Sólo se reescribe si el servidor dijo de quién es, para que deje de
+      // contarse como propio y de reenviarse a nombre de quien no es.
+      if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) await write((s) => s.put(desenlace.borrador));
+      resumen.retenidas++;
+    } else if (desenlace.tipo === "rechazado") {
+      await write((s) => s.put(desenlace.borrador));
       resumen.rejected++;
     } else {
       await discardFieldEventDraft(draft.id);
@@ -396,6 +444,6 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
     }
   }
 
-  resumen.stillPending = (await listFieldEventDrafts()).length;
+  resumen.stillPending = repartirPorCuenta(await listFieldEventDrafts(), cuentaActual).enviables.length;
   return resumen;
 }

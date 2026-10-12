@@ -234,3 +234,32 @@ describe("estadoDeBorrador: pendiente, rechazada o sincronizada", () => {
     expect(estadoDeBorrador({ status: "error" })).toBe("rechazada");
   });
 });
+
+describe("construirMutacionDesdeBorrador: la cuenta del borrador viaja (ADR-199)", () => {
+  it("un borrador con cuenta la manda como cuentaDelBorrador", () => {
+    const m = construirMutacionDesdeBorrador({
+      id: "draft-cuenta-1",
+      payload: { kind: "soil_sample", sampleCode: "S-01" },
+      createdAt: 0,
+      status: "pending",
+      cuenta: "11e594f481958c10",
+    });
+    expect(m.cuentaDelBorrador).toBe("11e594f481958c10");
+  });
+
+  it("uno de antes, sin cuenta, la manda null: la decide el servidor por el aparato", () => {
+    const m = construirMutacionDesdeBorrador({ id: "draft-cuenta-2", payload: { kind: "soil_sample" }, createdAt: 0, status: "pending" });
+    expect(m.cuentaDelBorrador).toBeNull();
+  });
+
+  it("el payload no puede suplantar la cuenta del borrador", () => {
+    const m = construirMutacionDesdeBorrador({
+      id: "draft-cuenta-3",
+      payload: { kind: "soil_sample", cuentaDelBorrador: "otra" },
+      createdAt: 0,
+      status: "pending",
+      cuenta: "11e594f481958c10",
+    });
+    expect(m.cuentaDelBorrador).toBe("11e594f481958c10");
+  });
+});

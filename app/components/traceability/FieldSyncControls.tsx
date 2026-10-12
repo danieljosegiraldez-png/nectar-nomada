@@ -11,6 +11,8 @@ import {
   STALE_PURGE_DAYS,
   type SyncSummary,
 } from "../../../lib/sync/offlineQueue";
+import { repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 /**
  * P4 §11 — lo que el operador ve de la cola: cuánto falta por enviar, un botón
@@ -49,6 +51,7 @@ export function FieldSyncControls() {
 
   const [purgados, setPurgados] = useState(0);
   const [rancios, setRancios] = useState(0);
+  const [deOtraCuenta, setDeOtraCuenta] = useState(0);
 
   const recontar = useCallback(async () => {
     try {
@@ -58,7 +61,10 @@ export function FieldSyncControls() {
       const { purgados: p, avisados } = await purgeStaleFieldDrafts();
       if (p > 0) setPurgados((n) => n + p);
       setRancios(avisados);
-      setPendientes((await listFieldEventDrafts()).length);
+      // ADR-199 — lo de otra cuenta no es «pendiente» de quien está dentro: no lo puede enviar.
+      const { enviables, ajenos } = repartirPorCuenta(await listFieldEventDrafts(), cuentaActualDelNavegador());
+      setPendientes(enviables.length);
+      setDeOtraCuenta(ajenos.length);
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no los datos: el formulario ya habría
@@ -109,6 +115,11 @@ export function FieldSyncControls() {
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("fieldSyncPending", { count: pendientes })}</p>
+      {deOtraCuenta > 0 ? (
+        <p className="nn-note" role="status">
+          {t("fieldDraftsOtherAccount", { count: deOtraCuenta })}
+        </p>
+      ) : null}
       {sinConexion ? <p className="nn-note">{t("fieldSyncOffline")}</p> : null}
       {purgados > 0 ? (
         <p className="nn-error" role="alert">
