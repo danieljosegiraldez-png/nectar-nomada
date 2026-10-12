@@ -31,16 +31,15 @@ import { UnitValidationError } from "../../lib/traceability/units";
 import { recordHarvestEvent, recordReceivingEvent, CerezaError } from "../../lib/traceability/harvest";
 import { recordRoastSession, elegirPerfilDeTueste, RoastSessionValidationError, CODIGOS_DE_TUESTE_CON_FRASE } from "../../lib/traceability/roasting";
 import { startFermentationRun, recordFermentationIntervention, endFermentationRun } from "../../lib/traceability/fermentation";
-import {
-  createRecipeWithVersion,
-  createRecipeVersion,
-  updateRecipeMetadata,
-  ProcessTargetError,
-} from "../../lib/traceability/processTargets";
+import { updateRecipeMetadata, ProcessTargetError, claveDeErrorDeMeta } from "../../lib/traceability/processTargets";
 import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryingRun, DryingValidationError } from "../../lib/traceability/drying";
 import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
+import { RecipeError, claveDeErrorDeReceta } from "../../lib/recetas/errorDeReceta";
+import { agregarPaso, actualizarPaso, quitarPaso, moverPaso, publicarVersion } from "../../lib/recetas/pasos";
+import { crearRecetaEnBorrador, nuevaVersionBorrador, derivarReceta } from "../../lib/recetas/versiones";
+import { pasoDeFormulario, posicionDeFormulario } from "../../lib/recetas/formularioDePaso";
 import { CODIGOS_DE_RECIPIENTE, RecipienteError } from "../../lib/traceability/recipientes";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
@@ -307,6 +306,12 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   ) {
     return t(`error_roast_${error.message}` as "error_roast_sample_must_be_green");
   }
+  // Parte 2a (tarea 5, C13): una versión que un tueste no puede seguir —no publicada, o de una receta Libre— tiene su frase,
+  // como `screen_system_invalid` de la clasificación por malla. El resto de los rechazos del tueste sigue por el genérico, con
+  // el código de detalle.
+  if (error instanceof RoastSessionValidationError && error.message === "version_no_publicada") {
+    return t("error_tueste_version_no_publicada");
+  }
   if (error instanceof RoastSessionValidationError) return t("error_roast", { detail: error.message });
   if (error instanceof TrillaValidationError) return t("error_hulling", { detail: error.message });
   if (error instanceof GreenGradingValidationError && error.message === "screen_system_invalid") {
@@ -316,6 +321,14 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
     return t("error_green_grading_screen_system_other_needs_note");
   }
   if (error instanceof GreenGradingValidationError) return t("error_green_grading", { detail: error.message });
+  // Parte 2a (tarea 3, 2026-10-03): la receta con pasos, un texto por código. El genérico de la receta de hoy, con el código
+  // de detalle, queda para un código que no tenga el suyo.
+  const claveDeReceta = claveDeErrorDeReceta(error);
+  if (claveDeReceta) return t(claveDeReceta as "error_receta_version_no_es_borrador");
+  // F1-7: las reglas de una meta de paso (`validateTargets`) tienen su texto; el genérico, con el código de detalle, queda para los demás `ProcessTargetError`.
+  const claveDeMeta = claveDeErrorDeMeta(error);
+  if (claveDeMeta) return t(claveDeMeta);
+  if (error instanceof RecipeError) return t("error_process_target", { detail: error.message });
   if (error instanceof ProcessTargetError) return t("error_process_target", { detail: error.message });
   if (error instanceof LabourValidationError) return t("error_labour", { detail: error.message });
   if (error instanceof MaterialConsumptionValidationError) {
@@ -1264,78 +1277,6 @@ export async function recordMaterialConsumptionEntryFormAction(
   return {};
 }
 
-/**
- * Create a recipe and its first version — ADR-100.
- *
- * The targets arrive as `targets[0][variable]`, `targets[0][moment]`… because
- * the count is not known in advance. Parsed by walking indices until one comes
- * up empty rather than trusting a hidden count field, which a truncated POST
- * would make wrong.
- */
-export async function createRecipeAction(
-  _prevState: TraceabilityActionState,
-  formData: FormData,
-): Promise<TraceabilityActionState> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  const t = await getTranslations("Traceability");
-
-  const targets = parseTargetRows(formData);
-
-  try {
-    await createRecipeWithVersion(user.userAccountId, {
-      name: String(formData.get("name") ?? ""),
-      description: emptyToNull(formData.get("description")),
-      organizationId: emptyToNull(formData.get("organizationId")),
-      expectedHours: emptyToNullNumber(formData.get("expectedHours")),
-      targets,
-    });
-  } catch (error) {
-    return { error: await friendlyError(t, error) };
-  }
-
-  revalidatePath("/recipes");
-  redirect("/recipes?ok=1");
-}
-
-/** Shared by both recipe forms — the target rows arrive the same way. */
-function parseTargetRows(formData: FormData) {
-  const targets: {
-    variable: string;
-    moment: "initial" | "during" | "final";
-    phase: "fermentation" | "drying";
-    unit: string;
-    targetValue: number | null;
-    minValue: number | null;
-    maxValue: number | null;
-    everyHours: number | null;
-    note: string | null;
-  }[] = [];
-  for (let i = 0; i < 50; i++) {
-    const variable = formData.get(`targets[${i}][variable]`);
-    if (typeof variable !== "string" || variable === "") break;
-    targets.push({
-      variable,
-      moment: String(formData.get(`targets[${i}][moment]`) ?? "final") as "initial" | "during" | "final",
-      // La fase por defecto es fermentación, que es lo que toda receta existente describe: un
-      // formulario viejo o una llamada sin el campo sigue significando lo que significaba. Lo que
-      // NO se admite es una fase inventada, así que cualquier otra cosa cae a fermentación y el
-      // servicio la valida igual.
-      phase: formData.get(`targets[${i}][phase]`) === "drying" ? "drying" : "fermentation",
-      unit: String(formData.get(`targets[${i}][unit]`) ?? ""),
-      targetValue: emptyToNullNumber(formData.get(`targets[${i}][targetValue]`)),
-      minValue: emptyToNullNumber(formData.get(`targets[${i}][minValue]`)),
-      maxValue: emptyToNullNumber(formData.get(`targets[${i}][maxValue]`)),
-      // El formulario sólo pinta este campo con `moment: during` y lo limpia al
-      // cambiar de momento, pero la acción no se fía de eso: se puede invocar
-      // sin pasar por la pantalla, y `validateTargets` rechaza el caso.
-      everyHours: emptyToNullNumber(formData.get(`targets[${i}][everyHours]`)),
-      note: emptyToNull(formData.get(`targets[${i}][note]`)),
-    });
-  }
-  return targets;
-}
-
 /** Rename a recipe, or reword its description — ADR-102. Never its targets. */
 export async function updateRecipeAction(
   _prevState: TraceabilityActionState,
@@ -1360,8 +1301,41 @@ export async function updateRecipeAction(
   redirect(`/recipes/${recipeId}?ok=renamed`);
 }
 
-/** A new version — the only way targets ever change (ADR-102). */
-export async function createRecipeVersionAction(
+// --- La receta con pasos: el editor (Parte 2a, tarea 14, 2026-10-03) ----------------------------------------------------
+//
+// Ocho acciones sobre `lib/recetas/pasos` y `lib/recetas/versiones`. Cada una autentica, llama a su servicio dentro del `try` y traduce lo que el
+// servicio rechace con `friendlyError` (que ya conoce `RecipeError`, tarea 3). **El `redirect` va FUERA del `try`**: Next lo implementa lanzando,
+// y dentro lo atraparía el `catch`. El id de la receta que sale a la URL es el del formulario donde la receta ya existía y el del SERVICIO donde
+// el servicio la crea (`crearRecetaAction`, `derivarRecetaAction`): un formulario manipulado no puede mandar a otra receta lo que un servicio acaba de crear.
+// Quitar y mover no redirigen: la lista cambiada es la confirmación, y volver a pintar la página evita un mensaje por cada flecha.
+
+/** Una receta nueva, en borrador y sin pasos: los pasos se escriben en el editor (`/recipes/[id]`). */
+export async function crearRecetaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  let recipeId: string;
+  try {
+    const creada = await crearRecetaEnBorrador(user.userAccountId, {
+      name: String(formData.get("name") ?? ""),
+      description: emptyToNull(formData.get("description")),
+      organizationId: emptyToNull(formData.get("organizationId")),
+    });
+    recipeId = creada.recipeId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=receta_creada`);
+}
+
+/** Añadir un paso a un borrador, detrás del paso que dice el formulario (o al principio). */
+export async function agregarPasoAction(
   _prevState: TraceabilityActionState,
   formData: FormData,
 ): Promise<TraceabilityActionState> {
@@ -1371,22 +1345,153 @@ export async function createRecipeVersionAction(
   const recipeId = String(formData.get("recipeId") ?? "");
 
   try {
-    await createRecipeVersion(
-      user.userAccountId,
-      recipeId,
-      parseTargetRows(formData),
-      emptyToNull(formData.get("notes")),
-      // Sin esto, publicar una v2 dejaba la version vigente sin duracion
-      // esperada aunque la v1 la tuviera. Lo cazo la revision de Codex.
-      emptyToNullNumber(formData.get("expectedHours")),
-    );
+    await agregarPaso(user.userAccountId, {
+      recipeVersionId: String(formData.get("recipeVersionId") ?? ""),
+      despuesDeSeq: posicionDeFormulario(formData, "despuesDeSeq"),
+      paso: pasoDeFormulario(formData),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  redirect(`/recipes/${recipeId}?ok=paso_agregado`);
+}
+
+/** Guardar los cambios de un paso de un borrador: reemplaza sus columnas y sus hijas, y conserva su lugar. */
+export async function actualizarPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await actualizarPaso(user.userAccountId, {
+      stepId: String(formData.get("stepId") ?? ""),
+      paso: pasoDeFormulario(formData),
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  redirect(`/recipes/${recipeId}?ok=paso_guardado`);
+}
+
+/** Quitar un paso de un borrador, con sus hijas. */
+export async function quitarPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await quitarPaso(user.userAccountId, String(formData.get("stepId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  // Sin redirect: la lista cambiada es la confirmación.
+  return {};
+}
+
+/** Subir o bajar un paso de un borrador: el botón dice a qué lugar (`aSeq`), de 1 a n. */
+export async function moverPasoAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await moverPaso(user.userAccountId, {
+      stepId: String(formData.get("stepId") ?? ""),
+      // Sin posición no se inventa una: el servicio recibe `NaN` y lo rechaza con `posicion_invalida`.
+      aSeq: posicionDeFormulario(formData, "aSeq") ?? Number.NaN,
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  return {};
+}
+
+/** Publicar un borrador: desde ahí no se edita (diseño §3.3). */
+export async function publicarVersionAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await publicarVersion(user.userAccountId, String(formData.get("recipeVersionId") ?? ""));
   } catch (error) {
     return { error: await friendlyError(t, error) };
   }
 
   revalidatePath(`/recipes/${recipeId}`);
   revalidatePath("/recipes");
-  redirect(`/recipes/${recipeId}?ok=versioned`);
+  redirect(`/recipes/${recipeId}?ok=version_publicada`);
+}
+
+/** Empezar la versión siguiente de una receta: un borrador con una copia de la versión que dice el formulario. */
+export async function nuevaVersionBorradorAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+  const recipeId = String(formData.get("recipeId") ?? "");
+
+  try {
+    await nuevaVersionBorrador(user.userAccountId, String(formData.get("desdeVersionId") ?? ""));
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/recipes/${recipeId}`);
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=borrador_creado`);
+}
+
+/** Derivar una copia propia de una plantilla, en borrador, a la organización que dice el formulario. */
+export async function derivarRecetaAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  let recipeId: string;
+  try {
+    const derivada = await derivarReceta(user.userAccountId, {
+      plantillaVersionId: String(formData.get("plantillaVersionId") ?? ""),
+      // En blanco es `null`, no una cadena vacía: la vacía llegaba al `uuid` de la base como un error crudo (F1-11). El servicio la rechaza con nombre.
+      organizationId: emptyToNull(formData.get("organizationId")),
+      nombre: String(formData.get("nombre") ?? ""),
+    });
+    recipeId = derivada.recipeId;
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath("/recipes");
+  redirect(`/recipes/${recipeId}?ok=receta_derivada`);
 }
 
 // --- Atributos de un lote de terreno (F1 §1 / P1 §3) ---------------------
