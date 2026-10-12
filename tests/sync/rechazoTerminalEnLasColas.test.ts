@@ -4,21 +4,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * Lo que las tres colas offline VUELVEN A RECOGER después de que el servidor dijo
  * que no — revisión de Codex del 2026-10-11, medida aquí por ejecución.
  *
- * **La afirmación.** Las tres marcan `error` un rechazo del servidor y, en el
- * intento siguiente, lo vuelven a mandar, porque sus filtros recogen
- * `pending || error` (`lib/sync/offlineQueue.ts:347`, `lib/apiary/offlineQueue.ts:203`,
- * `lib/sync/trapPhotoQueue.ts:143`). Sus propios comentarios dicen lo contrario:
- * «no se reintenta contra algo que no puede salir bien nunca»
- * (`lib/sync/offlineQueue.ts:334-337`, `:368-370`), «not silently retried forever»
- * (`lib/apiary/offlineQueue.ts:196-199`). No hay bucle dentro de una llamada ni se
- * borra nada: el defecto es que no hay condición terminal, y el intento siguiente
- * lo dispara la propia pantalla —`RondaDeTrampaForm` al registrar con señal,
- * `OfflineSyncIndicator` con `online` y al encolar, `SincronizarFotosDeRonda` con
- * cada sincronización de revisiones—.
+ * **El defecto.** Las tres marcaban `error` un rechazo del servidor y, en el
+ * intento siguiente, lo volvían a mandar, porque sus filtros recogían
+ * `pending || error`. Sus propios comentarios decían lo contrario, y el spec lo
+ * fija: «`rejected` es terminal: no se reintenta, y el operador lo ve»
+ * (`docs/implementation/46_P4_API_Y_SINCRONIZACION.md` §12). No había bucle
+ * dentro de una llamada ni se borraba nada: faltaba la condición terminal, y el
+ * intento siguiente lo disparaba la propia pantalla —`RondaDeTrampaForm` al
+ * registrar con señal, `OfflineSyncIndicator` con `online` y al encolar,
+ * `SincronizarFotosDeRonda` con cada sincronización de revisiones—.
+ *
+ * **Decisiones de Daniel del mismo día**, que es lo que estas pruebas fijan:
+ * 1. un rechazado sólo se descarta: ninguna sincronización lo vuelve a mandar;
+ * 2. una sesión caducada (401) es como no tener señal: sigue pendiente y se dice;
+ * 3. en apiario, un 403 del lote entero se trata igual que en campo: rechazado,
+ *    con el motivo que mandó el servidor.
  *
  * **Cada caso terminal tiene su control al lado**, un rechazo NO terminal (503,
- * sin señal, «la revisión todavía no llegó») que SÍ tiene que reenviarse. Sin él,
- * «no se reenvió» podría ser «la medición no ve ningún envío»: los controles
+ * sin señal, 401, «la revisión todavía no llegó») que SÍ tiene que reenviarse. Sin
+ * él, «no se reenvió» podría ser «la medición no ve ningún envío»: los controles
  * demuestran que `enviadosEnLaLlamada(1)` devuelve los ids cuando el segundo envío
  * existe. Y cada caso terminal afirma primero que el rechazo SE REGISTRÓ, porque
  * «no se reenvió» sobre un borrador que nunca se marcó no mide nada.
@@ -80,7 +84,7 @@ describe("cola de campo (`syncFieldEvents`): qué vuelve a mandar tras un rechaz
   it("control: un 503 deja el borrador pendiente y el intento siguiente lo reenvía", async () => {
     const d = await queueFieldEvent(evento);
     fetchFalso.mockResolvedValueOnce(json(503, { error: "unavailable" }));
-    expect(await syncFieldEvents()).toMatchObject({ serverUnavailable: true });
+    expect(await syncFieldEvents()).toMatchObject({ serverUnavailable: true, sessionExpired: false });
     expect((await listFieldEventDrafts()).map((x) => x.status)).toEqual(["pending"]);
 
     fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
@@ -98,14 +102,37 @@ describe("cola de campo (`syncFieldEvents`): qué vuelve a mandar tras un rechaz
     expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
   });
 
-  it("un 403 del lote (aparato revocado) queda en error y el intento siguiente no lo reenvía", async () => {
+  it("una sesión caducada (401) deja el borrador pendiente, lo dice, y el intento siguiente lo reenvía", async () => {
+    const d = await queueFieldEvent(evento);
+    fetchFalso.mockResolvedValueOnce(json(401, { error: "not_authenticated" }));
+    expect(await syncFieldEvents()).toMatchObject({
+      sessionExpired: true,
+      serverUnavailable: false,
+      rejected: 0,
+      stillPending: 1,
+    });
+    expect(await listFieldEventDrafts()).toMatchObject([{ id: d.id, status: "pending" }]);
+
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    await syncFieldEvents();
+    expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
+  });
+
+  it("un 403 del lote (aparato revocado) queda en error con el motivo del servidor y no se reenvía", async () => {
     const d = await queueFieldEvent(evento);
     fetchFalso.mockResolvedValue(json(403, { error: "device_revoked" }));
-    await syncFieldEvents();
-    expect(await listFieldEventDrafts()).toMatchObject([{ id: d.id, status: "error", errorMessage: "HTTP 403" }]);
+    expect(await syncFieldEvents()).toMatchObject({ rejected: 1, stillPending: 0 });
+    expect(await listFieldEventDrafts()).toMatchObject([{ id: d.id, status: "error", errorMessage: "device_revoked" }]);
 
     await syncFieldEvents();
     expect(enviadosEnLaLlamada(1)).toEqual([]);
+  });
+
+  it("un 403 sin cuerpo legible guarda el estado HTTP como motivo, no un motivo inventado", async () => {
+    await queueFieldEvent(evento);
+    fetchFalso.mockResolvedValueOnce(new Response("<!DOCTYPE html>", { status: 403, headers: { "content-type": "text/html" } }));
+    await syncFieldEvents();
+    expect(await listFieldEventDrafts()).toMatchObject([{ status: "error", errorMessage: "HTTP 403" }]);
   });
 
   it("una mutación rechazada no viaja otra vez cuando se encola otra con señal (lo que hace `RondaDeTrampaForm`)", async () => {
@@ -131,7 +158,18 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
   it("control: sin señal (el `fetch` lanza) el borrador sigue pendiente y se reenvía", async () => {
     const d = await queueDraft("inspection", inspeccion);
     fetchFalso.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    expect(await syncAll()).toEqual({ synced: 0, errored: 0, stillPending: 1 });
+    expect(await syncAll()).toEqual({ synced: 0, errored: 0, stillPending: 1, sessionExpired: false });
+
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    await syncAll();
+    expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
+  });
+
+  it("una sesión caducada (401) deja el borrador pendiente, lo dice, y el intento siguiente lo reenvía", async () => {
+    const d = await queueDraft("inspection", inspeccion);
+    fetchFalso.mockResolvedValueOnce(json(401, { error: "not_authenticated" }));
+    expect(await syncAll()).toEqual({ synced: 0, errored: 0, stillPending: 1, sessionExpired: true });
+    expect(await listDrafts()).toMatchObject([{ id: d.id, status: "pending" }]);
 
     fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
     await syncAll();
@@ -143,7 +181,7 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
     fetchFalso.mockResolvedValueOnce(
       json(200, { results: [{ clientDraftId: d.id, status: "rejected", reason: "colony_not_found" }] }),
     );
-    expect(await syncAll()).toMatchObject({ errored: 1 });
+    expect(await syncAll()).toMatchObject({ errored: 1, stillPending: 0 });
     expect(await listDrafts()).toMatchObject([{ id: d.id, status: "error", errorMessage: "colony_not_found" }]);
 
     // `OfflineSyncIndicator` dispara este segundo intento solo, con `online` o al encolar otro borrador.
@@ -152,25 +190,14 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
     expect(enviadosEnLaLlamada(1)).toEqual([]);
   });
 
-  it("un 403 del lote deja algo que lo distinga de no tener señal, en lo que devuelve o en lo que guarda", async () => {
-    const medir = async (respuesta: () => Promise<Response>) => {
-      instalarIndexedDbEnMemoria();
-      fetchFalso.mockReset();
-      fetchFalso.mockImplementationOnce(respuesta);
-      await queueDraft("inspection", inspeccion);
-      const devuelve = await syncAll();
-      const guarda = (await listDrafts()).map(({ status, errorMessage }) => ({ status, errorMessage }));
-      return { llamadas: llamadasAlLote().length, devuelve, guarda };
-    };
-    const sinSenal = await medir(() => Promise.reject(new TypeError("Failed to fetch")));
-    const revocado = await medir(() => Promise.resolve(json(403, { error: "device_revoked" })));
+  it("un 403 del lote (aparato revocado) queda en error con el motivo del servidor, igual que en campo, y no se reenvía", async () => {
+    const d = await queueDraft("inspection", inspeccion);
+    fetchFalso.mockResolvedValue(json(403, { error: "device_revoked" }));
+    expect(await syncAll()).toEqual({ synced: 0, errored: 1, stillPending: 0, sessionExpired: false });
+    expect(await listDrafts()).toMatchObject([{ id: d.id, status: "error", errorMessage: "device_revoked" }]);
 
-    // Las dos corridas llegaron al lote: si una no hubiera llamado, compararlas no diría nada.
-    expect([sinSenal.llamadas, revocado.llamadas]).toEqual([1, 1]);
-    expect({ devuelve: revocado.devuelve, guarda: revocado.guarda }).not.toEqual({
-      devuelve: sinSenal.devuelve,
-      guarda: sinSenal.guarda,
-    });
+    await syncAll();
+    expect(enviadosEnLaLlamada(1)).toEqual([]);
   });
 });
 
@@ -206,7 +233,7 @@ describe("cola de fotos de la ronda (`syncTrapPhotos`): qué vuelve a subir tras
   it("una foto rechazada al finalizar queda en error y el intento siguiente no la vuelve a subir", async () => {
     await encolarFoto();
     vi.mocked(finalizeTrampaPhotoPorBorradorAction).mockResolvedValue({ error: "error_access" });
-    await syncTrapPhotos();
+    expect(await syncTrapPhotos()).toMatchObject({ rejected: 1, stillPending: 0 });
     expect(await listTrapPhotoDrafts()).toMatchObject([{ status: "error", errorMessage: "error_access" }]);
 
     await syncTrapPhotos();
