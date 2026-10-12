@@ -90,7 +90,7 @@ export interface StartFermentationRunInput {
   motivoDesviacion?: string | null;
 }
 
-const UUID =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * El recipiente de una fermentación que empieza (Parte 2c, arreglos previos §4.1 y decisión D2 de Daniel, 2026-10-04).
