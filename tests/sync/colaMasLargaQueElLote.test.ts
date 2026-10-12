@@ -163,6 +163,22 @@ describe("cola de campo (`syncFieldEvents`) con más borradores de los que caben
       resumen: { applied: 1, rejected: 200, stillPending: 0 },
     });
   });
+
+  // El caso de arriba no ve si la negativa marca de más: la tanda siguiente sale
+  // igual, se aplica y borra la marca falsa. Sólo se ve si esa tanda NO entra.
+  // Encontrado por flip-test: marcar `mutaciones` en vez de `tanda` pasaba todo.
+  it("una tanda negada no marca como rechazadas a las que todavía no salieron", async () => {
+    await encolar(201);
+    fetchFalso.mockImplementationOnce(malFormado).mockImplementationOnce(caido);
+    const resumen = await syncFieldEvents();
+    expect({
+      estados: estadosDe(await listFieldEventDrafts()),
+      resumen: { rejected: resumen.rejected, stillPending: resumen.stillPending, serverUnavailable: resumen.serverUnavailable },
+    }).toEqual({
+      estados: { error: 200, pending: 1 },
+      resumen: { rejected: 200, stillPending: 1, serverUnavailable: true },
+    });
+  });
 });
 
 describe("cola de apiario (`syncAll`) con más borradores de los que caben en un lote", () => {
@@ -229,6 +245,18 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
       aplicados: 1,
       estados: { error: 200 },
       resumen: { synced: 1, errored: 200, stillPending: 0, sessionExpired: false },
+    });
+  });
+
+  // Igual que en campo: sólo se ve que la negativa marca de más si la tanda
+  // siguiente no entra. Encontrado por flip-test (`toSync` en vez de `tanda`).
+  it("una tanda negada no marca como rechazadas a las que todavía no salieron", async () => {
+    await encolar(201);
+    fetchFalso.mockImplementationOnce(malFormado).mockImplementationOnce(caido);
+    const resumen = await syncAll();
+    expect({ estados: estadosDe(await listDrafts()), resumen }).toEqual({
+      estados: { error: 200, pending: 1 },
+      resumen: { synced: 0, errored: 200, stillPending: 1, sessionExpired: false },
     });
   });
 });
