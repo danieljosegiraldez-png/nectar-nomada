@@ -37,6 +37,18 @@ import { Prisma, type ProvenanceClass, type RoastPurpose } from "../../generated
 export class RoastSessionValidationError extends Error {}
 
 /**
+ * Un tueste sólo sigue —y un lote sólo elige como óptimo— una versión PUBLICADA de una receta que no sea Libre (Parte 2a,
+ * §3.3 y §5.2; tarea 5, decisión del controlador del 2026-10-04). Hasta la 2a toda versión nacía publicada y bastaba con que
+ * existiera y fuera de la organización del lote; desde la tarea 3 nace en borrador y desde la 10 hay recetas Libres (una por
+ * proceso, escritas al abrirlo). Los selectores ya no las ofrecen (`listRecipeVersionsForLot`): esto es la puerta, para un
+ * formulario fabricado. Se llama DESPUÉS de la comprobación de organización, para que una versión ajena se rechace por ser
+ * ajena y no cuente su estado a quien no es de su organización.
+ */
+function exigeVersionPublicada(version: { status: string; recipe: { esLibre: boolean } }): void {
+  if (version.status !== "approved" || version.recipe.esLibre) throw new RoastSessionValidationError("version_no_publicada");
+}
+
+/**
  * Los códigos de tueste que tienen frase propia en `messages/*.json`, como
  * `error_roast_<código>`. El resto sale envuelto en `error_roast`, que dice «No se pudo guardar el
  * tueste: <código>» — en español con el código en inglés dentro.
@@ -165,6 +177,7 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     if (version.recipe.organizationId != null && version.recipe.organizationId !== sourceLot.organizationId) {
       throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
     }
+    exigeVersionPublicada(version);
   }
 
   const provenanceClass = input.provenanceClass;
@@ -467,6 +480,7 @@ export async function elegirPerfilDeTueste(
   if (version.recipe.organizationId != null && version.recipe.organizationId !== lot.organizationId) {
     throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
   }
+  exigeVersionPublicada(version);
 
   const anterior = await prisma.lotRoastProfile.findUnique({ where: { lotId: input.lotId } });
 
@@ -518,6 +532,13 @@ export async function getPerfilDeTuesteElegido(userAccountId: string, lotId: str
 
   return prisma.lotRoastProfile.findUnique({
     where: { lotId },
-    include: { recipeVersion: { include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } } } },
+    // Parte 2a, tarea 9a (§3.2, adjudicación I5): las metas de la VERSIÓN son las que no cuelgan de ningún paso; las de cada paso son de su
+    // paso y no del perfil. Hoy ninguna pantalla lee estas metas (la ficha pinta el nombre, la versión y las notas): el filtro es el
+    // contrato de esta función, para que el día que alguien las pinte no enseñe como del perfil las de un paso.
+    include: {
+      recipeVersion: {
+        include: { recipe: true, targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } } },
+      },
+    },
   });
 }
