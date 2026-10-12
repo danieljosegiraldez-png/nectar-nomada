@@ -12,9 +12,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { pushFieldEvents, type MutacionDeMuestraDeSuelo, type MutacionDeRevisionDeTrampa } from "../../lib/sync/pushFieldEvents";
-import { createTrap } from "../../lib/traceability/traps";
+import { createTrap, recordTrapCheck } from "../../lib/traceability/traps";
 import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
-import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
+import { BorradorAjenoError, RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
+import { claveDeFotoDeTrampa, finalizeTrampaPhotoPorBorrador, requestTrampaPhotoUpload } from "../../lib/traceability/landMedia";
 
 const RUN_ID = `borradores-con-dueno-${Date.now()}`;
 
@@ -191,5 +192,85 @@ describe("el lote no procesa un borrador de otra cuenta (ADR-199)", () => {
     const fila = await prisma.specimenObservation.findUniqueOrThrow({ where: { clientDraftId: id }, select: { observerPersonId: true } });
     const personaDeA = await prisma.userAccount.findUniqueOrThrow({ where: { id: cuentaA }, select: { personId: true } });
     expect(fila.observerPersonId).toBe(personaDeA.personId);
+  });
+});
+
+describe("las fotos de la ronda no se suben ni se cuelgan a nombre de otra cuenta (ADR-199)", () => {
+  async function revisionDeA() {
+    const trampa = await createTrap(cuentaA, { locationId: plotId, installedAt: new Date("2026-09-01"), provenanceClass: "direct_observation" });
+    return recordTrapCheck(cuentaA, {
+      specimenId: trampa.id,
+      observedAt: new Date("2026-09-15"),
+      brocaLevel: "pocos",
+      provenanceClass: "direct_observation",
+      clientDraftId: crypto.randomUUID(),
+    });
+  }
+
+  it("pedir la subida de una foto de otra cuenta lanza, antes de firmar nada", async () => {
+    const pedir = requestTrampaPhotoUpload(cuentaB, {
+      locationId: plotId,
+      originalFilename: "tela.jpg",
+      contentType: "image/jpeg",
+      photoClientDraftId: crypto.randomUUID(),
+      revisionClientDraftId: crypto.randomUUID(),
+      borrador: { cuenta: huellaDeCuenta(cuentaA), deviceId: aparatoDeB },
+    });
+    await expect(pedir).rejects.toBeInstanceOf(BorradorAjenoError);
+  });
+
+  it("sin cuenta, desde el aparato de A, también, y nombra a A", async () => {
+    const error = await requestTrampaPhotoUpload(cuentaB, {
+      locationId: plotId,
+      originalFilename: "tela.jpg",
+      contentType: "image/jpeg",
+      photoClientDraftId: crypto.randomUUID(),
+      revisionClientDraftId: crypto.randomUUID(),
+      borrador: { cuenta: null, deviceId: aparatoDeA },
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BorradorAjenoError);
+    expect((error as BorradorAjenoError).cuentaDelDueno).toBe(huellaDeCuenta(cuentaA));
+  });
+
+  it("finalizar la foto de otra cuenta no crea ningún Asset; su dueño sí puede", async () => {
+    const revision = await revisionDeA();
+    const storageKey = claveDeFotoDeTrampa(plotId, crypto.randomUUID(), "tela.jpg");
+    const entrada = {
+      locationId: plotId,
+      storageKey,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: revision.clientDraftId!,
+      provenanceClass: "direct_observation" as const,
+    };
+
+    await expect(
+      finalizeTrampaPhotoPorBorrador(cuentaB, { ...entrada, borrador: { cuenta: huellaDeCuenta(cuentaA), deviceId: aparatoDeB } }),
+    ).rejects.toBeInstanceOf(BorradorAjenoError);
+    expect(await prisma.asset.count({ where: { storageKey } })).toBe(0);
+
+    // Control: la misma foto, finalizada por su dueño, sí crea el Asset. Sin esto, el cero de arriba
+    // podría deberse a que faltaba la revisión o el acceso.
+    const asset = await finalizeTrampaPhotoPorBorrador(cuentaA, {
+      ...entrada,
+      borrador: { cuenta: huellaDeCuenta(cuentaA), deviceId: aparatoDeA },
+    });
+    expect(asset.storageKey).toBe(storageKey);
+  });
+
+  it("una llamada del servidor sin borrador no se mira: es la sesión actual", async () => {
+    const revision = await revisionDeA();
+    const storageKey = claveDeFotoDeTrampa(plotId, crypto.randomUUID(), "tela.jpg");
+    const asset = await finalizeTrampaPhotoPorBorrador(cuentaA, {
+      locationId: plotId,
+      storageKey,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: revision.clientDraftId!,
+      provenanceClass: "direct_observation",
+    });
+    expect(asset.storageKey).toBe(storageKey);
   });
 });

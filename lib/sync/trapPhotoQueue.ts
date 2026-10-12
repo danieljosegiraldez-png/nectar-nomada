@@ -13,6 +13,9 @@
  */
 
 import { requestTrampaPhotoUploadAction, finalizeTrampaPhotoPorBorradorAction } from "../../app/actions/traceability";
+import { repartirPorCuenta } from "./cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
+import { idDeAparatoGuardado } from "./offlineQueue";
 
 const DB_NAME = "nectar-trap-photo-offline";
 const DB_VERSION = 1;
@@ -28,6 +31,8 @@ export interface FotoDeRondaPendiente {
   createdAt: number;
   status: "pending" | "error";
   errorMessage?: string;
+  /** ADR-199 — la huella de la cuenta que la tomó. Ausente en las guardadas antes de que existiera. */
+  cuenta?: string | null;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -87,6 +92,7 @@ export async function queueTrapPhoto(input: {
     contentType: input.file.type,
     createdAt: Date.now(),
     status: "pending",
+    cuenta: cuentaActualDelNavegador(),
   };
   await write((s) => s.add(draft));
   avisarDeCambioDeFoto();
@@ -120,16 +126,20 @@ export async function discardTrapPhotoDraft(id: string): Promise<void> {
  * engancha a otra revisión (spec §4.3).
  */
 export function clasificarResultadoDeFoto(
-  r: { ok: true } | { pendiente: true } | { error: string },
-): "aplicar" | "reintentar" | "rechazar" {
+  r: { ok: true } | { pendiente: true } | { retenida: true; cuentaDelBorrador?: string } | { error: string },
+): "aplicar" | "reintentar" | "retener" | "rechazar" {
   if ("ok" in r) return "aplicar";
   if ("pendiente" in r) return "reintentar";
+  // ADR-199 — de otra cuenta: se queda en cola, sin error, hasta que su dueño vuelva.
+  if ("retenida" in r) return "retener";
   return "rechazar";
 }
 
 export interface SyncFotosSummary {
   applied: number;
   rejected: number;
+  /** ADR-199 — de otra cuenta: siguen en el teléfono, sin enviar. */
+  retenidas: number;
   stillPending: number;
 }
 
@@ -140,9 +150,28 @@ export interface SyncFotosSummary {
  * cual, sin marcar error — nadie evaluó su contenido.
  */
 export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
-  const fotos = (await listTrapPhotoDrafts()).filter((f) => f.status === "pending" || f.status === "error");
+  // ADR-199 — sólo salen las de la cuenta de este navegador y las que no tienen cuenta; las de otra
+  // cuenta se quedan en el teléfono hasta que su dueño vuelva a entrar.
+  const cuentaActual = cuentaActualDelNavegador();
+  const deviceId = idDeAparatoGuardado();
+  const { enviables: fotos, ajenos } = repartirPorCuenta(
+    (await listTrapPhotoDrafts()).filter((f) => f.status === "pending" || f.status === "error"),
+    cuentaActual,
+  );
   let applied = 0;
   let rejected = 0;
+  let retenidas = ajenos.length;
+
+  // Retener no toca el estado: sólo apunta de quién es si el servidor lo dijo y la foto no lo sabía.
+  const retener = async (foto: FotoDeRondaPendiente, cuentaDelDueno: string | undefined) => {
+    const cuenta = foto.cuenta ?? cuentaDelDueno ?? null;
+    if (cuenta !== (foto.cuenta ?? null)) {
+      await write((s) => s.put({ ...foto, cuenta }));
+      avisarDeCambioDeFoto();
+    }
+    retenidas++;
+  };
+
   for (const foto of fotos) {
     try {
       // Fix round 1 (Tarea 12) — `foto.id` es el clientDraftId de ESTA foto,
@@ -159,9 +188,15 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         // derivada ya tiene un Asset: ver el docstring de
         // `requestTrampaPhotoUpload` en `landMedia.ts`.
         foto.revisionClientDraftId,
+        foto.cuenta ?? null,
+        deviceId,
       );
+      if ("retenida" in paso1) {
+        await retener(foto, paso1.cuentaDelBorrador);
+        continue;
+      }
       if ("error" in paso1) {
-        await write((s) => s.put({ ...foto, status: "error", errorMessage: paso1.error }));
+        await write((s) => s.put({ ...foto, cuenta: foto.cuenta ?? cuentaActual, status: "error", errorMessage: paso1.error }));
         avisarDeCambioDeFoto();
         rejected++;
         continue;
@@ -181,13 +216,17 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         foto.blob.size,
         foto.originalFilename,
         foto.revisionClientDraftId,
+        foto.cuenta ?? null,
+        deviceId,
       );
       const decision = clasificarResultadoDeFoto(paso2);
       if (decision === "aplicar") {
         await discardTrapPhotoDraft(foto.id);
         applied++;
+      } else if (decision === "retener" && "retenida" in paso2) {
+        await retener(foto, paso2.cuentaDelBorrador);
       } else if (decision === "rechazar" && "error" in paso2) {
-        await write((s) => s.put({ ...foto, status: "error", errorMessage: paso2.error }));
+        await write((s) => s.put({ ...foto, cuenta: foto.cuenta ?? cuentaActual, status: "error", errorMessage: paso2.error }));
         avisarDeCambioDeFoto();
         rejected++;
       }
@@ -196,5 +235,10 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
       // Sin señal a mitad de camino: se deja en cola.
     }
   }
-  return { applied, rejected, stillPending: (await listTrapPhotoDrafts()).length };
+  return {
+    applied,
+    rejected,
+    retenidas,
+    stillPending: repartirPorCuenta(await listTrapPhotoDrafts(), cuentaActual).enviables.length,
+  };
 }

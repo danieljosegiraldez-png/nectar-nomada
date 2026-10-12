@@ -9,6 +9,8 @@ import {
   type SyncFotosSummary,
 } from "../../../lib/sync/trapPhotoQueue";
 import { FIELD_EVENTS_SYNCED_EVENT } from "../../../lib/sync/offlineQueue";
+import { repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 /**
  * Tarea 12 — el contador y el botón para las fotos de la ronda, gemelo de
@@ -34,10 +36,14 @@ export function SincronizarFotosDeRonda() {
   const [pendientes, setPendientes] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [ultimo, setUltimo] = useState<SyncFotosSummary | null>(null);
+  const [deOtraCuenta, setDeOtraCuenta] = useState(0);
 
   const recontar = useCallback(async () => {
     try {
-      setPendientes((await listTrapPhotoDrafts()).length);
+      // ADR-199 — las fotos de otra cuenta no son «pendientes» de quien está dentro.
+      const { enviables, ajenos } = repartirPorCuenta(await listTrapPhotoDrafts(), cuentaActualDelNavegador());
+      setPendientes(enviables.length);
+      setDeOtraCuenta(ajenos.length);
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no la foto: `queueTrapPhoto` ya habría
@@ -70,14 +76,21 @@ export function SincronizarFotosDeRonda() {
     };
   }, [recontar, sincronizar]);
 
-  if (pendientes === null || pendientes === 0) return null;
+  if (pendientes === null || (pendientes === 0 && deOtraCuenta === 0)) return null;
 
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("trapPhotoSyncPending", { count: pendientes })}</p>
-      <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando}>
-        {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
-      </button>
+      {deOtraCuenta > 0 ? (
+        <p className="nn-note" role="status">
+          {t("trapPhotosOtherAccount", { count: deOtraCuenta })}
+        </p>
+      ) : null}
+      {pendientes > 0 ? (
+        <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando}>
+          {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
+        </button>
+      ) : null}
       {ultimo ? (
         <>
           {/* A13 fix-final — textos propios de FOTO, no de «anotación»: estas

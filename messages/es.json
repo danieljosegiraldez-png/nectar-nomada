@@ -1332,6 +1332,7 @@
     "trapPhotoSyncPending": "{count, plural, =0 {Ninguna foto pendiente} one {# foto pendiente} other {# fotos pendientes}}",
     "trapPhotoSyncDone": "{applied, plural, =0 {Nada nuevo que enviar} one {1 foto enviada} other {# fotos enviadas}}",
     "trapPhotoSyncRejected": "{count, plural, one {1 foto fue rechazada por el servidor} other {# fotos fueron rechazadas por el servidor}}. Revísalas: reintentar no va a arreglarlas.",
+    "trapPhotosOtherAccount": "{count, plural, one {# foto de otra cuenta espera en este teléfono hasta que esa persona vuelva a entrar} other {# fotos de otra cuenta esperan en este teléfono hasta que esa persona vuelva a entrar}}",
     "trapCheckObserverLabel": "Quién revisó (opcional)",
     "trapCheckPhotosRevisionLabel": "A qué revisión pertenece esta foto",
     "trapsCaptureCount": "Conteo: {n}",
