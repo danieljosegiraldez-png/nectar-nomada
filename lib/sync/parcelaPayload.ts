@@ -72,6 +72,17 @@ function diaRequerido(fd: FormData, name: string): string {
   return dia.toISOString();
 }
 
+/**
+ * El mismo día que `diaRequerido`, como `YYYY-MM-DD`: es lo que exige el parseo
+ * de `trap_check` (A10, `diaEstrictoOpcional` en `parsearMutaciones.ts`). Con el
+ * instante de `diaRequerido`, toda revisión de la ronda volvía rechazada con
+ * `observed_at_not_a_day` (2026-10-11). Las muestras y la calicata siguen con el
+ * instante: su parseo usa `toDate`, que lo acepta.
+ */
+function diaRequeridoComoTexto(fd: FormData, name: string): string {
+  return diaRequerido(fd, name).slice(0, 10);
+}
+
 export interface PayloadDeMuestraDeSuelo {
   kind: "soil_sample";
   locationId: string;
@@ -292,7 +303,7 @@ export function construirPayloadDeRevisionDeTrampa(
     locationId,
     specimenId,
     clientDraftId,
-    observedAt: diaRequerido(fd, "observedAt"),
+    observedAt: diaRequeridoComoTexto(fd, "observedAt"),
     brocaLevel: String(fd.get("brocaLevel") ?? ""),
     captureCount: numero(fd, "captureCount"),
     otherInsects: otros,
