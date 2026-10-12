@@ -144,6 +144,10 @@ const ENCOLAR = `ColaDeApiario.queueDraft("inspection", {
   colonyId: "arnes-indexeddb", occurredAt: new Date().toISOString(), outcome: "nothing_unusual",
 }).then(() => "guardado", (e) => (e && e.name) + ": " + (e && e.message))`;
 
+// Una reparación bloqueada por otra conexión no falla: espera. Con plazo, la
+// espera se lee como lo que es en vez de colgar la corrida.
+const ENCOLAR_CON_PLAZO = `Promise.race([${ENCOLAR}, new Promise((ok) => setTimeout(() => ok("sin respuesta en 5 s"), 5000))])`;
+
 async function contadorDeOffline(cdp) {
   await ir(cdp, `${BASE}/offline.html`);
   for (let i = 0; i < 50; i++) {
@@ -257,6 +261,27 @@ try {
     `queueDraft: ${guardar4}; base: ${describir(tras4)}; un build viejo (v1): ${viejo}; borradores al recargar: ${cuantos}`,
     "v1 [drafts], el build viejo abre, 1 borrador",
     guardar4 === "guardado" && tras4.version === 1 && viejo === "abre" && cuantos === 1,
+  );
+
+  // 5. Una base rota con /offline.html abierta en OTRA pestaña: para repararla
+  // la cola sube la versión, y eso espera a que se cierren las demás conexiones.
+  await inyectar(cdp);
+  await evaluar(cdp, BORRAR);
+  await evaluar(cdp, ROMPER);
+  const pestana = await (await fetch(`http://127.0.0.1:${puerto}/json/new?about:blank`, { method: "PUT" })).json();
+  const otra = await conectar(pestana.webSocketDebuggerUrl);
+  const cuenta5 = await contadorDeOffline(otra);
+  await inyectar(cdp);
+  const guardar5 = await evaluar(cdp, ENCOLAR_CON_PLAZO);
+  otra.cerrar();
+  await fetch(`http://127.0.0.1:${puerto}/json/close/${pestana.id}`);
+  await espera(300);
+  const tras5 = await evaluar(cdp, ESTADO);
+  fila(
+    "5. offline.html abierta en otra pestaña no bloquea la reparación",
+    `la otra pestaña cuenta «${cuenta5}»; queueDraft: ${guardar5}; base al cerrarla: ${describir(tras5)}`,
+    "guardado sin esperar a que se cierre la otra pestaña",
+    guardar5 === "guardado",
   );
 
   for (const f of filas) {
