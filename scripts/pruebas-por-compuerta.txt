@@ -245,6 +245,10 @@ tests/apiary/apiarioHeredado.test.ts
 tests/people/quienLoHizo.test.ts
 tests/recetas/vocabularioSembrado.test.ts
 tests/traceability/elegirTanque.test.ts
+tests/research/ro1-2.test.ts
+tests/traceability/batchPageData.test.ts
+tests/traceability/plantingCohorts.test.ts
+
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #
@@ -254,11 +258,11 @@ tests/traceability/elegirTanque.test.ts
 # `scripts/test-db.sh`, y tenía razón: no deben salir de aquí, porque su valor
 # ES depender de datos reales.
 #
-# Las otras tres dependen de datos que ninguna bandera de semilla produce, y sí
-# podrían salir de aquí construyéndose sus fixtures. Eso es otro trabajo.
-tests/research/ro1-2.test.ts
-tests/traceability/batchPageData.test.ts
-tests/traceability/plantingCohorts.test.ts
+# Había otras tres —`ro1-2`, `batchPageData` y `plantingCohorts`— que dependían de datos que
+# ninguna bandera de semilla produce. Salieron de aquí el 2026-10-12 (ficha 006) construyendo sus
+# fixtures, y lo que de verdad afirmaba hechos de producción se quedó en dos archivos propios:
+tests/research/ro1-2-datosReales.test.ts
+tests/traceability/plantingCohorts-datosReales.test.ts
 tests/traceability/roasting.test.ts
 tests/traceability/s1.test.ts
 
