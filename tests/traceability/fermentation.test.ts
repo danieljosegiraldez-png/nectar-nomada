@@ -69,6 +69,10 @@ afterAll(async () => {
   const runs = await prisma.fermentationRun.findMany({ where: { transformations: { some: { inputs: { some: { lotId: { in: lotIds } } } } } } });
   const runIds = runs.map((r) => r.id);
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "fermentation_run", entityId: { in: runIds } }) });
+  // Parte 2a, tarea 7 (2026-10-03): registrar un manejo de fermentación escribe ahora su evento
+  // (`fermentation_intervention.record`), que cuelga de la INTERVENCIÓN: se borra por sus ids, antes de borrarlas.
+  const manejos = await prisma.fermentationIntervention.findMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }), select: { id: true } });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "fermentation_intervention", entityId: { in: manejos.map((m) => m.id) } }) });
   await prisma.fermentationIntervention.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ fermentationRunId: { in: runIds } }) });
   await prisma.fermentationRun.deleteMany({ where: assertDefinedWhere({ id: { in: runIds } }) });

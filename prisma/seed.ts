@@ -936,6 +936,26 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
   const blindCodes = ["C", "D"];
   const flight = await prisma.sensoryFlight.findFirstOrThrow({ where: { sessionId: sensorySessionId, name: "Flight 1" } });
 
+  // Parte 2a, tarea 7 (2026-10-04): «DEMO Lavado» lleva pasos (tarea 5b) y, bajo una receta con pasos, una corrida sin paso es una
+  // desviación que pide motivo (`exigePasoCoherente`, diseño §4.4). Las corridas de la demo cumplen los suyos: el de fermentación y el
+  // de secado de ESA receta, buscados por su tipo de paso. `findFirstOrThrow`: si la receta no los tiene, la semilla se detiene con eso
+  // a la vista, y no con un `desviacion_sin_motivo` que parecería de otra cosa.
+  const pasoDeLaDemo = async (tipo: "fermentation" | "drying") =>
+    (
+      await prisma.processRecipeStep.findFirstOrThrow({
+        where: {
+          recipeVersionId: recetaDemoVersionId,
+          stepTypeValueId: (
+            await prisma.variableCatalogValue.findFirstOrThrow({
+              where: { value: tipo, catalog: { key: "tipo_paso" } },
+              select: { id: true },
+            })
+          ).id,
+        },
+        select: { id: true },
+      })
+    ).id;
+
   for (const [index, batch] of batches.entries()) {
     const suffix = index === 0 ? "A" : "B";
 
@@ -957,6 +977,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     // --- Fermentation ---
     const { run: fermentationRun } = await startFermentationRun(operatorId, {
       lotId: batch.id,
+      recipeStepId: await pasoDeLaDemo("fermentation"),
       // D2 (Parte 2c, 2026-10-04): una fermentación nace con un tanque registrado o con el nombre escrito de uno. DEMO: el nombre.
       vesselNote: "DEMO: tanque sin registrar",
       startedAt: new Date("2027-01-20T10:00:00Z"),
@@ -977,6 +998,7 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     // --- Drying ---
     const { run: dryingRun } = await startDryingRun(operatorId, {
       lotId: dryingStageLot.id,
+      recipeStepId: await pasoDeLaDemo("drying"),
       startedAt: new Date("2027-01-22T11:00:00Z"),
       quantity: 380,
       unit: "kg",

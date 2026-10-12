@@ -74,6 +74,10 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   // Ronda de arreglo del 2026-10-04 (C14): los dos que `abrirProceso` ya lanzaba desde la Parte 1 y salían crudos.
   "recipe_archived",
   "recipe_version_not_found",
+  // Parte 2a, tarea 7 (2026-10-03): el guardián de pasos (diseño §4.2 y §4.4).
+  "paso_de_otra_receta",
+  "paso_no_corresponde",
+  "desviacion_sin_motivo",
 ];
 
 /**

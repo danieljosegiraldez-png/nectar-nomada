@@ -12,8 +12,11 @@
  *     outputs — nothing changes lot-identity-wise yet, matching how T1's
  *     recordTransformation already supports zero-output transformations
  *     for sample_extraction/loss/disposal/sale).
- *   recordFermentationIntervention — a simple typed log entry against an
- *     in-progress run (agitation, addition, sample, etc.).
+ *   recordFermentationIntervention — a typed log entry against an
+ *     in-progress run (agitation, addition, sample, etc.). Desde la Parte 2a
+ *     (2026-10-03) decide dentro de una transacción con el linaje bloqueado,
+ *     rechaza una corrida ya terminada, deja su AuditEvent y, si es una
+ *     inoculación o una adición, se une a su paso de la receta (§4.2/§4.4).
  *   endFermentationRun — sets endedAt once (a real one-time transition
  *     recording an actual event, not a correction — same as
  *     StorageAssignment's own endedAt, §17) and creates a second
@@ -30,8 +33,10 @@ import { prisma } from "../db";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
-import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
+import { bloquearLinaje, procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import { LotProcessError } from "./errorDeProceso";
+import { exigePasoCoherente } from "../recetas/guardian";
+import { TIPOS_POR_REGISTRO } from "../recetas/vocabulario";
 import { dondeCandidatoAFermentar, puedeVerEquipo } from "../equipos/equipos";
 import { RecipienteError } from "./recipientes";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
@@ -77,9 +82,15 @@ export interface StartFermentationRunInput {
   // proceso que cubre al lote. Si viene, tiene que ser ESA; otra se rechaza con
   // `receta_distinta_del_proceso`. Un proceso «Sin receta» da una corrida sin receta.
   processRecipeVersionId?: string | null;
+  // Parte 2a, §4.2/§4.4 (2026-10-03): el paso de la receta que cumple esta corrida o, sin paso bajo una receta con pasos, el
+  // motivo de la desviación. `stepTypeValueId` (catálogo `tipo_paso`) sólo hace falta sin paso: con paso, el tipo es el del
+  // paso, y declarar otro se rechaza. Lo decide `exigePasoCoherente` (`lib/recetas/guardian.ts`).
+  recipeStepId?: string | null;
+  stepTypeValueId?: string | null;
+  motivoDesviacion?: string | null;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * El recipiente de una fermentación que empieza (Parte 2c, arreglos previos §4.1 y decisión D2 de Daniel, 2026-10-04).
@@ -134,6 +145,21 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
     if (input.processRecipeVersionId && input.processRecipeVersionId !== proceso.processRecipeVersionId) {
       throw new LotProcessError("receta_distinta_del_proceso");
     }
+    // Parte 2a, §4.2/§4.4 (2026-10-03): el paso de la receta que cumple esta fermentación, o la desviación con su motivo. Se decide
+    // aquí dentro, con el linaje ya bloqueado por `procesoAbiertoParaCorrida` y ANTES de tomar el bloqueo del tanque (el guardián sólo
+    // lee). La versión es la del proceso (R4), y un proceso sólo se abre con una versión publicada, que no cambia sus pasos: contarlos
+    // aquí basta. El tanque (`vesselEquipmentId`, 2c) es independiente del paso: ninguno condiciona al otro.
+    const recetaTienePasos =
+      proceso.processRecipeVersionId !== null &&
+      (await tx.processRecipeStep.count({ where: { recipeVersionId: proceso.processRecipeVersionId } })) > 0;
+    const paso = await exigePasoCoherente(tx, {
+      registro: "fermentationRun",
+      recipeVersionIdDelProceso: proceso.processRecipeVersionId,
+      recetaTienePasos,
+      recipeStepId: input.recipeStepId ?? null,
+      stepTypeValueId: input.stepTypeValueId ?? null,
+      motivoDesviacion: input.motivoDesviacion ?? null,
+    });
     // Cierra la carrera con el retiro. La existencia y el permiso se comprobaron ARRIBA; aquí sólo se vuelve a exigir «activo» con
     // `FOR SHARE`: `retirarEquipo` toma `FOR UPDATE` sobre esta misma fila, así que o espera a que esta transacción termine (y
     // entonces ve la corrida nueva y se niega con `equipo_en_uso`) o termina antes (y entonces esto lee `retired`). `FOR SHARE` deja
@@ -152,6 +178,9 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
         inoculated: input.inoculated ?? false,
         processRecipeVersionId: proceso.processRecipeVersionId,
         lotProcessId: proceso.id,
+        stepTypeValueId: paso.stepTypeValueId,
+        recipeStepId: paso.recipeStepId,
+        motivoDesviacion: paso.motivoDesviacion,
         inoculationNote: input.inoculationNote ?? null,
         createdBy: userAccountId,
       },
@@ -199,21 +228,81 @@ export interface RecordFermentationInterventionInput {
   interventionType: "inoculation" | "agitation" | "purge" | "addition" | "sample" | "transfer" | "termination" | "other";
   occurredAt: Date;
   notes?: string | null;
+  // Parte 2a, §4.1/§4.2/§4.4 (2026-10-03): sólo una `inoculation` o una `addition` cumple un paso de la receta, y su tipo de
+  // paso es el suyo; sin paso, bajo una receta con pasos, es una desviación y exige motivo. Las demás (agitar, purgar,
+  // muestrear…) no cumplen ningún paso: con uno se rechazan, y nunca son desviación.
+  recipeStepId?: string | null;
+  motivoDesviacion?: string | null;
 }
 
 export async function recordFermentationIntervention(userAccountId: string, input: RecordFermentationInterventionInput) {
   const sourceLot = await resolveRunSourceLot(input.fermentationRunId);
   await requireLotAccess(userAccountId, "manage", [{ projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: sourceLot.classification }]);
 
-  return prisma.fermentationIntervention.create({
-    data: {
-      fermentationRunId: input.fermentationRunId,
-      interventionType: input.interventionType,
-      occurredAt: input.occurredAt,
-      notes: input.notes ?? null,
-      createdBy: userAccountId,
-    },
-  });
+  // Parte 2a (2026-10-03; registro del plan: «deciden DENTRO de una transacción con bloquearLinaje»). Escribía sin
+  // transacción, sin AuditEvent y sin mirar si la corrida seguía abierta. Ahora todo va dentro, DESPUÉS de bloquear el linaje
+  // del lote de la corrida —el mismo que bloquean empezarla, cerrar su proceso y dividirlo—, y la corrida se lee ya con él
+  // bloqueado.
+  return prisma.$transaction(async (tx) => {
+    await bloquearLinaje(tx, sourceLot.id);
+    const corrida = await tx.fermentationRun.findUniqueOrThrow({
+      where: { id: input.fermentationRunId },
+      select: { endedAt: true, processRecipeVersionId: true },
+    });
+    if (corrida.endedAt !== null) throw new TraceabilityAccessError("fermentation_run_already_ended");
+
+    // §4.1: sólo una inoculación o una adición cumple un paso. Su tipo de paso ES su tipo de intervención —los dos vocabularios
+    // llaman igual a esos dos actos: inferencia de la casa, no del paquete—, así que una adición no cumple un paso de
+    // inoculación. La versión es la de la corrida: desde R4 es la de su proceso, y con la corrida abierta ese proceso sigue
+    // abierto (R5: no se cierra ni se divide con corridas abiertas).
+    const cumplen: readonly string[] = TIPOS_POR_REGISTRO.fermentationIntervention;
+    const cumpleUnPaso = cumplen.includes(input.interventionType);
+    if (!cumpleUnPaso && input.recipeStepId) throw new LotProcessError("paso_no_corresponde");
+    const paso = cumpleUnPaso
+      ? await exigePasoCoherente(tx, {
+          registro: "fermentationIntervention",
+          recipeVersionIdDelProceso: corrida.processRecipeVersionId,
+          recetaTienePasos:
+            corrida.processRecipeVersionId !== null &&
+            (await tx.processRecipeStep.count({ where: { recipeVersionId: corrida.processRecipeVersionId } })) > 0,
+          recipeStepId: input.recipeStepId ?? null,
+          stepTypeValueId: (
+            await tx.variableCatalogValue.findFirstOrThrow({
+              where: { value: input.interventionType, catalog: { key: "tipo_paso" } },
+              select: { id: true },
+            })
+          ).id,
+          motivoDesviacion: input.motivoDesviacion ?? null,
+        })
+      : { recipeStepId: null, stepTypeValueId: null, motivoDesviacion: null };
+
+    const intervencion = await tx.fermentationIntervention.create({
+      data: {
+        fermentationRunId: input.fermentationRunId,
+        interventionType: input.interventionType,
+        occurredAt: input.occurredAt,
+        notes: input.notes ?? null,
+        stepTypeValueId: paso.stepTypeValueId,
+        recipeStepId: paso.recipeStepId,
+        motivoDesviacion: paso.motivoDesviacion,
+        createdBy: userAccountId,
+      },
+    });
+
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "fermentation_intervention.record",
+        entityType: "fermentation_intervention",
+        entityId: intervencion.id,
+        after: intervencion,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+
+    return intervencion;
+  }, TRANSACCION_DEL_LINAJE);
 }
 
 export interface EndFermentationRunInput {

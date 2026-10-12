@@ -22,6 +22,7 @@ import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { BandejaError } from "./bandejaError";
 import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
+import { exigePasoCoherente } from "../recetas/guardian";
 import type { DryingOutcome, Lot, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
@@ -49,6 +50,10 @@ export interface StartDryingRunInput {
   // StartFermentationRunInput (starting a run is an action taken).
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  // Parte 2a, §4.2/§4.4 (2026-10-03): el paso `drying` de la receta que cumple este secado o, sin paso bajo una receta con
+  // pasos, el motivo de la desviación. Lo decide `exigePasoCoherente` (`lib/recetas/guardian.ts`).
+  recipeStepId?: string | null;
+  motivoDesviacion?: string | null;
 }
 
 export async function startDryingRun(userAccountId: string, input: StartDryingRunInput) {
@@ -60,6 +65,20 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
   const result = await prisma.$transaction(async (tx) => {
     // Parte 1, R3 (2026-10-01): ver `startFermentationRun`.
     const proceso = await procesoAbiertoParaCorrida(tx, input.lotId);
+    // Parte 2a, §4.2/§4.4 (2026-10-03): ver `startFermentationRun`. Un secado no guarda versión de receta: la del proceso sale de
+    // `procesoAbiertoParaCorrida`, nunca de la corrida (`proceso-por-el-resolvedor`). Sólo cumple el tipo `drying`, así que no
+    // declara tipo: con paso, el del paso.
+    const recetaTienePasos =
+      proceso.processRecipeVersionId !== null &&
+      (await tx.processRecipeStep.count({ where: { recipeVersionId: proceso.processRecipeVersionId } })) > 0;
+    const paso = await exigePasoCoherente(tx, {
+      registro: "dryingRun",
+      recipeVersionIdDelProceso: proceso.processRecipeVersionId,
+      recetaTienePasos,
+      recipeStepId: input.recipeStepId ?? null,
+      stepTypeValueId: null,
+      motivoDesviacion: input.motivoDesviacion ?? null,
+    });
     const run = await tx.dryingRun.create({
       data: {
         method: input.method ?? null,
@@ -67,6 +86,9 @@ export async function startDryingRun(userAccountId: string, input: StartDryingRu
         layerDepthCm: input.layerDepthCm ?? null,
         startedAt: input.startedAt,
         lotProcessId: proceso.id,
+        stepTypeValueId: paso.stepTypeValueId,
+        recipeStepId: paso.recipeStepId,
+        motivoDesviacion: paso.motivoDesviacion,
         createdBy: userAccountId,
       },
     });

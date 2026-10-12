@@ -834,6 +834,10 @@
     {
       "archivo": "lib/recetas/avance.ts",
       "razon": "Parte 2a, tarea 6 (§4.3): `avanceDelProceso` recibe el cliente de quien la llama —el de su transacción, o el global si sólo lee— y con él lee el proceso que cubre al lote por el resolvedor (`procesoQueCubre`), los pasos de la versión de ese proceso, los valores de catálogo de sus tipos y los registros de las cuatro tablas de su hilo (fermentaciones, secados, intervenciones del proceso y manejos de fermentación), por los ids de los procesos del hilo. No escribe nada ni autoriza: quien la llama ya autorizó el lote."
+    },
+    {
+      "archivo": "lib/recetas/guardian.ts",
+      "razon": "Parte 2a, tarea 7: `exigePasoCoherente` recibe el cliente de la transacción de la puerta que escribe el registro —una corrida o un manejo de fermentación; desde la tarea 8 también una intervención del proceso— para decidir con el linaje ya bloqueado. No abre conexión ni importa lib/db, y no autoriza: sus llamadores ya pidieron gestionar el lote antes de abrir su transacción."
     }
   ],
   "operaciones_sin_patron": [
@@ -1561,6 +1565,12 @@
       "archivo": "lib/recetas/avance.ts",
       "operacion": "avanceDelProceso",
       "razon": "No recibe principal. Para el lote que recibe, lee por el resolvedor el proceso que lo cubre y, sobre su hilo (él y los procesos de los que deriva por división o devolución, con su misma versión), los pasos de la receta y los registros que los cumplen; devuelve ids de pasos y de registros, sus fechas de inicio y el siguiente paso, no filas de lote. Al escribirse no la llama ninguna pantalla: la llamarán las de empezar corridas y registrar manejos (tarea 13 de la Parte 2a), después de que ellas autoricen ese mismo lote. Quien la llame debe haber autorizado el lote antes: ella no recibe quién pregunta.",
+      "verificado": "2026-10-12"
+    },
+    {
+      "archivo": "lib/recetas/guardian.ts",
+      "operacion": "exigePasoCoherente",
+      "razon": "Decide si un registro del lote cumple un paso de la receta del proceso (paso_de_otra_receta, paso_no_corresponde; el tipo se toma del paso) o es una desviación que exige motivo (desviacion_sin_motivo), diseño §4.2 y §4.4. Lee un paso y valores de tipo_paso; no escribe, no bloquea ni recibe principal. Corre dentro de la transacción de quien la llama, con el linaje ya bloqueado: startFermentationRun y startDryingRun (fermentation.ts, drying.ts), después de pedir gestionar el lote de la corrida y de procesoAbiertoParaCorrida; y recordFermentationIntervention (fermentation.ts), después de pedir gestionar el lote de entrada de la corrida y de bloquearLinaje. Quien la llame debe haber autorizado el lote antes; lo prueba tests/recetas/guardian.test.ts puerta por puerta.",
       "verificado": "2026-10-12"
     }
   ]

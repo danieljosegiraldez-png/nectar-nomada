@@ -53,6 +53,10 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   // 2026-10-04, C14): una receta archivada ENTRE cargar la pantalla y enviarla es un caso real, no sólo un formulario fabricado.
   "recipe_archived",
   "recipe_version_not_found",
+  // Parte 2a, tarea 7 (2026-10-03): el guardián de pasos (`lib/recetas/guardian.ts`, diseño §4.2 y §4.4).
+  "paso_de_otra_receta",
+  "paso_no_corresponde",
+  "desviacion_sin_motivo",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];
