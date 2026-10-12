@@ -1244,6 +1244,23 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     expect(cadena[1]!.humedadDeCierre).toBe(11);
   });
 
+  // F2-6 (ronda 2 de la revisión final del PR-A): la página del proceso lee `i.catalogValue ?? i.stepTypeValue` de lo que carga esta función, y `lot_process_intervention.catalog_value_id` es
+  // anulable desde la Parte 2a. Si la carga dejara de traer el tipo de paso, la intervención sin valor de catálogo llegaría a la pantalla sin nada que nombrar. Se crean cruda, porque
+  // ningún servicio escribe todavía una sin valor de catálogo (el PR-B).
+  it("una intervención que sólo lleva tipo de paso llega con su tipo, y la que lleva valor de catálogo con el suyo (F2-6)", async () => {
+    const cereza = await lote("CB6-C");
+    const p = await abrirProcesoDePrueba(gestor, cereza);
+    const acto = await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "washing", catalog: { key: "tipo_paso" } }, select: { id: true } });
+    const como = await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "anaerobico", catalog: { key: "condicion_oxigeno" } }, select: { id: true } });
+    await prisma.lotProcessIntervention.create({ data: { lotProcessId: p.id, occurredAt: new Date("2026-03-06T10:00:00Z"), stepTypeValueId: acto.id, createdBy: gestor } });
+    await prisma.lotProcessIntervention.create({ data: { lotProcessId: p.id, occurredAt: new Date("2026-03-06T11:00:00Z"), catalogValueId: como.id, createdBy: gestor } });
+    const vigente = visible((await coberturaDelLote(gestor, cereza)).vigente);
+    expect(
+      vigente.interventions.map((i) => [i.catalogValue?.value ?? null, i.stepTypeValue?.value ?? null]),
+      "por orden de ocurrencia: primero el acto sin «cómo», después el «cómo» sin acto",
+    ).toEqual([[null, "washing"], ["anaerobico", null]]);
+  });
+
   it("con el id en MAYÚSCULAS devuelve lo mismo que en minúsculas", async () => {
     // Revisión final (ronda de arreglo 1, F5): la ficha y la página del proceso la llaman con el id del lote; en mayúsculas, el
     // resolvedor no encontraba los padres y el pergamino salía sin proceso (o una mezcla, si el proceso era suyo).

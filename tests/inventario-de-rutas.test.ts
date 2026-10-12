@@ -229,11 +229,14 @@ describe("el inventario del router", () => {
     // 117 → 118 al fusionar: las dos ramas añadieron una ruta el mismo día, y cada una escribió
     // 117. Medido sobre el árbol fusionado, no sumado: `node scripts/inventario-de-rutas.mjs`
     // dice 119 entradas (108 páginas, 11 handlers).
-    // 119 → 120 el 2026-10-08: /plots/[id]/floracion/nueva, registrar una floración (F1). 404 sin
+    // 119 → 121 (Parte 2a, tarea 14): /recipes/[id]/pasos/nuevo y /recipes/[id]/pasos/[stepId], las dos pantallas de un paso
+    // (las dos responden 404 a quien puede leer la receta y no escribirla). Medido con `node scripts/inventario-de-rutas.mjs`: 121 entradas
+    // (110 páginas, 11 handlers). La rama traía ya 119: otras dos rutas llegaron con `main`, y 119 + 2 = 121.
+    // 121 → 122 al juntar `main` con la Parte 2a (2026-10-12): /plots/[id]/floracion/nueva, registrar una floración (F1). 404 sin
     // `lot:manage` sobre la parcela, preguntado con `puedeGestionarLote`, que es el mismo guardia que
-    // exige `registrarFloracion` al guardar. Medido con `node scripts/inventario-de-rutas.mjs`: 120
-    // entradas (109 páginas, 11 handlers).
-    expect(salida).toContain("120 entradas");
+    // exige `registrarFloracion` al guardar. Medido sobre el árbol juntado con `node scripts/inventario-de-rutas.mjs`: 122
+    // entradas (111 páginas, 11 handlers), no sumado.
+    expect(salida).toContain("122 entradas");
     expect(codigo, salida).toBe(0);
   });
 

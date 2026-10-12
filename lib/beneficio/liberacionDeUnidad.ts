@@ -71,9 +71,10 @@ function volveraAEstarLibre(unidad: UnidadParaLiberar): boolean {
 function finDeLaCorrida(c: CorridaConDuracion): number | null {
   // NaN daría una fecha inválida que se pintaría como hora; 0 o un negativo darían el INICIO de
   // la corrida, o una hora anterior a él, y se leería como «ya debía liberarse» de una duración
-  // que ninguna receta puede declarar. **Es la misma regla de los otros dos consumidores**: la
-  // escritura la rechaza (`validateExpectedHours`, `processTargets.ts`: `expected_hours_must_be_positive`)
-  // y la cola la declara inválida (`estadoDeRitmo`, `ritmo.ts`: `duracion_esperada_invalida_en_la_base`).
+  // que ninguna receta puede declarar. **Es la misma regla de los otros consumidores**: la cola la declara
+  // inválida (`estadoDeRitmo`, `ritmo.ts`: `duracion_esperada_invalida_en_la_base`), y la escritura de recetas la valida
+  // antes de guardarla (`validarPaso`, `horas_invalidas`, en `pasos.ts`; `publicarVersion` copia después las horas a la fase). Esta línea es la
+  // defensa ante lo que la base ya traía.
   // Aquí no se lanza —la base puede traerlo corrupto y la pantalla no debe caer—, pero tampoco se
   // trata como duración: en la misma pantalla la cola diría «inválida» y esta línea la citaría.
   if (c.expectedHours === null || !Number.isFinite(c.expectedHours) || c.expectedHours <= 0) return null;
