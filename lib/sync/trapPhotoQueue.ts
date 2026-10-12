@@ -196,7 +196,11 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
         continue;
       }
       if ("error" in paso1) {
-        await write((s) => s.put({ ...foto, cuenta: foto.cuenta ?? cuentaActual, status: "error", errorMessage: paso1.error }));
+        // La foto conserva su `cuenta` tal cual: las acciones de foto también contestan `{ error }` a un
+        // fallo transitorio ANTES de decidir de quién es, así que apuntarla aquí a la cuenta actual podría
+        // atribuir la foto de otra cuenta a quien esté dentro. Nada lee ese apunte en las fotos (no hay
+        // botón de descartar).
+        await write((s) => s.put({ ...foto, status: "error", errorMessage: paso1.error }));
         avisarDeCambioDeFoto();
         rejected++;
         continue;
@@ -226,7 +230,8 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
       } else if (decision === "retener" && "retenida" in paso2) {
         await retener(foto, paso2.cuentaDelBorrador);
       } else if (decision === "rechazar" && "error" in paso2) {
-        await write((s) => s.put({ ...foto, cuenta: foto.cuenta ?? cuentaActual, status: "error", errorMessage: paso2.error }));
+        // Igual que arriba: la `cuenta` de la foto no se toca.
+        await write((s) => s.put({ ...foto, status: "error", errorMessage: paso2.error }));
         avisarDeCambioDeFoto();
         rejected++;
       }

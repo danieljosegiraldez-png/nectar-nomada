@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { pushFieldEvents, type MutacionDeMuestraDeSuelo, type MutacionDeRevisionDeTrampa } from "../../lib/sync/pushFieldEvents";
-import { createTrap, recordTrapCheck } from "../../lib/traceability/traps";
+import { createTrap, recordTrapCheck, TrapAccessError } from "../../lib/traceability/traps";
 import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
 import { BorradorAjenoError, RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
 import { claveDeFotoDeTrampa, finalizeTrampaPhotoPorBorrador, requestTrampaPhotoUpload } from "../../lib/traceability/landMedia";
@@ -22,6 +22,7 @@ const RUN_ID = `borradores-con-dueno-${Date.now()}`;
 let plotId: string;
 let cuentaA: string;
 let cuentaB: string;
+let sinAcceso: string;
 let aparatoDeA: string;
 let aparatoDeB: string;
 let aparatoSinCreador: string;
@@ -62,6 +63,15 @@ beforeAll(async () => {
   };
   cuentaA = await crearCuenta("A");
   cuentaB = await crearCuenta("B");
+
+  // Una cuenta SIN ninguna asignación. A y B tienen acceso al sitio a propósito, para que un «ajeno» no se
+  // confunda con un rechazo por acceso; ésta es la que fija el orden: lo ajeno se retiene aunque quien
+  // envía no tenga permiso, y no se rechaza por acceso (el teléfono lo marcaría como error y ofrecería
+  // descartarlo). Su persona lleva el RUN_ID para que el `afterAll` la descubra.
+  const personaSinAcceso = await prisma.person.create({
+    data: { givenName: "TEST", familyName: "SinAcceso", displayName: `TEST SinAcceso (${RUN_ID})`, locale: "es" },
+  });
+  sinAcceso = (await prisma.userAccount.create({ data: { personId: personaSinAcceso.id, authProvider: "credentials", status: "active" } })).id;
 
   aparatoDeA = (await prisma.device.create({ data: { label: `TEST de A (${RUN_ID})`, platform: "pwa", createdBy: cuentaA } })).id;
   aparatoDeB = (await prisma.device.create({ data: { label: `TEST de B (${RUN_ID})`, platform: "pwa", createdBy: cuentaB } })).id;
@@ -193,6 +203,18 @@ describe("el lote no procesa un borrador de otra cuenta (ADR-199)", () => {
     const personaDeA = await prisma.userAccount.findUniqueOrThrow({ where: { id: cuentaA }, select: { personId: true } });
     expect(fila.observerPersonId).toBe(personaDeA.personId);
   });
+
+  it("quien no tiene acceso al sitio recibe la respuesta de dueño, no un rechazo por acceso", async () => {
+    // Sin cuenta, en el aparato de A, enviado por una cuenta sin ninguna asignación. Si el dueño se
+    // decidiera después del acceso, esto saldría rechazado por permiso (otro motivo, sin la cuenta de A)
+    // y el teléfono lo marcaría como error en vez de retenerlo.
+    const id = `${RUN_ID}-sin-acceso`;
+    const antes = await auditoriaDe(sinAcceso);
+    const [r] = await pushFieldEvents(sinAcceso, aparatoDeA, [muestra(id)]);
+    expect(r).toEqual({ clientDraftId: id, status: "rejected", reason: RAZON_BORRADOR_AJENO, cuentaDelBorrador: huellaDeCuenta(cuentaA) });
+    expect(await filasDe(id)).toBe(0);
+    expect(await auditoriaDe(sinAcceso)).toBe(antes);
+  });
 });
 
 describe("las fotos de la ronda no se suben ni se cuelgan a nombre de otra cuenta (ADR-199)", () => {
@@ -272,5 +294,67 @@ describe("las fotos de la ronda no se suben ni se cuelgan a nombre de otra cuent
       provenanceClass: "direct_observation",
     });
     expect(asset.storageKey).toBe(storageKey);
+  });
+
+  it("control: una foto sin cuenta, en el aparato de quien envía, se finaliza (regla del aparato)", async () => {
+    const revision = await revisionDeA();
+    const storageKey = claveDeFotoDeTrampa(plotId, crypto.randomUUID(), "tela.jpg");
+    const asset = await finalizeTrampaPhotoPorBorrador(cuentaA, {
+      locationId: plotId,
+      storageKey,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: revision.clientDraftId!,
+      provenanceClass: "direct_observation",
+      borrador: { cuenta: null, deviceId: aparatoDeA },
+    });
+    expect(asset.storageKey).toBe(storageKey);
+  });
+
+  it("control: sin acceso al sitio, una foto PROPIA sí se rechaza por acceso", async () => {
+    // Fija que `sinAcceso` de verdad no tiene permiso: sin esto, las dos pruebas de abajo podrían pasar
+    // porque esa cuenta tuviera acceso y el orden no importara.
+    const pedir = requestTrampaPhotoUpload(sinAcceso, {
+      locationId: plotId,
+      originalFilename: "tela.jpg",
+      contentType: "image/jpeg",
+      photoClientDraftId: crypto.randomUUID(),
+      revisionClientDraftId: crypto.randomUUID(),
+      borrador: { cuenta: huellaDeCuenta(sinAcceso), deviceId: null },
+    });
+    await expect(pedir).rejects.toBeInstanceOf(TrapAccessError);
+  });
+
+  it("sin acceso al sitio, pedir la subida de una foto ajena da la respuesta de dueño, no la de acceso", async () => {
+    const error = await requestTrampaPhotoUpload(sinAcceso, {
+      locationId: plotId,
+      originalFilename: "tela.jpg",
+      contentType: "image/jpeg",
+      photoClientDraftId: crypto.randomUUID(),
+      revisionClientDraftId: crypto.randomUUID(),
+      borrador: { cuenta: huellaDeCuenta(cuentaA), deviceId: aparatoDeB },
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BorradorAjenoError);
+    expect(error).not.toBeInstanceOf(TrapAccessError);
+  });
+
+  it("sin acceso al sitio, finalizar una foto ajena da la respuesta de dueño, nombra a A y no crea ningún Asset", async () => {
+    const revision = await revisionDeA();
+    const storageKey = claveDeFotoDeTrampa(plotId, crypto.randomUUID(), "tela.jpg");
+    const error = await finalizeTrampaPhotoPorBorrador(sinAcceso, {
+      locationId: plotId,
+      storageKey,
+      mimeType: "image/jpeg",
+      sizeBytes: 1024,
+      originalFilename: "tela.jpg",
+      revisionClientDraftId: revision.clientDraftId!,
+      provenanceClass: "direct_observation",
+      borrador: { cuenta: null, deviceId: aparatoDeA },
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BorradorAjenoError);
+    expect(error).not.toBeInstanceOf(TrapAccessError);
+    expect((error as BorradorAjenoError).cuentaDelDueno).toBe(huellaDeCuenta(cuentaA));
+    expect(await prisma.asset.count({ where: { storageKey } })).toBe(0);
   });
 });

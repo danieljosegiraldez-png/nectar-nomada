@@ -2434,8 +2434,9 @@ export async function requestTrampaPhotoUploadAction(
 /**
  * `{ pendiente: true }` no es un error: la revisión todavía no llegó por su
  * propia cola (Tarea 11) y la foto se reintenta, sin engancharse nunca a otra
- * revisión (spec §4.3). `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`) es
- * quien distingue las tres formas de esta respuesta.
+ * revisión (spec §4.3). `{ retenida: true }` tampoco (ADR-199): la foto es de
+ * otra cuenta y se queda en su cola. `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`)
+ * es quien distingue las cuatro formas de esta respuesta.
  */
 export async function finalizeTrampaPhotoPorBorradorAction(
   locationId: string,
