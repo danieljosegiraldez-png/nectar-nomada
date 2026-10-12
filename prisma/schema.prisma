@@ -6308,6 +6308,13 @@ model Equipment {
   classification  ClassificationLevel @default(internal)
   lifecycleStatus EquipmentLifecycle  @default(active) @map("lifecycle_status")
 
+  /// Cuándo y por qué se retiró (Parte 2c §4.5; decisión D3 de Daniel, 2026-10-04): la fecha es la del servidor al
+  /// retirar y el motivo es obligatorio. Nulos mientras el equipo está activo; `reactivarEquipo` los devuelve a nulo.
+  /// El CHECK `equipment_retiro_completo` (NOT VALID, sólo en SQL: Prisma no ve los CHECK) exige las dos cosas a todo
+  /// `retired` nuevo. `TIMESTAMP(3)` sin zona, como el resto de las fechas del esquema.
+  retiredAt    DateTime? @map("retired_at")
+  retiroMotivo String?   @map("retiro_motivo")
+
   /// Cada cuántas horas este instrumento **se considera vencido de revisión**.
   ///
   /// **AVISA, NO DESCALIFICA — decisión de Daniel del 2026-09-14**, y es lo que

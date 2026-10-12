@@ -242,6 +242,7 @@ describe("the run-opening transformation writes no decrement", () => {
     await abrirProcesoDePrueba(operatorUserAccountId, source.id);
     await startFermentationRun(operatorUserAccountId, {
       lotId: source.id,
+      vesselNote: "Tanque de prueba",
       startedAt: new Date(),
       quantity: 50,
       unit: "kg",
