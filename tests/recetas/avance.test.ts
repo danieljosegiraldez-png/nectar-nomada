@@ -23,6 +23,7 @@
  * El catálogo `tipo_paso` es el REAL de la base sembrada (tarea 2). Si la base no se resembró después de la tarea 2, cada
  * prueba cae con un mensaje que lo dice, en vez de caer por otra cosa.
  */
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
@@ -98,29 +99,32 @@ async function humedad(lotId: string, occurredAt: Date) {
 
 /**
  * Una versión PUBLICADA de una receta de la organización, con un paso por tipo en ese orden (`seq` desde 1); los `seq` de
- * `opcionales` van marcados. Devuelve el id de la versión y los ids de sus pasos, en orden.
+ * `opcionales` van marcados. Devuelve el id de la versión y los ids de sus pasos, SIEMPRE por `seq`.
+ *
+ * `altaEn` es el orden en que se dan de alta las filas, por `seq` (por omisión 1, 2, 3…): con otro, el orden físico de la tabla
+ * deja de ser el de `seq`, como queda cuando el editor de la tarea 3 renumera o mueve pasos con UPDATE.
  */
-async function version(nombre: string, tipos: readonly string[], opcionales: readonly number[] = []) {
+async function version(nombre: string, tipos: readonly string[], opcionales: readonly number[] = [], altaEn?: readonly number[]) {
   const receta = await prisma.processRecipe.create({ data: { name: `TEST ${nombre} ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
   const v = await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "draft", createdBy: gestor } });
-  const pasos: string[] = [];
-  for (const [i, tipo] of tipos.entries()) {
-    pasos.push((await prisma.processRecipeStep.create({ data: {
-      recipeVersionId: v.id, seq: i + 1, stepTypeValueId: idDelTipo(tipo), opcional: opcionales.includes(i + 1),
+  const idDelSeq = new Map<number, string>();
+  for (const seq of altaEn ?? tipos.map((_, i) => i + 1)) {
+    idDelSeq.set(seq, (await prisma.processRecipeStep.create({ data: {
+      recipeVersionId: v.id, seq, stepTypeValueId: idDelTipo(tipos[seq - 1]!), opcional: opcionales.includes(seq),
     } })).id);
   }
   await prisma.processRecipeVersion.update({ where: { id: v.id }, data: { status: "approved" } });
-  return { id: v.id, pasos };
+  return { id: v.id, pasos: tipos.map((_, i) => idDelSeq.get(i + 1)!) };
 }
 
 /** El tipo del paso, que el registro copia (§4.2; con `recipe_step_id`, el CHECK de la tarea 1 exige `step_type_value_id`). */
 async function tipoDelPaso(stepId: string): Promise<string> {
   return (await prisma.processRecipeStep.findUniqueOrThrow({ where: { id: stepId }, select: { stepTypeValueId: true } })).stepTypeValueId;
 }
-/** Una intervención del proceso que cumple `stepId`. Se borra con su proceso (`lot_process_id` es CASCADE). */
-async function intervencion(lotProcessId: string, stepId: string, occurredAt: Date) {
+/** Una intervención del proceso que cumple `stepId`. Se borra con su proceso (`lot_process_id` es CASCADE). Con `id`, ése: para fijar el desempate. */
+async function intervencion(lotProcessId: string, stepId: string, occurredAt: Date, id?: string) {
   return (await prisma.lotProcessIntervention.create({ data: {
-    lotProcessId, occurredAt, recipeStepId: stepId, stepTypeValueId: await tipoDelPaso(stepId), notes: `TEST ${RUN}`,
+    ...(id === undefined ? {} : { id }), lotProcessId, occurredAt, recipeStepId: stepId, stepTypeValueId: await tipoDelPaso(stepId), notes: `TEST ${RUN}`,
   } })).id;
 }
 /** Una fermentación TERMINADA (dos días) que cumple `stepId`. Terminada: una abierta impediría dividir y cerrar (R5). */
@@ -139,13 +143,13 @@ async function secado(lotProcessId: string, stepId: string, startedAt: Date) {
   secados.push(id);
   return id;
 }
-/** Una adición DENTRO de la fermentación `fermentationRunId` que cumple `stepId`. */
-async function manejo(fermentationRunId: string, stepId: string, occurredAt: Date) {
-  const id = (await prisma.fermentationIntervention.create({ data: {
-    fermentationRunId, interventionType: "addition", occurredAt, recipeStepId: stepId, stepTypeValueId: await tipoDelPaso(stepId), notes: `TEST ${RUN}`,
+/** Una adición DENTRO de la fermentación `fermentationRunId` que cumple `stepId`. Con `id`, ése: para fijar el desempate. */
+async function manejo(fermentationRunId: string, stepId: string, occurredAt: Date, id?: string) {
+  const creado = (await prisma.fermentationIntervention.create({ data: {
+    ...(id === undefined ? {} : { id }), fermentationRunId, interventionType: "addition", occurredAt, recipeStepId: stepId, stepTypeValueId: await tipoDelPaso(stepId), notes: `TEST ${RUN}`,
   } })).id;
-  manejos.push(id);
-  return id;
+  manejos.push(creado);
+  return creado;
 }
 /** Un proceso de la versión `v` sobre un lote nuevo, con sus dos primeros pasos hechos, y CERRADO por humedad el día 6. */
 async function cerradoConDosPasos(codigo: string, v: { id: string; pasos: readonly string[] }) {
@@ -360,6 +364,65 @@ describe("Parte 2a, §4.3 — el avance se calcula sobre el hilo del resolvedor"
       [{ tabla: "dryingRun", id: sec, inicio: dia(7) }],
     ]);
     expect(avance?.siguiente).toBeNull();
+  });
+
+  it("los pasos salen por seq aunque la base los guarde en otro orden: ni `pasos` ni «el siguiente» dependen del orden físico de las filas", async () => {
+    // El editor de la tarea 3 renumera y mueve pasos con UPDATE, y entonces el orden físico deja de ser el de `seq`. Aquí se llega
+    // al mismo estado dando de alta los pasos en el orden 3, 1, 2. «El siguiente» es un `find` sobre la lista: si la lista no
+    // sale por seq, propone el tercero (el primero que la base devuelve) en vez del primero.
+    const v = await version("FUERA-DE-ORDEN", ["pulping", "fermentation", "drying"], [], [3, 1, 2]);
+    // Control: el orden físico de las filas (`ctid` es su posición en la tabla) NO es el de seq. Sin esto, el orden de abajo se
+    // leería igual con una base que ya las guardara ordenadas.
+    const fisico = await prisma.$queryRaw<{ seq: number }[]>`select seq from traceability.process_recipe_step where recipe_version_id = ${v.id}::uuid order by ctid`;
+    expect(fisico.map((f) => f.seq)).toEqual([3, 1, 2]);
+    const a = await lote("O1");
+    const p = await abrirProcesoDePrueba(gestor, a, { processRecipeVersionId: v.id });
+
+    // Aserciones BLANDAS: cada una se evalúa aunque otra falle, así que con la mutación puesta se ve cuál de las cuatro cae.
+    const inicio = await avanceDelProceso(prisma, a);
+    expect.soft(inicio?.pasos.map((x) => [x.seq, x.stepId])).toEqual([[1, v.pasos[0]], [2, v.pasos[1]], [3, v.pasos[2]]]);
+    expect.soft(inicio?.siguiente).toMatchObject({ stepId: v.pasos[0], seq: 1, tipo: "pulping" });
+    // Con el primero hecho, el siguiente es el 2: no el 3, que es el que la base devolvería primero.
+    await intervencion(p.id, v.pasos[0]!, dia(2));
+    const tras = await avanceDelProceso(prisma, a);
+    expect.soft(tras?.pasos.map((x) => x.seq)).toEqual([1, 2, 3]);
+    expect.soft(tras?.siguiente).toMatchObject({ stepId: v.pasos[1], seq: 2, tipo: "fermentation" });
+  });
+
+  it("con el MISMO inicio, los registros de un paso salen por id: no por la tabla de la que se leyeron ni por el orden en que la base los devuelva", async () => {
+    const v = await version("EMPATE", ["fermentation", "addition", "pulping"]);
+    const a = await lote("E1");
+    const p = await abrirProcesoDePrueba(gestor, a, { processRecipeVersionId: v.id });
+    const ferm = await fermentacion(p.id, v.pasos[0]!, dia(3));
+    const empate = new Date(dia(3).getTime() + 2 * HORA);
+    // Cuatro ids, de dos en dos, con el MENOR primero. Paso 2 (`addition`), entre DOS tablas: el manejo lleva el id menor y la
+    // intervención el mayor, y `avance.ts` anota las intervenciones antes que los manejos; sin desempate por id saldría primero la
+    // intervención. Paso 3 (`pulping`), en UNA tabla: el id mayor se da de alta primero, y sin desempate quedaría como la base lo
+    // devuelve, el mayor delante.
+    const par = (): [string, string] => { const [x, y] = [randomUUID(), randomUUID()].sort(); return [x!, y!]; };
+    const [idManejo, idIntervencion] = par();
+    const [idMenor, idMayor] = par();
+    expect(idManejo < idIntervencion).toBe(true);
+    expect(idMenor < idMayor).toBe(true);
+    await manejo(ferm, v.pasos[1]!, empate, idManejo);
+    await intervencion(p.id, v.pasos[1]!, empate, idIntervencion);
+    await intervencion(p.id, v.pasos[2]!, empate, idMayor);
+    await intervencion(p.id, v.pasos[2]!, empate, idMenor);
+
+    // Control: los inicios de cada par son IGUALES —los cuatro, el del empate—, leídos de la base y no de lo que se escribió.
+    const iniciosDe = async (ids: string[]) => (await prisma.lotProcessIntervention.findMany({ where: { id: { in: ids } }, select: { occurredAt: true } })).map((r) => r.occurredAt.getTime());
+    expect([
+      (await prisma.fermentationIntervention.findUniqueOrThrow({ where: { id: idManejo }, select: { occurredAt: true } })).occurredAt.getTime(),
+      ...(await iniciosDe([idIntervencion, idMayor, idMenor])),
+    ]).toEqual([empate.getTime(), empate.getTime(), empate.getTime(), empate.getTime()]);
+    // Control: la base guarda el par de una sola tabla en el orden CONTRARIO al de id (mayor, menor): el desempate no lo hace ella.
+    const fisico = await prisma.$queryRaw<{ id: string }[]>`select id::text as id from traceability.lot_process_intervention where id in (${idMayor}::uuid, ${idMenor}::uuid) order by ctid`;
+    expect(fisico.map((f) => f.id)).toEqual([idMayor, idMenor]);
+
+    // Blandas, para que cada par se compruebe aunque el otro falle.
+    const avance = await avanceDelProceso(prisma, a);
+    expect.soft(avance?.pasos[1]?.registros.map((r) => [r.tabla, r.id])).toEqual([["fermentationIntervention", idManejo], ["lotProcessIntervention", idIntervencion]]);
+    expect.soft(avance?.pasos[2]?.registros.map((r) => [r.tabla, r.id])).toEqual([["lotProcessIntervention", idMenor], ["lotProcessIntervention", idMayor]]);
   });
 
   it("propone el primer paso que un registro puede cumplir después del último hecho: ni la recepción, ni un opcional saltado, ni el almacenamiento", async () => {
