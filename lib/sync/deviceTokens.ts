@@ -42,9 +42,11 @@ import { verifyPassword } from "../auth/password";
  * de un aparato revocado se rechace al sincronizar, no que se le corte la
  * lectura. **Una ruta nueva que escriba por Bearer tiene que llamar a
  * `negativaDelAparato`** con el `deviceId` del principal y devolver si niega. Lo
- * exige `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`:
- * toma toda ruta que importe `resolverPrincipal`, falla ante una forma de
- * handler que no sabe leer en vez de callar, y su cabecera dice qué no ve.
+ * exige `tests/arquitectura/escrituras-por-token-miran-la-revocacion.test.ts`
+ * con una forma canónica estrecha; su cabecera dice cuál, qué formas de llegar
+ * al carril trata como no analizables, y qué no ve —por ejemplo, una escritura
+ * que no se espera—. Es un guardia de la forma, no una prueba de la conducta:
+ * la conducta la prueba `tests/sync/aparatoDelToken.test.ts`.
  *
  * **Lo que la comprobación NO cierra, dicho para que nadie lo cuente:**
  * - se hace **al empezar** la petición, fuera de la transacción que escribe:

@@ -35,8 +35,9 @@ import { describe, expect, it } from "vitest";
  *     const negativa = await negativaDelAparato(user.deviceId);
  *     if (negativa) return Response.json({ error: negativa }, { status: 403 });
  *
- * o `if (await negativaDelAparato(user.deviceId)) return …`. Y antes de ese `if`
- * no se espera nada más que `resolverPrincipal`. Lo que la revisión del
+ * o `if (await negativaDelAparato(user.deviceId)) return …`. Antes de ese `if` no
+ * se espera nada más que `resolverPrincipal` ni se toca el principal, y la rama
+ * que niega no espera nada: sólo devuelve. Lo que la revisión del
  * 2026-10-11 (Codex y tres revisores) encontró aceptado por la versión anterior,
  * y que ésta rechaza: `negativaDelAparato(null)` o con el `deviceId` del cuerpo,
  * `if (!negativa)`, una condición compuesta o comparada con un código, un
@@ -48,8 +49,16 @@ import { describe, expect, it } from "vitest";
  * la forma canónica; la excepción es para una ruta que no necesita la
  * comprobación, no para una que la escribe distinto.
  *
+ * La segunda pasada de Codex, sobre esta misma versión, encontró tres más y
+ * también se rechazan: una escritura esperada DENTRO de la rama que niega, tocar
+ * el principal antes de negar (`user.deviceId = null`), y llegar al carril por
+ * una referencia que no es una llamada directa o por un `import * as`.
+ *
  * **Lo que NO ve:**
- * - una escritura que no se espera (`void escribir()`) antes de la comprobación;
+ * - una escritura que no se espera (`void escribir()`) antes de la comprobación,
+ *   o dentro de la rama que niega;
+ * - el principal modificado a través de una llamada (`Object.assign(user, …)`,
+ *   o pasándolo a una función que lo cambie);
  * - que el `return` devuelva un 403 —sólo que devuelve—;
  * - que `negativaDelAparato` haga bien su trabajo: eso lo prueba en conducta
  *   `tests/sync/aparatoDelToken.test.ts`.
@@ -223,6 +232,7 @@ const MOTIVO = {
   forma: "llama a `negativaDelAparato`, pero no con `const negativa = …` y `if (negativa) return …` " +
     "en el nivel superior del handler",
   orden: "antes de negar al revocado ya se espera otra cosa (¿se escribe antes de mirar?)",
+  principal: "modifica el principal antes de negar: el aparato comprobado ya no sería el del token",
   sinLlamada: "no llama a `negativaDelAparato`",
 };
 
@@ -241,8 +251,35 @@ function porQueNoNiega(funcion: ts.FunctionLikeDeclaration, resolver: Set<string
     return ts.isPropertyAccessExpression(a) && a.name.text === "deviceId" &&
       ts.isIdentifier(a.expression) && principales.has(a.expression.text);
   };
+  const esperaAlgo = (n: ts.Node) => {
+    let hay = false;
+    recorrerSinAnidar(n, (m) => { if (ts.isAwaitExpression(m)) hay = true; });
+    return hay;
+  };
+  // La rama que niega sólo devuelve: una espera dentro —`await escribir()` y
+  // luego el 403, o `return await escribir()`— es escribir siendo revocado.
+  // Lo encontró la segunda pasada de Codex, el 2026-10-11.
   const devuelveYa = (s: ts.Statement) =>
-    ts.isReturnStatement(s) || (ts.isBlock(s) && s.statements.some(ts.isReturnStatement));
+    !esperaAlgo(s) && (ts.isReturnStatement(s) || (ts.isBlock(s) && s.statements.some(ts.isReturnStatement)));
+
+  // Tocar el principal antes de negar —`user.deviceId = null`, `delete`, `++`—
+  // cambia el aparato que se comprueba sin cambiar el nombre que se lee.
+  const raiz = (e: ts.Expression): ts.Identifier | null => {
+    let x = sinEnvoltorio(e);
+    while (ts.isPropertyAccessExpression(x) || ts.isElementAccessExpression(x)) x = sinEnvoltorio(x.expression);
+    return ts.isIdentifier(x) ? x : null;
+  };
+  const tocaAlPrincipal = (n: ts.Node) => {
+    const objetivo =
+      ts.isBinaryExpression(n) && n.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        n.operatorToken.kind <= ts.SyntaxKind.LastAssignment ? n.left
+        : ts.isDeleteExpression(n) ? n.expression
+          : (ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) &&
+            (n.operator === ts.SyntaxKind.PlusPlusToken || n.operator === ts.SyntaxKind.MinusMinusToken) ? n.operand
+            : null;
+    const r = objetivo ? raiz(objetivo) : null;
+    return !!r && principales.has(r.text);
+  };
 
   // El motivo, del más concreto al más general: un mensaje que culpe al orden
   // cuando falla el argumento manda a buscar en el sitio equivocado.
@@ -279,6 +316,9 @@ function porQueNoNiega(funcion: ts.FunctionLikeDeclaration, resolver: Set<string
         return null;
       }
     }
+    let modificaElPrincipal = false;
+    recorrerSinAnidar(s, (n) => { if (tocaAlPrincipal(n)) modificaElPrincipal = true; });
+    if (modificaElPrincipal) return MOTIVO.principal;
     // Antes de la negación no se espera nada más que al principal y a la propia negativa.
     let esperaOtraCosa = false;
     recorrerSinAnidar(s, (n) => {
@@ -323,11 +363,22 @@ function usoDelCarril(texto: string, nombre: string): string[] {
     locales.set(original, original); // llamada desde el propio módulo que la define
     for (const local of nombres.get(original) ?? []) locales.set(local, original);
   }
+  // Cualquier REFERENCIA, no sólo la llamada directa: `const quien =
+  // resolverPrincipal; quien(r)`, `(resolverPrincipal)(r)` o pasarla como
+  // callback llegan igual al carril (segunda pasada de Codex, 2026-10-11). No
+  // cuentan los nombres que no la usan: el de la importación o la exportación,
+  // el de una propiedad, una declaración, o un `typeof` en un tipo.
+  const noEsUso = (id: ts.Identifier) => {
+    const p = id.parent;
+    return ts.isImportSpecifier(p) || ts.isImportClause(p) || ts.isNamespaceImport(p) || ts.isExportSpecifier(p) ||
+      ts.isTypeQueryNode(p) || ts.isQualifiedName(p) ||
+      ((ts.isPropertyAccessExpression(p) || ts.isPropertyAssignment(p) || ts.isFunctionDeclaration(p) ||
+        ts.isVariableDeclaration(p) || ts.isMethodDeclaration(p) || ts.isPropertyDeclaration(p) ||
+        ts.isPropertySignature(p) || ts.isParameter(p)) && p.name === id);
+  };
   const salida: string[] = [];
   recorrer(fuente, (n) => {
-    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && locales.has(n.expression.text)) {
-      salida.push(locales.get(n.expression.text)!);
-    }
+    if (ts.isIdentifier(n) && locales.has(n.text) && !noEsUso(n)) salida.push(locales.get(n.text)!);
   });
   return opaco ? [...salida, opaco] : salida;
 }
@@ -455,6 +506,27 @@ describe("el detector, con formas que NO niegan", () => {
       return escribir();`));
   });
 
+  it("con una escritura DENTRO de la rama que niega", () => {
+    noNiegaPor(post(`${PRINCIPAL}
+      const negativa = await negativaDelAparato(user.deviceId);
+      if (negativa) { await escribir(); return Response.json({ error: negativa }, { status: 403 }); }
+      return Response.json({ ok: true });`), MOTIVO.forma);
+    noNiegaPor(post(`${PRINCIPAL}
+      const negativa = await negativaDelAparato(user.deviceId);
+      if (negativa) return await escribir();
+      return Response.json({ ok: true });`), MOTIVO.forma);
+  });
+
+  it("modificando el principal antes de negar", () => {
+    for (const toque of ["user.deviceId = null;", "delete user.deviceId;", 'user["deviceId"] = otro;', "user.deviceId ||= otro;"]) {
+      noNiegaPor(post(`${PRINCIPAL}
+        const otro = "id-de-otro";
+        ${toque}
+        ${NIEGA}
+        return escribir();`), MOTIVO.principal);
+    }
+  });
+
   it("con la comprobación DESPUÉS de escribir", () => noNiegaPor(post(`${PRINCIPAL}
     await escribir(await request.json());
     ${NIEGA}
@@ -518,9 +590,21 @@ describe("el mundo cerrado, con lo que tiene que ver fuera de las rutas", () => 
       .toEqual(["reexporta el carril del token"]);
   });
 
-  it("control: importar otra cosa del mismo módulo, por nombre, no es usar el carril", () => {
+  it("una referencia que no es una llamada directa: por variable, entre paréntesis o como callback", () => {
+    const IMPORTA = `import { resolverPrincipal } from "./requestPrincipal";`;
+    expect(usoDelCarril(`${IMPORTA} const quien = resolverPrincipal; export const f = (r: Request) => quien(r);`,
+      "lib/x.ts")).toEqual(["resolverPrincipal"]);
+    expect(usoDelCarril(`${IMPORTA} export const f = (r: Request) => (resolverPrincipal)(r);`, "lib/x.ts"))
+      .toEqual(["resolverPrincipal"]);
+    expect(usoDelCarril(`${IMPORTA} export const f = (rs: Request[]) => rs.map(resolverPrincipal);`, "lib/x.ts"))
+      .toEqual(["resolverPrincipal"]);
+  });
+
+  it("control: importar otra cosa del mismo módulo, o nombrar la función sólo en un tipo, no es usar el carril", () => {
     expect(usoDelCarril(`import { ACCESS_TTL_SEGUNDOS } from "./deviceTokens";
       export const ttl = ACCESS_TTL_SEGUNDOS;`, "lib/x.ts")).toEqual([]);
+    expect(usoDelCarril(`import { resolverPrincipal } from "./requestPrincipal";
+      export type P = Awaited<ReturnType<typeof resolverPrincipal>>;`, "lib/x.ts")).toEqual([]);
   });
 });
 
