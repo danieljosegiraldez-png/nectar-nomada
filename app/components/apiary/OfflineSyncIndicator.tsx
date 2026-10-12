@@ -37,6 +37,9 @@ export function OfflineSyncIndicator() {
   const [pendingCount, setPendingCount] = useState(0);
   const [erroredCount, setErroredCount] = useState(0);
   const [otherAccountCount, setOtherAccountCount] = useState(0);
+  // ADR-199 — cuántos fallidos puede borrar el botón de descartar: sólo los de esta cuenta. Uno viejo sin
+  // cuenta, en error, cuenta como fallido pero no se puede descartar, y el botón no debe ofrecerse muerto.
+  const [descartables, setDescartables] = useState(0);
   // Lazy initializer, not an effect — navigator.onLine is readable
   // synchronously on the client at mount, so there's no external system to
   // "subscribe to" for the very first value, only for later changes
@@ -65,6 +68,7 @@ export function OfflineSyncIndicator() {
     setPendingCount(enviables.filter((d) => d.status === "pending").length);
     setErroredCount(enviables.filter((d) => d.status === "error").length);
     setOtherAccountCount(ajenos.length);
+    setDescartables(descartablesPorEstaCuenta(drafts, cuentaActualDelNavegador()).length);
     setLastSyncAt(getLastSyncAt());
     if (purgeResult.purged > 0) setPurgeNotice(t("draftsPurgedNotice", { count: purgeResult.purged }));
     const estimate = await getStorageEstimate();
@@ -133,7 +137,7 @@ export function OfflineSyncIndicator() {
           {isSyncing ? t("syncingButton") : t("syncNowButton")}
         </button>
       ) : null}
-      {erroredCount > 0 ? (
+      {descartables > 0 ? (
         <button
           type="button"
           className="nn-button-quiet"
