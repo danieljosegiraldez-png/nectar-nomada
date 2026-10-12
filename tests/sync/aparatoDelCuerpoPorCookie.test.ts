@@ -98,6 +98,9 @@ afterAll(async () => {
 
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesIds } }) });
   await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIds } }) });
+  // Y por su clave, que lleva el RUN_ID: un Asset sin su evento —justo lo que
+  // las pruebas de rechazo vigilan— no lo encuentra el borrado de arriba.
+  await prisma.asset.deleteMany({ where: assertDefinedWhere({ storageKey: { contains: RUN_ID } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesIds } }) });
   await prisma.device.deleteMany({ where: assertDefinedWhere({ label: { contains: RUN_ID } }) });
   // Lo que escribieron las rutas lo firmó la cuenta de la corrida; borrar la
@@ -181,11 +184,13 @@ describe("field-media por cookie: el aparato del cuerpo se valida como en field-
   });
 
   it("para los mismos cuatro aparatos, field-media y field-events dan el mismo veredicto", async () => {
+    const vivo = (await alta(correoA, "cmp-vivo")).device.id;
+    const ajeno = (await alta(correoB, "cmp-ajeno")).device.id;
     const casos: [string, string][] = [
-      ["propio vivo", (await alta(correoA, "cmp-vivo")).device.id],
+      ["propio vivo", vivo],
       ["revocado", await revocado("cmp-rev")],
       ["inexistente", randomUUID()],
-      ["de otra cuenta, vivo", (await alta(correoB, "cmp-ajeno")).device.id],
+      ["de otra cuenta, vivo", ajeno],
     ];
     type Veredicto = { status: number; error: string | null };
     const veredicto = async (res: Response): Promise<Veredicto> =>
@@ -197,6 +202,12 @@ describe("field-media por cookie: el aparato del cuerpo se valida como en field-
       medios.push(await veredicto(await porCookie(postMedios, FINALIZAR, foto(id, `cmp-m${i}`))));
       eventos.push(await veredicto(await porCookie(postEventos, "/api/v1/sync/field-events", lote(id, `cmp-e${i}`))));
     }
+    // Lo que quedó escrito, no sólo lo que se contestó: field-events responde 200
+    // aunque rechace la mutación por dentro, así que el estado solo no dice que
+    // la ruta escribiera.
+    const escritoPorMedios = await Promise.all(casos.map((_, i) => filasDe(`cmp-m${i}`)));
+    const escritoPorEventos = await Promise.all(casos.map((_, i) => filasDe(`cmp-e${i}`)));
+
     // Fila patrón: sin ella, dos rutas que fallaran igual por el arnés también
     // «coincidirían». field-events tiene que dar exactamente esto.
     expect(eventos).toEqual([
@@ -205,7 +216,10 @@ describe("field-media por cookie: el aparato del cuerpo se valida como en field-
       { status: 403, error: "device_not_found" },
       { status: 200, error: null },
     ]);
-    expect(Object.fromEntries(casos.map(([n], i) => [n, medios[i]])))
-      .toEqual(Object.fromEntries(casos.map(([n], i) => [n, eventos[i]])));
+    expect(escritoPorEventos).toEqual([[{ deviceId: vivo }], [], [], [{ deviceId: ajeno }]]);
+
+    const porCaso = (vs: unknown[]) => Object.fromEntries(casos.map(([n], i) => [n, vs[i]]));
+    expect(porCaso(medios)).toEqual(porCaso(eventos));
+    expect(porCaso(escritoPorMedios)).toEqual(porCaso(escritoPorEventos));
   });
 });
