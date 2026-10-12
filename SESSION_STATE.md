@@ -82,6 +82,13 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-11 · Por cookie, una foto de campo ya no queda a nombre de un aparato revocado o inexistente (#718)
+
+`field-media?paso=finalizar` guardaba en `FieldEvent.deviceId` el aparato del cuerpo sin consultarlo. Medido por el `POST` real: uno **revocado** daba 200 y quedaba como autor, y uno **inexistente** reventaba contra `field_event_device_id_fkey` como 500. Hoy `finalizeFieldMedia` lo valida como `pushFieldEvents` (403 `device_revoked` / `device_not_found`, sin `FieldEvent` ni `Asset`), y una prueba compara las dos rutas —estado, error y filas escritas— para cuatro aparatos. Ningún cliente llamaba a field-media por cookie: sólo lo alcanzaba una petición fabricada. Vercel `success`; la ruta no se probó en producción.
+**Tu decisión, entre cuatro: «como field-events».** A sabiendas: un aparato **vivo de otra cuenta** pasa por las **dos** rutas —el revisor decía que field-events lo rechaza; medido, no—, porque exigirlo propio rompería la PWA en un navegador compartido (`ensureDeviceId` guarda el id sin atarlo a la persona). Si cambia, en las dos a la vez.
+**Lo que enseñó:** el verde del PR era de antes de #717 (CI a las 01:37Z, #717 a las 01:55Z con migración y `pruebas-por-compuerta.txt`): se juntó `main` y se empujó, no se relanzó. Y el primer control de `merge-tree` dio un «1» que era de una **redirección fallida**, no de un conflicto.
+**Sigue abierto:** el carril del **token** lo cierran #702/#708/#711, **sin fusionar**. Un `deviceId` que no es UUID da 500 (`P2007`) en las dos rutas; tras revocar, el reintento de una foto ya aceptada da 200 y el de un lote 403; y la comprobación no cierra la carrera revocar/insertar, igual que `pushFieldEvents`.
+
 ### 2026-10-09 · ADR-198 completo: un beneficio puede existir sin finca, y `Las Nubes` ya tiene su organización (#672, #684, #687, #692)
 
 **Cuatro PR.** #672 aprobó el diseño (ADR **198**: el 197 lo reservó #675, abierto). **#684**: `crearBeneficio` ya no copia `padre.organizationId` a ciegas y rechaza con `organizacion_requerida`; su test comparaba `null` con `null` porque el fixture creaba el sitio sin organización. **#687**: se crea sin padre diciendo la organización («Sin finca propia» en ajustes); la vista de bandejas acepta organizaciones con `beneficio` sin `site` (su test viejo afirmaba lo contrario y se **reescribió**). **#692**: una finca elige como destino los beneficios de **su organización** aunque no cuelguen de ella; la clasificación del beneficio manda y nunca concede ver sus lotes.
