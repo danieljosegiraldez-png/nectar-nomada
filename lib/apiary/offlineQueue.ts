@@ -14,7 +14,6 @@
  */
 
 const DB_NAME = "nectar-apiary-offline";
-const DB_VERSION = 1;
 const STORE_NAME = "drafts";
 
 export type DraftKind = "inspection" | "colonyEvent" | "colonyEnd" | "varroaCount";
@@ -33,16 +32,44 @@ export interface DraftRecord<T = unknown> {
   errorMessage?: string;
 }
 
-function openDb(): Promise<IDBDatabase> {
+/**
+ * Abre la base SIN pedir versión, y si la encuentra sin su almacén la sube una
+ * versión para que el manejador de subida lo cree.
+ *
+ * **Por qué.** Hasta el 2026-10-12 `public/offline.html` abría esta base en la
+ * versión 1 sin manejador de subida, y en un aparato que no la tenía eso la creaba
+ * VACÍA. Después esta cola pedía la misma versión 1, su manejador —el único sitio
+ * que crea `drafts`— ya no corría, y todo `queueDraft` fallaba con `NotFoundError`
+ * hasta que alguien borrara la base a mano. Esa página ya no crea nada, pero los
+ * teléfonos que quedaron así se curan aquí.
+ *
+ * **Por qué no subir la versión para todos.** Una base sana se queda en la 1: una
+ * página cacheada por el service worker con un build ANTERIOR abre la versión 1, y
+ * contra una base en la 2 recibiría `VersionError` — el mismo «no se pudo guardar»,
+ * esta vez en los teléfonos sanos. Sólo sube la que estaba rota, que para un build
+ * viejo ya lo estaba. Si un día hace falta cambiar el esquema, esa subida tiene que
+ * contar con que una base reparada puede estar ya en la 2.
+ *
+ * Mide en un Chrome de verdad: `tools/browser-checks/indexeddb-sin-almacen.mjs`.
+ */
+function openDb(subirA?: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = subirA === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, subirA);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Una sola subida: si tras ella siguiera sin almacén, el `NotFoundError` de
+      // la transacción lo dirá, en vez de un bucle.
+      if (db.objectStoreNames.contains(STORE_NAME) || subirA !== undefined) return resolve(db);
+      const siguiente = db.version + 1;
+      db.close();
+      openDb(siguiente).then(resolve, reject);
+    };
     request.onerror = () => reject(request.error);
   });
 }

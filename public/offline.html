@@ -55,11 +55,21 @@
   });
 
   // Same IndexedDB shape as lib/apiary/offlineQueue.ts (DB "nectar-apiary-offline", store "drafts") — read directly, no module import, since this page has no bundler.
-  var req = indexedDB.open("nectar-apiary-offline", 1);
+  //
+  // Esta página sólo LEE, y no puede crear la base. Hasta el 2026-10-12 la
+  // abría en la versión 1 sin decir qué hacer si no existía, y eso la creaba
+  // vacía: la cola ya no creaba nunca su almacén y todo guardado sin señal
+  // fallaba. Sin versión, abrir sólo pide subida cuando la base no existe; ahí
+  // se aborta, y abortar una creación deja el aparato como estaba.
+  var req = indexedDB.open("nectar-apiary-offline");
+  req.onupgradeneeded = function () {
+    req.transaction.abort();
+  };
   req.onsuccess = function () {
+    var db = req.result;
     try {
-      var db = req.result;
       if (!db.objectStoreNames.contains("drafts")) {
+        db.close();
         document.getElementById("draft-count").textContent = "0";
         return;
       }
@@ -69,12 +79,18 @@
         var pending = getAll.result.filter(function (d) { return d.status === "pending" || d.status === "error"; });
         document.getElementById("draft-count").textContent = String(pending.length);
       };
+      // Soltar la conexión: si la cola tiene que reparar la base, una conexión
+      // abierta aquí la dejaría esperando.
+      tx.oncomplete = function () { db.close(); };
     } catch (e) {
+      db.close();
       document.getElementById("draft-count").textContent = "?";
     }
   };
   req.onerror = function () {
-    document.getElementById("draft-count").textContent = "?";
+    // AbortError: la abortó esta página porque la base no existía — cero borradores.
+    var noExistia = req.error && req.error.name === "AbortError";
+    document.getElementById("draft-count").textContent = noExistia ? "0" : "?";
   };
 })();
 </script>
