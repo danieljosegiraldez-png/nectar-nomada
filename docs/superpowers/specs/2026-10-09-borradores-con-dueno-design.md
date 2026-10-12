@@ -220,3 +220,32 @@ pruebas nuevas con base **no** salen ahí), y el grupo con base **entero**
 - **Pruebas:** nuevas en `tests/sync/`, y su alta en `scripts/pruebas-por-compuerta.txt`
   para las que usan base.
 - **Decisión:** ADR-199 en `docs/architecture/DECISIONS.md`.
+
+## Nota de aprobación, 2026-10-11
+
+Daniel aprobó esta especificación el 2026-10-11 con una nota: **un solo componente en
+`app/layout.tsx`, compartido con el PR #703** (`sw-cierre-de-sesion`). El plan
+(`docs/superpowers/plans/2026-10-11-borradores-con-dueno.md`) la aplica así, y esto corrige tres
+puntos de las secciones de arriba:
+
+1. **El componente es `ServiceWorkerRegistration`, el de #703.** Recibe la cuenta y la hora de la
+   página, apunta la cuenta de los borradores y alinea las páginas guardadas. No hay un segundo
+   componente. El módulo nuevo vive al lado del de #703, en `lib/offline/cuentaDelNavegador.ts`, y
+   no en `lib/sync/`.
+2. **La cuenta es la HUELLA, no el `userAccountId`.** #703 ya calcula en el layout los 16 primeros
+   hexadecimales del SHA-256 del id y los guarda en el navegador. Los borradores guardan ese mismo
+   valor y el servidor compara huellas, así que el id completo no llega nunca al `localStorage` ni a
+   IndexedDB de un teléfono que puede ser compartido. La función deja de estar escrita dentro del
+   layout y pasa a `lib/auth/huellaDeCuenta.ts`, porque ahora la usan tres sitios.
+3. **Dos claves, una por pregunta.** `nn-pages-cuenta` (#703) dice para quién son las páginas
+   guardadas, y sólo se apunta después de borrarlas. `nn-cuenta-del-navegador` (ésta) dice quién
+   entró por última vez según el servidor, con la hora, para que una página vieja no gane. Si borrar
+   la caché falla, la primera queda vacía y la segunda sigue sabiendo de quién son los borradores.
+
+Y dos detalles que el plan añade porque el diseño los dejaba abiertos:
+
+- **Un borrador sin cuenta queda apuntado tras su primera respuesta.** Si el servidor lo retiene,
+  pasa a la cuenta que nombra el servidor: la retención trae la huella de quien registró el aparato.
+  Si lo procesa, pasa a quien envía. La regla del aparato se resuelve una vez, no en cada envío.
+- **Las fotos sólo comprueban el dueño cuando vienen de la cola.** El servicio recibe un campo
+  `borrador` sólo en ese caso; una llamada desde el servidor con la sesión actual no lo trae.
