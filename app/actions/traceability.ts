@@ -41,6 +41,7 @@ import { startDryingRun, recordDryingTurnEvent, registrarTandaDeVolteo, endDryin
 import { desenlaceDelSecado, DesenlaceDeSecadoRequerido, type DesenlaceDelSecado } from "../beneficio/bandejas/errorDeSecado";
 import { BandejaError } from "../../lib/traceability/bandejaError";
 import { claveDeErrorDeProceso } from "../../lib/traceability/errorDeProceso";
+import { CODIGOS_DE_RECIPIENTE, RecipienteError } from "../../lib/traceability/recipientes";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { registrarTrilla, TrillaValidationError } from "../../lib/traceability/trilla";
 import { recordGreenGrading, GreenGradingValidationError } from "../../lib/traceability/greenGrading";
@@ -326,6 +327,12 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
   // Dos toques del mismo botón. No es un fallo del operario ni hay nada que
   // corregir en el formulario: lo que hay que decirle es que ya está guardado.
   if (error instanceof ClaveDeEnvioAjena) return t("error_clave_de_envio");
+  // Parte 2c, arreglos previos §4.1 y D2 (2026-10-04): un texto por código, como `claveDeErrorDeProceso`. Sin esta rama la clase cae al
+  // `throw` final y empezar una fermentación sin tanque ni nombre —o con un tanque que no se puede usar— es un 500. Un código que no
+  // está en la lista no se traduce a una clave que no existe: se relanza.
+  if (error instanceof RecipienteError && (CODIGOS_DE_RECIPIENTE as readonly string[]).includes(error.message)) {
+    return t(`error_${error.message}` as "error_recipiente_no_disponible");
+  }
   // A4 (secado por bandeja, ajustes.md): sin esta rama, una bandeja cargada
   // entre que se pinta la página y se envía el cierre era un 500 — el mismo
   // caso que ya obligó a las ramas de arriba.
@@ -569,6 +576,7 @@ export async function startFermentationAction(
   try {
     await startFermentationRun(user.userAccountId, {
       lotId,
+      vesselEquipmentId: emptyToNull(formData.get("vesselEquipmentId")),
       vesselNote: emptyToNull(formData.get("vesselNote")),
       startedAt: new Date(),
       inoculated: formData.get("inoculated") === "on",
