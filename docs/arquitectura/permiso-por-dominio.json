@@ -153,6 +153,17 @@
           "veredicto": "propuesto legitimo",
           "confirmado_por_daniel": false,
           "razon": "La hermana de `pedidosPorDespachar`, y el mismo caso: autoriza `commerce:manage_store` con `exigeTienda` y toca `lotTransformationOutput`, que son los frascos que salieron de una transformacion del lote. El propio archivo documenta la division deliberada: asignar un lote a una variante exige `lot:manage` --y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`--, mientras recibir y despachar exigen tienda."
+        },
+        {
+          "archivo": "lib/equipos/equipos.ts",
+          "operacion": "retirarEquipo",
+          "permisos": [
+            "equipment",
+            "location"
+          ],
+          "veredicto": "LEGITIMO, confirmado por Daniel el 2026-10-06 (D10): el permiso es el de la gestion de equipos",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo confirmo el 2026-10-06 (decision D10). Toca `fermentationRun` y `roastSession` SOLO para decidir si el equipo esta en uso (D3 y D7 de Daniel: un equipo en uso no se retira): dos `findFirst` dentro de la transaccion, filtrados por el id de ESTE equipo (`vesselEquipmentId` / `equipmentId`) y por `endedAt: null`, con `select: { id: true }`. Su resultado no sale de la funcion: solo decide `equipo_en_uso`. No lee ni escribe nada del lote. El permiso es el de toda la gestion de equipos, `exigePermiso(userAccountId, \"manage\", equipo)` (equipment:manage, o location:edit_beneficio en el lugar del equipo), por la decision D4 de Daniel (2026-10-05)."
         }
       ],
       "_como_salio_esta_lista": "SACADA DEL ESQUEMA, no de la prosa de la ficha, y es una correccion: la primera version declaraba `lotClassification`, `lotStorageMove` y `greenSample`, que NO EXISTEN como modelos de Prisma -- me los invente leyendo la 005. Lo cazo la propia compuerta en su primera corrida, que es el mejor estreno que puede tener un guardia. Las 16 de ahora salen de `grep '^model (Lot|Harvest|RoastSession|FermentationRun|DryingRun)'` sobre prisma/schema.prisma y las 16 las toca al menos una operacion, medido. `Sample` queda fuera a proposito: es su propio dominio, con su propio permiso. SEGUNDA CORRECCION, tambien de la propia compuerta: `harvestContainer` entro por el prefijo `Harvest*` y NO es del dominio del lote -- cuelga de `ApiaryHarvestEvent`, son los baldes y tambores de una cosecha de MIEL («balde 3», «tambor A»), y solo `lib/apiary/*` lo toca. Una heuristica por nombre barre de mas; lo que decide es la relacion del modelo. `harvestWithdrawalFlag` y `loteDesdeRecepcion` si se quedan: el primero cuelga de `HarvestEvent` (cosecha de cafe) y el segundo del `Lot`.",

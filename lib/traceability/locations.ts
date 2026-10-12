@@ -288,8 +288,12 @@ export async function lugaresDeOrganizacion(organizationId: string) {
 
 /**
  * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
- * de la organización y no de un lugar, como las recetas. Una receta compartida
- * (`organizationId` nulo) sólo se configura con alcance de plataforma.
+ * de la organización y no de un lugar, como los tipos de bandeja
+ * (`lib/equipos/bandejas.ts`). **Las recetas ya no pasan por aquí** (Parte 2a, V16,
+ * 2026-10-04): las escribe el Coffee Process Manager, con `exigeAutoriaDeReceta`
+ * (`lib/recetas/autoria.ts`), que calca este camino con otro permiso. Una
+ * configuración compartida (`organizationId` nulo) sólo se hace con alcance de
+ * plataforma.
  *
  * Los candidatos son `lugaresDeOrganizacion`: las Location propias de la
  * organización más sus descendientes con `organizationId` nulo. Sin esto, un

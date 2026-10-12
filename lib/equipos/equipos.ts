@@ -33,7 +33,8 @@ import { recordAuditEvent } from "../audit";
 import { organizacionesVisibles } from "../catalogos/propiedad";
 import { prisma } from "../db";
 import { can } from "../rbac/service";
-import { clasificar, resumir } from "./disponibilidad";
+import { clasificar, resumir, type MotivoNoDisponible } from "./disponibilidad";
+import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { dentroDeTolerancia, estadoDeVerificacion, type EstadoDeVerificacion } from "./verificacion";
 import { Prisma, type ClassificationLevel, type EquipmentCondition, type EquipmentKind, type ProvenanceClass } from "../../generated/prisma/client";
 
@@ -336,6 +337,106 @@ export async function editarDatosDeEquipo(userAccountId: string, equipmentId: st
     if (esCodigoDuplicado(e)) throw new EquipoError("codigo_interno_duplicado");
     throw e;
   }
+}
+
+/**
+ * Retirar un equipo (Parte 2c §4.5; decisión D3 de Daniel, 2026-10-04).
+ *
+ * **Tres reglas, las tres suyas.** El **motivo es obligatorio**; la **fecha es la del servidor** (`new Date()`: nadie la
+ * teclea, así que nadie la inventa ni la adelanta); y **es reversible** —`reactivarEquipo`, también con motivo—. Retirar no
+ * borra nada: el equipo conserva sus traslados, sus informes de condición y lo que se midió con él.
+ *
+ * **Un equipo en uso no se retira**: lo lleva una fermentación abierta (`FermentationRun` con `endedAt` nulo y este equipo
+ * como `vesselEquipmentId`), una bandeja con fila abierta (`DryingRunTray` con `hasta` nulo; la base garantiza que una
+ * fila abierta vive en un secado abierto, así que `hasta` nulo basta) o —decisión D7 de Daniel, 2026-10-05— una tostadora
+ * con un tueste abierto (`RoastSession` con `endedAt` nulo y este equipo como `equipmentId`). Retirarlo dejaría a media
+ * corrida un recipiente que ya no se ofrece. Hoy el recipiente de una corrida es `vesselEquipmentId`; el traslado con destino
+ * (§4.2) lo cambiará al «recipiente vigente», y la consulta de la fermentación cambia con él (las otras dos, no).
+ *
+ * **El bloqueo es lo que hace verdadera la comprobación.** Un `UPDATE` toma `FOR NO KEY UPDATE`, que NO choca con el
+ * `FOR KEY SHARE` que toma la clave ajena al insertar una corrida con este tanque: sin un `FOR UPDATE` explícito, retirar
+ * y empezar una fermentación a la vez dejarían un tanque retirado con una corrida abierta, y las dos comprobaciones habrían
+ * salido bien. Con él, quien llega segundo ESPERA, y al despertar **relee** (en READ COMMITTED cada consulta ve lo que el
+ * otro confirmó). Mismo patrón que `moverBandeja`. El estado se lee DENTRO del bloqueo, no antes.
+ *
+ * `disposed` también se rechaza con `equipo_ya_retirado`: está fuera, y esta función no lo trae de vuelta ni lo vuelve a fechar.
+ *
+ * Permiso: el mismo `manage` que el resto de la gestión del equipo (`equipment:manage`, o `location:edit_beneficio` en el
+ * lugar donde está), resuelto por `exigePermiso`. Va ANTES de cualquier otra comprobación, para que quien no puede no se
+ * entere de si el equipo está en uso.
+ */
+export async function retirarEquipo(userAccountId: string, equipmentId: string, motivo: string): Promise<void> {
+  const equipo = await equipoOFalla(equipmentId);
+  await exigePermiso(userAccountId, "manage", equipo);
+  const razon = motivo.trim();
+  if (razon.length === 0) throw new EquipoError("motivo_obligatorio");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "core"."equipment" WHERE "id" = ${equipmentId}::uuid FOR UPDATE`;
+    const antes = await tx.equipment.findUniqueOrThrow({ where: { id: equipmentId } });
+    if (antes.lifecycleStatus !== "active") throw new EquipoError("equipo_ya_retirado");
+    const corrida = await tx.fermentationRun.findFirst({ where: { vesselEquipmentId: equipmentId, endedAt: null }, select: { id: true } });
+    const carga = await tx.dryingRunTray.findFirst({ where: { equipmentId, hasta: null }, select: { id: true } });
+    // D7: un tueste sin hora de fin también es «en uso». Nada lo cierra después de registrado (el campo es opcional en el formulario).
+    const tueste = await tx.roastSession.findFirst({ where: { equipmentId, endedAt: null }, select: { id: true } });
+    if (corrida || carga || tueste) throw new EquipoError("equipo_en_uso");
+
+    const cuando = new Date();
+    await tx.equipment.update({
+      where: { id: equipmentId },
+      data: { lifecycleStatus: "retired", retiredAt: cuando, retiroMotivo: razon },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "equipment",
+        entityId: equipmentId,
+        operation: "equipment.retire",
+        sourceInterface: "lib/equipos/equipos.ts",
+        before: { lifecycleStatus: antes.lifecycleStatus, retiredAt: antes.retiredAt?.toISOString() ?? null, retiroMotivo: antes.retiroMotivo },
+        after: { lifecycleStatus: "retired", retiredAt: cuando.toISOString(), retiroMotivo: razon },
+        reason: razon,
+      },
+      tx,
+    );
+  });
+}
+
+/**
+ * Deshacer un retiro (Parte 2c §4.5; D3 de Daniel: reversible, con motivo obligatorio). Vuelve a `active` y limpia la fecha
+ * y el motivo del retiro: **el motivo de reactivar vive en la auditoría** (`reason`), y el `before` conserva el retiro que se
+ * deshace, así que nada se pierde. Sólo reactiva un equipo `retired`: uno `active` o `disposed` dice `equipo_no_retirado`.
+ * Mismo permiso, mismo bloqueo y misma relectura bajo el bloqueo que `retirarEquipo`.
+ */
+export async function reactivarEquipo(userAccountId: string, equipmentId: string, motivo: string): Promise<void> {
+  const equipo = await equipoOFalla(equipmentId);
+  await exigePermiso(userAccountId, "manage", equipo);
+  const razon = motivo.trim();
+  if (razon.length === 0) throw new EquipoError("motivo_obligatorio");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "core"."equipment" WHERE "id" = ${equipmentId}::uuid FOR UPDATE`;
+    const antes = await tx.equipment.findUniqueOrThrow({ where: { id: equipmentId } });
+    if (antes.lifecycleStatus !== "retired") throw new EquipoError("equipo_no_retirado");
+
+    await tx.equipment.update({
+      where: { id: equipmentId },
+      data: { lifecycleStatus: "active", retiredAt: null, retiroMotivo: null },
+    });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        entityType: "equipment",
+        entityId: equipmentId,
+        operation: "equipment.reactivate",
+        sourceInterface: "lib/equipos/equipos.ts",
+        before: { lifecycleStatus: antes.lifecycleStatus, retiredAt: antes.retiredAt?.toISOString() ?? null, retiroMotivo: antes.retiroMotivo },
+        after: { lifecycleStatus: "active", retiredAt: null, retiroMotivo: null },
+        reason: razon,
+      },
+      tx,
+    );
+  });
 }
 
 /** Un permiso sobre un equipo, para otros módulos (rutinas, documentos). */
@@ -748,6 +849,13 @@ export interface EquipoEnLista {
   id: string;
   name: string;
   kind: EquipmentKind;
+  /**
+   * Sólo en una bandeja de secado: su tipo (`DryingTrayType`). **`null` = no es una bandeja.** Es la columna tal cual y no un
+   * booleano derivado, para que quien filtre compare lo mismo que dicen los CHECK de la base (`equipment_bandeja_tipo_y_numero`).
+   * `listarEquipos` NO filtra por él —es el inventario de todas las clases—: filtra quien cuenta TANQUES (`tanquesVisibles` del
+   * tablero, `disponibilidadDeRecipientes`). Parte 2c §4.6.
+   */
+  trayTypeId: string | null;
   lifecycleStatus: "active" | "retired" | "disposed";
   /** Del último traslado. `null` = registrado y todavía sin ubicar. */
   ubicacion: { id: string; name: string } | null;
@@ -797,6 +905,7 @@ export async function listarEquipos(userAccountId: string): Promise<EquipoEnList
       id: e.id,
       name: e.name,
       kind: e.kind,
+      trayTypeId: e.trayTypeId,
       lifecycleStatus: e.lifecycleStatus,
       ubicacion: ultimo ? { id: ultimo.toLocation.id, name: ultimo.toLocation.name } : null,
       condicion: informe ? { condition: informe.condition, occurredAt: informe.occurredAt } : null,
@@ -868,10 +977,18 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
  *
  * Sólo recipientes: un refractómetro no se «ocupa». Su disponibilidad es otra
  * cosa y la contesta `listarEquipos` con su estado de revisión.
+ *
+ * **Sólo los activos** (Parte 2c §4.5): un tanque retirado no está libre ni en uso, está fuera, y no cuenta en la
+ * «capacidad ahora». `clasificar` sigue sabiendo decir `RETIRADO` (es pura y su tipo admite `retired`), pero hoy nadie se
+ * lo manda: esta consulta sólo trae activos, y el tablero tampoco, porque quita de sus tanques los retirados (D5) y de sus
+ * camas las archivadas (D6) antes de clasificar.
  */
 export async function disponibilidadDeRecipientes(userAccountId: string) {
   const equipos = await prisma.equipment.findMany({
-    where: { kind: "vessel", lifecycleStatus: { not: "disposed" } },
+    // Una bandeja de secado es un `vessel` con `trayTypeId` y nunca ocupa un tanque de fermentación: contarla aquí
+    // la daba por «libre y sana» e inflaba la «Capacidad ahora» (Parte 2c §4.6). `listarEquipos`, que es el
+    // inventario de todas las clases, sí la sigue listando.
+    where: { kind: "vessel", trayTypeId: null, lifecycleStatus: "active" },
     include: {
       transfers: { orderBy: { occurredAt: "desc" }, take: 1, include: { toLocation: { select: { id: true, name: true } } } },
       conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1 },
@@ -909,6 +1026,87 @@ export async function disponibilidadDeRecipientes(userAccountId: string) {
     });
   }
   return { filas, resumen: resumir(filas.map((f) => f.clasificacion)) };
+}
+
+/**
+ * Una opción del selector de tanque al empezar una fermentación (Parte 2c, arreglos previos §4.1, 2026-10-04).
+ *
+ * `motivos` son los de `clasificar` que pueden aplicar a un recipiente ACTIVO: `EN_USO` y `CONDICION`. **Un tanque ocupado, o con una
+ * condición sin resolver, se ofrece igual**: C1/E1 —decisión de Daniel— dicen que sólo se avisa, y el aviso lo pinta el formulario con
+ * estos motivos. Quitarlo de la lista por estar ocupado sería decidir por quien opera lo que Daniel decidió que no.
+ */
+export interface OpcionDeRecipiente {
+  id: string;
+  label: string;
+  libreYSano: boolean;
+  motivos: MotivoNoDisponible[];
+}
+
+/**
+ * Qué recipientes pueden recibir la fermentación de un lote de esta organización: un `vessel` que no es una bandeja, activo, y de la
+ * misma organización.
+ *
+ * **Una sola definición para dos preguntas.** La lista que se ofrece (`recipientesParaFermentar`) y la validación al empezar
+ * (`startFermentationRun`) salen de este mismo filtro: si fueran dos, la pantalla podría ofrecer un tanque que el servicio rechaza, o
+ * dejar fuera uno que acepta. Es la forma de `puedeEmpezarCorrida`, que comparte con el servicio su predicado.
+ *
+ * Falta a propósito lo que este filtro no puede decir: que **quien opera lo vea**. Eso lo decide `puedeVerEquipo`, que resuelve el
+ * ámbito por el último traslado y no se expresa como un `where`.
+ */
+export function dondeCandidatoAFermentar(organizationId: string): Prisma.EquipmentWhereInput {
+  return { organizationId, kind: "vessel", trayTypeId: null, lifecycleStatus: "active" };
+}
+
+/**
+ * Los recipientes que `userAccountId` puede elegir para fermentar el lote `lotId` (Parte 2c, §4.1 y D2): los de la organización del
+ * lote que `dondeCandidatoAFermentar` deja pasar **y que quien opera VE**. Libres y sanos primero; luego, por nombre.
+ *
+ * **Primero el lote, y lo comprueba ESTA función** (decisión D11 de Daniel, 2026-10-06): quien no puede ver el lote no recibe la lista
+ * ni se entera de qué tanques tiene su organización. Es el mecanismo de `getLotSummary` y `getLotDetail` (`lib/traceability/lots.ts`):
+ * el lote por id, `TraceabilityAccessError("lot_not_found")` si no existe, y `requireLotAccess(…, "view", …)`, que lanza
+ * `TraceabilityAccessError("no_lot_access")` si no lo ve. Por eso NO hay excepción en `docs/arquitectura/permiso-por-dominio.json`:
+ * la operación toca `lot` y exige `lot`. La página ya pidió `view` con `getLotSummary`; se repite aquí para que la función no dependa
+ * de quién la llama. Después, sólo decide qué equipos ve esa persona: uno que no ve no se nombra ni se cuenta (§5.5).
+ *
+ * **Sin N+1 sobre toda la base:** la consulta se acota por la organización del lote, y por cada candidato hay UN traslado y UN permiso
+ * (`puedeVerEquipo`), que es lo que tiene que cuadrar con la validación del servicio. «En uso» es el de `disponibilidadDeRecipientes`:
+ * una corrida abierta que referencia el tanque por su clave.
+ */
+export async function recipientesParaFermentar(userAccountId: string, lotId: string): Promise<OpcionDeRecipiente[]> {
+  const lote = await prisma.lot.findUnique({
+    where: { id: lotId },
+    select: { organizationId: true, projectId: true, locationId: true, classification: true },
+  });
+  if (!lote) throw new TraceabilityAccessError("lot_not_found");
+  await requireLotAccess(userAccountId, "view", [{ projectId: lote.projectId, locationId: lote.locationId, classification: lote.classification }]);
+  const equipos = await prisma.equipment.findMany({
+    where: dondeCandidatoAFermentar(lote.organizationId),
+    select: {
+      id: true,
+      name: true,
+      projectId: true,
+      classification: true,
+      lifecycleStatus: true,
+      conditionReports: { where: { resolvedAt: null }, orderBy: { occurredAt: "desc" }, take: 1, select: { condition: true } },
+      fermentationRuns: { where: { endedAt: null }, take: 1, select: { id: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const opciones: OpcionDeRecipiente[] = [];
+  for (const e of equipos) {
+    if (!(await puedeVerEquipo(userAccountId, e))) continue;
+    const { libreYSano, motivos } = clasificar({
+      id: e.id,
+      lifecycleStatus: e.lifecycleStatus,
+      condicion: e.conditionReports[0]?.condition ?? null,
+      enUso: e.fermentationRuns.length > 0,
+    });
+    opciones.push({ id: e.id, label: e.name, libreYSano, motivos: [...motivos] });
+  }
+  return opciones.sort((a, b) =>
+    a.libreYSano === b.libreYSano ? a.label.localeCompare(b.label, "es") : a.libreYSano ? -1 : 1,
+  );
 }
 
 /**

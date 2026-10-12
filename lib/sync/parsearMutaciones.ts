@@ -73,16 +73,27 @@ export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile",
  * nunca un instante con hora. `toDate` —usado por el resto del parseo— acepta
  * cualquier cadena que `new Date()` sepa interpretar, incluida una con offset
  * de zona (`"2026-09-18T23:30:00-05:00"` se convierte en 19 de septiembre en
- * UTC), que desplazaría el día que la ronda cree estar registrando. El
- * cliente real (`diaRequerido` en `parcelaPayload.ts`) siempre manda un día
- * limpio; esto es la frontera para un cliente ajeno o futuro que no lo haga.
+ * UTC), que desplazaría el día que la ronda cree estar registrando.
+ *
+ * **Esta cabecera decía que el cliente real «siempre manda un día limpio», y
+ * era falso** (corregido el 2026-10-11): desde #445 `diaRequerido` mandaba
+ * `"2026-10-11T00:00:00.000Z"`, así que ninguna revisión de la ronda llegó a
+ * guardarse. Hoy el cliente manda `YYYY-MM-DD`
+ * (`diaRequeridoComoTexto` en `parcelaPayload.ts`).
+ *
+ * **Y por eso se acepta además la medianoche UTC EXACTA**, decisión de Daniel
+ * del 2026-10-11: es lo que llevan los borradores que quedaron rechazados en
+ * los teléfonos, y `syncFieldEvents` los reenvía en cada sincronización
+ * (recoge `pending` y `error`). Esa forma nombra un solo día sin ambigüedad —
+ * así guarda `fechaDeDia` los campos de día—, de modo que el propósito del A10
+ * sigue en pie: otra hora o un desfase (`-05:00`) se rechazan igual.
  *
  * Devuelve `"invalido"` (nunca lanza) para que quien llama decida el motivo
  * exacto del rechazo — ausente vs. malformado son mensajes distintos.
  */
 function diaEstrictoOpcional(v: unknown): Date | null | "invalido" {
   if (v == null) return null;
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return "invalido";
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}(T00:00:00\.000Z)?$/.test(v)) return "invalido";
   try {
     return fechaDeDia(v, "observedAt");
   } catch {
@@ -293,8 +304,9 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       // payload de la cola.
       if (m.kind === "trap_check") {
         // A10 — un instante con hora (o cualquier cosa que no sea
-        // exactamente `YYYY-MM-DD`) se rechaza en vez de truncarse en
-        // silencio al día que `toDate` habría inventado.
+        // `YYYY-MM-DD`, salvo la medianoche UTC exacta: ver
+        // `diaEstrictoOpcional`) se rechaza en vez de truncarse en silencio
+        // al día que `toDate` habría inventado.
         const observedAt = diaEstrictoOpcional(m.observedAt);
         if (observedAt === "invalido") {
           rechazar("observed_at_not_a_day");

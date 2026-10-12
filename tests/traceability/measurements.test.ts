@@ -406,6 +406,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
+      vesselNote: "Tanque de prueba",
       startedAt: new Date("2026-01-02"),
       inoculated: false,
     });
@@ -437,6 +438,7 @@ describe("recordMeasurement — fermentationRunId/dryingRunId/storageAssignmentI
     const { run } = await startFermentationRun(authorizedUserAccountId, {
       provenanceClass: "original_record",
       lotId: lot.id,
+      vesselNote: "Tanque de prueba",
       startedAt: new Date("2026-01-02"),
       inoculated: false,
     });
