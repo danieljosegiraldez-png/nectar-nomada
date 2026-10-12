@@ -53,12 +53,23 @@ describe("clasificarRespuesta: qué significa el código de estado de un push", 
   });
 
   /**
+   * Decisión de Daniel, 2026-10-11. Un 413 dice «demasiado para una petición»,
+   * no nada sobre lo anotado. Las colas ya trocean en tandas del tope del
+   * servidor (`tests/sync/colaMasLargaQueElLote.test.ts`), así que sólo llega
+   * si el tope baja con una pestaña abierta que trae el código de antes:
+   * recargar lo arregla, y rechazarlo perdería trabajo bueno.
+   */
+  it("413 (lote demasiado grande) es «ahora no», no «no»", () => {
+    expect(clasificarRespuesta(413)).toBe("reintentar");
+  });
+
+  /**
    * 403 es el caso real: aparato revocado. El servidor corrió, miró y se negó.
    * Reintentarlo para siempre no lo va a arreglar, y esconderlo del operador
    * tampoco.
    */
   it("el resto de 4xx sí es un no del servidor", () => {
-    for (const s of [400, 403, 404, 413, 422]) expect(clasificarRespuesta(s)).toBe("rechazar");
+    for (const s of [400, 403, 404, 422]) expect(clasificarRespuesta(s)).toBe("rechazar");
   });
 
   /**
