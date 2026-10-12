@@ -12897,7 +12897,14 @@ funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador e
 - La purga de 21 días borra también lo retenido de A si A no vuelve, y el aviso lo ve B.
 - Las fotos de trampa no tienen purga, así que una foto retenida espera indefinidamente.
 - Cuando una página guardada de A se abre con B vigente, `alinearConLaCuenta` (#703) recibe A y borra todas las páginas guardadas, también las de B. Es a propósito: borrar de más es el lado seguro, y comparar con la cuenta vigente dejaría la página de A en la caché. Llegar ahí exige que haya fallado el borrado que #703 hace al entrar B (acordado con la sesión de #703, 2026-10-12).
+- Una pestaña con el JavaScript de ANTES del despliegue marca como error lo que el servidor retiene, y su botón viejo de «descartar fallidas» borra todo lo que esté en error, también lo ajeno. Dura hasta que esa pestaña se recarga; el servidor no puede evitarlo sin tumbar el lote entero de quien envía. Para que esa pestaña al menos no envíe sin cuenta, la cuenta viaja también dentro del payload que se guarda (`payloadConCuenta`).
+- Si una página guardada de A se sirve con B dentro (sólo si falló el borrado de #703), el borrador sale con la cuenta de B —correcto—, pero su `operatorPersonId` es la Persona de A, porque ese campo sale del HTML de la página. Medido en el navegador el 2026-10-12.
+- Un borrador sin cuenta que el servidor rechaza por otro motivo (p. ej. en el parseo) se queda sin cuenta: sólo el servidor nombra dueños, y lo hace únicamente al retener. No se puede descartar a mano; lo purga la regla de 21 días.
 
 **Cómo se comprueba.** `tests/sync/borradoresConDueno.test.ts` (con base): un borrador ajeno se rechaza con
 cero filas y cero `AuditEvent`, tanto si trae otra cuenta como si es un borrador sin cuenta en un aparato
 ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los casos «ajeno» por su nombre.
+`tests/arquitectura/colas-por-cuenta.test.ts` (hermético) vigila que ningún lector de las colas en `app/` se
+salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `descartablesPorEstaCuenta(`—, y
+`tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
+viaje dentro del payload.
