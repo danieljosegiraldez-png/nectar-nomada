@@ -1976,6 +1976,7 @@
     "error_receta_nombre_requerido": "Enter the recipe name.",
     "error_receta_nombre_repetido": "Your organization already has a recipe with that name. Choose another.",
     "error_receta_receta_libre_no_se_versiona": "A free-form recipe is not versioned: it is what happened in a process. Convert it into an organization recipe to change it.",
+    "error_proceso_sin_receta": "A process opens with a recipe: choose the published recipe this coffee will follow.",
     "error_proceso_version_no_publicada": "That recipe version is still a draft: a process only opens with a published version.",
     "error_proceso_receta_de_otra_organizacion": "That recipe belongs to another organization: this coffee can only follow a recipe of its own organization or a shared one.",
     "error_proceso_recipe_archived": "That recipe is archived: no new process opens with it any more. Choose another published recipe.",

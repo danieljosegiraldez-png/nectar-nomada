@@ -45,6 +45,8 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   // Parte 2a, tarea 5a (2026-10-03): lo que se exige de la versión que se pasa a `abrirProceso` (diseño 2a, §3.3). Los lanza sólo
   // `abrirProceso`, y llegan a la pantalla por `abrirProcesoAction` → `friendlyError` → `claveDeErrorDeProceso`. (`sin_receta`, la
   // obligatoriedad, lo añade la 5b delante de éstos.)
+  // Parte 2a, tarea 5b (2026-10-03): la receta obligatoria (diseño 2a, §5.1). Lo lanza sólo `abrirProceso`.
+  "sin_receta",
   "version_no_publicada",
   "receta_de_otra_organizacion",
   // Los dos que `abrirProceso` ya lanzaba desde la Parte 1 y salían crudos por el mensaje genérico (ronda de arreglo del

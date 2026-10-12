@@ -97,9 +97,10 @@ export const CATALOGOS_DE_INTERVENCION: readonly string[] = [
 export interface AbrirProcesoInput {
   lotId: string;
   /**
-   * La versión de receta con la que se abre (Parte 2a, §3.3, tarea 5a): si se pasa, tiene que estar PUBLICADA, ser de una receta no
-   * archivada y de la organización del lote o compartida (`exigeRecetaParaAbrir`). Null, ausente o en blanco sigue siendo «Sin receta»,
-   * que el reporte agrupa aparte (decisión de Daniel) y que la tarea 5b deja de aceptar: la receta pasa a ser obligatoria (§5.1).
+   * **Obligatoria desde la Parte 2a** (§5.1, decisión de Daniel del 2026-10-02): una versión PUBLICADA de una receta no
+   * archivada, de la organización del lote o compartida. El tipo la deja anulable porque el formulario manda `null` con el
+   * desplegable vacío, y el servicio lo rechaza con `sin_receta` —una frase— en vez de con un error de tipos que la
+   * pantalla no puede enseñar. «Sin receta» sigue existiendo sólo en los procesos de antes (R9), que el reporte agrupa aparte.
    */
   processRecipeVersionId?: string | null;
   /**
@@ -219,9 +220,9 @@ async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionI
  * regla es del café y no del lote: se mira todo el linaje, y la hace
  * `abrirProcesoEnTx` dentro de la transacción, con el linaje bloqueado.
  *
- * **Y la versión que se pasa se valida** (Parte 2a, §3.3, 2026-10-03; tarea 5a): publicada, de una receta viva y de la organización del lote
- * o compartida (`exigeRecetaParaAbrir`). Sin versión sigue abriendo «Sin receta»: la receta obligatoria es de la tarea 5b. La regla vive AQUÍ,
- * en lo que abre un proceso a pedido de alguien, y no en `abrirProcesoEnTx`: la división (R6) y la devolución a secado (R7) copian el
+ * **Y no se abre sin receta** (Parte 2a, §5.1, 2026-10-03): `sin_receta`; y la versión tiene que estar publicada, su
+ * receta viva y ser de la organización del lote o compartida (`exigeRecetaParaAbrir`). La regla vive AQUÍ, en lo que abre
+ * un proceso a pedido de alguien, y no en `abrirProcesoEnTx`: la división (R6) y la devolución a secado (R7) copian el
  * proceso vigente tal cual, y un proceso viejo sin receta se sigue pudiendo dividir y devolver.
  */
 export async function abrirProceso(userAccountId: string, input: AbrirProcesoInput) {
@@ -230,9 +231,11 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
   // El CHECK de la base la rechaza igual; aquí sale con una frase legible.
   if (input.intent.trim().length === 0) throw new LotProcessError("intent_required");
 
-  // Parte 2a, §3.3 (5a): la versión que se pasa se valida DENTRO de la transacción, con su fila bloqueada (`exigeRecetaParaAbrir`).
-  // Sin versión sigue abriendo «Sin receta»: la receta obligatoria (`sin_receta`) es de la 5b.
-  const recetaVersionId = input.processRecipeVersionId?.trim() || null;
+  // Parte 2a, §5.1: sin receta no se abre. Va donde iba la comprobación de la receta, antes del grado y de la cereza: es
+  // un dato que falta, como la intención. Lo demás de la receta —que exista, publicada, viva y de esta organización— se
+  // mira DENTRO de la transacción, con la fila de la versión bloqueada (`exigeRecetaParaAbrir`).
+  const recetaVersionId = input.processRecipeVersionId?.trim() ?? "";
+  if (!recetaVersionId) throw new LotProcessError("sin_receta");
 
   // Se comprueban SIEMPRE, no «si vienen»: son obligatorios, y una cadena vacía
   // que llegara de un formulario mal armado tiene que salir con una frase, no
@@ -248,7 +251,7 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
     return await prisma.$transaction(async (tx) => {
       await bloquearLinaje(tx, input.lotId);
       // Parte 2a, §3.3: la versión se bloquea DESPUÉS del linaje —el linaje siempre primero, el orden de R2—.
-      if (recetaVersionId) await exigeRecetaParaAbrir(tx, recetaVersionId, lote.organizationId);
+      await exigeRecetaParaAbrir(tx, recetaVersionId, lote.organizationId);
       return abrirProcesoEnTx(tx, userAccountId, {
         lotId: input.lotId,
         processRecipeVersionId: recetaVersionId,

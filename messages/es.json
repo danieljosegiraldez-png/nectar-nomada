@@ -1976,6 +1976,7 @@
     "error_receta_nombre_requerido": "Escribe el nombre de la receta.",
     "error_receta_nombre_repetido": "Tu organización ya tiene una receta con ese nombre. Elige otro.",
     "error_receta_receta_libre_no_se_versiona": "Una receta Libre no se versiona: es lo que ocurrió en un proceso. Conviértela en una receta de la organización para poder cambiarla.",
+    "error_proceso_sin_receta": "Un proceso se abre con una receta: elige la receta publicada que va a seguir este café.",
     "error_proceso_version_no_publicada": "Esa versión de la receta todavía es un borrador: un proceso sólo se abre con una versión publicada.",
     "error_proceso_receta_de_otra_organizacion": "Esa receta es de otra organización: este café sólo puede seguir una receta de su organización o una compartida.",
     "error_proceso_recipe_archived": "Esa receta está archivada: ya no se abre ningún proceso con ella. Elige otra receta publicada.",

@@ -877,6 +877,62 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     ],
   });
 
+  // Parte 2a, §5.1 (2026-10-03): desde la receta obligatoria, `abrirProceso` exige una versión PUBLICADA de una receta de
+  // la organización del lote (o compartida). La demo abre con ésta. Es DEMO (CLAUDE.md §54): pasos SIN cifras —ni horas, ni
+  // temperaturas, ni umbrales— y sin metas: no declara ningún número que nadie haya dado. El único valor es el tramo del lavado
+  // (`mucilagoObjetivo` 0 = Lavado: «a la cama sin nada de mucílago», la definición de la casa), que no es una medida sino
+  // el nombre del grado. Sin fases derivadas: `publicarVersion` (tarea 3) las deriva del primer paso de cada fase, y con
+  // pasos sin horas saldrían filas sin ningún número; además publicar exige el permiso del Coffee Process Manager, que el
+  // operario de la semilla no tiene. Por eso se escribe cruda, en UNA transacción: borrador con sus pasos y publicada, o nada.
+  //
+  // Se busca antes de crearla: una corrida anterior de la semilla que fallara después de este punto la dejaría escrita, y
+  // `@@unique([organizationId, name])` rechazaría la segunda.
+  const nombreDeLaRecetaDemo = "DEMO Lavado";
+  const tiposDeLaRecetaDemo = ["pulping", "fermentation", "washing", "drying"] as const;
+  const recetaDemo =
+    (await prisma.processRecipe.findFirst({
+      where: { organizationId: lasNubesFarm.id, name: nombreDeLaRecetaDemo },
+      select: { versions: { where: { version: 1, status: "approved" }, select: { id: true } } },
+    })) ??
+    (await prisma.$transaction(async (tx) => {
+      // Los ids del catálogo `tipo_paso` (tarea 2), que `seedVariableCatalogs()` siembra ANTES de la demo. Si falta alguno, la
+      // semilla para con la razón: un paso sin tipo no es un paso.
+      const idsDeTipo = new Map(
+        (
+          await tx.variableCatalogValue.findMany({
+            where: { catalog: { key: "tipo_paso" }, value: { in: [...tiposDeLaRecetaDemo] } },
+            select: { id: true, value: true },
+          })
+        ).map((v) => [v.value, v.id]),
+      );
+      const pasos = tiposDeLaRecetaDemo.map((tipo, i) => {
+        const stepTypeValueId = idsDeTipo.get(tipo);
+        if (!stepTypeValueId) throw new Error(`El catálogo «tipo_paso» no tiene «${tipo}»: la demo no puede escribir sus pasos.`);
+        return { seq: i + 1, stepTypeValueId, ...(tipo === "washing" ? { mucilagoObjetivo: 0 } : {}) };
+      });
+      const receta = await tx.processRecipe.create({
+        data: {
+          name: nombreDeLaRecetaDemo,
+          description:
+            "[DEMO placeholder recipe — opens the DEMO Cloudline processes. Steps without figures: no hours, temperatures or thresholds.]",
+          organizationId: lasNubesFarm.id,
+          status: "approved",
+          versions: { create: { version: 1, status: "draft", notes: "DEMO", steps: { create: pasos } } },
+        },
+        select: { versions: { select: { id: true } } },
+      });
+      const version = await tx.processRecipeVersion.update({
+        where: { id: receta.versions[0]!.id },
+        data: { status: "approved" },
+        select: { id: true },
+      });
+      return { versions: [version] };
+    }));
+  const recetaDemoVersionId = recetaDemo.versions[0]?.id;
+  if (!recetaDemoVersionId) {
+    throw new Error("La receta «DEMO Lavado» no tiene una versión 1 publicada: la demo no puede abrir sus procesos.");
+  }
+
   const blindCodes = ["C", "D"];
   const flight = await prisma.sensoryFlight.findFirstOrThrow({ where: { sessionId: sensorySessionId, name: "Flight 1" } });
 
@@ -894,6 +950,8 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
       targetMoisturePct: 11,
       startedAt: new Date("2027-01-20T09:30:00Z"),
       provenanceClass: "original_record",
+      // Parte 2a, §5.1: la receta DEMO de arriba.
+      processRecipeVersionId: recetaDemoVersionId,
     });
 
     // --- Fermentation ---

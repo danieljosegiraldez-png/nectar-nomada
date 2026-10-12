@@ -25,7 +25,6 @@ import {
   CATALOGO_MOTIVO_DEVOLUCION,
   CATALOGOS_DE_INTERVENCION,
   LotProcessError,
-  SIN_RECETA,
 } from "../../lib/traceability/lotProcess";
 import { moveLotToStorage } from "../../lib/traceability/storage";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -232,6 +231,10 @@ const abrir = (lotId: string, extra: Record<string, unknown> = {}) => ({
   // hay ninguna llamada legítima que los omita.
   processGradeValueId: valorGrado,
   cherryStateValueId: valorCereza,
+  // Parte 2a, §5.1 (tarea 5b): un proceso no se abre sin receta. La de este archivo —publicada y de su organización— va
+  // por defecto: las pruebas que no son de recetas no tienen por qué nombrarla, y las de grado y cereza (más abajo)
+  // conservan así su código. La prueba del rechazo la quita a mano.
+  processRecipeVersionId: recetaVersionId,
   ...extra,
 });
 
@@ -266,21 +269,40 @@ describe("abrir un proceso", () => {
     ).rejects.toThrow(new LotProcessError("recipe_version_not_found"));
   });
 
-  it("se puede abrir SIN receta, y el listado lo agrupa como «Sin receta»", async () => {
+  /**
+   * Parte 2a, §5.1 (decisión de Daniel, 2026-10-02): la receta es obligatoria. Esta prueba decía lo contrario —«se puede
+   * abrir SIN receta, y el listado lo agrupa como «Sin receta»»— y se invierte. Los procesos viejos sin receta siguen
+   * existiendo (R9), y el reporte los sigue agrupando como «Sin receta» (`reporteDeProceso.test.ts`, el «desnudo»).
+   *
+   * Las tres formas en que llega «sin receta»: `null` (la acción, con el desplegable en su primera opción, pasa por
+   * `emptyToNull`), ausente, y una cadena en blanco. El control es el MISMO lote con la misma entrada y la receta del
+   * archivo: abre.
+   */
+  it("rechaza abrir SIN receta (`sin_receta`), sin escribir nada; con receta, el mismo lote abre", async () => {
+    await expect(abrirProceso(gestor, abrir(loteC, { processRecipeVersionId: null }))).rejects.toThrow(
+      new LotProcessError("sin_receta"),
+    );
+    await expect(abrirProceso(gestor, abrir(loteC, { processRecipeVersionId: undefined }))).rejects.toThrow(
+      new LotProcessError("sin_receta"),
+    );
+    await expect(abrirProceso(gestor, abrir(loteC, { processRecipeVersionId: "   " }))).rejects.toThrow(
+      new LotProcessError("sin_receta"),
+    );
+    expect(await prisma.lotProcess.count({ where: { lotId: loteC } }), "un rechazo dejó un proceso escrito").toBe(0);
+
     await abrirProceso(gestor, abrir(loteC));
     const [p] = await listarProcesosDeLote(gestor, loteC);
-    expect(p!.processRecipeVersionId).toBeNull();
-    expect(p!.etiqueta).toBe(SIN_RECETA);
-    // «Sin receta» NO es «sin nada declarado»: la intención de este batch sigue
-    // ahí, que es la corrección del dueño del 2026-09-07.
+    expect(p!.processRecipeVersionId).toBe(recetaVersionId);
+    expect(p!.etiqueta).toBe(`TEST Honey 48h ${RUN}`);
+    // La intención de este batch sigue ahí: la receta no la sustituye (corrección del dueño del 2026-09-07).
     expect(p!.intent).toContain("natural anaeróbico");
   });
 
   /**
-   * La regla que distingue este campo de la receta: no hace falta una receta
-   * estandarizada, pero **sí** hace falta decir qué se pretende con este batch.
+   * La intención es de ESTE batch y la receta no la sustituye: aunque desde la Parte 2a toda apertura lleve receta,
+   * **sí** hace falta decir qué se pretende con este batch.
    */
-  it("rechaza abrir sin intención declarada, aunque no haga falta receta", async () => {
+  it("rechaza abrir sin intención declarada, aunque traiga receta", async () => {
     await expect(abrirProceso(gestor, abrir(loteB, { intent: "   " }))).rejects.toThrow(
       new LotProcessError("intent_required"),
     );

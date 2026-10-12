@@ -742,3 +742,38 @@ describe("R6 — el reporte agrupa sólo las filas que cuentan", () => {
     );
   });
 });
+
+/**
+ * Parte 2a, §5.1 (tarea 5b, 2026-10-03). La receta obligatoria vive en `abrirProceso`, NO en `abrirProcesoEnTx`, el núcleo
+ * que comparten la división (R6) y la devolución a secado (R7): un proceso VIEJO sin receta —de antes de la regla, que la
+ * transición (R9) deja tal cual— se sigue dividiendo, y sus partes copian lo que tenía: tampoco receta. Si la comprobación
+ * bajara al núcleo, esta división caería con `sin_receta`. La devolución, en `tests/recetas/recetaObligatoria.test.ts`.
+ */
+describe("Parte 2a, §5.1 — dividir un proceso VIEJO sin receta sigue pasando", () => {
+  it("cierra el proceso viejo como dividido y cada parte abre el suyo, también sin receta", async () => {
+    const l = await lote("D2A-VIEJO");
+    await conSaldo(l, 100);
+    const [g, c] = await Promise.all([
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+      prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+    ]);
+    // Crudo: desde la receta obligatoria el servicio ya no abre un proceso sin receta.
+    const viejo = await prisma.lotProcess.create({ data: {
+      lotId: l, sequenceOrder: 1, processRecipeVersionId: null, intent: `TEST viejo ${RUN}`, targetMoisturePct: 11.5,
+      startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+    } });
+    const { outputLots } = await dividir(l, 100, [50, 50]);
+    const cerrado = await prisma.lotProcess.findUniqueOrThrow({ where: { id: viejo.id } });
+    expect(cerrado.closureKind, "la división no cerró el proceso viejo como dividido").toBe("divided");
+    const partes = await prisma.lotProcess.findMany({
+      where: { derivedFromLotProcessId: viejo.id },
+      select: { lotId: true, processRecipeVersionId: true, endedAt: true },
+    });
+    // Control: hay partes y son las de la división; sin esto, «ninguna se inventó receta» pasaría sobre una lista vacía.
+    expect(partes.map((p) => p.lotId).sort()).toEqual(outputLots.map((o) => o.id).sort());
+    for (const p of partes) {
+      expect(p.processRecipeVersionId, "una parte de un proceso sin receta se inventó una").toBeNull();
+      expect(p.endedAt).toBeNull();
+    }
+  });
+});

@@ -2,9 +2,9 @@
  * Lo que la pantalla DICE cuando la receta que se pasa a abrir rechaza — Parte 2a, tarea 5a (ronda de arreglo del 2026-10-04: C14 y C13
  * del segundo cruce; partida el 2026-10-06).
  *
- * **Por qué existe.** `abrirProceso` lanza cuatro códigos que tienen que ver con la versión que se le pasa —`version_no_publicada` y
+ * **Por qué existe.** `abrirProceso` lanza cinco códigos que tienen que ver con la receta —`sin_receta`, `version_no_publicada` y
  * `receta_de_otra_organizacion`, que esta tarea crea, y `recipe_archived` y `recipe_version_not_found`, que lanzaba desde la
- * Parte 1— (el quinto, `sin_receta`, lo crea la 5b y lo añade a la lista de abajo), y ninguno tenía frase en `CODIGOS_DE_PROCESO_TRADUCIDOS`: una receta archivada ENTRE
+ * Parte 1—, y hasta esta ronda sólo los tres primeros tenían frase en `CODIGOS_DE_PROCESO_TRADUCIDOS`: una receta archivada ENTRE
  * cargar la pantalla y enviarla salía como «No se pudo registrar el proceso: recipe_archived», con el código crudo. Y el tueste
  * rechaza con `version_no_publicada` una versión que no está publicada o que es de una receta Libre, que salía por el genérico
  * `error_roast` con el código crudo. Los dos últimos sólo con un formulario fabricado; el primero, de verdad.
@@ -53,9 +53,10 @@ const traceability = (idioma: string) =>
 const es = traceability("es");
 const en = traceability("en");
 
-/** Los códigos de la receta que `abrirProceso` lanza (cuatro en la 5a; la 5b añade `sin_receta` delante). Escritos aquí a mano, como `CODIGOS_QUE_EL_DISENO_NOMBRA`: una lista
+/** Los cinco códigos de la receta que `abrirProceso` lanza. Escritos aquí a mano, como `CODIGOS_QUE_EL_DISENO_NOMBRA`: una lista
  *  que se leyera de la fuente se encogería con ella y las pruebas de abajo recorrerían menos códigos y seguirían en verde. */
 const LOS_DE_LA_RECETA = [
+  "sin_receta",
   "version_no_publicada",
   "receta_de_otra_organizacion",
   "recipe_archived",

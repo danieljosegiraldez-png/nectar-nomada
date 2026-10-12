@@ -1,11 +1,11 @@
 /**
- * Lo que se exige de la receta que se pasa a abrir un proceso — Parte 2a, §3.3 (tarea 5a del plan, 2026-10-03; integrada el 2026-10-04; partida el 2026-10-06).
+ * La receta obligatoria — Parte 2a, §5.1 y §3.3 (tarea 5 del plan, 2026-10-03; integrada el 2026-10-04).
  *
- * `abrirProceso`, si se le pasa una versión, la abre sólo si está PUBLICADA, es de una receta que no esté archivada y de la organización del
+ * `abrirProceso` abre sólo con una versión PUBLICADA de una receta que no esté archivada y que sea de la organización del
  * lote o compartida (sin organización, como acepta el tueste), y bloquea la fila de esa versión y la de su receta con
- * `FOR SHARE` DESPUÉS del linaje. **Abrir SIN receta sigue valiendo en esta tarea**: su rechazo (`sin_receta`) y la prueba que lo mide (`lotProcess.test.ts`,
- * que se invierte), la división y la devolución de un proceso viejo sin receta y el ayudante `recetaDePrueba` son de la 5b, que añade a ESTE archivo lo que le toca.
- * El tueste, en `tests/recetas/tuesteSoloConPublicadas.test.ts`.
+ * `FOR SHARE` DESPUÉS del linaje. El rechazo SIN receta (`sin_receta`) vive en `tests/traceability/lotProcess.test.ts`, donde
+ * estaba la prueba que lo permitía y que se invirtió; la división de un proceso viejo sin receta, en
+ * `tests/traceability/divisionBajoProceso.test.ts`; el tueste, en `tests/recetas/tuesteSoloConPublicadas.test.ts`.
  *
  * **Cada rechazo lleva su control al lado, y el control cambia SÓLO lo que el rechazo mira**: la misma versión publicada,
  * la misma receta desarchivada, la misma receta pasada a la organización del lote. Así un rechazo que saliera por otra
@@ -20,18 +20,25 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma } from "../../lib/db";
-import { abrirProceso } from "../../lib/traceability/lotProcess";
+import { abrirProceso, devolverASecado, CATALOGO_MOTIVO_DEVOLUCION } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { listRecipeVersionsForLot } from "../../lib/traceability/processTargets";
 import type { Prisma } from "../../generated/prisma/client";
 import { RecordStatus } from "../../generated/prisma/enums";
-import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
+import {
+  abrirProcesoDePrueba,
+  borrarProcesosDeLotesDonde,
+  recetaDePrueba,
+  NOMBRE_DE_LA_RECETA_DE_PRUEBA,
+} from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `receta-obligatoria-${Date.now()}`;
 let orgId: string, otraOrgId: string, plotId: string, scopeId: string, gestor: string, sinPermiso: string;
 let gradoId: string, cerezaId: string;
+/** Mediciones de cierre insertadas crudas. Se borran DESPUÉS de los procesos (`closing_moisture_measurement_id` es RESTRICT). */
+const mediciones: string[] = [];
 
 async function cuenta(label: string) {
   const p = await prisma.person.create({ data: { givenName: "TEST", familyName: label, displayName: `TEST ${label} (${RUN})`, locale: "es" } });
@@ -205,11 +212,17 @@ afterAll(async () => {
     where: { OR: [{ lotCode: { contains: RUN } }, { organizationId: { in: organizaciones } }] }, select: { id: true },
   })).map((l) => l.id);
 
-  // Los procesos primero (`process_recipe_version_id` es RESTRICT), con su auditoría.
+  // Los procesos primero (`process_recipe_version_id` y `closing_moisture_measurement_id` son RESTRICT), con sus
+  // devoluciones y su auditoría; el ayudante borra además la receta de prueba de la organización si ya no la usa nadie.
+  // Las mediciones de cierre, DESPUÉS de los procesos y ANTES de los lotes: las insertadas crudas (`mediciones`) y, por si
+  // alguna prueba murió antes de anotarla, cualquiera de los lotes de la corrida.
   await borrarProcesosDeLotesDonde({ id: { in: lotesDeLaCorrida } });
+  await prisma.measurement.deleteMany({
+    where: assertDefinedWhere({ OR: [{ id: { in: mediciones } }, { lotId: { in: lotesDeLaCorrida } }] }),
+  });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotesDeLaCorrida } }) });
   // Las recetas de esta corrida —por su nombre, también las compartidas— y TODA receta que quede en sus dos
-  // organizaciones (las de `abrirProcesoDePrueba` que traiga la 5b, si su limpieza fallara), con sus versiones, pasos y metas (Cascade). DESPUÉS de los
+  // organizaciones (la de prueba, si su limpieza fallara), con sus versiones, pasos y metas (Cascade). DESPUÉS de los
   // procesos que las usan y ANTES de las organizaciones: `process_recipe.organization_id` es RESTRICT desde la tarea 1, así
   // que una receta que quedara viva haría FALLAR el borrado de su organización (el `afterAll` entero, no una receta
   // convertida en plantilla de todas, que era lo que hacía el SET NULL de antes).
@@ -232,6 +245,7 @@ afterAll(async () => {
     ambitos: await prisma.scope.count({ where: { id: { in: ambitos } } }),
     lotes: await prisma.lot.count({ where: { lotCode: { contains: RUN } } }),
     recetas: await prisma.processRecipe.count({ where: { name: { contains: RUN } } }),
+    mediciones: await prisma.measurement.count({ where: { OR: [{ id: { in: mediciones } }, { lotId: { in: lotesDeLaCorrida } }] } }),
   };
   expect(Object.entries(quedan).filter(([, n]) => n > 0), "quedan filas de esta corrida").toEqual([]);
 }, 60000);
@@ -316,20 +330,20 @@ describe("Parte 2a, §3.3 — la versión que se pasa a abrir tiene que estar pu
   });
 
   /**
-   * H1 (ronda de arreglo del 2026-10-06): `abrirProceso` recorta el id de la versión (`processRecipeVersionId?.trim() || null`), y el recorte no
+   * H1 (ronda de arreglo del 2026-10-06): `abrirProceso` recorta el id de la versión (`processRecipeVersionId?.trim()`), y el recorte no
    * tenía prueba: la mutación `?? null` compilaba y dejaba verdes todas. Antes de la 5a un id en blanco reventaba con la clave foránea
-   * (P2007: la cadena vacía no es un uuid); ahora se trata como «sin versión» y abre «Sin receta».
+   * (P2007: la cadena vacía no es un uuid); con la 5a se trataba como «sin versión» y abría «Sin receta».
    *
-   * **La 5b invierte la primera mitad**: cuando la receta sea obligatoria, un id en blanco —igual que nulo o ausente— se rechaza con
-   * `sin_receta`, y esta mitad pasa a esperar ese rechazo. La segunda se queda tal cual: un id con espacios alrededor se recorta y abre con SU
-   * versión, y es la que prueba que el campo se lee y que el recorte llega a la versión (el control de que el id en blanco no se ignora porque sí).
-   * Cada mitad ve una mutación distinta: `?? null` cae por la primera (la cadena vacía llega a la base) y recortar sólo para decidir si el id está en
-   * blanco, pasando el id SIN recortar, cae por la segunda.
+   * **La 5b invirtió la primera mitad** (la receta es obligatoria): un id en blanco —igual que nulo o ausente, `lotProcess.test.ts`— se
+   * rechaza con `sin_receta` y no escribe nada. La segunda se queda tal cual: un id con espacios alrededor se recorta y abre con SU
+   * versión, y es la que prueba que el campo se lee y que el recorte llega a la versión (el control de que el id en blanco no se rechaza porque sí).
+   * Cada mitad ve una mutación distinta: no recortar cae por las dos (la cadena en blanco, sin recortar, no es `sin_receta`: llega a la base) y
+   * recortar sólo para decidir si el id está en blanco, pasando el id SIN recortar, cae por la segunda.
    */
-  it("un id de versión en BLANCO abre «Sin receta»; con espacios alrededor, se recorta y abre con esa versión", async () => {
+  it("un id de versión en BLANCO se rechaza con `sin_receta`; con espacios alrededor, se recorta y abre con esa versión", async () => {
     const l1 = await lote("ID-EN-BLANCO");
-    await expect(abrir(l1, "   "), "un id en blanco no abrió «Sin receta»").resolves.toMatchObject({ processRecipeVersionId: null });
-    expect(await procesosDe(l1)).toBe(1);
+    await expect(abrir(l1, "   "), "un id en blanco no se rechazó con sin_receta").rejects.toThrow(new LotProcessError("sin_receta"));
+    expect(await procesosDe(l1), "un rechazo dejó un proceso escrito").toBe(0);
     // Control: el MISMO campo, con una versión publicada y espacios alrededor, abre con ella.
     const { versionId } = await receta("Recortada", { organizationId: orgId });
     const l2 = await lote("ID-CON-ESPACIOS");
@@ -485,5 +499,60 @@ describe("Parte 2a — el selector de recetas no ofrece lo que abrir rechaza", (
     expect(sin!._count.steps).toBe(0);
     expect(con!.targets.map((t) => t.recipeStepId), "enseña la meta de un paso como si fuera de la versión").toEqual([null]);
     expect(Number(con!.targets[0]!.minValue)).toBe(18);
+  });
+});
+
+/**
+ * Un proceso VIEJO —de antes de la receta obligatoria— no tiene receta, y la transición (R9) lo deja tal cual. Devolverlo
+ * a secado abre una continuación con `abrirProcesoEnTx`, que copia lo que el cerrado tenía: tampoco receta. Si la
+ * comprobación bajara al núcleo, esto caería con `sin_receta`. La división, la misma regla, en `divisionBajoProceso.test.ts`.
+ */
+describe("Parte 2a, §5.1 — la receta obligatoria está en abrirProceso, no en el núcleo (R7)", () => {
+  it("devolver a secado un proceso VIEJO sin receta abre su continuación, también sin receta", async () => {
+    const l = await lote("VIEJO-DEVUELTO");
+    const medicion = (await prisma.measurement.create({ data: {
+      variable: "moisture", value: 10.5, unit: "%", occurredAt: new Date("2026-03-20T12:00:00Z"), lotId: l, provenanceClass: "measured_fact", createdBy: gestor,
+    } })).id;
+    mediciones.push(medicion);
+    const viejo = await prisma.lotProcess.create({ data: {
+      lotId: l, sequenceOrder: 1, processRecipeVersionId: null, intent: `TEST ${RUN}`, targetMoisturePct: 11,
+      startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId,
+      endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: medicion,
+    } });
+    const motivo = await prisma.variableCatalogValue.findFirstOrThrow({
+      where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
+    });
+    const { continuacion } = await devolverASecado(gestor, { lotId: l, motivoValueId: motivo.id, ocurrioEn: new Date("2026-03-22T12:00:00Z") });
+    expect(continuacion.derivedFromLotProcessId, "la continuación no cuelga del proceso viejo").toBe(viejo.id);
+    expect(continuacion.endedAt).toBeNull();
+    expect(continuacion.processRecipeVersionId, "la continuación de un proceso sin receta se inventó una").toBeNull();
+  });
+});
+
+/**
+ * El ayudante de las pruebas (tarea 5b): ~150 aperturas de prueba dependen de que abra con su receta, y de que su limpieza
+ * no deje una receta de prueba viva: con `process_recipe.organization_id` en RESTRICT, haría fallar el borrado de la organización.
+ */
+describe("la receta de prueba de `abrirProcesoDePrueba`", () => {
+  it("abre con ella por defecto; la limpieza la borra cuando ya no la usa ningún proceso, y no antes", async () => {
+    const a = await lote("AYUDANTE-A");
+    const b = await lote("AYUDANTE-B");
+    const pa = await abrirProcesoDePrueba(gestor, a);
+    const pb = await abrirProcesoDePrueba(gestor, b);
+    const { recipeId, recipeVersionId } = await recetaDePrueba(orgId);
+    expect(pa.processRecipeVersionId, "el ayudante no abrió con la receta de prueba").toBe(recipeVersionId);
+    expect(pb.processRecipeVersionId).toBe(recipeVersionId);
+    expect(
+      await prisma.processRecipe.count({ where: { organizationId: orgId, name: NOMBRE_DE_LA_RECETA_DE_PRUEBA } }),
+      "una sola por organización: la segunda apertura la reusa",
+    ).toBe(1);
+
+    await borrarProcesosDeLotesDonde({ id: a });
+    expect(await prisma.processRecipe.count({ where: { id: recipeId } }), "se borró mientras el proceso de B la usa").toBe(1);
+    await borrarProcesosDeLotesDonde({ id: b });
+    expect(
+      await prisma.processRecipe.count({ where: { id: recipeId } }),
+      "sobrevivió a sus procesos: con la FK en RESTRICT impediría borrar la organización",
+    ).toBe(0);
   });
 });

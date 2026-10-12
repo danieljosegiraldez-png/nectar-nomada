@@ -65,6 +65,8 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "moisture_above_target",
   "no_closing_moisture",
   "process_already_closed",
+  // Parte 2a, tarea 5b (2026-10-03): la receta obligatoria (diseño 2a, §5.1; «Nombres nuevos para que Daniel los revise», §12). Lo lanza sólo `abrirProceso`.
+  "sin_receta",
   // Parte 2a, tarea 5a (2026-10-03, partida el 2026-10-06): lo que se exige de la versión que se pasa a `abrirProceso` (diseño 2a, §3.3; «Nombres nuevos para
   // que Daniel los revise», §12). Los lanza sólo `abrirProceso`. (`sin_receta`, la obligatoriedad, lo añade la 5b.)
   "version_no_publicada",
