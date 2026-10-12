@@ -12863,3 +12863,41 @@ padre sólo se alcanza con una asignación sobre él mismo**, y con ella las lis
 pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
 del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
 recepción → entrega → jornada → finca.
+
+## ADR-199 — Cada borrador offline tiene dueño y no se envía a nombre de otra cuenta
+
+**Fecha:** 2026-10-11 · **Spec:** `docs/superpowers/specs/2026-10-09-borradores-con-dueno-design.md` ·
+**Plan:** `docs/superpowers/plans/2026-10-11-borradores-con-dueno.md`
+
+**Contexto.** Las tres colas de IndexedDB (apiario, campo y fotos de trampa) guardaban borradores sin
+cuenta, y el envío autentica con la sesión del momento. En un teléfono donde A deja trabajo sin enviar y
+entra B, salía a nombre de B: actor falso en `core.audit_event` y, en una revisión de trampa, observador
+falso con `direct_observation` (§3, §35). ADR-109 hace los aparatos personales, pero dentro de él cabe el
+peor caso: un administrador que entra en el teléfono de un trabajador para ayudarle. Con acceso a todo,
+nada se rechaza.
+
+**Decisión de Daniel, 2026-10-09 y 2026-10-11.**
+1. Los borradores de otra cuenta **se retienen** en el teléfono hasta que vuelva su dueño: ni se envían, ni
+   se descartan, ni se exportan. La purga de 21 días sigue igual.
+2. Un borrador sin cuenta es **de quien registró el aparato** (`Device.createdBy`).
+3. Lo comprueban el navegador y el servidor, y la cuenta sale de la página más reciente que generó el
+   servidor.
+4. Un solo componente en el layout, compartido con #703.
+
+**Cómo.** El dueño es la huella de la cuenta (`lib/auth/huellaDeCuenta.ts`), nunca el id. El servidor
+contesta `rejected` con `borrador_de_otra_cuenta` y no escribe nada. Se eligió «rechazado» y no un estado
+nuevo porque el JavaScript viejo en caché descarta cualquier estado que no conoce. Las decisiones viven en
+funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador en
+`lib/offline/cuentaDelNavegador.ts`, ordenada por la hora del servidor.
+
+**Lo que no cubre.**
+- Quien manipule su navegador puede reetiquetar como suyo un borrador ajeno. No suplanta a nadie, porque
+  escribe con su propia sesión, pero se apropia de trabajo ajeno. Esto protege del error, no del abuso de
+  quien tiene el teléfono en la mano.
+- La purga de 21 días borra también lo retenido de A si A no vuelve, y el aviso lo ve B.
+- Las fotos de trampa no tienen purga, así que una foto retenida espera indefinidamente.
+- Cuando una página guardada de A se abre con B vigente, `alinearConLaCuenta` (#703) recibe A y borra todas las páginas guardadas, también las de B. Es a propósito: borrar de más es el lado seguro, y comparar con la cuenta vigente dejaría la página de A en la caché. Llegar ahí exige que haya fallado el borrado que #703 hace al entrar B (acordado con la sesión de #703, 2026-10-12).
+
+**Cómo se comprueba.** `tests/sync/borradoresConDueno.test.ts` (con base): un borrador ajeno se rechaza con
+cero filas y cero `AuditEvent`, tanto si trae otra cuenta como si es un borrador sin cuenta en un aparato
+ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los casos «ajeno» por su nombre.
