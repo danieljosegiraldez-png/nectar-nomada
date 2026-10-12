@@ -12848,3 +12848,18 @@ Daniel; (2) se relaja la regla y se hacen alcanzables las pantallas, reescribien
 afirma lo contrario; (3) permisos y procedencia. Sin padre se pierde la jerarquía de permisos y la
 geografía: es el precio de la variante, y sólo lo pagan los beneficios que nacen así.
 `lib/rbac/resolve.ts` queda sin leer y el PR 3 empieza por ahí.
+
+**Actualización 2026-10-09 — qué entra en el PR 3 y qué no (decisión de Daniel).** Entra **sólo** que una
+finca pueda elegir como destino de su cosecha los beneficios **de su misma organización** aunque no cuelguen
+de ella (`beneficiosDeDestino` y `exigeBeneficioDeDestino` con `finca`), con la clasificación del beneficio
+mandando y sin conceder nunca ver sus lotes. Sobre `resolveOrganizationForLocation`/`resolve.ts`: el
+resolutor es puro y exacto para ubicaciones, y la subida por ancestros vive en `can()`; **un beneficio sin
+padre sólo se alcanza con una asignación sobre él mismo**, y con ella las listas de lotes ya lo incluyen
+(`resolveLotVisibility`), sin código nuevo.
+
+**Pendiente, anotado para el primer caso real de cereza ajena** (hoy no existe ninguno en los datos):
+(1) una **concesión estrecha** «esta finca puede mandarme cereza» a un beneficio de OTRA organización — dar
+`lot:view` sobre el beneficio ajeno sería una fuga (la finca vería todos sus lotes); pide tabla, servicio y
+pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
+del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
+recepción → entrega → jornada → finca.

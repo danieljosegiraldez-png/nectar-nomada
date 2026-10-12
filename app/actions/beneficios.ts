@@ -13,13 +13,19 @@ export type BeneficioFormState = { error?: string };
 export async function guardarBeneficioFormAction(_state: BeneficioFormState, form: FormData): Promise<BeneficioFormState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Un beneficio sin finca (ADR-198) se confirma con otro aviso: dice lo que falta hacer.
+  let ok = "guardado";
   try {
     const name = String(form.get("name") ?? "");
     const locationId = String(form.get("locationId") ?? "");
     if (locationId) {
       await actualizarBeneficio(user.userAccountId, { locationId, name });
     } else {
-      await crearBeneficio(user.userAccountId, { name, parentLocationId: String(form.get("parentLocationId") ?? "") });
+      const parentLocationId = String(form.get("parentLocationId") ?? "");
+      if (!parentLocationId) ok = "creado_sin_finca";
+      await crearBeneficio(user.userAccountId, {
+        name, parentLocationId, organizationId: String(form.get("organizationId") ?? ""),
+      });
     }
   } catch (error) {
     if (error instanceof LocationAccessError) {
@@ -31,7 +37,7 @@ export async function guardarBeneficioFormAction(_state: BeneficioFormState, for
     throw error;
   }
   revalidatePath("/beneficio/ajustes");
-  redirect("/beneficio/ajustes?ok=guardado");
+  redirect(`/beneficio/ajustes?ok=${ok}`);
 }
 
 export type ConcesionFormState = { error?: string };

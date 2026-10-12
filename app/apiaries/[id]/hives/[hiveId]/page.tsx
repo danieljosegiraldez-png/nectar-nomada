@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
+import { seManejaEnCuadros } from "../../../../../lib/apiary/sitioDeAbejas";
 import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
@@ -546,7 +547,12 @@ export default async function HiveDetailPage({
                 desaparece sin explicación se lee como una pantalla rota. Misma
                 doctrina que las limitaciones del veredicto: la falta se declara. */}
             {puedeGestionar ? (
-              <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+              <InspectionForm
+                colonyId={colony.id}
+                selfPersonId={selfPersonId}
+                irregularidades={irregularidades}
+                enCuadros={seManejaEnCuadros(hive.location.locationType)}
+              />
             ) : (
               <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
             )}

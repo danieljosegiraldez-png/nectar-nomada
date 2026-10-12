@@ -27,7 +27,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
             pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
             lo que la otra pantalla niega. */}
         {puedeVerResearch ? (
-          <Link href="/research/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+          <Link href="/research/new" className="nn-button">
             {t("createProtocolButton")}
           </Link>
         ) : null}

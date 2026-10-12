@@ -41,7 +41,7 @@ export default async function RecipesPage({
             pregunta con el MISMO predicado del destino, para que el enlace no pueda prometer
             lo que la otra pantalla niega. */}
         {puedeCrearReceta ? (
-          <Link href="/recipes/new" className="nn-button" style={{ display: "inline-block", textDecoration: "none" }}>
+          <Link href="/recipes/new" className="nn-button">
             {t("recipeNewButton")}
           </Link>
         ) : null}

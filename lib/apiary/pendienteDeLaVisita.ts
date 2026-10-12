@@ -56,7 +56,7 @@ export async function pendientesDeLaVisita(
 ): Promise<PendienteDeLaVisita | null> {
   const visita = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
-    select: { id: true, locationId: true },
+    select: { id: true, locationId: true, startedAt: true },
   });
   if (!visita) return null;
 
@@ -83,10 +83,55 @@ export async function pendientesDeLaVisita(
     }
   }
 
-  // Las cajas del sitio. Se lee `hive.locationId` y no la colocacion vigente a proposito: la
-  // pregunta es "que tenias delante hoy", y eso es donde esta la caja ahora.
-  const cajas = await prisma.hive.findMany({
+  // Las cajas que estaban en el sitio CUANDO SE VISITO.
+  //
+  // **Esto leia `hive.locationId`**, con esta nota: *"la pregunta es 'que tenias delante hoy', y
+  // eso es donde esta la caja ahora"*. Para cerrar la jornada del dia da igual. Para abrir una
+  // visita PASADA no: una caja trasladada despues aparece en su sitio nuevo y desaparece del
+  // viejo, asi que "¿cuales seis se quedaron sin tocar?" cambia hacia atras con el tiempo.
+  // `traslado.ts` cierra la colocacion y abre otra, asi que el dato existe.
+  //
+  // **Y la regla NO es "la colocacion solapa el instante", aunque sea lo primero que sale.**
+  // `crearColocacionInicial` abre la colocacion en `installedAt ?? createdAt`, y `createdAt` es
+  // cuando alguien TECLEO la colmena, no cuando la caja llego. Con solape estricto, una colmena
+  // registrada despues de la visita en la que se vio por primera vez desaparece de esa visita —
+  // sin que nada falle, que es la direccion peligrosa. Las cuatro pruebas de este archivo lo
+  // enseñan: su jornada es de septiembre y sus cajas nacen el dia que corre la suite.
+  //
+  // La regla es **no excluir salvo que el registro diga que estaba en OTRO sitio**:
+  //
+  //   1. toda caja con una colocacion EN ESTE SITIO que cubre el instante; mas
+  //   2. las que hoy apuntan aqui y NO tienen una colocacion en otro sitio cubriendo el instante.
+  //
+  // El (2) cubre ademas un estado medido y no una hipotesis: el comentario de
+  // `crearColocacionInicial` registra *"10 de 29 colmenas sin ninguna colocacion"* sobre los datos
+  // reales el 2026-09-15 — las diez de Apiario Las Nubes, por un guion que no la abria. Una
+  // consulta que mire solo colocaciones devuelve CERO para esas diez.
+  const instante = visita.startedAt;
+  const cubreElInstante = { startedAt: { lte: instante }, OR: [{ endedAt: null }, { endedAt: { gt: instante } }] };
+
+  const aqui = await prisma.hivePlacement.findMany({
+    where: { locationId: visita.locationId, ...cubreElInstante },
+    select: { hiveId: true },
+  });
+  const idsAqui = aqui.map((c) => c.hiveId);
+
+  const apuntanAqui = await prisma.hive.findMany({
     where: { locationId: visita.locationId },
+    select: { id: true },
+  });
+  const sinColocacionAqui = apuntanAqui.map((h) => h.id).filter((id) => !idsAqui.includes(id));
+
+  const enOtroSitio = sinColocacionAqui.length
+    ? await prisma.hivePlacement.findMany({
+        where: { hiveId: { in: sinColocacionAqui }, locationId: { not: visita.locationId }, ...cubreElInstante },
+        select: { hiveId: true },
+      })
+    : [];
+  const idsEnOtroSitio = new Set(enOtroSitio.map((c) => c.hiveId));
+
+  const cajas = await prisma.hive.findMany({
+    where: { id: { in: [...idsAqui, ...sinColocacionAqui.filter((id) => !idsEnOtroSitio.has(id))] } },
     orderBy: { identifier: "asc" },
     select: { id: true, identifier: true, colonies: { where: { endedAt: null }, select: { status: true } } },
   });
