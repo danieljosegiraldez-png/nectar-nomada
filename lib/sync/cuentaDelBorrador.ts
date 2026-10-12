@@ -57,6 +57,17 @@ export interface ConCuenta {
 }
 
 /**
+ * ADR-199 — el payload que se guarda, con la cuenta dentro además de en el borrador.
+ *
+ * El JavaScript de antes del cambio reconstruye la mutación sólo desde el payload; si la cuenta viviera sólo en
+ * el borrador, una pestaña vieja la enviaría sin cuenta y el servidor aplicaría la regla del aparato. Los
+ * constructores nuevos ponen la del borrador DESPUÉS del payload, así que ésta nunca manda sobre aquélla.
+ */
+export function payloadConCuenta<T>(payload: T, cuenta: string | null): T & { cuentaDelBorrador: string | null } {
+  return { ...(payload as object), cuentaDelBorrador: cuenta } as T & { cuentaDelBorrador: string | null };
+}
+
+/**
  * Qué borradores puede enviar este navegador ahora.
  *
  * Los de la cuenta actual, y los que no tienen cuenta: ésos los decide el servidor por el aparato. Los
@@ -91,18 +102,19 @@ export function esRetencion(r: RespuestaDeUnBorrador): boolean {
 /**
  * La cuenta que queda apuntada en un borrador después de una respuesta del servidor.
  *
- * Sólo cambia la de un borrador SIN cuenta, y es lo que hace que la regla del aparato se resuelva una
- * sola vez. Si el servidor lo retuvo, pasa a ser del dueño que el servidor nombró, y deja de contarse
- * como propio. Si lo procesó, era de quien envía, por la misma regla.
+ * **Sólo el servidor nombra dueños.** Un borrador con cuenta conserva la suya. Uno SIN cuenta sólo la
+ * gana si el servidor la dice, y la dice únicamente al retenerlo (`cuentaDelBorrador` de la respuesta):
+ * pasa a ser del dueño que el servidor nombró y deja de contarse como propio. Cualquier otra respuesta
+ * lo deja sin cuenta. Antes se le apuntaba la de quien envía, pero los rechazos del parseo
+ * (`parsearMutaciones`) nunca pasaron por `duenoDelBorrador`: un legado de A rechazado por, p. ej.,
+ * `sample_code_required` al enviarlo B habría pasado a ser de B, descartable por B y procesable como B.
  */
 export function cuentaTrasRespuesta(
   cuentaDelBorrador: string | null | undefined,
   r: RespuestaDeUnBorrador,
-  cuentaActual: string | null,
 ): string | null {
   if (cuentaDelBorrador != null) return cuentaDelBorrador;
-  if (esRetencion(r)) return r.cuentaDelBorrador ?? null;
-  return cuentaActual;
+  return r.cuentaDelBorrador ?? null;
 }
 
 export type Desenlace<T> = { tipo: "enviado" } | { tipo: "retenido"; borrador: T } | { tipo: "rechazado"; borrador: T };
@@ -121,10 +133,9 @@ export type Desenlace<T> = { tipo: "enviado" } | { tipo: "retenido"; borrador: T
 export function desenlaceDeUnBorrador<T extends ConCuenta & { status: string; errorMessage?: string }>(
   borrador: T,
   r: RespuestaDeUnBorrador,
-  cuentaActual: string | null,
 ): Desenlace<T> {
   if (r.status === "applied" || r.status === "duplicate") return { tipo: "enviado" };
-  const cuenta = cuentaTrasRespuesta(borrador.cuenta, r, cuentaActual);
+  const cuenta = cuentaTrasRespuesta(borrador.cuenta, r);
   if (esRetencion(r)) return { tipo: "retenido", borrador: { ...borrador, cuenta } };
   return { tipo: "rechazado", borrador: { ...borrador, cuenta, status: "error", errorMessage: r.reason ?? "rejected" } };
 }
@@ -134,8 +145,8 @@ export function desenlaceDeUnBorrador<T extends ConCuenta & { status: string; er
  *
  * Antes borraba todo lo que estuviera en error, incluidos los borradores de otra cuenta que el
  * servidor había rechazado por falta de acceso: trabajo de A destruido desde la sesión de B. Un
- * borrador sin cuenta tampoco entra. Queda apuntado en su primera respuesta (`cuentaTrasRespuesta`),
- * y a partir de ahí ya se sabe de quién es.
+ * borrador sin cuenta tampoco entra: sólo gana una cuando el servidor nombra a su dueño al retenerlo
+ * (`cuentaTrasRespuesta`). Mientras no la tenga, no se puede descartar a mano; lo purga la regla de 21 días.
  */
 export function descartablesPorEstaCuenta<T extends ConCuenta & { status: string }>(
   borradores: readonly T[],

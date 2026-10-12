@@ -19,7 +19,7 @@
  */
 
 import { classifyDraftAge, STALE_WARNING_DAYS, STALE_PURGE_DAYS } from "./draftAge";
-import { desenlaceDeUnBorrador, repartirPorCuenta } from "./cuentaDelBorrador";
+import { desenlaceDeUnBorrador, payloadConCuenta, repartirPorCuenta } from "./cuentaDelBorrador";
 import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
 
 const DB_NAME = "nectar-field-offline";
@@ -85,12 +85,15 @@ async function write(fn: (store: IDBObjectStore) => void): Promise<void> {
  * no, y que lo ya anotado sobreviva a cerrar el navegador.
  */
 export async function queueFieldEvent(payload: Record<string, unknown>): Promise<FieldEventDraft> {
+  // ADR-199 — la cuenta se lee UNA vez: la del borrador y la que viaja dentro del payload (para una pestaña
+  // con el JavaScript de antes del cambio, que sólo copia el payload) son la misma.
+  const cuenta = cuentaActualDelNavegador();
   const draft: FieldEventDraft = {
     id: newDraftId(),
-    payload,
+    payload: payloadConCuenta(payload, cuenta),
     createdAt: Date.now(),
     status: "pending",
-    cuenta: cuentaActualDelNavegador(),
+    cuenta,
   };
   await write((s) => s.add(draft));
   avisarDeCambio();
@@ -371,6 +374,11 @@ export function construirMutacionDesdeBorrador(
  * para que el operador lo vea, y no se reintenta contra algo que no puede
  * salir bien nunca.
  *
+ * **Con una excepción, ADR-199: no todo rechazo se marca error.** La retención
+ * —el borrador es de otra cuenta— se queda PENDIENTE: no hay nada mal en él, y
+ * marcarlo error ofrecería descartarlo. Y sólo salen los de la cuenta de este
+ * navegador y los que no tienen cuenta; los ajenos ni se envían (`retenidas`).
+ *
  * `duplicate` se trata como éxito y se descarta el borrador: significa que una
  * tanda anterior sí llegó y sólo se perdió la respuesta.
  */
@@ -428,11 +436,15 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   for (const r of results) {
     const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
-    const desenlace = desenlaceDeUnBorrador(draft, r, cuentaActual);
+    const desenlace = desenlaceDeUnBorrador(draft, r);
     if (desenlace.tipo === "retenido") {
       // ADR-199 — sigue pendiente. Sólo se reescribe si el servidor dijo de quién es, para que deje de
       // contarse como propio y de reenviarse a nombre de quien no es.
-      if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) await write((s) => s.put(desenlace.borrador));
+      if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) {
+        await write((s) => s.put(desenlace.borrador));
+        // Los `FieldSyncControls` hermanos recuentan: el borrador dejó de ser «propio».
+        avisarDeCambio();
+      }
       resumen.retenidas++;
     } else if (desenlace.tipo === "rechazado") {
       await write((s) => s.put(desenlace.borrador));

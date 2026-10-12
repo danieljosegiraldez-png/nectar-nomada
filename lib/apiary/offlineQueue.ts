@@ -13,7 +13,7 @@
  * *` ("use client") files should import this.
  */
 
-import { desenlaceDeUnBorrador, repartirPorCuenta } from "../sync/cuentaDelBorrador";
+import { desenlaceDeUnBorrador, payloadConCuenta, repartirPorCuenta } from "../sync/cuentaDelBorrador";
 import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
 
 const DB_NAME = "nectar-apiary-offline";
@@ -68,14 +68,20 @@ function generateDraftId(): string {
  * true "if and only if each submission writes to IndexedDB synchronously
  * with the local save, not merely to React state" — this is that write).
  */
-export async function queueDraft<T>(kind: DraftKind, payload: T): Promise<DraftRecord<T>> {
-  const record: DraftRecord<T> = {
+export async function queueDraft<T>(
+  kind: DraftKind,
+  payload: T,
+): Promise<DraftRecord<T & { cuentaDelBorrador: string | null }>> {
+  // ADR-199 — la cuenta se lee UNA vez: la del borrador y la que viaja dentro del payload (para una pestaña
+  // con el JavaScript de antes del cambio, que sólo copia el payload) son la misma.
+  const cuenta = cuentaActualDelNavegador();
+  const record: DraftRecord<T & { cuentaDelBorrador: string | null }> = {
     id: generateDraftId(),
     kind,
-    payload,
+    payload: payloadConCuenta(payload, cuenta),
     createdAt: Date.now(),
     status: "pending",
-    cuenta: cuentaActualDelNavegador(),
+    cuenta,
   };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -205,15 +211,21 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
 }
 
 /**
- * Attempts every pending/error draft once, in creation order. The
- * distinction that matters (§0, "explicit sync now, no automatic conflict
- * resolution"): if the sync call itself throws, the request never reached
- * the server (offline, or the connection dropped mid-flight) — the draft
- * stays queued for the next attempt, no data lost. If the call resolves
+ * Attempts the pending/error drafts this browser may send, once, in creation
+ * order. The distinction that matters (§0, "explicit sync now, no automatic
+ * conflict resolution"): if the sync call itself throws, the request never
+ * reached the server (offline, or the connection dropped mid-flight) — the
+ * draft stays queued for the next attempt, no data lost. If the call resolves
  * with `ok: false`, the server *did* run and rejected it (a real
  * validation or access error, not a connectivity problem) — the draft is
  * marked "error" and left for the operator to see and discard, not
  * silently retried forever against a request that can never succeed.
+ *
+ * **ADR-199 — ya no intenta todos los borradores.** Sólo salen los de la cuenta
+ * de este navegador y los que no tienen cuenta (ésos los decide el servidor por
+ * el aparato); los de otra cuenta se quedan en el teléfono hasta que su dueño
+ * vuelva a entrar. `retained` cuenta esos y también los que el servidor retiene
+ * por la misma razón: siguen pendientes, nunca pasan a error.
  */
 export async function syncAll(): Promise<{ synced: number; errored: number; retained: number; stillPending: number }> {
   // ADR-199 — sólo salen los de la cuenta de este navegador y los que no tienen cuenta; los de otra
@@ -248,7 +260,7 @@ export async function syncAll(): Promise<{ synced: number; errored: number; reta
         for (const draft of toSync) {
           const r = porBorrador.get(draft.id);
           if (!r) continue; // el servidor no lo mencionó: se reintenta
-          const desenlace = desenlaceDeUnBorrador(draft, r, cuentaActual);
+          const desenlace = desenlaceDeUnBorrador(draft, r);
           if (desenlace.tipo === "enviado") {
             await discardDraft(draft.id);
             synced++;
