@@ -7,7 +7,7 @@
  */
 import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
-import { scopeTargetsFor } from "../traceability/lots";
+import { scopeTargetsFor } from "../traceability/objetivosDeAmbito";
 
 export class ResearchAccessError extends Error {}
 
