@@ -89,6 +89,9 @@ afterAll(async () => {
 
   await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: { in: sesIds } }) });
   await prisma.asset.deleteMany({ where: assertDefinedWhere({ id: { in: assetIds } }) });
+  // Y por su clave, que lleva el RUN_ID: un Asset sin su evento —justo lo que
+  // la prueba de `finalizar` revocado vigila— no lo encuentra el borrado de arriba.
+  await prisma.asset.deleteMany({ where: assertDefinedWhere({ storageKey: { contains: RUN_ID } }) });
   await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: sesIds } }) });
   await prisma.device.deleteMany({ where: assertDefinedWhere({ label: { contains: RUN_ID } }) });
   // Lo que escribieron las rutas lo firmó la cuenta de la corrida. Sin esto,

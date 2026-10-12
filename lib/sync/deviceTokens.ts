@@ -174,7 +174,8 @@ async function emitirAccess(deviceId: string, userAccountId: string) {
 /**
  * Canjea un refresh por un access. Aquí sí se consulta la base, y es donde la
  * revocación muerde primero: un aparato revocado no obtiene ningún access nuevo.
- * Las escrituras con el access que ya tenía las niega `negativaDelAparato`.
+ * Las escrituras con el access que ya tenía las niegan `negativaDelAparato` y,
+ * en el push de eventos, `pushFieldEvents` (ver «Revocación» arriba).
  */
 export async function refrescarAcceso(refreshToken: string) {
   const device = await prisma.device.findUnique({
