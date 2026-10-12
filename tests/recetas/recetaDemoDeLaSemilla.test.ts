@@ -32,7 +32,7 @@ async function laDemo() {
   });
   expect(recetas.length, SIN_SEMILLA).toBe(1);
   const receta = recetas[0]!;
-  expect(receta.versions.map((v) => `${v.version}:${v.status}`), SIN_SEMILLA).toEqual(["1:approved"]);
+  expect(receta.versions.map((v) => `${v.version}:${v.status}`), `«${NOMBRE}» debe tener una sola versión, la 1, publicada`).toEqual(["1:approved"]);
   const version = receta.versions[0]!;
   const pasos = await prisma.processRecipeStep.findMany({
     where: { recipeVersionId: version.id },
@@ -54,7 +54,9 @@ describe("la receta «DEMO Lavado» de la semilla", () => {
 
   it("lleva cuatro pasos —despulpado, fermentación, lavado, secado—, sin una sola cifra ni eje, y el tramo de mucílago 0 sólo en el lavado", async () => {
     const { pasos } = await laDemo();
-    expect(pasos.map((p) => p.stepTypeValue.value), SIN_SEMILLA).toEqual(["pulping", "fermentation", "washing", "drying"]);
+    expect(pasos.map((p) => p.stepTypeValue.value), `los pasos de «${NOMBRE}» no son, en este orden, despulpado, fermentación, lavado y secado`).toEqual([
+      "pulping", "fermentation", "washing", "drying",
+    ]);
     expect(pasos.map((p) => p.seq)).toEqual([1, 2, 3, 4]);
     // Sin cifras: toda columna que no sea identidad, orden, mucílago o un valor por defecto es nula. Una columna nueva que acepte una
     // cifra queda cubierta sin tocar esta prueba.
@@ -73,7 +75,7 @@ describe("la receta «DEMO Lavado» de la semilla", () => {
   it("no lleva adiciones, fines, requisitos, metas ni fases: la demo no declara ningún número", async () => {
     const { version, pasos } = await laDemo();
     const ids = pasos.map((p) => p.id);
-    expect(ids.length, SIN_SEMILLA).toBe(4);
+    expect(ids.length, `«${NOMBRE}» no tiene sus cuatro pasos`).toBe(4);
     expect(await prisma.processRecipeStepAddition.count({ where: { stepId: { in: ids } } })).toBe(0);
     expect(await prisma.processRecipeStepEnd.count({ where: { stepId: { in: ids } } })).toBe(0);
     expect(await prisma.processRecipeStepRequirement.count({ where: { stepId: { in: ids } } })).toBe(0);
@@ -86,7 +88,7 @@ describe("la receta «DEMO Lavado» de la semilla", () => {
     const paso = (tipo: string) => pasos.find((p) => p.stepTypeValue.value === tipo);
     const fermentacion = paso("fermentation");
     const secado = paso("drying");
-    expect(fermentacion && secado, SIN_SEMILLA).toBeTruthy();
+    expect(fermentacion && secado, `«${NOMBRE}» no tiene el paso de fermentación o el de secado que cumplen las corridas de la demo`).toBeTruthy();
     const ids = procesos.map((p) => p.id);
     expect(ids.length, SIN_SEMILLA).toBe(2);
 
