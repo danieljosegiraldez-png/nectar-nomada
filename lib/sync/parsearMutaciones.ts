@@ -83,8 +83,10 @@ export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile",
  *
  * **Y por eso se acepta además la medianoche UTC EXACTA**, decisión de Daniel
  * del 2026-10-11: es lo que llevan los borradores que quedaron rechazados en
- * los teléfonos, y `syncFieldEvents` los reenvía en cada sincronización
- * (recoge `pending` y `error`). Esa forma nombra un solo día sin ambigüedad —
+ * los teléfonos. Desde el #719 un rechazo ya no se reenvía, salvo éste: un
+ * `error` con `observed_at_not_a_day` viaja UNA vez más
+ * (`viajaEnLaProximaSincronizacion` en `offlineQueue.ts`, decisión de Daniel del
+ * 2026-10-12), y es ese viaje el que llega aquí. Esa forma nombra un solo día sin ambigüedad —
  * así guarda `fechaDeDia` los campos de día—, de modo que el propósito del A10
  * sigue en pie: otra hora o un desfase (`-05:00`) se rechazan igual.
  *

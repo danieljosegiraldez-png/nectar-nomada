@@ -9,6 +9,7 @@ import {
   discardFieldEventDraft,
   FIELD_DRAFTS_CHANGED_EVENT,
   MOTIVOS_DE_APARATO,
+  viajaEnLaProximaSincronizacion,
   STALE_WARNING_DAYS,
   STALE_PURGE_DAYS,
   type SyncSummary,
@@ -69,7 +70,10 @@ export function FieldSyncControls() {
       if (p > 0) setPurgados((n) => n + p);
       setRancios(avisados);
       const drafts = await listFieldEventDrafts();
-      const errores = drafts.filter((d) => d.status === "error");
+      // Lo que va a volver a salir —el reintento único de un rechazo viejo por la
+      // fecha— cuenta como pendiente, no como rechazado: si no, el botón quedaría
+      // deshabilitado y nadie podría mandarlo.
+      const errores = drafts.filter((d) => !viajaEnLaProximaSincronizacion(d));
       setPendientes(drafts.length - errores.length);
       setRechazadas(errores.length);
       setDeAparato(errores.some((d) => MOTIVOS_DE_APARATO.includes(d.errorMessage ?? "")));
@@ -120,7 +124,9 @@ export function FieldSyncControls() {
 
   const descartarRechazadas = async () => {
     try {
-      for (const d of await listFieldEventDrafts()) if (d.status === "error") await discardFieldEventDraft(d.id);
+      for (const d of await listFieldEventDrafts()) {
+        if (!viajaEnLaProximaSincronizacion(d)) await discardFieldEventDraft(d.id);
+      }
     } finally {
       await recontar();
     }
