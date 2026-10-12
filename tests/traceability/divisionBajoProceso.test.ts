@@ -16,7 +16,7 @@ import { procesoQueCubre } from "../../lib/traceability/procesoDelLinaje";
 import { reporteDeProceso } from "../../lib/traceability/reporteDeProceso";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
-import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde, NOMBRE_DE_LA_RECETA_DE_PRUEBA } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `division-${Date.now()}`;
@@ -675,8 +675,10 @@ describe("R6 — el reporte y la división", () => {
     const r = await reporteDeProceso(gestor);
     const fila = r.filas.find((f) => f.lotProcessId === p.id);
     expect(fila?.divididoEn).toHaveLength(2);
-    const grupo = r.porProceso.find((g) => g.etiqueta === "Sin receta");
-    expect(grupo?.filas).toBe(r.filas.filter((f) => f.etiqueta === "Sin receta" && f.divididoEn === null).length);
+    // Parte 2a, tarea 5b: el proceso lleva la receta de prueba del ayudante (antes, «Sin receta»). Control: lo dice la fila.
+    expect(fila?.etiqueta, "control: el proceso dividido lleva la receta de prueba").toBe(NOMBRE_DE_LA_RECETA_DE_PRUEBA);
+    const grupo = r.porProceso.find((g) => g.etiqueta === NOMBRE_DE_LA_RECETA_DE_PRUEBA);
+    expect(grupo?.filas).toBe(r.filas.filter((f) => f.etiqueta === NOMBRE_DE_LA_RECETA_DE_PRUEBA && f.divididoEn === null).length);
   });
 });
 
@@ -734,9 +736,9 @@ describe("R6 — el reporte agrupa sólo las filas que cuentan", () => {
     expect(grado!.puntajePromedio, "el promedio por grado junta el puntaje de la fila dividida").toBe(
       promedioDe(cuentan.filter((f) => f.gradoDeProceso === "Washed").flatMap((f) => f.puntajes)),
     );
-    const etiqueta = r.porProceso.find((g) => g.etiqueta === "Sin receta");
+    const etiqueta = r.porProceso.find((g) => g.etiqueta === NOMBRE_DE_LA_RECETA_DE_PRUEBA);
     expect(etiqueta?.puntajePromedio, "el promedio por receta junta el puntaje de la fila dividida").toBe(
-      promedioDe(cuentan.filter((f) => f.etiqueta === "Sin receta").flatMap((f) => f.puntajes)),
+      promedioDe(cuentan.filter((f) => f.etiqueta === NOMBRE_DE_LA_RECETA_DE_PRUEBA).flatMap((f) => f.puntajes)),
     );
   });
 });

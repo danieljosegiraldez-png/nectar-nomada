@@ -28,7 +28,7 @@ import { recordTransformation, TraceabilityAccessError } from "../../lib/traceab
 import { loteDividido, procesoQueCubre, procesosParaEntrada } from "../../lib/traceability/procesoDelLinaje";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import type { Prisma } from "../../generated/prisma/client";
-import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
+import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde, recetaDePrueba } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN = `bodega-${Date.now()}`;
@@ -36,8 +36,9 @@ let orgId: string, plotId: string, scopeId: string, gestor: string;
 /** Revisión final (ronda de arreglo 1, F7): una segunda parcela, quien sólo la ve a ella (`soloB`) y quien ve las dos (`ambos`). */
 let plotB: string, scopeB: string, soloB: string, ambos: string;
 /** Los dos valores de catálogo que lleva todo proceso, buscados una vez: la carrera no tiene que gastar su
- *  arranque en dos lecturas, o una de las dos mitades llegaría siempre tarde y la prueba no correría nada. */
-let gradoId: string, cerezaId: string;
+ *  arranque en dos lecturas, o una de las dos mitades llegaría siempre tarde y la prueba no correría nada.
+ *  Y por lo mismo la versión de la receta de prueba (Parte 2a, tarea 5b: no se abre un proceso sin receta). */
+let gradoId: string, cerezaId: string, recetaDePruebaVersionId: string;
 const lotes: string[] = [];
 const transformaciones: string[] = [];
 /** Mediciones de cierre. Se borran DESPUÉS de los procesos que las referencian (`closing_moisture_measurement_id` es RESTRICT). */
@@ -93,12 +94,13 @@ async function asignaciones(lotId: string) {
   return { todas, abiertas };
 }
 
-/** Abre un proceso con los valores de catálogo ya buscados (`abrirProcesoDePrueba` los busca en cada llamada). */
+/** Abre un proceso con los valores de catálogo y la receta de prueba ya buscados (`abrirProcesoDePrueba` los busca en
+ *  cada llamada). */
 function abrirDirecto(lotId: string) {
   return abrirProceso(gestor, {
     lotId, intent: "TEST: proceso abierto a la vez que se almacena (Parte 1, R7)", targetMoisturePct: 11.5,
     startedAt: new Date("2020-01-01T00:00:00Z"), provenanceClass: "original_record",
-    processGradeValueId: gradoId, cherryStateValueId: cerezaId, processRecipeVersionId: null,
+    processGradeValueId: gradoId, cherryStateValueId: cerezaId, processRecipeVersionId: recetaDePruebaVersionId,
   });
 }
 
@@ -183,6 +185,7 @@ beforeAll(async () => {
   ]);
   gradoId = g.id;
   cerezaId = c.id;
+  recetaDePruebaVersionId = (await recetaDePrueba(orgId)).recipeVersionId;
 }, 60000);
 
 afterAll(async () => {
@@ -1231,7 +1234,9 @@ describe("R7 — coberturaDelLote, lo que la ficha y la página del proceso ense
     const cereza = await lote("CB2-C");
     const pergamino = await lote("CB2-P");
     await enlazar([cereza], [pergamino]);
-    const p1 = await abrirProcesoDePrueba(gestor, cereza); // «Sin receta»
+    // Un proceso VIEJO «Sin receta» (R9): desde la Parte 2a el servicio ya no abre uno; se inserta crudo, como lo dejó la
+    // transición, y la cadena tiene que seguir enseñándolo sin inventarle versión.
+    const p1 = await procesoAbiertoCrudo(cereza);
     await cerrarProceso(gestor, { lotProcessId: p1.id, endedAt: ahora(), closingMoistureMeasurementId: await humedad(pergamino, 11) });
     const p2 = await abrirProcesoDePrueba(gestor, pergamino, { processRecipeVersionId: await versionDeReceta("Reproceso CB2") });
     const c = await coberturaDelLote(gestor, pergamino);

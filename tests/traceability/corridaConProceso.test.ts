@@ -73,6 +73,18 @@ async function cerradoPorHumedad(lotId: string) {
     endedAt: new Date("2026-03-21T12:00:00Z"), closureKind: "moisture", closingMoistureMeasurementId: m,
   } })).id;
 }
+/** Un proceso VIEJO «Sin receta», ABIERTO e insertado crudo (Parte 2a, tarea 5b). Desde la receta obligatoria `abrirProceso`
+ *  ya no abre uno sin receta, pero los de antes siguen abiertos (R9), y sus corridas tienen que seguir sin inventarse una. */
+async function procesoViejoSinReceta(lotId: string) {
+  const [g, c] = await Promise.all([
+    prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "Washed", catalog: { key: "grado_proceso" } } }),
+    prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "despulpada", catalog: { key: "estado_cereza" } } }),
+  ]);
+  return prisma.lotProcess.create({ data: {
+    lotId, sequenceOrder: 1, processRecipeVersionId: null, intent: `TEST ${RUN}`, targetMoisturePct: 11,
+    startedAt: new Date("2026-03-01T12:00:00Z"), provenanceClass: "original_record", processGradeValueId: g.id, cherryStateValueId: c.id,
+  } });
+}
 /** Cuántas fermentaciones o secados se llegaron a empezar con alguno de estos lotes de entrada. */
 const corridasEmpezadasEn = (ids: string[]) =>
   prisma.lotTransformation.count({
@@ -649,7 +661,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
 
   it("un proceso «Sin receta» rechaza una receta pedida a mano: la corrida no la elige", async () => {
     const l = await lote("R4-SIN-RECHAZA");
-    await abrirProcesoDePrueba(gestor, l); // sin receta
+    await procesoViejoSinReceta(l); // VIEJO, sin receta (R9)
     await expect(
       startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba", processRecipeVersionId: recetaVersionId }),
     ).rejects.toThrow(new LotProcessError("receta_distinta_del_proceso"));
@@ -658,7 +670,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
 
   it("en un proceso «Sin receta» la corrida tampoco lleva receta", async () => {
     const l = await lote("R4-SIN");
-    await abrirProcesoDePrueba(gestor, l);
+    await procesoViejoSinReceta(l); // VIEJO, sin receta (R9)
     const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(run.processRecipeVersionId).toBeNull();
   });

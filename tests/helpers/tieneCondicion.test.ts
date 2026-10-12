@@ -171,10 +171,14 @@ describe("el ayudante de limpieza llama a esa guarda antes de cualquier borrado 
   const primerBorrado = cuerpo.search(/\.deleteMany\(/);
   const guarda = /if\s*\(\s*!\s*tieneCondicion\(\s*lot\s*\)\s*\)\s*\{?\s*throw\s+new\s+UnsafeWhereClauseError\(/.exec(cuerpo);
 
-  it("el análisis encuentra el cuerpo del ayudante y sus tres borrados (control del propio análisis)", () => {
+  it("el análisis encuentra el cuerpo del ayudante y sus cuatro borrados (control del propio análisis)", () => {
     expect(cuerpo.length, "no se encontró el cuerpo de borrarProcesosDeLotesDonde").toBeGreaterThan(50);
-    // Tres desde la ronda de arreglo 1 de la tarea 4: la auditoría de los procesos, sus devoluciones y los procesos.
-    expect(cuerpo.match(/\.deleteMany\(/g) ?? [], "el ayudante hace tres deleteMany: auditoría, devoluciones y procesos").toHaveLength(3);
+    // Tres desde la ronda de arreglo 1 de la tarea 4 de la Parte 1: la auditoría de los procesos, sus devoluciones y los
+    // procesos. Cuatro desde la Parte 2a (tarea 5b): la receta de prueba de esas organizaciones, al final.
+    expect(
+      cuerpo.match(/\.deleteMany\(/g) ?? [],
+      "el ayudante hace cuatro deleteMany: auditoría, devoluciones, procesos y la receta de prueba",
+    ).toHaveLength(4);
     expect(primerBorrado).toBeGreaterThan(0);
   });
 

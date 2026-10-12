@@ -254,17 +254,23 @@ beforeAll(async () => {
     closingMoistureMeasurementId: medicion.id,
   });
 
-  // El desnudo: un proceso SIN receta y sin nada más colgando.
-  await abrirProceso(gestor, {
-    lotId: loteDesnudo,
-    intent: "sin más datos por ahora",
-    targetMoisturePct: 11,
-    // «Desnudo» es sin receta, sin tueste y sin puntajes. El grado y el estado
-    // de la cereza SÍ van: desde el 2026-09-08 son obligatorios.
-    processGradeValueId: gradoNaturalId,
-    cherryStateValueId: cerezaValorId,
-    startedAt: new Date("2026-03-02T12:00:00Z"),
-    provenanceClass: "original_record",
+  // El desnudo: un proceso VIEJO sin receta y sin nada más colgando. Desde la receta obligatoria (Parte 2a, §5.1)
+  // `abrirProceso` ya no abre uno sin receta; los de antes siguen existiendo (R9), y el reporte tiene que seguir
+  // agrupándolos como «Sin receta». Se inserta crudo, como lo dejó la transición.
+  await prisma.lotProcess.create({
+    data: {
+      lotId: loteDesnudo,
+      sequenceOrder: 1,
+      processRecipeVersionId: null,
+      intent: "sin más datos por ahora",
+      targetMoisturePct: 11,
+      // «Desnudo» es sin receta, sin tueste y sin puntajes. El grado y el estado
+      // de la cereza SÍ van: desde el 2026-09-08 son obligatorios.
+      processGradeValueId: gradoNaturalId,
+      cherryStateValueId: cerezaValorId,
+      startedAt: new Date("2026-03-02T12:00:00Z"),
+      provenanceClass: "original_record",
+    },
   });
 });
 
