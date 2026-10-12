@@ -23,9 +23,12 @@ import {
  * («explicit sync now, no automatic conflict resolution») y aquí vale igual.
  *
  * Un rechazo se enseña aparte de un envío bueno porque son cosas distintas:
- * lo enviado desaparece de la cola, lo rechazado se queda y **no se reintenta
- * solo**. Reintentar algo que el servidor ya evaluó y negó no lo va a arreglar,
- * y esconder eso detrás de un contador que baja sería mentir sobre lo que pasó.
+ * lo enviado desaparece de la cola, lo rechazado se queda en ella y **se
+ * reenvía con cada sincronización** (ver `syncFieldEvents`). Reenviarlo sólo lo
+ * arregla si cambió el servidor —así entran, tras #723, las revisiones de la
+ * ronda que volvían `observed_at_not_a_day`—; un rechazo definitivo vuelve
+ * rechazado, y esconder eso detrás de un contador que baja sería mentir sobre
+ * lo que pasó.
  */
 export function FieldSyncControls() {
   const t = useTranslations("Traceability");

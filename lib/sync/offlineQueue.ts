@@ -243,8 +243,9 @@ export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
  * (`observer_self_missing`, una trampa retirada, la clave de A9 reutilizada
  * con otra trampa…) sigue existiendo en la cola, porque `syncFieldEvents` lo
  * re-escribe con `status: "error"` en vez de borrarlo — así el operador
- * puede verlo y decidir, no para que se reintente solo contra algo que nunca
- * va a salir bien. `RondaDeTrampaForm` sólo comprobaba «¿sigue existiendo el
+ * puede verlo y decidir. (Se reenvía igual en cada sincronización, ver
+ * `syncFieldEvents`, pero un rechazo definitivo vuelve rechazado.)
+ * `RondaDeTrampaForm` sólo comprobaba «¿sigue existiendo el
  * borrador?», y la respuesta era «sí» tanto para uno pendiente como para uno
  * rechazado: un rechazo DEFINITIVO se leía como «todavía pendiente, sólo
  * falta señal» — lo opuesto de la verdad, porque no se resuelve solo.
@@ -306,9 +307,9 @@ type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "
  * `planting_cohort`; ver `lib/sync/parcelaPayload.ts`) siguen usando `d.id`
  * exactamente como antes de este arreglo — es el único id que tienen—.
  * `trap_check` es el primero que SÍ trae uno propio
- * (`construirPayloadDeRevisionDeTrampa`), la misma clave que
- * `RondaDeTrampaForm` pone en el campo oculto y que el camino CON señal
- * (`recordRoundTrapCheckFormAction`) también usa. Antes de este arreglo, esta
+ * (`construirPayloadDeRevisionDeTrampa`): la clave que `RondaDeTrampaForm`
+ * genera en cada envío (`generarClaveDeRevision`) y que lleva también la foto
+ * de esa revisión. Antes de este arreglo, esta
  * misma línea hacía `{ ...d.payload, clientDraftId: d.id }` — el spread
  * seguido de la sobreescritura tira SIEMPRE la clave del payload, así que la
  * fila que el servidor guardaba llevaba la clave de la cola, nunca la del
@@ -332,9 +333,23 @@ export function construirMutacionDesdeBorrador(
  * La distinción que sostiene todo esto, heredada de A5/A0: si el `fetch` lanza,
  * la petición **no llegó** —sin señal, o cortada a mitad— y los borradores se
  * quedan en cola para el próximo intento, sin perder nada. Si el servidor
- * responde y **rechaza** una mutación, eso es un no terminal: se marca error
- * para que el operador lo vea, y no se reintenta contra algo que no puede
- * salir bien nunca.
+ * responde y **rechaza** una mutación, el borrador se marca `error` para que
+ * el operador lo vea — pero **no sale de la cola ni deja de enviarse**: el
+ * filtro de entrada de abajo recoge `pending` y `error`, así que se reenvía en
+ * cada sincronización (el botón de `FieldSyncControls`, y la que lanza
+ * `RondaDeTrampaForm` al guardar con señal) hasta que el servidor lo acepte,
+ * se descarte (sólo la ronda de trampas ofrece descartar su borrador) o lo
+ * purgue `purgeStaleFieldDrafts` por edad.
+ *
+ * **Esta cabecera decía que un rechazo «no se reintenta», y era falso**
+ * (corregido el 2026-10-12). Y de esa conducta depende una recuperación, así
+ * que no se cambia sin decidirlo: las revisiones de la ronda que volvieron
+ * `observed_at_not_a_day` desde #445 siguen en los teléfonos como `error`, y
+ * entran solas en la siguiente sincronización porque el parseo acepta ya su
+ * medianoche UTC (`diaEstrictoOpcional` en `parsearMutaciones.ts`, #723). Un
+ * rechazo terminal de verdad las dejaría fuera. El coste de la conducta actual
+ * es el contrario: un rechazo definitivo (una trampa retirada,
+ * `observer_self_missing`) vuelve en cada tanda, y vuelve rechazado.
  *
  * `duplicate` se trata como éxito y se descarta el borrador: significa que una
  * tanda anterior sí llegó y sólo se perdió la respuesta.
@@ -366,8 +381,10 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   });
 
   // El lote entero negado (aparato revocado) es una respuesta del servidor, no
-  // una caída: marcarlo error evita reintentar para siempre algo que ya no va
-  // a ser aceptado hasta que alguien reactive el aparato.
+  // una caída: se marca error para que el operador vea un rechazo y no un «sin
+  // señal». No evita el reintento —el filtro de entrada vuelve a recoger los
+  // `error`, ver la cabecera—: el lote se reenvía en cada sincronización y
+  // entra cuando alguien reactive el aparato.
   const decision = clasificarRespuesta(res.status);
   if (decision === "reintentar") {
     // No se toca ni un borrador: nadie ha evaluado su contenido. Quedan
