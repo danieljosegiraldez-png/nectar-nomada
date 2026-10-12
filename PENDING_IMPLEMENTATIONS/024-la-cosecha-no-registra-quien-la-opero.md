@@ -1,7 +1,18 @@
 # 024 · La cosecha no registra quién la operó, aunque el servicio lo guarde
 
-**Estado: medido el 2026-10-05, sin construir.** Es un defecto, no una decisión: no hace falta
-preguntar nada para arreglarlo.
+**Estado: hecho el 2026-10-06** en lo que existía —la acción—; la otra mitad, el campo en el
+formulario de cosecha, no aplica porque ese formulario se retiró el 2026-09-19 (ver la sección
+corregida más abajo).
+
+**Esta cabecera decía «sin construir» seis días después de construirse**, y `SESSION_STATE.md` §3
+la contaba como «sin empezar». Re-medido el 2026-10-12 sobre `main` (`c59319a`), por conducta y
+no por artefactos: `tests/traceability/cosechaConOperario.test.ts` pasa **3/3** contra una base
+desechable migrada y sembrada, y quitando de `recordHarvestAction` la línea que manda
+`operatorPersonId` caen **2/3** por su nombre —«el operario que se nombra en el formulario llega a
+la fila» y «una persona ajena a la finca se rechaza»— mientras «sin operario … la fila queda nula»
+sigue en verde. `recordHarvestAction` sigue sin ningún llamador en `app/`.
+
+Lo que sigue abajo es la ficha tal como se escribió; su primera frase se queda por historia.
 
 ## El defecto, con su control
 
