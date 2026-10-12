@@ -192,11 +192,30 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  // La limpieza DESCUBRE lo que borra, no lo hereda del `beforeAll`: si éste muere antes de asignar `orgId`, `plotId`, `gestor`…
+  // (o a mitad de `cuenta`, con la persona creada y la cuenta no), esas variables siguen `undefined`, `assertDefinedWhere` lanza y
+  // abandona las filas que quedan. Todo sale de la marca del RUN: la organización por su nombre, de ella sus ubicaciones y sus lotes;
+  // las personas por su `displayName` y de ellas las cuentas; de las ubicaciones, los ámbitos. Las listas que llenan las pruebas
+  // (`lotes`, `fermentaciones`…) se suman a lo descubierto; ésas nunca están sin definir. (CLAUDE.md del repositorio, «Una limpieza que
+  // se apoya en una variable del fixture no corre si el `beforeAll` muere antes».)
+  const ids = <T extends { id: string }>(filas: T[]) => filas.map((f) => f.id);
+  const organizaciones = ids(await prisma.organization.findMany({ where: assertDefinedWhere({ name: { startsWith: `TEST ${RUN}` } }), select: { id: true } }));
+  const ubicaciones = ids(await prisma.location.findMany({
+    where: assertDefinedWhere({ OR: [{ organizationId: { in: organizaciones } }, { name: { contains: RUN } }] }), select: { id: true },
+  }));
+  const personas = ids(await prisma.person.findMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }), select: { id: true } }));
+  const cuentas = ids(await prisma.userAccount.findMany({ where: assertDefinedWhere({ personId: { in: personas } }), select: { id: true } }));
+  const ambitos = ids(await prisma.scope.findMany({
+    where: assertDefinedWhere({ scopeType: "location" as const, scopeRefId: { in: ubicaciones } }), select: { id: true },
+  }));
   // Todos los lotes de la organización, no sólo los apuntados: una división que sale bien sin esperarlo (en rojo, o con una
   // mutación del flip) crea lotes que ninguna lista conoce, y `lot_organization_id_fkey` es RESTRICT (la misma razón que en
   // `divisionBajoProceso.test.ts`).
-  const deLaOrganizacion = await prisma.lot.findMany({ where: assertDefinedWhere({ organizationId: orgId }), select: { id: true } });
-  const todos = [...new Set([...lotes, ...deLaOrganizacion.map((l) => l.id)])];
+  const deLaOrganizacion = ids(await prisma.lot.findMany({
+    where: assertDefinedWhere({ OR: [{ organizationId: { in: organizaciones } }, { lotCode: { contains: RUN } }] }), select: { id: true },
+  }));
+  const todos = [...new Set([...lotes, ...deLaOrganizacion])];
+  const idsDeProcesos = ids(await prisma.lotProcess.findMany({ where: assertDefinedWhere({ lotId: { in: todos } }), select: { id: true } }));
   const ts = await prisma.lotTransformation.findMany({
     where: assertDefinedWhere({ OR: [{ inputs: { some: { lotId: { in: todos } } } }, { outputs: { some: { lotId: { in: todos } } } }] }),
     select: { id: true },
@@ -218,20 +237,43 @@ afterAll(async () => {
   await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: idsT } }) });
   await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: idsT } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: todos } }) });
-  // 4. Las recetas de la organización, con sus versiones y sus pasos (CASCADE). Por organización y no por nombre: con
+  // 4. Las recetas de la organización, con sus versiones y sus pasos (CASCADE). Por organización y no sólo por nombre: con
   //    `process_recipe.organization_id` en RESTRICT (tarea 1; antes SET NULL, y la receta que sobrevivía a su organización se volvía
   //    una plantilla de todas), una receta viva haría FALLAR el borrado de la organización, un poco más abajo.
-  await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ organizationId: orgId }) });
+  await prisma.processRecipe.deleteMany({ where: assertDefinedWhere({ OR: [{ organizationId: { in: organizaciones } }, { name: { contains: RUN } }] }) });
   // 5. Lo que firmaron las cuentas y nadie borró arriba (la auditoría de las transformaciones): antes que las cuentas, porque el
-  //    actor es SET NULL y después ya no se encontraría.
-  const cuentas = [gestor, soloB, ambos];
+  //    actor es SET NULL y después ya no se encontraría. Luego, en el orden de las claves ajenas: asignaciones y ámbitos, cuentas y
+  //    personas, ubicaciones y, la última, la organización.
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: cuentas } }) });
-  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ scopeId: { in: [scopeId, scopeB] } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [scopeId, scopeB] } }) });
+  await prisma.assignment.deleteMany({ where: assertDefinedWhere({ OR: [{ userAccountId: { in: cuentas } }, { scopeId: { in: ambitos } }] }) });
+  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: ambitos } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
-  await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN } }) });
-  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [plotId, plotB] } }) });
-  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: orgId }) });
+  await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: personas } }) });
+  await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: ubicaciones } }) });
+  await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: { in: organizaciones } }) });
+  // 6. Contar lo que queda del RUN: «limpió» y «pasó» no son lo mismo, y un borrado que no llegó se leería como un verde. Si
+  //    algo sobra, el archivo FALLA aquí, con la tabla y la cuenta.
+  const restos: [string, number][] = [
+    ["organization", await prisma.organization.count({ where: { OR: [{ id: { in: organizaciones } }, { name: { startsWith: `TEST ${RUN}` } }] } })],
+    ["location", await prisma.location.count({ where: { OR: [{ id: { in: ubicaciones } }, { name: { contains: RUN } }] } })],
+    ["scope", await prisma.scope.count({ where: { id: { in: ambitos } } })],
+    ["person", await prisma.person.count({ where: { OR: [{ id: { in: personas } }, { displayName: { contains: RUN } }] } })],
+    ["userAccount", await prisma.userAccount.count({ where: { id: { in: cuentas } } })],
+    ["assignment", await prisma.assignment.count({ where: { OR: [{ userAccountId: { in: cuentas } }, { scopeId: { in: ambitos } }] } })],
+    ["lot", await prisma.lot.count({ where: { OR: [{ id: { in: todos } }, { lotCode: { contains: RUN } }] } })],
+    ["lotProcess", await prisma.lotProcess.count({ where: { lotId: { in: todos } } })],
+    ["lotProcessIntervention", await prisma.lotProcessIntervention.count({ where: { notes: { contains: RUN } } })],
+    ["fermentationRun", await prisma.fermentationRun.count({ where: { OR: [{ id: { in: fermentaciones } }, { vesselNote: { contains: RUN } }] } })],
+    ["fermentationIntervention", await prisma.fermentationIntervention.count({ where: { OR: [{ id: { in: manejos } }, { notes: { contains: RUN } }] } })],
+    ["dryingRun", await prisma.dryingRun.count({ where: { OR: [{ id: { in: secados } }, { method: { contains: RUN } }] } })],
+    ["measurement", await prisma.measurement.count({ where: { OR: [{ id: { in: mediciones } }, { lotId: { in: todos } }] } })],
+    ["quantityEvent", await prisma.quantityEvent.count({ where: { lotId: { in: todos } } })],
+    ["lotTransformation", await prisma.lotTransformation.count({ where: { id: { in: idsT } } })],
+    ["processRecipe", await prisma.processRecipe.count({ where: { OR: [{ organizationId: { in: organizaciones } }, { name: { contains: RUN } }] } })],
+    ["auditEvent (procesos)", await prisma.auditEvent.count({ where: { entityType: "lot_process", entityId: { in: idsDeProcesos } } })],
+  ];
+  const sobran = restos.filter(([, n]) => n > 0);
+  if (sobran.length > 0) throw new Error(`avance.test: la limpieza dejó filas del RUN ${RUN}: ${sobran.map(([tabla, n]) => `${tabla}=${n}`).join(", ")}`);
 }, 60000);
 
 describe("Parte 2a, §4.3 — el avance se calcula sobre el hilo del resolvedor", () => {
