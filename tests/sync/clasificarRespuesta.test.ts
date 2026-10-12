@@ -4,6 +4,7 @@ import {
   leerJson,
   construirMutacionDesdeBorrador,
   estadoDeBorrador,
+  estadoDeLaTarjeta,
   type FieldEventDraft,
 } from "../../lib/sync/offlineQueue";
 
@@ -232,5 +233,35 @@ describe("estadoDeBorrador: pendiente, rechazada o sincronizada", () => {
 
   it("status error es rechazada, NUNCA pendiente ni sincronizada", () => {
     expect(estadoDeBorrador({ status: "error" })).toBe("rechazada");
+  });
+});
+
+/**
+ * Qué dice la tarjeta de UNA trampa de la ronda — y cuándo no dice nada.
+ *
+ * **EL GUARDIA.** Desde `8fb5c2be` (2026-09-19) la tarjeta se reconcilia al
+ * montar y pasaba `estadoDeBorrador(null)` cuando no había borrador de esa
+ * trampa: «sincronizada». Visto en el navegador el 2026-10-12 con la cola
+ * vacía —0 borradores—: la tarjeta decía «Sin revisar desde que se instaló»
+ * fuera y «Revisada hoy. Enviada.» dentro del formulario, en TODAS las trampas.
+ * Ausente sólo significa «enviada» si la tarjeta sabía de un borrador.
+ */
+describe("estadoDeLaTarjeta: sin borrador conocido no dice nada", () => {
+  it("sin borrador y sin clave conocida no dice nada — no «Enviada»", () => {
+    expect(estadoDeLaTarjeta(null, null)).toEqual({ estado: null, clave: null });
+  });
+
+  it("sin borrador pero con la clave de uno conocido: se envió", () => {
+    expect(estadoDeLaTarjeta(null, "clave-1")).toEqual({ estado: "sincronizada", clave: "clave-1" });
+  });
+
+  it("tras enviarse, conserva la clave: la siguiente comprobación sigue diciendo «Enviada»", () => {
+    const primera = estadoDeLaTarjeta(null, "clave-1");
+    expect(estadoDeLaTarjeta(null, primera.clave).estado).toBe("sincronizada");
+  });
+
+  it("un borrador pendiente o rechazado dice su estado y su clave pasa a ser la conocida", () => {
+    expect(estadoDeLaTarjeta({ status: "pending", clave: "clave-2" }, null)).toEqual({ estado: "pendiente", clave: "clave-2" });
+    expect(estadoDeLaTarjeta({ status: "error", clave: "clave-2" }, "clave-1")).toEqual({ estado: "rechazada", clave: "clave-2" });
   });
 });

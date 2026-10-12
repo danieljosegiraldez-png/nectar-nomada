@@ -8,7 +8,7 @@ import {
   syncFieldEvents,
   listFieldEventDrafts,
   discardFieldEventDraft,
-  estadoDeBorrador,
+  estadoDeLaTarjeta,
   FIELD_EVENTS_SYNCED_EVENT,
   type FieldEventDraft,
   type EstadoDeBorrador,
@@ -82,6 +82,10 @@ function claveDelBorrador(d: FieldEventDraft): string | null {
  * invisible en vez de sólo "pendiente para siempre". Y se re-comprueba en
  * cualquier `FIELD_EVENTS_SYNCED_EVENT` de la página (el botón genérico de
  * `FieldSyncControls`, no sólo el envío inmediato de este formulario).
+ *
+ * **Sin borrador conocido, la tarjeta no dice nada** (`estadoDeLaTarjeta`).
+ * Al montar sin nada de esta trampa en la cola decía «Revisada hoy.
+ * Enviada.» en todas las trampas, también en las que nadie había revisado.
  */
 export function RondaDeTrampaForm({
   locationId,
@@ -113,9 +117,13 @@ export function RondaDeTrampaForm({
   const claveRef = useRef<string | null>(null);
 
   const actualizarDesdeBorrador = useCallback((borrador: FieldEventDraft | null) => {
+    const siguiente = estadoDeLaTarjeta(
+      borrador && { status: borrador.status, clave: claveDelBorrador(borrador) },
+      claveRef.current,
+    );
     draftIdRef.current = borrador?.id ?? null;
-    claveRef.current = borrador ? claveDelBorrador(borrador) : null;
-    setEstado(estadoDeBorrador(borrador));
+    claveRef.current = siguiente.clave;
+    setEstado(siguiente.estado);
     setMotivoRechazo(borrador?.errorMessage ?? null);
   }, []);
 

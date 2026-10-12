@@ -251,13 +251,42 @@ export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
  *
  * Ausente (`null`) es `"sincronizada"`: el borrador ya no está en la cola,
  * así que el servidor lo aplicó o lo marcó `duplicate` — las dos formas de
- * éxito de `syncFieldEvents`, que descarta el borrador en ambas.
+ * éxito de `syncFieldEvents`, que descarta el borrador en ambas. **Sólo vale
+ * para un borrador que existió**: para decidir qué dice una tarjeta, ver
+ * `estadoDeLaTarjeta`.
  */
 export type EstadoDeBorrador = "pendiente" | "rechazada" | "sincronizada";
 
 export function estadoDeBorrador(borrador: { status: DraftStatus } | null): EstadoDeBorrador {
   if (borrador == null) return "sincronizada";
   return borrador.status === "error" ? "rechazada" : "pendiente";
+}
+
+/**
+ * Qué dice la tarjeta de una trampa de la ronda (`RondaDeTrampaForm`), y la
+ * clave del borrador que la tarjeta conoce después de mirar la cola.
+ *
+ * **El defecto que esto arregla.** La tarjeta se reconcilia al montar, y sin
+ * borrador de su trampa pasaba `estadoDeBorrador(null)`: «sincronizada». Así
+ * TODA trampa sin nada en la cola decía «Revisada hoy. Enviada.» al abrir la
+ * ronda, aunque nadie la hubiera revisado — medido en el navegador el
+ * 2026-10-12, con la cola vacía, al lado de «Sin revisar desde que se instaló».
+ *
+ * Ausente sólo es «enviada» si la tarjeta conocía ese borrador: lo encoló
+ * ella, o lo encontró en la cola y después desapareció. Sin clave conocida,
+ * `null`: la tarjeta no dice nada, y lo que sabe el servidor ya lo dice la
+ * propia tarjeta fuera del formulario («Última revisión: …»).
+ *
+ * La clave se **conserva** cuando el borrador desaparece: si se olvidara, la
+ * siguiente comprobación —cualquier `FIELD_EVENTS_SYNCED_EVENT` de la página—
+ * borraría el «Enviada» de un envío real.
+ */
+export function estadoDeLaTarjeta(
+  borrador: { status: DraftStatus; clave: string | null } | null,
+  claveConocida: string | null,
+): { estado: EstadoDeBorrador | null; clave: string | null } {
+  if (borrador != null) return { estado: estadoDeBorrador(borrador), clave: borrador.clave };
+  return { estado: claveConocida != null ? "sincronizada" : null, clave: claveConocida };
 }
 
 export function clasificarRespuesta(status: number): DecisionDeRespuesta {
