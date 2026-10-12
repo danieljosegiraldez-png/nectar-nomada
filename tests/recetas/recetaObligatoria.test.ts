@@ -75,8 +75,8 @@ async function receta(
   return { recipeId: r.id, versionId: r.versions[0]!.id };
 }
 
-/** Abre con la entrada mínima y válida: de una prueba a otra sólo cambian la cuenta, el lote y la versión. */
-const abrirComo = (cuentaId: string, lotId: string, processRecipeVersionId: string) =>
+/** Abre con la entrada mínima y válida: de una prueba a otra sólo cambian la cuenta, el lote y la versión (`null` = sin receta). */
+const abrirComo = (cuentaId: string, lotId: string, processRecipeVersionId: string | null) =>
   abrirProceso(cuentaId, {
     lotId, processRecipeVersionId, intent: `TEST ${RUN}`, targetMoisturePct: 11, startedAt: new Date("2026-03-01T12:00:00Z"),
     provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId,
@@ -381,6 +381,42 @@ describe("Parte 2a, §3.3 — sin permiso sobre el lote, abrir con una versión 
 });
 
 /**
+ * Ruling INV (ronda de arreglo de la 5b, 2026-10-12; hallazgo 1 de la revisión): el ACCESO al lote va también antes de `sin_receta`. H4 lo fija para una
+ * apertura que trae versión; ninguna prueba lo fijaba para una que no la trae. `lotProcess.test.ts`, «sin acceso al lote no se puede abrir», abre con
+ * `abrir()`, que ya lleva receta por defecto, y su `rejects.toThrow()` no nombra la clase; y `sin_receta` sólo se probaba con la cuenta CON permiso.
+ * Medido con la mutación que lo describe —el `throw` de `sin_receta` puesto ANTES de `loteGestionable`—: los cuatro archivos de la tarea (`lotProcess`,
+ * `recetaObligatoria`, `frasesDeLaRecetaObligatoria`, `aperturaDeProceso`) seguían 92/92 en verde.
+ *
+ * Quien no puede gestionar el lote no aprende, por la frase de un dato que falta, qué le falta a la apertura: recibe la clase de acceso con
+ * `no_lot_access`, igual que con una versión. Las dos formas de «sin receta» que entran al servicio y que lo recortan hasta vaciarlo: `null` (el
+ * formulario con el desplegable vacío) y una cadena en blanco. **El control cambia SÓLO la cuenta**: sobre el MISMO lote y la MISMA entrada, la cuenta con
+ * permiso recibe `sin_receta`, así que el rechazo de acceso no es que la entrada ya fallara por otra cosa.
+ */
+describe("Parte 2a, §5.1 — sin permiso sobre el lote, abrir SIN receta rechaza por acceso, antes que por `sin_receta`", () => {
+  it("sin permiso: `null` y en blanco dan acceso rechazado, no `sin_receta`; con permiso, el mismo lote y la misma entrada dan `sin_receta`", async () => {
+    const l = await lote("ACCESO-SIN-RECETA");
+    for (const [cual, sinReceta] of [["null", null], ["en blanco", "   "]] as const) {
+      const r = await resultadoDe(abrirComo(sinPermiso, l, sinReceta));
+      expect(r.ok, `sin permiso, abrir con la receta ${cual} no se rechazó`).toBe(false);
+      if (r.ok) continue;
+      expect(r.error, `sin permiso, abrir con la receta ${cual} se rechazó con otra clase de error: ${String(r.error)}`).toBeInstanceOf(TraceabilityAccessError);
+      expect(r.error, `sin permiso, abrir con la receta ${cual} salió con el error de proceso (\`sin_receta\` va ANTES del acceso)`).not.toBeInstanceOf(LotProcessError);
+      expect((r.error as Error).message).toBe("no_lot_access");
+    }
+    expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+    // Control: la cuenta con permiso, sobre el MISMO lote y con las MISMAS dos entradas. El acceso pasó, y lo que rechaza es la receta que falta.
+    for (const [cual, sinReceta] of [["null", null], ["en blanco", "   "]] as const) {
+      const r = await resultadoDe(abrirComo(gestor, l, sinReceta));
+      expect(r.ok, `con permiso, abrir con la receta ${cual} no se rechazó`).toBe(false);
+      if (r.ok) continue;
+      expect(r.error, `con permiso, la receta ${cual} se rechazó con otra clase de error: ${String(r.error)}`).toBeInstanceOf(LotProcessError);
+      expect((r.error as Error).message).toBe("sin_receta");
+    }
+    expect(await procesosDe(l), "un rechazo dejó un proceso escrito").toBe(0);
+  });
+});
+
+/**
  * §3.3: «abrir un proceso con esa versión bloquea la fila de la versión», y la decisión del controlador del 2026-10-03: el
  * linaje PRIMERO, la versión después —el orden de R2—. Y la del 2026-10-04: con **`FOR SHARE`**, la versión y su receta —no
  * `FOR UPDATE`—: basta para cerrar el paso a publicar y a archivar, no serializa las aperturas entre sí y no choca con el
@@ -553,6 +589,39 @@ describe("la receta de prueba de `abrirProcesoDePrueba`", () => {
     expect(
       await prisma.processRecipe.count({ where: { id: recipeId } }),
       "sobrevivió a sus procesos: con la FK en RESTRICT impediría borrar la organización",
+    ).toBe(0);
+  });
+
+  /**
+   * Ronda de arreglo de la 5b (2026-10-12), hallazgo 2: `borrarProcesosDeLotesDonde` saca las organizaciones de los LOTES y no de sus procesos
+   * «porque `recetaDePrueba` puede haber creado la receta sin que llegara a abrirse ninguno». Esa rama no tenía prueba: derivar las organizaciones de
+   * `lotProcess.findMany` en vez de `lot.findMany` dejaba seis archivos 216/216 en verde, porque en todos los que usan el ayudante el lote SÍ abre su
+   * proceso. Aquí el lote de una organización propia no abre ninguno: sólo las organizaciones de los lotes encuentran su receta de prueba.
+   *
+   * Organización y parcela propias, no `orgId`: la prueba de arriba cuenta y borra la receta de prueba de `orgId`, y las dos no deben depender del orden. Las
+   * borra el `afterAll` del archivo, por el RUN (nombre y `lotCode`) y por organización, con las recetas antes que la organización: si el ayudante no
+   * borrara la receta, el rechazo de esta prueba no deja basura detrás.
+   */
+  it("borra la receta de prueba de una organización cuyo lote NO llegó a abrir ningún proceso (las organizaciones salen de los lotes)", async () => {
+    const organizacion = (await prisma.organization.create({
+      data: { organizationType: "farm", name: `TEST sin proceso ${RUN}`, status: "approved", classification: "internal" },
+    })).id;
+    const parcela = (await prisma.location.create({
+      data: { locationType: "plot", name: `TEST plot sin proceso ${RUN}`, organizationId: organizacion, status: "approved", classification: "internal" },
+    })).id;
+    const loteSinProceso = (await prisma.lot.create({ data: {
+      lotCode: `SIN-PROCESO-${RUN}`, lotType: "cherry", organizationId: organizacion, locationId: parcela, status: "approved", classification: "internal", createdBy: gestor,
+    } })).id;
+    const { recipeId } = await recetaDePrueba(organizacion);
+    // Controles: la receta de prueba existe, es de la organización del lote, y ningún proceso del archivo cuelga de ella ni del lote.
+    expect(await prisma.processRecipe.count({ where: { id: recipeId, organizationId: organizacion, name: NOMBRE_DE_LA_RECETA_DE_PRUEBA } }), "control: la receta de prueba no existe antes de limpiar").toBe(1);
+    expect(await prisma.lotProcess.count({ where: { lotId: loteSinProceso } }), "control: el lote ya tiene un proceso").toBe(0);
+    expect(await prisma.lotProcess.count({ where: { processRecipeVersion: { recipeId } } }), "control: algún proceso usa la receta de prueba").toBe(0);
+
+    await borrarProcesosDeLotesDonde({ id: loteSinProceso });
+    expect(
+      await prisma.processRecipe.count({ where: { id: recipeId } }),
+      "sobrevivió la receta de prueba de una organización sin procesos: las organizaciones se sacaron de los procesos y no de los lotes",
     ).toBe(0);
   });
 });
