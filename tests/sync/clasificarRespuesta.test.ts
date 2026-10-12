@@ -5,6 +5,7 @@ import {
   construirMutacionDesdeBorrador,
   estadoDeBorrador,
   estadoTrasRelectura,
+  viajaEnLaProximaSincronizacion,
   type FieldEventDraft,
 } from "../../lib/sync/offlineQueue";
 
@@ -280,5 +281,39 @@ describe("estadoTrasRelectura: un rechazado que desaparece se descartó, no se e
   it("si el borrador sigue en la cola manda lo que dice el borrador, no lo que había", () => {
     expect(estadoTrasRelectura("rechazada", { status: "pending" })).toBe("pendiente");
     expect(estadoTrasRelectura("pendiente", { status: "error" })).toBe("rechazada");
+  });
+});
+
+/**
+ * Decisión de Daniel, 2026-10-12: lo rechazado por `observed_at_not_a_day` antes del
+ * #723 viaja UNA vez más. La misma función decide qué recoge la cola, qué cuenta la
+ * pantalla como pendiente y qué ofrece descartar, para que las tres no discrepen.
+ */
+describe("viajaEnLaProximaSincronizacion: lo que la cola vuelve a recoger", () => {
+  it("lo pendiente viaja", () => {
+    expect(viajaEnLaProximaSincronizacion({ status: "pending" })).toBe(true);
+  });
+
+  it("un rechazo viejo por observed_at_not_a_day viaja una vez más", () => {
+    expect(viajaEnLaProximaSincronizacion({ status: "error", errorMessage: "observed_at_not_a_day" })).toBe(true);
+  });
+
+  it("el mismo con el reintento gastado ya no", () => {
+    expect(
+      viajaEnLaProximaSincronizacion({ status: "error", errorMessage: "observed_at_not_a_day", recuperacionGastada: true }),
+    ).toBe(false);
+  });
+
+  it("control: cualquier otro rechazo no viaja", () => {
+    for (const motivo of ["observer_self_missing", "device_revoked", "HTTP 403", undefined]) {
+      expect(viajaEnLaProximaSincronizacion({ status: "error", errorMessage: motivo })).toBe(false);
+    }
+  });
+
+  it("la tarjeta pinta pendiente lo que va a volver a salir, no rechazada", () => {
+    expect(estadoDeBorrador({ status: "error", errorMessage: "observed_at_not_a_day" })).toBe("pendiente");
+    expect(
+      estadoDeBorrador({ status: "error", errorMessage: "observed_at_not_a_day", recuperacionGastada: true }),
+    ).toBe("rechazada");
   });
 });

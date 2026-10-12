@@ -152,6 +152,67 @@ describe("cola de campo (`syncFieldEvents`): qué vuelve a mandar tras un rechaz
   });
 });
 
+/**
+ * Decisión de Daniel, 2026-10-12 — la recuperación del #723, que el #719 no puede romper.
+ *
+ * Desde #445 ninguna revisión de la ronda se guardaba: el cliente mandaba el día con
+ * hora y el servidor volvía `observed_at_not_a_day`. Esas revisiones siguen en los
+ * teléfonos como `error`, escritas por el código VIEJO. El #723 hizo que el servidor
+ * las acepte, contando con que la cola las reenviaba; el #719 quita ese reenvío. La
+ * salida: un `error` con exactamente ese motivo viaja UNA vez más, y nada más.
+ *
+ * Los borradores se siembran a mano, con la forma que dejó el código viejo —`error`,
+ * el motivo, y ninguna marca—, porque el código nuevo marca gastado el reintento de
+ * todo lo que rechaza: un rechazo nuevo por esa razón nunca califica.
+ */
+describe("recuperación de una vez: lo rechazado por `observed_at_not_a_day` antes del #723", () => {
+  const revision = { kind: "trap_check", specimenId: "trampa-1", observedAt: "2026-10-11T00:00:00.000Z" };
+
+  async function comoLoDejoElCodigoViejo(motivo: string) {
+    const bases = instalarIndexedDbEnMemoria();
+    const d = await queueFieldEvent(revision);
+    const fila = bases.get("nectar-field-offline")!.get("drafts")!.filas.get(d.id)!;
+    Object.assign(fila, { status: "error", errorMessage: motivo });
+    return d;
+  }
+
+  it("viaja una vez más y, si el servidor la acepta, sale de la cola", async () => {
+    const d = await comoLoDejoElCodigoViejo("observed_at_not_a_day");
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    expect(await syncFieldEvents()).toMatchObject({ applied: 1 });
+    expect(enviadosEnLaLlamada(0)).toEqual([d.id]);
+    expect(await listFieldEventDrafts()).toEqual([]);
+  });
+
+  it("si vuelve a rechazarse, el reintento queda gastado y ya no viaja más", async () => {
+    const d = await comoLoDejoElCodigoViejo("observed_at_not_a_day");
+    fetchFalso.mockResolvedValueOnce(
+      json(200, { results: [{ clientDraftId: d.id, status: "rejected", reason: "observed_at_not_a_day" }] }),
+    );
+    await syncFieldEvents();
+    expect(enviadosEnLaLlamada(0)).toEqual([d.id]);
+    expect(await listFieldEventDrafts()).toMatchObject([{ id: d.id, status: "error", recuperacionGastada: true }]);
+
+    await syncFieldEvents();
+    expect(enviadosEnLaLlamada(1)).toEqual([]);
+  });
+
+  it("un 503 en el reintento no lo gasta: nadie evaluó nada", async () => {
+    const d = await comoLoDejoElCodigoViejo("observed_at_not_a_day");
+    fetchFalso.mockResolvedValueOnce(json(503, { error: "unavailable" }));
+    await syncFieldEvents();
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    await syncFieldEvents();
+    expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
+  });
+
+  it("control: un `error` viejo con OTRO motivo no viaja", async () => {
+    await comoLoDejoElCodigoViejo("observer_self_missing");
+    await syncFieldEvents();
+    expect(enviadosEnLaLlamada(0)).toEqual([]);
+  });
+});
+
 describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", () => {
   const inspeccion = { colonyId: "colonia-1", note: "anotación" };
 

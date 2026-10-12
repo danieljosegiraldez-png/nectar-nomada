@@ -41,6 +41,34 @@ export interface FieldEventDraft {
   createdAt: number;
   status: DraftStatus;
   errorMessage?: string;
+  /**
+   * El servidor ya evaluó este borrador desde el 2026-10-12, así que no le queda
+   * el reintento de `viajaEnLaProximaSincronizacion`. Lo escribe todo rechazo; un
+   * borrador viejo, rechazado antes, no lo trae.
+   */
+  recuperacionGastada?: boolean;
+}
+
+/**
+ * El único rechazo que vuelve a viajar, y sólo una vez (decisión de Daniel,
+ * 2026-10-12). Desde #445 ninguna revisión de la ronda se guardaba: el cliente
+ * mandaba el día con hora y el servidor contestaba esto. Esas revisiones siguen en
+ * los teléfonos como `error`; el #723 hizo que el servidor las acepte contando con
+ * que la cola las reenviaba, y desde el #719 un rechazo ya no se reenvía.
+ */
+const MOTIVO_RECUPERABLE_UNA_VEZ = "observed_at_not_a_day";
+
+/**
+ * Lo que la próxima sincronización recoge: lo pendiente, y un rechazo viejo por
+ * `MOTIVO_RECUPERABLE_UNA_VEZ` que todavía no gastó su reintento. La cola, el
+ * contador de la pantalla y «Descartar las rechazadas» preguntan aquí, para que
+ * no discrepen entre sí.
+ */
+export function viajaEnLaProximaSincronizacion(
+  d: Pick<FieldEventDraft, "status" | "errorMessage" | "recuperacionGastada">,
+): boolean {
+  if (d.status === "pending") return true;
+  return d.errorMessage === MOTIVO_RECUPERABLE_UNA_VEZ && d.recuperacionGastada !== true;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -257,9 +285,12 @@ export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
  */
 export type EstadoDeBorrador = "pendiente" | "rechazada" | "sincronizada";
 
-export function estadoDeBorrador(borrador: { status: DraftStatus } | null): EstadoDeBorrador {
+type BorradorQueSePinta = Pick<FieldEventDraft, "status" | "errorMessage" | "recuperacionGastada">;
+
+export function estadoDeBorrador(borrador: BorradorQueSePinta | null): EstadoDeBorrador {
   if (borrador == null) return "sincronizada";
-  return borrador.status === "error" ? "rechazada" : "pendiente";
+  // Lo que va a volver a salir se pinta pendiente aunque su `status` diga error.
+  return viajaEnLaProximaSincronizacion(borrador) ? "pendiente" : "rechazada";
 }
 
 /**
@@ -281,7 +312,7 @@ export function estadoDeBorrador(borrador: { status: DraftStatus } | null): Esta
  */
 export function estadoTrasRelectura(
   previo: EstadoDeBorrador | null,
-  borrador: { status: DraftStatus } | null,
+  borrador: BorradorQueSePinta | null,
 ): EstadoDeBorrador | null {
   if (borrador != null) return estadoDeBorrador(borrador);
   return previo === "pendiente" || previo === "sincronizada" ? "sincronizada" : null;
@@ -394,6 +425,11 @@ export function construirMutacionDesdeBorrador(
  * `docs/implementation/46_P4_API_Y_SINCRONIZACION.md`, ya lo fijaba). Lo prueba
  * `tests/sync/rechazoTerminalEnLasColas.test.ts`.
  *
+ * **Con una excepción, y es de una sola vez** (Daniel, 2026-10-12): lo que volvió
+ * con `observed_at_not_a_day` antes del #723 viaja una vez más, para que el
+ * servidor lo guarde. Quién viaja lo decide `viajaEnLaProximaSincronizacion`, y
+ * todo lo que el servidor rechaza desde hoy sale con `recuperacionGastada`.
+ *
  * `duplicate` se trata como éxito y se descarta el borrador: significa que una
  * tanda anterior sí llegó y sólo se perdió la respuesta.
  */
@@ -402,7 +438,7 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   // (la ronda de trampas) necesita reintentar su propia cola cada vez que se
   // intenta ésta, sea cual sea el resultado.
   avisarDeSincronizacion();
-  const drafts = (await listFieldEventDrafts()).filter((d) => d.status === "pending");
+  const drafts = (await listFieldEventDrafts()).filter(viajaEnLaProximaSincronizacion);
   if (drafts.length === 0) {
     return { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false, sessionExpired: false };
   }
@@ -443,7 +479,9 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   }
   if (decision === "rechazar") {
     const razon = await motivoDeRechazoDelLote(res);
-    for (const d of drafts) await write((s) => s.put({ ...d, status: "error", errorMessage: razon }));
+    for (const d of drafts) {
+      await write((s) => s.put({ ...d, status: "error", errorMessage: razon, recuperacionGastada: true }));
+    }
     avisarDeCambio();
     return {
       applied: 0,
@@ -469,7 +507,9 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
     const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
     if (r.status === "rejected") {
-      await write((s) => s.put({ ...draft, status: "error", errorMessage: r.reason ?? "rejected" }));
+      await write((s) =>
+        s.put({ ...draft, status: "error", errorMessage: r.reason ?? "rejected", recuperacionGastada: true }),
+      );
       resumen.rejected++;
     } else {
       await discardFieldEventDraft(draft.id);
@@ -487,5 +527,5 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
 
 /** Lo que de verdad falta por enviar: un rechazado ya no es «pendiente». */
 async function contarPendientes(): Promise<number> {
-  return (await listFieldEventDrafts()).filter((d) => d.status === "pending").length;
+  return (await listFieldEventDrafts()).filter(viajaEnLaProximaSincronizacion).length;
 }
