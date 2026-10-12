@@ -342,6 +342,38 @@ describe("§4.2 — el paso es de la receta del proceso, y de un tipo que el reg
     expect(run.stepTypeValueId).toBe(tipo.prefermentacion);
   });
 
+  /**
+   * El tipo que declara la corrida se compara con el de su paso SIN distinguir mayúsculas (un uuid no las distingue: `UUID` lleva
+   * `/i`, y la base devuelve el id en minúsculas). Sin esa comparación en minúsculas, quien declara —con el uuid en mayúsculas— el
+   * tipo de su PROPIO paso se rechazaría «paso_no_corresponde». La única prueba de mayúsculas de arriba pasa el `recipeStepId` en
+   * mayúsculas, no el `stepTypeValueId`: no ve esta comparación (mutación: quitar el `.toLowerCase()` del guardián).
+   *
+   * El control es el mismo caso con un tipo DISTINTO, también en mayúsculas: sigue rechazándose, así que «se acepta» no es «se
+   * acepta todo lo que venga en mayúsculas».
+   */
+  it("el tipo declarado se compara con el de su paso sin distinguir mayúsculas: el uuid del tipo del PROPIO paso, en mayúsculas, empieza y se guarda en minúsculas; el de otro tipo, también en mayúsculas, sigue «paso_no_corresponde»", async () => {
+    const l = await lote("G3B");
+    await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: conPasos });
+    const delPaso = tipo.prefermentacion.toUpperCase();
+    const deOtroTipo = tipo.fermentation.toUpperCase();
+    // Sin esto, «en mayúsculas» podría ser el mismo texto que en minúsculas y la prueba no distinguiría nada.
+    expect(delPaso, "el uuid del tipo no tiene ninguna letra: la prueba no distinguiría mayúsculas").not.toBe(tipo.prefermentacion);
+    expect(deOtroTipo, "el uuid del otro tipo no tiene ninguna letra: el control no distinguiría mayúsculas").not.toBe(tipo.fermentation);
+    const base = { lotId: l, startedAt: ahora(), provenanceClass: "original_record" as const, vesselNote: TANQUE, recipeStepId: pasos.prefermentacion };
+    // Control: un tipo que NO es el de su paso, en mayúsculas, se rechaza por ser otro tipo y no por venir en mayúsculas.
+    await expect(startFermentationRun(gestor, { ...base, stepTypeValueId: deOtroTipo })).rejects.toThrow(new LotProcessError("paso_no_corresponde"));
+    expect(await corridasEmpezadasEn([l])).toBe(0);
+    // El caso: el tipo de su propio paso, en mayúsculas, empieza unido al paso...
+    const { run } = await startFermentationRun(gestor, { ...base, stepTypeValueId: delPaso });
+    expect(run.recipeStepId).toBe(pasos.prefermentacion);
+    // ...y lo guardado es el id en minúsculas: se lee la FILA, no sólo lo que devolvió el `create`.
+    const fila = await prisma.fermentationRun.findUniqueOrThrow({ where: { id: run.id }, select: { recipeStepId: true, stepTypeValueId: true, motivoDesviacion: true } });
+    expect(fila.stepTypeValueId).toBe(tipo.prefermentacion);
+    expect(fila.stepTypeValueId).not.toBe(delPaso);
+    expect(fila.recipeStepId).toBe(pasos.prefermentacion);
+    expect(fila.motivoDesviacion).toBeNull();
+  });
+
   it("sin paso, una fermentación no puede declarar un tipo que no cumple («drying») ni un valor de otro catálogo que se llame como un tipo («paso_no_corresponde»); declarando «prefermentacion» y con motivo, empieza con ese tipo", async () => {
     const l = await lote("G4");
     await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: conPasos });
