@@ -11,7 +11,9 @@ import { describe, expect, it } from "vitest";
  * **Y los avisos `?ok=` de las dos acciones se leen en la ficha.** `confirmacion-que-se-lee.test.ts` NO ve estas dos
  * redirecciones (las acciones de este archivo redirigen con `redirect(destino)`, no con la cadena pegada al `redirect(`),
  * y por su propia cabecera tampoco comprueba el código concreto: una confirmación sin rama en la ficha sería silenciosa.
- * El `it` de los avisos lo comprueba por presencia literal de `sp.ok === "<código>"` y de su `t("<clave>")`.
+ * El `it` de los avisos exige la PAREJA, pegada y en ese orden: `sp.ok === "<código>" ? ( <p …>{t("<clave>")}` (como el `it`
+ * de los errores, que lo hace con `codigoError`). Comprobar el código y la clave por separado dejaba pasar a la ficha con las
+ * dos claves intercambiadas entre sus ramas: retirar un equipo mostraba «reactivado» y la prueba seguía en verde.
  *
  * **Y los tres códigos de error nuevos tienen su rama de texto en la ficha, y el aviso «Retirado el …» se pinta.** La cadena de
  * errores de la ficha es un ternario encadenado: un código sin su rama cae a `errorModeloGenerico` («No se pudo completar:
@@ -83,8 +85,9 @@ describe("los formularios de retiro de la ficha", () => {
       ["equipo_reactivado", "okEquipoReactivado"],
     ] as const) {
       expect(acciones, `la acción ya no redirige con ?ok=${codigo}`).toContain(`?ok=${codigo}`);
-      expect(fuente, `la ficha no lee sp.ok === "${codigo}"`).toContain(`sp.ok === "${codigo}"`);
-      expect(fuente, `la ficha no pinta ${clave}`).toContain(`t("${clave}")`);
+      // La pareja, en ese orden y pegada: `sp.ok === "<código>"` y, dentro de SU rama, `<p …>{t("<clave>")}`.
+      const pareja = new RegExp(`sp\\.ok === "${codigo}"\\s*\\?\\s*\\(\\s*<p[^>]*>\\s*\\{t\\("${clave}"\\)\\s*\\}`);
+      expect(fuente, `la ficha no pinta ${clave} dentro de su propia rama sp.ok === "${codigo}"`).toMatch(pareja);
     }
   });
 
