@@ -530,7 +530,8 @@ export async function datosDelTablero(
     return declarada !== null && idsVisibles.has(declarada);
   });
   // Las unidades visibles con su estado: `proximaLiberacion` las necesita para no prometer la
-  // liberación de una unidad retirada o averiada, que no va a servir cuando se vacíe (015).
+  // liberación de una unidad averiada, que no va a servir cuando se vacíe (015). Una retirada (D5) o una cama archivada
+  // (D6) ya no llega aquí: `tanquesVisibles` y `camasVisibles` las quitaron arriba.
   const liberacion = proximaLiberacion({
     corridas: corridasConDuracion,
     unidades: [...tanquesVisibles, ...camasVisibles],

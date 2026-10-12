@@ -90,8 +90,10 @@ export interface ResumenDeDisponibilidad {
  * que se retiró a propósito no se arregla; tampoco está «en uso» ni «libre». Y
  * eso vale aunque traiga además `CONDICION` o `EN_USO`: por eso las tres
  * columnas se cuentan sobre `vigentes`, no sobre la lista entera. `clasificar`
- * sigue emitiendo `RETIRADO` —lo leen la liberación de una unidad y el mapa del
- * tablero—; lo que no hace es sumarlo aquí.
+ * sigue emitiendo `RETIRADO` (es pura y su tipo admite `retired`); lo que no hace
+ * `resumir` es sumarlo aquí. Hoy ningún llamador le pasa un retirado:
+ * `disponibilidadDeRecipientes` y el tablero sólo mandan unidades activas (D5,
+ * D6), así que esta exclusión es la red de quien algún día lo haga.
  */
 export function resumir(clasificaciones: readonly Clasificacion[]): ResumenDeDisponibilidad {
   // Un retirado cuenta en el total y en NINGUNA columna, traiga o no también EN_USO o CONDICION (Parte 2c §4.5).

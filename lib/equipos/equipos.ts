@@ -979,8 +979,9 @@ export async function instrumentoParaVerificar(userAccountId: string, equipmentI
  * cosa y la contesta `listarEquipos` con su estado de revisión.
  *
  * **Sólo los activos** (Parte 2c §4.5): un tanque retirado no está libre ni en uso, está fuera, y no cuenta en la
- * «capacidad ahora». `clasificar` sigue sabiendo decir `RETIRADO` para quien sí lo recibe (el tablero, con sus camas
- * archivadas); esta consulta simplemente no se lo manda.
+ * «capacidad ahora». `clasificar` sigue sabiendo decir `RETIRADO` (es pura y su tipo admite `retired`), pero hoy nadie se
+ * lo manda: esta consulta sólo trae activos, y el tablero tampoco, porque quita de sus tanques los retirados (D5) y de sus
+ * camas las archivadas (D6) antes de clasificar.
  */
 export async function disponibilidadDeRecipientes(userAccountId: string) {
   const equipos = await prisma.equipment.findMany({

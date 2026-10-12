@@ -121,8 +121,9 @@ describe("el recuento no se fuerza a sumar, y eso es correcto", () => {
  * `CONDICION`, y el retirado ocupado contaría en «en uso» por su `EN_USO`. Cada caso combinado lleva al lado su control —el
  * mismo equipo ACTIVO sí cuenta en esa columna—, que es lo que dice que lo que lo saca es el retiro y no una columna rota.
  *
- * **`clasificar` NO cambia**: sigue emitiendo `RETIRADO`, porque otros lectores lo necesitan —`liberacionDeUnidad` para
- * no prometer la hora de una unidad retirada, y el mapa del tablero para pintarla—. Lo que cambia es sólo el RECUENTO.
+ * **`clasificar` NO cambia**: sigue emitiendo `RETIRADO` (es pura, su tipo admite `retired`, y `liberacionDeUnidad` y el mapa
+ * del tablero saben leerlo). Pero hoy el tablero ya no les manda nunca una unidad no activa —D5 y D6 la quitan antes de
+ * clasificar—, así que eso es una red y no un camino vivo. Lo que cambia es sólo el RECUENTO.
  */
 describe("un equipo retirado no es una intervención pendiente", () => {
   it("cuenta en el total y en NINGUNA columna: nadie tiene que ir a arreglarlo", () => {
@@ -153,7 +154,7 @@ describe("un equipo retirado no es una intervención pendiente", () => {
     expect(resumir([c])).toEqual({ total: 1, libresYSanos: 0, enUso: 1, requierenIntervencion: 0 });
   });
 
-  it("clasificar SIGUE diciendo RETIRADO: la liberación de una unidad y el mapa lo leen", () => {
+  it("clasificar SIGUE diciendo RETIRADO: la liberación de una unidad y el mapa saben leerlo, aunque el tablero ya no les mande retiradas", () => {
     expect(clasificar(eq({ lifecycleStatus: "retired", enUso: true })).motivos).toEqual(["RETIRADO", "EN_USO"]);
   });
 });

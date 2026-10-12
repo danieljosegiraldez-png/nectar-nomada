@@ -117,8 +117,9 @@ describe("bandejas aparte (§4.6)", () => {
   it("el tablero no cuenta la bandeja como tanque libre", async () => {
     const d = await datosDelTablero(f.operarioA);
     expect(d.sinAmbito, "el tablero cortó por falta de ámbito: este caso estaría midiendo el vacío").toBe(false);
-    // Control: `instrumentos` sale de la lista entera, así que prueba que `listarEquipos` SÍ le entregó la bandeja al
-    // tablero, y que lo único que la deja fuera de `tanques` es el filtro de `tanquesVisibles`.
+    // Control: `instrumentos` sale de la lista de equipos ACTIVOS (D9), no de la entera, y la bandeja y el tanque de este caso
+    // lo son: así que prueba que `listarEquipos` SÍ le entregó la bandeja al tablero, y que lo único que la deja fuera de
+    // `tanques` es el filtro de `tanquesVisibles`.
     expect(d.instrumentos.map((i) => i.id).sort()).toEqual([bandejaId, tanqueId].sort());
     expect(d.tanques.map((t) => t.id)).toEqual([tanqueId]);
     const ocupacion = ocupacionDelSitio({
