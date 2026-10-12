@@ -39,8 +39,8 @@
           "permisos": [
             "sample"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Lee el lote para SACAR SU AMBITO y despues autoriza `sample:manage` SOBRE ESE AMBITO (`[{projectId: sourceLot.projectId, locationId: sourceLot.locationId, classification: ...}]`). O sea que no hay ambito ajeno en juego: sacar una muestra de un lote es una operacion de muestra hecha dentro del ambito del lote. El patron se repite en cuatro mas de esta lista."
         },
         {
@@ -49,8 +49,8 @@
           "permisos": [
             "sample"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Mismo patron: lee el lote y le pasa el lote como contexto a `requireSamplingAccess`, que autoriza `sample:manage` sobre el project/location DEL LOTE. Verificado leyendo `requireSamplingAccess`: autoriza sobre el ambito que recibe, no sobre uno propio."
         },
         {
@@ -59,9 +59,9 @@
           "permisos": [
             "sample"
           ],
-          "veredicto": "propuesto legitimo, con una nota",
-          "confirmado_por_daniel": false,
-          "razon": "Autoriza por lote con `requireSamplingAccess`, asi que solo devuelve los lotes sobre los que tienes muestreo. LA NOTA: su `prisma.lot.findMany({ orderBy: { lotCode: 'asc' } })` NO LLEVA `where` ni `take` -- lee la tabla entera y filtra despues. Hoy no filtra nada porque el filtro corre antes de devolver, pero es la forma que `CLAUDE.md` avisa que se rompe el dia que alguien le ponga un tope: con `take`, verias las filas ajenas primero."
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
+          "razon": "Autoriza por lote con `requireSamplingAccess`, asi que solo devuelve los lotes sobre los que tienes muestreo. LA NOTA, ARREGLADA el 2026-10-12 por decision de Daniel: leia la tabla entera de lotes y filtraba despues; ahora pregunta el permiso una vez por combinacion de proyecto, ubicacion y clasificacion y pide a la base solo los lotes de las que pasan (`tests/traceability/opcionesDeInspeccion.test.ts`)."
         },
         {
           "archivo": "lib/traceability/samplingEvents.ts",
@@ -69,8 +69,8 @@
           "permisos": [
             "sample"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Es un envoltorio de una linea sobre `crearInspeccionEnTransaccion`, que autoriza igual que `registrarInspeccion`: `sample:manage` sobre el ambito del lote."
         },
         {
@@ -79,8 +79,8 @@
           "permisos": [
             "research"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Lee el lote y autoriza `research:execute_protocol` SOBRE EL AMBITO DEL LOTE (`[{projectId, locationId}]` sacados de el). Correr un protocolo sobre material real es una operacion de investigacion hecha dentro del ambito de ese material."
         },
         {
@@ -89,8 +89,8 @@
           "permisos": [
             "apiary"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "No LEE un lote ajeno: lo CREA (`tx.lot.create`, linea 83) bajo el ambito de la colmena que ya autorizo con `apiary:manage`. Un lote de miel nace de un apiario, asi que el permiso de apiario es el que corresponde a su creacion. Es una decision de dominio deliberada y conviene que este escrita."
         },
         {
@@ -99,8 +99,8 @@
           "permisos": [
             "commerce"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "El propio archivo lo documenta como una division deliberada: «Dos permisos distintos, a proposito. Asignar exige `lot:manage` sobre el lote -- es trabajo de campo --. Recibir y crear variantes exigen `commerce:manage_store`». Y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`. Esta lee que lote salio en cada pedido para despacharlo, que es trabajo de tienda."
         },
         {
@@ -109,8 +109,8 @@
           "permisos": [
             "location"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "`harvestEvent` y `harvestEventSource` son datos del lote Y de la parcela a la vez: el origen de una cosecha es una afirmacion sobre QUE BLOQUES de la parcela la produjeron. Autoriza `requireLocationAttributeAccess` sobre la parcela, que es el ambito del dato que escribe. Las tres operaciones de este archivo son el mismo caso."
         },
         {
@@ -120,8 +120,8 @@
             "location",
             "specimen"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Mismo caso: lee el origen de cosecha de una parcela ya autorizada con `requireLocationAttributeAccess`."
         },
         {
@@ -130,8 +130,8 @@
           "permisos": [
             "location"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Mismo caso que las dos de arriba, en lectura."
         },
         {
@@ -140,8 +140,8 @@
           "permisos": [
             "equipment"
           ],
-          "veredicto": "legitimo por construccion",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "La UNICA de las trece que no depende de un juicio de dominio: esta ACOTADA POR CONSTRUCCION. Llama a `resolveLotVisibility`, asi que los lotes que devuelve salen del alcance del propio principal y no puede ensenar lo ajeno. El `equipment` es para las unidades del beneficio, que es otro dato. Medido: `acotado=true` y `resolveLotVisibility` en su cuerpo, contra las otras doce que no tienen ninguna de las tres senales."
         },
         {
@@ -150,8 +150,8 @@
           "permisos": [
             "commerce"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "La hermana de `pedidosPorDespachar`, y el mismo caso: autoriza `commerce:manage_store` con `exigeTienda` y toca `lotTransformationOutput`, que son los frascos que salieron de una transformacion del lote. El propio archivo documenta la division deliberada: asignar un lote a una variante exige `lot:manage` --y su hermana `asignarLoteAVariante` SI usa `requireLotAccess`--, mientras recibir y despachar exigen tienda."
         }
       ],
@@ -196,8 +196,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la parcela y, si se nombra un bloque, comprueba que sea DE ESA parcela (\"ese bloque es de otra parcela\")."
         },
         {
@@ -206,8 +206,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la parcela de la intervencion original, y `validarReferencias(parcela, input.nueva)` rechaza un bloque o una planta de otra parcela ANTES de que `crearAreas` escriba (lineas 542 y 582, verificado el 2026-10-11)."
         },
         {
@@ -216,8 +216,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Lectura: `lot:view` sobre la parcela y despues los bloques de esa misma parcela. Es la lista que necesita quien registra una intervencion, sin pedirle el permiso de atributos que exige el tablero entero."
         },
         {
@@ -226,8 +226,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Exige `lot:manage` sobre la ubicacion y escribe el evento de siembra en ESA ubicacion; la persona que opera pasa por `exigirPersonaPermitida`."
         },
         {
@@ -236,8 +236,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela»: en esta casa el registro agronomico de una parcela lo hace quien gestiona sus lotes (el Farm Operator tiene `lot:manage` y no `location:manage_attributes`), y el ambito que se autoriza es el de esa misma parcela. Lectura: `lot:view` sobre la ubicacion y los eventos de siembra de esa misma ubicacion."
         },
         {
@@ -246,8 +246,8 @@
           "permisos": [
             "research"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «investigacion sobre el mismo bloque»: autoriza `research:execute_protocol` sobre ESA ubicacion y despues `evaluarGate0` cuenta su perfil de suelo y sus muestras. Solo dice que falta para empezar el protocolo en ese bloque."
         },
         {
@@ -256,8 +256,8 @@
           "permisos": [
             "research"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «investigacion sobre el mismo bloque»: `research:execute_protocol` sobre la ubicacion (solo la ubicacion, no el proyecto: lo explica su comentario, por la revision del 2026-09-01). El lote de biocarbon que se cita tiene que ser de la MISMA organizacion que el bloque. Una nota, no un defecto: un id de biocarbon ajeno contesta `biochar_batch_from_another_organization` y uno inexistente `biochar_batch_not_found`, asi que la respuesta dice si ese id existe en otra finca. No escribe nada en ese caso, y un UUID no se adivina."
         },
         {
@@ -266,8 +266,8 @@
           "permisos": [
             "specimen"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trampas, con su permiso de especimen»: `requireTrapAccess` autoriza `specimen` sobre la parcela, y si se nombra un bloque tiene que ser DE ESA parcela (`block_not_in_plot`)."
         },
         {
@@ -276,8 +276,8 @@
           "permisos": [
             "specimen"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trampas, con su permiso de especimen»: lanza si no alcanza ningun plot de la finca con permiso de especimen, y despues lee la regla de trampas de esa finca (umbral, dias, accion sugerida) sin pedir `location:manage_attributes`. Lo dice su comentario y es deliberado, igual que en `getPlotDetail`: la regla es configuracion de la finca que necesita quien revisa sus trampas."
         }
       ]
@@ -303,9 +303,9 @@
           "permisos": [
             "location"
           ],
-          "veredicto": "propuesto legitimo, sin llamador de produccion",
-          "confirmado_por_daniel": false,
-          "razon": "Lee el ultimo traslado de una bandeja SOLO para saber en que cama estaba, y lo que devuelve -- la posicion -- lo autoriza `resolverPosicion` con `location:manage_attributes` sobre la cama (D1). No exige `equipment` sobre la bandeja. Medido el 2026-10-11: NO tiene llamador en `lib/` ni en `app/`, solo `tests/traceability/bandejasDelSecado.test.ts`. Su comentario dice que la llama `bandejasDeCorrida`, y ya no es cierto: esa funcion hace su propia consulta de traslados despues de `corridaConPermiso(..., \"view\")` y llama a `resolverPosicion` directamente. Si alguien vuelve a usarla desde una pantalla, tiene que llegar con la bandeja ya autorizada."
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
+          "razon": "Lee el ultimo traslado de una bandeja SOLO para saber en que cama estaba, y lo que devuelve -- la posicion -- lo autoriza `resolverPosicion` con `location:manage_attributes` sobre la cama (D1). No exige `equipment` sobre la bandeja. Medido el 2026-10-11: NO tiene llamador en `lib/` ni en `app/`, solo `tests/traceability/bandejasDelSecado.test.ts`. Su comentario decia que la llamaba `bandejasDeCorrida`, y ya no era cierto (corregido el 2026-10-12, por decision de Daniel): esa funcion hace su propia consulta de traslados despues de `corridaConPermiso(..., \"view\")` y llama a `resolverPosicion` directamente. Si alguien vuelve a usarla desde una pantalla, tiene que llegar con la bandeja ya autorizada."
         }
       ]
     },
@@ -323,8 +323,8 @@
           "permisos": [
             "location"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Exige `location:manage_attributes` sobre la parcela (`requireLocationAttributeAccess`) y despues lee las plantas situadas en ESA parcela, o en sus hijas, SOLO para contar las que la forma deja fuera y avisar (spec 7.4: avisa, no rechaza). Devuelve un numero, no las plantas."
         },
         {
@@ -336,8 +336,8 @@
             "location",
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Patron «trabajo de campo con `lot` sobre la misma parcela», el mismo del dominio `location`: exige `lot:manage` sobre la parcela, y `validarReferencias` rechaza una planta o una observacion de otra parcela (\"la planta X es de otra parcela\") antes de escribir. Una nota, no un defecto: la respuesta distingue \"no existe la planta\" de \"es de otra parcela\", asi que dice si ese id existe en otra parcela; no escribe nada en ese caso."
         },
         {
@@ -346,8 +346,8 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12",
+          "confirmado_por_daniel": true,
           "razon": "Igual que `registrarIntervencion`: `lot:manage` sobre la parcela de la intervencion original, y `validarReferencias(parcela, input.nueva)` antes de `crearAreas` (lineas 542 y 582)."
         }
       ]
@@ -367,9 +367,9 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
-          "razon": "`lot:view` sobre el lote y despues las muestras de ESE lote (`sourceLotId: lotId`) para pintar su ficha. Lo que cuelga del lote se lee con el permiso del lote."
+          "veredicto": "DEFECTO confirmado por Daniel el 2026-10-12: debe exigir `sample`",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo decidio el 2026-10-12: tocar una muestra exige el permiso de muestras aunque cuelgue del lote. Leer exigira `sample:view` O `sample:manage` (en esta casa `manage` no implica `view`, y Farm Manager y Farm Operator solo tienen `sample:manage`); escribir exigira `sample:manage`. Quien no tenga ninguno vera la ficha del lote SIN muestras. Pendiente del PR que lo construye: cuando exija `sample`, esta excepcion sobra y la compuerta pide borrarla. Lo que habia antes: `lot:view` sobre el lote y despues las muestras de ESE lote (`sourceLotId: lotId`) para pintar su ficha. Lo que cuelga del lote se lee con el permiso del lote."
         },
         {
           "archivo": "lib/traceability/roasting.ts",
@@ -377,9 +377,9 @@
           "permisos": [
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
-          "razon": "`lot:view` sobre el lote y las muestras verdes de ESE lote (`sourceLotId: lotId, materialState: GREEN`), para elegir cual se tuesta."
+          "veredicto": "DEFECTO confirmado por Daniel el 2026-10-12: debe exigir `sample`",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo decidio el 2026-10-12: tocar una muestra exige el permiso de muestras aunque cuelgue del lote. Leer exigira `sample:view` O `sample:manage` (en esta casa `manage` no implica `view`, y Farm Manager y Farm Operator solo tienen `sample:manage`); escribir exigira `sample:manage`. Quien no tenga ninguno vera la ficha del lote SIN muestras. Pendiente del PR que lo construye: cuando exija `sample`, esta excepcion sobra y la compuerta pide borrarla. Lo que habia antes: `lot:view` sobre el lote y las muestras verdes de ESE lote (`sourceLotId: lotId, materialState: GREEN`), para elegir cual se tuesta."
         },
         {
           "archivo": "lib/traceability/roasting.ts",
@@ -388,9 +388,9 @@
             "equipment",
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
-          "razon": "`lot:manage` sobre el lote de origen, y si se cita una muestra comprueba que sea DE ESE lote (`sample_source_lot_mismatch`), verde y con masa en kg. Es la comprobacion que le falta a `recordMeasurement`."
+          "veredicto": "DEFECTO confirmado por Daniel el 2026-10-12: debe exigir `sample`",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo decidio el 2026-10-12: tocar una muestra exige el permiso de muestras aunque cuelgue del lote. Leer exigira `sample:view` O `sample:manage` (en esta casa `manage` no implica `view`, y Farm Manager y Farm Operator solo tienen `sample:manage`); escribir exigira `sample:manage`. Quien no tenga ninguno vera la ficha del lote SIN muestras. Pendiente del PR que lo construye: cuando exija `sample`, esta excepcion sobra y la compuerta pide borrarla. Lo que habia antes: `lot:manage` sobre el lote de origen, y si se cita una muestra comprueba que sea DE ESE lote (`sample_source_lot_mismatch`), verde y con masa en kg. Es la comprobacion que le falta a `recordMeasurement`."
         },
         {
           "archivo": "lib/traceability/measurements.ts",
@@ -399,9 +399,9 @@
             "location",
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
-          "razon": "Autoriza el lote y despues comprueba que la corrida de secado tenga ese lote como entrada (`lotTransformation` con `dryingRunId` e `inputs.some.lotId`) antes de listar sus inspecciones; si no, devuelve una lista vacia."
+          "veredicto": "DEFECTO confirmado por Daniel el 2026-10-12: debe exigir `sample`",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo decidio el 2026-10-12: tocar una muestra exige el permiso de muestras aunque cuelgue del lote. Leer exigira `sample:view` O `sample:manage` (en esta casa `manage` no implica `view`, y Farm Manager y Farm Operator solo tienen `sample:manage`); escribir exigira `sample:manage`. Quien no tenga ninguno vera la ficha del lote SIN muestras. Pendiente del PR que lo construye: cuando exija `sample`, esta excepcion sobra y la compuerta pide borrarla. Lo que habia antes: Autoriza el lote y despues comprueba que la corrida de secado tenga ese lote como entrada (`lotTransformation` con `dryingRunId` e `inputs.some.lotId`) antes de listar sus inspecciones; si no, devuelve una lista vacia."
         },
         {
           "archivo": "lib/traceability/measurements.ts",
@@ -410,9 +410,9 @@
             "location",
             "lot"
           ],
-          "veredicto": "propuesto legitimo",
-          "confirmado_por_daniel": false,
-          "razon": "Autoriza sobre el sujeto de la medicion ORIGINAL (`requireSubjectAccess(userAccountId, original)`) y la correccion hereda su `sampleId`; no acepta uno nuevo."
+          "veredicto": "DEFECTO confirmado por Daniel el 2026-10-12: debe exigir `sample`",
+          "confirmado_por_daniel": true,
+          "razon": "Daniel lo decidio el 2026-10-12: tocar una muestra exige el permiso de muestras aunque cuelgue del lote. Leer exigira `sample:view` O `sample:manage` (en esta casa `manage` no implica `view`, y Farm Manager y Farm Operator solo tienen `sample:manage`); escribir exigira `sample:manage`. Quien no tenga ninguno vera la ficha del lote SIN muestras. Pendiente del PR que lo construye: cuando exija `sample`, esta excepcion sobra y la compuerta pide borrarla. Lo que habia antes: Autoriza sobre el sujeto de la medicion ORIGINAL (`requireSubjectAccess(userAccountId, original)`) y la correccion hereda su `sampleId`; no acepta uno nuevo."
         },
         {
           "archivo": "lib/traceability/measurements.ts",
@@ -422,9 +422,9 @@
             "location",
             "lot"
           ],
-          "veredicto": "propuesto legitimo hoy, con un hueco latente",
-          "confirmado_por_daniel": false,
-          "razon": "Legitimo para todos sus llamadores de hoy, y con un HUECO LATENTE. Con `sampleId`, autoriza `lot:manage` sobre el ambito de la muestra (`scopeCandidatesForSubject`), que es la regla de la casa. Pero si llegan `lotId` y `sampleId` A LA VEZ, `requireLotAccess` recibe los dos ambitos y sale bien con el PRIMERO que pase, y nada comprueba que la muestra sea de ese lote: con permiso sobre tu lote se colgaria una medicion de una muestra ajena, y se leeria su `materialState`. Es la misma forma que los dos defectos del dominio del lote. NO es alcanzable hoy: `recordMeasurementAction` manda solo `lotId`, `recordLabMeasurementAction` manda un unico sujeto de `biocharBatchId|soilSampleId|foliarSampleId`, y `lib/apiary/cierreDeCosecha.ts` no pasa `sampleId` (medido el 2026-10-11, leyendo, sin ejecutarlo). El arreglo seria el de `recordRoastSession`: exigir `sample.sourceLotId === lotId` cuando vienen los dos."
+          "veredicto": "legitimo, confirmado por Daniel el 2026-10-12; el hueco latente, CERRADO",
+          "confirmado_por_daniel": true,
+          "razon": "Con `sampleId`, autoriza `lot:manage` sobre el ambito de la muestra, que es la regla de la casa. EL HUECO, CERRADO el 2026-10-12 por decision de Daniel: si llegaban `lotId` y `sampleId` a la vez, `requireLotAccess` salia bien con el primer ambito que pasara y nada comprobaba que la muestra fuera de ese lote. Ahora lo exige (`sample_not_of_lot`), como `recordRoastSession`; lo guarda `tests/traceability/medicionDeMuestraDelLote.test.ts`, que caia con el codigo anterior. No era alcanzable desde ninguna pantalla."
         }
       ]
     }

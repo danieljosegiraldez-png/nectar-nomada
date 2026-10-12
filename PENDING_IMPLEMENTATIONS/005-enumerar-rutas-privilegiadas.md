@@ -3,7 +3,9 @@
 **Estado: la propiedad que faltaba YA TIENE MECANISMO, y el primer dominio está
 declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
 concretas, las dos nombradas al final: **los otros dominios** (desde el 2026-10-11 están
-declarados los cinco medidos: lote, ubicaciones, equipos, especímenes y muestras) y **tus veredictos**, de los que dos son defectos propuestos.
+declarados los cinco medidos: lote, ubicaciones, equipos, especímenes y muestras) y **tus veredictos**,
+**decididos el 2026-10-12**. Lo que queda: el defecto de muestras, que construye el PR siguiente, y la
+compuerta por acción, aprobada para después del #714.
 
 Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
 debido*— está en la sección «El guardia debido, 2026-10-04».
@@ -238,16 +240,40 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 
 ### Lo que sigue abierto
 
-- **Tus doce veredictos restantes.** Los dos defectos ya están arreglados. La
-  compuerta pasa hoy porque las 17 están declaradas; `confirmado_por_daniel` está
-  en `false` en todas, así que nadie puede confundir mi propuesta con tu decisión.
+- **Tus veredictos: DECIDIDOS el 2026-10-12**, de uno en uno por patrón. Esta viñeta decía «tus doce
+  veredictos restantes», todos con `confirmado_por_daniel: false`. Hoy no queda ninguno sin decidir:
+
+  | | cuántos |
+  |---|---|
+  | legítimos, confirmados | **26** (los 12 del lote, 9 de ubicaciones, 1 de equipos, 3 de especímenes, y `recordMeasurement`) |
+  | **defectos** confirmados | **5**, todos de muestras: ver abajo |
+  | confirmados antes (`recordWashMedium`, 2026-10-04) | 1 |
+
+  Con los veredictos, Daniel pidió tres arreglos pequeños, hechos en el mismo #714:
+  - **`opcionesParaInspeccion` filtra en la consulta**, en vez de leer la tabla entera de lotes y
+    descartar después. Lo guarda `tests/traceability/opcionesDeInspeccion.test.ts`.
+  - **El hueco de `recordMeasurement`, cerrado** (abajo).
+  - **El comentario de `posicionDeBandeja`**, que decía que la llamaba `bandejasDeCorrida`.
+
+  **Los 5 defectos de muestras** son `getLotDetail`, `listGreenSamplesForRoast`,
+  `recordRoastSession`, `inspeccionesParaMedicion` y `correctMeasurement`. Hoy leen o escriben
+  muestras sólo con el permiso del lote, y Daniel decidió que **deben exigir `sample`**:
+  - leer, `sample:view` **o** `sample:manage`;
+  - escribir, `sample:manage`.
+
+  Lo de «o»: aquí `manage` no implica `view` (`lib/rbac/catalog.ts:98`), y Farm Manager y Farm
+  Operator sólo tienen `sample:manage`. Exigir `view` les habría quitado ver las muestras que ellos
+  mismos toman. Quien no tenga ninguno de los dos verá la ficha del lote **sin muestras**. Medido
+  sobre el catálogo: el único perfil que pierde algo es **Project Viewer**, que tiene `lot:view` y
+  ningún permiso de muestras. **Lo construye el PR siguiente**: cuando esas operaciones exijan
+  `sample`, sus excepciones sobran y la compuerta pide borrarlas.
 - **Los otros dominios.** Desde el 2026-10-11 están los cinco que la medición proponía: lote,
   ubicaciones, equipos, especímenes y muestras. No queda ninguno pendiente por volumen. Los permisos
   que no tienen dominio (`apiary`, `research`, `sensory`, `field_report`…) son trabajo nuevo, no
   esta lista.
 
-  **Tus veredictos, en total:** 12 del lote, 9 de ubicaciones, 1 de equipos, 3 de especímenes y 6 de
-  muestras. Todos «propuesto legítimo» salvo uno, que lleva hueco latente (abajo).
+  **Los veredictos de los cinco dominios** se decidieron el 2026-10-12; el reparto está en la viñeta
+  de arriba.
 
   **Esta viñeta decía que añadir el siguiente «no toca la compuerta», y era falso.** La compuerta
   leía sólo `declaracion.dominios[0]`. Medido al declarar `location`: con la versión vieja, quitarle
@@ -320,7 +346,10 @@ entero: 207 archivos, 2576 pruebas, salida 0.
 
   La lectura de ambiente a mano usa `sample:manage`, pero es un dato del ambiente y queda fuera.
 
-  **Un hueco latente en `recordMeasurement`, que es tuyo decidir si se cierra.** Si llegan `lotId` y
+  **Un hueco latente en `recordMeasurement` — CERRADO el 2026-10-12, por decisión de Daniel.** Ahora
+  exige que la muestra sea del lote (`sample_not_of_lot`), y lo guarda
+  `tests/traceability/medicionDeMuestraDelLote.test.ts`, que caía con el código anterior: la medición
+  con la muestra ajena **se guardaba**. Lo que decía antes: si llegan `lotId` y
   `sampleId` a la vez, `requireLotAccess` recibe los dos ámbitos y sale bien con el **primero** que
   pase, y nada comprueba que la muestra sea de ese lote. Con permiso sobre tu lote se colgaría una
   medición de una muestra ajena. Es la forma de los dos defectos del dominio del lote. **No es
@@ -376,8 +405,9 @@ entero: 207 archivos, 2576 pruebas, salida 0.
   contra operación-de-escritura. Y la partición lectura = {`view`, `export`} del
   vocabulario de 35 acciones del catálogo es **mía, no tuya**.
 
-  **No está construido como compuerta**, y es decisión tuya: hoy pasaría en verde
-  con 0, igual que la de los 396 nombres, y su flip la salva de ser un adorno.
+  **No está construido como compuerta. Daniel decidió el 2026-10-12 construirla, DESPUÉS del #714**,
+  en su propio PR: hoy pasaría en verde con 0, igual que la de los 396 nombres, y su flip la salva de
+  ser un adorno.
   Si se construye, los tres cambios son en `scripts/inventario/simbolos.mjs`:
   recoger el argumento 1 además del 2, resolver omisiones de parámetro, y
   devolver un mapa `acciones` propagado como el de `recursos`.

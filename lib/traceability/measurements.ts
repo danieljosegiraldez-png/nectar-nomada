@@ -234,6 +234,14 @@ export interface RecordMeasurementInput {
 export async function recordMeasurement(userAccountId: string, input: RecordMeasurementInput) {
   const anclas = await requireSubjectAccess(userAccountId, input);
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas);
+  // Con lote Y muestra, la muestra tiene que ser DE ESE lote. `requireLotAccess` sale bien con el
+  // primer ámbito que pase, así que el permiso sobre el lote no dice nada de la muestra: sin esto se
+  // colgaba una medición de una muestra ajena (Daniel, 2026-10-12; PENDING_IMPLEMENTATIONS/005).
+  // Es la comprobación que `recordRoastSession` ya hace con `sample_source_lot_mismatch`.
+  if (input.lotId && input.sampleId) {
+    const muestra = await prisma.sample.findUnique({ where: { id: input.sampleId }, select: { sourceLotId: true } });
+    if (muestra?.sourceLotId !== input.lotId) throw new MeasurementValidationError("sample_not_of_lot");
+  }
 
   if (input.roastSessionId && !input.lotId) {
     throw new MeasurementValidationError("roast_session_link_requires_lot_id");
