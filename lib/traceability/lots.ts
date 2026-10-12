@@ -28,7 +28,7 @@ import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
 import { antesDeTransformar, dividirProcesoEnTx, procesoQueCubre, TRANSACCION_DEL_LINAJE, type TipoConReglaDeProceso } from "./procesoDelLinaje";
 import { LotProcessError } from "./errorDeProceso";
-import { requireResearchAccess, ResearchAccessError } from "../research/access";
+import { puedeVerInvestigacion } from "../research/access";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
@@ -894,7 +894,7 @@ export async function getActiveOperations(userAccountId: string) {
  * - **Los ensayos** (`treatment_batch` y sus etapas, `processing_stage`) entran **sólo si quien mira puede ver
  *   investigación sobre ese ensayo**. El Farm Operator no tiene `research:view`, y la ficha del lote no puede
  *   ser una puerta trasera a esos datos. El permiso se pide sobre el MISMO ámbito con que se crea un ensayo
- *   (`createTreatmentBatch`): su proyecto o el del lote, y la ubicación del lote. Uno a uno: `requireResearchAccess`
+ *   (`createTreatmentBatch`): su proyecto o el del lote, y la ubicación del lote. Uno a uno: `puedeVerInvestigacion`
  *   aprueba en cuanto UN candidato pasa, así que pasarle todos juntos autorizaría el conjunto.
  * - **El proceso** entra con **toda su cadena**: el vigente y los de más arriba, o todos los de una mezcla. Se
  *   pregunta a `procesoQueCubre`, no por `lotId`: el proceso se abre sobre la cereza y CUBRE a los lotes que salen
@@ -914,11 +914,8 @@ async function sujetosDeEnsayosYProceso(
   });
   const ensayosVisibles: string[] = [];
   for (const e of ensayos) {
-    try {
-      await requireResearchAccess(userAccountId, "view", [{ projectId: e.projectId ?? lot.projectId, locationId: e.locationId ?? lot.locationId }]);
+    if (await puedeVerInvestigacion(userAccountId, [{ projectId: e.projectId ?? lot.projectId, locationId: e.locationId ?? lot.locationId }])) {
       ensayosVisibles.push(e.id);
-    } catch (error) {
-      if (!(error instanceof ResearchAccessError)) throw error;
     }
   }
   const etapas = ensayosVisibles.length

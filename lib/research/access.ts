@@ -25,9 +25,20 @@ export type ResearchAction = "view" | "create_measurement" | "create_evidence" |
  * Mismo criterio y mismo recorrido que el guardia: se delega en él y se atrapa su
  * error, para que las dos respuestas no puedan divergir.
  */
-export async function puedeVerInvestigacion(userAccountId: string): Promise<boolean> {
+/**
+ * ¿Puede ver investigación? Sin ámbitos, en cualquier parte (lo que preguntaba siempre); con ámbitos, sobre
+ * ésos. Sólo se traga la negativa (`ResearchAccessError`): cualquier otro error sube.
+ *
+ * Los ámbitos se añadieron el 2026-10-12 para el historial del lote, que enseña un ensayo sólo a quien puede
+ * verlo: así `lib/traceability/lots.ts` pregunta sin importar nada que lance, y `ResearchAccessError` no puede
+ * escapar hacia las acciones que lo llaman.
+ */
+export async function puedeVerInvestigacion(
+  userAccountId: string,
+  candidatos: ReadonlyArray<{ projectId?: string | null; locationId?: string | null }> = [{}],
+): Promise<boolean> {
   try {
-    await requireResearchAccess(userAccountId, "view", [{}]);
+    await requireResearchAccess(userAccountId, "view", candidatos);
     return true;
   } catch (e) {
     if (e instanceof ResearchAccessError) return false;
