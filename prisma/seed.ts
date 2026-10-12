@@ -899,6 +899,8 @@ async function seedDemoTraceabilityChain(lasNubesProjectId: string, sensorySessi
     // --- Fermentation ---
     const { run: fermentationRun } = await startFermentationRun(operatorId, {
       lotId: batch.id,
+      // D2 (Parte 2c, 2026-10-04): una fermentación nace con un tanque registrado o con el nombre escrito de uno. DEMO: el nombre.
+      vesselNote: "DEMO: tanque sin registrar",
       startedAt: new Date("2027-01-20T10:00:00Z"),
       quantity: 400,
       unit: "kg",

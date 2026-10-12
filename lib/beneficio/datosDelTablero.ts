@@ -445,8 +445,17 @@ export async function datosDelTablero(
     const proceso = lotId ? procesoPorLote.get(lotId) : null;
     return proceso?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
   };
+  // Parte 2c §4.6: una bandeja de secado es un `vessel` con `trayTypeId`, no un tanque. Contarla aquí inflaba «N de TOTAL
+  // tanques libres y sanos»: una bandeja vacía nunca tiene una fermentación apuntándole, así que salía libre y sana.
+  // `listarEquipos` la sigue devolviendo —es el inventario, y `instrumentos` de abajo sólo lee los activos (D9), bandejas incluidas— y el filtro vive
+  // donde se CUENTAN tanques. Efecto observable, a propósito: una corrida cuyo `vesselEquipmentId` fuera una bandeja (nada
+  // en la base lo impide) deja de ocupar un «tanque» y `ocupacionDelSitio` la cuenta como `ajenas`.
+  // Parte 2c, D5 (Daniel, 2026-10-05): **un tanque retirado sale de los totales** —ni libre, ni en uso, ni «requiere intervención»:
+  // ya no es capacidad—. El filtro va encima del de bandeja. `listarEquipos` NO se filtra (es el inventario: el retirado sigue ahí,
+  // y /equipos lo marca) y `disponibilidadDeRecipientes` ya sólo trae `active`, así que la «Capacidad ahora» de /equipos y este
+  // tablero cuentan lo mismo.
   const tanquesVisibles: UnidadDelSitio[] = equipos
-    .filter((e) => e.kind === "vessel")
+    .filter((e) => e.kind === "vessel" && e.trayTypeId === null && e.lifecycleStatus === "active")
     .map((e) => ({
       id: e.id,
       nombre: e.name,
@@ -455,13 +464,18 @@ export async function datosDelTablero(
     }));
   // Una cama no tiene informe de condición, así que su `condicion` es `null` — nunca puede
   // salir «requiere intervención» por ese motivo, y eso es un hecho del modelo, no un hueco.
-  const camasVisibles: UnidadDelSitio[] = camas.map((c) => ({
-    id: c.id,
-    nombre: c.name,
-    // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`.
-    lifecycleStatus: c.status === "archived" ? ("retired" as const) : ("active" as const),
-    condicion: null,
-  }));
+  const camasVisibles: UnidadDelSitio[] = camas
+    // Parte 2c, D6 (Daniel, 2026-10-05): **una cama archivada sale de los totales y del mapa**, igual que un tanque retirado.
+    // `RecordStatus` no tiene «retired»: una cama fuera de servicio está `archived`, y hasta hoy entraba aquí como `retired`
+    // (contaba en el total y en el mapa). Efecto observable, a propósito: una corrida de secado abierta sobre una cama archivada
+    // ya no tiene unidad visible y `ocupacionDelSitio` la cuenta como `ajenas`, que se dice en voz alta y no se silencia.
+    .filter((c) => c.status !== "archived")
+    .map((c) => ({
+      id: c.id,
+      nombre: c.name,
+      lifecycleStatus: "active" as const,
+      condicion: null,
+    }));
   const idsVisibles = new Set([...tanquesVisibles, ...camasVisibles].map((u) => u.id));
 
   // **Cuántas corridas abiertas tiene cada unidad visible, SIN filtrar por lote.** Es el arreglo de
@@ -516,7 +530,8 @@ export async function datosDelTablero(
     return declarada !== null && idsVisibles.has(declarada);
   });
   // Las unidades visibles con su estado: `proximaLiberacion` las necesita para no prometer la
-  // liberación de una unidad retirada o averiada, que no va a servir cuando se vacíe (015).
+  // liberación de una unidad averiada, que no va a servir cuando se vacíe (015). Una retirada (D5) o una cama archivada
+  // (D6) ya no llega aquí: `tanquesVisibles` y `camasVisibles` las quitaron arriba.
   const liberacion = proximaLiberacion({
     corridas: corridasConDuracion,
     unidades: [...tanquesVisibles, ...camasVisibles],
@@ -541,7 +556,14 @@ export async function datosDelTablero(
     camas: camasVisibles,
     corridas,
     corridasPorUnidad,
-    instrumentos: equipos.map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
+    // Parte 2c, D9 (Daniel, 2026-10-05): **un instrumento retirado sale del bloque «instrumentos que piden atención»**. Ese bloque
+    // (`instrumentosQuePidenAtencion`, en `tablero.ts`) mira `kind` y `verificacion` y nunca el estado, así que un instrumento
+    // retirado y sin contraste lo pedía para siempre. Se filtra AQUÍ, sobre la lista entera, y no en la función pura: así
+    // `instrumentosVisibles` lee la misma lista y un retirado tampoco cuenta como «visible» en ese bloque. `listarEquipos` NO
+    // se filtra (es el inventario) y /equipos ya no lo pone en «atención» (D5).
+    instrumentos: equipos
+      .filter((e) => e.lifecycleStatus === "active")
+      .map((e) => ({ id: e.id, name: e.name, kind: e.kind, verificacion: e.verificacion })),
     desviacionesAbiertasPorLote: porLote,
     sinAmbito: false,
     etapas,
