@@ -249,3 +249,7 @@ Y dos detalles que el plan añade porque el diseño los dejaba abiertos:
   Si lo procesa, pasa a quien envía. La regla del aparato se resuelve una vez, no en cada envío.
 - **Las fotos sólo comprueban el dueño cuando vienen de la cola.** El servicio recibe un campo
   `borrador` sólo en ese caso; una llamada desde el servidor con la sesión actual no lo trae.
+- **Revertido por la revisión final (2026-10-12): el primer detalle ya no es así.** Un borrador sin
+  cuenta que el servidor procesa o rechaza por otro motivo **no pasa a quien envía**: sólo el servidor
+  nombra dueños, y lo hace únicamente al retener. Se queda sin cuenta (no se puede descartar a mano; lo
+  purga la regla de 21 días). La autoridad es ADR-199 en `docs/architecture/DECISIONS.md`.

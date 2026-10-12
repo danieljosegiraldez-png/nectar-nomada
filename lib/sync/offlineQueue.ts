@@ -45,8 +45,9 @@ export interface FieldEventDraft {
   errorMessage?: string;
   /**
    * ADR-199 — la huella de la cuenta que lo anotó. Ausente en los guardados antes de que existiera:
-   * ésos los decide el servidor por quien registró el aparato, y quedan apuntados tras su primera
-   * respuesta.
+   * ésos los decide el servidor por quien registró el aparato. Sólo el servidor nombra dueños: un
+   * borrador sin cuenta gana una únicamente si el servidor lo retiene y nombra a quien registró el
+   * aparato; en cualquier otra respuesta sigue sin cuenta.
    */
   cuenta?: string | null;
 }
