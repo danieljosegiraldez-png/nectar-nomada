@@ -143,6 +143,7 @@ tests/sync/pushFieldEvents.test.ts
 tests/sync/parseoDelLote.test.ts
 tests/sync/finDeColoniaSinSenal.test.ts
 tests/sync/parcelaSinSenal.test.ts
+tests/sync/borradoresConDueno.test.ts
 tests/traceability/ambitoVacio.test.ts
 tests/traceability/biocharBatches.test.ts
 tests/traceability/classificationGate.test.ts

@@ -15,6 +15,7 @@ import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { parsearMutaciones } from "../../lib/sync/parsearMutaciones";
 import { pushFieldEvents, type MutacionDeRevisionDeTrampa } from "../../lib/sync/pushFieldEvents";
 import { createTrap } from "../../lib/traceability/traps";
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
 import { crearUsuarioSinAcceso } from "../helpers/traceability";
 
 const RUN_ID = `parcela-sin-senal-${Date.now()}`;
@@ -1035,7 +1036,8 @@ describe("ruling del controlador: procedencia y observador NUNCA salen del paylo
     });
     trampaIds.push(trampa.id);
 
-    const [r] = await pushFieldEvents(crypto.randomUUID(), deviceId, [
+    const cuentaInexistente = crypto.randomUUID();
+    const [r] = await pushFieldEvents(cuentaInexistente, deviceId, [
       {
         kind: "trap_check",
         clientDraftId: `d-sin-cuenta-${Date.now()}`,
@@ -1043,7 +1045,11 @@ describe("ruling del controlador: procedencia y observador NUNCA salen del paylo
         specimenId: trampa.id,
         observedAt: new Date("2026-09-15"),
         brocaLevel: "pocos",
-      } satisfies MutacionDeRevisionDeTrampa,
+        // ADR-199 — el aparato es de `userAccountId`: sin cuenta, este borrador sería ajeno y se rechazaría
+        // por eso, no por `observer_self_missing`. Se manda la cuenta de quien envía, como hace un cliente
+        // nuevo.
+        cuentaDelBorrador: huellaDeCuenta(cuentaInexistente),
+      } satisfies MutacionDeRevisionDeTrampa & { cuentaDelBorrador: string },
     ]);
     expect(r).toMatchObject({ status: "rejected", reason: "observer_self_missing" });
     // Control: no quedó ninguna revisión — un rechazo no escribe nada a
@@ -1079,9 +1085,9 @@ describe("aplicarRevisionDeTrampa deniega el acceso a quien no tiene specimen:ma
     const ajeno = await crearUsuarioSinAcceso();
     try {
       const clientDraftId = `d-sin-acceso-${Date.now()}`;
-      // Se reutiliza el `deviceId` del `beforeAll`: `pushFieldEvents` sólo
-      // comprueba que el APARATO exista y no esté revocado, nunca que sea el
-      // mismo que registró la cuenta — así que no hace falta un segundo.
+      // Se reutiliza el `deviceId` del `beforeAll`, que registró otra cuenta. ADR-199: un borrador SIN
+      // cuenta en ese aparato sería ajeno y se rechazaría por eso, no por el acceso; así que la mutación
+      // lleva la cuenta de quien envía, como hace un cliente nuevo, y la prueba sigue probando el acceso.
       const [r] = await pushFieldEvents(ajeno.userAccountId, deviceId, [
         {
           kind: "trap_check",
@@ -1090,7 +1096,8 @@ describe("aplicarRevisionDeTrampa deniega el acceso a quien no tiene specimen:ma
           specimenId: trampa.id,
           observedAt: new Date("2026-09-15"),
           brocaLevel: "pocos",
-        } satisfies MutacionDeRevisionDeTrampa,
+          cuentaDelBorrador: huellaDeCuenta(ajeno.userAccountId),
+        } satisfies MutacionDeRevisionDeTrampa & { cuentaDelBorrador: string },
       ]);
       expect(r).toMatchObject({ status: "rejected" });
       // La razón exacta que `requireTrapAccess` lanza cuando `can()` niega el

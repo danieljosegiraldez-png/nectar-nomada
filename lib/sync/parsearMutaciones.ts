@@ -24,6 +24,7 @@
 import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo, MutacionDeRevisionDeTrampa } from "./pushFieldEvents";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import { fechaDeDia } from "../time/localDateTime";
+import { cuentaDelBorradorDe, RAZON_CUENTA_INVALIDA } from "./cuentaDelBorrador";
 
 /** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
 export function toDate(v: unknown): Date | null {
@@ -187,7 +188,18 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
   const rechazos: { clientDraftId: string; reason: string }[] = [];
 
   for (const raw of mutations) {
-    const m = (raw ?? {}) as Record<string, unknown>;
+    const crudo = (raw ?? {}) as Record<string, unknown>;
+    // ADR-199 — la cuenta del borrador se valida aquí, una vez, para todos los tipos. Una que no se
+    // puede comparar con nada rechaza SÓLO su mutación; sin `clientDraftId` no hay a quién
+    // atribuírselo, y es 400 de lote, como en el resto de este parseo.
+    const cuenta = cuentaDelBorradorDe(crudo.cuentaDelBorrador);
+    if (!cuenta.ok) {
+      if (typeof crudo.clientDraftId !== "string") return { ok: false, error: "mutation_malformed" };
+      rechazos.push({ clientDraftId: crudo.clientDraftId, reason: RAZON_CUENTA_INVALIDA });
+      continue;
+    }
+    // Normalizada en el objeto, así que las ramas que copian `m` entero ya la llevan limpia.
+    const m: Record<string, unknown> = { ...crudo, cuentaDelBorrador: cuenta.cuenta };
     const occurredAt = toDate(m.occurredAt);
 
     if (m.kind === KIND_DE_FIN_DE_COLONIA) {
@@ -385,6 +397,7 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       position: (m.position ?? undefined) as MutacionDeEvento["position"],
       operatorPersonId: typeof m.operatorPersonId === "string" ? m.operatorPersonId : null,
       notes: typeof m.notes === "string" ? m.notes : null,
+      cuentaDelBorrador: cuenta.cuenta,
     });
   }
 
