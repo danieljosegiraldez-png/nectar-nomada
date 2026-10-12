@@ -800,8 +800,9 @@ export function leerCuentaApuntada(raw: string | null): CuentaApuntada | null {
     if (typeof v !== "object" || v === null) return null;
     const { cuenta, generadaEn } = v as { cuenta?: unknown; generadaEn?: unknown };
     if (typeof generadaEn !== "number" || !Number.isFinite(generadaEn)) return null;
-    if (cuenta !== null && (typeof cuenta !== "string" || cuenta === "")) return null;
-    return { cuenta, generadaEn };
+    if (cuenta === null) return { cuenta: null, generadaEn };
+    if (typeof cuenta === "string" && cuenta !== "") return { cuenta, generadaEn };
+    return null;
   } catch {
     return null;
   }
@@ -970,6 +971,7 @@ Esperado: 4 archivos y `commit=0`.
 - Prueba hermética: `tests/sync/parseoDeLaCuenta.test.ts`
 - Prueba con base: `tests/sync/borradoresConDueno.test.ts`
 - Modificar: `scripts/pruebas-por-compuerta.txt`
+- Modificar: `tests/traceability/jornadaEnApiario.test.ts` y `tests/sync/finDeColoniaSinSenal.test.ts` (paso 8)
 
 **Interfaces:**
 - Consume: `huellaDeCuenta`, `cuentaDelBorradorDe`, `duenoDelBorrador`, `RAZON_BORRADOR_AJENO`, `RAZON_CUENTA_INVALIDA` (Tarea 1).
@@ -1469,19 +1471,86 @@ grep -e 'Test Files' -e 'Tests ' "$S/t3-verde.txt"
 
 Esperado: `vitest=0`, `Test Files 2 passed (2)` y `Tests 13 passed (13)`.
 
-- [ ] **Paso 8: Las pruebas vecinas del lote siguen en verde**
+- [ ] **Paso 8: Las dos pruebas vecinas que envían desde un aparato ajeno**
 
-Tocan `pushFieldEvents` y el parseo, que se acaban de cambiar:
+Medido al preparar el plan: casi todas las pruebas que llaman a `pushFieldEvents` envían desde un aparato
+que registró la misma cuenta que envía, y la regla del aparato las da por propias. **Dos no**, y con la
+regla nueva sus borradores sin cuenta serían ajenos:
+
+- `tests/traceability/jornadaEnApiario.test.ts` crea su aparato **sin** `createdBy`, y envían dos cuentas
+  distintas. Sus dos casos «applied» caerían, y el de «sin permiso» pasaría por el motivo equivocado.
+- `tests/sync/finDeColoniaSinSenal.test.ts`, en «sin acceso al sitio se rechaza», envía
+  `sinAccesoUserAccountId` desde el aparato de `userAccountId`. Seguiría en verde, pero ya no probaría el
+  acceso.
+
+El arreglo es mandar la huella de quien envía, que es lo que hace un cliente nuevo, sin tocar el aparato. Así
+cada prueba sigue probando lo que probaba.
+
+En `tests/traceability/jornadaEnApiario.test.ts`:
+
+1. Añadir a las importaciones:
+
+```ts
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
+import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
+```
+
+2. En cada uno de los tres envíos de `describe("A9.5 — el lote acepta lo que se captura en el apiario", …)`
+   (el objeto en línea del primer caso, el `const mutacion` del segundo y el objeto en línea de «sin
+   permiso»), añadir como último campo la cuenta de quien envía en ESE caso:
+   `cuentaDelBorrador: huellaDeCuenta(apicultorConManejo),` en los dos primeros y
+   `cuentaDelBorrador: huellaDeCuenta(registradorPorSitio),` en el tercero. Encima del primero, este
+   comentario:
+
+```ts
+        // ADR-199 — el aparato de esta prueba no tiene creador, así que un borrador sin cuenta sería ajeno
+        // para todos. Se manda la cuenta de quien envía, como hace un cliente nuevo.
+```
+
+3. En «sin permiso, el lote lo RECHAZA…», debajo de `expect(resultado!.status).toBe("rejected");`:
+
+```ts
+    // Y rechazado por el permiso, no por ser de otra cuenta: si no, esta prueba ya no probaría el acceso.
+    expect((resultado as { reason?: string }).reason).not.toBe(RAZON_BORRADOR_AJENO);
+```
+
+En `tests/sync/finDeColoniaSinSenal.test.ts`:
+
+1. Añadir a las importaciones:
+
+```ts
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
+import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
+```
+
+2. En «sin acceso al sitio se rechaza, y la colonia no se toca», sustituir
+
+```ts
+    const [r] = await pushFieldEvents(sinAccesoUserAccountId, deviceId, [mutacion(c.id, `${RUN_ID}-d`)]);
+    expect(r!.status).toBe("rejected");
+```
+
+por:
+
+```ts
+    // ADR-199 — el aparato es de `userAccountId`: sin cuenta, este borrador sería ajeno y se rechazaría por
+    // eso, no por el acceso. Se manda la cuenta de quien envía, como hace un cliente nuevo.
+    const [r] = await pushFieldEvents(sinAccesoUserAccountId, deviceId, [
+      { ...mutacion(c.id, `${RUN_ID}-d`), cuentaDelBorrador: huellaDeCuenta(sinAccesoUserAccountId) },
+    ]);
+    expect(r!.status).toBe("rejected");
+    expect((r as { reason?: string }).reason).not.toBe(RAZON_BORRADOR_AJENO);
+```
+
+Después, todas las pruebas que llaman a `pushFieldEvents`, que tocan el envío y el parseo recién cambiados:
 
 ```bash
-npx vitest run tests/sync/pushFieldEvents.test.ts tests/sync/parcelaSinSenal.test.ts tests/sync/finDeColoniaSinSenal.test.ts tests/sync/parseoDelLote.test.ts tests/sync/deviceOperator.test.ts > "$S/t3-vecinas.txt" 2>&1; echo "vitest=$?"
+npx vitest run tests/sync/pushFieldEvents.test.ts tests/sync/parcelaSinSenal.test.ts tests/sync/finDeColoniaSinSenal.test.ts tests/sync/parseoDelLote.test.ts tests/sync/deviceOperator.test.ts tests/sync/deviceTokens.test.ts tests/apiary/irregularidades.test.ts tests/apiary/marcosNegros.test.ts tests/traceability/jornadaEnApiario.test.ts > "$S/t3-vecinas.txt" 2>&1; echo "vitest=$?"
 grep -e 'Test Files' -e 'Tests ' "$S/t3-vecinas.txt"
 ```
 
-Esperado: `vitest=0` y `Test Files 5 passed (5)`. Esas pruebas mandan mutaciones sin cuenta, desde un
-aparato que registró la misma cuenta que envía, así que la regla del aparato las da por propias. Si alguna
-cae con `borrador_de_otra_cuenta`, es que su fixture usa un aparato de otra cuenta. Se arregla el fixture y
-se dice en el commit.
+Esperado: `vitest=0` y `Test Files 9 passed (9)`. Si alguna otra cae con `borrador_de_otra_cuenta`, se
+arregla igual (la huella de quien envía en la mutación, nunca el aparato) y se dice en el commit.
 
 - [ ] **Paso 9: Tipos**
 
@@ -1503,12 +1572,12 @@ con la huella de quien registró el aparato si el borrador no traía cuenta.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
-git add lib/sync/parsearMutaciones.ts lib/sync/pushFieldEvents.ts tests/sync/parseoDeLaCuenta.test.ts tests/sync/borradoresConDueno.test.ts scripts/pruebas-por-compuerta.txt
+git add lib/sync/parsearMutaciones.ts lib/sync/pushFieldEvents.ts tests/sync/parseoDeLaCuenta.test.ts tests/sync/borradoresConDueno.test.ts scripts/pruebas-por-compuerta.txt tests/traceability/jornadaEnApiario.test.ts tests/sync/finDeColoniaSinSenal.test.ts
 git diff --cached --stat
 git commit -q -F "$S/msg-t3.txt"; echo "commit=$?"
 ```
 
-Esperado: 5 archivos y `commit=0`.
+Esperado: 7 archivos y `commit=0`. El hook `mirar-el-stat.py` no pregunta por debajo de 8.
 
 ---
 
@@ -2260,7 +2329,8 @@ import { BorradorAjenoError, duenoDelBorrador } from "../sync/cuentaDelBorrador"
   borrador?: { cuenta: string | null; deviceId: string | null };
 ```
 
-3. Encima de `export async function requestTrampaPhotoUpload`, añadir:
+3. Debajo de la función `claveDeFotoDeTrampa`, y antes del comentario que empieza «Tarea 12, ruling P2 del
+   controlador», para no separar ningún comentario de documentación de su función, añadir:
 
 ```ts
 const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -3014,11 +3084,13 @@ tests/offline/cuentaDelNavegador.test.ts
 tests/sync/borradoresConDueno.test.ts
 tests/sync/clasificarRespuesta.test.ts
 tests/sync/cuentaDelBorrador.test.ts
+tests/sync/finDeColoniaSinSenal.test.ts
 tests/sync/parseoDeLaCuenta.test.ts
 tests/sync/trapPhotoQueue.test.ts
+tests/traceability/jornadaEnApiario.test.ts
 ```
 
-28 archivos. Si sale alguno más, mirar qué le pasa antes de empujar.
+30 archivos. Si sale alguno más, mirar qué le pasa antes de empujar.
 
 - [ ] **Paso 2: Empujar y comprobar contra el remoto**
 
