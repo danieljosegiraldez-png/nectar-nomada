@@ -53,3 +53,36 @@ export function exigeTipoDeSitioDeAbejas(valor: unknown): TipoDeSitioDeAbejas {
   }
   return v as TipoDeSitioDeAbejas;
 }
+
+/**
+ * Si las cajas de este tipo de sitio se manejan **en cuadros**.
+ *
+ * **El defecto que cierra.** `InspectionForm` pregunta «cuadros cubiertos de abeja» a TODA
+ * inspeccion, sin mirar donde esta la colonia. Los meliponinos no se manejan en cuadros, asi que
+ * a un meliponario se le hace una pregunta que no tiene respuesta — y un campo vacio se lee
+ * despues como «no se conto», no como «aqui no aplica».
+ *
+ * **La especie no esta en `Colony` ni en `Hive`** —medido el 2026-10-08— y no es un olvido: vive
+ * en el TIPO DE SITIO, y el comentario de `LocationType.meliponary` en el esquema explica por
+ * que, citando el manual de ANSA (Gennari, INTA): *las cajas, sus modulos y sus medidas cambian
+ * por especie*, y las especies con tendencia al pillaje «deben ser manejadas en meliponarios
+ * separados». Con la especie en las colonias, un meliponario vacio no podia decir de que era.
+ *
+ * **Es un `Record` total y no un `if`, a proposito.** Anadir un tipo de sitio de abejas deja de
+ * compilar hasta que alguien decida si se maneja en cuadros. Un tipo que no compila es mejor
+ * guardia que un test que hay que acordarse de mirar.
+ *
+ * **Lo que esto NO hace:** decir que se pregunta en su lugar. Eso es oficio del dueno y no se
+ * inventa aqui; de momento la pregunta simplemente no se hace.
+ */
+export const SE_MANEJA_EN_CUADROS: Record<TipoDeSitioDeAbejas, boolean> = {
+  apiary_site: true,
+  meliponary: false,
+};
+
+export function seManejaEnCuadros(tipo: LocationType | string | null | undefined): boolean {
+  const v = String(tipo ?? "");
+  return (TIPOS_DE_SITIO_DE_ABEJAS as readonly string[]).includes(v)
+    ? SE_MANEJA_EN_CUADROS[v as TipoDeSitioDeAbejas]
+    : true;
+}

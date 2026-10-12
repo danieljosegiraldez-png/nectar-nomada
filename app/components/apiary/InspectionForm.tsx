@@ -49,10 +49,17 @@ export function InspectionForm({
   colonyId,
   selfPersonId,
   irregularidades,
+  enCuadros,
 }: {
   colonyId: string;
   selfPersonId: string | null;
   irregularidades: readonly IrregularidadOfrecida[];
+  /**
+   * Si este sitio maneja sus cajas en cuadros. Lo decide `seManejaEnCuadros` desde el TIPO DE
+   * SITIO, no desde la colonia: a un meliponario no se le pregunta por cuadros, porque no los
+   * tiene y un vacio se leeria despues como «no se conto».
+   */
+  enCuadros: boolean;
 }) {
   const t = useTranslations("Apiary");
   const [showDetails, setShowDetails] = useState(false);
@@ -269,17 +276,19 @@ export function InspectionForm({
               ))}
             </select>
           </div>
-          <div className="nn-field">
-            <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
-            <CampoNumerico
-              id={`insp-cuadros-${colonyId}`}
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={cuadros}
-              onChange={(e) => setCuadros(e.target.value)}
-            />
-          </div>
+          {enCuadros ? (
+            <div className="nn-field">
+              <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
+              <CampoNumerico
+                id={`insp-cuadros-${colonyId}`}
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={cuadros}
+                onChange={(e) => setCuadros(e.target.value)}
+              />
+            </div>
+          ) : null}
           <div className="nn-field">
             <label htmlFor={`insp-marcos-negros-${colonyId}`}>{t("darkFramesLabel")}</label>
             <CampoNumerico

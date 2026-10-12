@@ -41,11 +41,15 @@ tests/equipos/bandejas.test.ts
 tests/traceability/capacidadDeBandeja.test.ts
 tests/equipos/equipos.test.ts
 tests/equipos/datosDeEquipo.test.ts
+tests/equipos/retiroEnLaBase.test.ts
+tests/equipos/retirarEquipo.test.ts
+tests/equipos/retiroEnElTablero.test.ts
 tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
 tests/equipos/documentos.test.ts
 tests/equipos/proveedores.test.ts
+tests/equipos/bandejasAparte.test.ts
 tests/rutinas/rutinas.test.ts
 tests/rutinas/rutinasDeLugar.test.ts
 tests/catalogos/propiedad.test.ts
@@ -230,6 +234,7 @@ tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
 tests/traceability/carreraDelArbolDeEstante.test.ts
 tests/apiary/apiarioHeredado.test.ts
 tests/people/quienLoHizo.test.ts
+tests/traceability/elegirTanque.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #

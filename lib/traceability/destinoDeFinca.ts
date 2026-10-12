@@ -31,6 +31,11 @@ import { TraceabilityAccessError } from "./lots";
  * pueden no ser la misma («no son la misma organizacion», Daniel, 2026-09-30). Gestionar la finca
  * no autoriza a mandarle cereza a un beneficio que quien declara no ve.
  *
+ * **Salvo uno de la MISMA organización que la finca** (ADR-198, PR 3): un beneficio sin padre no
+ * cuelga de ninguna finca y `lot:view` no le llega por los ancestros, pero la finca y él son de la
+ * misma casa. Ahí basta `lot:manage` sobre la finca con la clasificación del beneficio, y nunca se
+ * concede ver sus lotes.
+ *
  * **`null` no es un hueco, es una respuesta.** Una finca cuya cereza se compra y se traslada
  * —Jaramillo, Artillería— no envía a ningún beneficio propio, y quitar el destino es una operación
  * legítima, no un error. Por eso la comprobación del beneficio se salta cuando viene `null`: no
@@ -41,7 +46,7 @@ export async function declararDestinoDeFinca(
   input: { readonly fincaSiteId: string; readonly beneficioId: string | null },
 ): Promise<void> {
   const sitio = await exigeGestionarFinca(userAccountId, input.fincaSiteId);
-  if (input.beneficioId !== null) await exigeBeneficioDeDestino(userAccountId, input.beneficioId);
+  if (input.beneficioId !== null) await exigeBeneficioDeDestino(userAccountId, input.beneficioId, sitio);
 
   await prisma.$transaction(async (tx) => {
     // **El `before` se lee con la fila bloqueada.** Sin esto, dos declaraciones a la vez leen el
@@ -89,7 +94,8 @@ export async function declararDestinoDeFinca(
  * (`lot:manage` sobre la finca), no `location:manage_attributes` como la pantalla del logotipo: una
  * pantalla que se abre con un permiso y guarda con otro enseña un formulario que va a fallar.
  *
- * Los beneficios salen de `beneficiosDeDestino`, que ya filtra por `can(view, lot)`. Así la lista
+ * Los beneficios salen de `beneficiosDeDestino` con esta finca: los que `can(view, lot)` deja ver, más
+ * los de su organización (ADR-198, PR 3). Son exactamente los que acepta `exigeBeneficioDeDestino`. Así la lista
  * no puede ofrecer un destino que después el servicio rechace — y, si sale vacía, la pantalla dice
  * qué falta en vez de un desplegable sin opciones.
  */
@@ -107,11 +113,12 @@ export async function fincaParaDestino(
     select: { id: true, name: true, locationType: true, beneficioDestino: { select: { id: true, name: true } } },
   });
   if (!sitio || sitio.locationType !== "site") return null;
+  let finca: Awaited<ReturnType<typeof exigeGestionarFinca>>;
   try {
-    await exigeGestionarFinca(userAccountId, siteId);
+    finca = await exigeGestionarFinca(userAccountId, siteId);
   } catch (error) {
     if (error instanceof TraceabilityAccessError || error instanceof JornadaError) return null;
     throw error;
   }
-  return { id: sitio.id, name: sitio.name, destino: sitio.beneficioDestino, beneficios: await beneficiosDeDestino(userAccountId) };
+  return { id: sitio.id, name: sitio.name, destino: sitio.beneficioDestino, beneficios: await beneficiosDeDestino(userAccountId, finca) };
 }
