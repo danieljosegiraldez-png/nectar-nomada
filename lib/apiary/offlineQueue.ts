@@ -13,6 +13,9 @@
  * *` ("use client") files should import this.
  */
 
+import { desenlaceDeUnBorrador, repartirPorCuenta } from "../sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
+
 const DB_NAME = "nectar-apiary-offline";
 const DB_VERSION = 1;
 const STORE_NAME = "drafts";
@@ -31,6 +34,11 @@ export interface DraftRecord<T = unknown> {
   createdAt: number;
   status: DraftStatus;
   errorMessage?: string;
+  /**
+   * ADR-199 — la huella de la cuenta que lo anotó. Ausente en los guardados antes de que existiera:
+   * ésos los decide el servidor por quien registró el aparato.
+   */
+  cuenta?: string | null;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -61,7 +69,14 @@ function generateDraftId(): string {
  * with the local save, not merely to React state" — this is that write).
  */
 export async function queueDraft<T>(kind: DraftKind, payload: T): Promise<DraftRecord<T>> {
-  const record: DraftRecord<T> = { id: generateDraftId(), kind, payload, createdAt: Date.now(), status: "pending" };
+  const record: DraftRecord<T> = {
+    id: generateDraftId(),
+    kind,
+    payload,
+    createdAt: Date.now(),
+    status: "pending",
+    cuenta: cuentaActualDelNavegador(),
+  };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -180,6 +195,8 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
     // falta, no por lo que es.
     kind: KIND_DEL_SERVIDOR[draft.kind],
     clientDraftId: draft.id,
+    // ADR-199 — del BORRADOR, después del payload: lo que traiga el payload no la pisa.
+    cuentaDelBorrador: draft.cuenta ?? null,
     // Si el borrador no trajo hora propia, vale la de su creación: es cuando el
     // operador lo anotó, que es el hecho que interesa. Inventar `Date.now()` al
     // sincronizar fecharía la inspección el día que hubo señal.
@@ -198,12 +215,18 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
  * marked "error" and left for the operator to see and discard, not
  * silently retried forever against a request that can never succeed.
  */
-export async function syncAll(): Promise<{ synced: number; errored: number; stillPending: number }> {
-  const drafts = await listDrafts();
-  const toSync = drafts.filter((d) => d.status === "pending" || d.status === "error");
+export async function syncAll(): Promise<{ synced: number; errored: number; retained: number; stillPending: number }> {
+  // ADR-199 — sólo salen los de la cuenta de este navegador y los que no tienen cuenta; los de otra
+  // cuenta se quedan aquí hasta que su dueño vuelva a entrar.
+  const cuentaActual = cuentaActualDelNavegador();
+  const { enviables: toSync, ajenos } = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error"),
+    cuentaActual,
+  );
 
   let synced = 0;
   let errored = 0;
+  let retained = ajenos.length;
 
   if (toSync.length > 0) {
     try {
@@ -218,16 +241,23 @@ export async function syncAll(): Promise<{ synced: number; errored: number; stil
       // dejan en cola, como un fallo de transporte, porque marcarlos con error
       // haría que el operador descartara trabajo bueno.
       if (res.ok) {
-        const { results } = (await res.json()) as { results: Array<{ clientDraftId: string; status: string; reason?: string }> };
+        const { results } = (await res.json()) as {
+          results: Array<{ clientDraftId: string; status: string; reason?: string; cuentaDelBorrador?: string }>;
+        };
         const porBorrador = new Map(results.map((r) => [r.clientDraftId, r]));
         for (const draft of toSync) {
           const r = porBorrador.get(draft.id);
           if (!r) continue; // el servidor no lo mencionó: se reintenta
-          if (r.status === "applied" || r.status === "duplicate") {
+          const desenlace = desenlaceDeUnBorrador(draft, r, cuentaActual);
+          if (desenlace.tipo === "enviado") {
             await discardDraft(draft.id);
             synced++;
+          } else if (desenlace.tipo === "retenido") {
+            // ADR-199 — sigue pendiente; sólo se apunta de quién es si el servidor lo dijo.
+            if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) await putDraft(desenlace.borrador);
+            retained++;
           } else {
-            await putDraft({ ...draft, status: "error", errorMessage: r.reason });
+            await putDraft(desenlace.borrador);
             errored++;
           }
         }
@@ -238,9 +268,12 @@ export async function syncAll(): Promise<{ synced: number; errored: number; stil
     }
   }
 
-  const stillPending = (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error").length;
+  const stillPending = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error"),
+    cuentaActual,
+  ).enviables.length;
   if (synced > 0) recordLastSyncSuccess();
-  return { synced, errored, stillPending };
+  return { synced, errored, retained, stillPending };
 }
 
 // --- A5.5 §2: "visible, honest state" — when was the last successful sync?

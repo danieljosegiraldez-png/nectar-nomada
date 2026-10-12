@@ -2117,6 +2117,7 @@
     "syncNowButton": "Sincronizar ahora",
     "syncingButton": "Sincronizando…",
     "discardErroredButton": "Descartar fallidas",
+    "otherAccountDrafts": "{count, plural, one {# anotación de otra cuenta espera en este teléfono hasta que esa persona vuelva a entrar} other {# anotaciones de otra cuenta esperan en este teléfono hasta que esa persona vuelva a entrar}}",
     "syncResult": "Sincronizadas {synced}, fallidas {errored}.",
     "lastSyncLabel": "Última sincronización: {time}",
     "neverSyncedLabel": "Todavía no sincronizó",

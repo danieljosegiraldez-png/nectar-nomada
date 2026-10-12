@@ -2117,6 +2117,7 @@
     "syncNowButton": "Sync now",
     "syncingButton": "Syncing…",
     "discardErroredButton": "Discard failed",
+    "otherAccountDrafts": "{count, plural, one {# entry from another account is waiting on this phone until that person signs in again} other {# entries from another account are waiting on this phone until that person signs in again}}",
     "syncResult": "Synced {synced}, failed {errored}.",
     "lastSyncLabel": "Last synced: {time}",
     "neverSyncedLabel": "Never synced yet",

@@ -145,3 +145,19 @@ describe("A9.5 — un borrador se traduce a la mutación del lote", () => {
     expect(m.occurredAt).toBe("2026-09-02T09:15:00.000Z");
   });
 });
+
+describe("mutacionDe: la cuenta del borrador viaja (ADR-199)", () => {
+  const base = { id: "draft-cuenta", kind: "inspection" as const, payload: { colonyId: "c1", outcome: "ok" }, createdAt: 0, status: "pending" as const };
+
+  it("un borrador con cuenta la manda como cuentaDelBorrador", () => {
+    expect(mutacionDe({ ...base, cuenta: "11e594f481958c10" }).cuentaDelBorrador).toBe("11e594f481958c10");
+  });
+
+  it("uno de antes, sin cuenta, la manda null", () => {
+    expect(mutacionDe(base).cuentaDelBorrador).toBeNull();
+  });
+
+  it("el payload no puede suplantar la cuenta del borrador", () => {
+    expect(mutacionDe({ ...base, payload: { ...base.payload, cuentaDelBorrador: "otra" }, cuenta: "11e594f481958c10" }).cuentaDelBorrador).toBe("11e594f481958c10");
+  });
+});
