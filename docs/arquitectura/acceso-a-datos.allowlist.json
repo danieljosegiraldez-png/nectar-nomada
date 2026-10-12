@@ -694,6 +694,10 @@
     {
       "archivo": "lib/recetas/catalogosDelEditor.ts",
       "razon": "Parte 2a, tarea 14: el vocabulario de los desplegables del editor de recetas (valores de catálogo). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
+    },
+    {
+      "archivo": "lib/recetas/avance.ts",
+      "razon": "Parte 2a, tarea 6 (§4.3): importa el cliente SÓLO como tipo (`import type { prisma }`), para la firma que fija el plan, `avanceDelProceso(tx: Prisma.TransactionClient | typeof prisma, lotId)`, que deja leer con el cliente global fuera de una transacción. En tiempo de ejecución consulta con el `tx` que recibe; no abre conexión."
     }
   ],
   "reciben_transaccion": [
@@ -826,6 +830,10 @@
     {
       "archivo": "lib/recetas/versiones.ts",
       "razon": "Parte 2a, tarea 4: `copiarContenidoDeVersion` recibe el cliente de la transacción de quien la llama (`nuevaVersionBorrador` y `derivarReceta`, y —desde el PR-B— la conversión de una Libre de la tarea 11) y copia dentro de ella pasos, adiciones, fines, requisitos, metas y fases de una versión a otra. No abre conexión ni transacción propia, y no autoriza: sus llamadores ya pidieron `exigeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16)."
+    },
+    {
+      "archivo": "lib/recetas/avance.ts",
+      "razon": "Parte 2a, tarea 6 (§4.3): `avanceDelProceso` recibe el cliente de quien la llama —el de su transacción, o el global si sólo lee— y con él lee el proceso que cubre al lote por el resolvedor (`procesoQueCubre`), los pasos de la versión de ese proceso, los valores de catálogo de sus tipos y los registros de las cuatro tablas de su hilo (fermentaciones, secados, intervenciones del proceso y manejos de fermentación), por los ids de los procesos del hilo. No escribe nada ni autoriza: quien la llama ya autorizó el lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -1548,6 +1556,12 @@
       "operacion": "catalogosDelEditor",
       "razon": "Lee los valores canónicos de diez catálogos (tipo de paso, estado de la fruta, oxígeno, temperatura, fuente microbiana, medio, físico, sustrato, levadura y capacidad) para los desplegables del formulario de un paso. No recibe principal y no filtra por nadie: es vocabulario, no dato de una organización. La llaman sólo `app/recipes/[id]/pasos/datosDelFormulario.ts`, después de `getRecipeForEditor` (que abre la receta a quien puede escribirla o a quien opera un lote de su organización: Ruling C4) y de `puedeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16), que responde 404 a quien no puede.",
       "verificado": "2026-10-08"
+    },
+    {
+      "archivo": "lib/recetas/avance.ts",
+      "operacion": "avanceDelProceso",
+      "razon": "No recibe principal. Para el lote que recibe, lee por el resolvedor el proceso que lo cubre y, sobre su hilo (él y los procesos de los que deriva por división o devolución, con su misma versión), los pasos de la receta y los registros que los cumplen; devuelve ids de pasos y de registros, sus fechas de inicio y el siguiente paso, no filas de lote. Al escribirse no la llama ninguna pantalla: la llamarán las de empezar corridas y registrar manejos (tarea 13 de la Parte 2a), después de que ellas autoricen ese mismo lote. Quien la llame debe haber autorizado el lote antes: ella no recibe quién pregunta.",
+      "verificado": "2026-10-12"
     }
   ]
 }

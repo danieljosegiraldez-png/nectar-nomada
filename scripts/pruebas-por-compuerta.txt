@@ -187,6 +187,7 @@ tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts
 tests/traceability/lotProcess.test.ts
 tests/traceability/procesoDelLinaje.test.ts
+tests/recetas/avance.test.ts
 tests/traceability/aperturaDeProceso.test.ts
 tests/traceability/corridaConProceso.test.ts
 tests/traceability/divisionBajoProceso.test.ts

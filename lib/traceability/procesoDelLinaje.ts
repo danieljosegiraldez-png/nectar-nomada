@@ -41,6 +41,12 @@ export interface ProcesoEnCadena {
   readonly closureKind: "moisture" | "divided" | null;
   readonly derivedFromLotProcessId: string | null;
   readonly origen: OrigenDelProceso;
+  /**
+   * La versión de receta del proceso; null en uno de antes de la receta obligatoria (R9). Parte 2a, §4.3 (tarea 6): el avance
+   * sobre los pasos sigue el hilo de derivación mientras la versión sea la del vigente, y la toma AQUÍ, de la selección del
+   * resolvedor, para no leer `lotProcess` por su cuenta (`tests/arquitectura/proceso-por-el-resolvedor.test.ts`).
+   */
+  readonly processRecipeVersionId: string | null;
 }
 
 export interface Composicion {
@@ -62,6 +68,7 @@ const SELECCION = {
   endedAt: true,
   closureKind: true,
   derivedFromLotProcessId: true,
+  processRecipeVersionId: true,
   returnThatOpened: { select: { id: true } },
 } as const;
 
@@ -72,6 +79,7 @@ type FilaDeProceso = {
   endedAt: Date | null;
   closureKind: "moisture" | "divided" | null;
   derivedFromLotProcessId: string | null;
+  processRecipeVersionId: string | null;
   returnThatOpened: { id: string } | null;
 };
 
@@ -85,6 +93,7 @@ function enCadena(p: FilaDeProceso, profundidad: number): ProcesoEnCadena {
     closureKind: p.closureKind,
     derivedFromLotProcessId: p.derivedFromLotProcessId,
     origen: p.derivedFromLotProcessId === null ? "original" : p.returnThatOpened ? "continuacion" : "parte_de_division",
+    processRecipeVersionId: p.processRecipeVersionId,
   };
 }
 

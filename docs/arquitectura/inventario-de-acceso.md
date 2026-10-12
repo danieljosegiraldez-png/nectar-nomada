@@ -13,9 +13,11 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**640 operaciones** que tocan la base, en **173 archivos** — medido el 2026-10-11 con `node scripts/inventario-de-acceso.mjs`, al volver a unir
-`origin/main` (`62a206da`) en la rama de la Parte 2a: son **tres más** que las 637 en 173 de la unión anterior, y las tres vienen de `main`
-(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la primera nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
+**641 operaciones** que tocan la base, en **174 archivos** — medido el 2026-10-12 con `node scripts/inventario-de-acceso.mjs`: es **una más** que las
+640 en 173 de la medición anterior, y es `avanceDelProceso` (`lib/recetas/avance.ts`, tarea 6 del PR-B: ver la primera nota de abajo), de la clase
+«depende del llamador»; las otras seis filas no se mueven. **La medición anterior**, del 2026-10-11 con el mismo script, al volver a unir
+`origin/main` (`62a206da`) en la rama de la Parte 2a: **640 operaciones** en **173 archivos**, **tres más** que las 637 en 173 de la unión anterior, y las tres vienen de `main`
+(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la segunda nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
 y las otras seis filas no se mueven (ninguna operación de la rama cambia de clase). **La unión anterior**, medida el 2026-10-10 al unir `a2f269b5`: **637 operaciones** en **173 archivos**, que eran **tres más** que las 634 en 173 de la rama antes de unir, y las tres
 vienen de `main` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`,
 **guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #687), y
@@ -47,10 +49,18 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 | **402** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **67** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **101** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **102** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+
+> **El avance de la receta sobre el hilo del proceso (Parte 2a, tarea 6 del PR-B, 2026-10-12): 640→641,
+> 173→174 archivos y «depende del llamador» 101→102.** `avanceDelProceso`
+> (`lib/recetas/avance.ts`) es nueva y no recibe principal: para el lote que recibe, lee por el resolvedor el proceso que lo
+> cubre y, sobre su hilo —él y los procesos de los que deriva por división o devolución, con su misma versión—, los pasos de la
+> receta y los registros de las cuatro tablas que los cumplen. Devuelve ids, fechas de inicio y el siguiente paso, no filas. La
+> llamarán las pantallas de empezar corridas y registrar manejos (tarea 13), después de autorizar ese lote; hasta entonces sólo
+> la llaman sus pruebas. Que `ProcesoEnCadena` lleve la versión de receta (`procesoDelLinaje.ts`) no cambia ninguna cifra.
 
 > **Arreglos previos de la Parte 2c, PR 1 (2026-10-11): 628→631 operaciones, 170→170 archivos; «guardia directo» 399→402.**
 > Medido con `--json` sobre los dos árboles (`origin/main` `637cabce` y la rama), no sumado a mano. Las 3 nuevas son de `lib/equipos/equipos.ts`: `retirarEquipo` en «guardia directo» (guardias: `can`, `puedeConfigurar`, `exigePermiso`; toca `equipment`, `fermentationRun`, `dryingRunTray`, `roastSession`, `equipmentTransfer`, `SQL-crudo`); `reactivarEquipo` en «guardia directo» (guardias: `can`, `puedeConfigurar`, `exigePermiso`; toca `equipment`, `equipmentTransfer`, `SQL-crudo`); `recipientesParaFermentar` en «guardia directo» (guardias: `requireLotAccess`, `puedeVerEquipo`; toca `lot`, `equipment`).
