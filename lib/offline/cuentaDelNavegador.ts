@@ -53,7 +53,15 @@ export function apuntarCuentaDelNavegador(nueva: CuentaApuntada): void {
     const vigente = cuentaVigente(leerCuentaApuntada(localStorage.getItem(CLAVE_CUENTA_DEL_NAVEGADOR)), nueva);
     if (vigente === nueva) localStorage.setItem(CLAVE_CUENTA_DEL_NAVEGADOR, JSON.stringify(nueva));
   } catch {
-    // Sin almacenamiento local: los borradores quedan sin cuenta y el servidor los decide por el aparato.
+    // No se pudo escribir. Si ya había una entrada, seguiría mandando la ANTERIOR —p. ej. la de A cuando ya
+    // entró B— y las colas guardarían y enviarían a nombre de quien ya no es. Se intenta quitarla para caer a
+    // «sin cuenta»: los borradores quedan sin cuenta y el servidor los decide por el aparato. Si ni quitarla
+    // se puede (sin almacenamiento local), tampoco hay entrada que lea nadie.
+    try {
+      localStorage.removeItem(CLAVE_CUENTA_DEL_NAVEGADOR);
+    } catch {
+      // Sin almacenamiento local.
+    }
   }
 }
 

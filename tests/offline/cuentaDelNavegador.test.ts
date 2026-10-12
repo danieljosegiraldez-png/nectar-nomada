@@ -81,6 +81,46 @@ describe("apuntarCuentaDelNavegador y cuentaActualDelNavegador", () => {
     expect(cuentaActualDelNavegador()).toBeNull();
   });
 
+  /**
+   * **Si escribir falla, la entrada anterior no puede seguir mandando.** B entra después de A, pero el
+   * `setItem` de B lanza (cuota llena, almacenamiento bloqueado a mitad de sesión): si el `catch` sólo
+   * callara, las colas seguirían leyendo A y guardarían los borradores de B a nombre de A. Debe caer a
+   * «sin cuenta», que el servidor decide por el aparato.
+   */
+  it("si escribir la cuenta nueva falla, no se queda la anterior: cae a «sin cuenta»", () => {
+    apuntarCuentaDelNavegador({ cuenta: "huella-a", generadaEn: 100 });
+    // Control: la primera escritura sí entró, así que el caso de abajo parte de una cuenta que borrar.
+    expect(cuentaActualDelNavegador()).toBe("huella-a");
+
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (k: string) => almacen.get(k) ?? null,
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+        removeItem: (k: string) => void almacen.delete(k),
+      },
+    });
+    expect(() => apuntarCuentaDelNavegador({ cuenta: "huella-b", generadaEn: 200 })).not.toThrow();
+    expect(cuentaActualDelNavegador()).toBeNull();
+    expect(almacen.has(CLAVE_CUENTA_DEL_NAVEGADOR)).toBe(false);
+  });
+
+  it("y si tampoco se puede quitar, no lanza", () => {
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+        removeItem: () => {
+          throw new Error("SecurityError");
+        },
+      },
+    });
+    expect(() => apuntarCuentaDelNavegador({ cuenta: "huella-a", generadaEn: 1 })).not.toThrow();
+  });
+
   it("sin almacenamiento local no lanza, y no hay cuenta", () => {
     delete (globalThis as { localStorage?: unknown }).localStorage;
     expect(() => apuntarCuentaDelNavegador({ cuenta: "huella-a", generadaEn: 1 })).not.toThrow();

@@ -21,8 +21,10 @@ export function huellaDeCuenta(userAccountId: string): string {
  * servidor a la que se generó la página.
  *
  * La hora ordena las cargas: una página vieja servida desde la caché del service worker no puede
- * pisar a una más reciente. Ver `lib/offline/cuentaDelNavegador.ts`. Se calcula aquí y no en el
- * cuerpo del layout para no llamar a `Date.now()` durante el render de un componente.
+ * pisar a una más reciente. Ver `lib/offline/cuentaDelNavegador.ts`. Se calcula en una función para
+ * poder inyectar la hora en las pruebas (`ahora`) y para que la regla de pureza de React no la marque
+ * en el cuerpo del componente del layout; el reloj se sigue leyendo durante el render, sólo que de forma
+ * indirecta.
  */
 export function cuentaParaElNavegador(
   userAccountId: string | null,
