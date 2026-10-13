@@ -27,7 +27,16 @@ import { estadoDeRitmo, puntajeDeUrgencia, type EstadoDeRitmo, type MetaConRitmo
 import { procesoQueCubre, type Cobertura } from "../traceability/procesoDelLinaje";
 import { LotProcessError } from "../traceability/errorDeProceso";
 
-/** Lo que la receta declara para el secado de este lote, o nada si no se declaró. */
+/**
+ * Lo que la receta declara para el secado de este lote, o nada si no se declaró.
+ *
+ * **Parte 2a, tarea 9 (diseño §3.1).** Si la corrida cumple un PASO de la receta (`recipeStepId`), esto sale de ese paso —sus
+ * `horasSugeridas`, su `volteoCadaHoras` y su banda de humedad— aunque alguno sea nulo: un paso que no declara volteo no hereda el
+ * de la fase, que es el de OTRO paso (la fase de una versión con pasos es el primero de su tipo). Sin paso, sale de la fase de
+ * secado de la versión del proceso SÓLO si esa versión no tiene pasos (las corridas de antes de la Parte 2a y las de un proceso
+ * viejo), como hasta ahora. **Una corrida sin paso bajo una versión CON pasos es una desviación (§4.4): no declaró ritmo y no hereda
+ * el de la fase** —el de otro paso—; sus cuatro campos salen nulos (R9, revisión adversaria del 2026-10-05).
+ */
 export interface RitmoDeclarado {
   readonly expectedHours: number | null;
   readonly turnEveryHours: number | null;
@@ -207,7 +216,12 @@ export function urgenciaDeUnidad(input: {
   return total;
 }
 
-/** Las metas con ritmo de la fase de secado, para que `ritmo.ts` diga qué lecturas se deben. */
+/**
+ * Las metas con ritmo de la fase de secado, para que `ritmo.ts` diga qué lecturas se deben.
+ *
+ * Parte 2a, tarea 9: las metas de un PASO pasan por el mismo filtro de fase. La tarea 3 escribe la fase de una meta de paso desde
+ * el tipo de su paso (`FASE_DEL_TIPO`), y la de un paso de secado es `drying`.
+ */
 function metasDeSecado(
   objetivos: readonly { variable: string; everyHours: number | null; phase: string | null }[],
   ultimaPorVariable: Map<string, Date>,
@@ -244,6 +258,18 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
       dryingBedLocationId: true,
       location: { select: { id: true, name: true, locationType: true, parentLocationId: true } },
       dryingBedLocation: { select: { id: true, name: true, parentLocationId: true } },
+      // Parte 2a, tarea 9 (§3.1): el paso que esta corrida cumple, con lo que la cola le lee. Se lee por la relación de la corrida
+      // con su paso y no por su proceso: el proceso de un lote sale del resolvedor (`procesoQueCubre`), nunca de la corrida
+      // (`tests/arquitectura/proceso-por-el-resolvedor.test.ts`).
+      recipeStep: {
+        select: {
+          horasSugeridas: true,
+          volteoCadaHoras: true,
+          humedadMinPct: true,
+          humedadMaxPct: true,
+          targets: { select: { variable: true, everyHours: true, phase: true } },
+        },
+      },
       turningEvents: { select: { occurredAt: true }, orderBy: { occurredAt: "desc" } },
       trays: {
         where: { hasta: null },
@@ -288,19 +314,37 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
                 // Parte 2a, tarea 9a (§3.2): las metas de la VERSIÓN son las que no tienen paso. Las de un paso son de ese paso: sin este filtro,
                 // una receta con metas por paso le haría deber a toda corrida de su versión lecturas de un paso que quizá no hizo.
                 targets: { where: { recipeStepId: null }, select: { variable: true, everyHours: true, phase: true } },
+                // Parte 2a, tarea 9 (R9): cuántos pasos tiene la versión. La fase sólo vale si no tiene ninguno (abajo).
+                _count: { select: { steps: true } },
               },
             },
           },
         })
       : null;
 
+    // Parte 2a, tarea 9 (§3.1; R9): con paso, el ritmo es el de SU paso —aunque sea nulo—. Sin paso, el de la fase de secado de la
+    // versión del proceso SÓLO si esa versión no tiene pasos (el mundo de antes de la 2a); bajo una versión con pasos, una corrida
+    // sin paso es una desviación (§4.4): no declaró ritmo, y la fase —una derivación del primer paso— es el ritmo de OTRO paso.
+    // Horas, volteo, banda y metas salen del MISMO sitio (el paso, o la versión): mezclar las horas de un paso con las metas de la
+    // versión juzgaría a una corrida con dos recetas.
+    const paso = c.recipeStep;
     const faseDeSecado = proceso?.processRecipeVersion?.fases[0] ?? null;
-    const ritmo: RitmoDeclarado = {
-      expectedHours: faseDeSecado?.expectedHours ?? null,
-      turnEveryHours: faseDeSecado?.turnEveryHours ?? null,
-      humedadMinPct: faseDeSecado?.targetMoistureMinPct?.toNumber() ?? null,
-      humedadMaxPct: faseDeSecado?.targetMoistureMaxPct?.toNumber() ?? null,
-    };
+    const versionConPasos = (proceso?.processRecipeVersion?._count.steps ?? 0) > 0;
+    const ritmo: RitmoDeclarado = paso
+      ? {
+          expectedHours: paso.horasSugeridas,
+          turnEveryHours: paso.volteoCadaHoras,
+          humedadMinPct: paso.humedadMinPct?.toNumber() ?? null,
+          humedadMaxPct: paso.humedadMaxPct?.toNumber() ?? null,
+        }
+      : versionConPasos
+        ? { expectedHours: null, turnEveryHours: null, humedadMinPct: null, humedadMaxPct: null }
+        : {
+            expectedHours: faseDeSecado?.expectedHours ?? null,
+            turnEveryHours: faseDeSecado?.turnEveryHours ?? null,
+            humedadMinPct: faseDeSecado?.targetMoistureMinPct?.toNumber() ?? null,
+            humedadMaxPct: faseDeSecado?.targetMoistureMaxPct?.toNumber() ?? null,
+          };
 
     // Las mediciones del lote en esta fase, para la última humedad y para las lecturas debidas.
     const mediciones = await prisma.measurement.findMany({
@@ -316,7 +360,8 @@ export async function colaDeSecado(userAccountId: string, ahora: Date = new Date
       ahora,
       faseIniciada: c.startedAt,
       expectedHours: ritmo.expectedHours,
-      metas: metasDeSecado(proceso?.processRecipeVersion?.targets ?? [], ultimaPorVariable),
+      // Las metas de su paso o, sin paso, las de la versión (que ya no incluyen las de ningún paso: las filtra la 9a, en la consulta de arriba).
+      metas: metasDeSecado(paso ? paso.targets : (proceso?.processRecipeVersion?.targets ?? []), ultimaPorVariable),
     });
 
     const ultimoVolteo = c.turningEvents[0]?.occurredAt ?? null;
