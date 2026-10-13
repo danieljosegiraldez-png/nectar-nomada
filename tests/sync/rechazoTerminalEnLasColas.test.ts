@@ -211,6 +211,51 @@ describe("recuperación de una vez: lo rechazado por `observed_at_not_a_day` ant
     await syncFieldEvents();
     expect(enviadosEnLaLlamada(0)).toEqual([]);
   });
+
+  /**
+   * ADR-199 sobre el #719: el borrador viejo no tiene cuenta, sale con A dentro, y el servidor lo
+   * RETIENE porque el aparato lo registró B. Una retención no es un rechazo —nadie evaluó la
+   * revisión—, así que el reintento único tiene que seguir vivo para cuando entre B. Si se gastara,
+   * esa revisión se quedaría en el teléfono sin poder salir nunca.
+   */
+  it("una retención (de otra cuenta) no gasta el reintento: no viaja con A y sí cuando entra su dueño", async () => {
+    const A = "a".repeat(16);
+    const B = "b".repeat(16);
+    let dentro: string | null = null;
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) =>
+        k === "nn-field-device-id"
+          ? "aparato-de-prueba"
+          : k === "nn-cuenta-del-navegador"
+            ? JSON.stringify({ cuenta: dentro, generadaEn: 1 })
+            : null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    const d = await comoLoDejoElCodigoViejo("observed_at_not_a_day");
+
+    dentro = A;
+    fetchFalso.mockResolvedValueOnce(
+      json(200, {
+        results: [{ clientDraftId: d.id, status: "rejected", reason: "borrador_de_otra_cuenta", cuentaDelBorrador: B }],
+      }),
+    );
+    expect(await syncFieldEvents()).toMatchObject({ retenidas: 1, rejected: 0 });
+    expect(enviadosEnLaLlamada(0)).toEqual([d.id]);
+    const [retenido] = await listFieldEventDrafts();
+    expect(retenido).toMatchObject({ id: d.id, cuenta: B, errorMessage: "observed_at_not_a_day" });
+    expect(retenido.recuperacionGastada).not.toBe(true);
+
+    // Con A dentro ya es de otra cuenta: no sale.
+    await syncFieldEvents();
+    expect(llamadasAlLote()).toHaveLength(1);
+
+    dentro = B;
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    expect(await syncFieldEvents()).toMatchObject({ applied: 1 });
+    expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
+    expect(await listFieldEventDrafts()).toEqual([]);
+  });
 });
 
 describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", () => {
