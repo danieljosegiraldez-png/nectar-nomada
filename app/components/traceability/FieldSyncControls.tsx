@@ -162,33 +162,48 @@ export function FieldSyncControls() {
           </button>
         </>
       ) : null}
-      {ultimo ? (
-        <>
-          {/* Un servidor caído NO es un rechazo, y decirlo así al operador
-              sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
-              Por eso este caso excluye el resumen de enviados en vez de
-              acompañarlo — no hay nada que resumir. Una sesión caducada,
-              lo mismo: nada se evaluó, sale al volver a entrar. */}
-          {ultimo.sessionExpired ? (
-            <p className="nn-note" role="status">
-              {t("fieldSyncSessionExpired")}
-            </p>
-          ) : ultimo.serverUnavailable ? (
-            <p className="nn-note" role="status">
-              {t("fieldSyncUnavailable")}
-            </p>
-          ) : (
-            <>
-              <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
-              {ultimo.rejected > 0 ? (
-                <p className="nn-error" role="alert">
-                  {t("fieldSyncRejected", { count: ultimo.rejected })}
-                </p>
-              ) : null}
-            </>
-          )}
-        </>
-      ) : null}
+      {ultimo ? <ResumenDeSincronizacion ultimo={ultimo} /> : null}
     </div>
+  );
+}
+
+/**
+ * Qué pasó en la última sincronización. Aparte del componente de arriba para
+ * poder pintarlo con un resumen dado: ése sólo lo enseña tras una sincronización
+ * asíncrona, y su primer render es `null`
+ * (`tests/sync/resumenDeSincronizacion.test.ts`).
+ */
+export function ResumenDeSincronizacion({ ultimo }: { ultimo: SyncSummary }) {
+  const t = useTranslations("Traceability");
+  return (
+    <>
+      {/* Un servidor caído NO es un rechazo, y decirlo así al operador
+          sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
+          Una sesión caducada, lo mismo: nada se evaluó, sale al volver a
+          entrar.
+
+          Lo que SÍ salió se dice (decisión de Daniel, 2026-10-11): desde que
+          la cola va en tandas, el servidor puede dejar de responder —o la
+          sesión caducar— con la primera ya enviada. Sólo si salió algo:
+          «Nada nuevo que enviar» al lado de «no se pudo enviar» sería
+          contradecirse. */}
+      {ultimo.sessionExpired || ultimo.serverUnavailable ? (
+        <>
+          {ultimo.applied > 0 ? <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p> : null}
+          <p className="nn-note" role="status">
+            {ultimo.sessionExpired ? t("fieldSyncSessionExpired") : t("fieldSyncUnavailable")}
+          </p>
+        </>
+      ) : (
+        <>
+          <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
+          {ultimo.rejected > 0 ? (
+            <p className="nn-error" role="alert">
+              {t("fieldSyncRejected", { count: ultimo.rejected })}
+            </p>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }
