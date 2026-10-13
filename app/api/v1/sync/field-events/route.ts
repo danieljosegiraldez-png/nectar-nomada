@@ -30,6 +30,7 @@
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { pushFieldEvents, DeviceError } from "../../../../../lib/sync/pushFieldEvents";
 import { parsearMutaciones } from "../../../../../lib/sync/parsearMutaciones";
+import { TOPE_DEL_LOTE } from "../../../../../lib/sync/topeDelLote";
 
 export const dynamic = "force-dynamic";
 
@@ -57,8 +58,10 @@ export async function POST(request: Request) {
   if (!Array.isArray(mutations)) return Response.json({ error: "mutations_required" }, { status: 400 });
   // Un tope explícito: sin él, un cliente con un mes de cola manda una petición
   // que tarda más que cualquier tiempo de espera y no sincroniza nunca nada.
-  // 200 es holgado para una jornada de campo y acotado para el servidor.
-  if (mutations.length > 200) return Response.json({ error: "batch_too_large" }, { status: 413 });
+  // 200 es holgado para una jornada de campo y acotado para el servidor. Las
+  // colas trocean por esta misma constante, así que una cola más larga sale en
+  // varias peticiones en vez de rebotar entera.
+  if (mutations.length > TOPE_DEL_LOTE) return Response.json({ error: "batch_too_large" }, { status: 413 });
 
   const parseo = parsearMutaciones(mutations);
   if (!parseo.ok) return Response.json({ error: parseo.error }, { status: 400 });

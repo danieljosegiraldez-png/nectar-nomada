@@ -24,6 +24,7 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { resolvedPermissionKeys } from "../rbac/service";
+import { UUID } from "../validation/uuid";
 // The classification half of the gate — ADR-079 found it missing here, then
 // ADR-081 found the same omission in Sensory, so the rule now lives beside
 // the other classification helpers rather than in whichever module first
@@ -115,8 +116,13 @@ export async function getProjectWorkspace(userAccountId: string, projectId: stri
     throw new PartnerAccessError("no_project_access");
   }
 
+  // El id llega de la URL, y las cuatro consultas de abajo lo usan. `findUniqueOrThrow` lanzaba
+  // `P2025` con un UUID que no existe y `P2007` con uno mal formado, y la página —que sólo atrapa
+  // esta clase— daba 500 en los dos casos (PENDING_IMPLEMENTATIONS/026). Las dos cosas son un
+  // proyecto que no existe.
+  if (!UUID.test(projectId)) throw new PartnerAccessError("project_not_found");
   const [project, tasks, submissions, assets] = await Promise.all([
-    prisma.project.findUniqueOrThrow({ where: { id: projectId } }),
+    prisma.project.findUnique({ where: { id: projectId } }),
     prisma.task.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
@@ -129,6 +135,7 @@ export async function getProjectWorkspace(userAccountId: string, projectId: stri
     }),
     prisma.asset.findMany({ where: { projectId }, orderBy: { createdAt: "desc" } }),
   ]);
+  if (!project) throw new PartnerAccessError("project_not_found");
 
   // The Project is a classified record too, and its name and description are
   // the sensitive parts (ADR-079). Refusing here rather than returning a
