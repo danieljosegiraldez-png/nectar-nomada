@@ -72,6 +72,17 @@ function diaRequerido(fd: FormData, name: string): string {
   return dia.toISOString();
 }
 
+/**
+ * El mismo día que `diaRequerido`, como `YYYY-MM-DD`: es lo que exige el parseo
+ * de `trap_check` (A10, `diaEstrictoOpcional` en `parsearMutaciones.ts`). Con el
+ * instante de `diaRequerido`, toda revisión de la ronda volvía rechazada con
+ * `observed_at_not_a_day` (2026-10-11). Las muestras y la calicata siguen con el
+ * instante: su parseo usa `toDate`, que lo acepta.
+ */
+function diaRequeridoComoTexto(fd: FormData, name: string): string {
+  return diaRequerido(fd, name).slice(0, 10);
+}
+
 export interface PayloadDeMuestraDeSuelo {
   kind: "soil_sample";
   locationId: string;
@@ -274,11 +285,11 @@ export interface PayloadDeRevisionDeTrampa {
  * campo oculto (SECURITY.md §2 — un `<input type="hidden">` es falsificable, y
  * un payload de cola es tan falsificable como un campo oculto: viaja igual, por
  * fuera de cualquier sesión). Los dos se fijan en el SERVIDOR al aplicar la
- * mutación (`aplicarRevisionDeTrampa` en `pushFieldEvents.ts`), con la misma
- * regla que `recordRoundTrapCheckFormAction`: procedencia siempre
- * `direct_observation`, observador la Person de la cuenta del dispositivo. Este
- * constructor no puede leer del `FormData` un campo que el formulario nunca
- * pinta.
+ * mutación (`aplicarRevisionDeTrampa` en `pushFieldEvents.ts`): procedencia
+ * siempre `direct_observation`, observador la Person de la cuenta del
+ * dispositivo. La acción con señal que compartía esa regla se retiró en #445, y
+ * desde entonces la cola es el único camino de la ronda. Este constructor no
+ * puede leer del `FormData` un campo que el formulario nunca pinta.
  */
 export function construirPayloadDeRevisionDeTrampa(
   fd: FormData,
@@ -292,12 +303,14 @@ export function construirPayloadDeRevisionDeTrampa(
     locationId,
     specimenId,
     clientDraftId,
-    observedAt: diaRequerido(fd, "observedAt"),
+    observedAt: diaRequeridoComoTexto(fd, "observedAt"),
     brocaLevel: String(fd.get("brocaLevel") ?? ""),
     captureCount: numero(fd, "captureCount"),
     otherInsects: otros,
-    // Mismo criterio que `recordRoundTrapCheckFormAction` (F8 fix-final): la
-    // nota se guarda salvo cuando "otros" es explícitamente NO.
+    // F8 fix-final: la nota se guarda salvo cuando "otros" es explícitamente
+    // NO. En el camino de la cola se decide aquí: `aplicarRevisionDeTrampa`
+    // guarda la nota tal como llega. (`recordTrapCheckFormAction`, la de
+    // ajustes, aplica la misma regla por su lado.)
     otherInsectsNote: otros === false ? null : texto(fd, "otherInsectsNote"),
     cleaned: booleano(fd, "cleaned"),
     liquidChanged: booleano(fd, "liquidChanged"),

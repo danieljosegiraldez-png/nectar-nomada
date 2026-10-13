@@ -28,9 +28,10 @@ export default async function InstalacionPage({ params, searchParams }: {
   let instalacion;
   try { instalacion = await detalleInstalacion(user.userAccountId, id); }
   catch (error) {
-    if (error instanceof SecadoFormError) notFound();
-    if (!(error instanceof LocationAccessError)) throw error;
-    return <div><h1>{t("instalaciones")}</h1><p role="alert">{t("error_sin_acceso")}</p><Link href="/instalaciones">{t("volver")}</Link></div>;
+    // «No existe», «id mal formado» y «sin permiso» dan las tres 404, como en `plots/[id]`:
+    // separarlas diría a quien no tiene acceso qué ids existen (Daniel, 2026-10-09; ficha 026).
+    if (error instanceof SecadoFormError || error instanceof LocationAccessError) notFound();
+    throw error;
   }
   const puedeEditar = await puedeEditarBeneficioEn(user.userAccountId, id);
   // Hallazgo 5 (revisión independiente de Codex, 2026-09-18): el permiso de

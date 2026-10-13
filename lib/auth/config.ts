@@ -5,6 +5,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { verifyPassword } from "./password";
 import { loginSchema } from "../validation/auth";
+import { DURACION_DE_SESION_S } from "./duracionDeSesion";
 
 /**
  * SECURITY.md §1 — Auth.js handles authentication mechanics (credentials +
@@ -70,7 +71,7 @@ export const authConfig: NextAuthConfig = {
   // applies the same online and off — chosen to bound how long a lost or
   // stolen device stays signed in without forcing daily re-auth for
   // operators who use the app most days.
-  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
+  session: { strategy: "jwt", maxAge: DURACION_DE_SESION_S },
   pages: { signIn: "/login" },
   callbacks: {
     /**

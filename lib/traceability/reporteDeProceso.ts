@@ -123,7 +123,7 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
           processGradeValue: true,
           cherryStateValue: true,
           closingMoistureMeasurement: true,
-          interventions: { include: { catalogValue: true }, orderBy: { occurredAt: "asc" } },
+          interventions: { include: { catalogValue: true, stepTypeValue: true }, orderBy: { occurredAt: "asc" } },
           derivations: { select: { lot: { select: { lotCode: true } } } },
         },
       },
@@ -198,7 +198,10 @@ export async function reporteDeProceso(userAccountId: string): Promise<ReporteDe
         targetMoisturePct: p.targetMoisturePct.toNumber(),
         humedadDeCierre: cierre,
         diferenciaContraObjetivo: cierre === null ? null : Math.round((cierre - p.targetMoisturePct.toNumber()) * 100) / 100,
-        intervenciones: p.interventions.map((i) => i.catalogValue.value),
+        // Parte 2a (tarea 1): el valor de catálogo es opcional desde que el acto es el tipo de paso (decisión de
+        // Daniel, 2026-10-03). La base exige uno de los dos (CHECK `lot_process_intervention_catalogo_o_tipo`): se
+        // nombra el «cómo» si se declaró y, si no, el acto.
+        intervenciones: p.interventions.map((i) => (i.catalogValue ?? i.stepTypeValue)!.value),
         varietales,
         perfilesDeTueste,
         puntajes,

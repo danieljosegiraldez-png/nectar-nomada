@@ -34,6 +34,8 @@ flip-test el 2026-08-28, en ambas direcciones.
 
 **Heredadas de dos entregas archivadas el 2026-10-05**, que seguían abiertas y el histórico no dirige trabajo: si **dos corridas abiertas en una cama** son conflicto de datos y si una receta de fermentación debe **obligar** a medir pH (#603/#605); si la **coordenada de un plantón** exige tablero, los dos puntos sin resolver de tu lego del 2026-10-03 (`docs/superpowers/specs/2026-10-02-forma-del-lote-y-densidad-design.md`), y si el rango de la microparcela sigue «opcional a propósito» o pasa a obligatorio como pide #621 §3.2.
 
+**Heredada de la entrega archivada el 2026-10-10** (el cierre y la alarma de backup, #659–#666): **borrar la data**. Había punto de restauración verificado el 2026-10-06 —PASS, 216 tablas y 15.315 filas idénticas—, y la recomendación era dejar `core.user_account` fuera, porque borrar cuentas pone a NULL, en silencio, el actor de 4.922 filas de auditoría. Nada en el repositorio dice que se haya hecho; el detalle está en `docs/SESSION_STATE_ARCHIVE.md`.
+
 **P-C y P-D no cambian ningún artefacto por sí solas.** Su veredicto aterriza
 en un ADR de `docs/architecture/DECISIONS.md` que contenga literalmente la frase
 de su prueba. Sin ese sitio nombrado, ninguna búsqueda distinguiría «sin hacer»
@@ -80,6 +82,13 @@ de que los acentos se leen. Lo literal de cada una, con su procedencia, en
 
 ## 2. Lo que se entregó — más nuevo primero
 
+### 2026-10-11 · Por cookie, una foto de campo ya no queda a nombre de un aparato revocado o inexistente (#718)
+
+`field-media?paso=finalizar` guardaba en `FieldEvent.deviceId` el aparato del cuerpo sin consultarlo. Medido por el `POST` real: uno **revocado** daba 200 y quedaba como autor, y uno **inexistente** reventaba contra `field_event_device_id_fkey` como 500. Hoy `finalizeFieldMedia` lo valida como `pushFieldEvents` (403 `device_revoked` / `device_not_found`, sin `FieldEvent` ni `Asset`), y una prueba compara las dos rutas —estado, error y filas escritas— para cuatro aparatos. Ningún cliente llamaba a field-media por cookie: sólo lo alcanzaba una petición fabricada. Vercel `success`; la ruta no se probó en producción.
+**Tu decisión, entre cuatro: «como field-events».** A sabiendas: un aparato **vivo de otra cuenta** pasa por las **dos** rutas —el revisor decía que field-events lo rechaza; medido, no—, porque exigirlo propio rompería la PWA en un navegador compartido (`ensureDeviceId` guarda el id sin atarlo a la persona). Si cambia, en las dos a la vez.
+**Lo que enseñó:** el verde del PR era de antes de #717 (CI a las 01:37Z, #717 a las 01:55Z con migración y `pruebas-por-compuerta.txt`): se juntó `main` y se empujó, no se relanzó. Y el primer control de `merge-tree` dio un «1» que era de una **redirección fallida**, no de un conflicto.
+**Sigue abierto:** el carril del **token** lo cierran #702/#708/#711, **sin fusionar**. Un `deviceId` que no es UUID da 500 (`P2007`) en las dos rutas; tras revocar, el reintento de una foto ya aceptada da 200 y el de un lote 403; y la comprobación no cierra la carrera revocar/insertar, igual que `pushFieldEvents`.
+
 ### 2026-10-09 · ADR-198 completo: un beneficio puede existir sin finca, y `Las Nubes` ya tiene su organización (#672, #684, #687, #692)
 
 **Cuatro PR.** #672 aprobó el diseño (ADR **198**: el 197 lo reservó #675, abierto). **#684**: `crearBeneficio` ya no copia `padre.organizationId` a ciegas y rechaza con `organizacion_requerida`; su test comparaba `null` con `null` porque el fixture creaba el sitio sin organización. **#687**: se crea sin padre diciendo la organización («Sin finca propia» en ajustes); la vista de bandejas acepta organizaciones con `beneficio` sin `site` (su test viejo afirmaba lo contrario y se **reescribió**). **#692**: una finca elige como destino los beneficios de **su organización** aunque no cuelguen de ella; la clasificación del beneficio manda y nunca concede ver sus lotes.
@@ -117,14 +126,6 @@ Producción, **sin ningún borrado**, cada cifra releída por una lectura indepe
 **Lo que enseñó:** un `tsc` en un worktree sin `node_modules` sale 0 sin comprobar nada; y las filas «repetidas» de Chris eran **tres ámbitos distintos** —mi `join` imprimía `(plataforma)` donde el proyecto no resolvía—: casi retiro justo las que describían lo que Daniel quería.
 
 **Queda tuyo:** aprobar el diseño del #672 y su ADR **(hecho: ADR-198, ver arriba)**; **`Las Nubes` tenía `organization_id` nulo en producción (resuelto el 2026-10-09, ver arriba)**, y siete guiones de datos llevan `Lote N` donde un renombrado dirá `Parcela N`, tres de ellos **crean una parcela nueva en vez de abortar**.
-
-### 2026-10-06 · El cierre y la alarma de backup mentían, y los dos del lado que tranquiliza (#659, #661, #663, #666)
-
-**Tres defectos de una clase en `scripts/cierre-de-sesion.sh`, y el tercero lo metí yo arreglando los dos primeros.** Decía «SIN EMPUJAR» de una rama empujada: comparaba `HEAD` con `origin/main`, o sea medía «sin fusionar», que es el estado normal de un PR abierto (#659). Su gemela leía `$?` después de un `if !`, que es **siempre 0**, así que «detrás de su remoto» no se distinguía de «al día» (#661). Hoy son cuatro estados con severidades distintas, y el flip-test produce los tres mundos de verdad en vez de simularlos.
-**La alarma gritaba «NO restauró» sobre un backup que acababa de restaurar bien** (#663). Lo que murió fue el `wc` del recuento, **después** de que el `diff` ya hubiera probado la copia idéntica: el set fallido tiene **0** `verified_result` y **0** `census-mismatch.diff`, o sea que no llegó a ninguna de sus dos ramas. Hoy el censo se reintenta y sale con **2** —«restauró, no se pudo contar»—, el `/fail` se sigue mandando, y las cifras del mensaje se leen de la copia local: aunque fallen, el veredicto no cambia. Verificar **escribe en el MANIFEST del backup real**; dos corridas mías acabaron ahí y se quitaron, con el checksum del dump idéntico antes y después.
-**Las dos abamectinas, de alta en el catálogo y nada más** (#666, tu decisión de hoy): sin dosis, porque ninguna de las dos etiquetas registra café. De paso corrige §1, que decía «no hay camino de catálogo sin existencias» — falso: `materiales.ts:131` crea el material solo, y lo que falta es **pantalla**.
-**Fichas nuevas:** `024`, la cosecha no registra quién la operó —35 de 35 nulos, porque la acción no manda un campo que el servicio sí guarda—, y `025`, ya hecha. Y quitados los worktrees `wt-ux` y `recovery-control`: sus 3 commits en un solo disco eran versiones **viejas** de documentos que `main` ya trae corregidos, comparados línea a línea antes de borrar.
-**Queda tuyo:** borrar la data —tienes punto de restauración **verificado**, PASS con 216 tablas y 15.315 filas idénticas, y yo dejaría `core.user_account` fuera, porque borrar cuentas pone a NULL el actor de 4.922 filas de auditoría en silencio—; correr `npm run data:abamectinas -- --apply`; y P-J.
 
 
 ## 3. Bloqueado, y en qué
