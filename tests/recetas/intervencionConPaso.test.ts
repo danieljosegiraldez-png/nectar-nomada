@@ -9,7 +9,8 @@
  *   el tipo tomado del paso, la desviación con motivo, y lo que NO es desviación.
  * - Decide dentro de la transacción, con el linaje bloqueado (antes decidía fuera: reconocimiento u2 §9 y u3 S9).
  * - Deja su `AuditEvent` `lot_process.record_intervention` con el paso, el tipo y el motivo, y pide `manage` sobre el lote
- *   del proceso ANTES que cualquier otra cosa: ninguna prueba leía ni lo uno ni lo otro (u3 S12; Ruling INV).
+ *   del proceso antes de cualquier comprobación de la receta, del paso o del vocabulario: ninguna prueba leía ni lo uno ni lo
+ *   otro (u3 S12; Ruling INV).
  * - `opcionesParaProceso` ofrece, aparte, los tipos de paso que una intervención cumple, y no ofrece los valores ALIAS.
  * - Un valor alias (`aliasOfId`) es el mismo valor escrito de otra forma: si llega, se guarda el canónico (Ruling I7 del
  *   cruce, 2026-10-04; como `fieldSessions.ts` con los tipos de evento). Se prueba con dos valores PROPIOS de la prueba,
@@ -40,6 +41,7 @@
  *
  * Base: la base propia de la 2a, sembrada. Grupo `base-sembrada` de `scripts/pruebas-por-compuerta.txt`.
  */
+import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { TIPOS_POR_REGISTRO } from "../../lib/recetas/vocabulario";
@@ -351,6 +353,15 @@ describe("el acto es el tipo de paso, y con él el valor de catálogo es opciona
       registrarIntervencion(gestor, { lotProcessId: p.id, stepTypeValueId: tipo.washing, catalogValueId: deOtroCatalogo, occurredAt: cuando }),
     ).rejects.toThrow(new LotProcessError("catalog_value_wrong_catalog"));
     expect(await prisma.lotProcessIntervention.count({ where: { lotProcessId: p.id } })).toBe(0);
+    // Y un valor que NO existe: un uuid bien formado que ninguna fila tiene (uno mal formado no llegaría aquí: la base lo rechaza con
+    // su error propio). Se mide que no existe antes de usarlo, para que «no se encontró» no pueda ser un uuid que casualmente está. Sin
+    // la rama de `registrarIntervencion` que lo dice, esto reventaría con un TypeError al leer el catálogo de un valor que no es nada.
+    const inexistente = randomUUID();
+    expect(await prisma.variableCatalogValue.count({ where: { id: inexistente } })).toBe(0);
+    await expect(
+      registrarIntervencion(gestor, { lotProcessId: p.id, stepTypeValueId: tipo.washing, catalogValueId: inexistente, occurredAt: cuando }),
+    ).rejects.toThrow(new LotProcessError("catalog_value_not_found"));
+    expect(await prisma.lotProcessIntervention.count({ where: { lotProcessId: p.id } })).toBe(0);
     // Control: el mismo lavado con su «cómo» del vocabulario de manejos entra con los dos.
     const ok = await registrarIntervencion(gestor, {
       lotProcessId: p.id,
@@ -389,9 +400,10 @@ describe("el acto es el tipo de paso, y con él el valor de catálogo es opciona
     await expect(registrarIntervencion(gestor, { lotProcessId: p.id, stepTypeValueId: tipo.drying, occurredAt: cuando })).rejects.toThrow(
       new LotProcessError("paso_no_corresponde"),
     );
+    // El código exacto, como arriba: con `toBeInstanceOf(LotProcessError)` cualquier otro rechazo del servicio dejaba esto en verde.
     await expect(
       registrarIntervencion(gestor, { lotProcessId: p.id, stepTypeValueId: deOtroCatalogo, occurredAt: cuando }),
-    ).rejects.toBeInstanceOf(LotProcessError);
+    ).rejects.toThrow(new LotProcessError("paso_no_corresponde"));
     expect(await prisma.lotProcessIntervention.count({ where: { lotProcessId: p.id } })).toBe(0);
     // Control: un tipo de la fila de la intervención entra.
     await expect(
@@ -628,7 +640,7 @@ describe("deja rastro y pide permiso", () => {
    * rechazada por un motivo DISTINTO cuando la manda quien sí gestiona el lote (el control), y por el acceso cuando la manda
    * quien no. La de arriba (con una entrada válida) no distingue «pide el acceso primero» de «lo pide en algún momento».
    */
-  it("el acceso al lote se pide ANTES que cualquier otra comprobación: quien no puede gestionarlo no se entera de la receta", async () => {
+  it("el acceso al lote se pide antes de cualquier comprobación de la receta, del paso o del vocabulario: quien no puede gestionarlo no se entera de la receta", async () => {
     const p = await abrirCon(await lote("ORDEN"), conPasos.versionId);
     const entradas = [
       { motivo: "paso_de_otra_receta", datos: { recipeStepId: otra.pulping } },

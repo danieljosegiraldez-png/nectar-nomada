@@ -425,9 +425,10 @@ export interface RegistrarIntervencionInput {
  * proceso, su tipo es uno que una intervención cumple, el tipo se toma del paso, y sin paso bajo una receta con pasos es
  * una desviación con motivo. Se guarda lo que el guardián DEVUELVE, no lo que se pidió.
  *
- * **El acceso al lote se pide ANTES que cualquier otra cosa** (Ruling INV): el guardián recibe sólo la transacción y no
- * autoriza, así que quien no puede gestionar el lote recibe el rechazo de acceso y nunca uno que le cuente qué hay en la
- * receta del proceso.
+ * **El acceso al lote se pide antes de cualquier comprobación de la receta, del paso o del vocabulario** (Ruling INV): lo
+ * único que se lee antes es el proceso y su lote, para saber de cuál es y si existen (`process_not_found`, `lot_not_found`),
+ * y ninguno de esos dos rechazos cuenta nada de la receta. El guardián recibe sólo la transacción y no autoriza, así que
+ * quien no puede gestionar el lote recibe el rechazo de acceso y nunca uno que le cuente qué hay en la receta del proceso.
  */
 export async function registrarIntervencion(userAccountId: string, input: RegistrarIntervencionInput) {
   const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
