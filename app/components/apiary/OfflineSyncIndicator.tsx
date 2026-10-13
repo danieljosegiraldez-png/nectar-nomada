@@ -11,8 +11,11 @@ import {
   getStorageEstimate,
   type DraftKind,
 } from "../../../lib/apiary/offlineQueue";
+import { MOTIVOS_DE_APARATO } from "../../../lib/sync/offlineQueue";
 import type { RecordInspectionInput } from "../../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../../lib/apiary/colonyEvents";
+import { descartablesPorEstaCuenta, repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 // Other components (InspectionForm, ColonyEventQuickEntry) dispatch this
 // after queueDraft() so this indicator refreshes and attempts a sync
@@ -34,6 +37,13 @@ export function OfflineSyncIndicator() {
   const t = useTranslations("Apiary");
   const [pendingCount, setPendingCount] = useState(0);
   const [erroredCount, setErroredCount] = useState(0);
+  const [otherAccountCount, setOtherAccountCount] = useState(0);
+  // ADR-199 — cuántos fallidos puede borrar el botón de descartar: sólo los de esta cuenta. Uno viejo sin
+  // cuenta, en error, cuenta como fallido pero no se puede descartar, y el botón no debe ofrecerse muerto.
+  const [descartables, setDescartables] = useState(0);
+  // El lote entero negado por el APARATO (2026-10-11): hasta ese día no se
+  // guardaba nada y la pantalla no tenía cómo decirlo.
+  const [deviceRejected, setDeviceRejected] = useState(false);
   // Lazy initializer, not an effect — navigator.onLine is readable
   // synchronously on the client at mount, so there's no external system to
   // "subscribe to" for the very first value, only for later changes
@@ -57,8 +67,14 @@ export function OfflineSyncIndicator() {
   const refresh = useCallback(async () => {
     const purgeResult = await purgeStaleDrafts();
     const drafts = await listDrafts();
-    setPendingCount(drafts.filter((d) => d.status === "pending").length);
-    setErroredCount(drafts.filter((d) => d.status === "error").length);
+    // ADR-199 — lo de otra cuenta no se cuenta como pendiente ni fallido de quien está dentro.
+    const { enviables, ajenos } = repartirPorCuenta(drafts, cuentaActualDelNavegador());
+    setPendingCount(enviables.filter((d) => d.status === "pending").length);
+    const errored = enviables.filter((d) => d.status === "error");
+    setErroredCount(errored.length);
+    setDeviceRejected(errored.some((d) => MOTIVOS_DE_APARATO.includes(d.errorMessage ?? "")));
+    setOtherAccountCount(ajenos.length);
+    setDescartables(descartablesPorEstaCuenta(drafts, cuentaActualDelNavegador()).length);
     setLastSyncAt(getLastSyncAt());
     if (purgeResult.purged > 0) setPurgeNotice(t("draftsPurgedNotice", { count: purgeResult.purged }));
     const estimate = await getStorageEstimate();
@@ -71,7 +87,9 @@ export function OfflineSyncIndicator() {
     try {
       const result = await syncAll();
       await refresh();
-      if (result.synced > 0 || result.errored > 0) {
+      if (result.sessionExpired) {
+        setLastMessage(t("syncSessionExpired"));
+      } else if (result.synced > 0 || result.errored > 0) {
         setLastMessage(t("syncResult", { synced: result.synced, errored: result.errored }));
       }
     } finally {
@@ -110,7 +128,7 @@ export function OfflineSyncIndicator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runSync/refresh are stable via useCallback's own deps
   }, []);
 
-  const hasContent = pendingCount > 0 || erroredCount > 0 || !isOnline || storageWarning || purgeNotice;
+  const hasContent = pendingCount > 0 || erroredCount > 0 || otherAccountCount > 0 || !isOnline || storageWarning || purgeNotice;
   if (!hasContent) return null;
 
   return (
@@ -120,19 +138,25 @@ export function OfflineSyncIndicator() {
       </span>
       {pendingCount > 0 ? <span className="nn-muted">{t("pendingCount", { count: pendingCount })}</span> : null}
       {erroredCount > 0 ? <span className="nn-muted">{t("erroredCount", { count: erroredCount })}</span> : null}
+      {otherAccountCount > 0 ? <span className="nn-muted">{t("otherAccountDrafts", { count: otherAccountCount })}</span> : null}
       <span className="nn-muted">{lastSyncAt ? t("lastSyncLabel", { time: new Date(lastSyncAt).toLocaleString() }) : t("neverSyncedLabel")}</span>
-      {pendingCount > 0 || erroredCount > 0 ? (
+      {/* Sólo lo pendiente viaja (2026-10-11): con sólo fallidas dentro, el
+          botón no tendría nada que mandar. Lo fallido se descarta abajo. */}
+      {pendingCount > 0 ? (
         <button type="button" className="nn-button" onClick={() => void runSync()} disabled={isSyncing || !isOnline}>
           {isSyncing ? t("syncingButton") : t("syncNowButton")}
         </button>
       ) : null}
-      {erroredCount > 0 ? (
+      {deviceRejected ? <span className="nn-muted">{t("deviceNotAuthorized")}</span> : null}
+      {descartables > 0 ? (
         <button
           type="button"
           className="nn-button-quiet"
           onClick={async () => {
             const drafts = await listDrafts();
-            for (const d of drafts.filter((d) => d.status === "error")) await discardDraft(d.id);
+            // ADR-199 — sólo los de esta cuenta. Antes borraba cualquier borrador en error, también los
+            // borradores de otra cuenta que el servidor había rechazado por falta de acceso.
+            for (const d of descartablesPorEstaCuenta(drafts, cuentaActualDelNavegador())) await discardDraft(d.id);
             await refresh();
           }}
         >

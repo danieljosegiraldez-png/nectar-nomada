@@ -28,6 +28,7 @@ import { destinoDeBitacora } from "../integrations/bitacora";
 import { LocationAccessError } from "./locations";
 // A9.0 — la compuerta resuelve por el tipo de la `Location`. Ver su cabecera.
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
+import { UUID } from "../validation/uuid";
 import type { DataQuality, ProvenanceClass, VisitPurpose } from "../../generated/prisma/client";
 
 export class FieldSessionValidationError extends Error {}
@@ -610,6 +611,9 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
  * nothing about the morning's work.
  */
 export async function getFieldSessionTimeline(userAccountId: string, fieldSessionId: string) {
+  // El id llega de la URL de `field-sessions/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la
+  // página daba 500 (PENDING_IMPLEMENTATIONS/026); es una jornada que no existe.
+  if (!UUID.test(fieldSessionId)) throw new FieldSessionValidationError("session_not_found");
   const session = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
     include: {

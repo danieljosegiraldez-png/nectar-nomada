@@ -13,8 +13,12 @@
  * *` ("use client") files should import this.
  */
 
+import { desenlaceDeUnBorrador, payloadConCuenta, repartirPorCuenta } from "../sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
+import { clasificarRespuesta, motivoDeRechazoDelLote } from "../sync/offlineQueue";
+import { TOPE_DEL_LOTE } from "../sync/topeDelLote";
+
 const DB_NAME = "nectar-apiary-offline";
-const DB_VERSION = 1;
 const STORE_NAME = "drafts";
 
 export type DraftKind = "inspection" | "colonyEvent" | "colonyEnd" | "varroaCount";
@@ -31,18 +35,51 @@ export interface DraftRecord<T = unknown> {
   createdAt: number;
   status: DraftStatus;
   errorMessage?: string;
+  /**
+   * ADR-199 — la huella de la cuenta que lo anotó. Ausente en los guardados antes de que existiera:
+   * ésos los decide el servidor por quien registró el aparato.
+   */
+  cuenta?: string | null;
 }
 
-function openDb(): Promise<IDBDatabase> {
+/**
+ * Abre la base SIN pedir versión, y si la encuentra sin su almacén la sube una
+ * versión para que el manejador de subida lo cree.
+ *
+ * **Por qué.** Hasta el 2026-10-12 `public/offline.html` abría esta base en la
+ * versión 1 sin manejador de subida, y en un aparato que no la tenía eso la creaba
+ * VACÍA. Después esta cola pedía la misma versión 1, su manejador —el único sitio
+ * que crea `drafts`— ya no corría, y todo `queueDraft` fallaba con `NotFoundError`
+ * hasta que alguien borrara la base a mano. Esa página ya no crea nada, pero los
+ * teléfonos que quedaron así se curan aquí.
+ *
+ * **Por qué no subir la versión para todos.** Una base sana se queda en la 1: una
+ * página cacheada por el service worker con un build ANTERIOR abre la versión 1, y
+ * contra una base en la 2 recibiría `VersionError` — el mismo «no se pudo guardar»,
+ * esta vez en los teléfonos sanos. Sólo sube la que estaba rota, que para un build
+ * viejo ya lo estaba. Si un día hace falta cambiar el esquema, esa subida tiene que
+ * contar con que una base reparada puede estar ya en la 2.
+ *
+ * Mide en un Chrome de verdad: `tools/browser-checks/indexeddb-sin-almacen.mjs`.
+ */
+function openDb(subirA?: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = subirA === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, subirA);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Una sola subida: si tras ella siguiera sin almacén, el `NotFoundError` de
+      // la transacción lo dirá, en vez de un bucle.
+      if (db.objectStoreNames.contains(STORE_NAME) || subirA !== undefined) return resolve(db);
+      const siguiente = db.version + 1;
+      db.close();
+      openDb(siguiente).then(resolve, reject);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -60,8 +97,21 @@ function generateDraftId(): string {
  * true "if and only if each submission writes to IndexedDB synchronously
  * with the local save, not merely to React state" — this is that write).
  */
-export async function queueDraft<T>(kind: DraftKind, payload: T): Promise<DraftRecord<T>> {
-  const record: DraftRecord<T> = { id: generateDraftId(), kind, payload, createdAt: Date.now(), status: "pending" };
+export async function queueDraft<T>(
+  kind: DraftKind,
+  payload: T,
+): Promise<DraftRecord<T & { cuentaDelBorrador: string | null }>> {
+  // ADR-199 — la cuenta se lee UNA vez: la del borrador y la que viaja dentro del payload (para una pestaña
+  // con el JavaScript de antes del cambio, que sólo copia el payload) son la misma.
+  const cuenta = cuentaActualDelNavegador();
+  const record: DraftRecord<T & { cuentaDelBorrador: string | null }> = {
+    id: generateDraftId(),
+    kind,
+    payload: payloadConCuenta(payload, cuenta),
+    createdAt: Date.now(),
+    status: "pending",
+    cuenta,
+  };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -180,6 +230,8 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
     // falta, no por lo que es.
     kind: KIND_DEL_SERVIDOR[draft.kind],
     clientDraftId: draft.id,
+    // ADR-199 — del BORRADOR, después del payload: lo que traiga el payload no la pisa.
+    cuentaDelBorrador: draft.cuenta ?? null,
     // Si el borrador no trajo hora propia, vale la de su creación: es cuando el
     // operador lo anotó, que es el hecho que interesa. Inventar `Date.now()` al
     // sincronizar fecharía la inspección el día que hubo señal.
@@ -188,46 +240,106 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
 }
 
 /**
- * Attempts every pending/error draft once, in creation order. The
- * distinction that matters (§0, "explicit sync now, no automatic conflict
- * resolution"): if the sync call itself throws, the request never reached
- * the server (offline, or the connection dropped mid-flight) — the draft
- * stays queued for the next attempt, no data lost. If the call resolves
+ * Attempts the pending drafts this browser may send, once, in creation
+ * order. The distinction that matters (§0, "explicit sync now, no automatic
+ * conflict resolution"): if the sync call itself throws, the request never
+ * reached the server (offline, or the connection dropped mid-flight) — the
+ * draft stays queued for the next attempt, no data lost. If the call resolves
  * with `ok: false`, the server *did* run and rejected it (a real
  * validation or access error, not a connectivity problem) — the draft is
  * marked "error" and left for the operator to see and discard, not
  * silently retried forever against a request that can never succeed.
+ *
+ * **Sólo `pending`, y no `pending || error` como hasta el 2026-10-11.** Con el
+ * `error` dentro, ese «not silently retried forever» era falso: cada `online` y
+ * cada borrador nuevo (`OfflineSyncIndicator`) volvía a mandar lo rechazado. Un
+ * rechazado sólo se descarta — decisión de Daniel de ese día, la misma que en
+ * `lib/sync/offlineQueue.ts`, y la prueba es la misma:
+ * `tests/sync/rechazoTerminalEnLasColas.test.ts`.
+ *
+ * **ADR-199 — y de lo pendiente, sólo lo de esta cuenta.** Salen los de la cuenta
+ * de este navegador y los que no tienen cuenta (ésos los decide el servidor por
+ * el aparato); los de otra cuenta se quedan en el teléfono hasta que su dueño
+ * vuelva a entrar. `retained` cuenta esos y también los que el servidor retiene
+ * por la misma razón: siguen pendientes, nunca pasan a error.
+ *
+ * **En tandas de `TOPE_DEL_LOTE`, no en una petición** (2026-10-11): la ruta
+ * responde 413 por encima de ese número, y con la cola entera en un viaje 201
+ * borradores buenos quedaban rechazados (`tests/sync/colaMasLargaQueElLote.test.ts`).
+ * Cada tanda tiene su veredicto, igual que en `syncFieldEvents`.
  */
-export async function syncAll(): Promise<{ synced: number; errored: number; stillPending: number }> {
-  const drafts = await listDrafts();
-  const toSync = drafts.filter((d) => d.status === "pending" || d.status === "error");
+export async function syncAll(): Promise<{
+  synced: number;
+  errored: number;
+  retained: number;
+  stillPending: number;
+  /** La sesión caducó (401): nada se marcó, sale al volver a entrar. */
+  sessionExpired: boolean;
+}> {
+  // #719 — sólo lo `pending` viaja; ADR-199 — y de eso, sólo lo de la cuenta de este navegador y lo que no
+  // tiene cuenta.
+  const cuentaActual = cuentaActualDelNavegador();
+  const { enviables: toSync, ajenos } = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending"),
+    cuentaActual,
+  );
 
   let synced = 0;
   let errored = 0;
+  let retained = ajenos.length;
+  let sessionExpired = false;
 
   if (toSync.length > 0) {
     try {
-      const res = await fetch(RUTA_DE_LOTE, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deviceId: await idDeAparato(), mutations: toSync.map(mutacionDe) }),
-      });
+      const deviceId = await idDeAparato();
+      for (let i = 0; i < toSync.length; i += TOPE_DEL_LOTE) {
+        const tanda = toSync.slice(i, i + TOPE_DEL_LOTE);
+        const res = await fetch(RUTA_DE_LOTE, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deviceId, mutations: tanda.map(mutacionDe) }),
+        });
 
-      // Un 4xx del lote ENTERO —aparato revocado, cuerpo mal formado— no es un
-      // rechazo de cada borrador: es que la petición no se pudo evaluar. Se
-      // dejan en cola, como un fallo de transporte, porque marcarlos con error
-      // haría que el operador descartara trabajo bueno.
-      if (res.ok) {
-        const { results } = (await res.json()) as { results: Array<{ clientDraftId: string; status: string; reason?: string }> };
+        // La misma frontera que la cola de P4, y con su misma función: un 5xx,
+        // un 408/429/413 o una sesión caducada dejan intacto lo que falta;
+        // cualquier otro 4xx de la tanda ENTERA —aparato revocado o
+        // desconocido— es un no del servidor.
+        //
+        // **Esto antes era al revés, y a propósito:** un 4xx dejaba los
+        // borradores pendientes, sin motivo, «porque marcarlos con error haría
+        // que el operador descartara trabajo bueno». El precio era que se
+        // reenviaban en cada `online` sin que la pantalla dijera por qué no
+        // salían — idéntico a no tener señal. Daniel decidió el 2026-10-11
+        // tratarlo igual que en campo: rechazados, con el motivo que mandó el
+        // servidor.
+        const decision = clasificarRespuesta(res.status);
+        if (decision === "reintentar") {
+          sessionExpired = res.status === 401;
+          break;
+        }
+        if (decision === "rechazar") {
+          const motivo = await motivoDeRechazoDelLote(res);
+          for (const draft of tanda) await putDraft({ ...draft, status: "error", errorMessage: motivo });
+          errored += tanda.length;
+          continue;
+        }
+        const { results } = (await res.json()) as {
+          results: Array<{ clientDraftId: string; status: string; reason?: string; cuentaDelBorrador?: string }>;
+        };
         const porBorrador = new Map(results.map((r) => [r.clientDraftId, r]));
-        for (const draft of toSync) {
+        for (const draft of tanda) {
           const r = porBorrador.get(draft.id);
           if (!r) continue; // el servidor no lo mencionó: se reintenta
-          if (r.status === "applied" || r.status === "duplicate") {
+          const desenlace = desenlaceDeUnBorrador(draft, r);
+          if (desenlace.tipo === "enviado") {
             await discardDraft(draft.id);
             synced++;
+          } else if (desenlace.tipo === "retenido") {
+            // ADR-199 — sigue pendiente; sólo se apunta de quién es si el servidor lo dijo.
+            if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) await putDraft(desenlace.borrador);
+            retained++;
           } else {
-            await putDraft({ ...draft, status: "error", errorMessage: r.reason });
+            await putDraft(desenlace.borrador);
             errored++;
           }
         }
@@ -238,9 +350,12 @@ export async function syncAll(): Promise<{ synced: number; errored: number; stil
     }
   }
 
-  const stillPending = (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error").length;
+  const stillPending = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending"),
+    cuentaActual,
+  ).enviables.length;
   if (synced > 0) recordLastSyncSuccess();
-  return { synced, errored, stillPending };
+  return { synced, errored, retained, stillPending, sessionExpired };
 }
 
 // --- A5.5 §2: "visible, honest state" — when was the last successful sync?
