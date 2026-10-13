@@ -294,18 +294,21 @@ describe("FormularioDePaso — lo que manda y lo que precarga", () => {
     expect(campos(durante, "metas[0][unit]")[0]).toMatch(/value="pH"/);
   });
 
-  it("la ayuda del ritmo de una meta dice lo que es cierto con sólo el PR-A: se guarda con el paso, y ninguna pantalla del lote avisa con él (F1-3)", () => {
+  it("la ayuda del ritmo de una meta dice lo que lee cada pantalla: una fermentación, el tablero; un secado, también Secado; los demás pasos, sólo se guarda (T9, que sustituye a F1-3)", () => {
     const meta = { variable: "ph", targetValue: "3.8", minValue: "", maxValue: "", everyHours: "", note: "", unit: "pH" };
     const durante = aTexto(conTipo("fermentation", { metas: [{ ...meta, moment: "during" }] }));
-    expect(durante).toContain("Se guarda con el paso; todavía ninguna pantalla del lote lo usa para avisar de lecturas.");
-    // La promesa vieja —«la lista dice si el lote te debe una lectura»— no vuelve: la cola, el tablero y el objetivo-contra-real leen sólo las metas SIN paso.
-    expect(durante).not.toMatch(/te debe una lectura|no puede decir si/);
+    expect(durante).toContain(
+      "Si el paso se cumple con una fermentación, el tablero del beneficio avisa cuando toca una lectura; si se cumple con un secado, también lo avisa la pantalla de Secado; en los demás pasos sólo se guarda.",
+    );
+    // Desde la tarea 9 la cola, el tablero y el objetivo-contra-real leen las metas DEL PASO de la corrida: la frase del PR-A —«todavía ninguna pantalla del lote lo
+    // usa»— ya es falsa y no vuelve; tampoco la promesa vieja, de antes de los pasos.
+    expect(durante).not.toMatch(/todavía ninguna pantalla|te debe una lectura|no puede decir si/);
     // Control: sin «durante» no hay campo de ritmo y tampoco su ayuda.
-    expect(aTexto(conTipo("fermentation", { metas: [{ ...meta, moment: "final" }] }))).not.toContain("Se guarda con el paso");
+    expect(aTexto(conTipo("fermentation", { metas: [{ ...meta, moment: "final" }] }))).not.toContain("el tablero del beneficio avisa");
     // En inglés, lo mismo.
     const ayuda = traductorDePrueba("Traceability", "en")("recetaEditor_metaCadaHorasAyuda");
-    expect(ayuda).toContain("saved with the step");
-    expect(ayuda).not.toMatch(/owes you a reading|cannot say/);
+    expect(ayuda).toContain("the beneficio board warns when a reading is due");
+    expect(ayuda).not.toMatch(/no lot screen|owes you a reading|cannot say/);
   });
 
   it("las variables se rotulan con su texto, también las del panel que hasta esta tarea no lo tenían", () => {
