@@ -21,6 +21,7 @@
 import { classifyDraftAge, STALE_WARNING_DAYS, STALE_PURGE_DAYS } from "./draftAge";
 import { desenlaceDeUnBorrador, payloadConCuenta, repartirPorCuenta } from "./cuentaDelBorrador";
 import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
+import { TOPE_DEL_LOTE } from "./topeDelLote";
 
 const DB_NAME = "nectar-field-offline";
 const DB_VERSION = 1;
@@ -358,7 +359,12 @@ export function clasificarRespuesta(status: number): DecisionDeRespuesta {
   // 401 tampoco (decisión de Daniel, 2026-10-11): la sesión caducó y volver a
   // entrar lo arregla. Como un rechazo ya no se reenvía nunca, tratarlo como
   // rechazo dejaría varado trabajo bueno.
-  if (status >= 500 || status === 408 || status === 429 || status === 401) return "reintentar";
+  //
+  // 413 tampoco (decisión de Daniel, 2026-10-11): dice «demasiado para una
+  // petición», no nada sobre lo anotado. Las colas trocean por `TOPE_DEL_LOTE`,
+  // así que sólo llega si el tope bajó con una pestaña abierta que trae el
+  // código de antes; recargar lo arregla, rechazarlo perdería trabajo bueno.
+  if (status >= 500 || status === 408 || status === 429 || status === 401 || status === 413) return "reintentar";
   return "rechazar";
 }
 
@@ -425,9 +431,9 @@ type ServerResult = {
  * `planting_cohort`; ver `lib/sync/parcelaPayload.ts`) siguen usando `d.id`
  * exactamente como antes de este arreglo — es el único id que tienen—.
  * `trap_check` es el primero que SÍ trae uno propio
- * (`construirPayloadDeRevisionDeTrampa`), la misma clave que
- * `RondaDeTrampaForm` pone en el campo oculto y que el camino CON señal
- * (`recordRoundTrapCheckFormAction`) también usa. Antes de este arreglo, esta
+ * (`construirPayloadDeRevisionDeTrampa`): la clave que `RondaDeTrampaForm`
+ * genera en cada envío (`generarClaveDeRevision`) y que lleva también la foto
+ * de esa revisión. Antes de este arreglo, esta
  * misma línea hacía `{ ...d.payload, clientDraftId: d.id }` — el spread
  * seguido de la sobreescritura tira SIEMPRE la clave del payload, así que la
  * fila que el servidor guardaba llevaba la clave de la cola, nunca la del
@@ -447,7 +453,12 @@ export function construirMutacionDesdeBorrador(
 }
 
 /**
- * Vacía la cola en **una sola petición**, y aplica el resultado por mutación.
+ * Vacía la cola en **tandas de `TOPE_DEL_LOTE`**, y aplica el resultado por
+ * mutación. Hasta el 2026-10-11 era una sola petición, y una cola de más de 200
+ * rebotaba entera con un 413 que se leía como rechazo de todo lo anotado
+ * (`tests/sync/colaMasLargaQueElLote.test.ts`). Cada tanda tiene su propio
+ * veredicto: una negada no arrastra a las demás, y una que no pudo entrar
+ * (servidor caído, sesión caducada) para el envío y deja el resto pendiente.
  *
  * La distinción que sostiene todo esto, heredada de A5/A0: si el `fetch` lanza,
  * la petición **no llegó** —sin señal, o cortada a mitad— y los borradores se
@@ -510,52 +521,6 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   // abajo: el servidor devuelve el `clientDraftId` que recibió, no `d.id`.
   const mutaciones = drafts.map((d) => ({ draft: d, mutacion: construirMutacionDesdeBorrador(d) }));
   const porClaveDeEnvio = new Map(mutaciones.map(({ draft, mutacion }) => [mutacion.clientDraftId, draft]));
-  const res = await fetch("/api/v1/sync/field-events", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      deviceId,
-      mutations: mutaciones.map(({ mutacion }) => mutacion),
-    }),
-  });
-
-  // El lote entero negado (aparato revocado) es una respuesta del servidor, no
-  // una caída: se marca error con el motivo que él mandó, y como el filtro de
-  // arriba no recoge `error`, no vuelve a viajar. Lo que el operador hace con
-  // eso es descartarlo; reactivar el aparato no lo devuelve a la cola.
-  const decision = clasificarRespuesta(res.status);
-  if (decision === "reintentar") {
-    // No se toca ni un borrador: nadie ha evaluado su contenido. Quedan
-    // pendientes y el operador puede volver a darle a sincronizar.
-    const sessionExpired = res.status === 401;
-    return {
-      applied: 0,
-      duplicate: 0,
-      rejected: 0,
-      retenidas: ajenos.length,
-      stillPending: drafts.length,
-      serverUnavailable: !sessionExpired,
-      sessionExpired,
-    };
-  }
-  if (decision === "rechazar") {
-    const razon = await motivoDeRechazoDelLote(res);
-    for (const d of drafts) {
-      await write((s) => s.put({ ...d, status: "error", errorMessage: razon, recuperacionGastada: true }));
-    }
-    avisarDeCambio();
-    return {
-      applied: 0,
-      duplicate: 0,
-      rejected: drafts.length,
-      retenidas: ajenos.length,
-      stillPending: await contarPendientes(cuentaActual),
-      serverUnavailable: false,
-      sessionExpired: false,
-    };
-  }
-
-  const { results } = await leerJson<{ results: ServerResult[] }>(res, "POST /api/v1/sync/field-events");
   const resumen: SyncSummary = {
     applied: 0,
     duplicate: 0,
@@ -566,28 +531,63 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
     sessionExpired: false,
   };
 
-  for (const r of results) {
-    const draft = porClaveDeEnvio.get(r.clientDraftId);
-    if (!draft) continue;
-    const desenlace = desenlaceDeUnBorrador(draft, r);
-    if (desenlace.tipo === "retenido") {
-      // ADR-199 — sigue pendiente, y no gasta la recuperación de una sola vez: no es un rechazo. Sólo se
-      // reescribe si el servidor dijo de quién es, para que deje de contarse como propio y de reenviarse a
-      // nombre de quien no es.
-      if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) {
-        await write((s) => s.put(desenlace.borrador));
-        // Los `FieldSyncControls` hermanos recuentan: el borrador dejó de ser «propio».
-        avisarDeCambio();
+  for (let i = 0; i < mutaciones.length; i += TOPE_DEL_LOTE) {
+    const tanda = mutaciones.slice(i, i + TOPE_DEL_LOTE);
+    const res = await fetch("/api/v1/sync/field-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deviceId,
+        mutations: tanda.map(({ mutacion }) => mutacion),
+      }),
+    });
+
+    // La tanda entera negada (aparato revocado) es una respuesta del servidor,
+    // no una caída: se marca error con el motivo que él mandó y con
+    // `recuperacionGastada`, así que no vuelve a viajar. Lo que el operador hace
+    // con eso es descartarlo; reactivar el aparato no lo devuelve a la cola.
+    const decision = clasificarRespuesta(res.status);
+    if (decision === "reintentar") {
+      // No se toca ni un borrador de esta tanda ni de las siguientes: nadie ha
+      // evaluado su contenido. Quedan pendientes y el operador puede volver a
+      // darle a sincronizar; lo de las tandas anteriores ya salió.
+      resumen.sessionExpired = res.status === 401;
+      resumen.serverUnavailable = !resumen.sessionExpired;
+      break;
+    }
+    if (decision === "rechazar") {
+      const razon = await motivoDeRechazoDelLote(res);
+      for (const { draft } of tanda) {
+        await write((s) => s.put({ ...draft, status: "error", errorMessage: razon, recuperacionGastada: true }));
       }
-      resumen.retenidas++;
-    } else if (desenlace.tipo === "rechazado") {
-      // #719 — un rechazo es terminal: no vuelve a viajar, ni siquiera por la recuperación de una vez.
-      await write((s) => s.put({ ...desenlace.borrador, recuperacionGastada: true }));
-      resumen.rejected++;
-    } else {
-      await discardFieldEventDraft(draft.id);
-      if (r.status === "applied") resumen.applied++;
-      else resumen.duplicate++;
+      resumen.rejected += tanda.length;
+      continue;
+    }
+
+    const { results } = await leerJson<{ results: ServerResult[] }>(res, "POST /api/v1/sync/field-events");
+    for (const r of results) {
+      const draft = porClaveDeEnvio.get(r.clientDraftId);
+      if (!draft) continue;
+      const desenlace = desenlaceDeUnBorrador(draft, r);
+      if (desenlace.tipo === "retenido") {
+        // ADR-199 — sigue pendiente, y no gasta la recuperación de una sola vez: no es un rechazo. Sólo se
+        // reescribe si el servidor dijo de quién es, para que deje de contarse como propio y de reenviarse a
+        // nombre de quien no es.
+        if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) {
+          await write((s) => s.put(desenlace.borrador));
+          // Los `FieldSyncControls` hermanos recuentan: el borrador dejó de ser «propio».
+          avisarDeCambio();
+        }
+        resumen.retenidas++;
+      } else if (desenlace.tipo === "rechazado") {
+        // #719 — un rechazo es terminal: no vuelve a viajar, ni siquiera por la recuperación de una vez.
+        await write((s) => s.put({ ...desenlace.borrador, recuperacionGastada: true }));
+        resumen.rejected++;
+      } else {
+        await discardFieldEventDraft(draft.id);
+        if (r.status === "applied") resumen.applied++;
+        else resumen.duplicate++;
+      }
     }
   }
 

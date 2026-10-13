@@ -364,8 +364,7 @@ export type MutacionDeSiembra = {
  * La revisión de la ronda de trampas, sin señal — Tarea 11.
  *
  * **Sin `observerPersonId` ni `provenanceClass`, a diferencia de las cuatro
- * mutaciones de arriba.** Ruling del controlador: la ronda aplica la MISMA
- * regla que `recordRoundTrapCheckFormAction` (Tarea 10) — procedencia y
+ * mutaciones de arriba.** Ruling del controlador (Tarea 10): procedencia y
  * observador se fijan en el SERVIDOR, nunca desde lo que trae la mutación. Un
  * payload de cola es tan falsificable como un `<input type="hidden">`
  * (SECURITY.md §2), así que aunque esta mutación trajera esos dos campos,

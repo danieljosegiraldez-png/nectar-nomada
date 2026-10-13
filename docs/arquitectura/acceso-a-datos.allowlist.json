@@ -1548,6 +1548,12 @@
       "operacion": "catalogosDelEditor",
       "razon": "Lee los valores canónicos de diez catálogos (tipo de paso, estado de la fruta, oxígeno, temperatura, fuente microbiana, medio, físico, sustrato, levadura y capacidad) para los desplegables del formulario de un paso. No recibe principal y no filtra por nadie: es vocabulario, no dato de una organización. La llaman sólo `app/recipes/[id]/pasos/datosDelFormulario.ts`, después de `getRecipeForEditor` (que abre la receta a quien puede escribirla o a quien opera un lote de su organización: Ruling C4) y de `puedeAutoriaDeReceta` (el permiso del Coffee Process Manager, V16), que responde 404 a quien no puede.",
       "verificado": "2026-10-08"
+    },
+    {
+      "archivo": "lib/sync/deviceTokens.ts",
+      "operacion": "negativaDelAparato",
+      "razon": "No autoriza ni devuelve datos: lee sólo `revokedAt` del aparato cuyo access YA autenticó la firma, y dice si puede escribir. Recibe el `deviceId` del token, no un principal. Sus dos llamadores son las rutas de escritura por Bearer, `app/api/v1/sync/field-media` (los dos pasos) y `app/api/v1/devices`, y las dos la llaman justo después de `resolverPrincipal` y antes de tocar nada. Lo que escriben después lo decide su servicio, y no igual: `finalizeFieldMedia` y `requestFieldMediaUpload` autorizan con `requireLocationAttributeAccess` sobre la ubicación de la jornada; `registerDevice` sólo autentica, a propósito (ver su propia fila en este archivo: a un aparato lo acota quién lo registró). Es la misma comprobación que `pushFieldEvents` hace con el aparato del lote. Decisión de Daniel del 2026-10-10: la revocación muerde en cada escritura, no en cada lectura.",
+      "verificado": "2026-10-10"
     }
   ]
 }

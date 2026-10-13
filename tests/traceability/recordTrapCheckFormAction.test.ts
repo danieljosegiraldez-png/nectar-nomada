@@ -1,15 +1,15 @@
 /**
  * El formulario completo de ajustes/transcripción (`RevisionDeTrampaForm`,
  * restaurado en la Tarea 10 fix round 1 y montado en
- * `/plots/[id]/ajustes`) — el contraparte de
- * `recordRoundTrapCheckFormAction.test.ts`: ahí la acción IGNORA cualquier
- * observador/procedencia que llegue en el `FormData` porque el formulario
+ * `/plots/[id]/ajustes`) — el contraparte de la ronda: allí el servidor
+ * (`aplicarRevisionDeTrampa`, en `lib/sync/pushFieldEvents.ts`) IGNORA
+ * cualquier observador/procedencia que traiga la mutación porque el formulario
  * corto de la ronda nunca los ofrece; aquí, en cambio, `RevisionDeTrampaForm`
  * SÍ los ofrece como selectores, y `recordTrapCheckFormAction` debe guardar
  * lo que el formulario manda — no un valor de la sesión ni uno fijo.
  *
- * Base real (`base-sembrada`, ver scripts/pruebas-por-compuerta.txt). Mismo
- * patrón que el archivo hermano: sólo se mockea lo que la acción necesita
+ * Base real (`base-sembrada`, ver scripts/pruebas-por-compuerta.txt). Sólo
+ * se mockea lo que la acción necesita
  * del contexto de request y que un test no tiene (`lib/auth/session`,
  * `next/cache`, `next/navigation`, `next-intl/server`); `lib/traceability/traps`
  * corre contra la base de verdad, para que la aserción sobre la fila
