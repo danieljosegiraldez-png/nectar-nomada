@@ -28,6 +28,7 @@ import { recordAuditEvent } from "../audit";
 import {
   scopeTargetsFor,
   requireLotAccess,
+  requireSampleAccess,
   TraceabilityAccessError,
   DEFAULT_NEW_RECORD_CLASSIFICATION,
 } from "./lots";
@@ -36,19 +37,6 @@ import type { ClassificationLevel } from "../rbac/types";
 import type { DataQuality, HarvestWindowPrecision, ProvenanceClass, MaterialState, SamplingRole, SamplingZone, SampleKind } from "../../generated/prisma/client";
 
 export class SampleValidationError extends Error {}
-
-async function requireSampleAccess(
-  userAccountId: string,
-  action: "manage" | "view",
-  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null; classification: ClassificationLevel }>,
-) {
-  for (const candidate of candidates) {
-    for (const target of scopeTargetsFor(candidate)) {
-      if (await can(userAccountId, action, "sample", target, candidate.classification)) return;
-    }
-  }
-  throw new TraceabilityAccessError("no_sample_access");
-}
 
 /**
  * La fase actual del lote —fermentación, secado o reposo— leída de sus

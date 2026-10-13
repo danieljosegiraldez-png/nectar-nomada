@@ -28,7 +28,7 @@
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
-import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
+import { puedeVerMuestra, requireLotAccess, requireSampleAccess, resolveLotVisibility, lotWhereFromVisibility, TraceabilityAccessError } from "./lots";
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { listarEquipos } from "../equipos/equipos";
@@ -82,7 +82,11 @@ export async function listGreenSamplesForRoast(userAccountId: string, lotId: str
     include: { roastSessions: { select: { chargeWeightKg: true } } },
     orderBy: { createdAt: "desc" },
   });
-  return muestras.map((m) => ({
+  // Sólo las que quien mira puede ver: `sample:view` o `sample:manage` (Daniel, 2026-10-12;
+  // PENDING_IMPLEMENTATIONS/005). El permiso del lote no basta para las muestras que cuelgan de él.
+  const visibles: typeof muestras = [];
+  for (const m of muestras) if (await puedeVerMuestra(userAccountId, m)) visibles.push(m);
+  return visibles.map((m) => ({
     id: m.id,
     label: m.sampleCode,
     disponibleKg: m.massUnitAtExtraction === "kg" && m.massAtExtraction != null
@@ -134,6 +138,9 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     : null;
   if (input.sourceSampleId && !sourceSample) throw new RoastSessionValidationError("sample_not_found");
   if (sourceSample) {
+    // Tostar desde una muestra escribe sobre ella: exige `sample:manage` sobre SU ámbito, no sólo el del lote
+    // (Daniel, 2026-10-12; PENDING_IMPLEMENTATIONS/005). Va antes que las demás comprobaciones.
+    await requireSampleAccess(userAccountId, "manage", [sourceSample]);
     if (input.purpose !== "sample") throw new RoastSessionValidationError("sample_source_requires_sample_purpose");
     if (sourceSample.sourceLotId !== sourceLot.id) throw new RoastSessionValidationError("sample_source_lot_mismatch");
     if (sourceSample.materialState !== "GREEN") throw new RoastSessionValidationError("sample_must_be_green");
