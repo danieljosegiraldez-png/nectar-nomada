@@ -15,6 +15,7 @@
     "signIn": "Sign in",
     "signUp": "Sign up",
     "signOut": "Sign out",
+    "signOutOffline": "No connection: the pages saved on this phone have been deleted, but you are still signed in. Sign out again once you have signal.",
     "primaryNavLabel": "Primary",
     "admin": "Admin",
     "content": "Content",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Metadata } from "next";
 import { Bodoni_Moda, Archivo } from "next/font/google";
 import Link from "next/link";
@@ -8,10 +9,9 @@ import { getCurrentUser } from "../lib/auth/session";
 import { permissionKeysAnywhere } from "../lib/rbac/service";
 import { buildNavigation } from "../lib/navigation";
 import { JornadaAbiertaBanner } from "./components/JornadaAbiertaBanner";
-import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
-import { BotonDeEnvio } from "./components/BotonDeEnvio";
+import { CerrarSesion } from "./components/CerrarSesion";
 
 /**
  * Las dos familias de la marca, las mismas que sirve el sitio público
@@ -49,10 +49,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // question than authorization does, and why it must never answer one.
   const navEntries = user ? buildNavigation(await permissionKeysAnywhere(user.userAccountId)) : [];
 
+  // La huella y no el id: se apunta en el `localStorage` de un teléfono que
+  // puede ser compartido, y sólo sirve para saber si la cuenta cambió.
+  const huellaDeCuenta = user ? createHash("sha256").update(user.userAccountId).digest("hex").slice(0, 16) : null;
+
   return (
     <html lang={locale} className={`${fuenteTexto.variable} ${fuenteDisplay.variable}`}>
       <body>
-        <ServiceWorkerRegistration />
+        <ServiceWorkerRegistration cuenta={huellaDeCuenta} />
         <NextIntlClientProvider>
           <header className="nn-nav">
             <div className="nn-shell nn-nav-row">
@@ -97,13 +101,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <summary aria-label={t("accountMenuLabel")}>{t("accountMenuShort")}</summary>
                 <div className="nn-nav-cuenta-panel">
                   <LocaleSwitcher />
-                  {user ? (
-                    <form action={logoutAction}>
-                      <BotonDeEnvio className="nn-link-button">
-                        {t("signOut")}
-                      </BotonDeEnvio>
-                    </form>
-                  ) : null}
+                  {user ? <CerrarSesion /> : null}
                 </div>
               </details>
             </div>

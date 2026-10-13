@@ -15,6 +15,7 @@
     "signIn": "Iniciar sesión",
     "signUp": "Crear cuenta",
     "signOut": "Cerrar sesión",
+    "signOutOffline": "Sin conexión: las páginas guardadas en este teléfono ya se borraron, pero la sesión sigue abierta. Vuelve a cerrarla cuando haya señal.",
     "primaryNavLabel": "Principal",
     "admin": "Admin",
     "content": "Contenido",
