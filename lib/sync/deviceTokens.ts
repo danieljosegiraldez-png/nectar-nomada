@@ -21,10 +21,22 @@ import { verifyPassword } from "../auth/password";
  *
  * **Revocación.** `Device.revokedAt` corta el refresco al instante. Un access ya
  * emitido sigue siendo criptográficamente válido hasta que expira —eso es
- * inherente a un token sin estado— pero **no sirve para escribir**:
- * `pushFieldEvents` comprueba `revokedAt` en cada lote, así que un aparato
- * revocado no mete una fila ni dentro de esa hora. La ventana es de lectura, y
- * es la que el audit §19 acepta a cambio de no consultar la base por petición.
+ * inherente a un token sin estado—, y lo que hace en esa hora depende de la
+ * ruta, no de este módulo:
+ *
+ * - **El push de eventos (`/api/v1/sync/field-events`) sí se niega.**
+ *   `pushFieldEvents` comprueba `revokedAt` en cada lote, y la ruta exige que
+ *   el `deviceId` del cuerpo sea el del token. Hasta el 2026-10-09 tomaba el
+ *   del cuerpo sin compararlo, y un aparato revocado escribía nombrando a otro
+ *   vivo; lo vigila `tests/sync/aparatoDelToken.test.ts`.
+ * - **Otras dos rutas que aceptan el Bearer NO miran la revocación**, medido el
+ *   2026-10-10: `field-media?paso=finalizar` crea la foto (200, una fila) con el
+ *   propio id del aparato revocado, y `POST /api/v1/devices` registra otro
+ *   aparato (201). `paso=solicitar` no se midió: llama al adaptador de R2.
+ *
+ * O sea que la ventana **no es sólo de lectura**, que es lo que este párrafo
+ * prometía. Cerrarla es consultar `revokedAt` en cada escritura, justo el coste
+ * que el audit §19 aceptó no pagar por petición; la decisión no está tomada.
  *
  * **Sin rotación de refresh en esta versión.** Rotar es una mitigación real
  * contra el robo del token, pero obliga a resolver la carrera de dos refrescos
