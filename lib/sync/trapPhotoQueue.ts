@@ -148,14 +148,21 @@ export interface SyncFotosSummary {
  * finalizar) es por fotografía, a diferencia del lote único de
  * `syncFieldEvents`. Una foto sin señal a mitad de camino se queda en cola tal
  * cual, sin marcar error — nadie evaluó su contenido.
+ *
+ * **Una rechazada no se vuelve a subir.** Hasta el 2026-10-11 el filtro recogía
+ * también las `error`, y como `SincronizarFotosDeRonda` sincroniza con cada
+ * sincronización de revisiones, cada vez pedía URL nueva y volvía a subir la
+ * foto ENTERA por la señal del campo. Un rechazo sólo se descarta (decisión de
+ * Daniel de ese día); lo prueba `tests/sync/rechazoTerminalEnLasColas.test.ts`.
  */
 export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
-  // ADR-199 — sólo salen las de la cuenta de este navegador y las que no tienen cuenta; las de otra
-  // cuenta se quedan en el teléfono hasta que su dueño vuelva a entrar.
+  // #719 — una rechazada no se vuelve a subir: sólo viaja lo `pending`. ADR-199 — y de eso, sólo las de la
+  // cuenta de este navegador y las que no tienen cuenta; las de otra cuenta se quedan en el teléfono hasta
+  // que su dueño vuelva a entrar.
   const cuentaActual = cuentaActualDelNavegador();
   const deviceId = idDeAparatoGuardado();
   const { enviables: fotos, ajenos } = repartirPorCuenta(
-    (await listTrapPhotoDrafts()).filter((f) => f.status === "pending" || f.status === "error"),
+    (await listTrapPhotoDrafts()).filter((f) => f.status === "pending"),
     cuentaActual,
   );
   let applied = 0;
@@ -244,6 +251,9 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
     applied,
     rejected,
     retenidas,
-    stillPending: repartirPorCuenta(await listTrapPhotoDrafts(), cuentaActual).enviables.length,
+    stillPending: repartirPorCuenta(
+      (await listTrapPhotoDrafts()).filter((f) => f.status === "pending"),
+      cuentaActual,
+    ).enviables.length,
   };
 }

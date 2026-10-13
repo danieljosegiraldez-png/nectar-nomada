@@ -11434,6 +11434,11 @@ arreglo de un dano medido.
 
 1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
 2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+   **Corregido el 2026-10-10 (Parte 2a, V16: decisión de Daniel del 2026-10-04):** la autoría de recetas ya no es `edit_beneficio` sino el permiso del Coffee Process Manager
+   (`lot:approve_exception`, nombre provisional; `lib/recetas/autoria.ts`). **`edit_beneficio` ya no basta para escribir, versionar o publicar una receta**, tampoco a un Farm Manager que lo lleva de
+   serie: quien tenía `edit_beneficio` y no tiene el perfil nuevo pierde las recetas y conserva lo demás de este ADR (instalaciones, camas y equipos). Tampoco se pide ya `lot:manage` sobre un lote de la
+   organización: esa autoridad es otra persona. Una plantilla (`organizationId` nulo) sigue escribiéndose sólo con alcance de plataforma. Lo de arriba se conserva como se escribió, y las «Consecuencias» de
+   más abajo —que cuentan las recetas entre lo que exige `edit_beneficio`— quedan corregidas por esta nota.
 3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
 
 **Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
@@ -11996,6 +12001,12 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
+    **Corregido el 2026-10-04 (decisión de Daniel del 2026-10-03, preguntado dos veces con este ADR delante):** la escala es
+    la contraria. **«Semi Wash NN %» = le QUEDA el NN % del mucílago**; 0 % = Lavado, 100 % = Honey. Lo de arriba se
+    conserva como se escribió. Con el 50 % las dos lecturas coinciden; con el 75 % no (antes quedaba el 25 %). Hoy la escala
+    vive en el `mucilagoObjetivo` de cada paso de receta (0, 10, 25, 50, 75, 100; Parte 2a) y en las definiciones de
+    `grado_proceso` de `lib/research/catalogs.ts`. **Cómo se leen los procesos ya registrados con `Semi Wash 50%` o
+    `Semi Wash 75%` lo decide Daniel antes del reimport**: la Parte 2a deja una consulta de sólo lectura que los cuenta.
 13. **Agua y sospecha de dilución**: fuera el 6,5 fijo. **El mosto se compara contra el pH del agua de
     ese lote**, y sólo contra eso: si mide casi lo mismo que el agua que se usó, avisa. Nunca se avisa
     sobre una lectura de agua. Para tenerlo, opción en el beneficio de **medir el pH del agua** cada día
@@ -12825,6 +12836,63 @@ Tres nombres decían que una selección parte a su madre, que es justo lo que es
 creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía sólo en comentarios. Queda
 dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
 verificación, así que esta es la enmienda.
+
+## ADR-197 — La integración del paquete farm-to-green: referencia, no norma, y tres carriles
+
+**Fecha:** 2026-10-08 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta, del
+2026-10-04 al 08) · **Spec:** `docs/superpowers/specs/2026-10-08-farm-to-green-integracion-design.md` ·
+**Auditoría:** `docs/reference/farm-management/AUDIT_2026-10-04.md`, cuya §8 lleva cada respuesta citada
+aquí entre paréntesis
+
+**Contexto.** El paquete `docs/reference/farm-management/` (v2.1, entró con el #638) propone un módulo de
+café de punta a punta y un cockpit del beneficio. La Fase 1 lo midió contra el código: de 48 capacidades,
+1 completa, 32 parciales y 15 ausentes, y 18 conflictos con los normativos de `docs/beneficio/` y con los
+ADR. El prompt del paquete pedía, como Fase 2, un ADR y una lista de tickets; éste es el ADR.
+
+**Decisiones.**
+
+1. **El paquete es referencia, no norma.** Manda la precedencia de `docs/beneficio/README.md`. Sus 208
+   referencias **sólo se muestran** —valor · fuente · confianza, con «baja» y «NN» a la vista—, **todas las
+   fuentes lado a lado y ninguna por defecto**, y **nunca deciden** (C1, C17, P1). Sin perfiles de autoridad.
+2. **Los umbrales salen de la receta**, en el orden de la 2b: lote → receta → ninguno. **Si falta un
+   parámetro, ese motor no opina y lo dice**: sin perfil de respaldo, ni por grado ni por ejes (PE-77/78).
+   Esto cambia la V6 de la 2b («perfil si falta»).
+3. **Qué se bloquea:** las reglas de la casa (2a D6: la regla 8 del paquete vale para umbrales de
+   referencia), **más la sobrepresión de un recipiente sellado como bloqueo de seguridad**; cada
+   recipiente sellable guarda su presión máxima (C2; dato para la 2c, que hoy la excluye).
+4. **Datos del campo.** Mucílago **por tramo** 0/10/25/50/75/100, lo que queda (C3). **aw opcional** y fin
+   de secado por humedad (ADR-181 #18); si hay aw, se pide la temperatura de la muestra y sin ella la
+   lectura se guarda marcada (C7). **Reposo por receta**, con las sugerencias de ADR-181 #20 y la venta
+   bloqueada hasta cumplirlo (C8). **«De primera» con las cinco condiciones de ADR-181 #8**; el 18–24 °Bx
+   deja de ser regla global y los veredictos guardados quedan como historia (C9).
+5. **Nombres de proceso.** Los métodos se nombran libremente; afirmar un resultado ante un comprador («es
+   láctico») pide un dato medido o va como «perfil buscado» (P4a). Los de la casa: Lavado, Natural,
+   Honey, Semi Wash NN %, Multiproceso, fiebre, CryoBloom, Doble Mosto y fermentación láctica (P4). **La
+   plataforma no evalúa elegibilidad de concurso** —depende de cada caficultor—, y la inoculación, la
+   bioprotección, las enzimas y el mosto propio **no son infusión ni coinfusión** (P3).
+6. **Pantallas.** Portada **por rol**: `/beneficio` es el cockpit del jefe de beneficio (ADR-193 sigue); el
+   operario de secado entra a `/beneficio/secado` (C15). Los avisos dicen **qué, cuándo y quién en tono de
+   sugerencia que alguien confirma** —«Toca lavar antes de 14:30 · Juan»—, coherente con `00_reglas` §3
+   (C16).
+7. **El registro central en el WhatsApp de Néctar Nómada es regla de Daniel**: todo aviso y toda acción se
+   registran también ahí. **Se construye después del cockpit**; hasta entonces sigue el aplazamiento de
+   ADR-039/044 (C14).
+8. **El trabajo va en tres carriles** —finca, arreglos, beneficio—, con trece tickets en la spec. La 2a, la
+   2b y la 2c de la sesión de recetas son **dependencias con nombre**, no trabajo de este plan, y ningún
+   ticket se construye en paralelo con ellas sobre los mismos archivos.
+9. **Fuera:** nómina, aguas residuales y exportación no se eligieron (P5; sigue la mano de obra sin nómina
+   del 2026-09-18); vivero, en una fase futura (P5); elegibilidad de concurso (P3).
+
+**Lo que este ADR NO decide.** Ningún nombre nuevo: los aprueba Daniel en el diseño de cada ticket (C4).
+Ni el diseño interno de los tickets, ni las horas de CryoBloom B —«entre 24 y 48 h», provisional (C12)—.
+Y corrige un dato de la casa sin reescribirlo: el «choque térmico de 26–31 °C» de
+`docs/implementation/36_RO1.2_METODOS_FERMENTACION.md:109` **no existe como método**; fue una temperatura
+observada por las condiciones del lugar (C12b).
+
+**Consecuencias.** Pueden empezar ya, en paralelo, los tickets que no tocan archivos de la 2a: F1
+(floración con pantalla), R1 (pantallas de carga y error), R2 (`/beneficio` legible sin conexión), R3
+(contraste y tacto) y R4 (el 6,5 de dilución y la aw del motor). El cockpit (B2) espera al PR-B de la 2a,
+a la ocupación de la 2c y al alta real de Las Nubes (B0), que depende de la lista de equipos de Daniel.
 
 ## ADR-198 — Un beneficio puede existir sin finca propia
 

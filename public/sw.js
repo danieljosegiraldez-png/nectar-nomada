@@ -35,6 +35,14 @@ const CABECERA_GUARDADA = "x-nn-guardada";
 
 const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
+// Un cambio en offline.html NO llega solo a los teléfonos que ya tienen este
+// service worker: el navegador sólo lo reinstala —y sólo entonces `install`
+// vuelve a precargar PRECACHE_URLS— cuando ESTE archivo cambia. Por eso cambia
+// este comentario cuando cambia offline.html. Y no se renombra SHELL_CACHE para
+// forzarlo: `activate` borraría los chunks de los que dependen las páginas ya
+// guardadas en PAGE_CACHE, y dejarían de abrir sin señal.
+// 2026-10-12: offline.html deja de crear vacía la base del apiario.
+
 // Operator routes this ticket covers (§1) — apiary (A5) and the coffee
 // equivalent (T10/T13). Deliberately excludes admin/report routes (§1's
 // own "no construir" list).

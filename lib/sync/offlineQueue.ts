@@ -50,6 +50,34 @@ export interface FieldEventDraft {
    * aparato; en cualquier otra respuesta sigue sin cuenta.
    */
   cuenta?: string | null;
+  /**
+   * El servidor ya evaluó este borrador desde el 2026-10-12, así que no le queda
+   * el reintento de `viajaEnLaProximaSincronizacion`. Lo escribe todo rechazo; un
+   * borrador viejo, rechazado antes, no lo trae.
+   */
+  recuperacionGastada?: boolean;
+}
+
+/**
+ * El único rechazo que vuelve a viajar, y sólo una vez (decisión de Daniel,
+ * 2026-10-12). Desde #445 ninguna revisión de la ronda se guardaba: el cliente
+ * mandaba el día con hora y el servidor contestaba esto. Esas revisiones siguen en
+ * los teléfonos como `error`; el #723 hizo que el servidor las acepte contando con
+ * que la cola las reenviaba, y desde el #719 un rechazo ya no se reenvía.
+ */
+const MOTIVO_RECUPERABLE_UNA_VEZ = "observed_at_not_a_day";
+
+/**
+ * Lo que la próxima sincronización recoge: lo pendiente, y un rechazo viejo por
+ * `MOTIVO_RECUPERABLE_UNA_VEZ` que todavía no gastó su reintento. La cola, el
+ * contador de la pantalla y «Descartar las rechazadas» preguntan aquí, para que
+ * no discrepen entre sí.
+ */
+export function viajaEnLaProximaSincronizacion(
+  d: Pick<FieldEventDraft, "status" | "errorMessage" | "recuperacionGastada">,
+): boolean {
+  if (d.status === "pending") return true;
+  return d.errorMessage === MOTIVO_RECUPERABLE_UNA_VEZ && d.recuperacionGastada !== true;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -237,6 +265,8 @@ export interface SyncSummary {
   stillPending: number;
   /** El servidor no pudo responder. Nada se marcó como error: sigue en cola. */
   serverUnavailable: boolean;
+  /** La sesión caducó (401). Nada se marcó como error: sale al volver a entrar. */
+  sessionExpired: boolean;
 }
 
 /**
@@ -257,9 +287,9 @@ export interface SyncSummary {
  * sí, y es la parte que se puede equivocar en silencio.
  *
  * - `aplicar`   — el servidor respondió; hay un resultado por mutación que leer.
- * - `reintentar`— el servidor no pudo atender (caído, saturado, tiempo agotado).
- *                 Los borradores se quedan **pendientes**, no en error: nadie
- *                 evaluó su contenido.
+ * - `reintentar`— el servidor no pudo atender (caído, saturado, tiempo agotado)
+ *                 o la sesión caducó (401). Los borradores se quedan
+ *                 **pendientes**, no en error: nadie evaluó su contenido.
  * - `rechazar`  — el servidor corrió y se negó al lote entero (aparato
  *                 revocado, petición mal formada). Reintentar no lo arreglará.
  */
@@ -287,18 +317,69 @@ export type DecisionDeRespuesta = "aplicar" | "reintentar" | "rechazar";
  */
 export type EstadoDeBorrador = "pendiente" | "rechazada" | "sincronizada";
 
-export function estadoDeBorrador(borrador: { status: DraftStatus } | null): EstadoDeBorrador {
+type BorradorQueSePinta = Pick<FieldEventDraft, "status" | "errorMessage" | "recuperacionGastada">;
+
+export function estadoDeBorrador(borrador: BorradorQueSePinta | null): EstadoDeBorrador {
   if (borrador == null) return "sincronizada";
-  return borrador.status === "error" ? "rechazada" : "pendiente";
+  // Lo que va a volver a salir se pinta pendiente aunque su `status` diga error.
+  return viajaEnLaProximaSincronizacion(borrador) ? "pendiente" : "rechazada";
+}
+
+/**
+ * Lo mismo, al RE-leer la cola sabiendo lo que la tarjeta pintaba antes.
+ *
+ * Desde el 2026-10-11 un rechazado no vuelve a viajar (`syncFieldEvents` sólo
+ * recoge `pending`), así que si desaparece de la cola es que alguien lo descartó
+ * —«Descartar las rechazadas» de `FieldSyncControls`, en la misma página que las
+ * tarjetas, o la purga de §10—, nunca que se sincronizó. Leerlo con
+ * `estadoDeBorrador(null)` pintaría «revisada hoy» de algo que se tiró. `null` es
+ * lo mismo que deja el descarte de la propia tarjeta: en blanco.
+ *
+ * **La regla entera:** un borrador ausente es «sincronizada» sólo si lo último
+ * que la tarjeta vio de él fue «pendiente» (o ya lo pintaba así). Sin nada visto
+ * —al montar, sin borrador de esta trampa en la cola— tampoco hay nada que decir:
+ * antes de este día ese caso pintaba «Revisada hoy. Enviada.» en cada trampa sin
+ * borrador, y es además el camino que sigue a un descarte, porque la tarjeta
+ * olvida la clave y la relectura siguiente llega aquí con `null`.
+ */
+export function estadoTrasRelectura(
+  previo: EstadoDeBorrador | null,
+  borrador: BorradorQueSePinta | null,
+): EstadoDeBorrador | null {
+  if (borrador != null) return estadoDeBorrador(borrador);
+  return previo === "pendiente" || previo === "sincronizada" ? "sincronizada" : null;
 }
 
 export function clasificarRespuesta(status: number): DecisionDeRespuesta {
   if (status >= 200 && status < 300) return "aplicar";
   // 5xx es el servidor cayéndose; 408 y 429 son «ahora no, vuelve». Ninguno de
   // los tres es un juicio sobre lo que el operador anotó.
-  if (status >= 500 || status === 408 || status === 429) return "reintentar";
+  //
+  // 401 tampoco (decisión de Daniel, 2026-10-11): la sesión caducó y volver a
+  // entrar lo arregla. Como un rechazo ya no se reenvía nunca, tratarlo como
+  // rechazo dejaría varado trabajo bueno.
+  if (status >= 500 || status === 408 || status === 429 || status === 401) return "reintentar";
   return "rechazar";
 }
+
+/**
+ * El motivo que se guarda cuando el servidor niega el lote entero: el código que
+ * él mismo mandó (`device_revoked`, `device_not_found`…), que es lo que la
+ * pantalla sabe traducir. Si el cuerpo no se puede leer, el estado HTTP — nunca
+ * un motivo que nadie dijo.
+ */
+export async function motivoDeRechazoDelLote(res: Response): Promise<string> {
+  try {
+    const { error } = await leerJson<{ error?: unknown }>(res, "rechazo del lote");
+    if (typeof error === "string" && error !== "") return error;
+  } catch {
+    // Sin JSON legible: cae al estado.
+  }
+  return `HTTP ${res.status}`;
+}
+
+/** Los códigos con que el servidor niega el lote por el APARATO, no por lo anotado. */
+export const MOTIVOS_DE_APARATO: readonly string[] = ["device_revoked", "device_not_found"];
 
 /**
  * Lee el JSON de una respuesta, o lanza diciendo QUÉ llegó en su lugar.
@@ -375,10 +456,24 @@ export function construirMutacionDesdeBorrador(
  * para que el operador lo vea, y no se reintenta contra algo que no puede
  * salir bien nunca.
  *
- * **Con una excepción, ADR-199: no todo rechazo se marca error.** La retención
- * —el borrador es de otra cuenta— se queda PENDIENTE: no hay nada mal en él, y
- * marcarlo error ofrecería descartarlo. Y sólo salen los de la cuenta de este
- * navegador y los que no tienen cuenta; los ajenos ni se envían (`retenidas`).
+ * **Por eso sólo se recogen los `pending`.** Hasta el 2026-10-11 el filtro
+ * recogía también los `error`, contra lo que decía este mismo párrafo: un
+ * aparato revocado volvía a mandar el mismo lote en cada intento, y
+ * `RondaDeTrampaForm` dispara uno solo cada vez que se registra con señal. Un
+ * rechazado sólo se descarta (decisión de Daniel de ese día; el spec, §12 de
+ * `docs/implementation/46_P4_API_Y_SINCRONIZACION.md`, ya lo fijaba). Lo prueba
+ * `tests/sync/rechazoTerminalEnLasColas.test.ts`.
+ *
+ * **Con una excepción, y es de una sola vez** (Daniel, 2026-10-12): lo que volvió
+ * con `observed_at_not_a_day` antes del #723 viaja una vez más, para que el
+ * servidor lo guarde. Quién viaja lo decide `viajaEnLaProximaSincronizacion`, y
+ * todo lo que el servidor rechaza desde hoy sale con `recuperacionGastada`.
+ *
+ * **ADR-199: no todo rechazo se marca error.** La retención —el borrador es de
+ * otra cuenta— se queda PENDIENTE, y no gasta la recuperación de una sola vez:
+ * no hay nada mal en él, y saldrá cuando su dueño vuelva a entrar. Y de lo que
+ * viaja sólo salen los de la cuenta de este navegador y los que no tienen
+ * cuenta; los ajenos ni se envían (`retenidas`).
  *
  * `duplicate` se trata como éxito y se descarta el borrador: significa que una
  * tanda anterior sí llegó y sólo se perdió la respuesta.
@@ -388,16 +483,24 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   // (la ronda de trampas) necesita reintentar su propia cola cada vez que se
   // intenta ésta, sea cual sea el resultado.
   avisarDeSincronizacion();
-  // ADR-199 — sólo salen los de la cuenta de este navegador y los que no tienen cuenta (ésos los decide
-  // el servidor por el aparato). Los de otra cuenta se quedan en el teléfono, sin tocar, hasta que su
-  // dueño vuelva a entrar.
+  // ADR-199 — de lo que viaja (`viajaEnLaProximaSincronizacion`), sólo salen los de la cuenta de este
+  // navegador y los que no tienen cuenta (ésos los decide el servidor por el aparato). Los de otra cuenta
+  // se quedan en el teléfono, sin tocar, hasta que su dueño vuelva a entrar.
   const cuentaActual = cuentaActualDelNavegador();
   const { enviables: drafts, ajenos } = repartirPorCuenta(
-    (await listFieldEventDrafts()).filter((d) => d.status === "pending" || d.status === "error"),
+    (await listFieldEventDrafts()).filter(viajaEnLaProximaSincronizacion),
     cuentaActual,
   );
   if (drafts.length === 0) {
-    return { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: 0, serverUnavailable: false };
+    return {
+      applied: 0,
+      duplicate: 0,
+      rejected: 0,
+      retenidas: ajenos.length,
+      stillPending: 0,
+      serverUnavailable: false,
+      sessionExpired: false,
+    };
   }
 
   const deviceId = await ensureDeviceId();
@@ -417,30 +520,60 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
   });
 
   // El lote entero negado (aparato revocado) es una respuesta del servidor, no
-  // una caída: marcarlo error evita reintentar para siempre algo que ya no va
-  // a ser aceptado hasta que alguien reactive el aparato.
+  // una caída: se marca error con el motivo que él mandó, y como el filtro de
+  // arriba no recoge `error`, no vuelve a viajar. Lo que el operador hace con
+  // eso es descartarlo; reactivar el aparato no lo devuelve a la cola.
   const decision = clasificarRespuesta(res.status);
   if (decision === "reintentar") {
     // No se toca ni un borrador: nadie ha evaluado su contenido. Quedan
     // pendientes y el operador puede volver a darle a sincronizar.
-    return { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: drafts.length, serverUnavailable: true };
+    const sessionExpired = res.status === 401;
+    return {
+      applied: 0,
+      duplicate: 0,
+      rejected: 0,
+      retenidas: ajenos.length,
+      stillPending: drafts.length,
+      serverUnavailable: !sessionExpired,
+      sessionExpired,
+    };
   }
   if (decision === "rechazar") {
-    const razon = `HTTP ${res.status}`;
-    for (const d of drafts) await write((s) => s.put({ ...d, status: "error", errorMessage: razon }));
-    return { applied: 0, duplicate: 0, rejected: drafts.length, retenidas: ajenos.length, stillPending: drafts.length, serverUnavailable: false };
+    const razon = await motivoDeRechazoDelLote(res);
+    for (const d of drafts) {
+      await write((s) => s.put({ ...d, status: "error", errorMessage: razon, recuperacionGastada: true }));
+    }
+    avisarDeCambio();
+    return {
+      applied: 0,
+      duplicate: 0,
+      rejected: drafts.length,
+      retenidas: ajenos.length,
+      stillPending: await contarPendientes(cuentaActual),
+      serverUnavailable: false,
+      sessionExpired: false,
+    };
   }
 
   const { results } = await leerJson<{ results: ServerResult[] }>(res, "POST /api/v1/sync/field-events");
-  const resumen: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, retenidas: ajenos.length, stillPending: 0, serverUnavailable: false };
+  const resumen: SyncSummary = {
+    applied: 0,
+    duplicate: 0,
+    rejected: 0,
+    retenidas: ajenos.length,
+    stillPending: 0,
+    serverUnavailable: false,
+    sessionExpired: false,
+  };
 
   for (const r of results) {
     const draft = porClaveDeEnvio.get(r.clientDraftId);
     if (!draft) continue;
     const desenlace = desenlaceDeUnBorrador(draft, r);
     if (desenlace.tipo === "retenido") {
-      // ADR-199 — sigue pendiente. Sólo se reescribe si el servidor dijo de quién es, para que deje de
-      // contarse como propio y de reenviarse a nombre de quien no es.
+      // ADR-199 — sigue pendiente, y no gasta la recuperación de una sola vez: no es un rechazo. Sólo se
+      // reescribe si el servidor dijo de quién es, para que deje de contarse como propio y de reenviarse a
+      // nombre de quien no es.
       if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) {
         await write((s) => s.put(desenlace.borrador));
         // Los `FieldSyncControls` hermanos recuentan: el borrador dejó de ser «propio».
@@ -448,7 +581,8 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
       }
       resumen.retenidas++;
     } else if (desenlace.tipo === "rechazado") {
-      await write((s) => s.put(desenlace.borrador));
+      // #719 — un rechazo es terminal: no vuelve a viajar, ni siquiera por la recuperación de una vez.
+      await write((s) => s.put({ ...desenlace.borrador, recuperacionGastada: true }));
       resumen.rejected++;
     } else {
       await discardFieldEventDraft(draft.id);
@@ -457,6 +591,18 @@ export async function syncFieldEvents(): Promise<SyncSummary> {
     }
   }
 
-  resumen.stillPending = repartirPorCuenta(await listFieldEventDrafts(), cuentaActual).enviables.length;
+  // Pasar a rechazado cambia los contadores aunque nada se borre; descartar ya
+  // avisa por su cuenta.
+  if (resumen.rejected > 0) avisarDeCambio();
+  resumen.stillPending = await contarPendientes(cuentaActual);
   return resumen;
+}
+
+/**
+ * Lo que de verdad falta por enviar desde esta cuenta: un rechazado ya no es «pendiente» (#719), y lo de
+ * otra cuenta tampoco, porque no sale de este navegador (ADR-199).
+ */
+async function contarPendientes(cuentaActual: string | null): Promise<number> {
+  return repartirPorCuenta((await listFieldEventDrafts()).filter(viajaEnLaProximaSincronizacion), cuentaActual)
+    .enviables.length;
 }
