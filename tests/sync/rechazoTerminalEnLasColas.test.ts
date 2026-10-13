@@ -242,9 +242,11 @@ describe("recuperación de una vez: lo rechazado por `observed_at_not_a_day` ant
     );
     expect(await syncFieldEvents()).toMatchObject({ retenidas: 1, rejected: 0 });
     expect(enviadosEnLaLlamada(0)).toEqual([d.id]);
-    const [retenido] = await listFieldEventDrafts();
-    expect(retenido).toMatchObject({ id: d.id, cuenta: B, errorMessage: "observed_at_not_a_day" });
-    expect(retenido.recuperacionGastada).not.toBe(true);
+    // `toMatchObject` sobre la lista exige que haya exactamente uno, así que el `?.` de abajo no
+    // puede pasar por un borrador que no existe.
+    const retenidos = await listFieldEventDrafts();
+    expect(retenidos).toMatchObject([{ id: d.id, cuenta: B, errorMessage: "observed_at_not_a_day" }]);
+    expect(retenidos[0]?.recuperacionGastada).not.toBe(true);
 
     // Con A dentro ya es de otra cuenta: no sale.
     await syncFieldEvents();
