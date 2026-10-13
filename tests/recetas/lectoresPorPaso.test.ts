@@ -46,6 +46,7 @@ import { prisma } from "../../lib/db";
 import { colaDeSecado } from "../../lib/beneficio/colaDeSecado";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { startDryingRun } from "../../lib/traceability/drying";
+import { compareRunToTargets } from "../../lib/traceability/processTargets";
 import { FASE_DEL_TIPO, type TipoDePaso } from "../../lib/recetas/vocabulario";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -771,5 +772,93 @@ describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
     // El Brix sólo lo declara ese paso: con él hay banda (20–30, objetivo 25: y = 50); sin paso, la meta de un paso no se cuela.
     expect(await bandaDe(delPaso.lotId, "brix")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
     expect(await bandaDe(sinPaso.lotId, "brix")).toEqual({ tipo: "sin_objetivo_declarado" });
+  });
+});
+
+describe("compareRunToTargets lee las metas del paso de la corrida (diseño §3.2)", () => {
+  let m: Mundo;
+  let admin: string;
+  /** Un paso de fermentación con su pH final (3,8) y su Brix inicial (22); la meta de la VERSIÓN es otro pH final (4,2). */
+  let compara: { versionId: string; pasoIds: string[] };
+
+  const lectura = (c: { lotId: string; runId: string }, variable: string, value: number, haceH: number) =>
+    prisma.measurement.create({
+      data: {
+        variable,
+        value,
+        unit: variable === "ph" ? "pH" : "Bx",
+        occurredAt: haceHoras(haceH),
+        lotId: c.lotId,
+        fermentationRunId: c.runId,
+        provenanceClass: "direct_observation",
+      },
+    });
+
+  beforeAll(async () => {
+    m = await mundo("compara");
+    // El Platform Admin de la base sembrada, como `processTargets.test.ts`: `compareRunToTargets` lee por el id de UNA corrida y
+    // no cuenta nada global, así que ese alcance no contamina ninguna cifra.
+    admin = (
+      await prisma.assignment.findFirstOrThrow({
+        where: { status: "active", roleProfile: { name: "Platform Admin" }, scope: { scopeType: "platform" } },
+        select: { userAccountId: true },
+      })
+    ).userAccountId;
+    compara = await receta(
+      m,
+      "compara",
+      [
+        {
+          tipo: "fermentation",
+          horasSugeridas: 36,
+          metas: [
+            { variable: "ph", moment: "final", unit: "pH", targetValue: 3.8 },
+            { variable: "brix", moment: "initial", unit: "Bx", targetValue: 22 },
+          ],
+        },
+      ],
+      [{ variable: "ph", moment: "final", phase: "fermentation", unit: "pH", targetValue: 4.2 }],
+    );
+  }, 60_000);
+
+  it("fila patrón: la versión trae dos metas de su paso y una de la versión, cada una con su pH final distinto", async () => {
+    const metas = await prisma.processTarget.findMany({ where: { recipeVersionId: compara.versionId }, select: { variable: true, targetValue: true, recipeStepId: true } });
+    expect(metas.filter((t) => t.recipeStepId === compara.pasoIds[0]).map((t) => t.variable).sort()).toEqual(["brix", "ph"]);
+    expect(metas.filter((t) => t.recipeStepId === null).map((t) => [t.variable, t.targetValue?.toNumber()])).toEqual([["ph", 4.2]]);
+  });
+
+  it("una corrida con paso se compara contra las metas de SU paso, con sus lecturas, y no contra las de la versión", async () => {
+    const delPaso = await conCorrida(m, {
+      codigo: "CMP-PASO",
+      fase: "fermentation",
+      versionId: compara.versionId,
+      pasoId: compara.pasoIds[0]!,
+      iniciadoHaceHoras: 5,
+      locationId: m.finca,
+    });
+    await lectura(delPaso, "ph", 3.785, 1);
+    const filas = await compareRunToTargets(admin, delPaso.runId);
+    expect(filas.map((f) => [f.variable, f.moment, f.target.value?.toNumber()])).toEqual([
+      ["ph", "final", 3.8],
+      ["brix", "initial", 22],
+    ]);
+    // Y la comparación es de verdad: la lectura se mide contra SU meta (3,8) y no contra la de la versión (4,2).
+    expect(filas[0]!.actual.mean?.toNumber()).toBe(3.785);
+    expect(filas[0]!.deviation?.toNumber()).toBeCloseTo(-0.015, 4);
+
+    // Control (el lado contrario, en la MISMA versión y con la misma lectura): una corrida SIN paso se compara contra la meta de la versión
+    // —su pH final de 4,2— y de ninguna del paso. Sin esto, «solo salen las del paso» no distinguiría un lector que siempre lee las del paso.
+    const sinPaso = await conCorrida(m, {
+      codigo: "CMP-SIN-PASO",
+      fase: "fermentation",
+      versionId: compara.versionId,
+      pasoId: null,
+      iniciadoHaceHoras: 5,
+      locationId: m.finca,
+    });
+    await lectura(sinPaso, "ph", 3.785, 1);
+    const delControl = await compareRunToTargets(admin, sinPaso.runId);
+    expect(delControl.map((f) => [f.variable, f.moment, f.target.value?.toNumber()])).toEqual([["ph", "final", 4.2]]);
+    expect(delControl[0]!.deviation?.toNumber()).toBeCloseTo(3.785 - 4.2, 4);
   });
 });
