@@ -393,9 +393,9 @@ type ServerResult = { clientDraftId: string; status: "applied" | "duplicate" | "
  * `planting_cohort`; ver `lib/sync/parcelaPayload.ts`) siguen usando `d.id`
  * exactamente como antes de este arreglo — es el único id que tienen—.
  * `trap_check` es el primero que SÍ trae uno propio
- * (`construirPayloadDeRevisionDeTrampa`), la misma clave que
- * `RondaDeTrampaForm` pone en el campo oculto y que el camino CON señal
- * (`recordRoundTrapCheckFormAction`) también usa. Antes de este arreglo, esta
+ * (`construirPayloadDeRevisionDeTrampa`): la clave que `RondaDeTrampaForm`
+ * genera en cada envío (`generarClaveDeRevision`) y que lleva también la foto
+ * de esa revisión. Antes de este arreglo, esta
  * misma línea hacía `{ ...d.payload, clientDraftId: d.id }` — el spread
  * seguido de la sobreescritura tira SIEMPRE la clave del payload, así que la
  * fila que el servidor guardaba llevaba la clave de la cola, nunca la del

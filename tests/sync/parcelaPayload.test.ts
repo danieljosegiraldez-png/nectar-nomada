@@ -381,8 +381,7 @@ describe("construirPayloadDeRevisionDeTrampa", () => {
     expect(p.captureCount).toBe(47);
   });
 
-  // F8 fix-final (recordRoundTrapCheckFormAction): la nota se guarda salvo
-  // cuando "otros" es explícitamente NO.
+  // F8 fix-final: la nota se guarda salvo cuando "otros" es explícitamente NO.
   it("otherInsectsNote se descarta cuando otherInsects es explícitamente NO", () => {
     const p = construirPayloadDeRevisionDeTrampa(
       form({ ...BASE, otherInsects: "no", otherInsectsNote: "avispas" }),

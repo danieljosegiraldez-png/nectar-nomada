@@ -9,8 +9,11 @@
  * lo calcula: si lo hiciera, dos implementaciones tendrían que coincidir sobre
  * cuál fue la última fila, y la que se equivoque se salta trabajo en silencio.
  *
- * Se autentica por la sesión de cookie existente, igual que el push. El carril
- * de tokens sigue aplazado (ADR-108).
+ * Se autentica por la cookie de sesión o por el token de un aparato
+ * (`resolverPrincipal`, P4 §2). Este párrafo decía que el carril de tokens
+ * seguía aplazado; dejó de ser cierto cuando la ruta pasó a `resolverPrincipal`.
+ * Es una lectura: no comprueba la revocación (ver «Revocación» en
+ * `lib/sync/deviceTokens.ts`).
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { pullFieldWork, LIMITE_POR_PAGINA, type PullCursor } from "../../../../../lib/sync/pullFieldWork";
