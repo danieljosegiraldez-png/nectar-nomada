@@ -20,6 +20,15 @@
  * `localStorage` sin atarlo a la persona— y, si algún día se decide, se decide
  * para las dos rutas a la vez: la comparación cae si una cambia sola.
  *
+ * **Y ADR-199 lo decidió para las dos (2026-10-13).** Desde ADR-199 la pregunta
+ * ya no es sólo si el aparato vale, sino de quién es el borrador: con cuenta, la
+ * suya; sin cuenta, la de quien registró el aparato. Un borrador SIN cuenta que
+ * nombra el aparato vivo de otra cuenta es de esa otra cuenta, y ninguna ruta lo
+ * escribe. Con la cuenta de quien envía —lo que mandan los teléfonos desde
+ * ADR-199— un aparato vivo de otra cuenta sigue pasando en las dos, que es lo
+ * que se decidió el 2026-10-11. Lo descubrió esta misma comparación: al
+ * fusionar ADR-199, `field-events` retenía ese caso y `field-media` lo escribía.
+ *
  * Se entra por el POST de la ruta y no por el servicio por la misma razón que
  * `aparatoDelToken.test.ts`: lo que se vigila es qué responde la ruta. Sólo se
  * sustituye `lib/auth/session`, que arrastra `next-auth`.
@@ -33,6 +42,7 @@ vi.mock("../../lib/auth/session", () => ({ getCurrentUser: cookie.usuario }));
 import { prisma } from "../../lib/db";
 import { hashPassword } from "../../lib/auth/password";
 import { registrarAparato } from "../../lib/sync/deviceTokens";
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
 import { POST as postEventos } from "../../app/api/v1/sync/field-events/route";
 import { POST as postMedios } from "../../app/api/v1/sync/field-media/route";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -44,6 +54,7 @@ const CLAVE = "clave-de-prueba-larga-y-tonta";
 const FINALIZAR = "/api/v1/sync/field-media?paso=finalizar";
 
 let cuentaA: string;
+let cuentaB: string;
 let correoA: string;
 let correoB: string;
 let sesionId: string;
@@ -69,6 +80,7 @@ beforeAll(async () => {
   const a = await persona("A");
   const b = await persona("B");
   cuentaA = a.cuentaId;
+  cuentaB = b.cuentaId;
   correoA = a.correo;
   correoB = b.correo;
   const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
@@ -124,13 +136,13 @@ const revocado = async (n: string) => {
 };
 
 // Sin cabecera Authorization: `resolverPrincipal` cae a la cookie.
-const porCookie = async (post: (r: Request) => Promise<Response>, ruta: string, cuerpo: unknown) => {
-  cookie.usuario.mockResolvedValueOnce({ userAccountId: cuentaA });
+const porCookie = async (post: (r: Request) => Promise<Response>, ruta: string, cuerpo: unknown, cuenta = cuentaA) => {
+  cookie.usuario.mockResolvedValueOnce({ userAccountId: cuenta });
   return post(new Request(`http://localhost${ruta}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cuerpo) }));
 };
 
-const foto = (deviceId: string | undefined, n: string) => ({
+const foto = (deviceId: string | undefined, n: string, cuentaDelBorrador?: string) => ({
   fieldSessionId: sesionId,
   storageKey: `nectar-originals/field/${sesionId}/${RUN_ID}-${n}.jpg`,
   mimeType: "image/jpeg",
@@ -139,12 +151,14 @@ const foto = (deviceId: string | undefined, n: string) => ({
   clientDraftId: `${RUN_ID}-${n}`,
   occurredAt: "2026-08-28T07:30:00Z",
   ...(deviceId === undefined ? {} : { deviceId }),
+  ...(cuentaDelBorrador === undefined ? {} : { cuentaDelBorrador }),
 });
 
-const lote = (deviceId: string, n: string) => ({
+const lote = (deviceId: string, n: string, cuentaDelBorrador?: string) => ({
   deviceId,
   mutations: [{ clientDraftId: `${RUN_ID}-${n}`, fieldSessionId: sesionId, eventKindValueId: kindId,
-                occurredAt: "2026-08-28T07:30:00Z" }],
+                occurredAt: "2026-08-28T07:30:00Z",
+                ...(cuentaDelBorrador === undefined ? {} : { cuentaDelBorrador }) }],
 });
 
 const filasDe = (n: string) => prisma.fieldEvent.findMany({
@@ -183,24 +197,73 @@ describe("field-media por cookie: el aparato del cuerpo se valida como en field-
     expect(await filasDe("sin")).toEqual([{ deviceId: null }]);
   });
 
-  it("para los mismos cuatro aparatos, field-media y field-events dan el mismo veredicto", async () => {
+  // ADR-199 — sin cuenta, el borrador es de quien registró el aparato. Aquí lo registró B, así que no es
+  // de A: ni FieldEvent ni Asset, y la respuesta nombra a su dueño para que el teléfono lo apunte.
+  it("una foto SIN cuenta en el aparato vivo de otra cuenta no se escribe, y dice de quién es", async () => {
+    const ajeno = (await alta(correoB, "ret-sin")).device.id;
+    const res = await porCookie(postMedios, FINALIZAR, foto(ajeno, "ret-sin"));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "borrador_de_otra_cuenta", cuentaDelBorrador: huellaDeCuenta(cuentaB) });
+    expect(await filasDe("ret-sin"), "ni FieldEvent").toEqual([]);
+    expect(await assetsDe("ret-sin"), "ni Asset").toBe(0);
+  });
+
+  it("una foto con la cuenta de OTRA persona no se escribe, aunque el aparato sea de quien envía", async () => {
+    const vivo = (await alta(correoA, "ret-otra")).device.id;
+    const res = await porCookie(postMedios, FINALIZAR, foto(vivo, "ret-otra", huellaDeCuenta(cuentaB)));
+    expect(res.status).toBe(403);
+    // Con cuenta no hay nada que deducir del aparato: no se nombra dueño.
+    expect(await res.json()).toEqual({ error: "borrador_de_otra_cuenta" });
+    expect(await filasDe("ret-otra"), "ni FieldEvent").toEqual([]);
+    expect(await assetsDe("ret-otra"), "ni Asset").toBe(0);
+  });
+
+  // Como en `pushFieldEvents`: de quién es se decide ANTES que el acceso. B no tiene ningún permiso en la
+  // jornada de A; si el acceso fuera primero, la foto de A volvería como «sin acceso» y el teléfono la
+  // marcaría para descartar, en vez de guardarla hasta que vuelva A.
+  it("una foto ajena se retiene aunque quien envía no tenga acceso a la jornada", async () => {
+    const deA = (await alta(correoA, "ret-acc")).device.id;
+    const res = await porCookie(postMedios, FINALIZAR, foto(deA, "ret-acc"), cuentaB);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "borrador_de_otra_cuenta", cuentaDelBorrador: huellaDeCuenta(cuentaA) });
+    expect(await assetsDe("ret-acc"), "ni Asset").toBe(0);
+  });
+
+  it("control: con la cuenta de quien envía, un aparato vivo de otra cuenta sigue pasando", async () => {
+    const ajeno = (await alta(correoB, "con-cuenta")).device.id;
+    const res = await porCookie(postMedios, FINALIZAR, foto(ajeno, "con-cuenta", huellaDeCuenta(cuentaA)));
+    expect(res.status).toBe(200);
+    expect(await filasDe("con-cuenta")).toEqual([{ deviceId: ajeno }]);
+  });
+
+  it("para los mismos cinco casos, field-media y field-events dan el mismo veredicto", async () => {
     const vivo = (await alta(correoA, "cmp-vivo")).device.id;
     const ajeno = (await alta(correoB, "cmp-ajeno")).device.id;
-    const casos: [string, string][] = [
-      ["propio vivo", vivo],
-      ["revocado", await revocado("cmp-rev")],
-      ["inexistente", randomUUID()],
-      ["de otra cuenta, vivo", ajeno],
+    const casos: [string, string, string | undefined][] = [
+      ["propio vivo", vivo, undefined],
+      ["revocado", await revocado("cmp-rev"), undefined],
+      ["inexistente", randomUUID(), undefined],
+      ["de otra cuenta, vivo, borrador sin cuenta", ajeno, undefined],
+      ["de otra cuenta, vivo, con la cuenta de quien envía", ajeno, huellaDeCuenta(cuentaA)],
     ];
-    type Veredicto = { status: number; error: string | null };
-    const veredicto = async (res: Response): Promise<Veredicto> =>
-      ({ status: res.status, error: (await res.json()).error ?? null });
+    // El motivo, no el código HTTP: field-events dice el «no» de UN borrador dentro de un 200 (su
+    // `results`), y field-media, que lleva uno solo, lo dice con un 403. Comparar códigos sólo valía
+    // mientras todos los casos se decidían para el lote entero —el aparato—; desde ADR-199 hay uno que se
+    // decide borrador a borrador.
+    type Veredicto = { status: number; motivo: string | null };
+    const deMedios = async (res: Response): Promise<Veredicto> =>
+      ({ status: res.status, motivo: (await res.json()).error ?? null });
+    const deEventos = async (res: Response): Promise<Veredicto> => {
+      const cuerpo = (await res.json()) as { error?: string; results?: { status: string; reason?: string }[] };
+      const r = cuerpo.results?.[0];
+      return { status: res.status, motivo: cuerpo.error ?? (r?.status === "rejected" ? (r.reason ?? null) : null) };
+    };
 
     const medios: Veredicto[] = [];
     const eventos: Veredicto[] = [];
-    for (const [i, [, id]] of casos.entries()) {
-      medios.push(await veredicto(await porCookie(postMedios, FINALIZAR, foto(id, `cmp-m${i}`))));
-      eventos.push(await veredicto(await porCookie(postEventos, "/api/v1/sync/field-events", lote(id, `cmp-e${i}`))));
+    for (const [i, [, id, cuenta]] of casos.entries()) {
+      medios.push(await deMedios(await porCookie(postMedios, FINALIZAR, foto(id, `cmp-m${i}`, cuenta))));
+      eventos.push(await deEventos(await porCookie(postEventos, "/api/v1/sync/field-events", lote(id, `cmp-e${i}`, cuenta))));
     }
     // Lo que quedó escrito, no sólo lo que se contestó: field-events responde 200
     // aunque rechace la mutación por dentro, así que el estado solo no dice que
@@ -211,15 +274,17 @@ describe("field-media por cookie: el aparato del cuerpo se valida como en field-
     // Fila patrón: sin ella, dos rutas que fallaran igual por el arnés también
     // «coincidirían». field-events tiene que dar exactamente esto.
     expect(eventos).toEqual([
-      { status: 200, error: null },
-      { status: 403, error: "device_revoked" },
-      { status: 403, error: "device_not_found" },
-      { status: 200, error: null },
+      { status: 200, motivo: null },
+      { status: 403, motivo: "device_revoked" },
+      { status: 403, motivo: "device_not_found" },
+      { status: 200, motivo: "borrador_de_otra_cuenta" },
+      { status: 200, motivo: null },
     ]);
-    expect(escritoPorEventos).toEqual([[{ deviceId: vivo }], [], [], [{ deviceId: ajeno }]]);
+    expect(escritoPorEventos).toEqual([[{ deviceId: vivo }], [], [], [], [{ deviceId: ajeno }]]);
 
+    const motivos = (vs: Veredicto[]) => Object.fromEntries(casos.map(([n], i) => [n, vs[i]?.motivo]));
     const porCaso = (vs: unknown[]) => Object.fromEntries(casos.map(([n], i) => [n, vs[i]]));
-    expect(porCaso(medios)).toEqual(porCaso(eventos));
+    expect(motivos(medios)).toEqual(motivos(eventos));
     expect(porCaso(escritoPorMedios)).toEqual(porCaso(escritoPorEventos));
   });
 });

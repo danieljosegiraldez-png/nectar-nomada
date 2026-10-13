@@ -12958,6 +12958,15 @@ nuevo porque el JavaScript viejo en caché descarta cualquier estado que no cono
 funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador en
 `lib/offline/cuentaDelNavegador.ts`, ordenada por la hora del servidor.
 
+**También la ruta de fotos `field-media` (decisión de Daniel, 2026-10-13).** Ninguna cola la usa —es API—,
+pero recibe borradores (`clientDraftId`) y la prueba de #708 (`tests/sync/aparatoDelCuerpoPorCookie.test.ts`)
+exige que diga lo mismo que `field-events`. Al fusionar, esa comparación cayó: `field-events` retenía un
+borrador sin cuenta en el aparato vivo de otra cuenta y `field-media` lo escribía. Ahora `finalizeFieldMedia`
+decide el dueño con la misma función y antes que el acceso; una foto ajena no escribe nada y la ruta responde
+403 `borrador_de_otra_cuenta`, con el dueño cuando se deduce del aparato. Sin aparato y sin cuenta la foto es
+de quien la envía: por cookie el aparato es opcional (#708). Con la cuenta de quien envía, un aparato vivo de
+otra cuenta sigue pasando en las dos rutas, como se decidió el 2026-10-11.
+
 **Lo que no cubre.**
 - Quien manipule su navegador puede reetiquetar como suyo un borrador ajeno. No suplanta a nadie, porque
   escribe con su propia sesión, pero se apropia de trabajo ajeno. Esto protege del error, no del abuso de
