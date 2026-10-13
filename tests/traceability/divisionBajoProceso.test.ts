@@ -26,7 +26,7 @@ let orgTolerante: string;
 /** Una versión de receta real, para que la copia de R6.4 tenga una receta que perder. */
 let recetaVersionId: string;
 /** Para medir y sacar muestra: el Farm Operator puede no tener permiso de muestras, y la prueba caería
- *  por acceso y no por la regla. Es el mismo admin que usa `recipeVersions.test.ts`. */
+ *  por acceso y no por la regla. Es el mismo admin que usa `tests/recetas/versiones.test.ts`. */
 let admin: string;
 const lotes: string[] = [];
 /** Mediciones insertadas crudas para cerrar una copia. Se borran DESPUÉS de los procesos

@@ -6,7 +6,10 @@ import {
   listFieldEventDrafts,
   syncFieldEvents,
   purgeStaleFieldDrafts,
+  discardFieldEventDraft,
   FIELD_DRAFTS_CHANGED_EVENT,
+  MOTIVOS_DE_APARATO,
+  viajaEnLaProximaSincronizacion,
   STALE_WARNING_DAYS,
   STALE_PURGE_DAYS,
   type SyncSummary,
@@ -23,12 +26,15 @@ import {
  * («explicit sync now, no automatic conflict resolution») y aquí vale igual.
  *
  * Un rechazo se enseña aparte de un envío bueno porque son cosas distintas:
- * lo enviado desaparece de la cola, lo rechazado se queda en ella y **se
- * reenvía con cada sincronización** (ver `syncFieldEvents`). Reenviarlo sólo lo
- * arregla si cambió el servidor —así entran, tras #723, las revisiones de la
- * ronda que volvían `observed_at_not_a_day`—; un rechazo definitivo vuelve
- * rechazado, y esconder eso detrás de un contador que baja sería mentir sobre
- * lo que pasó.
+ * lo enviado desaparece de la cola, lo rechazado se queda y **no vuelve a
+ * viajar**: sólo se descarta (decisión de Daniel, 2026-10-11). Reintentar algo
+ * que el servidor ya evaluó y negó no lo va a arreglar, y esconder eso detrás
+ * de un contador que baja sería mentir sobre lo que pasó.
+ *
+ * **Por eso se cuentan aparte.** Este contador sumaba los rechazados a los
+ * «sin enviar», y el botón seguía activo con sólo rechazados dentro: pulsarlo
+ * no podía mandar nada. Y es el único sitio de las pantallas de parcela donde
+ * se ve la cola, así que hasta ese día un rechazado no tenía cómo quitarse.
  */
 export function FieldSyncControls() {
   const t = useTranslations("Traceability");
@@ -52,6 +58,8 @@ export function FieldSyncControls() {
 
   const [purgados, setPurgados] = useState(0);
   const [rancios, setRancios] = useState(0);
+  const [rechazadas, setRechazadas] = useState(0);
+  const [deAparato, setDeAparato] = useState(false);
 
   const recontar = useCallback(async () => {
     try {
@@ -61,7 +69,14 @@ export function FieldSyncControls() {
       const { purgados: p, avisados } = await purgeStaleFieldDrafts();
       if (p > 0) setPurgados((n) => n + p);
       setRancios(avisados);
-      setPendientes((await listFieldEventDrafts()).length);
+      const drafts = await listFieldEventDrafts();
+      // Lo que va a volver a salir —el reintento único de un rechazo viejo por la
+      // fecha— cuenta como pendiente, no como rechazado: si no, el botón quedaría
+      // deshabilitado y nadie podría mandarlo.
+      const errores = drafts.filter((d) => !viajaEnLaProximaSincronizacion(d));
+      setPendientes(drafts.length - errores.length);
+      setRechazadas(errores.length);
+      setDeAparato(errores.some((d) => MOTIVOS_DE_APARATO.includes(d.errorMessage ?? "")));
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no los datos: el formulario ya habría
@@ -107,6 +122,16 @@ export function FieldSyncControls() {
     }
   };
 
+  const descartarRechazadas = async () => {
+    try {
+      for (const d of await listFieldEventDrafts()) {
+        if (!viajaEnLaProximaSincronizacion(d)) await discardFieldEventDraft(d.id);
+      }
+    } finally {
+      await recontar();
+    }
+  };
+
   if (pendientes === null) return null;
 
   return (
@@ -126,13 +151,29 @@ export function FieldSyncControls() {
       <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando || pendientes === 0}>
         {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
       </button>
+      {rechazadas > 0 ? (
+        <>
+          <p className="nn-error" role="status">
+            {t("fieldSyncRejectedStored", { count: rechazadas })}
+          </p>
+          {deAparato ? <p className="nn-note">{t("fieldSyncDeviceNotAuthorized")}</p> : null}
+          <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
+            {t("fieldSyncDiscardRejected")}
+          </button>
+        </>
+      ) : null}
       {ultimo ? (
         <>
           {/* Un servidor caído NO es un rechazo, y decirlo así al operador
               sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
               Por eso este caso excluye el resumen de enviados en vez de
-              acompañarlo — no hay nada que resumir. */}
-          {ultimo.serverUnavailable ? (
+              acompañarlo — no hay nada que resumir. Una sesión caducada,
+              lo mismo: nada se evaluó, sale al volver a entrar. */}
+          {ultimo.sessionExpired ? (
+            <p className="nn-note" role="status">
+              {t("fieldSyncSessionExpired")}
+            </p>
+          ) : ultimo.serverUnavailable ? (
             <p className="nn-note" role="status">
               {t("fieldSyncUnavailable")}
             </p>
