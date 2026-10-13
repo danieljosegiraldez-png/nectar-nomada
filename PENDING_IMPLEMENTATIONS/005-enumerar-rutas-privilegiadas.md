@@ -4,8 +4,8 @@
 declarado** — #639, 2026-10-04, decisión de Daniel. Sigue abierta en dos cosas
 concretas, las dos nombradas al final: **los otros dominios** (desde el 2026-10-11 están
 declarados los cinco medidos: lote, ubicaciones, equipos, especímenes y muestras) y **tus veredictos**,
-**decididos el 2026-10-12**. Lo que queda: el defecto de muestras, que construye el PR siguiente, y la
-compuerta por acción, aprobada para después del #714.
+**decididos el 2026-10-12**. El defecto de muestras está construido (PR apilado sobre el #714). Lo que queda:
+la compuerta por acción, aprobada para después del #714.
 
 Lo que había antes demostraba tres propiedades. La cuarta —que el guardia sea *el
 debido*— está en la sección «El guardia debido, 2026-10-04».
@@ -265,8 +265,16 @@ entero: 207 archivos, 2576 pruebas, salida 0.
   Operator sólo tienen `sample:manage`. Exigir `view` les habría quitado ver las muestras que ellos
   mismos toman. Quien no tenga ninguno de los dos verá la ficha del lote **sin muestras**. Medido
   sobre el catálogo: el único perfil que pierde algo es **Project Viewer**, que tiene `lot:view` y
-  ningún permiso de muestras. **Lo construye el PR siguiente**: cuando esas operaciones exijan
-  `sample`, sus excepciones sobran y la compuerta pide borrarlas.
+  ningún permiso de muestras.
+
+  **Construido el 2026-10-12, en el PR apilado sobre el #714.** `requireSampleAccess` pasa de `samples.ts`
+  a `lots.ts`, junto a `requireLotAccess`, con un predicado `puedeVerMuestra` que acepta ver o gestionar.
+  Las tres lecturas filtran y las dos escrituras exigen `sample:manage`. Al exigirlo, la compuerta nombró
+  las cinco excepciones como sobrantes, y se borraron: en el dominio `sample` queda sólo `recordMeasurement`.
+  Lo guarda `tests/traceability/permisoDeMuestras.test.ts`. Usa un Farm Operator al que un override le quita
+  `sample:manage`, porque ningún perfil del catálogo tiene `lot:manage` sin él. Con el código anterior caían
+  exactamente las cinco filas de rechazo y del visor. Flip: quitar cada guardia tumba sólo su fila, y un
+  predicado que aceptara sólo `view` tumba las tres lecturas de los gestores.
 - **Los otros dominios.** Desde el 2026-10-11 están los cinco que la medición proponía: lote,
   ubicaciones, equipos, especímenes y muestras. No queda ninguno pendiente por volumen. Los permisos
   que no tienen dominio (`apiary`, `research`, `sensory`, `field_report`…) son trabajo nuevo, no
