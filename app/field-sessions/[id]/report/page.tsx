@@ -6,7 +6,7 @@ import { redirect, notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../lib/auth/session";
 import { leerReporteDeVisita, enlacesPublicadosDeVisita } from "../../../../lib/traceability/reporteDeVisita";
-import { LocationAccessError } from "../../../../lib/traceability/fieldSessions";
+import { FieldSessionValidationError, LocationAccessError } from "../../../../lib/traceability/fieldSessions";
 import { PrintButton } from "../../../components/traceability/PrintButton";
 import { PublicarEnlaceForm, EnlacesPublicados } from "../../../components/traceability/ReporteDeVisitaForms";
 
@@ -39,7 +39,9 @@ export default async function ReporteDeVisitaPage({ params }: { params: Promise<
   try {
     reporte = await leerReporteDeVisita(user.userAccountId, id);
   } catch (error) {
-    if (error instanceof LocationAccessError) notFound();
+    // `FieldSessionValidationError` también: es la que dice «esa jornada no existe», y sin ella un
+    // UUID inexistente o un id mal formado daban 500 en vez de 404 (ficha 026).
+    if (error instanceof LocationAccessError || error instanceof FieldSessionValidationError) notFound();
     throw error;
   }
   if (!reporte) notFound();

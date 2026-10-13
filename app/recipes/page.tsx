@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../lib/auth/session";
 import { puedeAutoriaDeReceta } from "../../lib/recetas/autoria";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { listRecipes, puedeCrearRecetaEnAlguna } from "../../lib/traceability/processTargets";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +12,14 @@ export default async function RecipesPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // Quien no opera ningún lote ni puede escribir recetas recibe aquí el rechazo de `listRecipes` (`TraceabilityAccessError`) y la pantalla no lo atrapa: ve la
-  // página de error. Ningún menú le ofrece el enlace, pero la pantalla se niega igual (SECURITY.md §2). Tampoco hay nada que atrapar de otra clase:
-  // `listRecipes` no lanza `ProcessTargetError` (sus únicos rechazos son los de acceso a lotes), así que lo que lance sube tal cual.
-  const recipes = await listRecipes(user.userAccountId);
+  // Quien no opera ningún lote ni puede escribir recetas recibe aquí el rechazo de `listRecipes` (`TraceabilityAccessError`) y vuelve a `/lots`. Ningún
+  // menú le ofrece el enlace, pero la pantalla se niega igual (SECURITY.md §2). Hasta el 2026-10-12 no lo atrapaba y enseñaba la página de error: un 500
+  // se lee como «la aplicación se rompió» (Daniel, ese día; PENDING_IMPLEMENTATIONS/027). Sólo esa clase: `listRecipes` no lanza `ProcessTargetError`
+  // (sus únicos rechazos son los de acceso a lotes), y cualquier otro error sube tal cual. El `redirect` va en el `.catch`, no dentro de un `try`.
+  const recipes = await listRecipes(user.userAccountId).catch((error: unknown) => {
+    if (error instanceof TraceabilityAccessError) redirect("/lots");
+    throw error;
+  });
 
   const t = await getTranslations("Traceability");
   const puedeCrearReceta = await puedeCrearRecetaEnAlguna(user.userAccountId);

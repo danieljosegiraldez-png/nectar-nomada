@@ -15,6 +15,7 @@
  */
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess } from "./lots";
 import { idsBajoLaFinca } from "./fincas";
@@ -320,6 +321,9 @@ export async function origenesDeParcelas(parcelaIds: readonly string[]) {
 
 /** Una jornada con sus asignaciones, sus entregas y los orígenes que admite. */
 export async function detalleDeJornada(userAccountId: string, jornadaId: string) {
+  // El id llega de la URL de `finca/jornadas/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la
+  // página daba 500 (PENDING_IMPLEMENTATIONS/026); es una jornada que no existe.
+  if (!UUID.test(jornadaId)) throw new JornadaError("jornada_no_encontrada");
   const jornada = await prisma.jornadaDeCosecha.findUnique({ where: { id: jornadaId }, include: { fincaSite: { select: { name: true, timezone: true } } } });
   if (!jornada) throw new JornadaError("jornada_no_encontrada");
   const sitio = await sitioDeFinca(jornada.fincaSiteId);

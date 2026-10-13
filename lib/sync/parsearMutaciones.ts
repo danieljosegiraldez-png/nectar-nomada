@@ -83,8 +83,10 @@ export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile",
  *
  * **Y por eso se acepta además la medianoche UTC EXACTA**, decisión de Daniel
  * del 2026-10-11: es lo que llevan los borradores que quedaron rechazados en
- * los teléfonos, y `syncFieldEvents` los reenvía en cada sincronización
- * (recoge `pending` y `error`). Esa forma nombra un solo día sin ambigüedad —
+ * los teléfonos. Desde el #719 un rechazo ya no se reenvía, salvo éste: un
+ * `error` con `observed_at_not_a_day` viaja UNA vez más
+ * (`viajaEnLaProximaSincronizacion` en `offlineQueue.ts`, decisión de Daniel del
+ * 2026-10-12), y es ese viaje el que llega aquí. Esa forma nombra un solo día sin ambigüedad —
  * así guarda `fechaDeDia` los campos de día—, de modo que el propósito del A10
  * sigue en pie: otra hora o un desfase (`-05:00`) se rechazan igual.
  *
@@ -258,9 +260,10 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       // Sin `clientDraftId` no hay a quién atribuir el rechazo, así que es 400
       // de lote — la misma frontera que el `kind` desconocido de abajo, y la que
       // el spec fija. CON él, un dato malo se rechaza SOLO y las demás
-      // mutaciones del lote se aplican: tumbar el lote entero marcaba `error`
-      // todos los borradores, los buenos incluidos, y `syncFieldEvents` los
-      // vuelve a recoger en la tanda siguiente — el mismo 400 para siempre.
+      // mutaciones del lote se aplican: tumbar el lote entero marca `error`
+      // todos los borradores, los buenos incluidos, y desde el 2026-10-11 un
+      // `error` ya no se reenvía nunca — sólo se descarta. Trabajo bueno perdido
+      // por un vecino malo.
       if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_missing_ids" };
       const clientDraftId = m.clientDraftId;
       const rechazar = (reason: string) => {
@@ -371,9 +374,10 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
     // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás.
     // Medido en el cliente: un 400 hace que `clasificarRespuesta` devuelva
     // `rechazar`, y eso marca **todos** los borradores del lote como `error`,
-    // los buenos incluidos; y como `syncFieldEvents` vuelve a recoger los
-    // `error` en la tanda siguiente, el mismo lote regresa, recibe otro 400, y
-    // la cola no se vacía nunca mientras el borrador raro siga dentro.
+    // los buenos incluidos. Hasta el 2026-10-11 `syncFieldEvents` volvía a
+    // recoger los `error` y el mismo 400 regresaba para siempre; desde ese día
+    // un `error` no se reenvía y sólo se descarta, así que un 400 de lote tira
+    // el trabajo bueno junto al raro.
     // Con `clientDraftId` se puede atribuir el rechazo a su mutación; sin él no,
     // y entonces sí es 400 de lote.
     if (typeof m.kind === "string" && m.kind !== "field_event") {

@@ -26,6 +26,7 @@
  * deliberate and recorded, not overlooked.
  */
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import { compareNames } from "../naturalOrder";
@@ -108,6 +109,9 @@ export async function listStoriesForEditor(userAccountId: string) {
 }
 
 export async function getStoryForEditor(userAccountId: string, storyId: string) {
+  // El id llega de la URL de `content/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la página
+  // daba 500 (PENDING_IMPLEMENTATIONS/026); recibe lo mismo que una historia que no existe.
+  if (!UUID.test(storyId)) throw new ContentAccessError("no_content_access");
   const story = await prisma.story.findUnique({
     where: { id: storyId },
     include: { project: true, location: true, organization: true, authorPerson: true },
