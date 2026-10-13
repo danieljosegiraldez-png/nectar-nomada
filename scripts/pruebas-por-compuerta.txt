@@ -186,6 +186,7 @@ tests/traceability/formularioSinAmbito.test.ts
 tests/traceability/harvest.test.ts
 tests/traceability/landMedia.test.ts
 tests/traceability/lotProcess.test.ts
+tests/recetas/intervencionConPaso.test.ts
 tests/traceability/procesoDelLinaje.test.ts
 tests/recetas/avance.test.ts
 tests/traceability/aperturaDeProceso.test.ts

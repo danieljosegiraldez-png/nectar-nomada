@@ -42,6 +42,23 @@ describe("el vocabulario de la receta con pasos está sembrado, no sólo declara
     },
   );
 
+  it("los cuatro alias del paquete están sembrados en sustrato_anadido y apuntan a doble_mosto (registro I7)", async () => {
+    const alias = declarados("sustrato_anadido")
+      .filter((v) => v.aliasOf !== undefined)
+      .map((v) => v.value);
+    expect(alias, "los alias no están declarados en lib/research/catalogs.ts").toHaveLength(4);
+    const filas = await prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "sustrato_anadido" }, value: { in: [...alias, "doble_mosto"] } },
+      select: { id: true, value: true, aliasOfId: true },
+    });
+    const canonico = filas.find((f) => f.value === "doble_mosto");
+    expect(canonico, "doble_mosto no está sembrado").toBeDefined();
+    expect(canonico?.aliasOfId, "doble_mosto es el canónico: no apunta a nadie").toBeNull();
+    const sembrados = filas.filter((f) => f.value !== "doble_mosto");
+    expect(sembrados.map((f) => f.value).sort()).toEqual([...alias].sort());
+    expect(sembrados.filter((f) => f.aliasOfId !== canonico?.id).map((f) => f.value)).toEqual([]);
+  });
+
   it.each(["tipo_paso", "fisico", "capacidad"])(
     "«%s» es nuevo y sólo la semilla le escribe: lo sembrado es exactamente lo declarado, sin alias",
     async (clave) => {

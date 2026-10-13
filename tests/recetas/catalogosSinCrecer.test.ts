@@ -11,8 +11,8 @@
  * añadir uno exige cambiar la prueba A CONCIENCIA, con la decisión de Daniel delante.
  *
  * Los valores de abajo son una SEGUNDA copia a propósito: comparar el catálogo consigo mismo no cazaría que alguien lo
- * amplíe. Los de `sustrato_anadido` son los tres de siempre: los cuatro alias de `doble_mosto` (registro I7) los siembra la
- * tarea 8 (PR-B), que cambia esa línea de la prueba en su commit. Hermética: compara constantes, sin base y sin red, como
+ * amplíe. Los de `sustrato_anadido` son los de DESPUÉS del registro I7 (los cuatro alias de `doble_mosto`), que es lo que la
+ * tarea 8 siembra. Hermética: compara constantes, sin base y sin red, como
  * `tests/traceability/catalogos-de-intervencion-existen.test.ts`, que mira otra propiedad: que las claves existan.
  */
 import { describe, expect, it } from "vitest";
@@ -27,7 +27,7 @@ const INTERVENCION: Record<string, string[]> = {
   manejo_temperatura: ["ambiente", "cold_hold_prefermentativo", "fermentacion_fria", "choque_termico", "choque_en_frio"],
   medio_lavado: ["agua_limpia", "mosto_propio", "mosto_de_otro_lote", "ninguno_natural"],
   metodo_inoculacion: ["direct pitch", "rehydrated", "spontaneous"],
-  sustrato_anadido: ["ninguno", "co_fermentacion", "doble_mosto"],
+  sustrato_anadido: ["ninguno", "co_fermentacion", "doble_mosto", "mosto", "mossto", "lixiviado", "previous-batch starter"],
   recipiente: RECIPIENTE,
   cereza_flotado: ["sin_flotadores", "<2%", "2_5%", "5_10%", "10_20%", "20_30%", ">30%"],
   cereza_seleccion: ["uniforme_alta", "uniforme_media", "heterogenea_leve", "heterogenea_alta", "mezcla_no_controlada"],

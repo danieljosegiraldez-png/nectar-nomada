@@ -78,6 +78,8 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "paso_de_otra_receta",
   "paso_no_corresponde",
   "desviacion_sin_motivo",
+  // Parte 2a, tarea 8: la intervención del proceso sin paso, tipo ni valor de catálogo.
+  "intervencion_sin_acto",
 ];
 
 /**

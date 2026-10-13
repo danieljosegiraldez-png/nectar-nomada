@@ -345,6 +345,14 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
         definition:
           "Reuso de mosto de una fermentación previa. De qué lote vino se registra vía Medio de lavado (mosto_de_otro_lote) cuando ese mosto también se usa como medio; si además hubo inoculación con él, ambos ejes se marcan.",
       },
+      // Parte 2a (2026-10-04, registro I7): los otros nombres que el paquete «farm-to-green v2» da a `doble_mosto`
+      // (`processing_methods.json`, M02 «Backslopping / mossto» y su grupo S9). Alias DENTRO del mismo catálogo, que es lo
+      // único que la semilla admite: un alias no cruza catálogos. Al FINAL, para no mover el orden de los tres de siempre.
+      // Sin definición propia: es el mismo valor escrito de otra forma, y la del canónico es la que vale.
+      { value: "mosto", aliasOf: "doble_mosto" },
+      { value: "mossto", aliasOf: "doble_mosto" },
+      { value: "lixiviado", aliasOf: "doble_mosto" },
+      { value: "previous-batch starter", aliasOf: "doble_mosto" },
     ],
   },
   {

@@ -32,6 +32,8 @@ import {
   procesosParaEntrada,
   type OrigenDelProceso,
 } from "./procesoDelLinaje";
+import { exigePasoCoherente } from "../recetas/guardian";
+import { TIPOS_POR_REGISTRO } from "../recetas/vocabulario";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
@@ -372,21 +374,60 @@ export async function cambiarIntencion(
 
 export interface RegistrarIntervencionInput {
   lotProcessId: string;
-  /** De uno de los catálogos de `CATALOGOS_DE_INTERVENCION`. */
-  catalogValueId: string;
+  /**
+   * El «cómo» del manejo, de uno de los catálogos de `CATALOGOS_DE_INTERVENCION`: con qué medio se lavó, qué cepa se
+   * inoculó, qué condición de oxígeno. **Opcional desde la Parte 2a cuando hay tipo de paso o paso** (decisión de
+   * Daniel, 2026-10-03: el acto es el tipo de paso). Sin ninguno de los dos es lo único que dice qué se hizo. Si es un
+   * alias, se guarda su canónico (Ruling I7).
+   */
+  catalogValueId?: string | null;
+  /**
+   * El ACTO —despulpado, desmucilaginado, lavado, flotación…—: un valor del catálogo `tipo_paso` que una intervención
+   * cumpla (`TIPOS_POR_REGISTRO.lotProcessIntervention`, diseño §4.1). Con `recipeStepId` no hace falta: el tipo se toma
+   * del paso (§4.2).
+   */
+  stepTypeValueId?: string | null;
+  /** El paso de la receta del proceso que esta intervención cumple (§4.2). */
+  recipeStepId?: string | null;
+  /**
+   * Por qué este manejo se sale de la receta. Hace falta sólo sin paso y bajo una receta con pasos (§4.4,
+   * `desviacion_sin_motivo`); una desviación no bloquea, queda marcada.
+   */
+  motivoDesviacion?: string | null;
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
 }
 
 /**
- * Registra un manejo que no es una fermentación ni un secado: flotado,
- * despulpado, reposo, mover a sombra.
+ * Registra un manejo del proceso que no es una fermentación ni un secado: despulpado, desmucilaginado, lavado,
+ * flotación, sanitización, inoculación o adición (diseño 2a §4.1), o un cambio del vocabulario de manejos —atmósfera,
+ * choque térmico, trasiego—.
  *
- * **El valor tiene que pertenecer al catálogo de intervenciones**, no a
- * cualquiera. Sin esa comprobación se podría colgar aquí un valor de
- * `medio_lavado` o de cultivar y la lista quedaría contaminada, con una FK
- * perfectamente válida diciendo que todo está bien.
+ * **El acto es el tipo de paso** (Daniel, 2026-10-03). Hasta la 2a una intervención exigía un valor de catálogo, y esos
+ * catálogos son ejes —oxígeno, medio, cereza flotada—, no actos: el despulpado y el lavado no se podían registrar. Desde
+ * la 2a lleva `stepTypeValueId` y, con él, el valor de catálogo es opcional y sigue diciendo el «cómo». Sin paso, tipo
+ * ni valor no se sabría qué se hizo (`intervencion_sin_acto`; la base lo exige con
+ * `lot_process_intervention_catalogo_o_tipo`).
+ *
+ * **El valor, si viene, tiene que ser del catálogo de intervenciones**, no de cualquiera. Sin esa comprobación se podría
+ * colgar aquí un valor de `grado_proceso` o de cultivar y la lista quedaría contaminada, con una FK perfectamente válida
+ * diciendo que todo está bien. **Un alias se guarda como su canónico** (`aliasOfId ?? id`; Ruling I7, 2026-10-04): es el
+ * mismo valor escrito de otra forma, y `opcionesParaProceso` ya no lo ofrece.
+ *
+ * **Decide dentro de la transacción, con el linaje bloqueado** (registro de la 2a, 2026-10-03). Antes leía «cerrado»
+ * fuera de la transacción y sin bloqueo: un cierre o una división concurrentes podían colar la intervención en un proceso
+ * ya cerrado, y con el paso de la receta sería además el paso de un proceso que ya no es el vigente. Como
+ * `cerrarProceso`: el linaje primero, y lo que sigue se decide con él tomado. Lo de fuera es una salida temprana con
+ * frase, no la decisión.
+ *
+ * **El paso lo juzga `exigePasoCoherente`** (§4.2 y §4.4, tarea 7), el guardián único: el paso es de la versión de este
+ * proceso, su tipo es uno que una intervención cumple, el tipo se toma del paso, y sin paso bajo una receta con pasos es
+ * una desviación con motivo. Se guarda lo que el guardián DEVUELVE, no lo que se pidió.
+ *
+ * **El acceso al lote se pide ANTES que cualquier otra cosa** (Ruling INV): el guardián recibe sólo la transacción y no
+ * autoriza, así que quien no puede gestionar el lote recibe el rechazo de acceso y nunca uno que le cuente qué hay en la
+ * receta del proceso.
  */
 export async function registrarIntervencion(userAccountId: string, input: RegistrarIntervencionInput) {
   const proceso = await prisma.lotProcess.findUnique({ where: { id: input.lotProcessId } });
@@ -395,20 +436,54 @@ export async function registrarIntervencion(userAccountId: string, input: Regist
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lote.projectId, locationId: lote.locationId }]);
   if (proceso.endedAt !== null) throw new LotProcessError("process_already_closed");
 
-  const valor = await prisma.variableCatalogValue.findUnique({
-    where: { id: input.catalogValueId },
-    include: { catalog: true },
-  });
-  if (!valor) throw new LotProcessError("catalog_value_not_found");
-  if (!CATALOGOS_DE_INTERVENCION.includes(valor.catalog.key)) {
-    throw new LotProcessError("catalog_value_wrong_catalog");
+  // Una cadena en blanco es «no viene»: la acción manda `""` con el desplegable sin elegir.
+  const valorPedido = input.catalogValueId?.trim() || null;
+  const stepTypeValueId = input.stepTypeValueId?.trim() || null;
+  const recipeStepId = input.recipeStepId?.trim() || null;
+  const motivoDesviacion = input.motivoDesviacion?.trim() || null;
+  // Con paso, el tipo sale del paso. Sin paso ni tipo, el valor de catálogo es lo único que dice qué se hizo.
+  if (valorPedido === null && stepTypeValueId === null && recipeStepId === null) {
+    throw new LotProcessError("intervencion_sin_acto");
   }
 
+  const valor =
+    valorPedido === null
+      ? null
+      : await prisma.variableCatalogValue.findUnique({ where: { id: valorPedido }, include: { catalog: true } });
+  if (valorPedido !== null) {
+    if (!valor) throw new LotProcessError("catalog_value_not_found");
+    if (!CATALOGOS_DE_INTERVENCION.includes(valor.catalog.key)) {
+      throw new LotProcessError("catalog_value_wrong_catalog");
+    }
+  }
+  // Ruling I7 (cruce del 2026-10-04): un alias es el mismo valor escrito de otra forma y lo que se guarda es el CANÓNICO, como
+  // hacen `fieldSessions.ts` y `intervenciones.ts` con los tipos de evento. Un alias apunta directo a su canónico, nunca a
+  // otro alias, y nunca a otro catálogo, así que el canónico es del mismo catálogo que ya se comprobó arriba.
+  const catalogValueId = valor === null ? null : (valor.aliasOfId ?? valor.id);
+
   return prisma.$transaction(async (tx) => {
+    await bloquearLinaje(tx, proceso.lotId);
+    const vigente = await tx.lotProcess.findUniqueOrThrow({ where: { id: proceso.id } });
+    if (vigente.endedAt !== null) throw new LotProcessError("process_already_closed");
+    const recetaTienePasos =
+      vigente.processRecipeVersionId !== null &&
+      (await tx.processRecipeStep.count({ where: { recipeVersionId: vigente.processRecipeVersionId } })) > 0;
+    const paso = await exigePasoCoherente(tx, {
+      registro: "lotProcessIntervention",
+      recipeVersionIdDelProceso: vigente.processRecipeVersionId,
+      recetaTienePasos,
+      recipeStepId,
+      stepTypeValueId,
+      motivoDesviacion,
+    });
+
     const intervencion = await tx.lotProcessIntervention.create({
       data: {
-        lotProcessId: input.lotProcessId,
-        catalogValueId: input.catalogValueId,
+        lotProcessId: vigente.id,
+        catalogValueId,
+        stepTypeValueId: paso.stepTypeValueId,
+        recipeStepId: paso.recipeStepId,
+        motivoDesviacion: paso.motivoDesviacion,
         occurredAt: input.occurredAt,
         operatorPersonId: input.operatorPersonId ?? null,
         notes: input.notes?.trim() || null,
@@ -429,7 +504,7 @@ export async function registrarIntervencion(userAccountId: string, input: Regist
     );
 
     return intervencion;
-  });
+  }, TRANSACCION_DEL_LINAJE);
 }
 
 export interface CerrarProcesoInput {
@@ -780,7 +855,9 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
       : null;
   const [valores, mediciones] = await Promise.all([
     prisma.variableCatalogValue.findMany({
-      where: { catalog: { key: { in: [...CATALOGOS_DE_INTERVENCION] } } },
+      // Ruling I7 (2026-10-04): sólo los CANÓNICOS. Un alias es el mismo valor escrito de otra forma y apunta a uno de ellos
+      // (`aliasOfId`); ofrecerlo duplicaría la opción, como evitan los demás desplegables de la casa (`aliasOfId: null`).
+      where: { aliasOfId: null, catalog: { key: { in: [...CATALOGOS_DE_INTERVENCION] } } },
       include: { catalog: true },
       orderBy: [{ catalog: { key: "asc" } }, { displayOrder: "asc" }, { value: "asc" }],
     }),
@@ -801,7 +878,7 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
     ),
   ]);
 
-  const [grados, estados, motivos] = await Promise.all([
+  const [grados, estados, motivos, tiposDeIntervencion] = await Promise.all([
     prisma.variableCatalogValue.findMany({
       where: { catalog: { key: CATALOGO_GRADO_PROCESO } },
       orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
@@ -815,13 +892,31 @@ export async function opcionesParaProceso(userAccountId: string, lotId: string) 
       where: { catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } },
       orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
     }),
+    // Parte 2a, tarea 8: los tipos de paso que una intervención puede cumplir (diseño §4.1). El orden lo pone
+    // `TIPOS_POR_REGISTRO`, no la base.
+    prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "tipo_paso" }, value: { in: [...TIPOS_POR_REGISTRO.lotProcessIntervention] } },
+      select: { id: true, value: true },
+    }),
   ]);
+  const idDelTipo = new Map(tiposDeIntervencion.map((v) => [v.value, v.id]));
 
   return {
     grados: grados.map((v) => ({ id: v.id, label: v.value })),
     estadosDeCereza: estados.map((v) => ({ id: v.id, label: v.value })),
     motivosDeDevolucion: motivos.map((v) => ({ id: v.id, label: v.value })),
     intervenciones: valores.map((v) => ({ id: v.id, label: `${v.catalog.name} · ${v.value}` })),
+    /**
+     * Parte 2a, tarea 8: los tipos de paso que una intervención cumple (`TIPOS_POR_REGISTRO.lotProcessIntervention`, en
+     * su orden), con el id de su valor de `tipo_paso`; el rótulo lo pone la pantalla con `Traceability.tipoPaso_<tipo>`.
+     * **Van APARTE de `intervenciones`, a propósito**: el formulario de hoy (`IntervencionForm`) manda cada opción de esa
+     * lista como `catalogValueId`, y un tipo de paso ahí saldría `catalog_value_wrong_catalog`. Un tipo que no esté
+     * sembrado no se ofrece.
+     */
+    tiposDePasoDeIntervencion: TIPOS_POR_REGISTRO.lotProcessIntervention.flatMap((tipo) => {
+      const id = idDelTipo.get(tipo);
+      return id === undefined ? [] : [{ id, tipo }];
+    }),
     // El código del lote va en la etiqueta cuando la medición NO es de este lote: ofrecer una
     // humedad de otro lote sin decir de cuál es pedirle al operario que adivine (ADR-080: un id
     // no significa nada, un código sí).

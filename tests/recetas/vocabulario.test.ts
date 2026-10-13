@@ -243,6 +243,19 @@ describe("los catálogos nuevos y los ampliados (diseño §7)", () => {
     expect(definicion("estado_cereza", "despulpada_con_mucilago")).toMatch(/le queda el 100 %/);
   });
 
+  it("el paquete da cuatro sinónimos a doble_mosto: son alias DENTRO de sustrato_anadido (registro I7)", () => {
+    const valoresDeSustrato = catalogo("sustrato_anadido")?.values ?? [];
+    const alias = valoresDeSustrato.filter((v) => v.aliasOf !== undefined);
+    expect(alias.map((v) => v.value)).toEqual(["mosto", "mossto", "lixiviado", "previous-batch starter"]);
+    expect(alias.every((v) => v.aliasOf === "doble_mosto")).toBe(true);
+    // El canónico existe, en el mismo catálogo, y no es él mismo un alias (la semilla no encadena).
+    const canonico = valoresDeSustrato.find((v) => v.value === "doble_mosto");
+    expect(canonico, "doble_mosto").toBeDefined();
+    expect(canonico?.aliasOf).toBeUndefined();
+    // Van al FINAL: la semilla pone el orden por posición, y los tres de siempre no se mueven.
+    expect(valoresDeSustrato.slice(0, 3).map((v) => v.value)).toEqual(["ninguno", "co_fermentacion", "doble_mosto"]);
+  });
+
   it("todo valor nuevo trae definición y ninguno es un alias", () => {
     // Un alias no cruza catálogos (la semilla lanza, `prisma/seed.ts:120–133`), y uno dentro del mismo
     // catálogo aparecería como opción aparte en los desplegables que no filtran `aliasOfId`. Los cuatro de
