@@ -19,8 +19,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import {
+  buscarMuestrasParaCata,
   crearSesionDeCata,
-  listarMuestrasParaCata,
   invitarParticipante,
   listarParticipantes,
   listarInvitables,
@@ -125,7 +125,11 @@ afterAll(async () => {
 
 describe("el anfitrión de cata monta la cata", () => {
   it("alcanza las muestras con `sample:view`, sin poder cambiarlas", async () => {
-    const suyas = (await listarMuestrasParaCata(anfitrion)).map((m) => m.id);
+    // Buscando por el RUN y no leyendo la lista entera (2026-10-10): el anfitrión ve en PLATAFORMA, o sea las muestras
+    // de toda la base compartida. La lista corta en 200, así que bastan 200 muestras ajenas que ordenen antes para que las
+    // suyas no salgan; y pide el grado del proceso de cada una, que otro archivo puede borrar entre dos lecturas (P2025,
+    // reproducido con un archivo vecino que crea y borra procesos en bucle).
+    const suyas = (await buscarMuestrasParaCata(anfitrion, RUN)).muestras.map((m) => m.id);
     expect(suyas, "sin esto el anfitrión ve la pantalla y no puede elegir nada").toEqual(
       expect.arrayContaining([m1, m2]),
     );

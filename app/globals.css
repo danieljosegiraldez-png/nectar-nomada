@@ -2394,3 +2394,11 @@ a.nn-card-link:active {
   border-radius: 0.5rem;
   white-space: nowrap;
 }
+
+/* El aviso de cerrar sesión sin red es una frase entera. Con el `nowrap` del
+   panel quedaba en una sola línea de 849 px que, a 375 px, empezaba en x = -503:
+   medido en el navegador el 2026-10-10. */
+.nn-nav-cuenta-aviso {
+  white-space: normal;
+  width: min(18rem, calc(100vw - 2rem));
+}

@@ -27,8 +27,10 @@ export function destinosDelBeneficio(granted: Set<string>) {
     // sección: la cola misma sólo trae lo que la visibilidad de lotes alcanza.
     { href: "/beneficio/secado", clave: "secado", visible: true },
     { href: "/lots", clave: "lotes", visible: true },
-    // Recetas, sólo quien gestiona lotes: `listRecipes` exige `manage` sobre un
-    // lote. Así estaba en la barra de Lotes antes del #383, y el índice lo perdió.
+    // Recetas, sólo quien gestiona lotes (`lot:manage`). Así estaba en la barra de Lotes antes del #383, y el índice lo perdió. Ya no es lo único que abre
+    // `/recipes`: desde la Parte 2a `listRecipes` también la abre a quien puede ESCRIBIR recetas (`puedeAutoriaDeReceta`: el Coffee Process Manager, que no lleva
+    // `lot:manage`). A esa persona este índice no le ofrece el enlace, y el botón de `/lots` tampoco (también pide `lot:manage`): llega a `/recipes` si escribe la
+    // dirección, y ningún menú la lleva ahí. Si se le ofrece es decisión de Daniel.
     { href: "/recipes", clave: "recetas", visible: granted.has("lot:manage") },
     { href: "/reports/proceso", clave: "informe", visible: true },
     { href: "/instalaciones", clave: "instalaciones", visible: granted.has("location:manage_attributes") },
