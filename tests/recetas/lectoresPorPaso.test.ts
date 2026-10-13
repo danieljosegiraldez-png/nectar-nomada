@@ -386,8 +386,10 @@ afterAll(async () => {
   // `process.stdout.write` y no `console.log`: vitest intercepta la consola y sólo la saca para las pruebas que FALLAN.
   if (fallos.length > 0) process.stdout.write(`\n[FUGA] la limpieza de ${RUN} dejó filas: ${fallos.join(" | ")}\n`);
 
-  // La limpieza se AFIRMA, no se supone. El control: la corrida sí creó lotes; sin eso los ceros de abajo no miran nada.
-  expect(lotes.length).toBeGreaterThan(0);
+  // La limpieza se AFIRMA, no se supone. El control: la corrida sí creó su organización; sin eso los ceros de abajo no miran nada. Es la
+  // organización y no los lotes porque tiene que valer para CUALQUIER subconjunto (`-t`): las pruebas «fila patrón» de cada `describe` no
+  // crean ningún lote, pero su `beforeAll` sí arma el mundo.
+  expect(organizaciones.length).toBeGreaterThan(0);
   expect(await prisma.lot.count({ where: { OR: [{ id: { in: lotes } }, { lotCode: { contains: RUN } }] } })).toBe(0);
   expect(await prisma.processRecipe.count({ where: { OR: [{ organizationId: { in: organizaciones } }, { name: { contains: RUN } }] } })).toBe(0);
   expect(await prisma.processRecipeStep.count({ where: { recipeVersion: { recipe: { name: { contains: RUN } } } } })).toBe(0);
