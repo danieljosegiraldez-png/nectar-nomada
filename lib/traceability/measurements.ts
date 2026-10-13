@@ -30,7 +30,7 @@
 import { exigirPersonaPermitida, type Ancla } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
-import { requireLotAccess, TraceabilityAccessError } from "./lots";
+import { puedeVerMuestra, requireLotAccess, requireSampleAccess, TraceabilityAccessError } from "./lots";
 import { loteDividido } from "./procesoDelLinaje";
 import { requireLocationAttributeAccess } from "./locations";
 import type { ClassificationLevel } from "../rbac/types";
@@ -472,6 +472,15 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
   if (!original) throw new TraceabilityAccessError("measurement_not_found");
 
   const anclas = await requireSubjectAccess(userAccountId, original);
+  // Corregir la medición de una muestra escribe sobre ella: exige `sample:manage` sobre SU ámbito (Daniel,
+  // 2026-10-12; PENDING_IMPLEMENTATIONS/005). El sujeto de arriba se autoriza con el permiso del lote.
+  if (original.sampleId) {
+    const muestra = await prisma.sample.findUnique({
+      where: { id: original.sampleId },
+      select: { projectId: true, locationId: true, classification: true },
+    });
+    if (muestra) await requireSampleAccess(userAccountId, "manage", [muestra]);
+  }
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, anclas, { actual: original.operatorPersonId });
 
   // No se corrige lo ya corregido: se corrige lo vigente. Dos correcciones de
@@ -555,6 +564,10 @@ export async function correctMeasurement(userAccountId: string, input: CorrectMe
 /** Sólo inspecciones de una corrida vinculada al lote autorizado. */
 export async function inspeccionesParaMedicion(userAccountId: string, lotId: string, dryingRunId: string) {
   await requireSubjectAccess(userAccountId, { lotId });
+  // Las inspecciones son de las muestras: se leen con `sample:view` o `sample:manage` sobre el lote (Daniel,
+  // 2026-10-12; PENDING_IMPLEMENTATIONS/005). Sin ninguno, el formulario no ofrece ninguna.
+  const lote = await prisma.lot.findUnique({ where: { id: lotId }, select: { projectId: true, locationId: true, classification: true } });
+  if (!lote || !(await puedeVerMuestra(userAccountId, lote))) return [];
   const origen = await prisma.lotTransformation.findFirst({ where: { dryingRunId, inputs: { some: { lotId } } } });
   if (!origen) return [];
   return prisma.samplingEvent.findMany({ where: { dryingRunId }, select: { id: true, occurredAt: true }, orderBy: { occurredAt: "desc" } });

@@ -743,6 +743,45 @@ export function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.Sam
  * sube, porque un fallo de base leído como «no puedes» es un permiso denegado
  * en silencio.
  */
+/**
+ * El guardia de las MUESTRAS. Vivía privado en `samples.ts`; está aquí desde el 2026-10-12 para que la
+ * ficha del lote, el tueste y las mediciones pregunten al MISMO guardia (`PENDING_IMPLEMENTATIONS/005`,
+ * dominio `sample`, decisión de Daniel de ese día). `samples.ts` ya importa de este archivo, así que no hay
+ * ciclo. Como `requireLotAccess`, aprueba en cuanto UN candidato pasa.
+ */
+export async function requireSampleAccess(
+  userAccountId: string,
+  action: "manage" | "view",
+  candidates: ReadonlyArray<{ projectId?: string | null; locationId?: string | null; classification: ClassificationLevel }>,
+) {
+  for (const candidate of candidates) {
+    for (const target of scopeTargetsFor(candidate)) {
+      if (await can(userAccountId, action, "sample", target, candidate.classification)) return;
+    }
+  }
+  throw new TraceabilityAccessError("no_sample_access");
+}
+
+/**
+ * ¿Puede VER esta muestra? `sample:view` **o** `sample:manage` (Daniel, 2026-10-12). Aquí `manage` no
+ * implica `view` (`lib/rbac/catalog.ts`), y Farm Manager y Farm Operator sólo tienen `sample:manage`:
+ * exigir `view` les quitaría ver las muestras que toman ellos mismos. Sólo se traga la negativa.
+ */
+export async function puedeVerMuestra(
+  userAccountId: string,
+  ambito: { projectId?: string | null; locationId?: string | null; classification: ClassificationLevel },
+): Promise<boolean> {
+  for (const accion of ["view", "manage"] as const) {
+    try {
+      await requireSampleAccess(userAccountId, accion, [ambito]);
+      return true;
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+  }
+  return false;
+}
+
 export async function puedeGestionarLote(
   userAccountId: string,
   lot: { projectId?: string | null; locationId?: string | null; classification: ClassificationLevel },
@@ -976,7 +1015,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     transformations,
     quantityEvents,
     measurements,
-    samples,
+    todasLasMuestras,
     storageAssignments,
     tasks,
     perfilDeTueste,
@@ -1028,6 +1067,15 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     // whether to ask.
     prisma.apiaryHarvestEvent.findUnique({ where: { resultingLotId: lotId } }),
   ]);
+
+  // Las muestras se enseñan sólo a quien puede verlas: `sample:view` o `sample:manage` (Daniel, 2026-10-12;
+  // PENDING_IMPLEMENTATIONS/005). Quien sólo tiene `lot:view` —el Project Viewer— ve el lote SIN muestras, y
+  // con ellas desaparece lo que cuelga de esta lista: sus adjuntos, su vínculo sensorial y su auditoría.
+  // Una a una: cada muestra lleva su propio ámbito.
+  const samples: typeof todasLasMuestras = [];
+  for (const muestra of todasLasMuestras) {
+    if (await puedeVerMuestra(userAccountId, muestra)) samples.push(muestra);
+  }
 
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
