@@ -27,14 +27,11 @@ export default async function BodegaPage({
   try {
     bodega = await detalleBodega(user.userAccountId, id);
   } catch (e) {
-    if (e instanceof BodegaError) notFound();
-    if (!(e instanceof LocationAccessError)) throw e;
-    return (
-      <div>
-        <h1>{t("titulo")}</h1>
-        <p role="alert">{t("sinPermiso")}</p>
-      </div>
-    );
+    // «No existe», «id mal formado» y «sin permiso» dan las tres 404, como en `plots/[id]`.
+    // Antes la tercera pintaba un aviso de «sin permiso», y también a un id que no existía:
+    // separarlas diría a quien no tiene acceso qué ids existen (Daniel, 2026-10-09; ficha 026).
+    if (e instanceof BodegaError || e instanceof LocationAccessError) notFound();
+    throw e;
   }
   return (
     <div>
