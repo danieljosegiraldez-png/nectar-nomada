@@ -44,6 +44,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { colaDeSecado } from "../../lib/beneficio/colaDeSecado";
+import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { startDryingRun } from "../../lib/traceability/drying";
 import { FASE_DEL_TIPO, type TipoDePaso } from "../../lib/recetas/vocabulario";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -568,5 +569,207 @@ describe("la cola de secado lee el paso de la corrida (diseño §3.1 y §3.2)", 
     expect(run.recipeStepId, "la puerta no guardó el paso en la corrida").toBe(dosSecados.pasoIds[1]);
     const u = await unidadDe(lote.id);
     expect(u.ritmo).toEqual({ expectedHours: 60, turnEveryHours: 12, humedadMinPct: 11, humedadMaxPct: 12.5 });
+  });
+});
+
+describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
+  let m: Mundo;
+  /** Prefermentación de 12 h, fermentación de 36 h con pH cada 6 h y una tercera fermentación sin horas ni metas; la meta de la VERSIÓN es la temperatura cada 2 h. */
+  let fermenta: { versionId: string; pasoIds: string[] };
+  /**
+   * El mundo de ANTES de la 2a, para la fermentación: la fase dice 12 h (lo mismo que la fase derivada de `fermenta`), la meta de la
+   * VERSIÓN es la misma temperatura cada 2 h, y no hay ningún paso. Es el control de «sin paso» (R9).
+   */
+  let fermentaAntes: { versionId: string; pasoIds: string[] };
+  /** Tres pasos de secado: 100 h, 60 h y uno que no declara horas. La fase derivada es la del primero. */
+  let secados: { versionId: string; pasoIds: string[] };
+  /** Un paso sin metas y otro con su banda de humedad (10–14) y de Brix (20–30); la banda de la VERSIÓN es la de humedad 10–12. */
+  let curvas: { versionId: string; pasoIds: string[] };
+
+  /** La entrada de un lote en la cola de atención, o un fallo con nombre: «no aparece» no es «no tiene horas». */
+  const entradaDe = (d: Awaited<ReturnType<typeof datosDelTablero>>, lotId: string) => {
+    const e = d.lotes.find((l) => l.lotId === lotId);
+    expect(e, "el lote con una fermentación abierta no está en el tablero").toBeDefined();
+    return e!;
+  };
+
+  beforeAll(async () => {
+    m = await mundo("tablero");
+    fermenta = await receta(
+      m,
+      "fermenta",
+      [
+        { tipo: "prefermentacion", horasSugeridas: 12 },
+        {
+          tipo: "fermentation",
+          horasSugeridas: 36,
+          metas: [{ variable: "ph", moment: "during", unit: "pH", minValue: 3.8, maxValue: 4.6, everyHours: 6 }],
+        },
+        { tipo: "fermentation" },
+      ],
+      [{ variable: "temperature", moment: "during", phase: "fermentation", unit: "C", minValue: 18, maxValue: 24, everyHours: 2 }],
+    );
+    fermentaAntes = await receta(
+      m,
+      "fermenta antes de la 2a",
+      [],
+      [{ variable: "temperature", moment: "during", phase: "fermentation", unit: "C", minValue: 18, maxValue: 24, everyHours: 2 }],
+      [{ phase: "fermentation", horasSugeridas: 12 }],
+    );
+    secados = await receta(m, "dos secados del tablero", [
+      { tipo: "drying", horasSugeridas: 100, volteoCadaHoras: 4 },
+      { tipo: "drying", horasSugeridas: 60, volteoCadaHoras: 12 },
+      { tipo: "drying" },
+    ]);
+    curvas = await receta(
+      m,
+      "curva",
+      [
+        { tipo: "drying", horasSugeridas: 100, volteoCadaHoras: 4 },
+        {
+          tipo: "drying",
+          horasSugeridas: 60,
+          metas: [
+            { variable: "moisture", moment: "during", unit: "%", minValue: 10, maxValue: 14, targetValue: 13 },
+            { variable: "brix", moment: "during", unit: "Bx", minValue: 20, maxValue: 30, targetValue: 25 },
+          ],
+        },
+      ],
+      [{ variable: "moisture", moment: "during", phase: "drying", unit: "%", minValue: 10, maxValue: 12, targetValue: 11 }],
+    );
+  }, 60_000);
+
+  it("fila patrón: la fase derivada de la fermentación es la del primer paso (12 h), distinta de la del segundo (36 h)", async () => {
+    const fase = await prisma.processRecipePhase.findFirstOrThrow({ where: { recipeVersionId: fermenta.versionId, phase: "fermentation" } });
+    expect(fase.expectedHours).toBe(12);
+    const pasos = await prisma.processRecipeStep.findMany({
+      where: { recipeVersionId: fermenta.versionId },
+      orderBy: { seq: "asc" },
+      select: { horasSugeridas: true },
+    });
+    expect(pasos.map((p) => p.horasSugeridas)).toEqual([12, 36, null]);
+    // Las metas: la del paso cuelga de su paso y la de la versión no cuelga de ninguno.
+    const metas = await prisma.processTarget.findMany({ where: { recipeVersionId: fermenta.versionId }, orderBy: { variable: "asc" } });
+    expect(metas.map((t) => [t.variable, t.recipeStepId === null ? "versión" : "paso"])).toEqual([
+      ["ph", "paso"],
+      ["temperature", "versión"],
+    ]);
+    // R9: la versión de antes de la 2a dice 12 h en su fase —lo mismo que la fase derivada de arriba—, trae la misma meta de la VERSIÓN
+    // y no tiene ningún paso: lo único que la distingue de `fermenta` es eso, que es lo que la hace el control de «sin paso».
+    const faseAntes = await prisma.processRecipePhase.findFirstOrThrow({ where: { recipeVersionId: fermentaAntes.versionId, phase: "fermentation" } });
+    expect(faseAntes.expectedHours).toBe(12);
+    expect(await prisma.processRecipeStep.count({ where: { recipeVersionId: fermentaAntes.versionId } })).toBe(0);
+    expect(await prisma.processTarget.count({ where: { recipeVersionId: fermentaAntes.versionId, recipeStepId: null } })).toBe(1);
+  });
+
+  it("la entrada del lote en la cola de atención lee las horas y las metas de su paso; sin paso y sin pasos en la versión, las de la fase y las de la versión", async () => {
+    const delPaso = await conCorrida(m, { codigo: "TAB-PASO", fase: "fermentation", versionId: fermenta.versionId, pasoId: fermenta.pasoIds[1]!, iniciadoHaceHoras: 10 });
+    const sinPaso = await conCorrida(m, { codigo: "TAB-SIN-PASO", fase: "fermentation", versionId: fermentaAntes.versionId, pasoId: null, iniciadoHaceHoras: 10 });
+    const sinHoras = await conCorrida(m, { codigo: "TAB-SIN-HORAS", fase: "fermentation", versionId: fermenta.versionId, pasoId: fermenta.pasoIds[2]!, iniciadoHaceHoras: 10 });
+    const d = await datosDelTablero(m.operario, ahora);
+
+    // Control: la corrida SIN paso, bajo la versión sin pasos de antes de la 2a, lee la fase (12 h) y las metas de la versión (temperatura cada 2 h).
+    const control = entradaDe(d, sinPaso.lotId);
+    expect(control.expectedHours).toBe(12);
+    expect(control.metas).toEqual([{ variable: "temperature", everyHours: 2, ultimaLectura: null }]);
+    // La del segundo paso: sus 36 h y su pH cada 6 h, y ninguna meta de la versión.
+    const e = entradaDe(d, delPaso.lotId);
+    expect(e.expectedHours).toBe(36);
+    expect(e.metas).toEqual([{ variable: "ph", everyHours: 6, ultimaLectura: null }]);
+    // Un paso que no declara horas ni metas NO hereda las de la fase ni las de la versión: no tiene ninguna.
+    const vacio = entradaDe(d, sinHoras.lotId);
+    expect(vacio.expectedHours).toBeNull();
+    expect(vacio.metas).toEqual([]);
+  });
+
+  it("la entrada de una corrida SIN paso bajo una versión CON pasos no lee las horas de la fase —sale sin horas—, y sus metas son las de la versión (R9)", async () => {
+    // La MISMA corrida —10 h de fermentación, sin paso— bajo dos versiones cuya fase de fermentación dice 12 h y que traen la misma meta de la
+    // VERSIÓN (temperatura cada 2 h): la de antes de la 2a no tiene pasos, y la de los tres pasos sí. Lo único que cambia es si la versión los tiene.
+    const desviacion = await conCorrida(m, { codigo: "TAB-R9-DESVIACION", fase: "fermentation", versionId: fermenta.versionId, pasoId: null, iniciadoHaceHoras: 10 });
+    const sinPasos = await conCorrida(m, { codigo: "TAB-R9-SIN-PASOS", fase: "fermentation", versionId: fermentaAntes.versionId, pasoId: null, iniciadoHaceHoras: 10 });
+    const d = await datosDelTablero(m.operario, ahora);
+
+    // Control: bajo la versión sin pasos la fase manda, y son 12 h.
+    expect(entradaDe(d, sinPasos.lotId).expectedHours).toBe(12);
+    // La desviación NO lee las 12 h de la fase de su versión (la del primer paso, la prefermentación): no declaró ninguna.
+    const e = entradaDe(d, desviacion.lotId);
+    expect(e.expectedHours).toBeNull();
+    // Lo que R9 NO quita: las metas de la versión, que no salen de la fase. Son las mismas del control, y no traen el pH del paso 2.
+    expect(e.metas).toEqual([{ variable: "temperature", everyHours: 2, ultimaLectura: null }]);
+  });
+
+  it("la liberación se calcula por corrida: gana el paso más corto, y un paso sin horas no hereda las de la fase (§3.1)", async () => {
+    const cama = async (rotulo: string) =>
+      (
+        await prisma.location.create({
+          data: { name: nombre(`${rotulo} del tablero`), locationType: "drying_bed", classification: "internal", status: "approved", organizationId: m.orgId },
+        })
+      ).id;
+    const cama1 = await cama("Cama 1");
+    const cama2 = await cama("Cama 2");
+    const cama3 = await cama("Cama 3");
+    // Las dos primeras llevan 10 h secándose. Por la fase (la del primer paso) las dos durarían 100 h; por su paso, una dura 100 h y la otra 60.
+    await conCorrida(m, { codigo: "LIB-100H", fase: "drying", versionId: secados.versionId, pasoId: secados.pasoIds[0]!, iniciadoHaceHoras: 10, cama: cama1 });
+    await conCorrida(m, { codigo: "LIB-60H", fase: "drying", versionId: secados.versionId, pasoId: secados.pasoIds[1]!, iniciadoHaceHoras: 10, cama: cama2 });
+    // La tercera lleva 90 h y su paso no declara horas: si heredara las 100 h de la fase se liberaría dentro de 10 h y ganaría; sin
+    // duración declarada su cama no tiene hora (`proximaLiberacion` agrupa por unidad y una unidad sin fin conocido no cuenta), y la próxima sigue siendo la de 60 h.
+    await conCorrida(m, { codigo: "LIB-SIN-HORAS", fase: "drying", versionId: secados.versionId, pasoId: secados.pasoIds[2]!, iniciadoHaceHoras: 90, cama: cama3 });
+
+    const d = await datosDelTablero(m.operario, ahora);
+    // Control: las tres camas son unidades visibles de quien mira; si no, ninguna corrida contaría para la liberación.
+    expect(d.camas.map((c) => c.id)).toEqual(expect.arrayContaining([cama1, cama2, cama3]));
+    expect(d.liberacion).toEqual({ tipo: "a_las", cuando: new Date(haceHoras(10).getTime() + 60 * HORA) });
+  });
+
+  it("la liberación: una corrida SIN paso bajo una versión CON pasos no hereda la duración de la fase, y bajo una versión sin pasos sí (R9)", async () => {
+    // Un mundo PROPIO: la liberación es la de la próxima unidad de TODAS las visibles, y las camas de la prueba de arriba, abiertas todavía en
+    // el mundo del `describe`, la contaminarían.
+    const w = await mundo("tablero-r9");
+    const cama = async (rotulo: string) =>
+      (
+        await prisma.location.create({
+          data: { name: nombre(`${rotulo} del tablero R9`), locationType: "drying_bed", classification: "internal", status: "approved", organizationId: w.orgId },
+        })
+      ).id;
+    const camaDeLaDesviacion = await cama("Cama de la desviación");
+    const camaDelControl = await cama("Cama del control");
+    // La fase de las dos versiones dice 100 h (la de la primera por derivación del primer paso), así que heredarla liberaría la cama dentro de 10 h.
+    const conPasos = await receta(w, "secado con pasos del tablero R9", [
+      { tipo: "drying", horasSugeridas: 100, volteoCadaHoras: 4 },
+      { tipo: "drying", horasSugeridas: 60, volteoCadaHoras: 12 },
+    ]);
+    const sinPasos = await receta(w, "secado antes de la 2a del tablero R9", [], [], [{ phase: "drying", horasSugeridas: 100 }]);
+
+    // Las dos corridas llevan 90 h secándose y NINGUNA cumple un paso.
+    await conCorrida(w, { codigo: "LIB-R9-DESVIACION", fase: "drying", versionId: conPasos.versionId, pasoId: null, iniciadoHaceHoras: 90, cama: camaDeLaDesviacion });
+    const sola = await datosDelTablero(w.operario, ahora);
+    // Control: la cama es una unidad visible de quien mira; si no, ninguna corrida contaría para la liberación y el resultado de abajo no diría nada.
+    expect(sola.camas.map((c) => c.id)).toContain(camaDeLaDesviacion);
+    // La desviación sola: hay algo ocupado y NADIE declaró cuándo acaba. Heredar la fase daría «a las» dentro de 10 h.
+    expect(sola.liberacion).toEqual({ tipo: "sin_duracion_declarada" });
+
+    await conCorrida(w, { codigo: "LIB-R9-SIN-PASOS", fase: "drying", versionId: sinPasos.versionId, pasoId: null, iniciadoHaceHoras: 90, cama: camaDelControl });
+    const conControl = await datosDelTablero(w.operario, ahora);
+    expect(conControl.camas.map((c) => c.id)).toEqual(expect.arrayContaining([camaDeLaDesviacion, camaDelControl]));
+    // Control: bajo la versión sin pasos la fase manda (100 h desde hace 90 h = dentro de 10 h), y la desviación sigue sin aportar ninguna hora.
+    expect(conControl.liberacion).toEqual({ tipo: "a_las", cuando: new Date(haceHoras(90).getTime() + 100 * HORA) });
+  });
+
+  it("la curva pinta la banda del paso de la corrida abierta; sin paso, la de la versión, y la de un paso no se cuela en ella", async () => {
+    const delPaso = await conCorrida(m, { codigo: "CURVA-PASO", fase: "drying", versionId: curvas.versionId, pasoId: curvas.pasoIds[1]!, iniciadoHaceHoras: 10 });
+    const sinPaso = await conCorrida(m, { codigo: "CURVA-SIN-PASO", fase: "drying", versionId: curvas.versionId, pasoId: null, iniciadoHaceHoras: 10 });
+    const bandaDe = async (lotId: string, variable: string) => {
+      const { curva } = await datosDelTablero(m.operario, ahora, { curva: { lotId, variable, ancho: 300, alto: 100 } });
+      expect(curva, "el lote no es visible para quien mira").not.toBeNull();
+      return curva!.banda;
+    };
+
+    // Control: sin paso, la banda de humedad es la de la VERSIÓN (10–12, objetivo 11: y = 50). Un objetivo `during` es una banda de trayectoria.
+    expect(await bandaDe(sinPaso.lotId, "moisture")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
+    // Con el segundo paso es la SUYA (10–14, objetivo 13: y = 25).
+    expect(await bandaDe(delPaso.lotId, "moisture")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 25 });
+    // El Brix sólo lo declara ese paso: con él hay banda (20–30, objetivo 25: y = 50); sin paso, la meta de un paso no se cuela.
+    expect(await bandaDe(delPaso.lotId, "brix")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
+    expect(await bandaDe(sinPaso.lotId, "brix")).toEqual({ tipo: "sin_objetivo_declarado" });
   });
 });

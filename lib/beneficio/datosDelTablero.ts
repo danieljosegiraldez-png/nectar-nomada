@@ -113,7 +113,12 @@ const VACIO: Omit<DatosDelTablero, "medidoEn"> = {
   curva: null,
 };
 
-/** Las metas con ritmo de una fase, con la última lectura de cada variable **dentro** de ella. */
+/**
+ * Las metas con ritmo de una fase, con la última lectura de cada variable **dentro** de ella.
+ *
+ * Parte 2a, tarea 9: las metas de un PASO pasan por el mismo filtro de fase. La tarea 3 escribe la fase de una meta de paso desde
+ * el tipo de su paso (`FASE_DEL_TIPO`), y todo tipo que cumple una corrida tiene la fase de esa corrida.
+ */
 function metasDeFase(
   objetivos: readonly { variable: string; everyHours: number | null; phase: string | null }[],
   fase: string,
@@ -148,11 +153,35 @@ const procesoSelect = {
           targetValue: true,
         },
       },
+      // Parte 2a, tarea 9 (R9): cuántos pasos tiene la versión. La fase sólo vale para una corrida sin paso si la versión no tiene ninguno.
+      _count: { select: { steps: true } },
     },
   },
 } as const;
 
 type ProcesoDelTablero = Prisma.LotProcessGetPayload<{ select: typeof procesoSelect }>;
+
+/**
+ * Lo que el tablero lee del PASO que cumple una corrida (Parte 2a, tarea 9, diseño §3.1 y §3.2): su duración y sus metas. Las
+ * consultas de las corridas lo piden por la relación de la corrida con su paso —no por su proceso: el proceso de un lote sale del
+ * resolvedor— y la corrida que no cumple ninguno trae `null`.
+ */
+const pasoSelect = {
+  horasSugeridas: true,
+  targets: {
+    select: {
+      variable: true,
+      everyHours: true,
+      phase: true,
+      moment: true,
+      minValue: true,
+      maxValue: true,
+      targetValue: true,
+    },
+  },
+} as const;
+
+type PasoDelTablero = Prisma.ProcessRecipeStepGetPayload<{ select: typeof pasoSelect }>;
 
 const medicionSelect = {
   id: true,
@@ -189,6 +218,7 @@ export async function datosDelTablero(
         startedAt: true,
         vesselNote: true,
         vesselEquipmentId: true,
+        recipeStep: { select: pasoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -202,6 +232,7 @@ export async function datosDelTablero(
         id: true,
         startedAt: true,
         dryingBedLocationId: true,
+        recipeStep: { select: pasoSelect },
         transformations: {
           orderBy: { occurredAt: "asc" },
           take: 1,
@@ -343,14 +374,21 @@ export async function datosDelTablero(
     const veredicto = cobertura === null ? LINAJE_DEMASIADO_HONDO : veredictoDelLote(entrada);
     const fases = proceso?.processRecipeVersion?.fases ?? [];
     const targets = proceso?.processRecipeVersion?.targets ?? [];
+    // Parte 2a, tarea 9 (§3.1 y §3.2; R9): una corrida que cumple un paso lee SUS horas y SUS metas —aunque las horas sean nulas: un
+    // paso sin horas no hereda las de la fase, que son las de otro paso—. Sin paso: las de la fase SÓLO si la versión no tiene pasos
+    // (el mundo de antes de la 2a), y las metas de la versión, como hasta ahora; bajo una versión con pasos, una corrida sin paso es
+    // una desviación (§4.4) y sale SIN horas —la fase es la del primer paso, el ritmo de otro—, con las metas de la versión. Todo
+    // sale de la corrida de esta vuelta, no de otra del mismo lote.
+    const paso = c.recipeStep;
+    const versionConPasos = (proceso?.processRecipeVersion?._count.steps ?? 0) > 0;
 
     const entradaDeTablero: EntradaDeLoteParaTablero = {
       lotId: lot.id,
       lotCode: lot.lotCode,
       veredicto: typeof veredicto === "string" ? veredicto : (veredicto as unknown as VeredictoParaCola),
       faseIniciada: c.startedAt,
-      expectedHours: fases.find((f) => f.phase === c.fase)?.expectedHours ?? null,
-      metas: metasDeFase(targets, c.fase, ultimaPorVariable),
+      expectedHours: paso ? paso.horasSugeridas : versionConPasos ? null : (fases.find((f) => f.phase === c.fase)?.expectedHours ?? null),
+      metas: metasDeFase(paso ? paso.targets : targets, c.fase, ultimaPorVariable),
       corridaId: c.id,
       ultimaLectura: mediciones[0]?.occurredAt ?? null,
     };
@@ -441,11 +479,21 @@ export async function datosDelTablero(
   // (`tanques` ∪ `camas`, los dos de abajo), calculado aquí porque la ocupación lo calcula una función
   // más allá, en la página.
   const duracionDeFase = (
-    corrida: { readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[] },
+    corrida: {
+      readonly recipeStep: { readonly horasSugeridas: number | null } | null;
+      readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
+    },
     fase: "fermentation" | "drying",
   ) => {
+    // Parte 2a, tarea 9 (§3.1; R9): la liberación se calcula POR CORRIDA. Con paso, la duración es la de su paso —aunque sea nula—;
+    // sin paso, la de la fase del proceso del lote (el del resolvedor) SÓLO si la versión de ese proceso no tiene pasos, como hasta
+    // ahora: bajo una versión con pasos, una corrida sin paso es una desviación y no hereda la fase —la del primer paso—, así que su
+    // unidad queda sin hora de liberación. Dos secados de un mismo lote con horas distintas liberan sus camas a horas distintas, y
+    // «por lote y fase» los igualaba.
+    if (corrida.recipeStep) return corrida.recipeStep.horasSugeridas;
     const lotId = corrida.transformations[0]?.inputs[0]?.lot.id;
     const proceso = lotId ? procesoPorLote.get(lotId) : null;
+    if ((proceso?.processRecipeVersion?._count.steps ?? 0) > 0) return null;
     return proceso?.processRecipeVersion?.fases.find((f) => f.phase === fase)?.expectedHours ?? null;
   };
   // Parte 2c §4.6: una bandeja de secado es un `vessel` con `trayTypeId`, no un tanque. Contarla aquí inflaba «N de TOTAL
@@ -604,6 +652,7 @@ async function curvaDeUnLote(
     readonly id: string;
     readonly fase: "fermentation" | "drying";
     readonly startedAt: Date;
+    readonly recipeStep: PasoDelTablero | null;
     readonly transformations: readonly { readonly inputs: readonly { readonly lot: { readonly id: string } }[] }[];
   }[],
   procesoPorLote: ReadonlyMap<string, ProcesoDelTablero | null>,
@@ -655,7 +704,8 @@ async function curvaDeUnLote(
 
   // El proceso que cubre al lote, del resolvedor (Parte 1, R7), no el de la FK de la corrida abierta.
   const proceso = abierta ? (procesoPorLote.get(lotId) ?? null) : null;
-  const metas = proceso?.processRecipeVersion?.targets ?? [];
+  // Parte 2a, tarea 9 (§3.2): la banda sale de las metas del PASO de la corrida abierta; sin paso, de las de la versión.
+  const metas = abierta?.recipeStep ? abierta.recipeStep.targets : (proceso?.processRecipeVersion?.targets ?? []);
   const delaFase = metas.filter((t) => abierta && t.variable === variable && t.phase === abierta.fase);
   // **TODOS los objetivos de la fase, con su momento, y la elección la hace `curvaDeLote`.** Esta
   // línea hacía `find("during") ?? find("final")`, y ahí vivían los dos defectos de
