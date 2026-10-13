@@ -41,11 +41,15 @@ tests/equipos/bandejas.test.ts
 tests/traceability/capacidadDeBandeja.test.ts
 tests/equipos/equipos.test.ts
 tests/equipos/datosDeEquipo.test.ts
+tests/equipos/retiroEnLaBase.test.ts
+tests/equipos/retirarEquipo.test.ts
+tests/equipos/retiroEnElTablero.test.ts
 tests/equipos/marcasDeRevision.test.ts
 tests/equipos/esquemaDeCatalogo.test.ts
 tests/equipos/modelos.test.ts
 tests/equipos/documentos.test.ts
 tests/equipos/proveedores.test.ts
+tests/equipos/bandejasAparte.test.ts
 tests/rutinas/rutinas.test.ts
 tests/rutinas/rutinasDeLugar.test.ts
 tests/catalogos/propiedad.test.ts
@@ -134,6 +138,7 @@ tests/sensory/descriptors.test.ts
 tests/sensory/informeExterno.test.ts
 tests/sensory/puntajeCalculado.test.ts
 tests/sensory/ruedas.test.ts
+tests/sync/aparatoDelToken.test.ts
 tests/sync/authorizationSnapshot.test.ts
 tests/sync/deviceOperator.test.ts
 tests/sync/deviceTokens.test.ts
@@ -143,12 +148,19 @@ tests/sync/pushFieldEvents.test.ts
 tests/sync/parseoDelLote.test.ts
 tests/sync/finDeColoniaSinSenal.test.ts
 tests/sync/parcelaSinSenal.test.ts
+tests/sync/aparatoDelCuerpoPorCookie.test.ts
 tests/traceability/ambitoVacio.test.ts
 tests/traceability/biocharBatches.test.ts
 tests/traceability/classificationGate.test.ts
 tests/traceability/drying.test.ts
 tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/historialDelLote.test.ts
+tests/traceability/idMalFormado.test.ts
+tests/traceability/idMalFormadoDeUbicacion.test.ts
+tests/apiary/idMalFormadoDeApiario.test.ts
+tests/idMalFormadoYFindUniqueOrThrow.test.ts
+tests/research/idMalFormado.test.ts
+tests/idMalFormadoRestantes.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
 tests/inventario/materiales.test.ts
@@ -189,6 +201,8 @@ tests/traceability/bodegaConProceso.test.ts
 tests/traceability/manejoEsquema.test.ts
 tests/traceability/manejoPrB.test.ts
 tests/traceability/reporteDeProceso.test.ts
+tests/recetas/recetaObligatoria.test.ts
+tests/recetas/tuesteSoloConPublicadas.test.ts
 tests/traceability/coordenadasDelSitio.test.ts
 tests/traceability/lots.test.ts
 tests/traceability/loteCitadoExigeSuPermiso.test.ts
@@ -200,8 +214,13 @@ tests/traceability/organizacionAcotada.test.ts
 tests/traceability/perfilDeTueste.test.ts
 tests/traceability/processTargets.test.ts
 tests/traceability/quantity.test.ts
-tests/traceability/recipeAuthoring.test.ts
-tests/traceability/recipeVersions.test.ts
+tests/recetas/versiones.test.ts
+tests/recetas/recetaEnBorrador.test.ts
+tests/recetas/puedeCrearReceta.test.ts
+tests/recetas/lecturasDeRecetas.test.ts
+tests/recetas/autoria.test.ts
+tests/recetas/pasos.test.ts
+tests/recetas/esquemaDePasos.test.ts
 tests/traceability/reports.test.ts
 tests/traceability/samples.test.ts
 tests/traceability/muestraConMaterial.test.ts
@@ -226,10 +245,13 @@ tests/traceability/ubicacionesEmparentadas.test.ts
 tests/beneficio/vistaDeBandejas.test.ts
 tests/beneficio/colaDeSecado.test.ts
 tests/beneficio/datos-del-tablero.test.ts
+tests/recetas/metasDeLaVersion.test.ts
 tests/traceability/carreraDeOrganizacionDeBandeja.test.ts
 tests/traceability/carreraDelArbolDeEstante.test.ts
 tests/apiary/apiarioHeredado.test.ts
 tests/people/quienLoHizo.test.ts
+tests/recetas/vocabularioSembrado.test.ts
+tests/traceability/elegirTanque.test.ts
 # @grupo: datos-reales
 # Necesitan datos que no crean ni la semilla ni ellas.
 #

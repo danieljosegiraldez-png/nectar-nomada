@@ -18,8 +18,8 @@
  * que se degrada con el orden es la legibilidad de un informe de lote mixto,
  * no el resultado.
  *
- * Lo que sí es 4xx: el lote entero negado (aparato desconocido o revocado) y el
- * cuerpo mal formado.
+ * Lo que sí es 4xx: el lote entero negado (aparato desconocido o revocado, o,
+ * por token, un `deviceId` que no es el del token) y el cuerpo mal formado.
  *
  * **El parseo vive en `lib/sync/parsearMutaciones.ts`, no aquí.** Importar esta
  * ruta arrastra `next-auth`, que vitest no resuelve, así que mientras el parseo
@@ -30,6 +30,7 @@
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
 import { pushFieldEvents, DeviceError } from "../../../../../lib/sync/pushFieldEvents";
 import { parsearMutaciones } from "../../../../../lib/sync/parsearMutaciones";
+import { TOPE_DEL_LOTE } from "../../../../../lib/sync/topeDelLote";
 
 export const dynamic = "force-dynamic";
 
@@ -47,11 +48,20 @@ export async function POST(request: Request) {
 
   const { deviceId, mutations } = (body ?? {}) as Record<string, unknown>;
   if (typeof deviceId !== "string") return Response.json({ error: "device_id_required" }, { status: 400 });
+  // Por token, el aparato lo dice el token y no el cuerpo. Sin esto, el access
+  // todavía vigente de un aparato revocado escribía nombrando en el cuerpo a
+  // otro vivo, y `pushFieldEvents` comprobaba `revokedAt` sobre ése. Por cookie
+  // (`deviceId === null`) no hay aparato propio y vale el del cuerpo, como antes.
+  if (user.deviceId !== null && deviceId !== user.deviceId) {
+    return Response.json({ error: "device_mismatch" }, { status: 403 });
+  }
   if (!Array.isArray(mutations)) return Response.json({ error: "mutations_required" }, { status: 400 });
   // Un tope explícito: sin él, un cliente con un mes de cola manda una petición
   // que tarda más que cualquier tiempo de espera y no sincroniza nunca nada.
-  // 200 es holgado para una jornada de campo y acotado para el servidor.
-  if (mutations.length > 200) return Response.json({ error: "batch_too_large" }, { status: 413 });
+  // 200 es holgado para una jornada de campo y acotado para el servidor. Las
+  // colas trocean por esta misma constante, así que una cola más larga sale en
+  // varias peticiones en vez de rebotar entera.
+  if (mutations.length > TOPE_DEL_LOTE) return Response.json({ error: "batch_too_large" }, { status: 413 });
 
   const parseo = parsearMutaciones(mutations);
   if (!parseo.ok) return Response.json({ error: parseo.error }, { status: 400 });

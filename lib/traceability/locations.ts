@@ -16,6 +16,7 @@ import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { recordAuditEvent } from "../audit";
 import { validarRango, type RangoInvalido } from "../territorio/rejilla";
 import type { ScopeTarget } from "../rbac/types";
+import { UUID } from "../validation/uuid";
 import type { Aspect, GridOrigin, LocationType, MotivoDeSeleccion, Prisma, ShadePercentageBracket, SunExposure } from "../../generated/prisma/client";
 
 export class LocationAccessError extends Error {}
@@ -186,6 +187,12 @@ export async function requireLocationAttributeAccess(userAccountId: string, loca
   // A location that does not exist is refused rather than treated as public:
   // defaulting a missing record to the most permissive level is how a gate
   // gets bypassed by a bad id.
+  //
+  // Y un id sin forma de UUID tampoco llega a la base: Postgres rechazaría la
+  // conversión y Prisma lanzaría `P2007`, que ninguna de las ocho páginas que
+  // entran por aquí atrapa — daban 500 (PENDING_IMPLEMENTATIONS/026). Se trata
+  // como lo que es, una ubicación que no existe.
+  if (!UUID.test(locationId)) throw new LocationAccessError("location_not_found");
   const location = await prisma.location.findUnique({
     where: { id: locationId },
     select: { classification: true },
@@ -288,8 +295,12 @@ export async function lugaresDeOrganizacion(organizationId: string) {
 
 /**
  * `location:edit_beneficio` en ALGÚN lugar de una organización — para lo que es
- * de la organización y no de un lugar, como las recetas. Una receta compartida
- * (`organizationId` nulo) sólo se configura con alcance de plataforma.
+ * de la organización y no de un lugar, como los tipos de bandeja
+ * (`lib/equipos/bandejas.ts`). **Las recetas ya no pasan por aquí** (Parte 2a, V16,
+ * 2026-10-04): las escribe el Coffee Process Manager, con `exigeAutoriaDeReceta`
+ * (`lib/recetas/autoria.ts`), que calca este camino con otro permiso. Una
+ * configuración compartida (`organizationId` nulo) sólo se hace con alcance de
+ * plataforma.
  *
  * Los candidatos son `lugaresDeOrganizacion`: las Location propias de la
  * organización más sus descendientes con `organizationId` nulo. Sin esto, un

@@ -6,7 +6,6 @@ import { LocationAccessError, LocationValidationError, createMicrolot, exigeEdit
 import { confirmarCoordenadasDelSitio } from "../../lib/traceability/coordenadasDelSitio";
 import { actualizarBeneficio } from "../../lib/traceability/beneficios";
 import { actualizarUbicacionDeSecado, crearUbicacionDeSecado, sitiosParaCrearInstalacion } from "../../lib/traceability/instalaciones";
-import { createRecipeVersion, createRecipeWithVersion, updateRecipeMetadata } from "../../lib/traceability/processTargets";
 import { EquipoError, informarCondicion, registrarEquipo, sitiosParaRegistrar } from "../../lib/equipos/equipos";
 
 /**
@@ -53,7 +52,7 @@ async function sitio() {
 async function hijo(parentLocationId: string, locationType: "beneficio" | "plot" | "drying_facility" | "drying_bed") {
   return prisma.location.create({ data: { name: nombre(), locationType, classification: "internal", parentLocationId } });
 }
-async function cuenta(locationId: string, perfil: "Farm Manager" | "Farm Operator") {
+async function cuenta(locationId: string, perfil: "Farm Manager" | "Farm Operator" | "Coffee Process Manager") {
   const personId = randomUUID();
   await prisma.person.create({ data: { id: personId, givenName: "TEST", familyName: "EditarBeneficio", displayName: personId } });
   personIds.push(personId);
@@ -71,9 +70,9 @@ async function cuenta(locationId: string, perfil: "Farm Manager" | "Farm Operato
 }
 /** La concesión por persona que el plan 3 hará desde pantalla. Se cae con el
  *  Assignment: `onDelete: Cascade` en `AssignmentPermissionOverride`. */
-async function conceder(userAccountId: string) {
+async function conceder(userAccountId: string, resourceType = "location", action = "edit_beneficio") {
   const asignacion = await prisma.assignment.findFirstOrThrow({ where: { userAccountId } });
-  const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType: "location", action: "edit_beneficio" } });
+  const permiso = await prisma.permission.findFirstOrThrow({ where: { resourceType, action } });
   await prisma.assignmentPermissionOverride.create({
     data: { assignmentId: asignacion.id, permissionId: permiso.id, effect: "grant", reason: "TEST concesión de editar beneficio" },
   });
@@ -295,77 +294,7 @@ describe("sitiosParaCrearInstalacion (Task 3, plan 3): sólo sitios donde ademá
   });
 });
 
-describe("recetas (crear, editar, publicar)", () => {
-  const orgIds: string[] = [];
-  const lotIds: string[] = [];
-  const recetaNombres: string[] = [];
-  afterEach(async () => {
-    const recetas = await prisma.processRecipe.findMany({ where: { name: { in: recetaNombres } }, select: { id: true } });
-    await prisma.auditEvent.deleteMany({ where: { entityId: { in: recetas.map((r) => r.id) } } });
-    await prisma.processRecipe.deleteMany({ where: { name: { in: recetaNombres } } });
-    await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
-    // La finca de la organización la borra el afterEach general (por nombre); aquí se suelta antes su organización.
-    await prisma.location.updateMany({ where: { organizationId: { in: orgIds } }, data: { organizationId: null } });
-    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
-    orgIds.length = 0; lotIds.length = 0; recetaNombres.length = 0;
-  });
-
-  /** Una organización con su finca y un lote en ella: el capataz de la finca gestiona ese lote. */
-  async function fincaConLote() {
-    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
-    orgIds.push(org.id);
-    const finca = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
-    const lot = await prisma.lot.create({ data: { lotCode: nombre(), lotType: "cherry", organizationId: org.id, locationId: finca.id, classification: "internal" } });
-    lotIds.push(lot.id);
-    return { org, finca };
-  }
-  // `targets: []` no pasa `validateTargets` (`at_least_one_target_required`,
-  // un ProcessTargetError) antes de llegar a la guardia bajo prueba, así que
-  // se usa el mínimo válido: el mismo objetivo de humo que
-  // tests/traceability/recipeAuthoring.test.ts.
-  const unTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
-  const receta = (organizationId: string | null) => {
-    const name = nombre(); recetaNombres.push(name);
-    return { name, organizationId, targets: unTarget };
-  };
-
-  it("un capataz NO crea una receta de su organización; un Farm Manager sí", async () => {
-    const { org, finca } = await fincaConLote();
-    const capataz = await cuenta(finca.id, "Farm Operator");
-    const jefe = await cuenta(finca.id, "Farm Manager");
-    await expect(createRecipeWithVersion(capataz, receta(org.id))).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
-    await expect(createRecipeWithVersion(jefe, receta(org.id))).resolves.toBeDefined();
-  });
-
-  it("un capataz NO edita ni publica; con la concesión, sí", async () => {
-    const { org, finca } = await fincaConLote();
-    const jefe = await cuenta(finca.id, "Farm Manager");
-    const capataz = await cuenta(finca.id, "Farm Operator");
-    // `createRecipeWithVersion` devuelve el `ProcessRecipe` directamente
-    // (con sus versiones incluidas), no envuelto — `creada.id` es el id de
-    // la receta, no de una versión.
-    const original = receta(org.id);
-    const creada = await createRecipeWithVersion(jefe, original);
-    await expect(updateRecipeMetadata(capataz, creada.id, { name: nombre() })).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
-    await conceder(capataz);
-    // Vuelve a poner el nombre rastreado (`original.name`, no el `nombre()`
-    // suelto de la línea de arriba) para que el `afterEach` de este describe
-    // la encuentre por nombre.
-    await expect(updateRecipeMetadata(capataz, creada.id, { name: original.name })).resolves.toBeDefined();
-  });
-
-  it("un capataz NO publica una versión nueva; con la concesión, sí", async () => {
-    const { org, finca } = await fincaConLote();
-    const jefe = await cuenta(finca.id, "Farm Manager");
-    const capataz = await cuenta(finca.id, "Farm Operator");
-    const creada = await createRecipeWithVersion(jefe, receta(org.id));
-    await expect(createRecipeVersion(capataz, creada.id, unTarget)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
-    await conceder(capataz);
-    await expect(createRecipeVersion(capataz, creada.id, unTarget)).resolves.toBeDefined();
-  });
-});
-
-describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas)", () => {
+describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las bandejas)", () => {
   const orgIds: string[] = [];
   afterEach(async () => {
     await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
@@ -375,8 +304,9 @@ describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas
   it("una organización sin ninguna Location propia rechaza a un Farm Manager de otro sitio; un Platform Admin sí pasa", async () => {
     // El caso que forzó el respaldo de plataforma en
     // exigeEditarBeneficioEnOrganizacion: una organización con lotes pero SIN
-    // ninguna Location — como las de recipeAuthoring.test.ts y
-    // recipeVersions.test.ts — deja `lugares` vacío, así que el bucle nunca
+    // ninguna Location — como las de las pruebas de recetas de antes de la
+    // Parte 2a (recipeAuthoring.test.ts y recipeVersions.test.ts, ya retiradas)
+    // — deja `lugares` vacío, así que el bucle nunca
     // corre `can()` ni una vez. Sin el respaldo, ni siquiera un Platform Admin
     // pasaría.
     const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
@@ -419,51 +349,6 @@ describe("exigeEditarBeneficioEnOrganizacion (guardia compartida por las recetas
     await expect(exigeEditarBeneficioEnOrganizacion(capataz, org.id)).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
     await conceder(capataz);
     await expect(exigeEditarBeneficioEnOrganizacion(capataz, org.id)).resolves.toBeUndefined();
-  });
-});
-
-describe("recetas: la organización heredada también cuenta (createRecipeWithVersion)", () => {
-  const orgIds: string[] = [];
-  const lotIds: string[] = [];
-  const recetaNombres: string[] = [];
-  afterEach(async () => {
-    const recetas = await prisma.processRecipe.findMany({ where: { name: { in: recetaNombres } }, select: { id: true } });
-    await prisma.auditEvent.deleteMany({ where: { entityId: { in: recetas.map((r) => r.id) } } });
-    await prisma.processRecipe.deleteMany({ where: { name: { in: recetaNombres } } });
-    await prisma.lot.deleteMany({ where: { id: { in: lotIds } } });
-    // La finca y la parcela de la organización las borra el afterEach general
-    // (por nombre); aquí se suelta antes su organización.
-    await prisma.location.updateMany({ where: { organizationId: { in: orgIds } }, data: { organizationId: null } });
-    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
-    orgIds.length = 0; lotIds.length = 0; recetaNombres.length = 0;
-  });
-
-  const unTarget = [{ variable: "ph", moment: "final" as const, phase: "fermentation" as const, unit: "pH", targetValue: 3.8 }];
-  const receta = (organizationId: string | null) => {
-    const name = nombre(); recetaNombres.push(name);
-    return { name, organizationId, targets: unTarget };
-  };
-
-  /** Finca con organización propia y una parcela hija SIN organización propia
-   *  (la hereda por jerarquía) — el caso medido el 2026-09-18. El lote vive
-   *  en la parcela, para que `requireLotAccess` pase con el capataz asignado
-   *  ahí mismo, sin depender de ningún lote ajeno de la base compartida. */
-  async function fincaConParcelaHeredadaYLote() {
-    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
-    orgIds.push(org.id);
-    const finca = await prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId: org.id } });
-    const parcela = await hijo(finca.id, "plot");
-    const lot = await prisma.lot.create({ data: { lotCode: nombre(), lotType: "cherry", organizationId: org.id, locationId: parcela.id, classification: "internal" } });
-    lotIds.push(lot.id);
-    return { org, parcela };
-  }
-
-  it("un capataz asignado en la parcela heredada crea una receta de la organización sólo con la concesión ahí", async () => {
-    const { org, parcela } = await fincaConParcelaHeredadaYLote();
-    const capataz = await cuenta(parcela.id, "Farm Operator");
-    await expect(createRecipeWithVersion(capataz, receta(org.id))).rejects.toThrow(new LocationAccessError("no_beneficio_edit_access"));
-    await conceder(capataz);
-    await expect(createRecipeWithVersion(capataz, receta(org.id))).resolves.toBeDefined();
   });
 });
 

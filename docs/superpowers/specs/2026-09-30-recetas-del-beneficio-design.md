@@ -124,10 +124,17 @@ cinco preguntas clave.
    proceso que cubre al lote. Dividir reparte el lote entero, nunca con una corrida en curso, y crea
    un proceso por parte. En bodega no se reprocesa. Una v2 conserva las fases. Diseño:
    `2026-09-30-parte-1-el-proceso-cubre-al-lote-design.md`. **Estado: construida (rama `recetas-base`).**
-- **Parte 2 — La receta con pasos.** Pasos en orden con valores por defecto: horas, recipiente, oxígeno,
-   fuente microbiana, medio, ritmo de medición, volteo y humedad. El grado se ata a la receta. Se
-   añaden al vocabulario cama africana, sacos de cosecha y atomizado, y la definición de Honey. Aquí
-   entra también **la pantalla de fases**, que la Parte 1 deja fuera a propósito.
+- **Parte 2 — La receta con pasos.** Se partió en tres por decisión de Daniel (2026-10-02).
+   **2a — la receta como lista de pasos**, con borrador y publicación, vocabulario, receta obligatoria y
+   receta Libre: `2026-10-02-parte-2a-la-receta-con-pasos-design.md`.
+   **Estado: PR-A construido (rama `recetas-parte-2a`); el PR-B viene después.**
+   **2b — lo que la receta vigila en el lote** (aquí se ata el grado a la receta):
+   `2026-10-02-parte-2b-lo-que-la-receta-vigila-design.md`.
+   **2c — equipos y capacidades**: `2026-10-04-parte-2c-equipos-y-capacidades-design.md`.
+   Al construir la 2a: el paso declara **capacidades**, no un recipiente, y no se
+   añadieron cama africana, sacos ni bolsa al catálogo `recipiente` (Daniel, 2026-10-03); «atomizado» tampoco entró como fuente microbiana: es
+   un método de inoculación; la definición de Honey sí (100 % del mucílago que queda, la escala de Daniel del 2026-10-03); y no existía
+   ninguna «pantalla de fases»: la 2a retira la de metas de versión y pone en su lugar el editor por pasos.
 - **Parte 3 — Las tres recetas cargadas**, como plantilla para todas las organizaciones, con un guion que por
    defecto simula y que Daniel corre con `--apply`.
 - **Re-importar.** Daniel decidió **rehacer el histórico** con un import que cumpla las reglas, en vez

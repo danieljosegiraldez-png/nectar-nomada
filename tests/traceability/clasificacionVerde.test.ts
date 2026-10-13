@@ -19,9 +19,18 @@ import {
   claveDeColumna,
   peorEstado,
 } from "../../lib/traceability/clasificacionVerde";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearUsuarioConAcceso, crearUsuarioSinAcceso } from "../helpers/traceability";
 
 const RUN = `cv-${Date.now()}`;
+
+/**
+ * Lo que cada `createX`/ayudante DEVOLVIÓ, por clase: la mitad de arriba del control positivo del
+ * `afterAll`. Si el descubrimiento por nombre halla MENOS de lo que se creó, está ciego, y entonces
+ * «quedan 0» no diría nada. Cuenta sólo lo que de verdad volvió, así que un `beforeAll` que muere a
+ * mitad rebaja la cota en vez de hacer fallar la limpieza.
+ */
+const devueltas = { lotes: 0, personas: 0, organizaciones: 0, lugares: 0, proyectos: 0 };
 
 let userAccountId: string;
 let organizationId: string;
@@ -46,6 +55,7 @@ async function cuentaSinAsignaciones() {
   const persona = await prisma.person.create({
     data: { givenName: "TEST", familyName: "SinAmbito", displayName: `TEST SinAmbito (${RUN})`, locale: "es" },
   });
+  devueltas.personas += 1;
   const cuenta = await prisma.userAccount.create({
     data: { personId: persona.id, authProvider: "credentials", status: "active" },
   });
@@ -56,6 +66,7 @@ async function loteVerde(code: string, kg: number) {
   const lot = await createLot(userAccountId, {
     lotCode: `${RUN}-${code}`, lotType: "green", organizationId, projectId, locationId,
   });
+  devueltas.lotes += 1;
   await recordQuantityEvent(userAccountId, {
     lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
     occurredAt: new Date(), provenanceClass: "measured_fact",
@@ -67,6 +78,7 @@ async function loteCereza(code: string, kg: number) {
   const lot = await createLot(userAccountId, {
     lotCode: `${RUN}-${code}`, lotType: "cherry", organizationId, projectId, locationId,
   });
+  devueltas.lotes += 1;
   await recordQuantityEvent(userAccountId, {
     lotId: lot.id, eventType: "received", quantity: kg, unit: "kg",
     occurredAt: new Date(), provenanceClass: "measured_fact",
@@ -75,29 +87,170 @@ async function loteCereza(code: string, kg: number) {
 }
 
 beforeAll(async () => {
-  const usuario = await crearUsuarioConAcceso();
+  // A los ayudantes compartidos se les pasa `RUN` como etiqueta: así sus filas llevan el RUN en el
+  // nombre y la limpieza las encuentra por él aunque el ayudante muera ENTRE sus `create`.
+  const usuario = await crearUsuarioConAcceso(RUN);
   userAccountId = usuario.userAccountId;
+  devueltas.personas += 1;
 
   const organization = await prisma.organization.create({
     data: { organizationType: "farm", name: `TEST Finca (${RUN})`, status: "approved", classification: "internal" },
   });
   organizationId = organization.id;
+  devueltas.organizaciones += 1;
   const project = await prisma.project.create({
     data: { name: `TEST Proyecto (${RUN})`, status: "approved", classification: "internal" },
   });
   projectId = project.id;
+  devueltas.proyectos += 1;
   const location = await prisma.location.create({
     data: { locationType: "site", name: `TEST Beneficio (${RUN})`, organizationId, status: "approved", classification: "internal" },
   });
   locationId = location.id;
+  devueltas.lugares += 1;
 
   brocaId = await catalogValue("broca", "rechazo_categoria");
   flotadoresId = await catalogValue("flotadores", "rechazo_categoria");
 });
 
+/**
+ * Hasta el 2026-10-11 este `afterAll` sólo desconectaba, y cada corrida dejaba en la base 29 lotes
+ * `cv-<ts>` con sus 39 eventos de cantidad, 10 transformaciones, 19 filas de auditoría y el resto
+ * del fixture. Medido con un censo de las 207 tablas antes y después de una corrida.
+ *
+ * **Todo se DESCUBRE por el RUN, no se hereda de las variables del fixture**: si el `beforeAll`
+ * murió a mitad, esas variables siguen `undefined` y una limpieza que dependa de ellas aborta
+ * (`assertDefinedWhere`) en vez de limpiar. Eso incluye las filas de los ayudantes compartidos, que
+ * llevan el RUN porque se les pasa como etiqueta: la primera versión guardaba sus ids en un arreglo,
+ * y olvidar uno dejaba el archivo en verde con una fila de más (medido con un flip el 2026-10-11).
+ *
+ * **Cada BORRADO se intenta aunque el anterior falle:** un `afterAll` es una cadena, y la primera
+ * clave ajena que se queja tira el resto. Los fallos se juntan y se lanzan al final. El descubrimiento
+ * sí queda fuera: si él mismo lanza, el error sale tal cual y no se borra nada, que es mejor que
+ * borrar a ciegas.
+ *
+ * **Y termina CONTANDO** lo que quedó del RUN, con consultas que no comparten lista con el borrado
+ * (por nombre o por prefijo, no por los ids que el borrado usó: una lista incompleta se contaría
+ * incompleta). «0 filas» sólo dice algo si antes se demostró que el descubrimiento sabe ver filas:
+ * el control positivo compara lo hallado con lo que cada creación devolvió. Vale para cualquier
+ * subconjunto con `-t`, porque las cotas son sólo de lo que ese subconjunto llegó a crear.
+ */
 afterAll(async () => {
-  await prisma.$disconnect();
-});
+  const fallos: string[] = [];
+  const intentar = async (paso: string, accion: () => Promise<unknown>) => {
+    try {
+      await accion();
+    } catch (error) {
+      fallos.push(`${paso}: ${error instanceof Error ? error.message.trim().split("\n").pop() : String(error)}`);
+    }
+  };
+  const prefijoDeLote = `${RUN}-`;
+  // Entre paréntesis porque así lo escriben TODOS los nombres de este archivo, ayudantes incluidos:
+  // `TEST Finca (cv-…)`, `TEST Acceso (cv-…)`, `TEST SinAcceso (cv-…)`.
+  const marca = `(${RUN})`;
+  const porNombre = { contains: marca };
+
+  try {
+    const lotes = await prisma.lot.findMany({ where: { lotCode: { startsWith: prefijoDeLote } }, select: { id: true } });
+    const idsDeLotes = lotes.map((l) => l.id);
+    const transformaciones = await prisma.lotTransformation.findMany({
+      where: {
+        OR: [
+          { inputs: { some: { lotId: { in: idsDeLotes } } } },
+          { outputs: { some: { lotId: { in: idsDeLotes } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    const idsDeTransformaciones = transformaciones.map((t) => t.id);
+    const cantidades = await prisma.quantityEvent.findMany({ where: { lotId: { in: idsDeLotes } }, select: { id: true } });
+    const idsDeCantidades = cantidades.map((q) => q.id);
+    // `userAccount` en singular: `UserAccount.personId` es `@unique`, la relación es uno a uno.
+    const personas = await prisma.person.findMany({
+      where: { displayName: porNombre },
+      select: { userAccount: { select: { id: true } } },
+    });
+    const idsDeCuentas = personas.flatMap((p) => (p.userAccount ? [p.userAccount.id] : []));
+    const lugares = await prisma.location.findMany({ where: { name: porNombre }, select: { id: true } });
+    const idsDeLugares = lugares.map((l) => l.id);
+    const organizaciones = await prisma.organization.findMany({ where: { name: porNombre }, select: { id: true } });
+    const proyectos = await prisma.project.findMany({ where: { name: porNombre }, select: { id: true } });
+    const idsDeAuditoria = [...idsDeLotes, ...idsDeTransformaciones, ...idsDeCantidades];
+    // Por entidad Y por actor. Las cuentas de aquí sólo escriben auditoría de este archivo, y contar
+    // por actor ve filas de una entidad que la lista de arriba no conoce.
+    const auditoriaDeAqui = {
+      OR: [{ entityId: { in: idsDeAuditoria } }, { actorUserAccountId: { in: idsDeCuentas } }],
+    };
+
+    // CONTROL POSITIVO, antes de borrar nada: el descubrimiento tiene que ver lo que se creó.
+    const hallados = {
+      lotes: idsDeLotes.length,
+      personas: personas.length,
+      organizaciones: organizaciones.length,
+      lugares: lugares.length,
+      proyectos: proyectos.length,
+    };
+    for (const clase of Object.keys(devueltas) as Array<keyof typeof devueltas>) {
+      if (hallados[clase] < devueltas[clase]) {
+        fallos.push(`control positivo: se crearon ${devueltas[clase]} ${clase} y el descubrimiento sólo halló ${hallados[clase]}`);
+      }
+    }
+
+    // En orden de claves ajenas: `lot` es RESTRICT hacia casi todo, y una transformación se lleva
+    // por CASCADE sus entradas y salidas.
+    const quedan: Record<string, number> = {};
+    await intentar("auditoría", () => prisma.auditEvent.deleteMany({ where: assertDefinedWhere(auditoriaDeAqui) }));
+    // Se cuenta AHORA y no al final: `audit_event.actor_user_account_id` es SET NULL, así que tras
+    // borrar las cuentas el actor ya no se vería y quedaría sólo la mitad por entidad.
+    await intentar("recuento de auditoría", async () => {
+      quedan.auditoria = await prisma.auditEvent.count({ where: auditoriaDeAqui });
+    });
+    await intentar("eventos de cantidad", () =>
+      prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: idsDeLotes } }) }),
+    );
+    await intentar("transformaciones", () =>
+      prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeTransformaciones } }) }),
+    );
+    await intentar("lotes", () => prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeLotes } }) }));
+    await intentar("asignaciones", () =>
+      prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: idsDeCuentas } }) }),
+    );
+    // Después de las asignaciones, que lo referencian, y por el lugar al que apunta: `scope_ref_id`
+    // es polimórfico y no tiene clave ajena, así que borrar el lugar NO se lleva su ámbito.
+    // `scopeType` es un cinturón: esta orden no puede tocar el ámbito de plataforma compartido.
+    await intentar("ámbitos", () =>
+      prisma.scope.deleteMany({
+        where: assertDefinedWhere({ scopeType: "location" as const, scopeRefId: { in: idsDeLugares } }),
+      }),
+    );
+    await intentar("cuentas", () => prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeCuentas } }) }));
+    await intentar("personas", () => prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: porNombre }) }));
+    await intentar("lugares", () => prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: idsDeLugares } }) }));
+    await intentar("organizaciones", () => prisma.organization.deleteMany({ where: assertDefinedWhere({ name: porNombre }) }));
+    await intentar("proyectos", () => prisma.project.deleteMany({ where: assertDefinedWhere({ name: porNombre }) }));
+
+    // Y se cuenta lo que quedó, sin fiarse de que los `deleteMany` anteriores hicieran lo suyo.
+    await intentar("recuento", async () => {
+      quedan.lotes = await prisma.lot.count({ where: { lotCode: { startsWith: prefijoDeLote } } });
+      quedan.cantidades = await prisma.quantityEvent.count({ where: { id: { in: idsDeCantidades } } });
+      quedan.transformaciones = await prisma.lotTransformation.count({ where: { id: { in: idsDeTransformaciones } } });
+      quedan.asignaciones = await prisma.assignment.count({ where: { userAccount: { person: { displayName: porNombre } } } });
+      quedan.ambitos = await prisma.scope.count({ where: { scopeType: "location", scopeRefId: { in: idsDeLugares } } });
+      quedan.cuentas = await prisma.userAccount.count({ where: { person: { displayName: porNombre } } });
+      quedan.personas = await prisma.person.count({ where: { displayName: porNombre } });
+      quedan.lugares = await prisma.location.count({ where: { name: porNombre } });
+      quedan.organizaciones = await prisma.organization.count({ where: { name: porNombre } });
+      quedan.proyectos = await prisma.project.count({ where: { name: porNombre } });
+    });
+    const sobrantes = Object.entries(quedan).filter(([, n]) => n > 0);
+    if (sobrantes.length > 0) {
+      fallos.push(`quedan filas del RUN ${RUN}: ${sobrantes.map(([tabla, n]) => `${tabla}=${n}`).join(", ")}`);
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+  if (fallos.length > 0) throw new Error(`La limpieza de ${RUN} no quedó limpia:\n  - ${fallos.join("\n  - ")}`);
+}, 30000);
 
 describe("peorEstado", () => {
   it("devuelve el peor y no el primero", () => {
@@ -255,7 +408,10 @@ describe("compararClasificacionVerde", () => {
       provenanceClass: "measured_fact",
     });
 
-    const ajeno = await crearUsuarioSinAcceso();
+    const ajeno = await crearUsuarioSinAcceso(RUN);
+    devueltas.personas += 1;
+    devueltas.organizaciones += 1;
+    devueltas.lugares += 1;
     const r = await compararClasificacionVerde(ajeno.userAccountId);
     expect(r.sinAmbito).toBe(false);
     expect(r.filas.find((f) => f.lotCode === `${RUN}-ajena`)).toBeUndefined();

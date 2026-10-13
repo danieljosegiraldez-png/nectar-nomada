@@ -32,6 +32,8 @@ import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import { LotProcessError } from "./errorDeProceso";
+import { dondeCandidatoAFermentar, puedeVerEquipo } from "../equipos/equipos";
+import { RecipienteError } from "./recipientes";
 import type { LotType, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(fermentationRunId: string) {
@@ -47,6 +49,17 @@ async function resolveRunSourceLot(fermentationRunId: string) {
 
 export interface StartFermentationRunInput {
   lotId: string;
+  /**
+   * El recipiente REGISTRADO donde fermenta (Parte 2c, arreglos previos §4.1, 2026-10-04). Antes nadie escribía esta clave y todo
+   * tanque salía libre. Tiene que ser un candidato de `dondeCandidatoAFermentar` que quien empieza pueda ver; si no,
+   * `recipiente_no_disponible`. Un tanque ocupado o con condición pendiente SE ACEPTA (C1/E1: sólo se avisa).
+   */
+  vesselEquipmentId?: string | null;
+  /**
+   * El nombre ESCRITO del recipiente: la única vía para uno que no está registrado, y una nota más cuando sí lo está. Decisión D2
+   * (Daniel, 2026-10-04): tiene que venir el tanque registrado, esto, o los dos —nunca los dos vacíos—
+   * (`recipiente_o_nota_obligatorio`). Sólo el tanque registrado cuenta como ocupado.
+   */
   vesselNote?: string | null;
   startedAt: Date;
   operatorPersonId?: string | null;
@@ -66,11 +79,51 @@ export interface StartFermentationRunInput {
   processRecipeVersionId?: string | null;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * El recipiente de una fermentación que empieza (Parte 2c, arreglos previos §4.1 y decisión D2 de Daniel, 2026-10-04).
+ *
+ * **Un tanque registrado O el nombre escrito de uno que no lo está** —pueden venir los dos—, y nunca los dos vacíos
+ * (`recipiente_o_nota_obligatorio`). Con un tanque registrado se exige que sea un candidato de `dondeCandidatoAFermentar` (la misma
+ * definición que usa la lista del formulario) y que quien empieza lo VEA; si no, `recipiente_no_disponible`, **un solo código**: no
+ * distingue «no existe» de «es de otra organización», «es una bandeja», «está retirado» o «no lo ves», porque un código por motivo le
+ * diría a quien no ve un tanque que existe (§5.5 del diseño).
+ *
+ * **Un tanque ocupado o con condición pendiente NO se rechaza** (C1/E1: sólo se avisa, y el aviso lo pinta el formulario).
+ *
+ * Devuelve el id del tanque registrado, o `null` si la corrida sólo lleva nombre. Un id que no es un UUID no puede ser de ningún
+ * equipo y se dice igual que «no existe»: sin esto la base lo rechazaría con un error propio y la acción lo dejaría escapar como un 500.
+ */
+async function recipienteDeLaCorrida(
+  userAccountId: string,
+  organizationId: string,
+  input: Pick<StartFermentationRunInput, "vesselEquipmentId" | "vesselNote">,
+): Promise<string | null> {
+  const id = input.vesselEquipmentId?.trim() || null;
+  const nota = input.vesselNote?.trim() || null;
+  if (!id) {
+    if (!nota) throw new RecipienteError("recipiente_o_nota_obligatorio");
+    return null;
+  }
+  if (!UUID.test(id)) throw new RecipienteError("recipiente_no_disponible");
+  const equipo = await prisma.equipment.findFirst({
+    where: { ...dondeCandidatoAFermentar(organizationId), id },
+    select: { id: true, projectId: true, classification: true },
+  });
+  if (!equipo || !(await puedeVerEquipo(userAccountId, equipo))) throw new RecipienteError("recipiente_no_disponible");
+  return equipo.id;
+}
+
 export async function startFermentationRun(userAccountId: string, input: StartFermentationRunInput) {
   const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ projectId: lot.projectId, locationId: lot.locationId }]);
+  // Parte 2c, §4.1 y D2: el recipiente se comprueba DESPUÉS del acceso al lote —quien no gestiona el lote no se entera de qué tanques
+  // existen— y FUERA de la transacción: `puedeVerEquipo` usa el cliente global, no `tx`, y la transacción comparte su presupuesto
+  // (`TRANSACCION_DEL_LINAJE`) con la espera por los bloqueos del linaje.
+  const vesselEquipmentId = await recipienteDeLaCorrida(userAccountId, lot.organizationId, input);
 
   const result = await prisma.$transaction(async (tx) => {
     // Parte 1, R3/R4 (2026-10-01): la corrida se une SOLA al proceso abierto que cubre al lote —el
@@ -81,8 +134,18 @@ export async function startFermentationRun(userAccountId: string, input: StartFe
     if (input.processRecipeVersionId && input.processRecipeVersionId !== proceso.processRecipeVersionId) {
       throw new LotProcessError("receta_distinta_del_proceso");
     }
+    // Cierra la carrera con el retiro. La existencia y el permiso se comprobaron ARRIBA; aquí sólo se vuelve a exigir «activo» con
+    // `FOR SHARE`: `retirarEquipo` toma `FOR UPDATE` sobre esta misma fila, así que o espera a que esta transacción termine (y
+    // entonces ve la corrida nueva y se niega con `equipo_en_uso`) o termina antes (y entonces esto lee `retired`). `FOR SHARE` deja
+    // que dos fermentaciones empiecen a la vez en el mismo tanque: que un tanque ocupado se acepta es la decisión C1/E1.
+    if (vesselEquipmentId) {
+      const [fila] = await tx.$queryRaw<{ lifecycle_status: string }[]>`
+        SELECT "lifecycle_status"::text AS lifecycle_status FROM "core"."equipment" WHERE "id" = ${vesselEquipmentId}::uuid FOR SHARE`;
+      if (fila?.lifecycle_status !== "active") throw new RecipienteError("recipiente_no_disponible");
+    }
     const run = await tx.fermentationRun.create({
       data: {
+        vesselEquipmentId,
         vesselNote: input.vesselNote ?? null,
         startedAt: input.startedAt,
         operatorPersonId: input.operatorPersonId ?? null,

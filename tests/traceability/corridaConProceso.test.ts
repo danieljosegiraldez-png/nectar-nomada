@@ -137,7 +137,7 @@ async function lotesLibres(ids: string[]): Promise<string[]> {
 /** Las dos puertas que empiezan una corrida, con la misma firma para probar las dos con el mismo cuerpo. */
 const EMPEZAR: { nombre: string; clave: string; empezar: (usuario: string, lotId: string) => Promise<{ run: { lotProcessId: string | null } }> }[] = [
   { nombre: "secado", clave: "SEC", empezar: (u, lotId) => startDryingRun(u, { lotId, startedAt: ahora(), provenanceClass: "original_record" }) },
-  { nombre: "fermentación", clave: "FER", empezar: (u, lotId) => startFermentationRun(u, { lotId, startedAt: ahora(), provenanceClass: "original_record" }) },
+  { nombre: "fermentación", clave: "FER", empezar: (u, lotId) => startFermentationRun(u, { lotId, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" }) },
 ];
 
 beforeAll(async () => {
@@ -208,16 +208,16 @@ describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
     // Control: `soloB` de verdad NO gestiona el lote donde vive el proceso; sin esto, que pueda empezar en el hijo
     // no diría nada del permiso.
     await expect(
-      startFermentationRun(soloB, { lotId: abuelo, startedAt: ahora(), provenanceClass: "original_record" }),
+      startFermentationRun(soloB, { lotId: abuelo, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" }),
     ).rejects.toThrow(TraceabilityAccessError);
-    const { run } = await startFermentationRun(soloB, { lotId: hijo, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(soloB, { lotId: hijo, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(run.lotProcessId).toBe(p.id);
   });
 
   it("sin proceso abierto, empezar una fermentación se rechaza con nombre", async () => {
     const l = await lote("R3-SIN");
     await expect(
-      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" }),
+      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" }),
     ).rejects.toThrow(new LotProcessError("sin_proceso_abierto"));
   });
 
@@ -262,7 +262,7 @@ describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
   it("la fermentación queda unida al proceso, sin evento de auditoría nuevo", async () => {
     const l = await lote("R3-FERM");
     const p = await abrirProcesoDePrueba(gestor, l);
-    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(run.lotProcessId).toBe(p.id);
     const eventos = await prisma.auditEvent.findMany({ where: { entityType: "fermentation_run", entityId: run.id } });
     expect(eventos.map((e) => e.operation)).toEqual(["fermentation_run.start"]);
@@ -292,7 +292,7 @@ describe("R3 — la corrida se une sola, y sin proceso no empieza", () => {
     // diferencia de abajo no mediría nada.
     expect([...antes.values()]).toEqual(expect.arrayContaining([`lot_process lot_process.open ${pFerm.id}`, `lot_process lot_process.open ${pSec.id}`]));
 
-    const { run: ferm } = await startFermentationRun(gestor, { lotId: lFerm, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run: ferm } = await startFermentationRun(gestor, { lotId: lFerm, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     const { run: sec } = await startDryingRun(gestor, { lotId: lSec, startedAt: ahora(), provenanceClass: "original_record" });
 
     const despues = await foto();
@@ -505,7 +505,7 @@ describe("R7 — una corrida consume su lote entero: no empieza otra sobre él",
     // El flujo normal —fermentar C, nace F1, secar F1— sigue pasando: es el control. Lo que se rechaza es volver a la cereza.
     const c = await lote("R7-CONS-C");
     const p = await abrirProcesoDePrueba(gestor, c);
-    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     const { outputLot: f1 } = await endFermentationRun(gestor, {
       fermentationRunId: run.id, endedAt: ahora(), outputLotCode: `R7-CONS-F1-${RUN}`, outputLotType: "processing", provenanceClass: "original_record",
     });
@@ -558,13 +558,13 @@ describe("R7 — una corrida consume su lote entero: no empieza otra sobre él",
     // Corrida abierta.
     const abierta = await lote("R7-PE-ABI");
     await abrirProcesoDePrueba(gestor, abierta);
-    await startFermentationRun(gestor, { lotId: abierta, startedAt: ahora(), provenanceClass: "original_record" });
+    await startFermentationRun(gestor, { lotId: abierta, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(await empezarDiceLoMismo(abierta)).toEqual({ puede: false, motivo: "corrida_ya_abierta" });
 
     // Consumido: la cereza cuya fermentación terminó. Y el lote que salió, que sí empieza (por el mismo camino del predicado).
     const c = await lote("R7-PE-CONS");
     await abrirProcesoDePrueba(gestor, c);
-    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: c, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     const { outputLot: f1 } = await endFermentationRun(gestor, {
       fermentationRunId: run.id, endedAt: ahora(), outputLotCode: `R7-PE-F1-${RUN}`, outputLotType: "processing", provenanceClass: "original_record",
     });
@@ -622,7 +622,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
   it("hereda la versión del proceso", async () => {
     const l = await lote("R4-HEREDA");
     await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: recetaVersionId });
-    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(run.processRecipeVersionId).toBe(recetaVersionId);
   });
 
@@ -633,7 +633,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
     const l = await lote("R4-MISMA");
     const p = await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: recetaVersionId });
     const { run } = await startFermentationRun(gestor, {
-      lotId: l, startedAt: ahora(), provenanceClass: "original_record", processRecipeVersionId: recetaVersionId,
+      lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba", processRecipeVersionId: recetaVersionId,
     });
     expect(run.processRecipeVersionId).toBe(recetaVersionId);
     expect(run.lotProcessId).toBe(p.id);
@@ -643,7 +643,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
     const l = await lote("R4-OTRA");
     await abrirProcesoDePrueba(gestor, l, { processRecipeVersionId: recetaVersionId });
     await expect(
-      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", processRecipeVersionId: otraVersionId }),
+      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba", processRecipeVersionId: otraVersionId }),
     ).rejects.toThrow(new LotProcessError("receta_distinta_del_proceso"));
   });
 
@@ -651,7 +651,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
     const l = await lote("R4-SIN-RECHAZA");
     await abrirProcesoDePrueba(gestor, l); // sin receta
     await expect(
-      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", processRecipeVersionId: recetaVersionId }),
+      startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba", processRecipeVersionId: recetaVersionId }),
     ).rejects.toThrow(new LotProcessError("receta_distinta_del_proceso"));
     expect(await corridasEmpezadasEn([l])).toBe(0);
   });
@@ -659,7 +659,7 @@ describe("R4 — la fermentación lleva la receta del proceso", () => {
   it("en un proceso «Sin receta» la corrida tampoco lleva receta", async () => {
     const l = await lote("R4-SIN");
     await abrirProcesoDePrueba(gestor, l);
-    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     expect(run.processRecipeVersionId).toBeNull();
   });
 });
@@ -691,7 +691,7 @@ describe("R5 — no se cierra un proceso con corridas abiertas", () => {
   it("una fermentación abierta unida al proceso también impide cerrarlo; terminada, cierra", async () => {
     const l = await lote("R5-FERM");
     const p = await abrirProcesoDePrueba(gestor, l);
-    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record" });
+    const { run } = await startFermentationRun(gestor, { lotId: l, startedAt: ahora(), provenanceClass: "original_record", vesselNote: "Tanque de prueba" });
     const m = await medicionDeHumedad(l);
     expect(run.lotProcessId).toBe(p.id);
     await expect(cerrar(p.id, m)).rejects.toThrow(new LotProcessError("corridas_abiertas"));

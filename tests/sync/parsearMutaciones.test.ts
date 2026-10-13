@@ -49,10 +49,26 @@ describe("A10 — trap_check.observedAt exige un día YYYY-MM-DD, no un instante
     expect(rechazos).toEqual([{ clientDraftId: "draft-1", reason: "observed_at_not_a_day" }]);
   });
 
-  it("un instante en UTC puro también se rechaza", () => {
-    const { rechazos } = unaMutacion({ ...BASE, observedAt: "2026-09-18T00:00:00.000Z" });
-    expect(rechazos).toEqual([{ clientDraftId: "draft-1", reason: "observed_at_not_a_day" }]);
+  // Esta prueba exigía lo contrario —«un instante en UTC puro también se
+  // rechaza»— y era justo la forma que mandaba el cliente real: con las dos
+  // mitades en verde, ninguna revisión de la ronda se guardaba (2026-10-11).
+  // Decisión de Daniel ese día: se acepta la medianoche UTC EXACTA, que es lo
+  // que llevan los borradores rechazados que siguen reenviándose.
+  it("la medianoche UTC exacta de un borrador viejo se acepta como ese día", () => {
+    const { mutations, rechazos } = unaMutacion({ ...BASE, observedAt: "2026-09-18T00:00:00.000Z" });
+    expect(rechazos).toEqual([]);
+    expect((mutations[0] as { observedAt: Date }).observedAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
   });
+
+  // La tolerancia es la medianoche y nada más: otra hora en UTC no nombra un
+  // día, y un día que no existe no pasa por llegar con la forma tolerada.
+  it.each(["2026-09-18T05:00:00.000Z", "2026-02-31T00:00:00.000Z"])(
+    "%s se rechaza",
+    (observedAt) => {
+      const { rechazos } = unaMutacion({ ...BASE, observedAt });
+      expect(rechazos).toEqual([{ clientDraftId: "draft-1", reason: "observed_at_not_a_day" }]);
+    },
+  );
 
   it("ausente se rechaza con su propia razón, distinta de la de un instante", () => {
     const { rechazos } = unaMutacion({ ...BASE, observedAt: undefined });

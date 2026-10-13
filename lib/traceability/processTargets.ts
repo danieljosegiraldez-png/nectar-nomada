@@ -27,16 +27,46 @@
  * what preserves that.
  */
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { Prisma } from "../../generated/prisma/client";
-import { requireLotAccess } from "./lots";
-import { exigeEditarBeneficioEnOrganizacion } from "./locations";
+import { requireLotAccess, TraceabilityAccessError } from "./lots";
 import { recordAuditEvent } from "../audit";
 import { boundsFor } from "./units";
 import { compareNames } from "../naturalOrder";
 import type { ProcessTargetMoment, ProcessPhase } from "../../generated/prisma/client";
-import { puedeEditarBeneficioEnOrganizacion } from "./locations";
+import { puedeAutoriaDeReceta } from "../recetas/autoria";
+import { exigeAutoriaDeReceta } from "../recetas/autoria";
+import { RecipeError } from "../recetas/errorDeReceta";
+import { MAX_HORAS } from "../recetas/vocabulario";
 
 export class ProcessTargetError extends Error {}
+
+/**
+ * Los códigos de `ProcessTargetError` que lanza `validateTargets` ante lo que el editor de recetas puede mandar, con su texto propio en `Traceability.error_<código>` (es y en).
+ * Revisión final de la Parte 2a, F1-7: sin esto salían por el genérico con el código crudo en inglés («No se pudo guardar la receta: target_needs_a_number»). **Es una lista
+ * CERRADA a propósito**, como `CODIGOS_DE_RECETA_TRADUCIDOS`: un código nuevo de `validateTargets` entra aquí con su texto en el mismo cambio, o se declara sin entrada en
+ * `tests/recetas/mensajesDeReceta.test.ts`, que cruza la lista con lo que la función lanza. Los códigos de este archivo que no son de una meta (`recipe_not_found`…) siguen por el genérico.
+ */
+export const CODIGOS_DE_META_TRADUCIDOS = [
+  "target_needs_a_number",
+  "range_inverted",
+  "unknown_variable",
+  "wrong_unit_for_variable",
+  "target_out_of_physical_range",
+  "cadence_only_while_running",
+  "cadence_must_be_positive_hours",
+  "duplicate_variable_and_moment",
+] as const;
+
+export type CodigoDeMetaTraducido = (typeof CODIGOS_DE_META_TRADUCIDOS)[number];
+
+/** La clave de `Traceability` de un `ProcessTargetError` de la lista, o null. Mira la clase Y el código: un `Error` cualquiera con ese mensaje no es de una meta. */
+export function claveDeErrorDeMeta(error: unknown): `error_${CodigoDeMetaTraducido}` | null {
+  if (error instanceof ProcessTargetError && (CODIGOS_DE_META_TRADUCIDOS as readonly string[]).includes(error.message)) {
+    return `error_${error.message as CodigoDeMetaTraducido}`;
+  }
+  return null;
+}
 
 export interface Reading {
   id: string;
@@ -114,7 +144,7 @@ function readingsForMoment(all: Reading[], moment: ProcessTargetMoment): { readi
 }
 
 /**
- * Every target of the run's recipe version, set against what was measured.
+ * Every target of the run's recipe version that hangs from no step, set against what was measured.
  *
  * Returns an empty array when the run has no recipe — a run improvised without
  * one is a legitimate state (most existing runs are), and an empty comparison
@@ -127,7 +157,8 @@ export async function compareRunToTargets(
   const run = await prisma.fermentationRun.findUnique({
     where: { id: fermentationRunId },
     include: {
-      processRecipeVersion: { include: { targets: { orderBy: { displayOrder: "asc" } } } },
+      // Parte 2a, tarea 9a (§3.2): the version's targets are the ones that hang from no step; a step's targets are the step's, not the version's.
+      processRecipeVersion: { include: { targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } } } },
       measurements: { select: { id: true, variable: true, value: true, occurredAt: true } },
       transformations: { include: { inputs: { include: { lot: true } } }, take: 1 },
     },
@@ -199,14 +230,31 @@ export async function listRecipeVersionsForLot(userAccountId: string, lotId: str
   const versions = await prisma.processRecipeVersion.findMany({
     // Only approved versions are offered. A draft is someone still deciding
     // what the targets should be, and a run operated against a moving target
-    // is worse than a run with none.
+    // is worse than a run with none. Parte 2a (§3.3): `abrirProceso` rechaza un
+    // borrador (`version_no_publicada`), y lo que se ofrece es la versión
+    // PUBLICADA más nueva de cada receta: una v2 en borrador no esconde a la v1.
     where: {
       status: "approved",
-      // A recipe belonging to another organization is not this batch's to use.
-      // Null organizationId means a shared recipe, available to everyone.
-      recipe: { OR: [{ organizationId: lot.organizationId }, { organizationId: null }] },
+      recipe: {
+        // A recipe belonging to another organization is not this batch's to use.
+        // Null organizationId means a shared recipe, available to everyone.
+        OR: [{ organizationId: lot.organizationId }, { organizationId: null }],
+        // Parte 2a (tarea 5): ni una receta archivada —`abrirProceso` la rechaza
+        // con `recipe_archived`— ni una Libre (§5.2), que es de UN proceso y se
+        // escribe al abrirlo, no se elige de una lista. Esta función es el
+        // selector del proceso, de `roast/new` y del perfil de tueste de la
+        // ficha: ninguno ofrece Libres (decisión del controlador, 2026-10-03).
+        status: { not: "archived" },
+        esLibre: false,
+      },
     },
-    include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } },
+    include: {
+      recipe: true,
+      // Parte 2a (tarea 5, I5): sólo las metas de LA VERSIÓN (las de un paso, con `recipeStepId`, las cuenta el paso), y cuántos
+      // pasos tiene: el rótulo de los tres selectores dice «<n> pasos» si la versión los tiene y «<n> objetivos» si no (tarea 13).
+      targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } },
+      _count: { select: { steps: true } },
+    },
     orderBy: [{ recipe: { name: "asc" } }, { version: "desc" }],
   });
 
@@ -263,65 +311,19 @@ export interface CreateRecipeInput {
 }
 
 /**
- * A recipe and its first version, created together.
+ * Las reglas de una meta: la de la versión y, desde la Parte 2a, la de un paso (tarea 3, diseño §3.2). Están reunidas aquí a propósito
+ * (ADR-102): dos copias de estas comprobaciones acabarían discrepando, y la que se desviara sería la que nadie lee.
  *
- * There is no such thing as a useful recipe with no version — a name with no
- * targets declares nothing — so the two are one operation rather than a
- * two-step flow that can be abandoned halfway.
+ * Una meta de PASO lleva `recipeStepId` y no `phase`: la fase sale del tipo de su paso al escribirla (`lib/recetas/pasos.ts`),
+ * o queda nula si el tipo no la tiene (un lavado). Su paso tiene que estar en `pasosDeEstaVersion`, los de la versión que se
+ * escribe; si no, `paso_de_otra_version`. Sin esa lista no hay contra qué comprobar, y una meta con paso se rechaza igual.
  */
-/**
- * Every rule a set of targets must satisfy, in one place — ADR-102.
- *
- * Extracted when creating a *version* joined creating a *recipe* as a way to
- * declare targets. Two copies of these checks would eventually disagree, and
- * the one that drifted would be the one nobody was reading.
- */
-export function validateExpectedHours(expectedHours: number | null | undefined) {
-  if (expectedHours == null) return; // no declararlo es legitimo
-  if (!Number.isInteger(expectedHours) || expectedHours <= 0) {
-    throw new ProcessTargetError("expected_hours_must_be_positive");
-  }
-}
-
-/**
- * Las reglas de las filas de fase. Viven aquí y **no en la base** por la misma razón que la del ritmo
- * de medición: un importador o un SQL directo se las salta, y eso se dice en vez de llamarlo
- * estructural.
- */
-export function validateFases(fases: CreateRecipeInput["fases"]) {
-  if (!fases?.length) return;
-  const vistas = new Set<ProcessPhase>();
-  for (const f of fases) {
-    if (vistas.has(f.phase)) throw new ProcessTargetError("duplicate_phase");
-    vistas.add(f.phase);
-
-    // Un volteo sólo existe en el secado. En fermentación no hay nada que revolver, y guardarlo
-    // sería un número que nadie puede leer sin equivocarse.
-    if (f.turnEveryHours != null && f.phase !== "drying") {
-      throw new ProcessTargetError("turn_cadence_only_in_drying");
-    }
-    for (const [valor, error] of [
-      [f.expectedHours, "expected_hours_must_be_positive"],
-      [f.turnEveryHours, "turn_cadence_must_be_positive_hours"],
-    ] as const) {
-      if (valor != null && (!Number.isInteger(valor) || valor <= 0)) throw new ProcessTargetError(error);
-    }
-
-    // Los dos o ninguno: un mínimo sin máximo no es un rango, y la pantalla no podría decir «cerca
-    // del objetivo» con la mitad de una banda.
-    const min = f.targetMoistureMinPct ?? null;
-    const max = f.targetMoistureMaxPct ?? null;
-    if ((min == null) !== (max == null)) throw new ProcessTargetError("moisture_range_needs_both_ends");
-    if (min != null && max != null) {
-      if (min > max) throw new ProcessTargetError("moisture_range_inverted");
-      for (const v of [min, max]) {
-        if (!(v > 0 && v <= 100)) throw new ProcessTargetError("moisture_range_out_of_physical_range");
-      }
-    }
-  }
-}
-
-export function validateTargets(targets: CreateRecipeInput["targets"]) {
+export function validateTargets(
+  targets: ReadonlyArray<
+    Omit<CreateRecipeInput["targets"][number], "phase"> & { phase?: ProcessPhase | null; recipeStepId?: string | null }
+  >,
+  pasosDeEstaVersion?: ReadonlySet<string>,
+) {
   if (targets.length === 0) throw new ProcessTargetError("at_least_one_target_required");
 
   for (const t of targets) {
@@ -342,7 +344,9 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
     if (!bounds) throw new ProcessTargetError("unknown_variable");
     if (t.unit !== bounds.canonicalUnit) throw new ProcessTargetError("wrong_unit_for_variable");
     for (const v of [t.targetValue, t.minValue, t.maxValue]) {
-      if (v != null && (v < bounds.min || v > bounds.max)) {
+      // Parte 2a (tarea 3, I9): `NaN` compara falso con todo, así que `v < min || v > max` lo dejaba pasar —y una meta con `NaN`
+      // se compararía contra lecturas para siempre—. Un valor que no es un número finito no es posible.
+      if (v != null && (!Number.isFinite(v) || v < bounds.min || v > bounds.max)) {
         throw new ProcessTargetError("target_out_of_physical_range");
       }
     }
@@ -352,13 +356,20 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
     // «cada 6 horas» es una contradicción, no una preferencia. Se rechaza en
     // vez de guardarla: una fila así haría que la pantalla prometiera lecturas
     // periódicas de un momento que no se repite.
-    if (!t.phase) throw new ProcessTargetError("phase_required");
+    // Parte 2a (tarea 3, diseño §3.2): una meta de paso no declara fase, y su paso tiene que ser de esta versión. Una de la
+    // versión sigue exigiendo la suya, como desde el 2026-09-27.
+    if (t.recipeStepId != null) {
+      if (!pasosDeEstaVersion?.has(t.recipeStepId)) throw new RecipeError("paso_de_otra_version");
+    } else if (!t.phase) {
+      throw new ProcessTargetError("phase_required");
+    }
     if (t.everyHours != null && t.moment !== "during") {
       throw new ProcessTargetError("cadence_only_while_running");
     }
     // Cero no es «sin ritmo» —para eso está el nulo— y un negativo no es nada.
-    // Sin esto, un 0 dividiría por cero al calcular cuántas lecturas se deben.
-    if (t.everyHours != null && (!Number.isInteger(t.everyHours) || t.everyHours <= 0)) {
+    // Sin esto, un 0 dividiría por cero al calcular cuántas lecturas se deben. Y tampoco más de MAX_HORAS: la columna es INTEGER y un número enorme llegaba a la
+    // base como un error crudo (F1-11).
+    if (t.everyHours != null && (!Number.isInteger(t.everyHours) || t.everyHours <= 0 || t.everyHours > MAX_HORAS)) {
       throw new ProcessTargetError("cadence_must_be_positive_hours");
     }
   }
@@ -370,93 +381,13 @@ export function validateTargets(targets: CreateRecipeInput["targets"]) {
   for (const t of targets) {
     // La fase entra en la clave: la misma variable y el mismo momento pueden repetirse en
     // fermentación y en secado sin ser un duplicado — son dos cosas distintas.
-    const key = `${t.phase}:${t.variable}:${t.moment}`;
+    // Parte 2a (tarea 3, diseño §3.2): una meta de paso es única en SU paso —la base lo dice con el índice parcial
+    // `(recipe_step_id, variable, moment)` de la tarea 1—, así que la fiebre y la fermentación pueden pedir las dos pH inicial.
+    const key =
+      t.recipeStepId != null ? `paso:${t.recipeStepId}:${t.variable}:${t.moment}` : `${t.phase}:${t.variable}:${t.moment}`;
     if (seen.has(key)) throw new ProcessTargetError("duplicate_variable_and_moment");
     seen.add(key);
   }
-}
-
-export async function createRecipeWithVersion(userAccountId: string, input: CreateRecipeInput) {
-  const name = input.name.trim();
-  if (!name) throw new ProcessTargetError("name_required");
-  validateTargets(input.targets);
-  validateFases(input.fases);
-  validateExpectedHours(input.expectedHours);
-
-  // Gated on the organization the recipe belongs to, through a lot of that
-  // organization — the same authority that operates the batches it will be
-  // applied to.
-  // A shared recipe (no organization) is gated on any lot the account can
-  // manage; an organization's recipe on a lot of that organization.
-  const anyLot = await prisma.lot.findFirst({
-    where: input.organizationId === null ? {} : { organizationId: input.organizationId },
-  });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, input.organizationId);
-
-  const recipe = await prisma.$transaction(async (tx) => {
-    const recipe = await tx.processRecipe.create({
-      data: {
-        name,
-        description: input.description?.trim() || null,
-        organizationId: input.organizationId,
-        status: "approved",
-        createdBy: userAccountId,
-        versions: {
-          create: {
-            version: 1,
-            status: "approved",
-            expectedHours: input.expectedHours ?? null,
-            createdBy: userAccountId,
-            targets: {
-              create: input.targets.map((t, i) => ({
-                variable: t.variable,
-                moment: t.moment,
-                unit: t.unit,
-                targetValue: t.targetValue ?? null,
-                minValue: t.minValue ?? null,
-                maxValue: t.maxValue ?? null,
-                note: t.note?.trim() || null,
-                everyHours: t.everyHours ?? null,
-                phase: t.phase,
-                displayOrder: i,
-              })),
-            },
-            fases: input.fases?.length
-              ? {
-                  create: input.fases.map((f) => ({
-                    phase: f.phase,
-                    expectedHours: f.expectedHours ?? null,
-                    turnEveryHours: f.turnEveryHours ?? null,
-                    targetMoistureMinPct: f.targetMoistureMinPct ?? null,
-                    targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
-                  })),
-                }
-              : undefined,
-          },
-        },
-      },
-      include: { versions: { include: { targets: true, fases: true } } },
-    });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "process_recipe.create",
-        entityType: "process_recipe",
-        entityId: recipe.id,
-        after: recipe,
-        sourceInterface: "traceability.processTargets",
-      },
-      tx,
-    );
-
-    return recipe;
-  });
-  return recipe;
 }
 
 /**
@@ -473,30 +404,73 @@ export async function createRecipeWithVersion(userAccountId: string, input: Crea
  * una frase de disculpa. Para omitir el enlace hay que poder preguntarlo antes.
  *
  * **Es la MISMA decisión que toma `app/recipes/new/page.tsx`**, movida aquí y usada por
- * las dos pantallas: una organización propia donde `edit_beneficio` alcance, o la receta
- * compartida (`null`). Si divergieran, el enlace volvería a mentir — que es el defecto
- * que esto arregla.
+ * las dos pantallas: una organización propia donde alcance el permiso de autoría de recetas
+ * —el del Coffee Process Manager, V16, 2026-10-04: `puedeAutoriaDeReceta`, la gemela de
+ * `exigeAutoriaDeReceta`, que es la regla de los servicios—, o la receta compartida
+ * (`null`). `edit_beneficio` ya no basta. Si divergieran, el enlace volvería a mentir — que
+ * es el defecto que esto arregla.
  */
 export async function puedeCrearRecetaEnAlguna(userAccountId: string): Promise<boolean> {
-  if (await puedeEditarBeneficioEnOrganizacion(userAccountId, null)) return true;
+  if (await puedeAutoriaDeReceta(userAccountId, null)) return true;
   for (const org of await listRecipeOrganizations(userAccountId)) {
-    if (await puedeEditarBeneficioEnOrganizacion(userAccountId, org.id)) return true;
+    if (await puedeAutoriaDeReceta(userAccountId, org.id)) return true;
   }
   return false;
 }
 
-export async function listRecipes(userAccountId: string) {
-  const anyLot = await prisma.lot.findFirst({ where: {} });
-  if (!anyLot) return [];
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+/**
+ * Los ámbitos de los lotes de una organización —o de todas, con `null`—: cada combinación distinta de proyecto, ubicación y clasificación, una
+ * sola vez. Es todo lo que la guardia de acceso pide de un lote, y esa guardia aprueba en cuanto UNO de sus candidatos pasa: dársela con los
+ * ámbitos de todos los lotes pregunta «¿opera esta cuenta ALGÚN lote de la organización?», sin traerlos uno a uno y sin depender de cuál devuelva
+ * la base primero. R7 (2026-10-05): `listRecipes` autorizaba con «un lote cualquiera de toda la base» y `getRecipeForEditor` con el primero de la
+ * organización, y un operario de una sola parcela pasaba o no según el orden en que la base respondiera.
+ */
+async function ambitosDeLosLotes(organizationId: string | null) {
+  return prisma.lot.groupBy({
+    by: ["projectId", "locationId", "classification"],
+    where: organizationId === null ? {} : { organizationId },
+  });
+}
 
-  return prisma.processRecipe.findMany({
+export async function listRecipes(userAccountId: string) {
+  // R8 (2026-10-05): una Libre es lo que ocurrió en UN lote (diseño §5.2), no un catálogo: no se lista, para nadie. Es filtro del SERVICIO y no sólo
+  // de la pantalla —que lo repite—: su nombre lleva el código del lote y su descripción, lo que el operario escribió, y una lista pedida por otro
+  // camino no puede traerlas. Se lee por `getRecipeForEditor`, que la autoriza por el lote.
+  const recetas = await prisma.processRecipe.findMany({
+    where: { esLibre: false },
     include: {
       organization: { select: { name: true } },
       versions: { include: { targets: { orderBy: { displayOrder: "asc" } } }, orderBy: { version: "desc" } },
     },
     orderBy: { name: "asc" },
   });
+
+  // R7 (2026-10-05): cada receta se decide por SU organización, para quien opera y para quien escribe. Antes, pasar la guardia contra «un lote cualquiera de
+  // la base» devolvía todas las recetas de todas las organizaciones, y un Coffee Process Manager con un perfil operativo de más eludía el filtro de
+  // la autoría. Ahora: la ve quien opera ALGÚN lote de la organización o quien puede escribir sus recetas (Ruling C4, V16). Una plantilla (organización
+  // nula) la ve quien opera algún lote en cualquier parte o tiene la autoría de plataforma, como hasta hoy: el Process Manager de una sola finca no las ve
+  // (decisión de Daniel). Una pregunta por organización, no por receta; un error que no sea de acceso a lotes se relanza.
+  const opera = async (organizationId: string | null): Promise<boolean> => {
+    try {
+      await requireLotAccess(userAccountId, "manage", await ambitosDeLosLotes(organizationId));
+      return true;
+    } catch (error) {
+      if (error instanceof TraceabilityAccessError) return false;
+      throw error;
+    }
+  };
+  const puede = new Map<string | null, boolean>();
+  for (const { organizationId } of recetas) {
+    if (puede.has(organizationId)) continue;
+    puede.set(organizationId, (await opera(organizationId)) || (await puedeAutoriaDeReceta(userAccountId, organizationId)));
+  }
+  const visibles = recetas.filter((r) => puede.get(r.organizationId));
+  if (visibles.length > 0) return visibles;
+
+  // Sin ninguna a la vista: lista vacía si esta cuenta opera algún lote o puede escribir recetas en alguna parte (la primera visita de un Process
+  // Manager cuya organización todavía no tiene recetas), y la negativa de siempre —la del acceso a lotes— si no.
+  if ((await opera(null)) || (await puedeCrearRecetaEnAlguna(userAccountId))) return visibles;
+  throw new TraceabilityAccessError("no_lot_access");
 }
 
 /** Organizations this account may create a recipe for. */
@@ -510,15 +484,22 @@ export async function listRecipeOrganizations(userAccountId: string) {
 
   const reachable: { id: string; name: string }[] = [];
   for (const org of organizations) {
-    const sample = await prisma.lot.findFirst({ where: { organizationId: org.id } });
-    if (!sample) continue;
+    // F1-12 (revisión final del PR-A): los ámbitos de TODOS los lotes de la organización, como `listRecipes` y `getRecipeForEditor` (R7). Antes se autorizaba con «el primer lote que
+    // devolviera la base» (`findFirst` sin orden): un operario de una sola parcela veía ofrecida la organización o no según el orden físico de las filas.
+    const ambitos = await ambitosDeLosLotes(org.id);
+    if (ambitos.length === 0) continue;
+    let alcanza = false;
     try {
-      await requireLotAccess(userAccountId, "manage", [sample]);
-      reachable.push(org);
+      await requireLotAccess(userAccountId, "manage", ambitos);
+      alcanza = true;
     } catch {
       // Not an error: an organization this account cannot operate is simply
       // not offered.
     }
+    // Ruling C4 (2026-10-04): quien puede ESCRIBIR las recetas de la organización también la ve, aunque no opere ninguno de sus lotes
+    // (el Coffee Process Manager no lleva `lot:manage`). La organización sigue necesitando algún lote: el filtro de arriba no cambia.
+    if (!alcanza && (await puedeAutoriaDeReceta(userAccountId, org.id))) alcanza = true;
+    if (alcanza) reachable.push(org);
   }
   return reachable.sort((a, b) => compareNames(a.name, b.name));
 }
@@ -532,6 +513,9 @@ export async function listRecipeOrganizations(userAccountId: string) {
  * quietly rewrite what those runs were aiming for.
  */
 export async function getRecipeForEditor(userAccountId: string, recipeId: string) {
+  // El id llega de la URL de `recipes/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la página
+  // daba 500 (PENDING_IMPLEMENTATIONS/026); es una receta que no existe.
+  if (!UUID.test(recipeId)) throw new ProcessTargetError("recipe_not_found");
   const recipe = await prisma.processRecipe.findUnique({
     where: { id: recipeId },
     include: {
@@ -549,9 +533,33 @@ export async function getRecipeForEditor(userAccountId: string, recipeId: string
   // the same rule a stale id gets everywhere else (ADR-081).
   if (!recipe) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
+  // R8 (2026-10-05): una receta Libre es lo que ocurrió en un lote (diseño §5.2): su nombre lleva el código del lote y su descripción, lo que el
+  // operario escribió. Se abre a quien puede VER el lote cuyo proceso la usa —cada uno, si una división la copió a varios: quien ve uno solo no la
+  // lee— y NO a quien sólo puede escribir recetas de la organización (el Coffee Process Manager no lleva `lot:view`): por eso va ANTES de la rama
+  // de la autoría y no la deja pasar. Se pregunta por la VERSIÓN, no por el lote («qué procesos usan esta receta»: no es «qué proceso cubre a este
+  // lote», que es del resolvedor). Sin ningún proceso que la use no hay lote por el que autorizar, y no se abre a nadie.
+  if (recipe.esLibre) {
+    const usos = await prisma.lotProcess.findMany({
+      where: { processRecipeVersionId: { in: recipe.versions.map((v) => v.id) } },
+      select: { lot: { select: { id: true, projectId: true, locationId: true, classification: true } } },
+    });
+    const lotes = [...new Map(usos.map((u) => [u.lot.id, u.lot] as const)).values()];
+    if (lotes.length === 0) throw new TraceabilityAccessError("no_lot_access");
+    // Uno por uno: la guardia aprueba en cuanto UNO de los candidatos pasa, y aquí hacen falta todos.
+    for (const lote of lotes) await requireLotAccess(userAccountId, "view", [lote]);
+    return recipe;
+  }
+
+  // Ruling C4 (2026-10-04): quien puede ESCRIBIR esta receta puede abrirla, sin operar ningún lote ni haber registrado ninguno en la
+  // organización (el Coffee Process Manager no lleva `lot:manage`). Primero, y no después del «sin lotes»: ese rechazo es de quien necesita un
+  // lote por el que pasar, y la autoría no lo necesita. Una plantilla (organización nula) se abre así sólo con alcance de plataforma.
+  if (await puedeAutoriaDeReceta(userAccountId, recipe.organizationId)) return recipe;
+
+  // R7 (2026-10-05): quien opera ALGÚN lote de la organización —o de cualquiera, si es una plantilla—, el mismo criterio que `listRecipes`: lo que la lista
+  // ofrece, esta lectura lo abre. Antes se miraba el primer lote que devolviera la base.
+  const ambitos = await ambitosDeLosLotes(recipe.organizationId);
+  if (ambitos.length === 0) throw new ProcessTargetError("organization_has_no_lots");
+  await requireLotAccess(userAccountId, "manage", ambitos);
 
   return recipe;
 }
@@ -576,12 +584,8 @@ export async function updateRecipeMetadata(
   const before = await prisma.processRecipe.findUnique({ where: { id: recipeId } });
   if (!before) throw new ProcessTargetError("recipe_not_found");
 
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: before.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, before.organizationId);
+  // V16 (Parte 2a, tarea 3, 2026-10-04): la misma regla única de autoría que al crearla.
+  await exigeAutoriaDeReceta(userAccountId, before.organizationId);
 
   const name = input.name.trim();
   if (!name) throw new ProcessTargetError("name_required");
@@ -610,128 +614,3 @@ export async function updateRecipeMetadata(
   return after;
 }
 
-/**
- * A new version of an existing recipe — the only way targets ever change.
- *
- * The number is `max + 1` rather than `count + 1`: those differ the moment a
- * version is ever removed, and the second would silently reuse a number that
- * runs already point at.
- */
-export async function createRecipeVersion(
-  userAccountId: string,
-  recipeId: string,
-  targets: CreateRecipeInput["targets"],
-  notes?: string | null,
-  /**
-   * **Sin esto, publicar una v2 le borraba el ritmo a la receta en silencio.**
-   * Lo cazó la revisión independiente de Codex el 2026-09-13: hay DOS caminos
-   * que escriben objetivos —crear receta y crear versión— y el primer intento
-   * sólo cerró uno. La versión vigente quedaba sin duración esperada aunque la
-   * v1 la tuviera, y nada lo decía.
-   */
-  expectedHours?: number | null,
-  /**
-   * R8 (Parte 1, 2026-09-30): las fases de la versión. **Sin pasarlas (`undefined`), se copian las de
-   * la versión anterior** —la pantalla todavía no las edita, y publicar una v2 desde ella las borraba
-   * en silencio, el mismo fallo que con las horas el 2026-09-13—. Un arreglo vacío explícito sí
-   * significa «sin fases».
-   */
-  fases?: CreateRecipeInput["fases"],
-) {
-  const recipe = await prisma.processRecipe.findUnique({
-    where: { id: recipeId },
-    include: { versions: { orderBy: { version: "desc" }, take: 1, include: { fases: true } } },
-  });
-  if (!recipe) throw new ProcessTargetError("recipe_not_found");
-
-  const anyLot = await prisma.lot.findFirst({ where: { organizationId: recipe.organizationId ?? undefined } });
-  if (!anyLot) throw new ProcessTargetError("organization_has_no_lots");
-  await requireLotAccess(userAccountId, "manage", [anyLot]);
-  // Configurar recetas es configurar el beneficio (spec #370 §4.3): además del
-  // lote, `edit_beneficio` en la organización de la receta; compartida, plataforma.
-  await exigeEditarBeneficioEnOrganizacion(userAccountId, recipe.organizationId);
-
-  validateTargets(targets);
-  validateExpectedHours(expectedHours);
-  if (fases !== undefined) validateFases(fases);
-  // Las copiadas ya se validaron al escribirse, y traen `Decimal`: no pasan por `validateFases`, que
-  // compara números.
-  const fasesDeLaVersion =
-    fases !== undefined
-      ? fases.map((f) => ({
-          phase: f.phase,
-          expectedHours: f.expectedHours ?? null,
-          turnEveryHours: f.turnEveryHours ?? null,
-          targetMoistureMinPct: f.targetMoistureMinPct ?? null,
-          targetMoistureMaxPct: f.targetMoistureMaxPct ?? null,
-        }))
-      : (recipe.versions[0]?.fases ?? []).map((f) => ({
-          phase: f.phase,
-          expectedHours: f.expectedHours,
-          turnEveryHours: f.turnEveryHours,
-          targetMoistureMinPct: f.targetMoistureMinPct,
-          targetMoistureMaxPct: f.targetMoistureMaxPct,
-        }));
-
-  const nextVersion = (recipe.versions[0]?.version ?? 0) + 1;
-
-  const version = await prisma.$transaction(async (tx) => {
-    const version = await tx.processRecipeVersion.create({
-      data: {
-        recipeId,
-        version: nextVersion,
-        notes: notes?.trim() || null,
-        status: "approved",
-        expectedHours: expectedHours ?? null,
-        createdBy: userAccountId,
-        targets: {
-          create: targets.map((t, i) => ({
-            variable: t.variable,
-            moment: t.moment,
-            unit: t.unit,
-            targetValue: t.targetValue ?? null,
-            minValue: t.minValue ?? null,
-            maxValue: t.maxValue ?? null,
-            everyHours: t.everyHours ?? null,
-            // La SEGUNDA puerta. El guardia `campos-con-dos-puertas` existe por esto: cuando se
-            // añadieron `everyHours` y `expectedHours` se cerró sólo `createRecipeWithVersion`, y
-            // publicar la v2 le borraba el ritmo a la receta en silencio.
-            phase: t.phase,
-            note: t.note?.trim() || null,
-            displayOrder: i,
-          })),
-        },
-        fases: fasesDeLaVersion.length
-          ? {
-              create: fasesDeLaVersion.map((f) => ({
-                phase: f.phase,
-                expectedHours: f.expectedHours,
-                turnEveryHours: f.turnEveryHours,
-                targetMoistureMinPct: f.targetMoistureMinPct,
-                targetMoistureMaxPct: f.targetMoistureMaxPct,
-              })),
-            }
-          : undefined,
-      },
-      include: { targets: true, fases: true },
-    });
-
-    await recordAuditEvent(
-      {
-        actorUserAccountId: userAccountId,
-        operation: "process_recipe_version.create",
-        entityType: "process_recipe_version",
-        entityId: version.id,
-        after: version,
-        // The fact worth searching the audit log for later: which version
-        // superseded which, and when.
-        reason: `supersedes_version_${recipe.versions[0]?.version ?? "none"}`,
-        sourceInterface: "traceability.processTargets",
-      },
-      tx,
-    );
-
-    return version;
-  });
-  return version;
-}
