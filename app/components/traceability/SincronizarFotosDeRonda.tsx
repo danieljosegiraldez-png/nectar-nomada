@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   listTrapPhotoDrafts,
   syncTrapPhotos,
+  discardTrapPhotoDraft,
   TRAP_PHOTO_DRAFTS_CHANGED_EVENT,
   type SyncFotosSummary,
 } from "../../../lib/sync/trapPhotoQueue";
@@ -28,16 +29,24 @@ import { FIELD_EVENTS_SYNCED_EVENT } from "../../../lib/sync/offlineQueue";
  *   envío inmediato de `RondaDeTrampaForm` con señal). Además de recontar,
  *   dispara su PROPIA sincronización: sin esto, sincronizar las revisiones
  *   desde el botón genérico no reintentaba ninguna foto pendiente.
+ *
+ * **Las rechazadas se cuentan aparte y se descartan aquí** (2026-10-11). Ya no
+ * se vuelven a subir —ver `syncTrapPhotos`—, y hasta ese día no había ningún
+ * sitio donde quitarlas: se sumaban a «pendientes» para siempre.
  */
 export function SincronizarFotosDeRonda() {
   const t = useTranslations("Traceability");
   const [pendientes, setPendientes] = useState<number | null>(null);
+  const [rechazadas, setRechazadas] = useState(0);
   const [enviando, setEnviando] = useState(false);
   const [ultimo, setUltimo] = useState<SyncFotosSummary | null>(null);
 
   const recontar = useCallback(async () => {
     try {
-      setPendientes((await listTrapPhotoDrafts()).length);
+      const fotos = await listTrapPhotoDrafts();
+      const errores = fotos.filter((f) => f.status === "error").length;
+      setPendientes(fotos.length - errores);
+      setRechazadas(errores);
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no la foto: `queueTrapPhoto` ya habría
@@ -70,14 +79,32 @@ export function SincronizarFotosDeRonda() {
     };
   }, [recontar, sincronizar]);
 
-  if (pendientes === null || pendientes === 0) return null;
+  const descartarRechazadas = async () => {
+    try {
+      for (const f of await listTrapPhotoDrafts()) if (f.status === "error") await discardTrapPhotoDraft(f.id);
+    } finally {
+      await recontar();
+    }
+  };
+
+  if (pendientes === null || (pendientes === 0 && rechazadas === 0)) return null;
 
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("trapPhotoSyncPending", { count: pendientes })}</p>
-      <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando}>
+      <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando || pendientes === 0}>
         {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
       </button>
+      {rechazadas > 0 ? (
+        <>
+          <p className="nn-error" role="status">
+            {t("trapPhotoRejectedStored", { count: rechazadas })}
+          </p>
+          <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
+            {t("trapPhotoDiscardRejected")}
+          </button>
+        </>
+      ) : null}
       {ultimo ? (
         <>
           {/* A13 fix-final — textos propios de FOTO, no de «anotación»: estas

@@ -13,6 +13,8 @@
  * *` ("use client") files should import this.
  */
 
+import { clasificarRespuesta, motivoDeRechazoDelLote } from "../sync/offlineQueue";
+
 const DB_NAME = "nectar-apiary-offline";
 const STORE_NAME = "drafts";
 
@@ -215,7 +217,7 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
 }
 
 /**
- * Attempts every pending/error draft once, in creation order. The
+ * Attempts every pending draft once, in creation order. The
  * distinction that matters (§0, "explicit sync now, no automatic conflict
  * resolution"): if the sync call itself throws, the request never reached
  * the server (offline, or the connection dropped mid-flight) — the draft
@@ -224,13 +226,27 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
  * validation or access error, not a connectivity problem) — the draft is
  * marked "error" and left for the operator to see and discard, not
  * silently retried forever against a request that can never succeed.
+ *
+ * **Sólo `pending`, y no `pending || error` como hasta el 2026-10-11.** Con el
+ * `error` dentro, ese «not silently retried forever» era falso: cada `online` y
+ * cada borrador nuevo (`OfflineSyncIndicator`) volvía a mandar lo rechazado. Un
+ * rechazado sólo se descarta — decisión de Daniel de ese día, la misma que en
+ * `lib/sync/offlineQueue.ts`, y la prueba es la misma:
+ * `tests/sync/rechazoTerminalEnLasColas.test.ts`.
  */
-export async function syncAll(): Promise<{ synced: number; errored: number; stillPending: number }> {
+export async function syncAll(): Promise<{
+  synced: number;
+  errored: number;
+  stillPending: number;
+  /** La sesión caducó (401): nada se marcó, sale al volver a entrar. */
+  sessionExpired: boolean;
+}> {
   const drafts = await listDrafts();
-  const toSync = drafts.filter((d) => d.status === "pending" || d.status === "error");
+  const toSync = drafts.filter((d) => d.status === "pending");
 
   let synced = 0;
   let errored = 0;
+  let sessionExpired = false;
 
   if (toSync.length > 0) {
     try {
@@ -240,11 +256,24 @@ export async function syncAll(): Promise<{ synced: number; errored: number; stil
         body: JSON.stringify({ deviceId: await idDeAparato(), mutations: toSync.map(mutacionDe) }),
       });
 
-      // Un 4xx del lote ENTERO —aparato revocado, cuerpo mal formado— no es un
-      // rechazo de cada borrador: es que la petición no se pudo evaluar. Se
-      // dejan en cola, como un fallo de transporte, porque marcarlos con error
-      // haría que el operador descartara trabajo bueno.
-      if (res.ok) {
+      // La misma frontera que la cola de P4, y con su misma función: un 5xx, un
+      // 408/429 o una sesión caducada dejan la cola intacta; cualquier otro 4xx
+      // del lote ENTERO —aparato revocado o desconocido— es un no del servidor.
+      //
+      // **Esto antes era al revés, y a propósito:** un 4xx dejaba los borradores
+      // pendientes, sin motivo, «porque marcarlos con error haría que el operador
+      // descartara trabajo bueno». El precio era que se reenviaban en cada
+      // `online` sin que la pantalla dijera por qué no salían — idéntico a no
+      // tener señal. Daniel decidió el 2026-10-11 tratarlo igual que en campo:
+      // rechazados, con el motivo que mandó el servidor.
+      const decision = clasificarRespuesta(res.status);
+      if (decision === "reintentar") {
+        sessionExpired = res.status === 401;
+      } else if (decision === "rechazar") {
+        const motivo = await motivoDeRechazoDelLote(res);
+        for (const draft of toSync) await putDraft({ ...draft, status: "error", errorMessage: motivo });
+        errored = toSync.length;
+      } else {
         const { results } = (await res.json()) as { results: Array<{ clientDraftId: string; status: string; reason?: string }> };
         const porBorrador = new Map(results.map((r) => [r.clientDraftId, r]));
         for (const draft of toSync) {
@@ -265,9 +294,9 @@ export async function syncAll(): Promise<{ synced: number; errored: number; stil
     }
   }
 
-  const stillPending = (await listDrafts()).filter((d) => d.status === "pending" || d.status === "error").length;
+  const stillPending = (await listDrafts()).filter((d) => d.status === "pending").length;
   if (synced > 0) recordLastSyncSuccess();
-  return { synced, errored, stillPending };
+  return { synced, errored, stillPending, sessionExpired };
 }
 
 // --- A5.5 §2: "visible, honest state" — when was the last successful sync?
