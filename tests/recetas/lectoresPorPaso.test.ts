@@ -45,6 +45,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { colaDeSecado } from "../../lib/beneficio/colaDeSecado";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
+import { grupoDeLaEntrada } from "../../lib/beneficio/tablero";
 import { startDryingRun } from "../../lib/traceability/drying";
 import { compareRunToTargets } from "../../lib/traceability/processTargets";
 import { FASE_DEL_TIPO, type TipoDePaso } from "../../lib/recetas/vocabulario";
@@ -683,6 +684,21 @@ describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
     const vacio = entradaDe(d, sinHoras.lotId);
     expect(vacio.expectedHours).toBeNull();
     expect(vacio.metas).toEqual([]);
+
+    // Y de ahí sale lo que el tablero AVISA —lo que dice la ayuda de «cada cuántas horas» (`recetaEditor_metaCadaHorasAyuda`)—: la corrida del segundo paso lleva
+    // 10 h de fermentación sin una sola lectura y su paso pide el pH cada 6 h, así que debe una lectura de pH; la del paso sin metas no debe ninguna, y la de la
+    // versión de antes de la 2a debe la temperatura de la versión (cada 2 h).
+    const aviso = (x: typeof e) => grupoDeLaEntrada({ lote: x, faseIniciada: x.faseIniciada!, desviacionesAbiertasPorLote: new Map(), ahora });
+    const debidasDe = (x: typeof e) => {
+      const { ritmo } = aviso(x);
+      if ("error" in ritmo) throw new Error(`el ritmo del lote salió roto: ${ritmo.error}`);
+      return ritmo.debidas.map((q) => q.variable);
+    };
+    expect(debidasDe(e)).toEqual(["ph"]);
+    expect(debidasDe(vacio)).toEqual([]);
+    expect(debidasDe(control)).toEqual(["temperature"]);
+    // (Se mira el RITMO y no los `motivos` del grupo: el motivo `DEBE_<VARIABLE>` sólo se escribe si el lote tiene veredicto, y éste, sin una sola lectura, no lo tiene
+    // —sale `SIN_LECTURAS`—; la pantalla (`app/beneficio/page.tsx`, `textoDeRitmo`) pinta «debe pH cada 6 h» de `fila.ritmo.debidas` con o sin veredicto.)
   });
 
   it("la entrada de una corrida SIN paso bajo una versión CON pasos no lee las horas de la fase —sale sin horas—, y sus metas son las de la versión (R9)", async () => {
