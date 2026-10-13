@@ -21,6 +21,12 @@ import {
 } from "../../../../../lib/sync/fieldMedia";
 import { FieldSessionValidationError } from "../../../../../lib/traceability/fieldSessions";
 import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import {
+  BorradorAjenoError,
+  cuentaDelBorradorDe,
+  RAZON_BORRADOR_AJENO,
+  RAZON_CUENTA_INVALIDA,
+} from "../../../../../lib/sync/cuentaDelBorrador";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +89,10 @@ export async function POST(request: Request) {
     ) {
       return Response.json({ error: "finalizar_malformado" }, { status: 400 });
     }
+    // ADR-199 — una cuenta que no es una cadena no se compara con nada; tratarla
+    // como «sin cuenta» la mandaría por la regla del aparato, que es otra pregunta.
+    const cuenta = cuentaDelBorradorDe(body.cuentaDelBorrador);
+    if (!cuenta.ok) return Response.json({ error: RAZON_CUENTA_INVALIDA }, { status: 400 });
 
     const evento = await finalizeFieldMedia(user.userAccountId, {
       fieldSessionId,
@@ -94,12 +104,21 @@ export async function POST(request: Request) {
       occurredAt,
       recordedAt: fecha(body.recordedAt),
       deviceId: typeof body.deviceId === "string" ? body.deviceId : null,
+      cuentaDelBorrador: cuenta.cuenta,
       operatorPersonId: typeof body.operatorPersonId === "string" ? body.operatorPersonId : null,
       notes: typeof body.notes === "string" ? body.notes : null,
       position: (body.position ?? undefined) as never,
     });
     return Response.json({ id: evento.id, assetId: evento.assetId }, { status: 200 });
   } catch (error) {
+    // ADR-199 — una foto de otra cuenta: no se escribió nada. El mismo motivo que
+    // el lote de `field-events`, y el dueño sólo cuando se dedujo del aparato.
+    if (error instanceof BorradorAjenoError) {
+      return Response.json(
+        { error: RAZON_BORRADOR_AJENO, ...(error.cuentaDelDueno ? { cuentaDelBorrador: error.cuentaDelDueno } : {}) },
+        { status: 403 },
+      );
+    }
     // Un no del servidor, no una caída: el cliente lo marca error y no lo
     // reintenta para siempre. Cualquier otra cosa sube y da 500, que el
     // cliente lee como «no llegué» y deja el medio en la cola.

@@ -188,7 +188,7 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
 
   it("control: 200 borradores salen en una sola petición y se aplican todos", async () => {
     await encolar(200);
-    expect(await syncAll()).toEqual({ synced: 200, errored: 0, stillPending: 0, sessionExpired: false });
+    expect(await syncAll()).toEqual({ synced: 200, errored: 0, retained: 0, stillPending: 0, sessionExpired: false });
     expect({ peticiones: tamanosDeLasPeticiones, aplicados: aplicadosPorElServidor.size }).toEqual({
       peticiones: [200],
       aplicados: 200,
@@ -214,7 +214,7 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
       aplicados: 201,
       enCola: 0,
       todasCabenEnElTope: true,
-      resumen: { synced: 201, errored: 0, stillPending: 0, sessionExpired: false },
+      resumen: { synced: 201, errored: 0, retained: 0, stillPending: 0, sessionExpired: false },
     });
   });
 
@@ -229,7 +229,7 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
     }).toEqual({
       aplicados: 200,
       estados: { pending: 1 },
-      resumen: { synced: 200, errored: 0, stillPending: 1, sessionExpired: false },
+      resumen: { synced: 200, errored: 0, retained: 0, stillPending: 1, sessionExpired: false },
     });
   });
 
@@ -244,7 +244,7 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
     }).toEqual({
       aplicados: 1,
       estados: { error: 200 },
-      resumen: { synced: 1, errored: 200, stillPending: 0, sessionExpired: false },
+      resumen: { synced: 1, errored: 200, retained: 0, stillPending: 0, sessionExpired: false },
     });
   });
 
@@ -256,7 +256,7 @@ describe("cola de apiario (`syncAll`) con más borradores de los que caben en un
     const resumen = await syncAll();
     expect({ estados: estadosDe(await listDrafts()), resumen }).toEqual({
       estados: { error: 200, pending: 1 },
-      resumen: { synced: 0, errored: 200, stillPending: 1, sessionExpired: false },
+      resumen: { synced: 0, errored: 200, retained: 0, stillPending: 1, sessionExpired: false },
     });
   });
 });

@@ -211,6 +211,53 @@ describe("recuperación de una vez: lo rechazado por `observed_at_not_a_day` ant
     await syncFieldEvents();
     expect(enviadosEnLaLlamada(0)).toEqual([]);
   });
+
+  /**
+   * ADR-199 sobre el #719: el borrador viejo no tiene cuenta, sale con A dentro, y el servidor lo
+   * RETIENE porque el aparato lo registró B. Una retención no es un rechazo —nadie evaluó la
+   * revisión—, así que el reintento único tiene que seguir vivo para cuando entre B. Si se gastara,
+   * esa revisión se quedaría en el teléfono sin poder salir nunca.
+   */
+  it("una retención (de otra cuenta) no gasta el reintento: no viaja con A y sí cuando entra su dueño", async () => {
+    const A = "a".repeat(16);
+    const B = "b".repeat(16);
+    let dentro: string | null = null;
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) =>
+        k === "nn-field-device-id"
+          ? "aparato-de-prueba"
+          : k === "nn-cuenta-del-navegador"
+            ? JSON.stringify({ cuenta: dentro, generadaEn: 1 })
+            : null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    const d = await comoLoDejoElCodigoViejo("observed_at_not_a_day");
+
+    dentro = A;
+    fetchFalso.mockResolvedValueOnce(
+      json(200, {
+        results: [{ clientDraftId: d.id, status: "rejected", reason: "borrador_de_otra_cuenta", cuentaDelBorrador: B }],
+      }),
+    );
+    expect(await syncFieldEvents()).toMatchObject({ retenidas: 1, rejected: 0 });
+    expect(enviadosEnLaLlamada(0)).toEqual([d.id]);
+    // `toMatchObject` sobre la lista exige que haya exactamente uno, así que el `?.` de abajo no
+    // puede pasar por un borrador que no existe.
+    const retenidos = await listFieldEventDrafts();
+    expect(retenidos).toMatchObject([{ id: d.id, cuenta: B, errorMessage: "observed_at_not_a_day" }]);
+    expect(retenidos[0]?.recuperacionGastada).not.toBe(true);
+
+    // Con A dentro ya es de otra cuenta: no sale.
+    await syncFieldEvents();
+    expect(llamadasAlLote()).toHaveLength(1);
+
+    dentro = B;
+    fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
+    expect(await syncFieldEvents()).toMatchObject({ applied: 1 });
+    expect(enviadosEnLaLlamada(1)).toEqual([d.id]);
+    expect(await listFieldEventDrafts()).toEqual([]);
+  });
 });
 
 describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", () => {
@@ -219,7 +266,7 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
   it("control: sin señal (el `fetch` lanza) el borrador sigue pendiente y se reenvía", async () => {
     const d = await queueDraft("inspection", inspeccion);
     fetchFalso.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    expect(await syncAll()).toEqual({ synced: 0, errored: 0, stillPending: 1, sessionExpired: false });
+    expect(await syncAll()).toEqual({ synced: 0, errored: 0, retained: 0, stillPending: 1, sessionExpired: false });
 
     fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
     await syncAll();
@@ -229,7 +276,7 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
   it("una sesión caducada (401) deja el borrador pendiente, lo dice, y el intento siguiente lo reenvía", async () => {
     const d = await queueDraft("inspection", inspeccion);
     fetchFalso.mockResolvedValueOnce(json(401, { error: "not_authenticated" }));
-    expect(await syncAll()).toEqual({ synced: 0, errored: 0, stillPending: 1, sessionExpired: true });
+    expect(await syncAll()).toEqual({ synced: 0, errored: 0, retained: 0, stillPending: 1, sessionExpired: true });
     expect(await listDrafts()).toMatchObject([{ id: d.id, status: "pending" }]);
 
     fetchFalso.mockResolvedValueOnce(json(200, { results: [{ clientDraftId: d.id, status: "applied" }] }));
@@ -254,7 +301,7 @@ describe("cola de apiario (`syncAll`): qué vuelve a mandar tras un rechazo", ()
   it("un 403 del lote (aparato revocado) queda en error con el motivo del servidor, igual que en campo, y no se reenvía", async () => {
     const d = await queueDraft("inspection", inspeccion);
     fetchFalso.mockResolvedValue(json(403, { error: "device_revoked" }));
-    expect(await syncAll()).toEqual({ synced: 0, errored: 1, stillPending: 0, sessionExpired: false });
+    expect(await syncAll()).toEqual({ synced: 0, errored: 1, retained: 0, stillPending: 0, sessionExpired: false });
     expect(await listDrafts()).toMatchObject([{ id: d.id, status: "error", errorMessage: "device_revoked" }]);
 
     await syncAll();
