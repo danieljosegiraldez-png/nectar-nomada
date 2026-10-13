@@ -962,8 +962,7 @@ describe("el replay aplica la revisión de trampa y no la duplica", () => {
 });
 
 /**
- * Tarea 11, ruling del controlador — el camino sin señal aplica la MISMA
- * regla que `recordRoundTrapCheckFormAction` (Tarea 10): procedencia y
+ * Tarea 11, ruling del controlador (Tarea 10) — en la ronda, procedencia y
  * observador se fijan en el SERVIDOR, nunca desde lo que trae la mutación.
  * Un payload de cola es tan falsificable como un `<input type="hidden">`
  * (SECURITY.md §2), así que aunque la mutación forjada trajera un observador
