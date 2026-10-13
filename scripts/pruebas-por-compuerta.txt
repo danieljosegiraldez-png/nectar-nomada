@@ -138,6 +138,7 @@ tests/sensory/descriptors.test.ts
 tests/sensory/informeExterno.test.ts
 tests/sensory/puntajeCalculado.test.ts
 tests/sensory/ruedas.test.ts
+tests/sync/aparatoDelToken.test.ts
 tests/sync/authorizationSnapshot.test.ts
 tests/sync/deviceOperator.test.ts
 tests/sync/deviceTokens.test.ts
@@ -154,6 +155,12 @@ tests/traceability/classificationGate.test.ts
 tests/traceability/drying.test.ts
 tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/historialDelLote.test.ts
+tests/traceability/idMalFormado.test.ts
+tests/traceability/idMalFormadoDeUbicacion.test.ts
+tests/apiary/idMalFormadoDeApiario.test.ts
+tests/idMalFormadoYFindUniqueOrThrow.test.ts
+tests/research/idMalFormado.test.ts
+tests/idMalFormadoRestantes.test.ts
 tests/traceability/subproductos.test.ts
 tests/traceability/venta-temprana.test.ts
 tests/inventario/materiales.test.ts

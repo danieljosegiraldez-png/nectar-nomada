@@ -8,7 +8,8 @@ import {
   syncFieldEvents,
   listFieldEventDrafts,
   discardFieldEventDraft,
-  estadoDeBorrador,
+  estadoTrasRelectura,
+  FIELD_DRAFTS_CHANGED_EVENT,
   FIELD_EVENTS_SYNCED_EVENT,
   type FieldEventDraft,
   type EstadoDeBorrador,
@@ -115,7 +116,9 @@ export function RondaDeTrampaForm({
   const actualizarDesdeBorrador = useCallback((borrador: FieldEventDraft | null) => {
     draftIdRef.current = borrador?.id ?? null;
     claveRef.current = borrador ? claveDelBorrador(borrador) : null;
-    setEstado(estadoDeBorrador(borrador));
+    // Con lo que se pintaba antes: un borrador que desaparece sólo se envió si
+    // estaba pendiente. Ver `estadoTrasRelectura`.
+    setEstado((previo) => estadoTrasRelectura(previo, borrador));
     setMotivoRechazo(borrador?.errorMessage ?? null);
   }, []);
 
@@ -140,7 +143,14 @@ export function RondaDeTrampaForm({
     void recomprobar();
     const alSincronizar = () => void recomprobar();
     window.addEventListener(FIELD_EVENTS_SYNCED_EVENT, alSincronizar);
-    return () => window.removeEventListener(FIELD_EVENTS_SYNCED_EVENT, alSincronizar);
+    // También cuando la cola cambia sin sincronizar: «Descartar las rechazadas»
+    // de `FieldSyncControls`, en esta misma página, quita el borrador de ESTA
+    // tarjeta sin pasar por ella.
+    window.addEventListener(FIELD_DRAFTS_CHANGED_EVENT, alSincronizar);
+    return () => {
+      window.removeEventListener(FIELD_EVENTS_SYNCED_EVENT, alSincronizar);
+      window.removeEventListener(FIELD_DRAFTS_CHANGED_EVENT, alSincronizar);
+    };
   }, [recomprobar]);
 
   const alEnviar = async (e: React.FormEvent<HTMLFormElement>) => {

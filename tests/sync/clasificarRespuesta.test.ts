@@ -4,6 +4,8 @@ import {
   leerJson,
   construirMutacionDesdeBorrador,
   estadoDeBorrador,
+  estadoTrasRelectura,
+  viajaEnLaProximaSincronizacion,
   type FieldEventDraft,
 } from "../../lib/sync/offlineQueue";
 
@@ -42,12 +44,33 @@ describe("clasificarRespuesta: qué significa el código de estado de un push", 
   });
 
   /**
+   * Decisión de Daniel, 2026-10-11. Una sesión caducada no es un juicio sobre lo
+   * anotado: volver a iniciar sesión lo arregla. Antes caía en «rechazar», y como
+   * un rechazo ya no se reenvía nunca, el trabajo bueno habría quedado varado
+   * aunque el operador volviera a entrar.
+   */
+  it("401 (sesión caducada) es «ahora no», no «no»", () => {
+    expect(clasificarRespuesta(401)).toBe("reintentar");
+  });
+
+  /**
+   * Decisión de Daniel, 2026-10-11. Un 413 dice «demasiado para una petición»,
+   * no nada sobre lo anotado. Las colas ya trocean en tandas del tope del
+   * servidor (`tests/sync/colaMasLargaQueElLote.test.ts`), así que sólo llega
+   * si el tope baja con una pestaña abierta que trae el código de antes:
+   * recargar lo arregla, y rechazarlo perdería trabajo bueno.
+   */
+  it("413 (lote demasiado grande) es «ahora no», no «no»", () => {
+    expect(clasificarRespuesta(413)).toBe("reintentar");
+  });
+
+  /**
    * 403 es el caso real: aparato revocado. El servidor corrió, miró y se negó.
    * Reintentarlo para siempre no lo va a arreglar, y esconderlo del operador
    * tampoco.
    */
   it("el resto de 4xx sí es un no del servidor", () => {
-    for (const s of [400, 401, 403, 404, 413, 422]) expect(clasificarRespuesta(s)).toBe("rechazar");
+    for (const s of [400, 403, 404, 422]) expect(clasificarRespuesta(s)).toBe("rechazar");
   });
 
   /**
@@ -232,5 +255,76 @@ describe("estadoDeBorrador: pendiente, rechazada o sincronizada", () => {
 
   it("status error es rechazada, NUNCA pendiente ni sincronizada", () => {
     expect(estadoDeBorrador({ status: "error" })).toBe("rechazada");
+  });
+});
+
+/**
+ * 2026-10-11 — lo que la tarjeta pinta al RE-leer la cola, sabiendo lo que pintaba.
+ *
+ * Desde ese día un rechazado no vuelve a viajar, así que sólo sale de la cola
+ * descartado —desde «Descartar las rechazadas» de `FieldSyncControls`, que está en
+ * la misma página que las tarjetas, o por la purga—. `estadoDeBorrador(null)` lo
+ * leería como «sincronizada», y la tarjeta diría «revisada hoy» de algo que se tiró.
+ */
+describe("estadoTrasRelectura: un rechazado que desaparece se descartó, no se envió", () => {
+  it("rechazada y ya no está en la cola: en blanco, como tras el descarte de la propia tarjeta", () => {
+    expect(estadoTrasRelectura("rechazada", null)).toBeNull();
+  });
+
+  it("control: pendiente y ya no está en la cola sí es sincronizada", () => {
+    expect(estadoTrasRelectura("pendiente", null)).toBe("sincronizada");
+  });
+
+  /**
+   * La misma regla al montar, y el defecto que había debajo: sin borrador de esta
+   * trampa en la cola, la tarjeta pintaba «Revisada hoy. Enviada.» de una trampa
+   * que nadie revisó desde este aparato. Y es el camino que sigue a un descarte:
+   * la tarjeta olvida la clave, y la relectura siguiente llega aquí con `null`.
+   */
+  it("nunca vio un borrador y no hay ninguno: nada que decir, no «Enviada»", () => {
+    expect(estadoTrasRelectura(null, null)).toBeNull();
+  });
+
+  it("ya se pintó «sincronizada» y la cola sigue sin él: se mantiene", () => {
+    expect(estadoTrasRelectura("sincronizada", null)).toBe("sincronizada");
+  });
+
+  it("si el borrador sigue en la cola manda lo que dice el borrador, no lo que había", () => {
+    expect(estadoTrasRelectura("rechazada", { status: "pending" })).toBe("pendiente");
+    expect(estadoTrasRelectura("pendiente", { status: "error" })).toBe("rechazada");
+  });
+});
+
+/**
+ * Decisión de Daniel, 2026-10-12: lo rechazado por `observed_at_not_a_day` antes del
+ * #723 viaja UNA vez más. La misma función decide qué recoge la cola, qué cuenta la
+ * pantalla como pendiente y qué ofrece descartar, para que las tres no discrepen.
+ */
+describe("viajaEnLaProximaSincronizacion: lo que la cola vuelve a recoger", () => {
+  it("lo pendiente viaja", () => {
+    expect(viajaEnLaProximaSincronizacion({ status: "pending" })).toBe(true);
+  });
+
+  it("un rechazo viejo por observed_at_not_a_day viaja una vez más", () => {
+    expect(viajaEnLaProximaSincronizacion({ status: "error", errorMessage: "observed_at_not_a_day" })).toBe(true);
+  });
+
+  it("el mismo con el reintento gastado ya no", () => {
+    expect(
+      viajaEnLaProximaSincronizacion({ status: "error", errorMessage: "observed_at_not_a_day", recuperacionGastada: true }),
+    ).toBe(false);
+  });
+
+  it("control: cualquier otro rechazo no viaja", () => {
+    for (const motivo of ["observer_self_missing", "device_revoked", "HTTP 403", undefined]) {
+      expect(viajaEnLaProximaSincronizacion({ status: "error", errorMessage: motivo })).toBe(false);
+    }
+  });
+
+  it("la tarjeta pinta pendiente lo que va a volver a salir, no rechazada", () => {
+    expect(estadoDeBorrador({ status: "error", errorMessage: "observed_at_not_a_day" })).toBe("pendiente");
+    expect(
+      estadoDeBorrador({ status: "error", errorMessage: "observed_at_not_a_day", recuperacionGastada: true }),
+    ).toBe("rechazada");
   });
 });

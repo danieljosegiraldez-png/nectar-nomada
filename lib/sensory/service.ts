@@ -14,6 +14,7 @@
  */
 import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
 import { clearsClassification } from "../rbac/scopeClassification";
@@ -58,6 +59,9 @@ export class SensoryPurposeNotDeclaredError extends Error {
  * is itself information about the session.
  */
 async function grantedKeysForSession(userAccountId: string, sessionId: string): Promise<Set<string>> {
+  // El id llega de la URL de `sensory/[sessionId]`. Sin forma de UUID, Prisma lanzaba `P2007` y la
+  // página daba 500 (PENDING_IMPLEMENTATIONS/026); recibe lo mismo que una sesión que no existe.
+  if (!UUID.test(sessionId)) throw new SensoryAccessError("no_session_access");
   const target: ScopeTarget = { scopeType: "session", scopeRefId: sessionId };
   const [grantedKeys, session] = await Promise.all([
     resolvedPermissionKeys(userAccountId, target),

@@ -13,6 +13,7 @@
  * vigilar dos entradas del router para un flujo que nunca se usa a medias.
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
+import { negativaDelAparato } from "../../../../../lib/sync/deviceTokens";
 import {
   requestFieldMediaUpload,
   finalizeFieldMedia,
@@ -33,6 +34,10 @@ export async function POST(request: Request) {
   // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
   const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  // Los dos pasos escriben —uno firma una subida, el otro crea la foto—, así que
+  // un aparato revocado no pasa de aquí aunque su access siga vigente.
+  const negativa = await negativaDelAparato(user.deviceId);
+  if (negativa) return Response.json({ error: negativa }, { status: 403 });
 
   const paso = new URL(request.url).searchParams.get("paso");
   if (paso !== "solicitar" && paso !== "finalizar") {
@@ -61,6 +66,13 @@ export async function POST(request: Request) {
         fieldSessionId, originalFilename, contentType,
       });
       return Response.json(r, { status: 200 });
+    }
+
+    // Por token, el aparato lo dice el token: el `deviceId` del cuerpo tiene que
+    // ser el suyo, o la foto quedaría atribuida a un aparato que no la tomó. Por
+    // cookie (`deviceId === null`) no hay aparato propio y sigue siendo opcional.
+    if (user.deviceId !== null && body.deviceId !== user.deviceId) {
+      return Response.json({ error: "device_mismatch" }, { status: 403 });
     }
 
     const occurredAt = fecha(body.occurredAt);

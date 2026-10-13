@@ -21,10 +21,36 @@ import { verifyPassword } from "../auth/password";
  *
  * **Revocación.** `Device.revokedAt` corta el refresco al instante. Un access ya
  * emitido sigue siendo criptográficamente válido hasta que expira —eso es
- * inherente a un token sin estado— pero **no sirve para escribir**:
- * `pushFieldEvents` comprueba `revokedAt` en cada lote, así que un aparato
- * revocado no mete una fila ni dentro de esa hora. La ventana es de lectura, y
- * es la que el audit §19 acepta a cambio de no consultar la base por petición.
+ * inherente a un token sin estado—, y lo que hace en esa hora depende de la
+ * ruta, no de este módulo:
+ *
+ * - **Las escrituras se niegan.** `pushFieldEvents` comprueba `revokedAt` en
+ *   cada lote sobre el aparato del cuerpo, que por token tiene que ser el del
+ *   token (hasta el 2026-10-09 no se comparaban). `field-media` —los dos pasos—
+ *   y `POST /api/v1/devices` llaman antes de nada a `negativaDelAparato`, al
+ *   final de este archivo. Hasta el 2026-10-10 no lo hacían, y con el access
+ *   vigente de un aparato revocado se firmaba una subida (200), se creaba la
+ *   foto (200) y se daba de alta otro aparato (201). Lo vigila
+ *   `tests/sync/aparatoDelToken.test.ts`.
+ * - **Las lecturas no se niegan.** Los dos GET (`sync/authorization` y
+ *   `sync/field-work`) no comprueban la revocación —no consultan `Device`;
+ *   sí leen, claro, los datos que sirven—, así que en esa hora un aparato
+ *   revocado todavía puede LEER lo que ve su cuenta.
+ *
+ * El reparto es decisión de Daniel del 2026-10-10: una consulta por clave
+ * primaria en cada escritura, ninguna en cada lectura. El audit §19 pide que lo
+ * de un aparato revocado se rechace al sincronizar, no que se le corte la
+ * lectura. **Una ruta nueva que escriba por Bearer tiene que llamar a
+ * `negativaDelAparato`**, porque ningún guardia lo exige.
+ *
+ * **Lo que la comprobación NO cierra, dicho para que nadie lo cuente:**
+ * - se hace **al empezar** la petición, fuera de la transacción que escribe:
+ *   una revocación que llega con una escritura ya en curso no la detiene. Es la
+ *   misma forma que `pushFieldEvents`, que comprueba una vez por lote;
+ * - una URL de subida firmada **antes** de revocar sigue valiendo sus 300 s
+ *   (`lib/integrations/storage/r2.ts`): con ella se suben bytes a R2, pero el
+ *   `finalizar` posterior se niega, así que no nace ni Asset ni FieldEvent —
+ *   queda un objeto huérfano, el problema de `PENDING_IMPLEMENTATIONS/002`.
  *
  * **Sin rotación de refresh en esta versión.** Rotar es una mitigación real
  * contra el robo del token, pero obliga a resolver la carrera de dos refrescos
@@ -143,8 +169,10 @@ async function emitirAccess(deviceId: string, userAccountId: string) {
 }
 
 /**
- * Canjea un refresh por un access. Aquí sí se consulta la base — es la única
- * petición del carril que lo hace, y por eso es donde la revocación muerde.
+ * Canjea un refresh por un access. Aquí sí se consulta la base, y es donde la
+ * revocación muerde primero: un aparato revocado no obtiene ningún access nuevo.
+ * Las escrituras con el access que ya tenía las niegan `negativaDelAparato` y,
+ * en el push de eventos, `pushFieldEvents` (ver «Revocación» arriba).
  */
 export async function refrescarAcceso(refreshToken: string) {
   const device = await prisma.device.findUnique({
@@ -189,4 +217,23 @@ export function interpretarAutorizacion(
     if (error instanceof DeviceAuthError) return { hayBearer: true, principal: null };
     throw error;
   }
+}
+
+/**
+ * Para las rutas que ESCRIBEN: si el aparato del token ya no puede escribir,
+ * por qué. `null` es que puede, y también lo que vale sin aparato (`deviceId`
+ * nulo: el carril de la cookie, donde no hay aparato del token que mirar).
+ *
+ * `interpretarAutorizacion` verifica el access por firma, sin la base, y así
+ * debe seguir para las lecturas. Esto es la consulta que pagan sólo las
+ * escrituras —ver «Revocación» en la cabecera—, con los mismos códigos que
+ * `pushFieldEvents` da sobre el aparato del lote.
+ */
+export async function negativaDelAparato(
+  deviceId: string | null,
+): Promise<"device_not_found" | "device_revoked" | null> {
+  if (deviceId === null) return null;
+  const device = await prisma.device.findUnique({ where: { id: deviceId }, select: { revokedAt: true } });
+  if (!device) return "device_not_found";
+  return device.revokedAt ? "device_revoked" : null;
 }

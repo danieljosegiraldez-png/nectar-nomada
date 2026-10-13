@@ -138,9 +138,15 @@ export interface SyncFotosSummary {
  * finalizar) es por fotografía, a diferencia del lote único de
  * `syncFieldEvents`. Una foto sin señal a mitad de camino se queda en cola tal
  * cual, sin marcar error — nadie evaluó su contenido.
+ *
+ * **Una rechazada no se vuelve a subir.** Hasta el 2026-10-11 el filtro recogía
+ * también las `error`, y como `SincronizarFotosDeRonda` sincroniza con cada
+ * sincronización de revisiones, cada vez pedía URL nueva y volvía a subir la
+ * foto ENTERA por la señal del campo. Un rechazo sólo se descarta (decisión de
+ * Daniel de ese día); lo prueba `tests/sync/rechazoTerminalEnLasColas.test.ts`.
  */
 export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
-  const fotos = (await listTrapPhotoDrafts()).filter((f) => f.status === "pending" || f.status === "error");
+  const fotos = (await listTrapPhotoDrafts()).filter((f) => f.status === "pending");
   let applied = 0;
   let rejected = 0;
   for (const foto of fotos) {
@@ -196,5 +202,5 @@ export async function syncTrapPhotos(): Promise<SyncFotosSummary> {
       // Sin señal a mitad de camino: se deja en cola.
     }
   }
-  return { applied, rejected, stillPending: (await listTrapPhotoDrafts()).length };
+  return { applied, rejected, stillPending: (await listTrapPhotoDrafts()).filter((f) => f.status === "pending").length };
 }
