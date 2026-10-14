@@ -13,13 +13,15 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**642 operaciones** que tocan la base, en **175 archivos** — medido el 2026-10-12 con `node scripts/inventario-de-acceso.mjs`: es **una más** que las
-641 en 174 de la medición anterior, y es `exigePasoCoherente` (`lib/recetas/guardian.ts`, tarea 7 del PR-B: ver la primera nota de abajo), de la clase
-«depende del llamador»; las otras seis filas no se mueven. **La medición anterior**, también del 2026-10-12 y de la tarea 6 del PR-B: **641 operaciones**
-en **174 archivos**, **una más** que las 640 en 173 de la anterior, y era `avanceDelProceso` (`lib/recetas/avance.ts`: ver la segunda nota de abajo), de la
+**646 operaciones** que tocan la base, en **176 archivos** — medido el 2026-10-14 con `node scripts/inventario-de-acceso.mjs`: son **cuatro más** que las
+642 en 175 de la medición anterior, y son las cuatro de la receta Libre (`lib/recetas/libre.ts`, un archivo nuevo, y dos de `lib/recetas/pasos.ts`, tarea 10 del PR-B: ver la
+primera nota de abajo): una «guardia directo», dos «depende del llamador» y una «recibe principal»; las otras cuatro filas no se mueven. **La medición anterior**, del
+2026-10-12 y de la tarea 7 del PR-B: **642 operaciones** en **175 archivos**, **una más** que las 641 en 174 de la anterior, y era `exigePasoCoherente`
+(`lib/recetas/guardian.ts`: ver la segunda nota de abajo), de la clase «depende del llamador». **La anterior a ésa**, también del 2026-10-12 y de la tarea 6 del PR-B: **641 operaciones**
+en **174 archivos**, **una más** que las 640 en 173 de la anterior, y era `avanceDelProceso` (`lib/recetas/avance.ts`: ver la tercera nota de abajo), de la
 misma clase. **La anterior a ésa**, del 2026-10-11 con el mismo script, al volver a unir
 `origin/main` (`62a206da`) en la rama de la Parte 2a: **640 operaciones** en **173 archivos**, **tres más** que las 637 en 173 de la unión anterior, y las tres vienen de `main`
-(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la tercera nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
+(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la cuarta nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
 y las otras seis filas no se mueven (ninguna operación de la rama cambia de clase). **La unión anterior**, medida el 2026-10-10 al unir `a2f269b5`: **637 operaciones** en **173 archivos**, que eran **tres más** que las 634 en 173 de la rama antes de unir, y las tres
 vienen de `main` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`,
 **guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #687), y
@@ -48,13 +50,27 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **402** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **403** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **67** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **103** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **105** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
-| **22** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 22 en total: `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx` y `dividirProcesoEnTx`, que reciben el principal sólo para firmar |
+| **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 23 en total (la última, de la tarea 10 de la Parte 2a): `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, `dividirProcesoEnTx` y `crearRecetaLibreEnTx` (que firma la receta Libre y su evento), que reciben el principal sólo para firmar |
+
+> **La receta Libre dentro de la apertura (Parte 2a, tarea 10 del PR-B, 2026-10-14): 642→646, 175→176 archivos,
+> «guardia directo» 402→403, «depende del llamador» 103→105 y «recibía principal sin guardia visible»
+> 22→23.** `lib/recetas/libre.ts` es el archivo nuevo: `parecidoDeLaLibre` pregunta si los pasos de una Libre ya son una
+> receta publicada y pide `lot:manage` sobre el lote ANTES de leer nada (guardia directo); `crearRecetaLibreEnTx` es el núcleo con `tx` que crea la
+> receta Libre dentro de la transacción de `abrirProceso` y recibe el principal sólo para firmar (la clase «recibe principal»,
+> como `abrirProcesoEnTx`). En `lib/recetas/pasos.ts`, `validarPasosPlaneados` y `escribirPasosPlaneados` no reciben principal; la
+> primera la llama `abrirProceso` y la segunda `crearRecetaLibreEnTx`, las dos después de gestionar el lote: dependen del llamador.
+> **Lo que dicen sus razones lo sostiene una prueba, no el comentario** (Ruling INV):
+> `tests/arquitectura/pasos-planeados-un-solo-camino.test.ts` falla si otro archivo nombra `escribirPasosPlaneados` (sólo `libre.ts`) o
+> `crearRecetaLibreEnTx` (sólo `lotProcess.ts`). El plan de la tarea fijaba sólo la primera; la segunda —que crea una receta publicada en la
+> organización que se le pase, sin pedir la autoría— se fijó también, porque su razón decía «su único llamador es `abrirProceso`» y nada lo
+> comprobaba. Ninguna de las cuatro pide la autoría de recetas, a propósito: una Libre no la exige (V13: abrir un proceso es `lot:manage`;
+> diseño §5.2). `abrirProceso` y `parecido.ts` (puro, sin base) no cambian ninguna fila.
 
 > **El guardián de pasos (Parte 2a, tarea 7 del PR-B, 2026-10-12): 641→642, 174→175 archivos y «depende del llamador» 102→103.**
 > `exigePasoCoherente` (`lib/recetas/guardian.ts`) es nueva y recibe sólo la transacción de quien la llama, como el resto de la familia «reciben

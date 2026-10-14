@@ -685,7 +685,7 @@
     },
     {
       "archivo": "lib/recetas/pasos.ts",
-      "razon": "Módulo de dominio: la receta como lista ordenada de pasos (Parte 2a, tarea 3, 2026-10-04). Sus seis operaciones exportadas autorizan antes de leer o escribir —las cinco que escriben, con `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso `lot:approve_exception` del Coffee Process Manager, V16); `pasosDeLaVersion`, con esa misma regla o con `requireLotAccess(manage)` sobre un lote de la organización, como `getRecipeForEditor`, y, si la receta es Libre, con `requireLotAccess(view)` sobre el lote de cada proceso que la usa (R24)—, y `agregarPaso` y `actualizarPaso` piden además `requireLotAccess(view)` sobre el lote de cada lectura de cierre que un fin cita (R6), y toda escritura va en una transacción que bloquea la versión y vuelve a leer su estado."
+      "razon": "Módulo de dominio: la receta como lista ordenada de pasos (Parte 2a, tarea 3, 2026-10-04). Sus seis operaciones exportadas autorizan antes de leer o escribir —las cinco que escriben, con `exigeAutoriaDeReceta` (`lib/recetas/autoria.ts`: el permiso `lot:approve_exception` del Coffee Process Manager, V16); `pasosDeLaVersion`, con esa misma regla o con `requireLotAccess(manage)` sobre un lote de la organización, como `getRecipeForEditor`, y, si la receta es Libre, con `requireLotAccess(view)` sobre el lote de cada proceso que la usa (R24)—, y `agregarPaso` y `actualizarPaso` piden además `requireLotAccess(view)` sobre el lote de cada lectura de cierre que un fin cita (R6), y toda escritura va en una transacción que bloquea la versión y vuelve a leer su estado. Parte 2a, tarea 10: dos exportadas más, `validarPasosPlaneados` y `escribirPasosPlaneados`, NO autorizan —las llama `abrirProceso` (la segunda, por `crearRecetaLibreEnTx`) después de `loteGestionable`, para una receta Libre, que no pide la autoría de recetas (V13: abrir es `lot:manage`)—."
     },
     {
       "archivo": "lib/recetas/versiones.ts",
@@ -698,6 +698,10 @@
     {
       "archivo": "lib/recetas/avance.ts",
       "razon": "Parte 2a, tarea 6 (§4.3): importa el cliente SÓLO como tipo (`import type { prisma }`), para la firma que fija el plan, `avanceDelProceso(tx: Prisma.TransactionClient | typeof prisma, lotId)`, que deja leer con el cliente global fuera de una transacción. En tiempo de ejecución consulta con el `tx` que recibe; no abre conexión."
+    },
+    {
+      "archivo": "lib/recetas/libre.ts",
+      "razon": "Módulo de dominio: la receta Libre (Parte 2a, tarea 10, 2026-10-03). Importa el cliente global sólo para `parecidoDeLaLibre`, la pregunta que la pantalla de abrir hace antes de enviar: autoriza con `requireLotAccess(manage)` sobre el lote, ANTES de leer nada, y lee, sin escribir nada, las recetas publicadas de la organización de ese lote. Todo lo que escribe (`crearRecetaLibreEnTx`) va con el `tx` de la transacción de `abrirProceso`."
     }
   ],
   "reciben_transaccion": [
@@ -825,7 +829,7 @@
     },
     {
       "archivo": "lib/recetas/pasos.ts",
-      "razon": "Parte 2a, tarea 3 (2026-10-04): sus ayudantes privados (`bloquearBorrador`, `idsEnOrden`, `apartar`, `colocar`, `escribirHijos`, `borrarHijos`, `leerPasos`) reciben el `tx` de la transacción que abre la propia operación exportada, después de autorizar; `leerPasos` recibe el cliente global cuando sólo se lee. Ninguno se exporta ni autoriza por su cuenta."
+      "razon": "Parte 2a, tarea 3 (2026-10-04): sus ayudantes privados (`bloquearBorrador`, `idsEnOrden`, `apartar`, `colocar`, `escribirHijos`, `borrarHijos`, `leerPasos`) reciben el `tx` de la transacción que abre la propia operación exportada, después de autorizar; `leerPasos` recibe el cliente global cuando sólo se lee. Ninguno autoriza por su cuenta, y los ayudantes privados siguen sin exportarse; las dos exportadas de la receta Libre (tarea 10), `validarPasosPlaneados` y `escribirPasosPlaneados`, están en `dependen_del_llamador`: las llama `abrirProceso` —la segunda por `crearRecetaLibreEnTx`— con el `tx` que ya autorizó."
     },
     {
       "archivo": "lib/recetas/versiones.ts",
@@ -838,6 +842,10 @@
     {
       "archivo": "lib/recetas/guardian.ts",
       "razon": "Parte 2a, tarea 7: `exigePasoCoherente` recibe el cliente de la transacción de la puerta que escribe el registro —una corrida o un manejo de fermentación; desde la tarea 8 también una intervención del proceso— para decidir con el linaje ya bloqueado. No abre conexión ni importa lib/db, y no autoriza: sus llamadores ya pidieron gestionar el lote antes de abrir su transacción."
+    },
+    {
+      "archivo": "lib/recetas/libre.ts",
+      "razon": "Parte 2a, tarea 10: `crearRecetaLibreEnTx` y su ayudante privado `buscarParecida` reciben el `tx` de la transacción de `abrirProceso`, que ya autorizó el lote (`loteGestionable`, `requireLotAccess(manage)`) y bloqueó el linaje; `buscarParecida` recibe además el cliente global cuando sólo pregunta (`parecidoDeLaLibre`, que autoriza antes). Ninguno autoriza por su cuenta: una receta Libre no pide la autoría de recetas (V13: abrir un proceso, también con Libre, es `lot:manage`; diseño §5.2)."
     }
   ],
   "operaciones_sin_patron": [
@@ -952,6 +960,12 @@
       "operacion": "dividirProcesoEnTx",
       "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/recetas/libre.ts",
+      "operacion": "crearRecetaLibreEnTx",
+      "razon": "Núcleo con `tx` que crea la receta Libre de un proceso: la receta publicada de la organización, con la clasificación del lote que le pasa quien llama (R8), su versión 1, sus pasos y fases, y su evento de auditoría, todo en la transacción de `abrirProceso`. Recibe el principal sólo para firmar `createdBy` y el evento: no decide nada ni autoriza. Su único llamador es `abrirProceso`, que pidió `requireLotAccess(\"manage\")` sobre el lote con `loteGestionable` antes de abrir su transacción y bloqueó el linaje con `bloquearLinaje` como lo primero de ella; y esa frase NO se sostiene sola (Ruling INV): `tests/arquitectura/pasos-planeados-un-solo-camino.test.ts` falla si otro archivo de `lib/`, `app/`, `scripts/` o `prisma/` nombra la función. No hay otro permiso que pedir, porque una Libre no exige la autoría de recetas (V13).",
+      "verificado": "2026-10-14"
     }
   ],
   "dependen_del_llamador": [
@@ -1572,6 +1586,18 @@
       "operacion": "exigePasoCoherente",
       "razon": "Decide si un registro del lote cumple un paso de la receta del proceso (paso_de_otra_receta, paso_no_corresponde; el tipo se toma del paso) o es una desviación que exige motivo (desviacion_sin_motivo), diseño §4.2 y §4.4. Lee un paso y valores de tipo_paso; no escribe, no bloquea ni recibe principal. Corre dentro de la transacción de quien la llama, con el linaje ya bloqueado: startFermentationRun y startDryingRun (fermentation.ts, drying.ts), después de pedir gestionar el lote de la corrida y de procesoAbiertoParaCorrida; y recordFermentationIntervention (fermentation.ts), después de pedir gestionar el lote de entrada de la corrida y de bloquearLinaje. Quien la llame debe haber autorizado el lote antes; lo prueba tests/recetas/guardian.test.ts puerta por puerta.",
       "verificado": "2026-10-12"
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "operacion": "validarPasosPlaneados",
+      "razon": "No recibe principal. Valida los pasos que una Libre planea —el tope de pasos, el tipo de cada uno, los ejes que le tocan, los números posibles y los valores de SU catálogo— leyendo sólo catálogos, y rechaza sin leer nada todo fin que cite una lectura de cierre (R6: una Libre se define antes de ejecutarse); no lee ni escribe nada de ninguna organización. La llama `abrirProceso`, después de `loteGestionable` (`requireLotAccess(manage)` sobre el lote): una Libre no pide la autoría de recetas (V13). Quien la llame debe haber autorizado el lote antes; lo que devuelve son los pasos ya validados, que sólo `escribirPasosPlaneados` escribe.",
+      "verificado": "2026-10-14"
+    },
+    {
+      "archivo": "lib/recetas/pasos.ts",
+      "operacion": "escribirPasosPlaneados",
+      "razon": "No recibe principal. Escribe con el `tx` de quien la llama los pasos de la versión SIN pasos de una receta Libre —lo comprueba ella misma al leer la versión: una de otra clase de receta, o que ya tiene pasos, se rechaza (R14)—, con sus hijas, y deriva sus fases; no audita (lo hace `crearRecetaLibreEnTx`, con el resultado). Su único llamador es `crearRecetaLibreEnTx`, dentro de la transacción de `abrirProceso`, que ya autorizó el lote y bloqueó el linaje, y `tests/arquitectura/pasos-planeados-un-solo-camino.test.ts` lo fija. Quien la llame debe haberlo hecho antes.",
+      "verificado": "2026-10-14"
     }
   ]
 }

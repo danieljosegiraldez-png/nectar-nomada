@@ -60,6 +60,8 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   // Parte 2a, tarea 8: una intervención del proceso sin paso, sin tipo de paso y sin valor de catálogo no dice qué se hizo
   // (decisión de Daniel, 2026-10-03: el acto es el tipo de paso). La base lo exige igual (`lot_process_intervention_catalogo_o_tipo`).
   "intervencion_sin_acto",
+  // Parte 2a, tarea 10 (2026-10-04): una Libre se define al abrir, no se elige por su id (diseño §5.2). Lo lanza `abrirProceso`.
+  "receta_libre_no_se_elige",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

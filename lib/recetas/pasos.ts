@@ -42,6 +42,7 @@ import { validateTargets } from "../traceability/processTargets";
 import { boundsFor } from "../traceability/units";
 import { exigeAutoriaDeReceta, puedeAutoriaDeReceta } from "./autoria";
 import { RecipeError } from "./errorDeReceta";
+import { MAX_PASOS_PLANEADOS } from "./parecido";
 import {
   EJES_POR_TIPO_DE_PASO,
   FASE_DEL_TIPO,
@@ -874,6 +875,37 @@ export async function moverPaso(userAccountId: string, input: { stepId: string; 
 }
 
 /**
+ * Diseño §3.1: las fases de una versión con pasos se DERIVAN —una por fase, del PRIMER paso de esa fase en `seq`, según
+ * `FASE_DEL_TIPO`— y reemplazan a las que hubiera: quedan como compatibilidad para los lectores que leen fases y no pasos. Recibe los
+ * pasos ya leídos, en `seq`; sin pasos no toca nada.
+ *
+ * La llaman `publicarVersion` (al publicar un borrador) y `escribirPasosPlaneados` (tarea 10: una Libre nace publicada). Sacada
+ * de `publicarVersion` sin cambiar lo que hace; la prueba de §3.1 de `tests/recetas/pasos.test.ts` la vigila.
+ */
+async function derivarFases(tx: Tx, recipeVersionId: string, pasos: readonly PasoConDetalle[]) {
+  if (pasos.length === 0) return;
+  const primeroDeCadaFase = new Map<ProcessPhase, PasoConDetalle>();
+  for (const p of pasos) {
+    const fase = FASE_DEL_TIPO[p.tipo];
+    if (fase && !primeroDeCadaFase.has(fase)) primeroDeCadaFase.set(fase, p);
+  }
+  await tx.processRecipePhase.deleteMany({ where: { recipeVersionId } });
+  for (const [phase, p] of primeroDeCadaFase) {
+    // `validarPaso` sólo deja volteo y banda de humedad en un paso de secado: en la fase de fermentación salen nulos.
+    await tx.processRecipePhase.create({
+      data: {
+        recipeVersionId,
+        phase,
+        expectedHours: p.horasSugeridas,
+        turnEveryHours: p.volteoCadaHoras,
+        targetMoistureMinPct: p.humedadMinPct,
+        targetMoistureMaxPct: p.humedadMaxPct,
+      },
+    });
+  }
+}
+
+/**
  * Publica un borrador: pasa a `approved`, y desde ahí no se edita (diseño §3.3).
  *
  * **Sin pasos no se publica** (I9, `version_sin_pasos`): desde la 2a toda versión nueva se publica con pasos, porque son lo que
@@ -895,25 +927,7 @@ export async function publicarVersion(userAccountId: string, recipeVersionId: st
 
     const pasos = await leerPasos(tx, recipeVersionId);
     if (pasos.length === 0) throw new RecipeError("version_sin_pasos");
-    const primeroDeCadaFase = new Map<ProcessPhase, PasoConDetalle>();
-    for (const p of pasos) {
-      const fase = FASE_DEL_TIPO[p.tipo];
-      if (fase && !primeroDeCadaFase.has(fase)) primeroDeCadaFase.set(fase, p);
-    }
-    await tx.processRecipePhase.deleteMany({ where: { recipeVersionId } });
-    for (const [phase, p] of primeroDeCadaFase) {
-      // `validarPaso` sólo deja volteo y banda de humedad en un paso de secado: en la fase de fermentación salen nulos.
-      await tx.processRecipePhase.create({
-        data: {
-          recipeVersionId,
-          phase,
-          expectedHours: p.horasSugeridas,
-          turnEveryHours: p.volteoCadaHoras,
-          targetMoistureMinPct: p.humedadMinPct,
-          targetMoistureMaxPct: p.humedadMaxPct,
-        },
-      });
-    }
+    await derivarFases(tx, recipeVersionId, pasos);
 
     const despues = await tx.processRecipeVersion.update({
       where: { id: recipeVersionId },
@@ -949,4 +963,76 @@ export async function pasosDeLaVersion(userAccountId: string, recipeVersionId: s
   }
   await exigeLecturaDeLosPasos(userAccountId, version.recipe.organizationId);
   return leerPasos(prisma, recipeVersionId);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Los pasos de una receta Libre (Parte 2a, tarea 10, diseño §5.2)
+// ---------------------------------------------------------------------------------------------------------------------------
+
+/** Un paso planeado de una Libre, ya validado: su tipo resuelto y todos sus datos dichos. Lo produce `validarPasosPlaneados`. */
+export interface PasoPlaneado {
+  tipo: TipoDePaso;
+  paso: PasoCompleto;
+}
+
+/**
+ * Valida los pasos que una Libre planea, ANTES de abrir la transacción (como cada operación de arriba): el tipo de cada uno, los
+ * ejes que le tocan, los números posibles y los valores de SU catálogo. Devuelve los pasos completos, en el orden dado.
+ *
+ * **No autoriza, a propósito** (§5.2 y V13: abrir, también con Libre, es `lot:manage`, y la autoría de recetas es del Coffee
+ * Process Manager, V16): lo llama `abrirProceso` después de gestionar el lote. Es lo único de este archivo que no pasa por la
+ * regla de autoría, y por eso no se exporta ningún camino que escriba con ella: sólo `escribirPasosPlaneados`, que además
+ * comprueba a qué versión escribe y tiene un solo llamador.
+ *
+ * **Dos cosas que una Libre no acepta y una receta publicada sí** (revisión del 2026-10-05, R6). Más de `MAX_PASOS_PLANEADOS` pasos
+ * —el mismo número que lee la pantalla—, y un fin con `desdeLecturaId`: una Libre se define ANTES de ejecutarse (§5.2), así que ninguna
+ * lectura de cierre existe todavía de la que un fin pueda salir (el §5.3 las marca al ejecutar, y la conversión de la tarea 11 es la
+ * que propone fines desde ellas). La segunda comprobación **no pregunta a la base si la lectura está marcada**: rechaza todo
+ * `desdeLecturaId`, así que una lectura marcada de verdad, una de otra organización y un id cualquiera se rechazan por la misma razón y por
+ * el mismo camino, antes de cualquier consulta. Va después de `completar`, que es lo que ya trata un id en blanco como «ninguno».
+ */
+export async function validarPasosPlaneados(pasos: readonly PasoEditable[]): Promise<PasoPlaneado[]> {
+  if (pasos.length > MAX_PASOS_PLANEADOS) throw new RecipeError("libre_demasiados_pasos");
+  const planeados: PasoPlaneado[] = [];
+  for (const entrada of pasos) {
+    const paso = completar(entrada);
+    if (paso.fines.some((f) => f.desdeLecturaId != null)) throw new RecipeError("libre_con_lectura_de_cierre");
+    const tipo = await tipoDelPaso(paso.stepTypeValueId);
+    validarPaso(tipo, paso);
+    await exigeValoresDelPaso(tipo, paso);
+    planeados.push({ tipo, paso });
+  }
+  return planeados;
+}
+
+/**
+ * Escribe los pasos planeados de una Libre en su versión RECIÉN creada, DENTRO de la transacción de quien llama, con sus hijas, y
+ * deriva sus fases como al publicar. La versión no tiene pasos todavía: `seq` es el lugar en la lista, de 1 a n, sin apartar nada.
+ * Devuelve los pasos tal como los lee la pantalla, para el «después» de la auditoría de quien llama. No audita ni autoriza.
+ *
+ * **Lo que dice que es, lo comprueba** (R14, revisión del 2026-10-05). No autoriza —una Libre no pide la autoría de recetas—, y
+ * exportada sin comprobar nada habría escrito pasos en una versión `approved` de antes de la 2a, o en el borrador de otra
+ * organización, saltándose la regla de autoría (V16). Lee la versión DENTRO de la transacción y exige que su receta sea Libre y que no
+ * tenga pasos; si no, un `Error` común: una invariante rota de quien llama, no algo que una persona pueda provocar (`abrirProceso` crea la
+ * receta unas líneas antes), y por eso sin código ni texto. Sus llamadores los fija
+ * `tests/arquitectura/pasos-planeados-un-solo-camino.test.ts`: sólo `lib/recetas/libre.ts`.
+ */
+export async function escribirPasosPlaneados(tx: Tx, recipeVersionId: string, planeados: readonly PasoPlaneado[]) {
+  const version = await tx.processRecipeVersion.findUnique({
+    where: { id: recipeVersionId },
+    select: { recipe: { select: { esLibre: true } }, _count: { select: { steps: true } } },
+  });
+  if (!version) throw new Error("escribirPasosPlaneados: esa versión no existe");
+  if (!version.recipe.esLibre) throw new Error("escribirPasosPlaneados: sólo escribe los pasos de una receta Libre");
+  if (version._count.steps > 0) throw new Error("escribirPasosPlaneados: esa versión ya tiene pasos");
+  for (const [i, { tipo, paso }] of planeados.entries()) {
+    const creado = await tx.processRecipeStep.create({
+      data: { recipeVersionId, seq: i + 1, ...columnas(paso) },
+      select: { id: true },
+    });
+    await escribirHijos(tx, recipeVersionId, creado.id, tipo, paso);
+  }
+  const pasos = await leerPasos(tx, recipeVersionId);
+  await derivarFases(tx, recipeVersionId, pasos);
+  return pasos;
 }

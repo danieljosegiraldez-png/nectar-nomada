@@ -80,6 +80,8 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "desviacion_sin_motivo",
   // Parte 2a, tarea 8: la intervención del proceso sin paso, tipo ni valor de catálogo.
   "intervencion_sin_acto",
+  // Parte 2a, tarea 10 (2026-10-04): una receta Libre no se elige por su id (diseño §5.2).
+  "receta_libre_no_se_elige",
 ];
 
 /**

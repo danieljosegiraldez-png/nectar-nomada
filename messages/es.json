@@ -1991,6 +1991,7 @@
     "error_proceso_paso_no_corresponde": "Ese tipo de paso no se cumple con este registro: una fermentación, un secado y cada manejo sólo cumplen los tipos de su clase, y con un paso de la receta el tipo es el del paso. Elige un paso o un tipo de esa clase, o ninguno.",
     "error_proceso_desviacion_sin_motivo": "La receta de este proceso tiene pasos y no elegiste ninguno. Elige el paso que estás cumpliendo o, si lo que hiciste está fuera de la receta, escribe el motivo: quedará registrado como desviación.",
     "error_proceso_intervencion_sin_acto": "Falta decir qué se hizo: una intervención lleva el paso de la receta que cumple, su tipo de paso o un valor del vocabulario de manejos.",
+    "error_proceso_receta_libre_no_se_elige": "Esa receta es una Libre: se define al abrir un proceso y sirve sólo a ése, no se elige de una lista. Elige una receta publicada, o define una nueva con sus pasos.",
     "error_tueste_version_no_publicada": "Esa receta no se puede usar como perfil de tueste: su versión todavía es un borrador, o es una receta Libre. Elige una versión publicada.",
     "recetaEditor_plantilla": "Plantilla (todas las organizaciones)",
     "recetaEditor_borrador": "Borrador",

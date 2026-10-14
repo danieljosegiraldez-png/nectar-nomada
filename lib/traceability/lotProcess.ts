@@ -15,6 +15,9 @@
  * tarea 8 de la Parte 1 (R7) no reabre nada: abre una continuación unida al proceso cerrado.
  */
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
+import { RecipeError } from "../recetas/errorDeReceta";
+import { crearRecetaLibreEnTx, type LibreAlAbrir } from "../recetas/libre";
+import { validarPasosPlaneados } from "../recetas/pasos";
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireLotAccess, TraceabilityAccessError } from "./lots";
@@ -100,11 +103,19 @@ export interface AbrirProcesoInput {
   lotId: string;
   /**
    * **Obligatoria desde la Parte 2a** (§5.1, decisión de Daniel del 2026-10-02): una versión PUBLICADA de una receta no
-   * archivada, de la organización del lote o compartida. El tipo la deja anulable porque el formulario manda `null` con el
-   * desplegable vacío, y el servicio lo rechaza con `sin_receta` —una frase— en vez de con un error de tipos que la
-   * pantalla no puede enseñar. «Sin receta» sigue existiendo sólo en los procesos de antes (R9), que el reporte agrupa aparte.
+   * archivada, de la organización del lote o compartida —o, en su lugar, una Libre que se define al abrir (`libre`, §5.2)—. El
+   * tipo la deja anulable porque el formulario manda `null` con el desplegable vacío, y el servicio lo rechaza con
+   * `sin_receta` —una frase— en vez de con un error de tipos que la pantalla no puede enseñar. «Sin receta» sigue existiendo sólo en los procesos de antes (R9), que el reporte agrupa aparte.
    */
   processRecipeVersionId?: string | null;
+  /**
+   * **La receta Libre** (Parte 2a, §5.2, tarea 10, 2026-10-03): en vez de elegir una receta publicada, se DEFINE una pequeña al abrir
+   * —los pasos planeados y, si coinciden con los de una receta publicada que la organización puede usar, el motivo de por qué ésta
+   * es distinta— y el proceso se abre con ella. La intención es `intent` y el grado, `processGradeValueId`. **Excluyente con
+   * `processRecipeVersionId`** (`libre_con_receta`): o una receta publicada, o una Libre. No exige la autoría de recetas: abrir,
+   * también con una Libre, es `lot:manage` (V13).
+   */
+  libre?: LibreAlAbrir | null;
   /**
    * La intención de ESTE batch. **Obligatoria aunque no haya receta**, por
    * corrección del dueño: «se puso tanto peso whole cherries, proceso natural
@@ -177,9 +188,10 @@ async function loteGestionable(userAccountId: string, lotId: string) {
  * `SELECT` con `OF r, v`: la receta primero y la versión después. El orden linaje → receta → versión no cierra ningún ciclo:
  * ninguna otra operación de la 2a toma las dos filas (medido en los planes de las tareas 3 y 4: cada una toma una sola).
  *
- * Cuatro rechazos, en este orden: la versión no existe (`recipe_version_not_found`); es de OTRA organización
+ * Cinco rechazos, en este orden: la versión no existe (`recipe_version_not_found`); es de OTRA organización
  * (`receta_de_otra_organizacion`); no está publicada (`version_no_publicada`: un borrador todavía se edita); su receta está
- * archivada (`recipe_archived`). **La organización va antes que el estado**, como en el tueste: una versión o una receta ajena se
+ * archivada (`recipe_archived`); su receta es una Libre pedida por su id (`receta_libre_no_se_elige`, tarea 10: una Libre se define al
+ * abrir, no se elige). **La organización va antes que el estado**, como en el tueste: una versión o una receta ajena se
  * rechaza por ser ajena, y su estado no se le cuenta a quien no es de esa organización. Una receta sin organización es
  * compartida y vale para todas: la misma regla que el tueste (`roasting.ts`, `recipe_belongs_to_another_organization`).
  * El selector (`listRecipeVersionsForLot`) ya no ofrece nada de eso; esto es la puerta, para un formulario manipulado o una
@@ -197,7 +209,7 @@ async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionI
   if (bloqueada.length === 0) throw new LotProcessError("recipe_version_not_found");
   const version = await tx.processRecipeVersion.findUniqueOrThrow({
     where: { id: recipeVersionId },
-    select: { status: true, recipe: { select: { status: true, organizationId: true } } },
+    select: { status: true, recipe: { select: { status: true, organizationId: true, esLibre: true } } },
   });
   // La organización PRIMERO (ronda de arreglo del 2026-10-06, H3), como en el tueste: quien no es de la organización de la receta no aprende si su
   // versión es un borrador o si la receta está archivada; recibe el rechazo de una ajena publicada.
@@ -206,6 +218,39 @@ async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionI
   }
   if (version.status !== "approved") throw new LotProcessError("version_no_publicada");
   if (version.recipe.status === "archived") throw new LotProcessError("recipe_archived");
+  // Parte 2a, tarea 10 (§5.2): una Libre se DEFINE al abrir, para el proceso que la usa; no se elige de una lista (el selector no
+  // las ofrece) ni por su id. Va después de la organización (T05a la puso antes que el estado): la Libre de otra organización sigue
+  // siendo «de otra organización».
+  if (version.recipe.esLibre) throw new LotProcessError("receta_libre_no_se_elige");
+}
+
+/**
+ * Los campos de la restricción que chocó en un `P2002`. **La forma está medida, no deducida** (`lib/sync/pushFieldEvents.ts`,
+ * 2026-09-16): con el adaptador de driver que usa este proyecto, Prisma NO pone las columnas en `error.meta.target`, como documenta
+ * el caso clásico, sino en `error.meta.driverAdapterError.cause.constraint.fields`. Se mira la documentada por si el adaptador
+ * cambia, y la medida, que es la que ocurre aquí; `tests/recetas/libre.test.ts` la vuelve a medir con errores reales de la base.
+ */
+function camposDelP2002(error: Prisma.PrismaClientKnownRequestError): string[] {
+  const meta = error.meta as
+    | { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } }
+    | undefined;
+  const campos = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.fields;
+  return Array.isArray(campos) ? campos.map(String) : [];
+}
+
+/**
+ * Qué es, para quien abre un proceso, un `P2002` (violación de un índice único) de la transacción de `abrirProceso`. **Parte 2a,
+ * tarea 10** (reconocimiento u6, sorpresa 3): hasta hoy cualquier `P2002` salía como `process_already_open`, y desde que la Libre crea
+ * una receta dentro de la misma transacción, un choque con `@@unique([organizationId, name])` de `ProcessRecipe` —la misma
+ * intención sobre el mismo lote el mismo día— habría salido como «ya hay un proceso abierto», que es mentira. Se decide por el
+ * ÍNDICE que chocó: el único con una columna `name` que esta transacción escribe es el de la receta (`libre_repetida`); el resto
+ * es, como siempre, la red del índice parcial de «un proceso abierto por lote» (`process_already_open`). Otra cosa que no sea un
+ * `P2002` no se traduce (nulo): quien llama la relanza.
+ */
+export function traducirP2002DeApertura(error: unknown): RecipeError | LotProcessError | null {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return null;
+  if (camposDelP2002(error).includes("name")) return new RecipeError("libre_repetida");
+  return new LotProcessError("process_already_open");
 }
 
 /**
@@ -226,6 +271,12 @@ async function exigeRecetaParaAbrir(tx: Prisma.TransactionClient, recipeVersionI
  * receta viva y ser de la organización del lote o compartida (`exigeRecetaParaAbrir`). La regla vive AQUÍ, en lo que abre
  * un proceso a pedido de alguien, y no en `abrirProcesoEnTx`: la división (R6) y la devolución a secado (R7) copian el
  * proceso vigente tal cual, y un proceso viejo sin receta se sigue pudiendo dividir y devolver.
+ *
+ * **O con una Libre** (Parte 2a, §5.2, tarea 10): `libre` define una receta pequeña al abrir (los pasos planeados, y el motivo si
+ * coinciden con una receta publicada), y esta función la crea DENTRO de la transacción, con el linaje bloqueado y después de
+ * comprobar que no hay otro proceso abierto, y abre el proceso con ella (`crearRecetaLibreEnTx`). No exige la autoría de recetas
+ * (V13): basta gestionar el lote. Excluyente con `processRecipeVersionId`. Y una Libre ya hecha NO se elige por su id
+ * (`receta_libre_no_se_elige`): se define al abrir, para el proceso que la usa.
  */
 export async function abrirProceso(userAccountId: string, input: AbrirProcesoInput) {
   const lote = await loteGestionable(userAccountId, input.lotId);
@@ -233,11 +284,16 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
   // El CHECK de la base la rechaza igual; aquí sale con una frase legible.
   if (input.intent.trim().length === 0) throw new LotProcessError("intent_required");
 
-  // Parte 2a, §5.1: sin receta no se abre. Va donde iba la comprobación de la receta, antes del grado y de la cereza: es
-  // un dato que falta, como la intención. Lo demás de la receta —que exista, publicada, viva y de esta organización— se
-  // mira DENTRO de la transacción, con la fila de la versión bloqueada (`exigeRecetaParaAbrir`).
+  // Parte 2a, §5.1 y §5.2: se abre con UNA receta publicada, o con una Libre que se define aquí; sin ninguna no se abre. Va donde iba
+  // la comprobación de la receta, antes del grado y de la cereza: es un dato que falta, como la intención. Las dos a la vez son una
+  // contradicción (`libre_con_receta`), no una opción: no se elige en silencio la una ni la otra. Una Libre sin pasos no es una
+  // receta: «se define y se ejecuta», y definirla es escribir sus pasos. Lo demás de la receta —que exista, publicada, viva y de
+  // esta organización— se mira DENTRO de la transacción, con la fila de la versión bloqueada (`exigeRecetaParaAbrir`).
+  const libre = input.libre ?? null;
   const recetaVersionId = input.processRecipeVersionId?.trim() ?? "";
-  if (!recetaVersionId) throw new LotProcessError("sin_receta");
+  if (libre && recetaVersionId) throw new RecipeError("libre_con_receta");
+  if (libre && libre.pasos.length === 0) throw new RecipeError("libre_sin_pasos");
+  if (!libre && !recetaVersionId) throw new LotProcessError("sin_receta");
 
   // Se comprueban SIEMPRE, no «si vienen»: son obligatorios, y una cadena vacía
   // que llegara de un formulario mal armado tiene que salir con una frase, no
@@ -246,17 +302,39 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
   if (!input.cherryStateValueId?.trim()) throw new LotProcessError("cherry_state_required");
   await exigeDelCatalogo(input.processGradeValueId, CATALOGO_GRADO_PROCESO, "process_grade");
   await exigeDelCatalogo(input.cherryStateValueId, CATALOGO_ESTADO_CEREZA, "cherry_state");
+  // §5.2: los pasos de la Libre se validan ANTES de abrir la transacción, como las operaciones de `lib/recetas/pasos.ts`: el tipo de
+  // cada uno, los ejes que le tocan, los números posibles y los valores de SU catálogo. Un paso malo no deja nada escrito.
+  const planeados = libre ? await validarPasosPlaneados(libre.pasos) : null;
 
   // R2 (Parte 1, 2026-10-01): la comprobación de «otro proceso abierto» ya no se hace aquí, con el cliente
   // global y fuera de la transacción: la hace `abrirProcesoEnTx` dentro, con el linaje bloqueado.
   try {
     return await prisma.$transaction(async (tx) => {
       await bloquearLinaje(tx, input.lotId);
-      // Parte 2a, §3.3: la versión se bloquea DESPUÉS del linaje —el linaje siempre primero, el orden de R2—.
-      await exigeRecetaParaAbrir(tx, recetaVersionId, lote.organizationId);
+      let versionDelProceso = recetaVersionId;
+      if (libre && planeados) {
+        // §5.2: ANTES de crear la receta, la misma pregunta que `abrirProcesoEnTx` repite después. Un doble envío del formulario es el
+        // choque más probable, y sin esto el segundo llegaría a crear una receta con el nombre de la primera y saldría
+        // `libre_repetida` en vez de la verdad: ya hay un proceso abierto. Además, un lote de miel, dividido o en bodega se rechaza
+        // antes de escribir nada.
+        await exigeSinOtroProcesoAbierto(tx, input.lotId);
+        const creada = await crearRecetaLibreEnTx(tx, userAccountId, {
+          organizationId: lote.organizationId,
+          lotCode: lote.lotCode,
+          classification: lote.classification,
+          startedAt: input.startedAt,
+          intencion: input.intent.trim(),
+          planeados,
+          motivoDeLibre: libre.motivoDeLibre ?? null,
+        });
+        versionDelProceso = creada.recipeVersionId;
+      } else {
+        // Parte 2a, §3.3: la versión se bloquea DESPUÉS del linaje —el linaje siempre primero, el orden de R2—.
+        await exigeRecetaParaAbrir(tx, recetaVersionId, lote.organizationId);
+      }
       return abrirProcesoEnTx(tx, userAccountId, {
         lotId: input.lotId,
-        processRecipeVersionId: recetaVersionId,
+        processRecipeVersionId: versionDelProceso,
         intent: input.intent.trim(),
         processGradeValueId: input.processGradeValueId,
         cherryStateValueId: input.cherryStateValueId,
@@ -268,11 +346,11 @@ export async function abrirProceso(userAccountId: string, input: AbrirProcesoInp
       });
     }, TRANSACCION_DEL_LINAJE);
   } catch (error) {
-    // El índice único parcial es la red: si algo se colara entre el bloqueo y la escritura, sale con
-    // nombre y no como un error de restricción ilegible.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new LotProcessError("process_already_open");
-    }
+    // El índice único parcial es la red: si algo se colara entre el bloqueo y la escritura, sale con nombre y no como un error de
+    // restricción ilegible. Parte 2a, tarea 10: ya NO todo `P2002` es «ya hay un proceso abierto» —el nombre de una receta Libre
+    // repetido también es un `P2002`—: se decide por el índice que chocó.
+    const traducido = traducirP2002DeApertura(error);
+    if (traducido) throw traducido;
     throw error;
   }
 }

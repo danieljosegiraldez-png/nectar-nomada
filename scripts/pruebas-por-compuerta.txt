@@ -199,6 +199,7 @@ tests/traceability/manejoEsquema.test.ts
 tests/traceability/manejoPrB.test.ts
 tests/traceability/reporteDeProceso.test.ts
 tests/recetas/recetaObligatoria.test.ts
+tests/recetas/libre.test.ts
 tests/recetas/tuesteSoloConPublicadas.test.ts
 tests/traceability/coordenadasDelSitio.test.ts
 tests/traceability/lots.test.ts

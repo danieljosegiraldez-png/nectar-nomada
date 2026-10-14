@@ -1991,6 +1991,7 @@
     "error_proceso_paso_no_corresponde": "That step type is not fulfilled by this record: a fermentation, a drying and each handling only fulfil the types of their kind, and with a recipe step the type is the step's. Choose a step or a type of that kind, or none.",
     "error_proceso_desviacion_sin_motivo": "This process's recipe has steps and you chose none. Choose the step you are carrying out or, if what you did is outside the recipe, write the reason: it will be recorded as a deviation.",
     "error_proceso_intervencion_sin_acto": "Say what was done: an intervention needs the recipe step it fulfils, its step type, or a value from the handling vocabulary.",
+    "error_proceso_receta_libre_no_se_elige": "That recipe is a free-form recipe: it is defined when a process is opened and serves only that one, it is not chosen from a list. Choose a published recipe, or define a new one with its steps.",
     "error_tueste_version_no_publicada": "That recipe cannot be used as a roast profile: its version is still a draft, or it is a free-form recipe. Choose a published version.",
     "recetaEditor_plantilla": "Template (all organizations)",
     "recetaEditor_borrador": "Draft",
