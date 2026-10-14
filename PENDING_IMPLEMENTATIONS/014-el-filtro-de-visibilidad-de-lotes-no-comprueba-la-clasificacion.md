@@ -78,3 +78,44 @@ control **sí** devolviéndose en las ocho (si no, «no sale» se lee igual que 
 quitar el filtro nuevo de una superficie debe hacer caer **esa** y sólo esa.
 
 Sin fecha. No bloquea la fusión de #573: el dato de hoy la mantiene inalcanzable.
+
+## Cómo quedó (2026-10-14)
+
+**Daniel eligió los ocho y la gemela de muestras, de raíz**, y en el mismo cambio un defecto que salió
+midiendo esta ficha: la lista leía `roleProfile.permissions` y **se saltaba los ajustes por asignación**
+de #357, que `can()` sí aplica. Quitado `lot:view`, la lista, el tablero y el CSV seguían enseñando lo
+que la ficha negaba; añadido, la lista salía vacía. Lo mismo en la lista de apiarios.
+
+**Seguía dormida al cerrarla**, medido ese día: de las 17 llamadas que crean o actualizan lotes y
+muestras, sólo 2 tocan `classification`, y las dos copian la del lote a su muestra. Pero el guardia de
+ADR-063 vigilaba los perfiles, no las escrituras: no habría caído si alguien abría ese camino.
+
+**Dónde se arregló: en el resolvedor, no en las pantallas.** `resolveLotVisibility` lee los permisos
+efectivos (`getResolvedAssignments`, exportada de `lib/rbac/service.ts`) y lleva, por objetivo, los
+niveles que la cuenta limpia. La regla es la de `can()`, y es **por objetivo**: para cada uno suma las
+asignaciones de plataforma y las de ese objetivo exacto, no las de sus ancestros. `lotWhereFromVisibility`,
+`sampleWhereFromVisibility` y `lotMatchesVisibility` filtran con eso. De las ocho superficies, cinco sólo
+usan el `where` (medido: cero lecturas de `mode`, `projectIds` o `locationIds`) y lo heredan sin tocarse;
+el tueste se saltaba el filtro con `mode === "all"` y ahora se fía del `where`; la exportación sólo lee
+`mode` para decir «sin permiso».
+
+**La prueba no es la que esta ficha proponía, y es más fuerte.** `tests/traceability/laListaVeLoQueVeCan.test.ts`
+monta once cuentas y seis lotes, y para cada cuenta afirma dos cosas: que `can()` deja ver lo que dice su
+tabla —si eso cae, la tabla está mal— y que la lista trae exactamente eso. Después ejerce cuatro
+superficies de punta a punta: `/lots`, las operaciones en curso (las únicas que filtran con el
+predicado), la exportación con un lote y una muestra confidenciales, y los tuestes con ámbito de
+plataforma. Las otras cuatro (cola de secado, bandejas, clasificación verde y reporte de proceso) y el
+tablero comparten el mismo `where` y no tienen prueba propia de esto.
+
+Con el código anterior caían **13 de 29**, todos con la firma del defecto, y pasaban las once filas de
+`can()`. Siete mutaciones, cada una con su sha distinto, cero errores de carga y el árbol restaurado:
+
+| mutación | cae |
+|---|---|
+| el filtro por nivel desaparece | seis cuentas, y las cuatro superficies |
+| sumar los permisos a lo largo de la cadena en vez de por objetivo | sólo `fincaYLeadEnParcela` |
+| la lista lee los permisos del perfil, sin ajustes | las tres cuentas con ajustes, y `/lots` |
+| lo mismo en apiarios | las dos de apiario, no su control |
+| el tueste vuelve a saltarse el filtro con ámbito de plataforma | sólo los tuestes |
+| el predicado no mira el nivel | sólo las operaciones en curso |
+| las muestras sin filtro | sólo la exportación, en la aserción de la muestra |
