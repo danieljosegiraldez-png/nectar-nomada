@@ -50,7 +50,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { Prisma } from "../../generated/prisma/client";
 import type { ClassificationLevel, ProvenanceClass } from "../../generated/prisma/client";
-import { abrirProceso, traducirP2002DeApertura } from "../../lib/traceability/lotProcess";
+import { CATALOGO_MOTIVO_DEVOLUCION, abrirProceso, cerrarProceso, devolverASecado, traducirP2002DeApertura } from "../../lib/traceability/lotProcess";
 import { LotProcessError } from "../../lib/traceability/errorDeProceso";
 import { exigeAutoriaDeReceta } from "../../lib/recetas/autoria";
 import { RecipeError } from "../../lib/recetas/errorDeReceta";
@@ -60,7 +60,7 @@ import { agregarPaso, escribirPasosPlaneados, publicarVersion, validarPasosPlane
 import { EJES_POR_TIPO_DE_PASO, FASE_DEL_TIPO, type TipoDePaso } from "../../lib/recetas/vocabulario";
 import { crearRecetaEnBorrador } from "../../lib/recetas/versiones";
 import { listRecipeVersionsForLot } from "../../lib/traceability/processTargets";
-import { TraceabilityAccessError } from "../../lib/traceability/lots";
+import { TraceabilityAccessError, recordTransformation } from "../../lib/traceability/lots";
 import { borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { fabricaDeCuentas } from "../helpers/cuentasDeAutoria";
@@ -356,6 +356,27 @@ afterAll(async () => {
   // Se cuentan ahora y se AFIRMAN al final, debajo de toda la limpieza: un control que lanzara aquí abandonaría el resto del `afterAll`.
   const organizacionesVistas = organizaciones.length;
   await borrarProcesosDeLotesDonde({ id: { in: lotesDeLaCorrida } });
+  // Lo que escriben la división y la devolución de «un proceso Libre se divide y se devuelve…» (ronda de arreglo del 2026-10-14, hallazgo 5):
+  // las transformaciones, el libro de masa y las humedades de cierre. DESPUÉS de los procesos (`divided_by_transformation_id` y
+  // `closing_moisture_measurement_id` son RESTRICT) y ANTES de los lotes. Se descubren por los lotes de la corrida, y las humedades se
+  // apuntan ANTES de borrar los lotes: `measurement.lot_id` es SET NULL, y una humedad huérfana ya no se encontraría por su lote.
+  const transformaciones = (
+    await prisma.lotTransformation.findMany({
+      where: assertDefinedWhere({
+        OR: [{ inputs: { some: { lotId: { in: lotesDeLaCorrida } } } }, { outputs: { some: { lotId: { in: lotesDeLaCorrida } } } }],
+      }),
+      select: { id: true },
+    })
+  ).map((t) => t.id);
+  const humedades = (
+    await prisma.measurement.findMany({ where: assertDefinedWhere({ lotId: { in: lotesDeLaCorrida } }), select: { id: true } })
+  ).map((m) => m.id);
+  await prisma.measurement.deleteMany({ where: assertDefinedWhere({ id: { in: humedades } }) });
+  await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotesDeLaCorrida } }) });
+  await prisma.lotTransformationInput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformaciones } }) });
+  await prisma.lotTransformationOutput.deleteMany({ where: assertDefinedWhere({ transformationId: { in: transformaciones } }) });
+  await prisma.lotTransformation.deleteMany({ where: assertDefinedWhere({ id: { in: transformaciones } }) });
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: transformaciones } }) });
   const deEstaCorrida: Prisma.ProcessRecipeWhereInput = {
     OR: [{ name: { contains: RUN } }, { organizationId: { in: organizaciones } }],
   };
@@ -389,6 +410,8 @@ afterAll(async () => {
   expect(await prisma.processRecipeStep.count({ where: { id: { in: ids.pasoIds } } }), "quedan pasos de esta corrida").toBe(0);
   expect(await prisma.lot.count({ where: { lotCode: { endsWith: RUN } } }), "quedan lotes de esta corrida").toBe(0);
   expect(await prisma.lotProcess.count({ where: { lotId: { in: lotesDeLaCorrida } } }), "quedan procesos de esta corrida").toBe(0);
+  expect(await prisma.lotTransformation.count({ where: { id: { in: transformaciones } } }), "quedan divisiones de esta corrida").toBe(0);
+  expect(await prisma.measurement.count({ where: { id: { in: humedades } } }), "quedan humedades de esta corrida").toBe(0);
   expect(await prisma.organization.count({ where: { name: { contains: RUN } } }), "quedan organizaciones de esta corrida").toBe(0);
   expect(await prisma.person.count({ where: { displayName: { contains: RUN } } }), "quedan personas de esta corrida").toBe(0);
 }, 60000);
@@ -1153,6 +1176,72 @@ describe("Parte 2a, §5.2 — cada valor de catálogo de una Libre es de SU cat�
     // Control: lo único que cambia es de qué catálogo es el valor.
     expect((await abrirLibre(l, { pasos: [await lavar(agua)] })).processRecipeVersionId).not.toBeNull();
     expect(await libresDeLaOrg(), "el control no creó UNA receta Libre").toBe(antes + 1);
+  }, 60000);
+});
+
+describe("Parte 2a, §5.2 — un proceso Libre se divide y se devuelve a secado: la regla de «una Libre no se elige» es de la APERTURA, no de la copia", () => {
+  // Ronda de arreglo del 2026-10-14, hallazgo 5. T10.md, decisión 9: «un proceso Libre se sigue pudiendo dividir y devolver», porque la división
+  // (`dividirProcesoEnTx`) y la devolución (`devolverASecado`) COPIAN la versión del proceso vigente a otros procesos sin pasar por
+  // `exigeRecetaParaAbrir`. Nada lo probaba, y el texto de `receta_libre_no_se_elige` prometía que la Libre «sirve sólo a ése».
+  const libreDeUnProceso = (procesoId: string) =>
+    prisma.lotProcess.findUniqueOrThrow({ where: { id: procesoId }, select: { processRecipeVersionId: true } });
+  /** Control de las dos pruebas: la MISMA versión, pasada por su id a otra apertura, SÍ se rechaza; la copia no pasa por esa puerta. */
+  const laRegla = async (versionDeLaLibre: string, codigo: string) => {
+    const v = await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: versionDeLaLibre }, include: { recipe: true } });
+    expect(v.recipe.esLibre, "control: la receta de las copias es una Libre").toBe(true);
+    await rechaza(abrirConReceta(await lote(codigo), versionDeLaLibre), "receta_libre_no_se_elige", LotProcessError);
+  };
+
+  it("dividir un proceso abierto con una Libre da a cada parte un proceso con ESA misma versión, y no crea otra receta", async () => {
+    const l = await lote("DIV");
+    await prisma.quantityEvent.create({
+      data: { lotId: l, eventType: "process_output", quantity: 100, unit: "kg", occurredAt: new Date("2026-03-02T12:00:00Z"), provenanceClass: "measured_fact" },
+    });
+    const proceso = await abrirLibre(l, { pasos: await distinto() });
+    const versionDeLaLibre = proceso.processRecipeVersionId!;
+    const libresAntes = await libresDeLaOrg();
+
+    const division = await recordTransformation(gestor, {
+      transformationType: "split",
+      occurredAt: new Date("2026-03-10T12:00:00Z"),
+      provenanceClass: "original_record",
+      inputs: [{ lotId: l, quantity: 100, unit: "kg" }],
+      outputs: [60, 40].map((kg, i) => ({ lotCode: codigoDe(`DIV-${i}`), lotType: "processing" as const, quantity: kg, unit: "kg" })),
+    });
+    const partes = division.outputLots.map((o) => o.id);
+    lotes.push(...partes);
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: proceso.id } })).closureKind, "la división no cerró el proceso como dividido").toBe("divided");
+    const copias = await prisma.lotProcess.findMany({ where: { lotId: { in: partes } } });
+    expect(copias, "dividir no abrió un proceso por parte").toHaveLength(2);
+    for (const c of copias) {
+      expect(c.processRecipeVersionId, "la parte no abrió con la versión de la Libre").toBe(versionDeLaLibre);
+      expect(c.derivedFromLotProcessId, "la parte no quedó unida al proceso que se dividió").toBe(proceso.id);
+    }
+    expect((await libreDeUnProceso(proceso.id)).processRecipeVersionId, "dividir cambió la versión del proceso que se dividió").toBe(versionDeLaLibre);
+    expect(await libresDeLaOrg(), "dividir creó otra receta Libre").toBe(libresAntes);
+    await laRegla(versionDeLaLibre, "DIV-ELIG");
+  }, 60000);
+
+  it("devolver a secado un proceso Libre cerrado abre la continuación con ESA misma versión, y no crea otra receta", async () => {
+    const l = await lote("DEV");
+    const proceso = await abrirLibre(l, { pasos: await distinto() });
+    const versionDeLaLibre = proceso.processRecipeVersionId!;
+    // La humedad que cierra el proceso (≤ el objetivo, 11 %), insertada cruda como en `bodegaConProceso.test.ts`: la limpieza la encuentra por el lote.
+    const humedad = await prisma.measurement.create({
+      data: { variable: "moisture", value: 10.5, unit: "%", occurredAt: new Date("2026-03-20T12:00:00Z"), lotId: l, provenanceClass: "measured_fact", createdBy: gestor },
+    });
+    await cerrarProceso(gestor, { lotProcessId: proceso.id, endedAt: new Date("2026-03-21T12:00:00Z"), closingMoistureMeasurementId: humedad.id });
+    const motivoValueId = (
+      await prisma.variableCatalogValue.findFirstOrThrow({ where: { value: "error_de_medicion", catalog: { key: CATALOGO_MOTIVO_DEVOLUCION } }, select: { id: true } })
+    ).id;
+    const libresAntes = await libresDeLaOrg();
+
+    const { continuacion } = await devolverASecado(gestor, { lotId: l, motivoValueId, ocurrioEn: new Date("2026-03-25T12:00:00Z") });
+    expect(continuacion.processRecipeVersionId, "la continuación no abrió con la versión de la Libre").toBe(versionDeLaLibre);
+    expect(continuacion.derivedFromLotProcessId, "la continuación no quedó unida al proceso cerrado").toBe(proceso.id);
+    expect(continuacion.endedAt, "la continuación no quedó abierta").toBeNull();
+    expect(await libresDeLaOrg(), "devolver creó otra receta Libre").toBe(libresAntes);
+    await laRegla(versionDeLaLibre, "DEV-ELIG");
   }, 60000);
 });
 

@@ -279,6 +279,14 @@ const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
     es: { debe: [/divisi/i], noDebe: [SIN_PANTALLA_ES] },
     en: { debe: [/split/i], noDebe: [SIN_PANTALLA_EN] },
   },
+  receta_libre_no_se_elige: {
+    por:
+      "Una Libre se define al abrir un proceso y no se elige de una lista, pero dividir y devolver a secado COPIAN su versión a otros procesos sin " +
+      "pasar por esta puerta (`dividirProcesoEnTx` y `devolverASecado`; `tests/recetas/libre.test.ts`, «un proceso Libre se divide y se devuelve…»): " +
+      "«sirve sólo a ése» / «serves only that one» prometía una exclusividad que el árbol no cumple (ronda de arreglo del 2026-10-14, hallazgo 5).",
+    es: { debe: [/Libre/, /no se elige de una lista/i], noDebe: [/sirve s[oó]lo/i, /s[oó]lo a [ée]se/i] },
+    en: { debe: [/free-form/i, /not chosen from a list/i], noDebe: [/serves only/i, /only that one/i] },
+  },
 };
 
 describe("los textos corregidos por falsedad dicen lo que la revisión pidió", () => {
