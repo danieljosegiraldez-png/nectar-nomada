@@ -597,6 +597,13 @@ describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
     return e!;
   };
 
+  /** La banda que la curva de un lote pinta para una variable, o un fallo con nombre: «sin banda» no es «el lote no se ve». */
+  const bandaDe = async (lotId: string, variable: string) => {
+    const { curva } = await datosDelTablero(m.operario, ahora, { curva: { lotId, variable, ancho: 300, alto: 100 } });
+    expect(curva, "el lote no es visible para quien mira").not.toBeNull();
+    return curva!.banda;
+  };
+
   beforeAll(async () => {
     m = await mundo("tablero");
     fermenta = await receta(
@@ -777,11 +784,6 @@ describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
   it("la curva pinta la banda del paso de la corrida abierta; sin paso, la de la versión, y la de un paso no se cuela en ella", async () => {
     const delPaso = await conCorrida(m, { codigo: "CURVA-PASO", fase: "drying", versionId: curvas.versionId, pasoId: curvas.pasoIds[1]!, iniciadoHaceHoras: 10 });
     const sinPaso = await conCorrida(m, { codigo: "CURVA-SIN-PASO", fase: "drying", versionId: curvas.versionId, pasoId: null, iniciadoHaceHoras: 10 });
-    const bandaDe = async (lotId: string, variable: string) => {
-      const { curva } = await datosDelTablero(m.operario, ahora, { curva: { lotId, variable, ancho: 300, alto: 100 } });
-      expect(curva, "el lote no es visible para quien mira").not.toBeNull();
-      return curva!.banda;
-    };
 
     // Control: sin paso, la banda de humedad es la de la VERSIÓN (10–12, objetivo 11: y = 50). Un objetivo `during` es una banda de trayectoria.
     expect(await bandaDe(sinPaso.lotId, "moisture")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
@@ -790,6 +792,25 @@ describe("el tablero lee el paso de la corrida (diseño §3.1 y §3.2)", () => {
     // El Brix sólo lo declara ese paso: con él hay banda (20–30, objetivo 25: y = 50); sin paso, la meta de un paso no se cuela.
     expect(await bandaDe(delPaso.lotId, "brix")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
     expect(await bandaDe(sinPaso.lotId, "brix")).toEqual({ tipo: "sin_objetivo_declarado" });
+  });
+
+  it("la curva de una corrida con paso toma SÓLO las metas de su paso: si el paso no declara la variable, no se le pinta la banda de la versión", async () => {
+    // El primer paso de `curvas` no declara ninguna meta; la VERSIÓN sí declara una banda de humedad (10–12, objetivo 11). La corrida de ese paso pide la
+    // humedad: si la curva sumara las metas de la versión a las del paso —lo que dejaba pasar la prueba de arriba, donde el paso de la corrida SÍ declara la humedad y su
+    // meta va primera—, le pintaría una banda que su paso nunca declaró.
+    const delPrimero = await conCorrida(m, { codigo: "CURVA-PASO-VACIO", fase: "drying", versionId: curvas.versionId, pasoId: curvas.pasoIds[0]!, iniciadoHaceHoras: 10 });
+    const sinPaso = await conCorrida(m, { codigo: "CURVA-SIN-PASO-VACIO", fase: "drying", versionId: curvas.versionId, pasoId: null, iniciadoHaceHoras: 10 });
+
+    // Control: la misma versión, la misma variable y la misma hora, pero SIN paso: la banda de la versión sí se pinta (10–12, objetivo 11: y = 50). Sin esto, el
+    // «sin objetivo» de abajo no distinguiría un lector que ya no lee la versión de uno que lee sólo el paso.
+    expect(await bandaDe(sinPaso.lotId, "moisture")).toEqual({ tipo: "banda", alcance: "trayectoria", yMin: 100, yMax: 0, yObjetivo: 50 });
+    // Control de la otra mitad: el paso de esa corrida no declara la humedad (y la versión, sí): es lo que hace de esta corrida el caso que distingue.
+    const delPaso = await prisma.processTarget.findMany({ where: { recipeStepId: curvas.pasoIds[0]! }, select: { variable: true } });
+    expect(delPaso, "el primer paso de `curvas` no debía declarar ninguna meta").toEqual([]);
+    const delaVersion = await prisma.processTarget.findMany({ where: { recipeVersionId: curvas.versionId, recipeStepId: null, variable: "moisture" }, select: { variable: true } });
+    expect(delaVersion.length, "la versión de `curvas` debía declarar la humedad").toBe(1);
+    // La corrida con paso: su paso no declara nada, así que NO hay objetivo; la banda de la versión no se cuela.
+    expect(await bandaDe(delPrimero.lotId, "moisture")).toEqual({ tipo: "sin_objetivo_declarado" });
   });
 });
 
