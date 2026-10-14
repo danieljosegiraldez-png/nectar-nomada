@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { cuentaParaElNavegador } from "../lib/auth/huellaDeCuenta";
 import type { Metadata } from "next";
 import { Bodoni_Moda, Archivo } from "next/font/google";
 import Link from "next/link";
@@ -49,14 +49,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // question than authorization does, and why it must never answer one.
   const navEntries = user ? buildNavigation(await permissionKeysAnywhere(user.userAccountId)) : [];
 
-  // La huella y no el id: se apunta en el `localStorage` de un teléfono que
-  // puede ser compartido, y sólo sirve para saber si la cuenta cambió.
-  const huellaDeCuenta = user ? createHash("sha256").update(user.userAccountId).digest("hex").slice(0, 16) : null;
+  // La huella y no el id: se apunta en el `localStorage` y en los borradores de un teléfono que puede
+  // ser compartido. Sirve para saber si la cuenta cambió (páginas guardadas, #703) y de quién es cada
+  // borrador (ADR-199). La hora ordena las cargas, para que una página vieja no gane.
+  const paraElNavegador = cuentaParaElNavegador(user?.userAccountId ?? null);
 
   return (
     <html lang={locale} className={`${fuenteTexto.variable} ${fuenteDisplay.variable}`}>
       <body>
-        <ServiceWorkerRegistration cuenta={huellaDeCuenta} />
+        <ServiceWorkerRegistration cuenta={paraElNavegador.cuenta} generadaEn={paraElNavegador.generadaEn} />
         <NextIntlClientProvider>
           <header className="nn-nav">
             <div className="nn-shell nn-nav-row">

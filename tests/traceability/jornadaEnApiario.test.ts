@@ -20,6 +20,8 @@ import {
 import { recordInspection } from "../../lib/apiary/inspections";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
+import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
 import {
   emitirReporteDeVisita,
   leerReporteDeVisita,
@@ -290,6 +292,9 @@ describe("A9.5 — el lote acepta lo que se captura en el apiario", () => {
         occurredAt: new Date("2026-09-02T14:00:00Z"),
         outcome: "nothing_unusual",
         note: `TEST por lotes (${RUN_ID})`,
+        // ADR-199 — el aparato de esta prueba no tiene creador, así que un borrador sin cuenta sería ajeno
+        // para todos. Se manda la cuenta de quien envía, como hace un cliente nuevo.
+        cuentaDelBorrador: huellaDeCuenta(apicultorConManejo),
       },
     ]);
 
@@ -315,6 +320,7 @@ describe("A9.5 — el lote acepta lo que se captura en el apiario", () => {
       colonyId,
       occurredAt: new Date("2026-09-02T15:00:00Z"),
       outcome: "nothing_unusual",
+      cuentaDelBorrador: huellaDeCuenta(apicultorConManejo),
     };
 
     const [primera] = await pushFieldEvents(apicultorConManejo, deviceId, [mutacion]);
@@ -345,9 +351,12 @@ describe("A9.5 — el lote acepta lo que se captura en el apiario", () => {
         colonyId,
         occurredAt: new Date("2026-09-02T16:00:00Z"),
         outcome: "nothing_unusual",
+        cuentaDelBorrador: huellaDeCuenta(registradorPorSitio),
       },
     ]);
     expect(resultado!.status).toBe("rejected");
+    // Y rechazado por el permiso, no por ser de otra cuenta: si no, esta prueba ya no probaría el acceso.
+    expect((resultado as { reason?: string }).reason).not.toBe(RAZON_BORRADOR_AJENO);
     expect(await prisma.inspection.count({ where: { clientDraftId: `${RUN_ID}-lote-3` } })).toBe(0);
   });
 });

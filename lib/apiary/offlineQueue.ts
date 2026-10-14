@@ -13,6 +13,8 @@
  * *` ("use client") files should import this.
  */
 
+import { desenlaceDeUnBorrador, payloadConCuenta, repartirPorCuenta } from "../sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../offline/cuentaDelNavegador";
 import { clasificarRespuesta, motivoDeRechazoDelLote } from "../sync/offlineQueue";
 import { TOPE_DEL_LOTE } from "../sync/topeDelLote";
 
@@ -33,6 +35,11 @@ export interface DraftRecord<T = unknown> {
   createdAt: number;
   status: DraftStatus;
   errorMessage?: string;
+  /**
+   * ADR-199 — la huella de la cuenta que lo anotó. Ausente en los guardados antes de que existiera:
+   * ésos los decide el servidor por quien registró el aparato.
+   */
+  cuenta?: string | null;
 }
 
 /**
@@ -90,8 +97,21 @@ function generateDraftId(): string {
  * true "if and only if each submission writes to IndexedDB synchronously
  * with the local save, not merely to React state" — this is that write).
  */
-export async function queueDraft<T>(kind: DraftKind, payload: T): Promise<DraftRecord<T>> {
-  const record: DraftRecord<T> = { id: generateDraftId(), kind, payload, createdAt: Date.now(), status: "pending" };
+export async function queueDraft<T>(
+  kind: DraftKind,
+  payload: T,
+): Promise<DraftRecord<T & { cuentaDelBorrador: string | null }>> {
+  // ADR-199 — la cuenta se lee UNA vez: la del borrador y la que viaja dentro del payload (para una pestaña
+  // con el JavaScript de antes del cambio, que sólo copia el payload) son la misma.
+  const cuenta = cuentaActualDelNavegador();
+  const record: DraftRecord<T & { cuentaDelBorrador: string | null }> = {
+    id: generateDraftId(),
+    kind,
+    payload: payloadConCuenta(payload, cuenta),
+    createdAt: Date.now(),
+    status: "pending",
+    cuenta,
+  };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -210,6 +230,8 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
     // falta, no por lo que es.
     kind: KIND_DEL_SERVIDOR[draft.kind],
     clientDraftId: draft.id,
+    // ADR-199 — del BORRADOR, después del payload: lo que traiga el payload no la pisa.
+    cuentaDelBorrador: draft.cuenta ?? null,
     // Si el borrador no trajo hora propia, vale la de su creación: es cuando el
     // operador lo anotó, que es el hecho que interesa. Inventar `Date.now()` al
     // sincronizar fecharía la inspección el día que hubo señal.
@@ -218,11 +240,11 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
 }
 
 /**
- * Attempts every pending draft once, in creation order. The
- * distinction that matters (§0, "explicit sync now, no automatic conflict
- * resolution"): if the sync call itself throws, the request never reached
- * the server (offline, or the connection dropped mid-flight) — the draft
- * stays queued for the next attempt, no data lost. If the call resolves
+ * Attempts the pending drafts this browser may send, once, in creation
+ * order. The distinction that matters (§0, "explicit sync now, no automatic
+ * conflict resolution"): if the sync call itself throws, the request never
+ * reached the server (offline, or the connection dropped mid-flight) — the
+ * draft stays queued for the next attempt, no data lost. If the call resolves
  * with `ok: false`, the server *did* run and rejected it (a real
  * validation or access error, not a connectivity problem) — the draft is
  * marked "error" and left for the operator to see and discard, not
@@ -235,6 +257,12 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
  * `lib/sync/offlineQueue.ts`, y la prueba es la misma:
  * `tests/sync/rechazoTerminalEnLasColas.test.ts`.
  *
+ * **ADR-199 — y de lo pendiente, sólo lo de esta cuenta.** Salen los de la cuenta
+ * de este navegador y los que no tienen cuenta (ésos los decide el servidor por
+ * el aparato); los de otra cuenta se quedan en el teléfono hasta que su dueño
+ * vuelva a entrar. `retained` cuenta esos y también los que el servidor retiene
+ * por la misma razón: siguen pendientes, nunca pasan a error.
+ *
  * **En tandas de `TOPE_DEL_LOTE`, no en una petición** (2026-10-11): la ruta
  * responde 413 por encima de ese número, y con la cola entera en un viaje 201
  * borradores buenos quedaban rechazados (`tests/sync/colaMasLargaQueElLote.test.ts`).
@@ -243,15 +271,22 @@ export function mutacionDe(draft: DraftRecord): Record<string, unknown> {
 export async function syncAll(): Promise<{
   synced: number;
   errored: number;
+  retained: number;
   stillPending: number;
   /** La sesión caducó (401): nada se marcó, sale al volver a entrar. */
   sessionExpired: boolean;
 }> {
-  const drafts = await listDrafts();
-  const toSync = drafts.filter((d) => d.status === "pending");
+  // #719 — sólo lo `pending` viaja; ADR-199 — y de eso, sólo lo de la cuenta de este navegador y lo que no
+  // tiene cuenta.
+  const cuentaActual = cuentaActualDelNavegador();
+  const { enviables: toSync, ajenos } = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending"),
+    cuentaActual,
+  );
 
   let synced = 0;
   let errored = 0;
+  let retained = ajenos.length;
   let sessionExpired = false;
 
   if (toSync.length > 0) {
@@ -288,16 +323,23 @@ export async function syncAll(): Promise<{
           errored += tanda.length;
           continue;
         }
-        const { results } = (await res.json()) as { results: Array<{ clientDraftId: string; status: string; reason?: string }> };
+        const { results } = (await res.json()) as {
+          results: Array<{ clientDraftId: string; status: string; reason?: string; cuentaDelBorrador?: string }>;
+        };
         const porBorrador = new Map(results.map((r) => [r.clientDraftId, r]));
         for (const draft of tanda) {
           const r = porBorrador.get(draft.id);
           if (!r) continue; // el servidor no lo mencionó: se reintenta
-          if (r.status === "applied" || r.status === "duplicate") {
+          const desenlace = desenlaceDeUnBorrador(draft, r);
+          if (desenlace.tipo === "enviado") {
             await discardDraft(draft.id);
             synced++;
+          } else if (desenlace.tipo === "retenido") {
+            // ADR-199 — sigue pendiente; sólo se apunta de quién es si el servidor lo dijo.
+            if (desenlace.borrador.cuenta !== (draft.cuenta ?? null)) await putDraft(desenlace.borrador);
+            retained++;
           } else {
-            await putDraft({ ...draft, status: "error", errorMessage: r.reason });
+            await putDraft(desenlace.borrador);
             errored++;
           }
         }
@@ -308,9 +350,12 @@ export async function syncAll(): Promise<{
     }
   }
 
-  const stillPending = (await listDrafts()).filter((d) => d.status === "pending").length;
+  const stillPending = repartirPorCuenta(
+    (await listDrafts()).filter((d) => d.status === "pending"),
+    cuentaActual,
+  ).enviables.length;
   if (synced > 0) recordLastSyncSuccess();
-  return { synced, errored, stillPending, sessionExpired };
+  return { synced, errored, retained, stillPending, sessionExpired };
 }
 
 // --- A5.5 §2: "visible, honest state" — when was the last successful sync?

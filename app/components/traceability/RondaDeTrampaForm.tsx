@@ -17,6 +17,8 @@ import {
 import { construirPayloadDeRevisionDeTrampa, generarClaveDeRevision } from "../../../lib/sync/parcelaPayload";
 import { queueTrapPhoto, syncTrapPhotos } from "../../../lib/sync/trapPhotoQueue";
 import { claveI18nDeRevisionRechazada } from "../../../lib/traceability/pendienteDeTrampas";
+import { descartablesPorEstaCuenta, repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 const NIVELES = ["ninguno", "pocos", "algunos", "muchos"] as const;
 
@@ -98,6 +100,9 @@ export function RondaDeTrampaForm({
 
   const [estado, setEstado] = useState<EstadoDeBorrador | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
+  // ADR-199 — si el operador de ESTE navegador puede borrar el borrador que la tarjeta enseña: sólo uno
+  // en error y de su cuenta. Un rechazo de otra cuenta no se pinta con «Descartar».
+  const [descartable, setDescartable] = useState(false);
   const [errorLocal, setErrorLocal] = useState(false);
   const [errorFoto, setErrorFoto] = useState(false);
   const [encolando, setEncolando] = useState(false);
@@ -120,6 +125,9 @@ export function RondaDeTrampaForm({
     // estaba pendiente. Ver `estadoTrasRelectura`.
     setEstado((previo) => estadoTrasRelectura(previo, borrador));
     setMotivoRechazo(borrador?.errorMessage ?? null);
+    setDescartable(
+      borrador !== null && descartablesPorEstaCuenta([borrador], cuentaActualDelNavegador()).length === 1,
+    );
   }, []);
 
   // Re-lee el borrador de ESTA clave (si ya se envió una vez) o, si aún no se
@@ -127,7 +135,10 @@ export function RondaDeTrampaForm({
   // ESTA trampa que quede en la cola — para sobrevivir a un remonte/recarga.
   const recomprobar = useCallback(async () => {
     try {
-      const drafts = await listFieldEventDrafts();
+      // ADR-199 — sólo lo que este navegador puede enviar. Sin esto, con `claveRef` nulo la tarjeta
+      // elegía el último borrador de esta trampa de CUALQUIER cuenta y enseñaba, con su botón de
+      // «Descartar», el rechazo de A a quien tiene abierta la sesión de B.
+      const drafts = repartirPorCuenta(await listFieldEventDrafts(), cuentaActualDelNavegador()).enviables;
       const clave = claveRef.current;
       const borrador = clave
         ? drafts.find((d) => claveDelBorrador(d) === clave) ?? null
@@ -212,6 +223,14 @@ export function RondaDeTrampaForm({
     const draftId = draftIdRef.current;
     if (draftId) {
       try {
+        // ADR-199 — se vuelve a comprobar contra la cola y no contra lo que la tarjeta recuerda: la
+        // cuenta de este navegador pudo cambiar desde que se pintó el botón. Si ya no es descartable por
+        // esta cuenta, no se borra nada.
+        const actual = (await listFieldEventDrafts()).find((d) => d.id === draftId) ?? null;
+        if (actual !== null && descartablesPorEstaCuenta([actual], cuentaActualDelNavegador()).length !== 1) {
+          setDescartable(false);
+          return;
+        }
         await discardFieldEventDraft(draftId);
       } catch {
         // Sin IndexedDB no hay nada que descartar; se deja como estaba.
@@ -222,6 +241,7 @@ export function RondaDeTrampaForm({
     claveRef.current = null;
     setEstado(null);
     setMotivoRechazo(null);
+    setDescartable(false);
   };
 
   return (
@@ -290,9 +310,11 @@ export function RondaDeTrampaForm({
       {estado === "rechazada" ? (
         <div className="nn-error" role="alert">
           <p>{t("trapCheckRejected", { motivo: t(claveI18nDeRevisionRechazada(motivoRechazo)) })}</p>
-          <button type="button" className="nn-button" onClick={descartar}>
-            {t("trapCheckDiscard")}
-          </button>
+          {descartable ? (
+            <button type="button" className="nn-button" onClick={descartar}>
+              {t("trapCheckDiscard")}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {errorLocal ? (

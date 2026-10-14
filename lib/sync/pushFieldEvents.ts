@@ -1,5 +1,7 @@
 import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
+import { huellaDeCuenta } from "../auth/huellaDeCuenta";
+import { duenoDelBorrador, RAZON_BORRADOR_AJENO } from "./cuentaDelBorrador";
 import {
   recordFieldEvent,
   FieldSessionValidationError,
@@ -93,7 +95,7 @@ export function reinaVistaDeLaCola(valor: boolean | string | null | undefined): 
  * desde A9.2 el enganche a la visita abierta. Copiar esas reglas aquí sería
  * crear un segundo sitio donde envejecen por separado.
  */
-export type PushMutation =
+export type PushMutation = (
   | MutacionDeEvento
   | MutacionDeInspeccion
   | MutacionDeEventoDeColonia
@@ -103,7 +105,14 @@ export type PushMutation =
   | MutacionDeMuestraFoliar
   | MutacionDePerfilDeSuelo
   | MutacionDeSiembra
-  | MutacionDeRevisionDeTrampa;
+  | MutacionDeRevisionDeTrampa
+) & {
+  /**
+   * ADR-199 — la huella de la cuenta que anotó el borrador, o `null`/ausente si se guardó antes de
+   * que existiera, o sin sesión. La valida `parsearMutaciones`; la decide `duenoDelBorrador`.
+   */
+  cuentaDelBorrador?: string | null;
+};
 
 export type MutacionDeEvento = {
   /** Ausente es `field_event`: el protocolo viejo sigue valiendo tal cual. */
@@ -379,7 +388,13 @@ export type MutacionDeRevisionDeTrampa = {
 export type PushResult =
   | { clientDraftId: string; status: "applied"; id: string }
   | { clientDraftId: string; status: "duplicate"; id: string }
-  | { clientDraftId: string; status: "rejected"; reason: string };
+  | {
+      clientDraftId: string;
+      status: "rejected";
+      reason: string;
+      /** ADR-199 — sólo al retener uno sin cuenta: la huella de quien registró el aparato. */
+      cuentaDelBorrador?: string;
+    };
 
 /** El lote entero se niega: el aparato no existe o está revocado. */
 export class DeviceError extends Error {}
@@ -909,7 +924,7 @@ export async function pushFieldEvents(
 ): Promise<PushResult[]> {
   const device = await prisma.device.findUnique({
     where: { id: deviceId },
-    select: { id: true, revokedAt: true },
+    select: { id: true, revokedAt: true, createdBy: true },
   });
   // Un aparato desconocido y uno revocado se distinguen en el mensaje pero no
   // en el efecto: ninguno escribe. Se dicen distintos porque quien lo lea
@@ -918,11 +933,34 @@ export async function pushFieldEvents(
   if (device.revokedAt) throw new DeviceError("device_revoked");
 
   const results: PushResult[] = [];
+  const huellaDeQuienEnvia = huellaDeCuenta(userAccountId);
 
   // En el orden en que llegan, que es el orden en que el operador los anotó.
   // Importa aunque hoy ningún evento dependa de otro: un rechazo se lee junto
   // a lo que el operador recuerda haber hecho, y reordenarlos lo haría ilegible.
   for (const m of mutations) {
+    // ADR-199 — antes que nada, de quién es. Un borrador de otra cuenta no se procesa con la sesión de
+    // quien envía: ni fila ni AuditEvent. Va el primero a propósito, antes de mirar el acceso, para que
+    // un borrador ajeno se RETENGA aunque quien envía no tenga permiso en su sitio: un rechazo por
+    // acceso lo marcaría como error en el teléfono, y la pantalla ofrecería descartarlo.
+    if (
+      duenoDelBorrador({
+        cuentaDelBorrador: m.cuentaDelBorrador,
+        huellaDeQuienEnvia,
+        quienEnvia: userAccountId,
+        creadorDelAparato: device.createdBy,
+      }) === "ajeno"
+    ) {
+      results.push({
+        clientDraftId: m.clientDraftId,
+        status: "rejected",
+        reason: RAZON_BORRADOR_AJENO,
+        // Sólo para uno sin cuenta: a quién se le atribuye por la regla del aparato, para que el
+        // teléfono lo apunte y deje de reenviarlo a nombre de quien no es.
+        ...(m.cuentaDelBorrador == null && device.createdBy ? { cuentaDelBorrador: huellaDeCuenta(device.createdBy) } : {}),
+      });
+      continue;
+    }
     // A9.5 — una mutación de apiario se delega a su servicio, que ya trae la
     // compuerta, la idempotencia y el audit. Lo único que se hace aquí es
     // distinguir `applied` de `duplicate`, que es lo que el protocolo promete

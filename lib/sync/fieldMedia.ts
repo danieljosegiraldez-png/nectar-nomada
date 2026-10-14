@@ -5,6 +5,8 @@ import { objectStorageProvider } from "../integrations/storage";
 import { requireLocationAttributeAccess } from "../traceability/locations";
 import { FieldSessionValidationError } from "../traceability/fieldSessions";
 import { recordAuditEvent } from "../audit";
+import { huellaDeCuenta } from "../auth/huellaDeCuenta";
+import { BorradorAjenoError, duenoDelBorrador } from "./cuentaDelBorrador";
 
 /**
  * P4 §7 — la cola de medios, y la decisión de modelo que la hace posible.
@@ -93,6 +95,8 @@ export interface FinalizeFieldMediaInput {
   occurredAt: Date;
   recordedAt?: Date | null;
   deviceId?: string | null;
+  /** ADR-199 — la huella de la cuenta que anotó la foto; `null` si llegó sin cuenta. */
+  cuentaDelBorrador?: string | null;
   operatorPersonId?: string | null;
   notes?: string | null;
   position?: { latitude?: number | null; longitude?: number | null; accuracyM?: number | null };
@@ -119,6 +123,43 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
     include: { asset: true },
   });
   if (yaExiste) return yaExiste;
+
+  // El aparato del cuerpo, con el mismo criterio que `pushFieldEvents`. Por
+  // cookie no hay aparato propio y éste es el que queda como autor de la foto:
+  // uno revocado no firma una foto nueva, y uno que no existe tiene que decirlo
+  // en vez de reventar contra la clave foránea como un 500.
+  let creadorDelAparato: string | null = null;
+  if (input.deviceId != null) {
+    const aparato = await prisma.device.findUnique({
+      where: { id: input.deviceId }, select: { revokedAt: true, createdBy: true },
+    });
+    if (!aparato) throw new FieldMediaError("device_not_found");
+    if (aparato.revokedAt) throw new FieldMediaError("device_revoked");
+    creadorDelAparato = aparato.createdBy;
+  }
+
+  // ADR-199 — de quién es la foto, con la regla de `pushFieldEvents` y ANTES que
+  // el acceso: con cuenta, la suya; sin cuenta, la de quien registró el aparato.
+  // Una foto ajena no se escribe con la sesión de quien envía, y se retiene
+  // aunque éste no tenga permiso en la jornada (Daniel, 2026-10-13). Un aparato
+  // vivo de otra cuenta sigue pasando si la foto trae la cuenta de quien envía,
+  // como se decidió el 2026-10-11.
+  //
+  // Sin aparato y sin cuenta no hay de quién deducir otro dueño: por cookie el
+  // aparato es opcional, y esa foto es de quien la envía.
+  if (input.deviceId != null || input.cuentaDelBorrador != null) {
+    const dueno = duenoDelBorrador({
+      cuentaDelBorrador: input.cuentaDelBorrador,
+      huellaDeQuienEnvia: huellaDeCuenta(userAccountId),
+      quienEnvia: userAccountId,
+      creadorDelAparato,
+    });
+    if (dueno === "ajeno") {
+      throw new BorradorAjenoError(
+        input.cuentaDelBorrador == null && creadorDelAparato ? huellaDeCuenta(creadorDelAparato) : null,
+      );
+    }
+  }
 
   const sesion = await sesionAccesible(userAccountId, input.fieldSessionId);
 
@@ -152,19 +193,6 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
   // Atribución, no autoridad — pero desde P-G (2026-09-21) acotada: tiene que ser alguien de la
   // finca de la jornada o del equipo Néctar Nómada, no cualquier persona de la plataforma.
   await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: sesion.locationId }]);
-
-  // El aparato del cuerpo, con el mismo criterio que `pushFieldEvents`. Por
-  // cookie no hay aparato propio y éste es el que queda como autor de la foto:
-  // uno revocado no firma una foto nueva, y uno que no existe tiene que decirlo
-  // en vez de reventar contra la clave foránea como un 500. Un aparato vivo de
-  // otra cuenta pasa, como en `field-events` (decisión de Daniel, 2026-10-11).
-  if (input.deviceId != null) {
-    const aparato = await prisma.device.findUnique({
-      where: { id: input.deviceId }, select: { revokedAt: true },
-    });
-    if (!aparato) throw new FieldMediaError("device_not_found");
-    if (aparato.revokedAt) throw new FieldMediaError("device_revoked");
-  }
 
   const cuenta = await prisma.userAccount.findUniqueOrThrow({
     where: { id: userAccountId },

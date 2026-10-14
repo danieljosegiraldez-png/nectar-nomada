@@ -42,4 +42,9 @@ describe("clasificarResultadoDeFoto", () => {
   it("error se marca error", () => {
     expect(clasificarResultadoDeFoto({ error: "algo" })).toBe("rechazar");
   });
+
+  it("una foto de otra cuenta se retiene: ni se aplica ni se marca error (ADR-199)", () => {
+    expect(clasificarResultadoDeFoto({ retenida: true })).toBe("retener");
+    expect(clasificarResultadoDeFoto({ retenida: true, cuentaDelBorrador: "11e594f481958c10" })).toBe("retener");
+  });
 });
