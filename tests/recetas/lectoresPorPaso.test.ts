@@ -105,6 +105,8 @@ interface MetaCruda {
   maxValue?: number;
   targetValue?: number;
   everyHours?: number;
+  /** Su lugar en la tabla «objetivo contra real». Por omisión, su posición en la lista de metas (`receta()` las inserta en ese orden). */
+  displayOrder?: number;
 }
 
 /** Un paso de prueba: su tipo, sus valores por defecto y sus metas. `seq` es su lugar en la lista, desde 1. */
@@ -166,7 +168,7 @@ async function receta(
     pasoIds.push(paso.id);
     for (const [j, t] of (p.metas ?? []).entries()) {
       await prisma.processTarget.create({
-        data: { ...t, recipeVersionId: v.id, recipeStepId: paso.id, phase: FASE_DEL_TIPO[p.tipo] ?? null, displayOrder: j },
+        data: { ...t, recipeVersionId: v.id, recipeStepId: paso.id, phase: FASE_DEL_TIPO[p.tipo] ?? null, displayOrder: t.displayOrder ?? j },
       });
     }
     const fase = FASE_DEL_TIPO[p.tipo];
@@ -185,7 +187,7 @@ async function receta(
     }
   }
   for (const [j, t] of metasDeLaVersion.entries()) {
-    await prisma.processTarget.create({ data: { ...t, recipeVersionId: v.id, recipeStepId: null, displayOrder: j } });
+    await prisma.processTarget.create({ data: { ...t, recipeVersionId: v.id, recipeStepId: null, displayOrder: t.displayOrder ?? j } });
   }
   for (const f of fasesDeLaVersion) {
     await prisma.processRecipePhase.create({
@@ -819,6 +821,12 @@ describe("compareRunToTargets lee las metas del paso de la corrida (diseño §3.
   let admin: string;
   /** Un paso de fermentación con su pH final (3,8) y su Brix inicial (22); la meta de la VERSIÓN es otro pH final (4,2). */
   let compara: { versionId: string; pasoIds: string[] };
+  /**
+   * Un paso de fermentación con TRES metas dadas de alta en un orden (pH, temperatura, Brix) y numeradas en el contrario (Brix 0, temperatura 1, pH 2):
+   * su `displayOrder` no es el orden en que la base las guarda ni el alfabético de la variable (Brix, pH, temperatura), que es el que daría el índice único
+   * por paso si el planificador lo usara para leerlas.
+   */
+  let ordenada: { versionId: string; pasoIds: string[] };
 
   const lectura = (c: { lotId: string; runId: string }, variable: string, value: number, haceH: number) =>
     prisma.measurement.create({
@@ -858,6 +866,17 @@ describe("compareRunToTargets lee las metas del paso de la corrida (diseño §3.
       ],
       [{ variable: "ph", moment: "final", phase: "fermentation", unit: "pH", targetValue: 4.2 }],
     );
+    ordenada = await receta(m, "metas en otro orden", [
+      {
+        tipo: "fermentation",
+        horasSugeridas: 36,
+        metas: [
+          { variable: "ph", moment: "final", unit: "pH", targetValue: 3.8, displayOrder: 2 },
+          { variable: "temperature", moment: "during", unit: "C", minValue: 18, maxValue: 24, displayOrder: 1 },
+          { variable: "brix", moment: "initial", unit: "Bx", targetValue: 22, displayOrder: 0 },
+        ],
+      },
+    ]);
   }, 60_000);
 
   it("fila patrón: la versión trae dos metas de su paso y una de la versión, cada una con su pH final distinto", async () => {
@@ -899,5 +918,32 @@ describe("compareRunToTargets lee las metas del paso de la corrida (diseño §3.
     const delControl = await compareRunToTargets(admin, sinPaso.runId);
     expect(delControl.map((f) => [f.variable, f.moment, f.target.value?.toNumber()])).toEqual([["ph", "final", 4.2]]);
     expect(delControl[0]!.deviation?.toNumber()).toBeCloseTo(3.785 - 4.2, 4);
+  });
+
+  it("las metas del paso salen en el orden de su displayOrder, no en el que la base las guarda ni en el alfabético de la variable", async () => {
+    const corrida = await conCorrida(m, {
+      codigo: "CMP-ORDEN",
+      fase: "fermentation",
+      versionId: ordenada.versionId,
+      pasoId: ordenada.pasoIds[0]!,
+      iniciadoHaceHoras: 5,
+      locationId: m.finca,
+    });
+    const delOrden = ["brix", "temperature", "ph"];
+
+    // Controles: el orden de la tabla que se espera NO es ninguno de los otros dos que una lectura sin `orderBy` podría dar. El físico (`ctid` es la posición de
+    // la fila en la tabla; es el que da un barrido secuencial) es el de alta, y el alfabético es el que daría el índice único por paso (`recipe_step_id, variable,
+    // moment`). Sin esto, el orden de abajo se leería igual con una lectura que no ordenara nada y una base que ya las guardara ordenadas.
+    const fisico = (
+      await prisma.$queryRaw<{ variable: string }[]>`select variable from traceability.process_target where recipe_step_id = ${ordenada.pasoIds[0]!}::uuid order by ctid`
+    ).map((f) => f.variable);
+    expect(fisico, "el orden físico de las metas debía ser el de alta").toEqual(["ph", "temperature", "brix"]);
+    expect(fisico).not.toEqual(delOrden);
+    expect([...delOrden].sort()).not.toEqual(delOrden);
+    const guardadas = await prisma.processTarget.findMany({ where: { recipeStepId: ordenada.pasoIds[0]! }, select: { variable: true, displayOrder: true } });
+    expect(guardadas.map((g) => [g.variable, g.displayOrder]).sort()).toEqual([["brix", 0], ["ph", 2], ["temperature", 1]]);
+
+    const filas = await compareRunToTargets(admin, corrida.runId);
+    expect(filas.map((f) => f.variable)).toEqual(delOrden);
   });
 });
