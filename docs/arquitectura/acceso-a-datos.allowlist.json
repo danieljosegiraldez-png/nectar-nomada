@@ -1554,6 +1554,12 @@
       "operacion": "negativaDelAparato",
       "razon": "No autoriza ni devuelve datos: lee sólo `revokedAt` del aparato cuyo access YA autenticó la firma, y dice si puede escribir. Recibe el `deviceId` del token, no un principal. Sus dos llamadores son las rutas de escritura por Bearer, `app/api/v1/sync/field-media` (los dos pasos) y `app/api/v1/devices`, y las dos la llaman justo después de `resolverPrincipal` y antes de tocar nada. Lo que escriben después lo decide su servicio, y no igual: `finalizeFieldMedia` y `requestFieldMediaUpload` autorizan con `requireLocationAttributeAccess` sobre la ubicación de la jornada; `registerDevice` sólo autentica, a propósito (ver su propia fila en este archivo: a un aparato lo acota quién lo registró). Es la misma comprobación que `pushFieldEvents` hace con el aparato del lote. Decisión de Daniel del 2026-10-10: la revocación muerde en cada escritura, no en cada lectura.",
       "verificado": "2026-10-10"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "conDescendientes",
+      "razon": "No autoriza ni devuelve datos de nadie: recibe ids de Location y devuelve esos ids más los de todo lo que cuelga de ellos por `parentLocationId`, leyendo sólo `location.id`, con tope de profundidad por si hay un ciclo. Es la mitad de ADR-144 que construye LISTAS (`can()` sube con `conAncestros`; esto baja). Se exportó el 2026-10-14 para que `resolveApiaryVisibility` (lib/apiary/hives.ts) dejara de filtrar por el id exacto del ámbito, en vez de escribir una segunda copia. Sus dos llamadores, `resolveLotVisibility` (lots.ts) y `resolveApiaryVisibility` (hives.ts), le pasan sólo los `scopeRefId` de las asignaciones activas DEL PROPIO principal, de tipo `location`, que conceden el permiso pedido (`lot:<acción>` o `apiary:<acción>`), así que lo que devuelve es lo que esas asignaciones ya alcanzan por `can()`, y una hermana queda fuera. Comprobado leyendo los dos sitios de llamada, no deducido; lo fijan `tests/traceability/fincas.test.ts` y `tests/apiary/apiarioBajoLaFinca.test.ts`, cada uno con una ubicación hermana como control.",
+      "verificado": "2026-10-14"
     }
   ]
 }
