@@ -276,30 +276,34 @@ export function InspectionForm({
               ))}
             </select>
           </div>
+          {/* Cuadros y marcos negros, sólo donde se maneja en cuadros (ADR-200): en un meliponario
+              no tienen respuesta, y su vacío se leería después como «no se contó». */}
           {enCuadros ? (
-            <div className="nn-field">
-              <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
-              <CampoNumerico
-                id={`insp-cuadros-${colonyId}`}
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={cuadros}
-                onChange={(e) => setCuadros(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="nn-field">
+                <label htmlFor={`insp-cuadros-${colonyId}`}>{t("beeCoveredFramesLabel")}</label>
+                <CampoNumerico
+                  id={`insp-cuadros-${colonyId}`}
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={cuadros}
+                  onChange={(e) => setCuadros(e.target.value)}
+                />
+              </div>
+              <div className="nn-field">
+                <label htmlFor={`insp-marcos-negros-${colonyId}`}>{t("darkFramesLabel")}</label>
+                <CampoNumerico
+                  id={`insp-marcos-negros-${colonyId}`}
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={marcosNegros}
+                  onChange={(e) => setMarcosNegros(e.target.value)}
+                />
+              </div>
+            </>
           ) : null}
-          <div className="nn-field">
-            <label htmlFor={`insp-marcos-negros-${colonyId}`}>{t("darkFramesLabel")}</label>
-            <CampoNumerico
-              id={`insp-marcos-negros-${colonyId}`}
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={marcosNegros}
-              onChange={(e) => setMarcosNegros(e.target.value)}
-            />
-          </div>
           {/* Varias a la vez: es un conjunto, no una elección. */}
           <fieldset className="nn-field">
             <legend>{t("broodStagesLegend")}</legend>
