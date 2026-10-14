@@ -738,6 +738,80 @@ describe("Parte 2a, §5.2 — el control de parecido", () => {
     expect(await parecido(afinados), "la afinación no es identidad: tiene que seguir coincidiendo").toBe(lav.versionId);
   }, 60000);
 
+  it("la receta publicada se lee con TODOS sus ejes y sus adiciones: el oxígeno, la temperatura por id, la fuente microbiana, lo físico y las adiciones cuentan para el parecido", async () => {
+    // Ronda de arreglo del 2026-10-14, hallazgo 2. `lavado()` no declara ninguna de esas cinco cosas, así que la LECTURA que `buscarParecida`
+    // hace de la receta publicada no estaba fijada para ellas: «las adiciones y esos ejes cuentan» sólo se probaba en la función pura
+    // (`parecido.test.ts`), no en el camino que lee la base. Quitar la línea que lee una columna dejaba la suite en verde.
+    const [entera, anaerobico, aerobico, fria, ambiente, levadura, espontanea, agitacion, ninguno, mosto, coFermentacion] = await Promise.all([
+      valorDe("estado_cereza", "entera"),
+      valorDe("condicion_oxigeno", "anaerobico"),
+      valorDe("condicion_oxigeno", "abierto_aerobico"),
+      valorDe("manejo_temperatura", "fermentacion_fria"),
+      valorDe("manejo_temperatura", "ambiente"),
+      valorDe("fuente_microbiana", "levadura_inoculada"),
+      valorDe("fuente_microbiana", "espontanea"),
+      valorDe("fisico", "agitacion"),
+      valorDe("fisico", "ninguno"),
+      valorDe("sustrato_anadido", "mosto"),
+      valorDe("sustrato_anadido", "co_fermentacion"),
+    ]);
+    const A0 = { categoriaValueId: mosto, cantidad: 5, unidad: "kg", momento: "pre_green" as const };
+    const A1 = { categoriaValueId: coFermentacion, momento: "post_green" as const };
+    /** El plan de la receta; `cambio` pisa lo que se diga en la fermentación, que es el paso que declara los ejes y las adiciones. */
+    const plan = async (cambio: Partial<PasoEditable> = {}): Promise<PasoEditable[]> => [
+      await pasoDe("pulping", { estadoFrutoValueId: entera }),
+      await pasoDe("fermentation", {
+        oxigenoValueId: anaerobico,
+        temperaturaValueId: fria,
+        temperaturaMinC: 23.1,
+        temperaturaMaxC: 30,
+        fuenteMicrobianaValueId: levadura,
+        fisicoValueId: agitacion,
+        adiciones: [A0, A1],
+        horasSugeridas: 48,
+        ...cambio,
+      }),
+      await pasoDe("drying", { modoSecado: "covered_patio", horasSugeridas: 120 }),
+    ];
+    const rec = await receta("Todos los ejes 23,1", await plan());
+    const l = await lote("P7");
+    const parecido = async (pasos: readonly PasoEditable[]) => (await parecidoDeLaLibre(gestor, { lotId: l, pasos }))?.recipeVersionId ?? null;
+
+    // Controles: la receta DECLARA cada cosa que esta prueba cambia (un nulo que pasa a otro nulo no probaría nada) y la copia exacta coincide.
+    const fermentacion = await prisma.processRecipeStep.findFirstOrThrow({ where: { recipeVersionId: rec.versionId, seq: 2 } });
+    expect(
+      [fermentacion.oxigenoValueId, fermentacion.temperaturaValueId, fermentacion.fuenteMicrobianaValueId, fermentacion.fisicoValueId],
+      "control: la receta no declara los cuatro ejes",
+    ).toEqual([anaerobico, fria, levadura, agitacion]);
+    expect(await prisma.processRecipeStepAddition.count({ where: { stepId: fermentacion.id } }), "control: la receta no guardó sus dos adiciones").toBe(2);
+    expect(await parecido(await plan()), "control: la copia exacta no coincide con la receta").toBe(rec.versionId);
+
+    // Cada eje, cambiado a otro valor de su catálogo o quitado, y cada diferencia de las adiciones: es otra receta.
+    const distintos: [string, Partial<PasoEditable>][] = [
+      ["otro oxígeno", { oxigenoValueId: aerobico }],
+      ["sin oxígeno", { oxigenoValueId: null }],
+      ["otro manejo de temperatura", { temperaturaValueId: ambiente }],
+      ["sin manejo de temperatura", { temperaturaValueId: null }],
+      ["otra fuente microbiana", { fuenteMicrobianaValueId: espontanea }],
+      ["sin fuente microbiana", { fuenteMicrobianaValueId: null }],
+      ["otro físico", { fisicoValueId: ninguno }],
+      ["sin físico", { fisicoValueId: null }],
+      ["una adición de menos", { adiciones: [A0] }],
+      ["una adición repetida", { adiciones: [A0, A1, A0] }],
+      ["otra categoría de adición", { adiciones: [{ ...A0, categoriaValueId: coFermentacion }, A1] }],
+      ["otro momento de adición", { adiciones: [{ ...A0, momento: "post_green" as const }, A1] }],
+      ["sin adiciones", { adiciones: [] }],
+    ];
+    for (const [que, cambio] of distintos) {
+      expect(await parecido(await plan(cambio)), `«${que}» no debería parecerse a la receta`).toBeNull();
+    }
+    // Lo que no es identidad: la dosis de una adición y el orden en que se escriben.
+    expect(
+      await parecido(await plan({ adiciones: [{ ...A1, cantidad: 3, unidad: "L" }, { ...A0, cantidad: 9, unidad: "g" }] })),
+      "la dosis y el orden de las adiciones no son identidad: tiene que seguir coincidiendo",
+    ).toBe(rec.versionId);
+  }, 120000);
+
   it("sólo se compara con lo que la organización puede usar: ni ajenas, ni archivadas, ni borradores, ni Libres, ni versiones superadas; sí las plantillas", async () => {
     const l = await lote("P4");
     /** Qué versión coincide con una copia del plan cuya fermentación empieza en `minC`, o nulo. */
