@@ -15,6 +15,7 @@ import { sortByName } from "../naturalOrder";
 import { recordAuditEvent } from "../audit";
 import { can, createAssignment, revokeAssignment } from "./service";
 import { CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
+import { UUID } from "../validation/uuid";
 import type { ScopeType } from "../../generated/prisma/client";
 
 export class UserAdminError extends Error {}
@@ -224,6 +225,10 @@ export async function revokeRole(actorUserAccountId: string, assignmentId: strin
  */
 export async function listAssignmentPermissions(actorUserAccountId: string, assignmentId: string) {
   await requirePermissionAdmin(actorUserAccountId);
+  // El id llega de la URL de `admin/users/[assignmentId]/permisos`. Sin forma de UUID, Prisma lanzaría
+  // `P2007`; es una asignación que no existe (PENDING_IMPLEMENTATIONS/026). Hace falta desde que la
+  // página dejó de tragarse cualquier error con un `catch {}`.
+  if (!UUID.test(assignmentId)) throw new UserAdminError("assignment_not_found");
 
   const asignacion = await prisma.assignment.findUnique({
     where: { id: assignmentId },

@@ -285,11 +285,11 @@ export interface PayloadDeRevisionDeTrampa {
  * campo oculto (SECURITY.md §2 — un `<input type="hidden">` es falsificable, y
  * un payload de cola es tan falsificable como un campo oculto: viaja igual, por
  * fuera de cualquier sesión). Los dos se fijan en el SERVIDOR al aplicar la
- * mutación (`aplicarRevisionDeTrampa` en `pushFieldEvents.ts`), con la misma
- * regla que `recordRoundTrapCheckFormAction`: procedencia siempre
- * `direct_observation`, observador la Person de la cuenta del dispositivo. Este
- * constructor no puede leer del `FormData` un campo que el formulario nunca
- * pinta.
+ * mutación (`aplicarRevisionDeTrampa` en `pushFieldEvents.ts`): procedencia
+ * siempre `direct_observation`, observador la Person de la cuenta del
+ * dispositivo. La acción con señal que compartía esa regla se retiró en #445, y
+ * desde entonces la cola es el único camino de la ronda. Este constructor no
+ * puede leer del `FormData` un campo que el formulario nunca pinta.
  */
 export function construirPayloadDeRevisionDeTrampa(
   fd: FormData,
@@ -307,8 +307,10 @@ export function construirPayloadDeRevisionDeTrampa(
     brocaLevel: String(fd.get("brocaLevel") ?? ""),
     captureCount: numero(fd, "captureCount"),
     otherInsects: otros,
-    // Mismo criterio que `recordRoundTrapCheckFormAction` (F8 fix-final): la
-    // nota se guarda salvo cuando "otros" es explícitamente NO.
+    // F8 fix-final: la nota se guarda salvo cuando "otros" es explícitamente
+    // NO. En el camino de la cola se decide aquí: `aplicarRevisionDeTrampa`
+    // guarda la nota tal como llega. (`recordTrapCheckFormAction`, la de
+    // ajustes, aplica la misma regla por su lado.)
     otherInsectsNote: otros === false ? null : texto(fd, "otherInsectsNote"),
     cleaned: booleano(fd, "cleaned"),
     liquidChanged: booleano(fd, "liquidChanged"),

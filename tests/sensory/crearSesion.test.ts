@@ -25,7 +25,7 @@ import { retirarMuestra } from "../../lib/traceability/samples";
 
 const RUN = `cata-${Date.now()}`;
 let orgId: string, plotId: string, scopeId: string;
-let gestor: string, sinPermiso: string;
+let gestor: string, sinPermiso: string, acotado: string;
 let versionOk: string, versionSinAtributos: string, versionArchivada: string;
 let m1: string, m2: string, m3: string, m3Code: string;
 let roast1: string, roast2: string;
@@ -65,7 +65,9 @@ beforeAll(async () => {
 
   gestor = await cuenta("Gestor");
   sinPermiso = await cuenta("SinPermiso");
-  scopeId = (await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
+  // Junto a las otras dos, no donde se le asigna: el `afterAll` borra por `ids`, y un `undefined` ahí lo aborta entero.
+  acotado = await cuenta("Acotado");
+  scopeId =(await prisma.scope.create({ data: { scopeType: "location", scopeRefId: plotId } })).id;
   const farm = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: farm.id, scopeId } });
   await prisma.assignment.create({ data: { userAccountId: sinPermiso, roleProfileId: farm.id, scopeId } });
@@ -78,7 +80,17 @@ beforeAll(async () => {
     (await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } }));
   await prisma.assignment.create({ data: { userAccountId: gestor, roleProfileId: admin.id, scopeId: plataforma.id } });
 
-  versionOk = await protocolo("protocolo bueno", 3, "active");
+  // **Para leer la lista SIN filtro, una cuenta que sólo ve SU parcela, nunca el admin** (2026-10-10, P2025 en el carril
+  // con base del PR #699). La lista del admin recorre las muestras de TODA la base compartida y pide el grado del proceso
+  // de cada una: si otro archivo que corre en paralelo borra ese proceso entre las dos lecturas de
+  // `procesosParaEntrada`, salta P2025. Reproducido con un archivo vecino que crea y borra procesos en bucle: con el admin
+  // caían esta lista y la de los tapones; con esta cuenta, ninguna. Monta catas (Head Judge, en plataforma) y ve muestras
+  // por Farm Operator de la parcela, la misma combinación que `juez` más abajo.
+  const juezJefe = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Sensory Head Judge" } });
+  await prisma.assignment.create({ data: { userAccountId: acotado, roleProfileId: juezJefe.id, scopeId: plataforma.id } });
+  await prisma.assignment.create({ data: { userAccountId: acotado, roleProfileId: farm.id, scopeId } });
+
+  versionOk =await protocolo("protocolo bueno", 3, "active");
   versionSinAtributos = await protocolo("protocolo vacío", 0, "active");
   versionArchivada = await protocolo("protocolo retirado", 3, "archived");
 
@@ -120,7 +132,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const ids = [gestor, sinPermiso];
+  const ids = [gestor, sinPermiso, acotado];
   const sesiones = await prisma.sensorySession.findMany({ where: assertDefinedWhere({ createdBy: { in: ids } }), select: { id: true } });
   await prisma.sensorySession.deleteMany({ where: assertDefinedWhere({ id: { in: sesiones.map((s) => s.id) } }) });
   await prisma.roastSession.deleteMany({ where: assertDefinedWhere({ id: { in: tuestesDePrueba } }) });
@@ -262,27 +274,42 @@ describe("crear una sesión de cata", () => {
   });
 
   /**
-   * **No se puede probar por la interfaz pública, y se dice en vez de fingirlo.**
-   * El servicio SÍ comprueba que cada muestra esté entre las que el llamador
-   * alcanza. Pero para crear una sesión hace falta `sensory:manage_session`, que
-   * hoy sólo tienen `Platform Admin` —que alcanza todo, así que ninguna muestra
-   * le es ajena— y `Sensory Head Judge`, que no tiene NI `lot:view` NI
-   * `sample:manage`, así que no alcanza ninguna y no puede crear nada.
+   * **Quién llega a la comprobación de alcance, y dónde se prueba.** El servicio
+   * comprueba cada muestra por su id contra las que el llamador alcanza
+   * (`puedeVerMuestra`) y rechaza con `sample_not_accessible`. Para llegar ahí
+   * hace falta `sensory:manage_session` en plataforma, y en `lib/rbac/catalog.ts`
+   * lo dan tres perfiles:
    *
-   * Es decir: **hoy sólo un Platform Admin puede montar una cata**, y contra él
-   * esta comprobación no puede fallar. Escribir una prueba con un usuario
-   * fabricado a mano que tuviera manage_session sin acceso a muestras probaría
-   * una combinación que el catálogo de perfiles no produce — un verde sobre un
-   * mundo que no existe.
+   * - `Platform Admin` lo tiene todo, también cada `clear_*`: ninguna muestra le
+   *   es ajena y contra él la comprobación no puede fallar. Es el `gestor` de
+   *   este archivo, así que sus pruebas no la ejercen.
+   * - `Cupping Host` trae `sample:view`. Es como resolvió el dueño, el mismo
+   *   2026-09-06, que dirigir una cata no exigiera ser admin; se prueba en
+   *   `anfitrionDeCata.test.ts`, asignado en plataforma —«alcanza las muestras
+   *   con `sample:view`, sin poder cambiarlas» y «crea la sesión con su propósito
+   *   y su tipo»—. En plataforma alcanza cualquier ubicación, así que tampoco
+   *   ejerce el rechazo.
+   * - `Sensory Head Judge` no trae ningún permiso de `sample`: solo, no alcanza
+   *   ninguna muestra. Con `Farm Operator` de una parcela alcanza sólo esa, y es
+   *   la cuenta `juez` del bloque «buscarMuestrasParaCata», más abajo. **Ahí se
+   *   ejerce la comprobación:** «y la cata rechaza esa muestra aunque llegue en
+   *   el formulario» cae con `sample_not_accessible`, y su control positivo es
+   *   «nunca devuelve una muestra que la cuenta no ve», donde la misma
+   *   `puedeVerMuestra` sí le da la de su parcela.
    *
-   * Queda como decisión del dueño (2026-09-06): o `Sensory Head Judge` recibe
-   * acceso de lectura a muestras, o montar la cata es trabajo de quien tiene
-   * `sample:manage` y entonces el permiso que la gobierna debería ser otro.
+   * **Corregido el 2026-10-10.** Este bloque decía desde el 2026-09-06 que sólo un
+   * Platform Admin podía montar una cata y que esta comprobación no se podía
+   * probar sin fabricar una combinación que el catálogo no produce. `Cupping Host`
+   * entró ese mismo día, y la cuenta `juez`, con perfiles del catálogo, el
+   * 2026-09-18.
    */
 
   it("no ofrece una muestra retirada en el listado para cata", async () => {
-    const listado = await listarMuestrasParaCata(gestor);
-    expect(listado.map((m) => m.id)).not.toContain(m3);
+    const ids = (await listarMuestrasParaCata(acotado)).map((m) => m.id);
+    // Exacta y no sólo «no contiene m3»: una lista vacía, o cortada en 200 antes de llegar a `M3-`, tampoco la contiene.
+    // Y exacta también afirma el aislamiento: si la cuenta vuelve a ver la base entera, entran las muestras sembradas.
+    expect(ids, "las dos sin retirar de su parcela, y nada más").toEqual([m1, m2]);
+    expect(ids).not.toContain(m3);
   });
 
   it("no la encuentra tampoco por búsqueda", async () => {
@@ -430,12 +457,16 @@ describe("crear una cata con una muestra que la lista no enseña", () => {
 
   it("control: la lista inicial NO la enseña", async () => {
     expect(tapon, "fila patrón: se crearon las 201").toHaveLength(201);
-    const ids = (await listarMuestrasParaCata(gestor)).map((m) => m.id);
+    const ids = (await listarMuestrasParaCata(acotado)).map((m) => m.id);
+    // `acotado` sólo ve esta parcela, así que la lista son los tapones: es el tope lo que esconde a la lejana, y no que
+    // la cuenta no vea nada.
+    expect(ids, "control positivo: la lista se llenó, y con tapones").toHaveLength(200);
+    expect(ids.every((id) => tapon.includes(id))).toBe(true);
     expect(ids).not.toContain(lejana);
   });
 
   it("y aun así la cata la acepta", async () => {
-    const s = await crearSesionDeCata(gestor, {
+    const s = await crearSesionDeCata(acotado, {
       name: `Lejana ${RUN}`,
       protocolVersionId: versionOk,
       muestras: [lejana],

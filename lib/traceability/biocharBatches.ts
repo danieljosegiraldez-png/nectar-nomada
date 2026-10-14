@@ -25,6 +25,7 @@
  * vez.
  */
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { recordAuditEvent } from "../audit";
 import {
   requireLocationAttributeAccess,
@@ -273,6 +274,9 @@ export function computeBatchAgingDays(producedAt: Date | null, asOf: Date): numb
 }
 
 export async function getBiocharBatch(userAccountId: string, biocharBatchId: string) {
+  // El id llega de la URL de `biochar/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la página
+  // daba 500 (PENDING_IMPLEMENTATIONS/026); es un lote que no existe.
+  if (!UUID.test(biocharBatchId)) throw new LocationAccessError("biochar_batch_not_found");
   const lote = await prisma.biocharBatch.findUnique({
     where: { id: biocharBatchId },
     include: {

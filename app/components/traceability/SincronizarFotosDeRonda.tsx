@@ -5,10 +5,13 @@ import { useTranslations } from "next-intl";
 import {
   listTrapPhotoDrafts,
   syncTrapPhotos,
+  discardTrapPhotoDraft,
   TRAP_PHOTO_DRAFTS_CHANGED_EVENT,
   type SyncFotosSummary,
 } from "../../../lib/sync/trapPhotoQueue";
 import { FIELD_EVENTS_SYNCED_EVENT } from "../../../lib/sync/offlineQueue";
+import { descartablesPorEstaCuenta, repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 /**
  * Tarea 12 — el contador y el botón para las fotos de la ronda, gemelo de
@@ -28,16 +31,31 @@ import { FIELD_EVENTS_SYNCED_EVENT } from "../../../lib/sync/offlineQueue";
  *   envío inmediato de `RondaDeTrampaForm` con señal). Además de recontar,
  *   dispara su PROPIA sincronización: sin esto, sincronizar las revisiones
  *   desde el botón genérico no reintentaba ninguna foto pendiente.
+ *
+ * **Las rechazadas se cuentan aparte y se descartan aquí** (2026-10-11). Ya no
+ * se vuelven a subir —ver `syncTrapPhotos`—, y hasta ese día no había ningún
+ * sitio donde quitarlas: se sumaban a «pendientes» para siempre.
  */
 export function SincronizarFotosDeRonda() {
   const t = useTranslations("Traceability");
   const [pendientes, setPendientes] = useState<number | null>(null);
+  const [rechazadas, setRechazadas] = useState(0);
   const [enviando, setEnviando] = useState(false);
   const [ultimo, setUltimo] = useState<SyncFotosSummary | null>(null);
+  const [deOtraCuenta, setDeOtraCuenta] = useState(0);
+  const [descartables, setDescartables] = useState(0);
 
   const recontar = useCallback(async () => {
     try {
-      setPendientes((await listTrapPhotoDrafts()).length);
+      const fotos = await listTrapPhotoDrafts();
+      const cuentaActual = cuentaActualDelNavegador();
+      // ADR-199 — las fotos de otra cuenta no son «pendientes» ni «rechazadas» de quien está dentro.
+      const { enviables, ajenos } = repartirPorCuenta(fotos, cuentaActual);
+      const errores = enviables.filter((f) => f.status === "error").length;
+      setPendientes(enviables.length - errores);
+      setRechazadas(errores);
+      setDeOtraCuenta(ajenos.length);
+      setDescartables(descartablesPorEstaCuenta(fotos, cuentaActual).length);
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no la foto: `queueTrapPhoto` ya habría
@@ -70,14 +88,42 @@ export function SincronizarFotosDeRonda() {
     };
   }, [recontar, sincronizar]);
 
-  if (pendientes === null || pendientes === 0) return null;
+  const descartarRechazadas = async () => {
+    try {
+      // ADR-199 — sólo las de esta cuenta: una foto rechazada de otra cuenta espera a su dueño.
+      for (const f of descartablesPorEstaCuenta(await listTrapPhotoDrafts(), cuentaActualDelNavegador())) {
+        await discardTrapPhotoDraft(f.id);
+      }
+    } finally {
+      await recontar();
+    }
+  };
+
+  if (pendientes === null || (pendientes === 0 && rechazadas === 0 && deOtraCuenta === 0)) return null;
 
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("trapPhotoSyncPending", { count: pendientes })}</p>
-      <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando}>
+      {deOtraCuenta > 0 ? (
+        <p className="nn-note" role="status">
+          {t("trapPhotosOtherAccount", { count: deOtraCuenta })}
+        </p>
+      ) : null}
+      <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando || pendientes === 0}>
         {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
       </button>
+      {rechazadas > 0 ? (
+        <>
+          <p className="nn-error" role="status">
+            {t("trapPhotoRejectedStored", { count: rechazadas })}
+          </p>
+          {descartables > 0 ? (
+            <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
+              {t("trapPhotoDiscardRejected")}
+            </button>
+          ) : null}
+        </>
+      ) : null}
       {ultimo ? (
         <>
           {/* A13 fix-final — textos propios de FOTO, no de «anotación»: estas

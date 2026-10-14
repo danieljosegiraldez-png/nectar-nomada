@@ -22,6 +22,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { JornadaError, beneficiosDeDestino, exigeBeneficioDeDestino, exigeGestionarFinca } from "./jornadasDeCosecha";
 import { TraceabilityAccessError } from "./lots";
+import { UUID } from "../validation/uuid";
 
 /**
  * Declara —o quita— el beneficio al que esta finca envía su cereza.
@@ -108,6 +109,9 @@ export async function fincaParaDestino(
   readonly destino: { readonly id: string; readonly name: string } | null;
   readonly beneficios: readonly { readonly id: string; readonly name: string }[];
 } | null> {
+  // El id llega de la URL. Sin forma de UUID, Prisma lanzaba `P2007` y la página daba 500
+  // (PENDING_IMPLEMENTATIONS/026); es una finca que no existe.
+  if (!UUID.test(siteId)) return null;
   const sitio = await prisma.location.findUnique({
     where: { id: siteId },
     select: { id: true, name: true, locationType: true, beneficioDestino: { select: { id: true, name: true } } },
