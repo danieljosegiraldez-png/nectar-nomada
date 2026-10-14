@@ -1080,6 +1080,31 @@ describe("Parte 2a, R6 — lo que una Libre no acepta y una receta publicada sí
   }, 60000);
 });
 
+describe("Parte 2a, §5.2 — cada valor de catálogo de una Libre es de SU catálogo", () => {
+  it("un valor de OTRO catálogo en un eje se rechaza (`valor_de_otro_catalogo`) por la validación y por la apertura, sin escribir nada; el valor de su catálogo, pasa", async () => {
+    // Ronda de arreglo del 2026-10-14, hallazgo 3. `validarPasosPlaneados` llama a `exigeValoresDelPaso`, y la clave ajena sola no basta: un
+    // valor de `tipo_paso` en la columna del medio de lavado es una FK perfectamente válida (la FK acepta cualquier valor de catálogo). Sin
+    // esa llamada un formulario manipulado guardaría en la receta Libre ids de otro catálogo, y la fila 19 del flip sólo mutaba `validarPaso`.
+    const deOtroCatalogo = await valorDe("tipo_paso", "pulping");
+    const agua = await valorDe("medio_lavado", "agua_limpia");
+    expect(deOtroCatalogo, "control: el valor «malo» no es el bueno").not.toBe(agua);
+    const lavar = (medioValueId: string) => pasoDe("washing", { mucilagoObjetivo: 75, medioValueId });
+
+    // Por la validación…
+    await rechaza(validarPasosPlaneados([await lavar(deOtroCatalogo)]), "valor_de_otro_catalogo");
+    expect(await validarPasosPlaneados([await lavar(agua)]), "control: el valor de su catálogo no validó").toHaveLength(1);
+    // …y por la apertura, que no deja ni receta ni proceso.
+    const l = await lote("CAT");
+    const antes = await libresDeLaOrg();
+    await rechaza(abrirLibre(l, { pasos: [await lavar(deOtroCatalogo)] }), "valor_de_otro_catalogo");
+    expect(await libresDeLaOrg(), "el rechazo dejó una receta Libre").toBe(antes);
+    expect(await procesosDe(l), "el rechazo dejó un proceso").toBe(0);
+    // Control: lo único que cambia es de qué catálogo es el valor.
+    expect((await abrirLibre(l, { pasos: [await lavar(agua)] })).processRecipeVersionId).not.toBeNull();
+    expect(await libresDeLaOrg(), "el control no creó UNA receta Libre").toBe(antes + 1);
+  }, 60000);
+});
+
 describe("Parte 2a, R14 — escribirPasosPlaneados sólo escribe en la versión sin pasos de una receta Libre", () => {
   /** Valida y escribe como lo hace `abrirProceso`: la validación fuera de la transacción, la escritura dentro. */
   const escribir = async (versionId: string, pasos: readonly PasoEditable[]) => {
