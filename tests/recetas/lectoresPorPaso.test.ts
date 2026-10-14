@@ -47,6 +47,7 @@ import { colaDeSecado } from "../../lib/beneficio/colaDeSecado";
 import { datosDelTablero } from "../../lib/beneficio/datosDelTablero";
 import { grupoDeLaEntrada } from "../../lib/beneficio/tablero";
 import { startDryingRun } from "../../lib/traceability/drying";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { compareRunToTargets } from "../../lib/traceability/processTargets";
 import { FASE_DEL_TIPO, type TipoDePaso } from "../../lib/recetas/vocabulario";
 import { abrirProcesoDePrueba, borrarProcesosDeLotesDonde } from "../helpers/procesoDePrueba";
@@ -945,5 +946,32 @@ describe("compareRunToTargets lee las metas del paso de la corrida (diseño §3.
 
     const filas = await compareRunToTargets(admin, corrida.runId);
     expect(filas.map((f) => f.variable)).toEqual(delOrden);
+  });
+
+  it("quien no ve el lote de la corrida no lee su comparación, ni la de su paso (Ruling INV): no_lot_access, y quien sí lo ve la lee", async () => {
+    // La lectura carga el paso de la corrida ANTES de comprobar el acceso (`include: { recipeStep }`); lo que la protege es `requireLotAccess(view)`, no el orden.
+    const corrida = await conCorrida(m, {
+      codigo: "CMP-RECHAZO",
+      fase: "fermentation",
+      versionId: compara.versionId,
+      pasoId: compara.pasoIds[0]!,
+      iniciadoHaceHoras: 5,
+      locationId: m.finca,
+    });
+    // Control: el Farm Operator del sitio del lote —no un Platform Admin— lee las dos filas del paso con ESTA corrida. Sin esto, el rechazo de abajo no distinguiría
+    // una guarda que protege el lote de una corrida que no se puede leer por ninguna cuenta.
+    const delSitio = await compareRunToTargets(m.operario, corrida.runId);
+    expect(delSitio.map((f) => f.variable)).toEqual(["ph", "brix"]);
+    // Un Farm Operator de OTRA organización, con su propio sitio: el mismo `runId` se rechaza con el código exacto y no devuelve ninguna fila.
+    const ajeno = await mundo("compara-ajeno");
+    expect(ajeno.orgId).not.toBe(m.orgId);
+    const error = await compareRunToTargets(ajeno.operario, corrida.runId).then(
+      (filas) => ({ filas }),
+      (e: unknown) => ({ e }),
+    );
+    expect("e" in error, "una cuenta que no ve el lote leyó la comparación de su corrida").toBe(true);
+    const e = (error as { e: unknown }).e;
+    expect(e).toBeInstanceOf(TraceabilityAccessError);
+    expect((e as Error).message).toBe("no_lot_access");
   });
 });
