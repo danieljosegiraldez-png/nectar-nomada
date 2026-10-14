@@ -66,11 +66,11 @@ const NUEVAS = [
   "reportPollenNextToBrood",
 ];
 
-async function html(inspeccion: unknown) {
+async function html(inspeccion: unknown, enCuadros = true) {
   const { DetallesDelReporte } = await import("../../app/components/traceability/DetallesDelReporte");
   const elemento = await (DetallesDelReporte as unknown as (p: unknown) => Promise<React.ReactElement>)({
     registro: { cuando: "2026-05-10T14:00:00Z", clase: "inspeccion", inspeccion },
-    enCuadros: true,
+    enCuadros,
   });
   return renderToStaticMarkup(elemento);
 }
@@ -101,6 +101,23 @@ describe("la sanidad congelada se pinta", () => {
   it("«no hay celdas» se dice, no se confunde con «sin registrar»", async () => {
     const h = await html({ ...VACIO, celdasReales: { tipo: "no_hay", cuantas: null } });
     expect(h).toContain(fila("queenCellsLabel", "queenCell_no_hay"));
+  });
+});
+
+describe("en un meliponario, los marcos negros no se pintan", () => {
+  it("ni con valor ni vacíos, igual que los cuadros; y las otras seis filas siguen", async () => {
+    // ADR-200: cuadros y marcos negros, sólo en cajas con cuadros, en el formulario y en el informe.
+    // Una fila «Marcos negros: Sin registrar» en un meliponario afirmaría que alguien miró y no
+    // contó, cuando la pregunta no existe ahí.
+    for (const inspeccion of [CON_VALOR, VACIO]) {
+      const h = await html(inspeccion, false);
+      expect(h).not.toContain(rotulo("darkFramesLabel"));
+      expect(h).not.toContain(rotulo("beeCoveredFramesLabel"));
+      // Control: el resto de la sanidad sí está, así que lo de arriba no pasa por no pintar nada.
+      for (const r of NUEVAS.filter((x) => x !== "darkFramesLabel")) expect(h, r).toContain(rotulo(r));
+    }
+    // Y donde sí hay cuadros, la fila sigue: el mismo valor con `enCuadros` encendido.
+    expect(await html(CON_VALOR, true)).toContain(fila("darkFramesLabel", 3));
   });
 });
 
