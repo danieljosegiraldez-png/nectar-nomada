@@ -195,6 +195,7 @@ tests/traceability/divisionBajoProceso.test.ts
 tests/traceability/bodegaConProceso.test.ts
 tests/recetas/guardian.test.ts
 tests/recetas/lecturasDeCierre.test.ts
+tests/recetas/convertir.test.ts
 tests/recetas/recetaDemoDeLaSemilla.test.ts
 tests/traceability/manejoEsquema.test.ts
 tests/traceability/manejoPrB.test.ts

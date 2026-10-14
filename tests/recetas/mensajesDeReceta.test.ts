@@ -77,6 +77,9 @@ const CODIGOS_DE_LA_TAREA_10 = [
   "libre_con_lectura_de_cierre",
 ];
 
+// Tarea 11 (convertir una Libre en receta, diseño §5.3): sus cuatro códigos, aparte de los de las tareas 3 y 10 por la misma razón.
+const CODIGOS_DE_LA_TAREA_11 = ["proceso_no_encontrado", "proceso_sin_cerrar_por_humedad", "no_es_libre", "ya_convertida"];
+
 /**
  * Los comentarios fuera, SALTANDO las cadenas. Copia de `sinComentarios` de `tests/traceability/mensajesDeProceso.test.ts`: no
  * se importa de allí porque ese archivo es una prueba y importarlo registraría sus `describe` aquí. Tiene su control abajo.
@@ -111,6 +114,11 @@ describe("los códigos de la receta tienen su texto en es y en", () => {
   it("control: la lista trae los seis códigos de la tarea 10", () => {
     expect(CODIGOS_DE_LA_TAREA_10.length).toBe(6);
     expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_10));
+  });
+
+  it("control: la lista trae los cuatro códigos de la tarea 11", () => {
+    expect(CODIGOS_DE_LA_TAREA_11.length).toBe(4);
+    expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_11));
   });
 
   it("cada código tiene `Traceability.error_receta_<código>` en los dos idiomas", () => {

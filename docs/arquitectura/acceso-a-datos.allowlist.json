@@ -702,6 +702,10 @@
     {
       "archivo": "lib/recetas/libre.ts",
       "razon": "Módulo de dominio: la receta Libre (Parte 2a, tarea 10, 2026-10-03). Importa el cliente global sólo para `parecidoDeLaLibre`, la pregunta que la pantalla de abrir hace antes de enviar: autoriza con `requireLotAccess(manage)` sobre el lote, ANTES de leer nada, y lee, sin escribir nada, las recetas publicadas de la organización de ese lote. Todo lo que escribe (`crearRecetaLibreEnTx`) va con el `tx` de la transacción de `abrirProceso`."
+    },
+    {
+      "archivo": "lib/recetas/convertir.ts",
+      "razon": "Parte 2a, tarea 11: convertir una receta Libre en receta de la organización (diseño §5.3). Módulo de dominio: es el sitio donde el acceso a datos vive por diseño."
     }
   ],
   "reciben_transaccion": [
@@ -850,6 +854,10 @@
     {
       "archivo": "lib/recetas/lecturasDeCierre.ts",
       "razon": "Parte 2a, tarea 11: `lecturasCandidatasDeCierre`, `vigenteDe`, `exigeVerLosLotes` y `marcarLecturasDeCierre` reciben el cliente de la transacción de la puerta que cierra un registro —`endFermentationRun`, `cerrarCorridaEnTransaccion` (que comparten `endDryingRun` y bajar la última bandeja) y `registrarIntervencion` del proceso—. Las dos primeras sólo leen (las lecturas candidatas, y la vigente de una cadena de correcciones); `exigeVerLosLotes` lee los lotes y pide `view` sobre cada uno; `marcarLecturasDeCierre` escribe en esa transacción las marcas de las lecturas que motivaron el cierre. Ninguna abre conexión ni importa lib/db. Sus llamadores ya pidieron lot:manage sobre el lote del registro; lo que `marcarLecturasDeCierre` pide además es ver el lote de cada lectura que no es de ése (R5)."
+    },
+    {
+      "archivo": "lib/recetas/convertir.ts",
+      "razon": "Parte 2a, tarea 11: los ayudantes privados de convertir.ts (`leerProceso`, `proponerFines`) reciben el cliente de la transacción de `convertirLibre` —o el cliente global, `leerProceso`, cuando sólo lee— para releer el proceso y proponer fines con el linaje ya bloqueado. `convertirLibre` ya autorizó (lot:view sobre el lote del proceso y la autoría de recetas de su organización, `exigeAutoriaDeReceta`); ninguno abre conexión ni transacción propia."
     }
   ],
   "operaciones_sin_patron": [

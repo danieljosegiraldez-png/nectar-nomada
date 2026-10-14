@@ -61,6 +61,11 @@ export const CODIGOS_DE_RECETA_TRADUCIDOS = [
   "libre_con_receta",
   "libre_demasiados_pasos",
   "libre_con_lectura_de_cierre",
+  // Tarea 11 (convertir una Libre en receta, diseño §5.3).
+  "proceso_no_encontrado",
+  "proceso_sin_cerrar_por_humedad",
+  "no_es_libre",
+  "ya_convertida",
 ] as const;
 
 export type CodigoDeRecetaTraducido = (typeof CODIGOS_DE_RECETA_TRADUCIDOS)[number];

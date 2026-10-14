@@ -13,17 +13,19 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**650 operaciones** que tocan la base, en **177 archivos** — medido el 2026-10-14 con `node scripts/inventario-de-acceso.mjs`: son **cuatro más** que las
-646 en 176 de la medición anterior, y son las cuatro de las lecturas de cierre (`lib/recetas/lecturasDeCierre.ts`, un archivo nuevo, tarea 11 del PR-B: ver la primera nota de abajo):
-una «guardia directo», dos «depende del llamador» y una «guardia transitivo»; las otras cuatro filas no se mueven. **La medición anterior**, del 2026-10-14 y de la tarea 10 del PR-B:
+**652 operaciones** que tocan la base, en **178 archivos** — medido el 2026-10-14 con `node scripts/inventario-de-acceso.mjs`: son **dos más** que las
+650 en 177 de la medición anterior, y son las dos de convertir la Libre en receta (`lib/recetas/convertir.ts`, un archivo nuevo, tarea 11 del PR-B, parte B: ver la primera nota de abajo),
+las dos «guardia directo»; las otras seis filas no se mueven. **La medición anterior**, del mismo día y de la parte A de la tarea 11:
+**650 operaciones** en **177 archivos**, **cuatro más** que las 646 en 176 de la anterior, y eran las cuatro de las lecturas de cierre (`lib/recetas/lecturasDeCierre.ts`, un archivo nuevo: ver la
+segunda nota de abajo): una «guardia directo», dos «depende del llamador» y una «guardia transitivo». **La anterior a ésa**, del 2026-10-14 y de la tarea 10 del PR-B:
 **646 operaciones** en **176 archivos**, **cuatro más** que las 642 en 175 de la anterior, y eran las cuatro de la receta Libre (`lib/recetas/libre.ts`, un archivo nuevo, y dos de `lib/recetas/pasos.ts`: ver la
-segunda nota de abajo): una «guardia directo», dos «depende del llamador» y una «recibe principal». **La anterior a ésa**, del
+tercera nota de abajo): una «guardia directo», dos «depende del llamador» y una «recibe principal». **La anterior a ésa**, del
 2026-10-12 y de la tarea 7 del PR-B: **642 operaciones** en **175 archivos**, **una más** que las 641 en 174 de la anterior, y era `exigePasoCoherente`
-(`lib/recetas/guardian.ts`: ver la tercera nota de abajo), de la clase «depende del llamador». **La anterior a ésa**, también del 2026-10-12 y de la tarea 6 del PR-B: **641 operaciones**
-en **174 archivos**, **una más** que las 640 en 173 de la anterior, y era `avanceDelProceso` (`lib/recetas/avance.ts`: ver la cuarta nota de abajo), de la
+(`lib/recetas/guardian.ts`: ver la cuarta nota de abajo), de la clase «depende del llamador». **La anterior a ésa**, también del 2026-10-12 y de la tarea 6 del PR-B: **641 operaciones**
+en **174 archivos**, **una más** que las 640 en 173 de la anterior, y era `avanceDelProceso` (`lib/recetas/avance.ts`: ver la quinta nota de abajo), de la
 misma clase. **La anterior a ésa**, del 2026-10-11 con el mismo script, al volver a unir
 `origin/main` (`62a206da`) en la rama de la Parte 2a: **640 operaciones** en **173 archivos**, **tres más** que las 637 en 173 de la unión anterior, y las tres vienen de `main`
-(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la quinta nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
+(`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la sexta nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
 y las otras seis filas no se mueven (ninguna operación de la rama cambia de clase). **La unión anterior**, medida el 2026-10-10 al unir `a2f269b5`: **637 operaciones** en **173 archivos**, que eran **tres más** que las 634 en 173 de la rama antes de unir, y las tres
 vienen de `main` —`puedeCrearBeneficioEnOrganizacion`, **guardia directo**, y `organizacionesParaBeneficio`,
 **guardia transitivo**, las dos de `lib/traceability/beneficios.ts` (ADR-198 PR 2, #687), y
@@ -52,13 +54,29 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **404** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **406** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **68** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **107** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 23 en total (la última, de la tarea 10 de la Parte 2a): `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, `dividirProcesoEnTx` y `crearRecetaLibreEnTx` (que firma la receta Libre y su evento), que reciben el principal sólo para firmar |
+
+> **Convertir la Libre en receta (Parte 2a, tarea 11 del PR-B, parte B, 2026-10-14): 650→652, 177→178 archivos y «guardia directo» 404→406.**
+> `lib/recetas/convertir.ts` es nuevo. `convertirLibre` y `puedeConvertirLibre` tienen guardia directo: `requireLotAccess(view)`
+> sobre el lote del proceso —`view` y no `manage`: convertir es un acto de autoría que lee el proceso, no trabajo de campo (C8)—, la
+> autoría de recetas de su organización (`exigeAutoriaDeReceta` / `puedeAutoriaDeReceta`, el permiso del Coffee Process Manager; ya no
+> `edit_beneficio`) y, por cada lote de cada registro del hilo del proceso que aporta una lectura (R3), `exigeVerLosLotes`. Los
+> ayudantes privados que leen el hilo y proponen (`leerProceso`, `hiloDelProceso`, `aporteDelHilo`, `proponerFines`) los absorbe
+> `convertirLibre`: reciben el cliente de su transacción, ya autorizada y con el linaje bloqueado, y el archivo está en el allowlist por
+> eso y por importar el cliente. El nivel no cambia la clase: el inventario sólo ve la llamada al guardia, así que «guardia directo»
+> sale igual con `view` que con `manage`; **lo que fija el nivel es una prueba** (`tests/recetas/convertir.test.ts`, con el lector que ve
+> el lote y no lo gestiona, y las filas de flip 26 y 27 que cambian `view` por `manage`). Coincide con el plan de la tarea
+> (+2 operaciones, +1 archivo, «guardia directo» +2, ninguna otra clase cambia). Las dos llevan su prueba de rechazo de quien no debe, con
+> el orden de las comprobaciones (ver el lote antes que la autoría): el operario y el Farm Manager, que ven el lote y no tienen la autoría;
+> quien tiene la autoría y no ve el lote; quien ve el lote y escribe recetas sólo en OTRA organización (R16); y quien no alcanza un lote
+> confidencial (R24). `vigenteDe` y `lecturasCandidatasDeCierre`, que no autorizan, las llama `convertirLibre` DESPUÉS de esas
+> comprobaciones y antes de escribir nada.
 
 > **Las lecturas de cierre (Parte 2a, tarea 11 del PR-B, 2026-10-14): 646→650, 176→177 archivos, «guardia directo» 403→404,
 > «guardia transitivo» 67→68 y «depende del llamador» 105→107.** `lib/recetas/lecturasDeCierre.ts` es nuevo y trae cuatro operaciones.
