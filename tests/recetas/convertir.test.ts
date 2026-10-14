@@ -1094,7 +1094,10 @@ describe("R3 — el lote del proceso de un manejo del hilo también se ve", () =
     // Control: quien ve los dos lotes convierte; un manejo no tiene serie, así que su lectura vuelve en `sinDireccion`.
     expect(await puedeConvertirLibre(encargadoDeAmbas, p1.id)).toBe(true);
     const r = await convertirLibre(encargadoDeAmbas, { lotProcessId: p1.id, nombre });
-    expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, [{ stepId: (await pasosDe(r.versionId)).washing, measurementId: lectura0 }]]);
+    // El paso NUEVO tiene que existir: con `undefined` a los dos lados (la receta sin copiar sus pasos) la igualdad pasaría vacía.
+    const lavadoNuevo = (await pasosDe(r.versionId)).washing;
+    expect(lavadoNuevo, "control: la receta nueva trae el paso de lavado copiado").toBeDefined();
+    expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, [{ stepId: lavadoNuevo, measurementId: lectura0 }]]);
   }, 90000);
 });
 
@@ -1169,7 +1172,10 @@ describe("R4 — el fin sale de la lectura VIGENTE de la marca, aunque se corrig
 
     const r = await convertirLibre(encargado, { lotProcessId: p.id, nombre: `TEST Convertida R4D ${RUN}` });
     // Un manejo no tiene serie: sin dirección, y UNA sola vez, con la id de la corrección.
-    expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, [{ stepId: (await pasosDe(r.versionId)).washing, measurementId: buena }]]);
+    // El paso NUEVO tiene que existir: con `undefined` a los dos lados (la receta sin copiar sus pasos) la igualdad pasaría vacía.
+    const lavadoNuevo = (await pasosDe(r.versionId)).washing;
+    expect(lavadoNuevo, "control: la receta nueva trae el paso de lavado copiado").toBeDefined();
+    expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, [{ stepId: lavadoNuevo, measurementId: buena }]]);
   }, 60000);
 });
 
