@@ -976,6 +976,18 @@ export interface PasoPlaneado {
 }
 
 /**
+ * Los pasos de una Libre tal como la creación los compara y los escribe: el tope de pasos y `completar` (un id vacío o con espacios
+ * es «ninguno», un id con espacios alrededor se recorta). **UNA sola vía** (ronda de arreglo del 2026-10-14, hallazgo 1): la leen
+ * `validarPasosPlaneados`, que es lo que la creación escribe, y la pregunta del parecido (`parecidoDeLaLibre`), que compara lo mismo
+ * que la creación comparará. Antes la pregunta comparaba los pasos CRUDOS: con ids en blanco —lo que manda un `select` vacío— decía
+ * «no hay parecido» mientras la apertura rechazaba con `libre_parecida`, y no aplicaba el tope. Es puro: no toca la base ni autoriza.
+ */
+export function normalizarPasosPlaneados(pasos: readonly PasoEditable[]): PasoCompleto[] {
+  if (pasos.length > MAX_PASOS_PLANEADOS) throw new RecipeError("libre_demasiados_pasos");
+  return pasos.map(completar);
+}
+
+/**
  * Valida los pasos que una Libre planea, ANTES de abrir la transacción (como cada operación de arriba): el tipo de cada uno, los
  * ejes que le tocan, los números posibles y los valores de SU catálogo. Devuelve los pasos completos, en el orden dado.
  *
@@ -992,10 +1004,8 @@ export interface PasoPlaneado {
  * el mismo camino, antes de cualquier consulta. Va después de `completar`, que es lo que ya trata un id en blanco como «ninguno».
  */
 export async function validarPasosPlaneados(pasos: readonly PasoEditable[]): Promise<PasoPlaneado[]> {
-  if (pasos.length > MAX_PASOS_PLANEADOS) throw new RecipeError("libre_demasiados_pasos");
   const planeados: PasoPlaneado[] = [];
-  for (const entrada of pasos) {
-    const paso = completar(entrada);
+  for (const paso of normalizarPasosPlaneados(pasos)) {
     if (paso.fines.some((f) => f.desdeLecturaId != null)) throw new RecipeError("libre_con_lectura_de_cierre");
     const tipo = await tipoDelPaso(paso.stepTypeValueId);
     validarPaso(tipo, paso);

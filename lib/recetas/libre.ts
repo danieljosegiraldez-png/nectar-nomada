@@ -37,7 +37,7 @@ import { LotProcessError } from "../traceability/errorDeProceso";
 import { requireLotAccess } from "../traceability/lots";
 import { RecipeError } from "./errorDeReceta";
 import { huellaDeLaSecuencia, nombreDeLaLibre, type PasoParaComparar } from "./parecido";
-import { escribirPasosPlaneados, type PasoEditable, type PasoPlaneado } from "./pasos";
+import { escribirPasosPlaneados, normalizarPasosPlaneados, type PasoEditable, type PasoPlaneado } from "./pasos";
 
 type Tx = Prisma.TransactionClient;
 
@@ -139,6 +139,12 @@ async function buscarParecida(tx: Tx, organizationId: string, pasos: readonly Pa
  *
  * **El acceso va antes que cualquier otra cosa** (Ruling INV): quien no gestiona el lote recibe el rechazo de acceso, nunca el nombre de
  * una receta de la organización de ese lote; sólo un lote que no existe se nombra (`lot_not_found`), como en cada operación del proceso.
+ *
+ * **Compara lo que la creación comparará** (ronda de arreglo del 2026-10-14, hallazgo 1): los pasos pasan por la MISMA vía de
+ * normalización que la creación (`normalizarPasosPlaneados`: el tope de `MAX_PASOS_PLANEADOS` y los ids en blanco como «ninguno»). Sin
+ * ella, un `select` vacío (`""`) hacía que la pregunta dijera «no hay parecido» mientras la apertura rechazaba con `libre_parecida`, y la
+ * acción que atrapa ese rechazo para nombrar la receta no nombraba nada. No valida lo demás (tipos, ejes, catálogos): eso es de
+ * `validarPasosPlaneados`, que `abrirProceso` corre antes de crear nada.
  */
 export async function parecidoDeLaLibre(
   userAccountId: string,
@@ -147,7 +153,7 @@ export async function parecidoDeLaLibre(
   const lote = await prisma.lot.findUnique({ where: { id: input.lotId } });
   if (!lote) throw new LotProcessError("lot_not_found");
   await requireLotAccess(userAccountId, "manage", [lote]);
-  return buscarParecida(prisma, lote.organizationId, input.pasos);
+  return buscarParecida(prisma, lote.organizationId, normalizarPasosPlaneados(input.pasos));
 }
 
 /** Lo que `abrirProceso` entrega a `crearRecetaLibreEnTx`, ya validado. */

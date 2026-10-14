@@ -656,6 +656,62 @@ describe("Parte 2a, §5.2 — el control de parecido", () => {
     expect(con.motivoDeLibre, "se guardó un motivo sin coincidencia").toBeNull();
   }, 60000);
 
+  it("la pregunta dice lo que dirá la creación: un id en blanco o con espacios es «ninguno» en las dos, y las dos topan en MAX_PASOS_PLANEADOS", async () => {
+    // Ronda de arreglo del 2026-10-14, hallazgo 1. La pregunta pasaba `input.pasos` CRUDO y la creación los pasos ya normalizados
+    // (`completar`: un id vacío o con espacios es «ninguno»). Un `select` vacío manda `""`: la pregunta decía «no hay parecido» y la
+    // apertura rechazaba con `libre_parecida`, y la acción que atrapa ese rechazo y llama a la pregunta para NOMBRAR la receta no
+    // nombraba nada. Y la pregunta no aplicaba el tope de pasos.
+    const lav = await receta("Lavado 22,9", await lavado(22.9));
+    const l = await lote("P6");
+    const antes = await libresDeLaOrg();
+    const pregunta = async (pasos: readonly PasoEditable[]) =>
+      (await parecidoDeLaLibre(gestor, { lotId: l, pasos }))?.recipeVersionId ?? null;
+    const copia = await lavado(22.9);
+    // Lo que manda un `select` vacío en los seis ejes de id, sobre la fermentación (que los admite todos): ninguno está declarado.
+    const enBlanco = copia.map((p, i) =>
+      i === 1
+        ? {
+            ...p,
+            estadoFrutoValueId: " ",
+            oxigenoValueId: "",
+            temperaturaValueId: "  ",
+            fuenteMicrobianaValueId: " ",
+            medioValueId: "",
+            fisicoValueId: "",
+          }
+        : p,
+    );
+    // Control: la copia sin esos campos coincide en las dos, y los campos en blanco son LITERALMENTE distintos de «sin campo».
+    expect(await pregunta(copia), "control: la copia exacta no coincide con la receta").toBe(lav.versionId);
+    expect(enBlanco[1], "control: la copia en blanco no lleva los campos en blanco").toMatchObject({ oxigenoValueId: "", fisicoValueId: "" });
+    // La pregunta y la creación coinciden: las dos ven el parecido…
+    expect(await pregunta(enBlanco), "la pregunta no ve el parecido que la creación ve (ids en blanco)").toBe(lav.versionId);
+    await rechaza(abrirLibre(l, { pasos: enBlanco }), "libre_parecida");
+    expect(await libresDeLaOrg(), "el rechazo dejó una receta Libre").toBe(antes);
+    expect(await procesosDe(l), "el rechazo dejó un proceso").toBe(0);
+    // …o las dos dejan de verlo cuando un id SÍ está declarado (un valor real del catálogo, no en blanco): la receta no lo declara.
+    const anaerobico = await valorDe("condicion_oxigeno", "anaerobico");
+    const conOxigeno = enBlanco.map((p, i) => (i === 1 ? { ...p, oxigenoValueId: anaerobico } : p));
+    expect(await pregunta(conOxigeno), "la pregunta vio parecido con un eje de más").toBeNull();
+    const abierta = await abrirLibre(l, { pasos: conOxigeno });
+    expect((await recetaDeLaVersion(abierta.processRecipeVersionId)).parecidaAVersionId, "la creación vio parecido con un eje de más").toBeNull();
+
+    // El tope: la pregunta lo aplica igual que la creación, y DESPUÉS del acceso al lote (Ruling INV).
+    const uno = await pasoDe("pulping");
+    const demasiados = Array.from({ length: MAX_PASOS_PLANEADOS + 1 }, () => uno);
+    const l2 = await lote("P6B");
+    await rechaza(parecidoDeLaLibre(gestor, { lotId: l2, pasos: demasiados }), "libre_demasiados_pasos");
+    await rechaza(abrirLibre(l2, { pasos: demasiados }), "libre_demasiados_pasos");
+    for (const quien of [autor, intruso]) {
+      await expect(
+        parecidoDeLaLibre(quien, { lotId: l2, pasos: demasiados }),
+        "quien no gestiona el lote recibió otra cosa que el rechazo de acceso",
+      ).rejects.toBeInstanceOf(TraceabilityAccessError);
+    }
+    // Control: exactamente MAX_PASOS_PLANEADOS pasos, la pregunta contesta (que no coincide con nada).
+    expect(await parecidoDeLaLibre(gestor, { lotId: l2, pasos: demasiados.slice(1) }), "el control no contestó con MAX_PASOS_PLANEADOS pasos").toBeNull();
+  }, 120000);
+
   it("cada diferencia de identidad evita el parecido; lo que no es identidad no la evita", async () => {
     const lav = await receta("Lavado 21,5", await lavado(21.5));
     const l = await lote("P3");
