@@ -14,6 +14,8 @@ import {
   STALE_PURGE_DAYS,
   type SyncSummary,
 } from "../../../lib/sync/offlineQueue";
+import { descartablesPorEstaCuenta, repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 /**
  * P4 §11 — lo que el operador ve de la cola: cuánto falta por enviar, un botón
@@ -58,7 +60,9 @@ export function FieldSyncControls() {
 
   const [purgados, setPurgados] = useState(0);
   const [rancios, setRancios] = useState(0);
+  const [deOtraCuenta, setDeOtraCuenta] = useState(0);
   const [rechazadas, setRechazadas] = useState(0);
+  const [descartables, setDescartables] = useState(0);
   const [deAparato, setDeAparato] = useState(false);
 
   const recontar = useCallback(async () => {
@@ -70,13 +74,21 @@ export function FieldSyncControls() {
       if (p > 0) setPurgados((n) => n + p);
       setRancios(avisados);
       const drafts = await listFieldEventDrafts();
+      const cuentaActual = cuentaActualDelNavegador();
+      // ADR-199 — lo de otra cuenta no es «pendiente» ni «rechazado» de quien está dentro: no lo puede
+      // enviar ni descartar.
+      const { enviables, ajenos } = repartirPorCuenta(drafts, cuentaActual);
       // Lo que va a volver a salir —el reintento único de un rechazo viejo por la
       // fecha— cuenta como pendiente, no como rechazado: si no, el botón quedaría
       // deshabilitado y nadie podría mandarlo.
-      const errores = drafts.filter((d) => !viajaEnLaProximaSincronizacion(d));
-      setPendientes(drafts.length - errores.length);
+      const errores = enviables.filter((d) => !viajaEnLaProximaSincronizacion(d));
+      setPendientes(enviables.length - errores.length);
       setRechazadas(errores.length);
       setDeAparato(errores.some((d) => MOTIVOS_DE_APARATO.includes(d.errorMessage ?? "")));
+      setDeOtraCuenta(ajenos.length);
+      setDescartables(
+        descartablesPorEstaCuenta(drafts, cuentaActual).filter((d) => !viajaEnLaProximaSincronizacion(d)).length,
+      );
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no los datos: el formulario ya habría
@@ -124,7 +136,9 @@ export function FieldSyncControls() {
 
   const descartarRechazadas = async () => {
     try {
-      for (const d of await listFieldEventDrafts()) {
+      // ADR-199 — sólo los de esta cuenta: un rechazado de otra cuenta espera a su dueño.
+      const propios = descartablesPorEstaCuenta(await listFieldEventDrafts(), cuentaActualDelNavegador());
+      for (const d of propios) {
         if (!viajaEnLaProximaSincronizacion(d)) await discardFieldEventDraft(d.id);
       }
     } finally {
@@ -137,6 +151,11 @@ export function FieldSyncControls() {
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("fieldSyncPending", { count: pendientes })}</p>
+      {deOtraCuenta > 0 ? (
+        <p className="nn-note" role="status">
+          {t("fieldDraftsOtherAccount", { count: deOtraCuenta })}
+        </p>
+      ) : null}
       {sinConexion ? <p className="nn-note">{t("fieldSyncOffline")}</p> : null}
       {purgados > 0 ? (
         <p className="nn-error" role="alert">
@@ -157,9 +176,11 @@ export function FieldSyncControls() {
             {t("fieldSyncRejectedStored", { count: rechazadas })}
           </p>
           {deAparato ? <p className="nn-note">{t("fieldSyncDeviceNotAuthorized")}</p> : null}
-          <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
-            {t("fieldSyncDiscardRejected")}
-          </button>
+          {descartables > 0 ? (
+            <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
+              {t("fieldSyncDiscardRejected")}
+            </button>
+          ) : null}
         </>
       ) : null}
       {ultimo ? <ResumenDeSincronizacion ultimo={ultimo} /> : null}

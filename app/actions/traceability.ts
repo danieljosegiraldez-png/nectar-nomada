@@ -134,6 +134,7 @@ import {
   LandMediaValidationError,
   type LandAssetParent,
 } from "../../lib/traceability/landMedia";
+import { BorradorAjenoError } from "../../lib/sync/cuentaDelBorrador";
 import { volverAValido } from "../../lib/traceability/volverA";
 import {
   recordLabourEntry,
@@ -2514,7 +2515,12 @@ export async function requestTrampaPhotoUploadAction(
   // clave derivada ya tiene un `Asset` de OTRA revisión antes de firmar el
   // PUT — ver su docstring en `landMedia.ts`.
   revisionClientDraftId: string,
-): Promise<{ uploadUrl: string; storageKey: string } | { error: string }> {
+  // ADR-199 — de quién es la foto encolada, y el aparato para la regla de las fotos sin cuenta. Con
+  // valor por defecto: un JavaScript viejo que llame sin ellos cae en «sin cuenta y sin aparato», que
+  // se retiene y se queda en su cola.
+  cuentaDelBorrador: string | null = null,
+  deviceId: string | null = null,
+): Promise<{ uploadUrl: string; storageKey: string } | { retenida: true; cuentaDelBorrador?: string } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -2526,8 +2532,12 @@ export async function requestTrampaPhotoUploadAction(
       contentType,
       photoClientDraftId,
       revisionClientDraftId,
+      borrador: { cuenta: cuentaDelBorrador, deviceId },
     });
   } catch (error) {
+    if (error instanceof BorradorAjenoError) {
+      return error.cuentaDelDueno ? { retenida: true, cuentaDelBorrador: error.cuentaDelDueno } : { retenida: true };
+    }
     if (error instanceof TrapAccessError) return { error: t("error_access", { detail: error.message }) };
     if (error instanceof Error) return { error: error.message };
     throw error;
@@ -2537,8 +2547,9 @@ export async function requestTrampaPhotoUploadAction(
 /**
  * `{ pendiente: true }` no es un error: la revisión todavía no llegó por su
  * propia cola (Tarea 11) y la foto se reintenta, sin engancharse nunca a otra
- * revisión (spec §4.3). `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`) es
- * quien distingue las tres formas de esta respuesta.
+ * revisión (spec §4.3). `{ retenida: true }` tampoco (ADR-199): la foto es de
+ * otra cuenta y se queda en su cola. `syncTrapPhotos` (`lib/sync/trapPhotoQueue.ts`)
+ * es quien distingue las cuatro formas de esta respuesta.
  */
 export async function finalizeTrampaPhotoPorBorradorAction(
   locationId: string,
@@ -2547,7 +2558,12 @@ export async function finalizeTrampaPhotoPorBorradorAction(
   sizeBytes: number,
   originalFilename: string,
   revisionClientDraftId: string,
-): Promise<{ ok: true } | { pendiente: true } | { error: string }> {
+  // ADR-199 — de quién es la foto encolada, y el aparato para la regla de las fotos sin cuenta. Con
+  // valor por defecto: un JavaScript viejo que llame sin ellos cae en «sin cuenta y sin aparato», que
+  // se retiene y se queda en su cola.
+  cuentaDelBorrador: string | null = null,
+  deviceId: string | null = null,
+): Promise<{ ok: true } | { pendiente: true } | { retenida: true; cuentaDelBorrador?: string } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const t = await getTranslations("Traceability");
@@ -2559,6 +2575,7 @@ export async function finalizeTrampaPhotoPorBorradorAction(
       sizeBytes,
       originalFilename,
       revisionClientDraftId,
+      borrador: { cuenta: cuentaDelBorrador, deviceId },
       // Una fotografía de la ronda es evidencia original: la tomó quien
       // registró la revisión. Misma regla que la revisión (T10, ruling del
       // controlador): procedencia siempre observación directa.
@@ -2572,6 +2589,9 @@ export async function finalizeTrampaPhotoPorBorradorAction(
       // `userAccount.personId` en el servidor.
     });
   } catch (error) {
+    if (error instanceof BorradorAjenoError) {
+      return error.cuentaDelDueno ? { retenida: true, cuentaDelBorrador: error.cuentaDelDueno } : { retenida: true };
+    }
     if (error instanceof LandMediaValidationError && error.message === "revision_not_found_yet") {
       return { pendiente: true };
     }

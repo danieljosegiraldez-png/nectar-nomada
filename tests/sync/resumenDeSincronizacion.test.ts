@@ -27,7 +27,15 @@ vi.mock("next-intl", () => ({
 }));
 const { ResumenDeSincronizacion } = await import("../../app/components/traceability/FieldSyncControls");
 
-const NADA: SyncSummary = { applied: 0, duplicate: 0, rejected: 0, stillPending: 0, serverUnavailable: false, sessionExpired: false };
+const NADA: SyncSummary = {
+  applied: 0,
+  duplicate: 0,
+  rejected: 0,
+  retenidas: 0,
+  stillPending: 0,
+  serverUnavailable: false,
+  sessionExpired: false,
+};
 const pintar = (ultimo: Partial<SyncSummary>) =>
   renderToStaticMarkup(createElement(ResumenDeSincronizacion, { ultimo: { ...NADA, ...ultimo } }));
 

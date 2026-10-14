@@ -12931,3 +12931,57 @@ padre sólo se alcanza con una asignación sobre él mismo**, y con ella las lis
 pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
 del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
 recepción → entrega → jornada → finca.
+
+## ADR-199 — Cada borrador offline tiene dueño y no se envía a nombre de otra cuenta
+
+**Fecha:** 2026-10-11 · **Spec:** `docs/superpowers/specs/2026-10-09-borradores-con-dueno-design.md` ·
+**Plan:** `docs/superpowers/plans/2026-10-11-borradores-con-dueno.md`
+
+**Contexto.** Las tres colas de IndexedDB (apiario, campo y fotos de trampa) guardaban borradores sin
+cuenta, y el envío autentica con la sesión del momento. En un teléfono donde A deja trabajo sin enviar y
+entra B, salía a nombre de B: actor falso en `core.audit_event` y, en una revisión de trampa, observador
+falso con `direct_observation` (§3, §35). ADR-109 hace los aparatos personales, pero dentro de él cabe el
+peor caso: un administrador que entra en el teléfono de un trabajador para ayudarle. Con acceso a todo,
+nada se rechaza.
+
+**Decisión de Daniel, 2026-10-09 y 2026-10-11.**
+1. Los borradores de otra cuenta **se retienen** en el teléfono hasta que vuelva su dueño: ni se envían, ni
+   se descartan, ni se exportan. La purga de 21 días sigue igual.
+2. Un borrador sin cuenta es **de quien registró el aparato** (`Device.createdBy`).
+3. Lo comprueban el navegador y el servidor, y la cuenta sale de la página más reciente que generó el
+   servidor.
+4. Un solo componente en el layout, compartido con #703.
+
+**Cómo.** El dueño es la huella de la cuenta (`lib/auth/huellaDeCuenta.ts`), nunca el id. El servidor
+contesta `rejected` con `borrador_de_otra_cuenta` y no escribe nada. Se eligió «rechazado» y no un estado
+nuevo porque el JavaScript viejo en caché descarta cualquier estado que no conoce. Las decisiones viven en
+funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador en
+`lib/offline/cuentaDelNavegador.ts`, ordenada por la hora del servidor.
+
+**También la ruta de fotos `field-media` (decisión de Daniel, 2026-10-13).** Ninguna cola la usa —es API—,
+pero recibe borradores (`clientDraftId`) y la prueba de #708 (`tests/sync/aparatoDelCuerpoPorCookie.test.ts`)
+exige que diga lo mismo que `field-events`. Al fusionar, esa comparación cayó: `field-events` retenía un
+borrador sin cuenta en el aparato vivo de otra cuenta y `field-media` lo escribía. Ahora `finalizeFieldMedia`
+decide el dueño con la misma función y antes que el acceso; una foto ajena no escribe nada y la ruta responde
+403 `borrador_de_otra_cuenta`, con el dueño cuando se deduce del aparato. Sin aparato y sin cuenta la foto es
+de quien la envía: por cookie el aparato es opcional (#708). Con la cuenta de quien envía, un aparato vivo de
+otra cuenta sigue pasando en las dos rutas, como se decidió el 2026-10-11.
+
+**Lo que no cubre.**
+- Quien manipule su navegador puede reetiquetar como suyo un borrador ajeno. No suplanta a nadie, porque
+  escribe con su propia sesión, pero se apropia de trabajo ajeno. Esto protege del error, no del abuso de
+  quien tiene el teléfono en la mano.
+- La purga de 21 días borra también lo retenido de A si A no vuelve, y el aviso lo ve B.
+- Las fotos de trampa no tienen purga, así que una foto retenida espera indefinidamente.
+- Cuando una página guardada de A se abre con B vigente, `alinearConLaCuenta` (#703) recibe A y borra todas las páginas guardadas, también las de B. Es a propósito: borrar de más es el lado seguro, y comparar con la cuenta vigente dejaría la página de A en la caché. Llegar ahí exige que haya fallado el borrado que #703 hace al entrar B (acordado con la sesión de #703, 2026-10-12).
+- Una pestaña con el JavaScript de ANTES del despliegue marca como error lo que el servidor retiene, y su botón viejo de «descartar fallidas» borra todo lo que esté en error, también lo ajeno. Dura hasta que esa pestaña se recarga; el servidor no puede evitarlo sin tumbar el lote entero de quien envía. Para que esa pestaña al menos no envíe sin cuenta, la cuenta viaja también dentro del payload que se guarda (`payloadConCuenta`).
+- Si una página guardada de A se sirve con B dentro (sólo si falló el borrado de #703), el borrador sale con la cuenta de B —correcto—, pero su `operatorPersonId` es la Persona de A, porque ese campo sale del HTML de la página. Medido en el navegador el 2026-10-12.
+- Un borrador sin cuenta que el servidor rechaza por otro motivo (p. ej. en el parseo) se queda sin cuenta: sólo el servidor nombra dueños, y lo hace únicamente al retener. No se puede descartar a mano; lo purga la regla de 21 días.
+
+**Cómo se comprueba.** `tests/sync/borradoresConDueno.test.ts` (con base): un borrador ajeno se rechaza con
+cero filas y cero `AuditEvent`, tanto si trae otra cuenta como si es un borrador sin cuenta en un aparato
+ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los casos «ajeno» por su nombre.
+`tests/arquitectura/colas-por-cuenta.test.ts` (hermético) vigila que ningún lector de las colas en `app/` se
+salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `descartablesPorEstaCuenta(`—, y
+`tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
+viaje dentro del payload.
