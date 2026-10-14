@@ -22,9 +22,13 @@
  * otra razón no podría pasar por éste. Y cada rechazo comprueba que NO dejó nada escrito: ni receta Libre, ni proceso.
  *
  * **Unicidad de los planes.** Ya no hay un mucílago único por caso: sólo existen seis tramos (0, 10, 25, 50, 75 y 100; Ruling M).
- * Las recetas de cada caso se distinguen por la TEMPERATURA MÍNIMA de su fermentación, ÚNICA en este archivo (de 21,1 a 22,6 °C), que
+ * Las recetas de cada caso se distinguen por la TEMPERATURA MÍNIMA de su fermentación, ÚNICA POR PRUEBA en este archivo (de 21,1 a 23,3 °C;
+ * una prueba repite su valor entre una receta y su copia, y la del empate lo repite A PROPÓSITO entre dos recetas: 23,2 y 23,3), que
  * es una columna de la huella del parecido (`temperaturaMinC`); la Libre «distinta» lleva un rango (13,25–15,75 °C) que ninguna
  * receta real tiene. Así ningún caso se parece a otro ni a una plantilla que la base ya traiga o que la Parte 3 siembre después.
+ * **La cabecera decía «ÚNICA en este archivo» y 22,6 estaba en dos pruebas** (revisión del 2026-10-14): la receta de una coincidía con la
+ * copia de la otra, y lo que decidía cuál ganaba era el orden de los nombres; renombrar una la hacía caer. Ahora se cuenta, por prueba,
+ * cada `lavado(N)` y cada `temperaturaMinC: N` de una receta publicada, y ningún valor está en dos.
  *
  * **Usuarios.** `gestor` es un Farm Operator acotado a su finca (`lot:manage`, SIN la autoría de recetas): el que abre procesos.
  * `autor` es un Coffee Process Manager de plataforma (V16): escribe las recetas «publicadas» con las puertas de la tarea 3, que sí
@@ -162,6 +166,20 @@ async function receta(
   }
   if (datos.publicada !== false) await publicarVersion(autor, versionId);
   return { recipeId: r.recipeId, versionId };
+}
+
+/**
+ * Una versión 2 PUBLICADA para una receta que ya tiene la 1, con `pasos`: la más nueva, que es la que ofrece el selector y la que el
+ * parecido compara. Devuelve el id de la versión.
+ */
+async function versionNuevaPublicada(recipeId: string, pasos: readonly PasoEditable[]): Promise<string> {
+  const v2 = (await prisma.processRecipeVersion.create({ data: { recipeId, version: 2, status: "draft", createdBy: autor } })).id;
+  for (const [i, paso] of pasos.entries()) {
+    const creado = await agregarPaso(autor, { recipeVersionId: v2, despuesDeSeq: i === 0 ? null : i, paso });
+    pasosCreados.push(creado.id);
+  }
+  await publicarVersion(autor, v2);
+  return v2;
 }
 
 /**
@@ -593,7 +611,7 @@ describe("Parte 2a, §5.2 — abrir con «Libre» define una receta pequeña y a
   it("el orden: el acceso al lote va ANTES que cualquier validación de la Libre; sólo quien gestiona el lote recibe los códigos de la Libre", async () => {
     const l = await lote("ORDEN-ACC");
     const pasos = await distinto();
-    const publicada = await receta("orden del acceso", await lavado(22.6));
+    const publicada = await receta("orden del acceso", await lavado(22.8));
     const antes = await libresDeLaOrg();
     const casos: [string, (quien: string) => Promise<unknown>][] = [
       ["sin pasos (libre_sin_pasos)", (quien) => abrirLibre(l, { pasos: [] }, { quien })],
@@ -858,6 +876,39 @@ describe("Parte 2a, §5.2 — el control de parecido", () => {
     // 6. Una plantilla (sin organización) sí cuenta: es de todas.
     const plantilla = await receta("plantilla", await lavado(22.3), { organizationId: null });
     expect(await veLaCopia(22.3), "una plantilla no cuenta").toBe(plantilla.versionId);
+  }, 120000);
+
+  it("el empate: la receta de la organización gana a la plantilla, y entre iguales el nombre menor; el resultado dice si es de la organización y su versión", async () => {
+    // Ronda de arreglo del 2026-10-14, hallazgo 4. El desempate de `buscarParecida` (la de la organización antes que la plantilla, luego por
+    // nombre) y los campos `deLaOrganizacion` y `version` no tenían prueba deliberada: lo único que ejercía el desempate era una colisión
+    // ACCIDENTAL de fixtures (22,6 en dos pruebas), y quitar el `.sort` sólo caía por ella.
+    const l = await lote("EMP");
+    const pregunta = async (minC: number) => parecidoDeLaLibre(gestor, { lotId: l, pasos: await lavado(minC) });
+
+    // A. La plantilla lo tiene TODO a favor menos ser de la organización: se creó antes, su nombre ordena primero y su versión más nueva es la 2
+    // (el orden de la lectura es por versión descendente, así que sin desempate sería la primera). La de la organización es la 1.
+    const plantilla = await receta("AAA empate plantilla", await lavado(23.2), { organizationId: null });
+    const plantillaV2 = await versionNuevaPublicada(plantilla.recipeId, await lavado(23.2));
+    const propia = await receta("ZZZ empate propia", await lavado(23.2));
+    const gana = await pregunta(23.2);
+    expect(gana?.recipeVersionId, "ganó la plantilla y no la receta de la organización").toBe(propia.versionId);
+    expect(gana?.nombre).toBe(`LIBRE ZZZ empate propia ${RUN}`);
+    expect([gana?.deLaOrganizacion, gana?.version], "la de la organización dice que es de la organización, y su versión").toEqual([true, 1]);
+    // Control: sin la de la organización (archivada), la que coincide es la plantilla —su versión 2, no de la organización—: la otra ganó por
+    // ser de la organización y no por ser la única, y el resultado cuenta la plantilla como lo que es.
+    await prisma.processRecipe.update({ where: { id: propia.recipeId }, data: { status: "archived" } });
+    const sola = await pregunta(23.2);
+    expect(sola?.recipeVersionId, "control: la plantilla sola no coincide").toBe(plantillaV2);
+    expect(sola?.nombre).toBe(`LIBRE AAA empate plantilla ${RUN}`);
+    expect([sola?.deLaOrganizacion, sola?.version], "la plantilla dice que es de la organización, o su versión es otra").toEqual([false, 2]);
+
+    // B. Entre dos de la organización con los mismos pasos, el nombre menor, aunque se creó DESPUÉS.
+    const eme = await receta("MMM empate", await lavado(23.3));
+    const ce = await receta("CCC empate", await lavado(23.3));
+    expect((await pregunta(23.3))?.recipeVersionId, "entre iguales no ganó el nombre menor").toBe(ce.versionId);
+    // Control: sin la CCC (archivada), la MMM: las dos competían.
+    await prisma.processRecipe.update({ where: { id: ce.recipeId }, data: { status: "archived" } });
+    expect((await pregunta(23.3))?.recipeVersionId, "control: la otra de la organización no coincide").toBe(eme.versionId);
   }, 120000);
 
   it("una receta propia que se llama «Libre» no se confunde con una Libre: se ofrece, se compara por sus pasos y no choca con ningún nombre", async () => {
