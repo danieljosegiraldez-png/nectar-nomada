@@ -1,8 +1,22 @@
 # 014 · `lotWhereFromVisibility` filtra por alcance y no por clasificación: una consulta así puede traer lotes que `can()` denegaría
 
-**Estado: abierto, y es decisión de Daniel si se cierra y dónde.** Encontrado el 2026-10-01 por el CLI de
-Codex, auditando el diff del PR #573 (el tablero del beneficio) antes de la fusión. **No está
-reproducido en el navegador**: es propagación leída en el código.
+**Estado: hecha para LOTES el 2026-10-14; la gemela de muestras sigue abierta.** Daniel decidió ese
+día arreglarlo en el filtro compartido (ver la actualización de ADR-063). Las ocho superficies y el
+CSV de lotes filtran ya con la misma regla que `can()`: `clasificacionesParaListar`
+(`lib/rbac/service.ts`) da qué clasificaciones pasan en cada proyecto y ubicación, y
+`lotWhereFromVisibility` y `lotMatchesVisibility` las aplican. De camino salió **una segunda
+divergencia de la misma familia**: `resolveLotVisibility` leía el perfil **sin los ajustes por
+asignación**, así que quitarle `lot:view` a alguien no le quitaba nada de las listas. También está
+arreglada. Prueba: `tests/traceability/visibilidadPorClasificacion.test.ts` —antes del arreglo, 7 de
+16 en rojo; tres mutaciones del flip caen cada una en las cuentas que le tocan—.
+
+**Lo que queda: `sampleWhereFromVisibility`.** Una muestra se autoriza como recurso `sample` con su
+propia clasificación, y su lista se acota con la visibilidad de LOTES: diverge por dos lados, y
+arreglarla pide un resolvedor de visibilidad de muestras, no un parche en éste.
+
+Lo que sigue es la ficha tal como se escribió. Encontrado el 2026-10-01 por el CLI de Codex,
+auditando el diff del PR #573 (el tablero del beneficio) antes de la fusión. **No estaba
+reproducido en el navegador**: era propagación leída en el código.
 
 **Esto NO es un hallazgo desconocido, y hay que leerlo antes de decidir.** El repositorio ya lo sabe y
 **ya decidió una vez**: ADR-063, «Corregido el 2026-09-26» (`docs/architecture/DECISIONS.md`, ~L4455),

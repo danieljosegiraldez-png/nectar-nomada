@@ -46,6 +46,13 @@
  * re-comprueba por fila** — no hay ni un `requireLotAccess` en él, a diferencia
  * del camino del detalle. El día que algo pueda clasificar un lote por encima de
  * `internal`, esto escribe esas filas a un archivo.
+ *
+ * **CORREGIDO EL 2026-10-14 (ficha 014, decisión de Daniel): los LOTES ya no.**
+ * `lotWhereFromVisibility` aplica la misma regla que `can()` —ámbito y
+ * clasificación, con los ajustes por asignación—, así que una fila de lote de
+ * este archivo no puede pasar de la clearance de quien exporta. Las MUESTRAS sí
+ * siguen así: `sampleWhereFromVisibility` acota sólo por ámbito, con la
+ * visibilidad de lotes, y es lo que la ficha deja abierto.
  */
 
 import { prisma } from "../db";

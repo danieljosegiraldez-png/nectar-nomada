@@ -276,11 +276,10 @@ export async function compararClasificacionVerde(
   // `null` es «no puedes ver ninguno», que no es «no hay ninguno». Devolver una lista vacía aquí
   // le diría a una cuenta recién dada de alta que la finca no tiene café (ver lots.ts:724).
   //
-  // **Lo que este recorte NO hace, dicho para no prometer de más** (Codex, 2026-09-25):
-  // `lotWhereFromVisibility` filtra por proyecto y ubicación, pero **no** por `classification`,
-  // que `requireLotAccess` sí comprueba al abrir la ficha. Es una divergencia del ayudante
-  // compartido —la tiene igual `getLotList`, o sea `/lots`— y no se corrige aquí: arreglarla en
-  // una pantalla y no en las otras deja dos reglas conviviendo. Anotada para Daniel aparte.
+  // `lotWhereFromVisibility` filtra con la misma regla que `requireLotAccess` al abrir la ficha:
+  // ámbito y `classification`. Hasta el 2026-10-14 sólo miraba el ámbito (Codex lo señaló el
+  // 2026-09-25); se arregló en el ayudante compartido y no aquí, para que todas las pantallas
+  // tengan una sola regla (ficha 014).
   if (where === null) {
     return { columnas: [], filas: [], sinClasificar: 0, sinAmbito: true, truncado: false, limite: LIST_LIMIT };
   }

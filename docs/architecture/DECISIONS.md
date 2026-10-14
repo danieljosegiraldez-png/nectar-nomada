@@ -4483,6 +4483,21 @@ guardia que la despertaría es una prueba que afirme que **todo perfil con
 un camino que clasifique un lote más arriba— la fuga se vuelve alcanzable y esa
 prueba es la que tiene que caer.
 
+**Actualización 2026-10-14 — se arregla en el filtro (decisión de Daniel, ficha 014).** El
+párrafo de arriba queda como historia. La razón de cambiarlo: la divergencia ya no eran «seis
+superficies» sino **ocho más el CSV**, y no dependía sólo de la clasificación. `resolveLotVisibility`
+leía las asignaciones con una consulta propia que veía el **perfil sin los ajustes** por asignación
+(`AssignmentPermissionOverride`, posterior a esta decisión), así que quitarle `lot:view` a alguien en
+una asignación no le quitaba nada de las listas. Ahora la regla la da
+`clasificacionesParaListar` (`lib/rbac/service.ts`), que parte de las mismas asignaciones resueltas
+que `can()` y pregunta `can()` nivel a nivel en cada proyecto y en cada ubicación con su cadena de
+ancestros; `lotWhereFromVisibility` y `lotMatchesVisibility` la aplican, y `roasting.ts` dejó de
+saltarse el filtro en modo «all». **Las muestras no**: `sampleWhereFromVisibility` se acota con la
+visibilidad de lotes y una muestra se autoriza como recurso `sample` con su propia clasificación;
+pide su propio resolvedor. La prueba que lo fija es
+`tests/traceability/visibilidadPorClasificacion.test.ts`, con cinco cuentas cuyo conjunto se
+comprueba contra `can()`, contra el filtro y contra la versión en memoria.
+
 **Decision 2 — Partner Field Collector is deliberately unchanged.** ADR-029
 decision 1 is not overturned. `partner.task` still holds one `internal` row and
 one `partner` row, and a partner seeing only the second is the property ADR-029
