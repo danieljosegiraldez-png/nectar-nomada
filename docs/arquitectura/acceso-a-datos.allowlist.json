@@ -845,6 +845,11 @@
       "razon": "Recibe al principal y no llama a `can` porque parte de `getManageableContext(userAccountId)`, que resuelve la visibilidad de lotes de esa cuenta y es quien autoriza. La lectura del árbol de ubicaciones sólo sirve para subir de una ubicación ya visible a su sitio; no devuelve nada que no sea el sitio de algo visible. Probado en tests/traceability/fincas.test.ts: el Farm Manager de A no ve B. Verificado el 2026-09-18."
     },
     {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "resolveLotVisibility",
+      "razon": "Ficha 014, 2026-10-14. Recibe al principal y no llama a `can` porque la regla la pide a `clasificacionesParaListar(userAccountId, …)` en lib/rbac/service.ts, que lee las asignaciones de esa cuenta con sus ajustes y aplica `can()` nivel a nivel. La única lectura propia es el árbol de ubicaciones bajo las asignadas a esa cuenta, para propagar hacia abajo lo que vale en el padre; no devuelve ningún dato de esas ubicaciones. Antes salía «acotado por construcción» porque leía `assignment` por su cuenta, y por eso discrepaba de `can()`. Probado en tests/traceability/visibilidadPorClasificacion.test.ts: cinco cuentas, la lista igual a `can()`."
+    },
+    {
       "archivo": "lib/traceability/biocharBatches.ts",
       "operacion": "listBiocharBatches",
       "razon": "Recibe el principal y filtra por el conjunto de Locations visibles que devuelve getManageableContext, que es la misma visibilidad con la que /plots lista sus parcelas — pero no llama a ningún require*, así que el detector no la reconoce y hace bien en señalarla. Es el filtro de una LISTA, no la frontera: cada lectura de detalle y cada escritura pasan por requireLocationAttributeAccess. Verificado el 2026-09-01."

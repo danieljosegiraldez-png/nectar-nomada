@@ -1,5 +1,5 @@
 import { tuesteVisible } from "./tuesteVisible";
-import type { ClassificationLevel } from "../rbac/types";
+import { CLASSIFICATION_LEVELS, type ClassificationLevel } from "../rbac/types";
 /**
  * Phase 1, ticket T1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
  * §8, §34). Canonical Lot + LotTransformation — the mechanism underneath
@@ -22,7 +22,7 @@ import type { ClassificationLevel } from "../rbac/types";
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { sortByName } from "../naturalOrder";
-import { can } from "../rbac/service";
+import { can, clasificacionesParaListar } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -625,6 +625,18 @@ export interface LotVisibility {
   mode: "all" | "none" | "scoped";
   projectIds: string[];
   locationIds: string[];
+  /**
+   * Ficha 014 — qué clasificaciones deja pasar `can()`. El permiso de lote no basta: hace falta
+   * además `classification:clear_<nivel>` en el MISMO objetivo (el proyecto del lote, su ubicación
+   * o un ancestro de ésta). `enCualquierLote` vale para todo lote, porque lo conceden asignaciones
+   * de plataforma y ésas cubren cualquier objetivo; los mapas, para los lotes de ese proyecto o esa
+   * ubicación. Se aplica con `lotWhereFromVisibility` y `lotMatchesVisibility`, nunca a mano.
+   */
+  clasificaciones: {
+    enCualquierLote: ClassificationLevel[];
+    porProyecto: Record<string, ClassificationLevel[]>;
+    porUbicacion: Record<string, ClassificationLevel[]>;
+  };
 }
 
 /**
@@ -634,21 +646,31 @@ export interface LotVisibility {
  * para decidir si UN ámbito lo cubre; esto baja desde el ámbito para construir la LISTA de lo que
  * alcanza. El tope de profundidad no es adorno: un `parentLocationId` en ciclo —nada en el esquema
  * lo impide— colgaría el punto por el que pasa toda la visibilidad de lotes.
+ *
+ * Devuelve también el padre de cada descendiente, en el orden en que se descubren —un padre siempre
+ * antes que sus hijos—, para propagar hacia abajo lo que vale en el padre sin una consulta por nodo.
  */
 const PROFUNDIDAD_MAXIMA_DE_UBICACION = 12;
-async function conDescendientes(ids: readonly string[]): Promise<string[]> {
-  if (ids.length === 0) return [];
-  const todos = new Set(ids);
+async function conDescendientes(ids: readonly string[]): Promise<{ todos: string[]; padreDe: Map<string, string> }> {
+  const vistos = new Set(ids);
+  const todos = [...ids];
+  const padreDe = new Map<string, string>();
   let frontera = [...ids];
   for (let nivel = 0; nivel < PROFUNDIDAD_MAXIMA_DE_UBICACION && frontera.length > 0; nivel += 1) {
     const hijos = await prisma.location.findMany({
       where: { parentLocationId: { in: frontera } },
-      select: { id: true },
+      select: { id: true, parentLocationId: true },
     });
-    frontera = hijos.map((h) => h.id).filter((id) => !todos.has(id));
-    for (const id of frontera) todos.add(id);
+    frontera = [];
+    for (const hijo of hijos) {
+      if (vistos.has(hijo.id) || !hijo.parentLocationId) continue;
+      vistos.add(hijo.id);
+      todos.push(hijo.id);
+      padreDe.set(hijo.id, hijo.parentLocationId);
+      frontera.push(hijo.id);
+    }
   }
-  return [...todos];
+  return { todos, padreDe };
 }
 
 export async function resolveLotVisibility(
@@ -658,69 +680,84 @@ export async function resolveLotVisibility(
   // as "which may they view", asked of a different permission.
   action: "view" | "manage" | "export" = "view",
 ): Promise<LotVisibility> {
-  const now = new Date();
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      userAccountId,
-      status: "active",
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
-    },
-    include: { scope: true, roleProfile: { include: { permissions: { include: { permission: true } } } } },
-  });
+  // Ficha 014 — la MISMA regla que `can()`, pedida a `lib/rbac/service.ts` en vez de leer aquí las
+  // asignaciones: esa consulta propia veía el perfil sin los ajustes de cada asignación y no miraba
+  // la clasificación del lote.
+  const regla = await clasificacionesParaListar(userAccountId, action, "lot");
+  const unir = (...listas: ClassificationLevel[][]) =>
+    CLASSIFICATION_LEVELS.filter((nivel) => listas.some((lista) => lista.includes(nivel)));
 
-  const viewGranting = assignments.filter((a) =>
-    a.roleProfile.permissions.some((rp) => rp.permission.resourceType === "lot" && rp.permission.action === action),
-  );
+  // Lo de la plataforma vale en cualquier objetivo, y es todo lo que se comprueba en un lote sin
+  // proyecto ni ubicación (`scopeTargetsFor`).
+  const enCualquierLote = regla.enCualquierObjetivo;
+  const porProyecto = regla.porProyecto;
 
-  if (viewGranting.some((a) => a.scope.scopeType === "platform")) {
-    return { mode: "all", projectIds: [], locationIds: [] };
+  // **Y las ubicaciones con todo lo que cuelga de ellas.** `can()` sube por los ancestros del
+  // recurso desde ADR-144 —quien manda en la finca manda en lo que hay dentro—, y esta LISTA llegó
+  // a mirar sólo el id exacto: el 2026-09-25 una cuenta Farm Manager de «Finca Rosina» veía cero de
+  // sus seis parcelas. Un HERMANO sigue fuera. Una asignada trae ya unida su cadena de ancestros; un
+  // descendiente recibe lo de la plataforma más lo de su padre.
+  const { todos, padreDe } = await conDescendientes(Object.keys(regla.porUbicacionAsignada));
+  const enUbicacion = new Map<string, ClassificationLevel[]>();
+  const porUbicacion: Record<string, ClassificationLevel[]> = {};
+  for (const id of todos) {
+    const propio = regla.porUbicacionAsignada[id] ?? enCualquierLote;
+    const padre = padreDe.get(id);
+    const niveles = padre ? unir(propio, enUbicacion.get(padre) ?? []) : propio;
+    enUbicacion.set(id, niveles);
+    if (niveles.length) porUbicacion[id] = niveles;
   }
 
-  const projectIds = [
-    ...new Set(
-      viewGranting
-        .filter((a) => a.scope.scopeType === "project")
-        .map((a) => a.scope.scopeRefId)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  const asignadas = [
-    ...new Set(
-      viewGranting
-        .filter((a) => a.scope.scopeType === "location")
-        .map((a) => a.scope.scopeRefId)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  // **Y todo lo que cuelga de ellas.** `can()` sube por los ancestros del recurso desde ADR-144
-  // —quien manda en la finca manda en lo que hay dentro—, pero esta LISTA miraba sólo el id exacto.
-  // Las dos mitades discrepaban: la ficha de una parcela autorizaba y la lista no la enseñaba.
-  //
-  // Medido el 2026-09-25 con una cuenta Farm Manager de ámbito «Finca Rosina»: la finca tiene seis
-  // parcelas y `getManageableContext` devolvía CERO, así que /plots salía vacío y parecía que las
-  // parcelas hubieran desaparecido. No es ensanchar permisos: es reconocer la misma contención que
-  // la comprobación por recurso ya aplica. Un HERMANO sigue fuera.
-  const locationIds = await conDescendientes(asignadas);
-
+  const clasificaciones = { enCualquierLote, porProyecto, porUbicacion };
+  if (enCualquierLote.length) return { mode: "all", projectIds: [], locationIds: [], clasificaciones };
+  const projectIds = Object.keys(porProyecto);
+  const locationIds = Object.keys(porUbicacion);
   if (projectIds.length === 0 && locationIds.length === 0) {
-    return { mode: "none", projectIds: [], locationIds: [] };
+    return { mode: "none", projectIds: [], locationIds: [], clasificaciones };
   }
-  return { mode: "scoped", projectIds, locationIds };
+  return { mode: "scoped", projectIds, locationIds, clasificaciones };
 }
 
+/** Los ids de un mapa agrupados por los niveles que añaden a `base`, para no emitir una cláusula por id. */
+function gruposPorNiveles(
+  mapa: Record<string, ClassificationLevel[]>,
+  base: ReadonlySet<ClassificationLevel>,
+): Array<{ ids: string[]; niveles: ClassificationLevel[] }> {
+  const grupos = new Map<string, { ids: string[]; niveles: ClassificationLevel[] }>();
+  for (const [id, niveles] of Object.entries(mapa)) {
+    const extra = niveles.filter((nivel) => !base.has(nivel));
+    if (extra.length === 0) continue;
+    const clave = extra.join(",");
+    const grupo = grupos.get(clave) ?? { ids: [], niveles: extra };
+    grupo.ids.push(id);
+    grupos.set(clave, grupo);
+  }
+  return [...grupos.values()];
+}
+
+/** Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything"). */
+export function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
+  if (visibility.mode === "none") return null;
+  const { enCualquierLote, porProyecto, porUbicacion } = visibility.clasificaciones;
+  if (enCualquierLote.length === CLASSIFICATION_LEVELS.length) return {};
+  const base = new Set(enCualquierLote);
+  const clausulas: Prisma.LotWhereInput[] = [];
+  if (enCualquierLote.length) clausulas.push({ classification: { in: enCualquierLote } });
+  for (const g of gruposPorNiveles(porProyecto, base)) clausulas.push({ projectId: { in: g.ids }, classification: { in: g.niveles } });
+  for (const g of gruposPorNiveles(porUbicacion, base)) clausulas.push({ locationId: { in: g.ids }, classification: { in: g.niveles } });
+  return clausulas.length ? { OR: clausulas } : null;
+}
+
+/**
+ * **La gemela de muestras NO aplica todavía la clasificación** (ficha 014, «lo que queda»). Una
+ * muestra se autoriza por recurso como `sample` y con SU clasificación, y esta lista se acota con la
+ * visibilidad de LOTES: diverge por dos lados, y arreglarla pide su propio resolvedor.
+ */
 function scopeOrClauses(visibility: LotVisibility): Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> {
   const clauses: Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> = [];
   if (visibility.projectIds.length) clauses.push({ projectId: { in: visibility.projectIds } });
   if (visibility.locationIds.length) clauses.push({ locationId: { in: visibility.locationIds } });
   return clauses;
-}
-
-/** Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything"). */
-export function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
-  if (visibility.mode === "all") return {};
-  if (visibility.mode === "none") return null;
-  return { OR: scopeOrClauses(visibility) };
 }
 
 export function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWhereInput | null {
@@ -756,12 +793,17 @@ export async function puedeGestionarLote(
   }
 }
 
-export function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
-  if (visibility.mode === "all") return true;
+/** La misma regla que `lotWhereFromVisibility`, sobre una fila ya leída (ficha 014). */
+export function lotMatchesVisibility(
+  lot: { projectId: string | null; locationId: string | null; classification: ClassificationLevel },
+  visibility: LotVisibility,
+): boolean {
   if (visibility.mode === "none") return false;
+  const { enCualquierLote, porProyecto, porUbicacion } = visibility.clasificaciones;
   return (
-    (lot.projectId != null && visibility.projectIds.includes(lot.projectId)) ||
-    (lot.locationId != null && visibility.locationIds.includes(lot.locationId))
+    enCualquierLote.includes(lot.classification) ||
+    (lot.projectId != null && (porProyecto[lot.projectId] ?? []).includes(lot.classification)) ||
+    (lot.locationId != null && (porUbicacion[lot.locationId] ?? []).includes(lot.classification))
   );
 }
 
@@ -869,8 +911,8 @@ export async function getActiveOperations(userAccountId: string) {
       .map((run) => ({ run, lot: run.transformations[0]?.inputs[0]?.lot ?? null }))
       .filter((entry): entry is { run: T; lot: NonNullable<(typeof entry)["lot"]> } => entry.lot != null);
 
-  const activeFermentationRuns = withSourceLot(fermentationRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
-  const activeDryingRuns = withSourceLot(dryingRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
+  const activeFermentationRuns = withSourceLot(fermentationRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null; classification: ClassificationLevel }, visibility));
+  const activeDryingRuns = withSourceLot(dryingRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null; classification: ClassificationLevel }, visibility));
 
   const staleThreshold = new Date(Date.now() - ATTENTION_MEASUREMENT_STALENESS_HOURS * 60 * 60 * 1000);
   const activeLotIds = [

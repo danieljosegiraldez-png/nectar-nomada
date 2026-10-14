@@ -403,7 +403,9 @@ export async function listRoastSessions(
       // almost nothing while hundreds of their own rows existed just past the
       // limit. That is not a cap, it is a wrong answer, and it is what let a
       // test lose its own three rows behind 200 leaked ones (ADR-086).
-      ...(visibility.mode === "all"
+      // Ficha 014: se decide por el filtro y no por `mode === "all"`. Una cuenta de plataforma que
+      // no limpia todas las clasificaciones tiene modo «all» y aun así un filtro que aplicar.
+      ...(Object.keys(lotWhere).length === 0
         ? {}
         : { transformations: { some: { inputs: { some: { lot: lotWhere } } } } }),
     },

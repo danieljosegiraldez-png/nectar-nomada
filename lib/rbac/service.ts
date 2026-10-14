@@ -8,8 +8,8 @@
 
 import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
-import { can as resolveCan, resolvePermissions as resolvePermissionsPure } from "./resolve";
-import { permissionKey } from "./types";
+import { can as resolveCan, clasificacionesQuePasan, resolvePermissions as resolvePermissionsPure } from "./resolve";
+import { CLASSIFICATION_LEVELS, permissionKey } from "./types";
 import { UUID } from "../validation/uuid";
 export { CLASSIFICATION_GATE_DEFERRED, CLASSIFICATION_NOT_APPLICABLE } from "./resolve";
 import type { ClassificationLevel, ResolvedAssignment, ScopeTarget, ScopeType } from "./types";
@@ -197,6 +197,57 @@ async function conAncestros(target: ScopeTarget): Promise<ScopeTarget[]> {
     actual = padre;
   }
   return cadena;
+}
+
+/**
+ * Ficha 014 — lo que una LISTA necesita para filtrar con la misma regla que `can()`, sin leer las
+ * asignaciones por su cuenta: qué clasificaciones de `resourceType` deja pasar
+ * `can(cuenta, action, resourceType, …)`. `resolveLotVisibility` las leía con una consulta propia que
+ * veía el perfil sin los ajustes y no miraba la clasificación, y por eso la lista de lotes
+ * discrepaba de la ficha.
+ *
+ * - `enCualquierObjetivo`: lo que conceden las asignaciones de plataforma, que cubren cualquier
+ *   objetivo. Es también lo que pasa en una ubicación sin asignación propia.
+ * - `porProyecto`: en cada proyecto asignado.
+ * - `porUbicacionAsignada`: en cada ubicación asignada, uniendo toda su cadena de ancestros como hace
+ *   `can()` (ADR-144). Hacia abajo lo propaga quien lista: un descendiente recibe lo de su padre.
+ *
+ * Sólo entran los ámbitos donde pasa algo.
+ */
+export async function clasificacionesParaListar(
+  userAccountId: string,
+  action: string,
+  resourceType: string,
+): Promise<{
+  enCualquierObjetivo: ClassificationLevel[];
+  porProyecto: Record<string, ClassificationLevel[]>;
+  porUbicacionAsignada: Record<string, ClassificationLevel[]>;
+}> {
+  const asignaciones = await getResolvedAssignments(userAccountId);
+  const pasanEn = (objetivo: ScopeTarget) => clasificacionesQuePasan(asignaciones, action, resourceType, objetivo);
+  const refs = (tipo: ScopeType) => [
+    ...new Set(
+      asignaciones
+        .filter((a) => a.scope.scopeType === tipo)
+        .map((a) => a.scope.scopeRefId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+
+  const porProyecto: Record<string, ClassificationLevel[]> = {};
+  for (const id of refs("project")) {
+    const niveles = pasanEn({ scopeType: "project", scopeRefId: id });
+    if (niveles.length) porProyecto[id] = niveles;
+  }
+
+  const porUbicacionAsignada: Record<string, ClassificationLevel[]> = {};
+  for (const id of refs("location")) {
+    const cadena = (await conAncestros({ scopeType: "location", scopeRefId: id })).map(pasanEn);
+    const niveles = CLASSIFICATION_LEVELS.filter((nivel) => cadena.some((enUno) => enUno.includes(nivel)));
+    if (niveles.length) porUbicacionAsignada[id] = niveles;
+  }
+
+  return { enCualquierObjetivo: pasanEn({ scopeType: "platform", scopeRefId: null }), porProyecto, porUbicacionAsignada };
 }
 
 /** Every permission key an authenticated user holds against one target — for building UI affordances, not for enforcement (enforcement is always a `can()` call server-side, per SECURITY.md §2). */

@@ -8,7 +8,7 @@
  */
 
 import type { AssignmentScope, ClassificationLevel, ResolvedAssignment, ScopeTarget } from "./types";
-import { permissionKey } from "./types";
+import { CLASSIFICATION_LEVELS, permissionKey } from "./types";
 
 /**
  * Does an Assignment's scope cover the target resource's location?
@@ -130,4 +130,18 @@ export function can(
   }
 
   return granted.has(permissionKey("classification", `clear_${resourceClassification}`));
+}
+
+/**
+ * Ficha 014 — las clasificaciones que `can()` dejaría pasar en UN objetivo, para que una LISTA
+ * filtre con la misma regla que la comprobación por recurso en vez de reimplementarla. Es `can()`
+ * preguntado por cada nivel, así que no puede discrepar de él.
+ */
+export function clasificacionesQuePasan(
+  assignments: readonly ResolvedAssignment[],
+  action: string,
+  resourceType: string,
+  target: ScopeTarget,
+): ClassificationLevel[] {
+  return CLASSIFICATION_LEVELS.filter((nivel) => can(assignments, action, resourceType, target, nivel));
 }
