@@ -95,6 +95,24 @@ async function primerValor(catalogo: string): Promise<string> {
   ).id;
 }
 
+/**
+ * Los sustratos canónicos del catálogo SEMBRADO, por su orden. **Sin los valores `TEST…`**: `sustrato_anadido` es el catálogo donde
+ * `tests/recetas/intervencionConPaso.test.ts` crea su valor canónico (y se lo borra al acabar), y los dos archivos corren a la vez en
+ * `ci-con-base.sh`. Con el `displayOrder` por omisión (0) ese valor empata con `ninguno` y ordena DENTRO de los dos primeros: este
+ * archivo lo usaba en una adición, y el `afterAll` del otro no podía borrarlo (`process_recipe_step_addition_categoria_value_id_fkey`,
+ * RESTRICT) y abandonaba la mitad de su limpieza. Medido el 2026-10-14 sobre `255a48ca`: la pareja caía en 9 de 9 corridas. Recibe el
+ * cliente para que la prueba de abajo la llame dentro de una transacción que se deshace.
+ */
+async function sustratosSembrados(db: Pick<typeof prisma, "variableCatalogValue"> = prisma): Promise<string[]> {
+  return (
+    await db.variableCatalogValue.findMany({
+      where: { catalog: { key: "sustrato_anadido" }, aliasOfId: null, NOT: { value: { startsWith: "TEST" } } },
+      orderBy: { displayOrder: "asc" },
+      select: { id: true },
+    })
+  ).map((v) => v.id);
+}
+
 async function pasoDe(tipo: TipoDePaso, extra: Omit<PasoEditable, "stepTypeValueId"> = {}): Promise<PasoEditable> {
   return { stepTypeValueId: await valor("tipo_paso", tipo), ...extra };
 }
@@ -411,13 +429,7 @@ describe("la lista de pasos queda numerada 1..n, sin huecos", () => {
     // permutación al azar de cuatro: la probabilidad de que cinco coincidan con la primera es (1/24)^5, por cada lista.
     expect(EJES_POR_TIPO_DE_PASO.fermentation, "precondición (tarea 2)").toContain("adiciones");
     const { versionId } = await borrador("orden-de-hijas");
-    const sustratos = (
-      await prisma.variableCatalogValue.findMany({
-        where: { catalog: { key: "sustrato_anadido" }, aliasOfId: null },
-        orderBy: { displayOrder: "asc" },
-        select: { id: true },
-      })
-    ).map((v) => v.id);
+    const sustratos = await sustratosSembrados();
     expect(sustratos.length, "precondición: el catálogo sembrado trae al menos dos sustratos").toBeGreaterThanOrEqual(2);
     const adiciones = [
       { categoriaValueId: sustratos[0]!, cantidad: 2, unidad: "L", momento: "pre_green" },
@@ -457,6 +469,36 @@ describe("la lista de pasos queda numerada 1..n, sin huecos", () => {
       expect(otra.adiciones, `adiciones, entrada ${orden.join("")}`).toEqual(primera.adiciones);
       expect(otra.fines, `fines, entrada ${orden.join("")}`).toEqual(primera.fines);
     }
+  });
+
+  it("los sustratos que elige el archivo son los SEMBRADOS: un valor TEST de otra prueba que ordene primero no se cuela (la carrera con intervencionConPaso)", async () => {
+    // Un intruso que ordena ANTES que todo lo sembrado, creado dentro de una transacción que se deshace: ninguna otra conexión lo ve, así que
+    // esta prueba no puede provocar la carrera que mide (es determinista; la carrera real depende de en qué instante corren dos archivos).
+    const intruso = `TEST intruso ${RUN}`;
+    let visto: { sinFiltro: string[]; sembrados: string[]; intrusoId: string } | undefined;
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const catalogo = await tx.variableCatalog.findUniqueOrThrow({ where: { key: "sustrato_anadido" }, select: { id: true } });
+        const creado = await tx.variableCatalogValue.create({ data: { catalogId: catalogo.id, value: intruso, displayOrder: -1 }, select: { id: true } });
+        const sinFiltro = (
+          await tx.variableCatalogValue.findMany({
+            where: { catalog: { key: "sustrato_anadido" }, aliasOfId: null },
+            orderBy: { displayOrder: "asc" },
+            select: { id: true },
+          })
+        ).map((v) => v.id);
+        visto = { sinFiltro, sembrados: await sustratosSembrados(tx), intrusoId: creado.id };
+        throw new Error("deshacer");
+      }),
+    ).rejects.toThrow("deshacer");
+    expect(visto, "control: la transacción llegó hasta el final").toBeDefined();
+    // Control: SIN el filtro el intruso es el primero —lo que haría el orden por `displayOrder`—; con él, no está entre los elegidos.
+    expect(visto!.sinFiltro[0], "control: el intruso ordena primero").toBe(visto!.intrusoId);
+    expect(visto!.sembrados).not.toContain(visto!.intrusoId);
+    expect(visto!.sembrados.length, "precondición: quedan al menos dos sembrados").toBeGreaterThanOrEqual(2);
+    // Lo elegido es lo mismo que sin intruso, y la transacción no dejó nada.
+    expect(visto!.sembrados).toEqual(await sustratosSembrados());
+    expect(await prisma.variableCatalogValue.count({ where: { value: intruso } })).toBe(0);
   });
 });
 

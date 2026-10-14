@@ -66,6 +66,14 @@ let deOtroCatalogo: string;
 /** Ruling I7: dos valores PROPIOS de la prueba en `sustrato_anadido` —un catálogo de manejos de verdad—: un canónico y un alias suyo. */
 const NOMBRE_DEL_CANONICO = `TEST canónico ${RUN}`;
 const NOMBRE_DEL_ALIAS = `TEST alias ${RUN}`;
+/**
+ * Dónde ordenan esos dos valores dentro de `sustrato_anadido`: DESPUÉS de todo lo sembrado. Con el `displayOrder` por omisión (0) el
+ * canónico empata con `ninguno` y ordena dentro de los dos primeros, y `tests/recetas/pasos.test.ts` —que corre a la vez en
+ * `ci-con-base.sh` y toma «los dos primeros sustratos»— lo usaba en una adición: el `afterAll` de este archivo no podía borrarlo
+ * (`process_recipe_step_addition_categoria_value_id_fkey`, RESTRICT) y abandonaba la mitad de su limpieza. Medido el 2026-10-14 sobre
+ * `255a48ca`: la pareja caía en 9 de 9 corridas. Un valor que esta prueba crea y borra no debe quedar a la vista de quien lee el catálogo por orden.
+ */
+const ORDEN_AL_FINAL = 1_000_000;
 let canonico: string;
 let alias: string;
 const tipo = { pulping: "", washing: "", drying: "" };
@@ -216,9 +224,13 @@ beforeAll(async () => {
   // Ruling I7: el canónico y su alias, los dos de `sustrato_anadido` (es de `CATALOGOS_DE_INTERVENCION`). Un alias apunta
   // directo a su canónico, nunca a otro alias (`VariableCatalogValue.aliasOfId`). Nombres con `RUN`: nadie más los toca.
   const sustrato = await prisma.variableCatalog.findUniqueOrThrow({ where: { key: "sustrato_anadido" }, select: { id: true } });
-  canonico = (await prisma.variableCatalogValue.create({ data: { catalogId: sustrato.id, value: NOMBRE_DEL_CANONICO } })).id;
+  canonico = (
+    await prisma.variableCatalogValue.create({ data: { catalogId: sustrato.id, value: NOMBRE_DEL_CANONICO, displayOrder: ORDEN_AL_FINAL } })
+  ).id;
   alias = (
-    await prisma.variableCatalogValue.create({ data: { catalogId: sustrato.id, value: NOMBRE_DEL_ALIAS, aliasOfId: canonico } })
+    await prisma.variableCatalogValue.create({
+      data: { catalogId: sustrato.id, value: NOMBRE_DEL_ALIAS, aliasOfId: canonico, displayOrder: ORDEN_AL_FINAL },
+    })
   ).id;
 
   const c = await receta("Lavado con pasos", [tipo.pulping, tipo.washing, tipo.drying]);
@@ -311,6 +323,21 @@ describe("el acto es el tipo de paso, y con él el valor de catálogo es opciona
     expect(await pasos(sinPasos.versionId)).toEqual([]);
     // Tres valores DISTINTOS de `tipo_paso`: si dos fueran el mismo, «toma el tipo del paso» no distinguiría nada.
     expect(new Set(Object.values(tipo)).size).toBe(3);
+  });
+
+  it("fila patrón de la carrera con pasos.test.ts: el canónico y el alias de la prueba ordenan DESPUÉS de todo lo sembrado en sustrato_anadido", async () => {
+    const todos = await prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "sustrato_anadido" } },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+      select: { id: true, value: true },
+    });
+    // Los sembrados son los que no llevan `TEST` (los de otros archivos que corren a la vez no cuentan ni para un lado ni para el otro).
+    const sembrados = todos.filter((v) => !v.value.startsWith("TEST"));
+    expect(sembrados.length, "control: hay sustratos sembrados que ordenar (ninguno, co_fermentacion, doble_mosto y sus alias)").toBeGreaterThanOrEqual(3);
+    const posicion = (id: string) => todos.findIndex((v) => v.id === id);
+    // Con `displayOrder: 0` el canónico empataba con `ninguno` y quedaba en la posición 0 o 1; ahora va detrás de TODOS los sembrados.
+    expect(posicion(canonico), "el canónico de la prueba ordena detrás de lo sembrado").toBeGreaterThanOrEqual(sembrados.length);
+    expect(posicion(alias), "el alias de la prueba ordena detrás de lo sembrado").toBeGreaterThanOrEqual(sembrados.length);
   });
 
   it("con un paso de la receta del proceso se une a él y toma su tipo, sin valor de catálogo", async () => {
