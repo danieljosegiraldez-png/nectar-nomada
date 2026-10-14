@@ -96,6 +96,10 @@ afterAll(async () => {
       await prisma.scope.deleteMany({ where: { scopeType: "location", scopeRefId: { in: mias.map((x) => x.id) } } });
       await prisma.location.deleteMany({ where: { id: { in: mias.map((x) => x.id) } } });
     }
+    // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto, borrar la cuenta
+    // deja esas filas con el actor a NULL (`ON DELETE SET NULL`): medido el 2026-10-13, 9 por corrida.
+    // Las cuentas ya se DESCUBRIERON por el RUN_ID, arriba.
+    if (cuentas.length) await prisma.auditEvent.deleteMany({ where: { actorUserAccountId: { in: cuentas.map((x) => x.id) } } });
     if (cuentas.length) await prisma.userAccount.deleteMany({ where: { id: { in: cuentas.map((x) => x.id) } } });
     if (personas.length) await prisma.person.deleteMany({ where: { id: { in: personas.map((x) => x.id) } } });
 

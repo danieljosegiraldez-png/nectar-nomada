@@ -83,7 +83,14 @@ CUANTOS="$(echo "$A_CORRER" | grep -c . || true)"
 echo "── Correrá $CUANTOS archivos del grupo base-sembrada"
 test "$CUANTOS" -ge 20 || { echo "ABORTA: la selección salió demasiado corta ($CUANTOS)"; exit 1; }
 
+# Lo que la corrida deja con el actor a NULL se cuenta antes y después: una limpieza que borra
+# su cuenta sin borrar antes su auditoría no falla en ninguna prueba, deja filas huérfanas.
+# Ver `scripts/auditoria-sin-actor.mjs`.
+AUDITORIA_SIN_ACTOR="$(node scripts/auditoria-sin-actor.mjs contar)"
+
 # shellcheck disable=SC2086
 npx vitest run $A_CORRER
+
+node scripts/auditoria-sin-actor.mjs comprobar "$AUDITORIA_SIN_ACTOR"
 
 echo "── Todo verde ──────────────────────────────────────────────────────────"

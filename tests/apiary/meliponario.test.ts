@@ -133,6 +133,21 @@ describe("ADR-145 contra Postgres", () => {
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: loteId }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: fincaId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+    // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+    // medido el 2026-10-13, 2 por corrida. Las cuentas —la del operador y la del lector,
+    // que se borran más abajo— se DESCUBREN por el RUN_ID.
+    const personasDeLaCorrida = await prisma.person.findMany({
+      where: assertDefinedWhere({ displayName: { contains: RUN_ID } }),
+      select: { id: true },
+    });
+    const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+      where: assertDefinedWhere({ personId: { in: personasDeLaCorrida.map((p) => p.id) } }),
+      select: { id: true },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+    });
     if (lectorId) {
       await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: lectorId }) });
       await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: lectorId }) });

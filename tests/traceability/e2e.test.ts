@@ -28,6 +28,7 @@ import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { getLotReport } from "../../lib/traceability/reports";
 import { cleanupE2eFixtures } from "./e2e-cleanup";
 import { abrirProcesoDePrueba } from "../helpers/procesoDePrueba";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `t14-e2e-${Date.now()}`;
 
@@ -205,6 +206,17 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // `cleanupE2eFixtures` borra la cuenta y deja esas filas con el actor a NULL
+  // (`ON DELETE SET NULL`): medido el 2026-10-13, 6 por corrida. Las cuentas se
+  // DESCUBREN por el RUN_ID, y se hace AQUÍ y no en `e2e-cleanup.ts` porque ese
+  // módulo no es de este archivo solo: lo ejercita también el failsafe de
+  // `tests/helpers/e2e-cleanup-failsafe.test.ts` con ids parciales a propósito.
+  const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
+  const cuentas = await prisma.userAccount.findMany({
+    where: { personId: { in: personas.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentas.map((c) => c.id) } }) });
   await cleanupE2eFixtures(RUN_ID, {
     blindSampleId,
     flightId,
