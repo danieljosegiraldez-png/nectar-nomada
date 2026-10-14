@@ -66,6 +66,17 @@ const CODIGOS_DE_LA_TAREA_4 = [
   "receta_libre_no_se_versiona",
 ];
 
+// Tarea 10 (receta Libre, diseño §5.2; los dos últimos, R6): sus seis códigos, escritos a mano por la misma razón que los de arriba y
+// APARTE de ellos: el total de la tarea 3 es exacto, y una lista que crece por cada tarea rompería ese control.
+const CODIGOS_DE_LA_TAREA_10 = [
+  "libre_sin_pasos",
+  "libre_parecida",
+  "libre_repetida",
+  "libre_con_receta",
+  "libre_demasiados_pasos",
+  "libre_con_lectura_de_cierre",
+];
+
 /**
  * Los comentarios fuera, SALTANDO las cadenas. Copia de `sinComentarios` de `tests/traceability/mensajesDeProceso.test.ts`: no
  * se importa de allí porque ese archivo es una prueba y importarlo registraría sus `describe` aquí. Tiene su control abajo.
@@ -95,6 +106,11 @@ describe("los códigos de la receta tienen su texto en es y en", () => {
   it("control: la lista trae los seis códigos de la tarea 4", () => {
     expect(CODIGOS_DE_LA_TAREA_4.length).toBe(6);
     expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_4));
+  });
+
+  it("control: la lista trae los seis códigos de la tarea 10", () => {
+    expect(CODIGOS_DE_LA_TAREA_10.length).toBe(6);
+    expect([...CODIGOS_DE_RECETA_TRADUCIDOS]).toEqual(expect.arrayContaining(CODIGOS_DE_LA_TAREA_10));
   });
 
   it("cada código tiene `Traceability.error_receta_<código>` en los dos idiomas", () => {

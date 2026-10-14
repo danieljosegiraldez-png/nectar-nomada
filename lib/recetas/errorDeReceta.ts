@@ -53,6 +53,14 @@ export const CODIGOS_DE_RECETA_TRADUCIDOS = [
   "nombre_requerido",
   "nombre_repetido",
   "receta_libre_no_se_versiona",
+  // Tarea 10 (receta Libre, diseño §5.2). Los lanza `abrirProceso` (lotProcess.ts) con la Libre; los dos últimos, `validarPasosPlaneados`
+  // (revisión del 2026-10-05, R6).
+  "libre_sin_pasos",
+  "libre_parecida",
+  "libre_repetida",
+  "libre_con_receta",
+  "libre_demasiados_pasos",
+  "libre_con_lectura_de_cierre",
 ] as const;
 
 export type CodigoDeRecetaTraducido = (typeof CODIGOS_DE_RECETA_TRADUCIDOS)[number];
