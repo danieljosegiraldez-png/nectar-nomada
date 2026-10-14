@@ -39,13 +39,16 @@
  * `Location`. En la base restaurada del último backup verificado, 45 de 45 son
  * `internal`. La divergencia está DORMIDA por ausencia de camino, no por hábito.
  *
- * **Lo que la despertaría, dicho aquí porque es donde más costaría:** las listas
- * recortan por ÁMBITO y no por confidencialidad (`scopeOrClauses` en `lots.ts`
- * no mira `classification` en ninguna línea), así que un lote por encima de la
- * clearance saldría en la lista y su ficha lo negaría. Y este archivo **no
- * re-comprueba por fila** — no hay ni un `requireLotAccess` en él, a diferencia
- * del camino del detalle. El día que algo pueda clasificar un lote por encima de
- * `internal`, esto escribe esas filas a un archivo.
+ * **CORREGIDO EL 2026-10-14: la compuerta ya está, y no aquí sino en el `where`.**
+ * Este párrafo avisaba de que las listas recortaban por ÁMBITO y no por
+ * confidencialidad, así que el día que algo clasificara un lote por encima de
+ * `internal` este archivo escribiría esas filas. Daniel decidió cerrarlo de raíz
+ * (`PENDING_IMPLEMENTATIONS/014`): `lotWhereFromVisibility` y
+ * `sampleWhereFromVisibility` filtran ahora por los niveles que la cuenta limpia
+ * en cada objetivo, la misma regla que `can()`. Este archivo sigue sin
+ * re-comprobar por fila, y ya no le hace falta: el `where` ES la regla de la
+ * ficha. Lo prueba `tests/traceability/laListaVeLoQueVeCan.test.ts`, con un lote
+ * y una muestra confidenciales.
  */
 
 import { prisma } from "../db";

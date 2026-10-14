@@ -1,6 +1,10 @@
 # 014 · `lotWhereFromVisibility` filtra por alcance y no por clasificación: una consulta así puede traer lotes que `can()` denegaría
 
-**Estado: abierto, y es decisión de Daniel si se cierra y dónde.** Encontrado el 2026-10-01 por el CLI de
+**Estado: HECHA el 2026-10-14, de raíz y en los ocho (más la gemela de muestras), por decisión de
+Daniel.** Lo que se hizo y cómo se comprobó está al final, en «Cómo quedó». Lo de en medio es la ficha
+tal como se abrió, y se queda como registro.
+
+**Estado original: abierto, y es decisión de Daniel si se cierra y dónde.** Encontrado el 2026-10-01 por el CLI de
 Codex, auditando el diff del PR #573 (el tablero del beneficio) antes de la fusión. **No está
 reproducido en el navegador**: es propagación leída en el código.
 

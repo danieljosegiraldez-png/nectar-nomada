@@ -162,8 +162,9 @@ something to assign, not a closed list:
   `location:edit_beneficio`, y **el Farm Manager no lo recibe de serie**: quien lleva los dos perfiles opera y aprueba. Sus pantallas de
   recetas se abren porque las lecturas de recetas aceptan también `puedeAutoriaDeReceta`, no porque el perfil lleve `lot:manage` ni
   `lot:view` (Ruling C4, 2026-10-04). La Parte 2b
-  le añade las excepciones y los límites de un lote (diseño 2b §12). Es un perfil y no un permiso suelto porque
-  `resolveLotVisibility` no cuenta los permisos que se le añaden a una persona. Su regla vive en `lib/recetas/autoria.ts`, y sus
+  le añade las excepciones y los límites de un lote (diseño 2b §12). Es un perfil y no un permiso suelto porque quien
+  aprueba se ve así en la lista de asignaciones. (El 2b §12 daba además que `resolveLotVisibility` no contaba los permisos
+  añadidos a una persona; desde el 2026-10-14 los cuenta, ADR-063.) Su regla vive en `lib/recetas/autoria.ts`, y sus
   pruebas en `tests/recetas/autoria*.test.ts`, con lo que §9 pide para un perfil: un caso positivo dentro de su ámbito, uno
   fuera de él y uno contra una clasificación que no limpia (`confidential`).
 - **Customer** — not an Assignment-based profile; every authenticated
