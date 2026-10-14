@@ -26,6 +26,8 @@ import { requireLocationAttributeAccess, LocationAccessError } from "./locations
 import { requireTrapAccess } from "./traps";
 import { recordAuditEvent } from "../audit";
 import { can } from "../rbac/service";
+import { huellaDeCuenta } from "../auth/huellaDeCuenta";
+import { BorradorAjenoError, duenoDelBorrador } from "../sync/cuentaDelBorrador";
 import type { ScopeTarget } from "../rbac/types";
 import { Prisma, type ClassificationLevel, type ProvenanceClass } from "../../generated/prisma/client";
 
@@ -82,6 +84,12 @@ export interface RequestTrampaPhotoUploadInput extends RequestLandAssetUploadInp
    * legítimo (misma revisión) o una clave ajena reutilizada.
    */
   revisionClientDraftId: string;
+  /**
+   * ADR-199 — sólo cuando la foto viene de la cola del teléfono: de quién es, y el aparato para la
+   * regla de los borradores sin cuenta. Una llamada desde el servidor con la sesión actual no lo trae,
+   * y entonces no hay borrador del que preguntar.
+   */
+  borrador?: { cuenta: string | null; deviceId: string | null };
 }
 
 /**
@@ -109,6 +117,31 @@ export function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: stri
   return `${prefijoDe(locationId)}foto-${photoClientDraftId}${ext ? `.${ext}` : ""}`;
 }
 
+const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * ADR-199 — una foto encolada de otra cuenta no se sube ni se cuelga con la sesión de quien envía.
+ * Misma regla que el lote (`pushFieldEvents`): con cuenta, la huella; sin ella, quien registró el
+ * aparato. Un `deviceId` que no es un UUID no se busca —Prisma lo rechazaría con un error que no es un
+ * «no es tuyo»— y cuenta como aparato sin creador.
+ */
+async function exigirFotoPropia(userAccountId: string, borrador: { cuenta: string | null; deviceId: string | null }) {
+  let creadorDelAparato: string | null = null;
+  if (borrador.cuenta == null && borrador.deviceId && ES_UUID.test(borrador.deviceId)) {
+    const aparato = await prisma.device.findUnique({ where: { id: borrador.deviceId }, select: { createdBy: true } });
+    creadorDelAparato = aparato?.createdBy ?? null;
+  }
+  const dueno = duenoDelBorrador({
+    cuentaDelBorrador: borrador.cuenta,
+    huellaDeQuienEnvia: huellaDeCuenta(userAccountId),
+    quienEnvia: userAccountId,
+    creadorDelAparato,
+  });
+  if (dueno === "ajeno") {
+    throw new BorradorAjenoError(borrador.cuenta == null && creadorDelAparato ? huellaDeCuenta(creadorDelAparato) : null);
+  }
+}
+
 /**
  * Tarea 12, ruling P2 del controlador. Para la foto de la ronda de trampas, el
  * paso de la URL firmada se gatea con `requireTrapAccess` (`specimen:manage`
@@ -132,6 +165,8 @@ export function claveDeFotoDeTrampa(locationId: string, photoClientDraftId: stri
  * ANTES de firmar nada.
  */
 export async function requestTrampaPhotoUpload(userAccountId: string, input: RequestTrampaPhotoUploadInput) {
+  // ADR-199 — antes que el acceso: una foto ajena se retiene, no se rechaza.
+  if (input.borrador) await exigirFotoPropia(userAccountId, input.borrador);
   await requireTrapAccess(userAccountId, input.locationId);
   const storageKey = claveDeFotoDeTrampa(input.locationId, input.photoClientDraftId, input.originalFilename);
 
@@ -302,6 +337,12 @@ export interface FinalizeTrampaPhotoInput {
   originalFilename: string;
   revisionClientDraftId: string;
   provenanceClass: ProvenanceClass;
+  /**
+   * ADR-199 — sólo cuando la foto viene de la cola del teléfono: de quién es, y el aparato para la
+   * regla de los borradores sin cuenta. Una llamada desde el servidor con la sesión actual no lo trae,
+   * y entonces no hay borrador del que preguntar.
+   */
+  borrador?: { cuenta: string | null; deviceId: string | null };
 }
 
 /**
@@ -347,6 +388,8 @@ export interface FinalizeTrampaPhotoInput {
  * una foto que no es la suya.
  */
 export async function finalizeTrampaPhotoPorBorrador(userAccountId: string, input: FinalizeTrampaPhotoInput) {
+  // ADR-199 — antes que el acceso: una foto ajena se retiene, no se rechaza.
+  if (input.borrador) await exigirFotoPropia(userAccountId, input.borrador);
   await requireTrapAccess(userAccountId, input.locationId);
   if (!input.storageKey.startsWith(prefijoDe(input.locationId))) {
     throw new LandMediaValidationError("invalid_storage_key");

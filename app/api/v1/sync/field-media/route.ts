@@ -13,6 +13,7 @@
  * vigilar dos entradas del router para un flujo que nunca se usa a medias.
  */
 import { resolverPrincipal } from "../../../../../lib/sync/requestPrincipal";
+import { negativaDelAparato } from "../../../../../lib/sync/deviceTokens";
 import {
   requestFieldMediaUpload,
   finalizeFieldMedia,
@@ -20,6 +21,12 @@ import {
 } from "../../../../../lib/sync/fieldMedia";
 import { FieldSessionValidationError } from "../../../../../lib/traceability/fieldSessions";
 import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import {
+  BorradorAjenoError,
+  cuentaDelBorradorDe,
+  RAZON_BORRADOR_AJENO,
+  RAZON_CUENTA_INVALIDA,
+} from "../../../../../lib/sync/cuentaDelBorrador";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +40,10 @@ export async function POST(request: Request) {
   // P4 §2 — cookie o token de aparato, indistinto para esta ruta.
   const user = await resolverPrincipal(request);
   if (!user) return Response.json({ error: "not_authenticated" }, { status: 401 });
+  // Los dos pasos escriben —uno firma una subida, el otro crea la foto—, así que
+  // un aparato revocado no pasa de aquí aunque su access siga vigente.
+  const negativa = await negativaDelAparato(user.deviceId);
+  if (negativa) return Response.json({ error: negativa }, { status: 403 });
 
   const paso = new URL(request.url).searchParams.get("paso");
   if (paso !== "solicitar" && paso !== "finalizar") {
@@ -63,6 +74,13 @@ export async function POST(request: Request) {
       return Response.json(r, { status: 200 });
     }
 
+    // Por token, el aparato lo dice el token: el `deviceId` del cuerpo tiene que
+    // ser el suyo, o la foto quedaría atribuida a un aparato que no la tomó. Por
+    // cookie (`deviceId === null`) no hay aparato propio y sigue siendo opcional.
+    if (user.deviceId !== null && body.deviceId !== user.deviceId) {
+      return Response.json({ error: "device_mismatch" }, { status: 403 });
+    }
+
     const occurredAt = fecha(body.occurredAt);
     if (
       typeof body.storageKey !== "string" || typeof body.mimeType !== "string" ||
@@ -71,6 +89,10 @@ export async function POST(request: Request) {
     ) {
       return Response.json({ error: "finalizar_malformado" }, { status: 400 });
     }
+    // ADR-199 — una cuenta que no es una cadena no se compara con nada; tratarla
+    // como «sin cuenta» la mandaría por la regla del aparato, que es otra pregunta.
+    const cuenta = cuentaDelBorradorDe(body.cuentaDelBorrador);
+    if (!cuenta.ok) return Response.json({ error: RAZON_CUENTA_INVALIDA }, { status: 400 });
 
     const evento = await finalizeFieldMedia(user.userAccountId, {
       fieldSessionId,
@@ -82,12 +104,21 @@ export async function POST(request: Request) {
       occurredAt,
       recordedAt: fecha(body.recordedAt),
       deviceId: typeof body.deviceId === "string" ? body.deviceId : null,
+      cuentaDelBorrador: cuenta.cuenta,
       operatorPersonId: typeof body.operatorPersonId === "string" ? body.operatorPersonId : null,
       notes: typeof body.notes === "string" ? body.notes : null,
       position: (body.position ?? undefined) as never,
     });
     return Response.json({ id: evento.id, assetId: evento.assetId }, { status: 200 });
   } catch (error) {
+    // ADR-199 — una foto de otra cuenta: no se escribió nada. El mismo motivo que
+    // el lote de `field-events`, y el dueño sólo cuando se dedujo del aparato.
+    if (error instanceof BorradorAjenoError) {
+      return Response.json(
+        { error: RAZON_BORRADOR_AJENO, ...(error.cuentaDelDueno ? { cuentaDelBorrador: error.cuentaDelDueno } : {}) },
+        { status: 403 },
+      );
+    }
     // Un no del servidor, no una caída: el cliente lo marca error y no lo
     // reintenta para siempre. Cualquier otra cosa sube y da 500, que el
     // cliente lee como «no llegué» y deja el medio en la cola.

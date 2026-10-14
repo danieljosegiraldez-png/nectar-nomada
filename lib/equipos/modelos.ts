@@ -16,6 +16,7 @@ import {
   type Dueno,
 } from "../catalogos/propiedad";
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { can } from "../rbac/service";
 import { puedeSobreEquipo } from "./equipos";
 
@@ -408,6 +409,9 @@ export async function modelosParaElegir(userAccountId: string, organizationId: s
 }
 
 export async function modeloParaFicha(userAccountId: string, modelId: string) {
+  // El id llega de la URL de `equipos/modelos/[id]`. Sin forma de UUID, Prisma lanzaba `P2007` y la
+  // página daba 500 (PENDING_IMPLEMENTATIONS/026); es un modelo que no existe.
+  if (!UUID.test(modelId)) throw new ModeloError("modelo_no_encontrado");
   const orgs = await organizacionesVisibles(userAccountId, VER);
   const m = await prisma.equipmentModel.findFirst({
     where: { id: modelId, ...filtroVisible(orgs) },

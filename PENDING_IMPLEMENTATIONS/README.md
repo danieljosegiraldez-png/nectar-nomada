@@ -28,6 +28,11 @@ tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de 
 Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
 el mismo día en que se encontró recorriendo la pantalla en un navegador.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
+Y **026 · páginas que daban 500 con un id mal formado en la URL**, cerrada el 2026-10-10 en el PR #696: medidas
+las 52 páginas con segmento dinámico, ninguna da 500 con un id basura ni con uno que no existe.
+Y **027 · la lista de recetas daba 500 sin acceso y decidía con un lote cualquiera**, hecha el
+2026-10-12 en el mismo PR. El 500 ahora vuelve a `/lots`. El «lote cualquiera» lo arregló la Parte 2a
+(#715), y Daniel eligió su regla de quién ve la lista sobre la que la 027 había construido: lo cuenta la ficha.
 Y **025 · el verificador de backup decía «no restauró» cuando lo que no pudo fue contar**, hecha
 el 2026-10-06 — y su diagnóstico original era más flojo que la realidad: el fallo estaba **dentro
 de la rama PASS**, después de que el `diff` ya hubiera probado la copia idéntica. Lo peor que

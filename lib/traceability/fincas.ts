@@ -21,6 +21,7 @@ import { CLASSIFICATION_NOT_APPLICABLE } from "../rbac/resolve";
 import { sortByName } from "../naturalOrder";
 import { getManageableContext } from "./lots";
 import { LocationAccessError, nombreLibreBajo, requireLocationAttributeAccess } from "./locations";
+import { UUID } from "../validation/uuid";
 
 export const COOKIE_FINCA = "finca";
 /** El valor de la cookie cuando se eligió «ver todas». Borrarla haría que cada página volviera a preguntar. */
@@ -340,6 +341,9 @@ export async function organizacionesSinTerreno(userAccountId: string) {
  * usan dos reglas distintas, la pantalla miente.
  */
 export async function puedeSubdividirParcela(userAccountId: string, plotId: string) {
+  // `/plots/[id]` la llama con el id de la URL fuera de su `try`: un id sin forma de UUID daba
+  // `P2007` y un 500 (PENDING_IMPLEMENTATIONS/026). Contesta lo que contesta a una que no existe.
+  if (!UUID.test(plotId)) return false;
   const parcela = await prisma.location.findUnique({
     where: { id: plotId },
     select: { id: true, locationType: true, classification: true },

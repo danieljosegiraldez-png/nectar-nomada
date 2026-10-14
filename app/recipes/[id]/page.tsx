@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getCurrentUser } from "../../../lib/auth/session";
 import { pasosDeLaVersion } from "../../../lib/recetas/pasos";
 import { puedeAutoriaDeReceta } from "../../../lib/recetas/autoria";
+import { TraceabilityAccessError } from "../../../lib/traceability/lots";
 import { getRecipeForEditor, listRecipeOrganizations, ProcessTargetError } from "../../../lib/traceability/processTargets";
 import { AccionesDelPaso } from "../../components/traceability/AccionesDelPaso";
 import { DerivarRecetaForm } from "../../components/traceability/DerivarRecetaForm";
@@ -46,8 +47,13 @@ export default async function RecipeDetailPage({
 
   // Un `const` y no un `let` + `try`: los cierres de más abajo (`renderPaso`, `metasDeVersion`) leen `recipe`, y un `let` sin tipo capturado por un cierre es un
   // error de tipos implícito (TS7034).
+  //
+  // «No existe», «sin permiso» e id mal formado dan 404, los tres: no se dice qué ids existen
+  // (Daniel, 2026-10-10; PENDING_IMPLEMENTATIONS/026). Antes volvía a la lista, y un
+  // `TraceabilityAccessError` —la receta Libre sin lote visible, o quien no opera ninguno de la
+  // organización— no lo atrapaba nadie: 500.
   const recipe = await getRecipeForEditor(user.userAccountId, id).catch((error: unknown) => {
-    if (error instanceof ProcessTargetError) redirect("/recipes");
+    if (error instanceof ProcessTargetError || error instanceof TraceabilityAccessError) notFound();
     throw error;
   });
 

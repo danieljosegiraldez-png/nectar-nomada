@@ -16,6 +16,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { pushFieldEvents, type MutacionDeFinDeColonia } from "../../lib/sync/pushFieldEvents";
+import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
+import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
 import { createHive, createColony } from "../../lib/apiary/hives";
 import { CATALOGO_DE_CAUSA_DE_PERDIDA } from "../../lib/apiary/causaDePerdida";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
@@ -173,8 +175,13 @@ describe("un fin de colonia que llega por la cola", () => {
 
   it("sin acceso al sitio se rechaza, y la colonia no se toca", async () => {
     const c = await nuevaColonia(4);
-    const [r] = await pushFieldEvents(sinAccesoUserAccountId, deviceId, [mutacion(c.id, `${RUN_ID}-d`)]);
+    // ADR-199 — el aparato es de `userAccountId`: sin cuenta, este borrador sería ajeno y se rechazaría por
+    // eso, no por el acceso. Se manda la cuenta de quien envía, como hace un cliente nuevo.
+    const [r] = await pushFieldEvents(sinAccesoUserAccountId, deviceId, [
+      { ...mutacion(c.id, `${RUN_ID}-d`), cuentaDelBorrador: huellaDeCuenta(sinAccesoUserAccountId) },
+    ]);
     expect(r!.status).toBe("rejected");
+    expect((r as { reason?: string }).reason).not.toBe(RAZON_BORRADOR_AJENO);
     const fila = await prisma.colony.findUniqueOrThrow({ where: { id: c.id } });
     expect(fila.status).toBe("active");
     expect(fila.endedAt).toBeNull();
