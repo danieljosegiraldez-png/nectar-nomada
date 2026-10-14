@@ -274,6 +274,15 @@ async function borrarRecetas(donde: Prisma.ProcessRecipeWhereInput) {
     await prisma.processRecipeStep.findMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }), select: { id: true } })
   ).map((p) => p.id);
   const todosLosPasos = [...new Set([...pasoIds, ...pasosCreados])];
+  // Una Libre cita con `parecida_a_version_id` (RESTRICT) la versión con la que coincidió. Con la regla bien puesta cita sólo versiones de
+  // recetas que NO son Libre, y éstas se borran después; pero con la regla rota (el flip de `esLibre: false` en `buscarParecida`) una Libre cita
+  // a OTRA Libre de la misma corrida, y borrar las versiones antes que las recetas choca con su propia RESTRICT, aborta el `afterAll` y deja
+  // la corrida entera en la base (medido: 29 recetas, 29 lotes, 2 organizaciones y 3 cuentas). La limpieza suelta esas citas primero, para que
+  // no dependa de que el código que prueba esté sano.
+  await prisma.processRecipe.updateMany({
+    where: assertDefinedWhere({ id: { in: recetaIds }, parecidaAVersionId: { not: null } }),
+    data: { parecidaAVersionId: null },
+  });
   await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityId: { in: [...recetaIds, ...versionIds, ...todosLosPasos] } }) });
   await prisma.processTarget.deleteMany({ where: assertDefinedWhere({ recipeVersionId: { in: versionIds } }) });
   await prisma.processRecipeStepAddition.deleteMany({ where: assertDefinedWhere({ stepId: { in: pasoIds } }) });
