@@ -846,6 +846,10 @@
     {
       "archivo": "lib/recetas/libre.ts",
       "razon": "Parte 2a, tarea 10: `crearRecetaLibreEnTx` y su ayudante privado `buscarParecida` reciben el `tx` de la transacción de `abrirProceso`, que ya autorizó el lote (`loteGestionable`, `requireLotAccess(manage)`) y bloqueó el linaje; `buscarParecida` recibe además el cliente global cuando sólo pregunta (`parecidoDeLaLibre`, que autoriza antes). Ninguno autoriza por su cuenta: una receta Libre no pide la autoría de recetas (V13: abrir un proceso, también con Libre, es `lot:manage`; diseño §5.2)."
+    },
+    {
+      "archivo": "lib/recetas/lecturasDeCierre.ts",
+      "razon": "Parte 2a, tarea 11: `lecturasCandidatasDeCierre`, `vigenteDe`, `exigeVerLosLotes` y `marcarLecturasDeCierre` reciben el cliente de la transacción de la puerta que cierra un registro —`endFermentationRun`, `cerrarCorridaEnTransaccion` (que comparten `endDryingRun` y bajar la última bandeja) y `registrarIntervencion` del proceso—. Las dos primeras sólo leen (las lecturas candidatas, y la vigente de una cadena de correcciones); `exigeVerLosLotes` lee los lotes y pide `view` sobre cada uno; `marcarLecturasDeCierre` escribe en esa transacción las marcas de las lecturas que motivaron el cierre. Ninguna abre conexión ni importa lib/db. Sus llamadores ya pidieron lot:manage sobre el lote del registro; lo que `marcarLecturasDeCierre` pide además es ver el lote de cada lectura que no es de ése (R5)."
     }
   ],
   "operaciones_sin_patron": [
@@ -937,7 +941,7 @@
     {
       "archivo": "lib/traceability/drying.ts",
       "operacion": "cerrarCorridaEnTransaccion",
-      "razon": "Ayudante transaccional sin guardia propio. Sólo lo llaman `endDryingRun`, después de `requireLotAccess(\"manage\")`, y `bajarBandeja`, después de `corridaConPermiso` sobre el lote de la corrida. Recibe la transacción y el principal para cerrar el secado, crear la transformación y sellar su AuditEvent como una sola operación; no es una superficie autorizable independiente. Verificado al rebasar secado-2b el 2026-09-22."
+      "razon": "Ayudante transaccional sin guardia propio. Sólo lo llaman `endDryingRun`, después de `requireLotAccess(\"manage\")`, y `bajarBandeja`, después de `corridaConPermiso` sobre el lote de la corrida. Recibe la transacción y el principal para cerrar el secado, crear la transformación y sellar su AuditEvent como una sola operación; no es una superficie autorizable independiente. Verificado al rebasar secado-2b el 2026-09-22. Desde la tarea 11 de la Parte 2a (2026-10-14) también llama a `marcarLecturasDeCierre` (lib/recetas/lecturasDeCierre.ts), que pide `view` sobre el lote de cualquier lectura que no sea del lote de la corrida (R5); en un secado todas las lecturas candidatas son de ese lote, que ya autorizó su puerta, así que ese `view` no se ejerce aquí y la razón de arriba sigue en pie."
     },
     {
       "archivo": "lib/traceability/samplingEvents.ts",
@@ -1597,6 +1601,18 @@
       "archivo": "lib/recetas/pasos.ts",
       "operacion": "escribirPasosPlaneados",
       "razon": "No recibe principal. Escribe con el `tx` de quien la llama los pasos de la versión SIN pasos de una receta Libre —lo comprueba ella misma al leer la versión: una de otra clase de receta, o que ya tiene pasos, se rechaza (R14)—, con sus hijas, y deriva sus fases; no audita (lo hace `crearRecetaLibreEnTx`, con el resultado). Su único llamador es `crearRecetaLibreEnTx`, dentro de la transacción de `abrirProceso`, que ya autorizó el lote y bloqueó el linaje, y `tests/arquitectura/pasos-planeados-un-solo-camino.test.ts` lo fija. Quien la llame debe haberlo hecho antes.",
+      "verificado": "2026-10-14"
+    },
+    {
+      "archivo": "lib/recetas/lecturasDeCierre.ts",
+      "operacion": "lecturasCandidatasDeCierre",
+      "razon": "Sólo lee, con el cliente de quien la llama: la definición ÚNICA de qué lecturas se pueden marcar en un registro (diseño §5.3, adjudicaciones I4 y R5) —la lectura vigente de cada cadena de correcciones cuya raíz es de la corrida y del lote que entró en ella, o del lote del proceso o un descendiente suyo—. No recibe principal ni autoriza. La llaman `marcarLecturasDeCierre` (de este archivo, después de que su puerta pidió lot:manage sobre el lote del registro), `convertirLibre` (para la serie de una corrida del hilo, cuyos lotes autoriza antes de escribir) y, a partir de la tarea 13, la lista que ofrece la pantalla, que la envuelve con su propia autorización de lectura del lote. Quien la llame debe haber autorizado el lote.",
+      "verificado": "2026-10-14"
+    },
+    {
+      "archivo": "lib/recetas/lecturasDeCierre.ts",
+      "operacion": "vigenteDe",
+      "razon": "Sólo lee, con el cliente de quien la llama: lleva cada id de lectura a la vigente de su cadena de correcciones (R4) y devuelve su valor, unidad, fecha y lote. No recibe principal ni autoriza. La llaman `convertirLibre` y `puedeConvertirLibre`, que con el lote de cada vigente piden `view` sobre todos (`exigeVerLosLotes`) antes de usar un valor o de devolver nada. Quien la llame debe haber autorizado los lotes de lo que use.",
       "verificado": "2026-10-14"
     }
   ]

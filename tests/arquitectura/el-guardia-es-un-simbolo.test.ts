@@ -103,6 +103,16 @@ describe("el guardia se resuelve hasta su símbolo", () => {
    * dos saltos», «el detector no lo reconoce como guardia»—. El comprobador de
    * tipos sostiene ahora esas dos frases.
    *
+   * **Desde la tarea 11 de la Parte 2a (2026-10-14) son TRES.** La tercera es
+   * `cerrarCorridaEnTransaccion` (`lib/traceability/drying.ts`): recibe principal y no
+   * nombra ningún guardia, pero llama a `marcarLecturasDeCierre`, que llama a
+   * `exigeVerLosLotes`, que llama a `requireLotAccess` (R5: `view` sobre el lote de cada
+   * lectura que no es el de la corrida). Estáticamente alcanza el servicio de
+   * autorización; en una corrida todas las lecturas candidatas son del lote que ya
+   * autorizó su puerta, así que ese `view` no se ejerce ahí. Su clase no cambia (sigue
+   * «recibe principal, sin guardia visible», con su razón en el allowlist) y la
+   * justificación a mano ya existía: esta prueba sólo registra el hecho.
+   *
    * Si el número crece, la convención se está quedando atrás y conviene saberlo;
    * si baja, alguien las acercó al servicio. Las tres puertas se excluyen porque
    * «alcanzar» es trivial para ellas.
@@ -113,6 +123,7 @@ describe("el guardia se resuelve hasta su símbolo", () => {
     expect(callan.sort()).toEqual([
       "lib/equipos/bandejas.ts:registrarBandejas",
       "lib/equipos/modosDeInstrumento.ts:declararModoDeInstrumento",
+      "lib/traceability/drying.ts:cerrarCorridaEnTransaccion",
     ]);
   });
 

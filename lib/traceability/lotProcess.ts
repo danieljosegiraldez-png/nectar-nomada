@@ -36,6 +36,7 @@ import {
   type OrigenDelProceso,
 } from "./procesoDelLinaje";
 import { exigePasoCoherente } from "../recetas/guardian";
+import { marcarLecturasDeCierre } from "../recetas/lecturasDeCierre";
 import { TIPOS_POR_REGISTRO } from "../recetas/vocabulario";
 import { Prisma } from "../../generated/prisma/client";
 import type { ProvenanceClass } from "../../generated/prisma/client";
@@ -475,6 +476,12 @@ export interface RegistrarIntervencionInput {
   occurredAt: Date;
   operatorPersonId?: string | null;
   notes?: string | null;
+  /**
+   * Las lecturas que motivaron este manejo (Parte 2a, tarea 11, §5.3), opcionales: la lectura VIGENTE de cada cadena del lote donde
+   * vive el proceso o de un descendiente suyo, tomadas desde que el proceso empezó. Se marcan en la misma transacción
+   * (`lib/recetas/lecturasDeCierre.ts`); una que no cumpla rechaza la intervención entera.
+   */
+  lecturasDeCierre?: readonly string[];
 }
 
 /**
@@ -568,6 +575,17 @@ export async function registrarIntervencion(userAccountId: string, input: Regist
         notes: input.notes?.trim() || null,
         createdBy: userAccountId,
       },
+    });
+
+    // Parte 2a, tarea 11 (§5.3): las lecturas que motivaron el manejo, en la MISMA transacción y con el linaje ya bloqueado.
+    // `vigente` es el proceso releído DESPUÉS de bloquear: su lote y su inicio son los que deciden qué lecturas son suyas.
+    await marcarLecturasDeCierre(tx, {
+      registro: "lotProcessIntervention",
+      registroId: intervencion.id,
+      measurementIds: input.lecturasDeCierre ?? [],
+      marcadoPor: userAccountId,
+      loteDelProceso: vigente.lotId,
+      desde: vigente.startedAt,
     });
 
     await recordAuditEvent(

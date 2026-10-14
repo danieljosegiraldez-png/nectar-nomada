@@ -62,6 +62,9 @@ export const CODIGOS_DE_PROCESO_TRADUCIDOS = [
   "intervencion_sin_acto",
   // Parte 2a, tarea 10 (2026-10-04): una Libre se define al abrir, no se elige por su id (diseño §5.2). Lo lanza `abrirProceso`.
   "receta_libre_no_se_elige",
+  // Parte 2a, tarea 11 (2026-10-03/04): las lecturas de cierre (`lib/recetas/lecturasDeCierre.ts`, diseño §5.3).
+  "lectura_de_cierre_ajena",
+  "lectura_reemplazada",
 ] as const;
 
 export type CodigoDeProcesoTraducido = (typeof CODIGOS_DE_PROCESO_TRADUCIDOS)[number];

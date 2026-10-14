@@ -82,6 +82,9 @@ const CODIGOS_QUE_EL_DISENO_NOMBRA = [
   "intervencion_sin_acto",
   // Parte 2a, tarea 10 (2026-10-04): una receta Libre no se elige por su id (diseño §5.2).
   "receta_libre_no_se_elige",
+  // Parte 2a, tarea 11 (2026-10-03/04): las lecturas de cierre y su cadena de correcciones (diseño §5.3, adjudicación I4).
+  "lectura_de_cierre_ajena",
+  "lectura_reemplazada",
 ];
 
 /**

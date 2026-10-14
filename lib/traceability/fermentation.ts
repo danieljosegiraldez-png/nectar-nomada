@@ -36,6 +36,7 @@ import { recordAuditEvent } from "../audit";
 import { bloquearLinaje, procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import { LotProcessError } from "./errorDeProceso";
 import { exigePasoCoherente } from "../recetas/guardian";
+import { marcarLecturasDeCierre } from "../recetas/lecturasDeCierre";
 import { TIPOS_POR_REGISTRO } from "../recetas/vocabulario";
 import { dondeCandidatoAFermentar, puedeVerEquipo } from "../equipos/equipos";
 import { RecipienteError } from "./recipientes";
@@ -317,6 +318,9 @@ export interface EndFermentationRunInput {
   // T9.5: required — same reasoning as StartFermentationRunInput above.
   provenanceClass: ProvenanceClass;
   sourceReference?: string | null;
+  // Parte 2a, tarea 11 (§5.3, 2026-10-03): las lecturas que motivaron el cierre, opcionales. Se marcan dentro de esta
+  // transacción (`lib/recetas/lecturasDeCierre.ts`); una que no sea de ESTA corrida rechaza el cierre entero.
+  lecturasDeCierre?: readonly string[];
 }
 
 export async function endFermentationRun(userAccountId: string, input: EndFermentationRunInput) {
@@ -334,6 +338,16 @@ export async function endFermentationRun(userAccountId: string, input: EndFermen
     const endedRun = await tx.fermentationRun.update({
       where: { id: input.fermentationRunId },
       data: { endedAt: input.endedAt },
+    });
+
+    // Parte 2a, tarea 11 (§5.3): las lecturas que motivaron el cierre, en la MISMA transacción. Si una no es de esta corrida,
+    // `lectura_de_cierre_ajena` deshace todo, `endedAt` incluido.
+    await marcarLecturasDeCierre(tx, {
+      registro: "fermentationRun",
+      registroId: endedRun.id,
+      loteDeLaCorrida: sourceLot.id,
+      measurementIds: input.lecturasDeCierre ?? [],
+      marcadoPor: userAccountId,
     });
 
     const transformation = await tx.lotTransformation.create({

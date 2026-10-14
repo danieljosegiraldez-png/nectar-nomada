@@ -23,6 +23,7 @@ import { recordAuditEvent } from "../audit";
 import { BandejaError } from "./bandejaError";
 import { procesoAbiertoParaCorrida, TRANSACCION_DEL_LINAJE } from "./procesoDelLinaje";
 import { exigePasoCoherente } from "../recetas/guardian";
+import { marcarLecturasDeCierre } from "../recetas/lecturasDeCierre";
 import type { DryingOutcome, Lot, ProvenanceClass } from "../../generated/prisma/client";
 
 async function resolveRunSourceLot(dryingRunId: string) {
@@ -273,6 +274,12 @@ export interface EndDryingRunInput {
    * `desenlaceDelSecado` (`app/beneficio/bandejas/errorDeSecado.ts`).
    */
   endedOutcome?: DryingOutcome | null;
+  /**
+   * Parte 2a, tarea 11 (§5.3, 2026-10-03): las lecturas de ESTE secado que motivaron el cierre, opcionales. Llega también a
+   * `CierreDelSecado` y por él a `bajarBandeja({ cierre })`, porque `endDryingRun` y bajar la última bandeja cierran por
+   * `cerrarCorridaEnTransaccion`, que las marca.
+   */
+  lecturasDeCierre?: readonly string[];
 }
 
 export const DRYING_OUTPUT_LOT_TYPES = ["parchment", "dry_cherry"] as const;
@@ -312,6 +319,17 @@ export async function cerrarCorridaEnTransaccion(
   const endedRun = await tx.dryingRun.update({
     where: { id: dryingRunId },
     data: { endedAt: input.endedAt, endedOutcome: input.endedOutcome ?? null },
+  });
+
+  // Parte 2a, tarea 11 (§5.3): las lecturas que motivaron el cierre. Aquí, y no en cada puerta, porque `endDryingRun` y bajar la
+  // última bandeja cierran por esta función: una sola llamada cubre las dos, y una segunda chocaría con la unicidad de la marca.
+  // Una que no sea de este secado rechaza el cierre entero, y con él la baja de la bandeja.
+  await marcarLecturasDeCierre(tx, {
+    registro: "dryingRun",
+    registroId: dryingRunId,
+    loteDeLaCorrida: sourceLot.id,
+    measurementIds: input.lecturasDeCierre ?? [],
+    marcadoPor: userAccountId,
   });
 
   const transformation = await tx.lotTransformation.create({
