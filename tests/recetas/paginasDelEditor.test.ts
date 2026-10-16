@@ -92,6 +92,7 @@ import NuevoPasoPage from "../../app/recipes/[id]/pasos/nuevo/page";
 import NewRecipePage from "../../app/recipes/new/page";
 import RecipesPage from "../../app/recipes/page";
 import { ProcessTargetError } from "../../lib/traceability/processTargets";
+import { TraceabilityAccessError } from "../../lib/traceability/lots";
 
 async function pintar(jsx: ReactElement): Promise<string> {
   const flujo = await renderToReadableStream(jsx);
@@ -474,9 +475,14 @@ describe("la pantalla de una receta (/recipes/[id])", () => {
     expect(texto).not.toContain("11.5");
   });
 
-  it("una receta que ya no existe vuelve a la lista, y un error de otra clase sube tal cual", async () => {
+  // «No existe», «sin permiso» e id mal formado dan 404, los tres, para no decir qué ids existen (Daniel,
+  // 2026-10-10; PENDING_IMPLEMENTATIONS/026). Esta prueba esperaba la vuelta a la lista de antes; el rechazo de
+  // acceso (la receta Libre sin lote visible) no lo atrapaba nadie y daba 500.
+  it("una receta que no existe o sin permiso da 404, y un error de otra clase sube tal cual", async () => {
     estado.fallaAlLeer = new ProcessTargetError("recipe_not_found");
-    await expect(pintarReceta()).rejects.toThrow("redirect:/recipes");
+    await expect(pintarReceta()).rejects.toThrow("notFound");
+    estado.fallaAlLeer = new TraceabilityAccessError("no_lot_access");
+    await expect(pintarReceta()).rejects.toThrow("notFound");
     // Control: lo que no es un `ProcessTargetError` no se disfraza de «la receta no existe».
     const otro = new Error("la base no responde");
     estado.fallaAlLeer = otro;

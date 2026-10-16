@@ -6,11 +6,16 @@ import {
   listFieldEventDrafts,
   syncFieldEvents,
   purgeStaleFieldDrafts,
+  discardFieldEventDraft,
   FIELD_DRAFTS_CHANGED_EVENT,
+  MOTIVOS_DE_APARATO,
+  viajaEnLaProximaSincronizacion,
   STALE_WARNING_DAYS,
   STALE_PURGE_DAYS,
   type SyncSummary,
 } from "../../../lib/sync/offlineQueue";
+import { descartablesPorEstaCuenta, repartirPorCuenta } from "../../../lib/sync/cuentaDelBorrador";
+import { cuentaActualDelNavegador } from "../../../lib/offline/cuentaDelNavegador";
 
 /**
  * P4 §11 — lo que el operador ve de la cola: cuánto falta por enviar, un botón
@@ -23,9 +28,15 @@ import {
  * («explicit sync now, no automatic conflict resolution») y aquí vale igual.
  *
  * Un rechazo se enseña aparte de un envío bueno porque son cosas distintas:
- * lo enviado desaparece de la cola, lo rechazado se queda y **no se reintenta
- * solo**. Reintentar algo que el servidor ya evaluó y negó no lo va a arreglar,
- * y esconder eso detrás de un contador que baja sería mentir sobre lo que pasó.
+ * lo enviado desaparece de la cola, lo rechazado se queda y **no vuelve a
+ * viajar**: sólo se descarta (decisión de Daniel, 2026-10-11). Reintentar algo
+ * que el servidor ya evaluó y negó no lo va a arreglar, y esconder eso detrás
+ * de un contador que baja sería mentir sobre lo que pasó.
+ *
+ * **Por eso se cuentan aparte.** Este contador sumaba los rechazados a los
+ * «sin enviar», y el botón seguía activo con sólo rechazados dentro: pulsarlo
+ * no podía mandar nada. Y es el único sitio de las pantallas de parcela donde
+ * se ve la cola, así que hasta ese día un rechazado no tenía cómo quitarse.
  */
 export function FieldSyncControls() {
   const t = useTranslations("Traceability");
@@ -49,6 +60,10 @@ export function FieldSyncControls() {
 
   const [purgados, setPurgados] = useState(0);
   const [rancios, setRancios] = useState(0);
+  const [deOtraCuenta, setDeOtraCuenta] = useState(0);
+  const [rechazadas, setRechazadas] = useState(0);
+  const [descartables, setDescartables] = useState(0);
+  const [deAparato, setDeAparato] = useState(false);
 
   const recontar = useCallback(async () => {
     try {
@@ -58,7 +73,22 @@ export function FieldSyncControls() {
       const { purgados: p, avisados } = await purgeStaleFieldDrafts();
       if (p > 0) setPurgados((n) => n + p);
       setRancios(avisados);
-      setPendientes((await listFieldEventDrafts()).length);
+      const drafts = await listFieldEventDrafts();
+      const cuentaActual = cuentaActualDelNavegador();
+      // ADR-199 — lo de otra cuenta no es «pendiente» ni «rechazado» de quien está dentro: no lo puede
+      // enviar ni descartar.
+      const { enviables, ajenos } = repartirPorCuenta(drafts, cuentaActual);
+      // Lo que va a volver a salir —el reintento único de un rechazo viejo por la
+      // fecha— cuenta como pendiente, no como rechazado: si no, el botón quedaría
+      // deshabilitado y nadie podría mandarlo.
+      const errores = enviables.filter((d) => !viajaEnLaProximaSincronizacion(d));
+      setPendientes(enviables.length - errores.length);
+      setRechazadas(errores.length);
+      setDeAparato(errores.some((d) => MOTIVOS_DE_APARATO.includes(d.errorMessage ?? "")));
+      setDeOtraCuenta(ajenos.length);
+      setDescartables(
+        descartablesPorEstaCuenta(drafts, cuentaActual).filter((d) => !viajaEnLaProximaSincronizacion(d)).length,
+      );
     } catch {
       // IndexedDB no disponible (navegación privada en algunos navegadores).
       // El operador pierde el contador, no los datos: el formulario ya habría
@@ -104,11 +134,28 @@ export function FieldSyncControls() {
     }
   };
 
+  const descartarRechazadas = async () => {
+    try {
+      // ADR-199 — sólo los de esta cuenta: un rechazado de otra cuenta espera a su dueño.
+      const propios = descartablesPorEstaCuenta(await listFieldEventDrafts(), cuentaActualDelNavegador());
+      for (const d of propios) {
+        if (!viajaEnLaProximaSincronizacion(d)) await discardFieldEventDraft(d.id);
+      }
+    } finally {
+      await recontar();
+    }
+  };
+
   if (pendientes === null) return null;
 
   return (
     <div className="nn-field-sync" role="group">
       <p>{t("fieldSyncPending", { count: pendientes })}</p>
+      {deOtraCuenta > 0 ? (
+        <p className="nn-note" role="status">
+          {t("fieldDraftsOtherAccount", { count: deOtraCuenta })}
+        </p>
+      ) : null}
       {sinConexion ? <p className="nn-note">{t("fieldSyncOffline")}</p> : null}
       {purgados > 0 ? (
         <p className="nn-error" role="alert">
@@ -123,28 +170,61 @@ export function FieldSyncControls() {
       <button type="button" className="nn-button" onClick={sincronizar} disabled={enviando || pendientes === 0}>
         {enviando ? t("fieldSyncWorking") : t("fieldSyncButton")}
       </button>
-      {ultimo ? (
+      {rechazadas > 0 ? (
         <>
-          {/* Un servidor caído NO es un rechazo, y decirlo así al operador
-              sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
-              Por eso este caso excluye el resumen de enviados en vez de
-              acompañarlo — no hay nada que resumir. */}
-          {ultimo.serverUnavailable ? (
-            <p className="nn-note" role="status">
-              {t("fieldSyncUnavailable")}
-            </p>
-          ) : (
-            <>
-              <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
-              {ultimo.rejected > 0 ? (
-                <p className="nn-error" role="alert">
-                  {t("fieldSyncRejected", { count: ultimo.rejected })}
-                </p>
-              ) : null}
-            </>
-          )}
+          <p className="nn-error" role="status">
+            {t("fieldSyncRejectedStored", { count: rechazadas })}
+          </p>
+          {deAparato ? <p className="nn-note">{t("fieldSyncDeviceNotAuthorized")}</p> : null}
+          {descartables > 0 ? (
+            <button type="button" className="nn-button-quiet" onClick={descartarRechazadas} disabled={enviando}>
+              {t("fieldSyncDiscardRejected")}
+            </button>
+          ) : null}
         </>
       ) : null}
+      {ultimo ? <ResumenDeSincronizacion ultimo={ultimo} /> : null}
     </div>
+  );
+}
+
+/**
+ * Qué pasó en la última sincronización. Aparte del componente de arriba para
+ * poder pintarlo con un resumen dado: ése sólo lo enseña tras una sincronización
+ * asíncrona, y su primer render es `null`
+ * (`tests/sync/resumenDeSincronizacion.test.ts`).
+ */
+export function ResumenDeSincronizacion({ ultimo }: { ultimo: SyncSummary }) {
+  const t = useTranslations("Traceability");
+  return (
+    <>
+      {/* Un servidor caído NO es un rechazo, y decirlo así al operador
+          sería mentirle sobre su propio trabajo: nadie llegó a mirarlo.
+          Una sesión caducada, lo mismo: nada se evaluó, sale al volver a
+          entrar.
+
+          Lo que SÍ salió se dice (decisión de Daniel, 2026-10-11): desde que
+          la cola va en tandas, el servidor puede dejar de responder —o la
+          sesión caducar— con la primera ya enviada. Sólo si salió algo:
+          «Nada nuevo que enviar» al lado de «no se pudo enviar» sería
+          contradecirse. */}
+      {ultimo.sessionExpired || ultimo.serverUnavailable ? (
+        <>
+          {ultimo.applied > 0 ? <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p> : null}
+          <p className="nn-note" role="status">
+            {ultimo.sessionExpired ? t("fieldSyncSessionExpired") : t("fieldSyncUnavailable")}
+          </p>
+        </>
+      ) : (
+        <>
+          <p role="status">{t("fieldSyncDone", { applied: ultimo.applied })}</p>
+          {ultimo.rejected > 0 ? (
+            <p className="nn-error" role="alert">
+              {t("fieldSyncRejected", { count: ultimo.rejected })}
+            </p>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }

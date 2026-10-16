@@ -28,3 +28,18 @@ Reglas de diseño:
 export PATH="$HOME/.nvm/versions/node/v24.19.0/bin:$PATH"
 node tools/browser-checks/respuesta-anonima.mjs
 ```
+
+## `indexeddb-sin-almacen.mjs` — la excepción a la regla 1
+
+Mide si la cola offline del apiario puede guardar después de que el teléfono
+haya visto `/offline.html` (el defecto del 2026-10-12), en un Chrome de verdad:
+un sustituto de IndexedDB escrito a mano probaría lo que uno cree que hace la
+semántica de versiones, que es justo lo que estaba mal. **No corre «tal cual»:**
+necesita `npm ci` —empaqueta la cola real desde `lib/` con el esbuild que trae
+`tsx`— y Chrome en `/Applications` (o `CHROME=<ruta>`). Perfil desechable; no
+toca el navegador de nadie.
+
+```bash
+npm run build && npx next start -p 3094      # en otra terminal
+node tools/browser-checks/indexeddb-sin-almacen.mjs http://localhost:3094
+```

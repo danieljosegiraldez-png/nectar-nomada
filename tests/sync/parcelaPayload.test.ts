@@ -335,13 +335,17 @@ describe("construirPayloadDeRevisionDeTrampa", () => {
     expect(p.brocaLevel).toBe("pocos");
   });
 
-  // La fecha del brief (paso 11 del task brief): un campo de DÍA, parseado con
-  // `fechaDeDia` (medianoche UTC) — no `parseLocalDateTime`, que aplicaría el
-  // desfase del dispositivo y movería la fecha (ver la cabecera del módulo).
+  // La fecha del brief (paso 11 del task brief): un campo de DÍA, validado con
+  // `fechaDeDia` — no `parseLocalDateTime`, que aplicaría el desfase del
+  // dispositivo y movería la fecha (ver la cabecera del módulo). Viaja como
+  // `YYYY-MM-DD` porque es lo que exige el parseo (A10): esta prueba exigía el
+  // instante de medianoche y el parseo lo rechazaba, así que ninguna revisión
+  // de la ronda se guardaba (2026-10-11). La ida y vuelta entera está en
+  // `idaYVueltaDeLaCola.test.ts`.
   it("la fecha del payload es la del formulario, no la de hoy", () => {
     const p = construirPayloadDeRevisionDeTrampa(form(BASE), "specimen-1", "loc-1", "draft-1");
-    expect(p.observedAt).toBe("2020-03-01T00:00:00.000Z");
-    expect(p.observedAt).not.toBe(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+    expect(p.observedAt).toBe("2020-03-01");
+    expect(p.observedAt).not.toBe(new Date().toISOString().slice(0, 10));
   });
 
   // Paso 11 del task brief, verbatim: blanco = null, nunca 0/false (ADR-080).
@@ -377,8 +381,7 @@ describe("construirPayloadDeRevisionDeTrampa", () => {
     expect(p.captureCount).toBe(47);
   });
 
-  // F8 fix-final (recordRoundTrapCheckFormAction): la nota se guarda salvo
-  // cuando "otros" es explícitamente NO.
+  // F8 fix-final: la nota se guarda salvo cuando "otros" es explícitamente NO.
   it("otherInsectsNote se descarta cuando otherInsects es explícitamente NO", () => {
     const p = construirPayloadDeRevisionDeTrampa(
       form({ ...BASE, otherInsects: "no", otherInsectsNote: "avispas" }),

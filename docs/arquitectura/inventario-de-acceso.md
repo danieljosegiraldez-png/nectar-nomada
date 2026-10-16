@@ -13,9 +13,17 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**653 operaciones** que tocan la base, en **179 archivos** — medido el 2026-10-16 con `node scripts/inventario-de-acceso.mjs`: es **una más** que las
-652 en 178 de la medición anterior, y es `avisosDeRecepcion` (`lib/recetas/recepcion.ts`, un archivo nuevo, tarea 12 del PR-B: ver la primera nota de abajo), de la clase
-«depende del llamador»; las otras seis filas no se mueven. **La medición anterior**, del 2026-10-14 y de la parte B de la tarea 11 del PR-B: **652 operaciones** en **178 archivos**, **dos más**
+**654 operaciones** que tocan la base, en **179 archivos** — medido el 2026-10-16 con `node scripts/inventario-de-acceso.mjs`, al unir `origin/main` (`1efa8d9c`) en la rama de la Parte 2a (PR-B) antes de la tarea 13.
+**Contra la rama sola** (`287c1a79`: 653 operaciones en 179 archivos) es **una más**, y es `negativaDelAparato` (`lib/sync/deviceTokens.ts`, la revocación en las escrituras por token, #708), que trajo `main` y es de la clase
+«depende del llamador»: el archivo ya lo contaba la rama, así que los archivos no se mueven, esa fila sube de 108 a 109 y las otras seis no se mueven.
+**Contra `main` solo** (`1efa8d9c`: 641 operaciones en 173 archivos, que son las 640 en 173 del ancestro común `7c6a2cda` más esa misma `negativaDelAparato`, medida por #708 el 2026-10-13) son **trece más** en **seis archivos más**, y son las de la Parte 2a
+que cuentan las notas de abajo: `avanceDelProceso` (`lib/recetas/avance.ts`), `exigePasoCoherente` (`lib/recetas/guardian.ts`), las cuatro de la receta Libre (`lib/recetas/libre.ts` y dos de `lib/recetas/pasos.ts`), las cuatro de las lecturas de cierre
+(`lib/recetas/lecturasDeCierre.ts`), las dos de convertir la Libre en receta (`lib/recetas/convertir.ts`) y `avisosDeRecepcion` (`lib/recetas/recepcion.ts`). **El 641 de `main` y el 641 de las notas de abajo no son el mismo número:** el de `main` es el ancestro común
+más `negativaDelAparato`; el de las notas es el ancestro común más `avanceDelProceso`, medido antes de que `main` trajera aquélla. La cuenta cuadra por clase: «guardia directo» 402 + 4 = 406, «guardia transitivo» 67 + 1 = 68, «depende del llamador» 102 + 7 = 109,
+«recibía principal sin guardia visible» 22 + 1 = 23, y las otras tres no se mueven; 641 + 13 = 654 y 173 + 6 = 179. **Ninguna operación cambia de clase al unir:** medido comparando, fila por fila, el inventario de cada punta —medida cada una con el script, en un worktree aparte,
+y no leída de su documento— con el de la unión (654 filas, 0 cambios de clase, y la unión es exactamente la rama más `main`). **La medición anterior**, la de la rama antes de unir, del 2026-10-16 y de la tarea 12 del PR-B: **653 operaciones** en **179 archivos**,
+**una más** que las 652 en 178 de la anterior, y era `avisosDeRecepcion` (`lib/recetas/recepcion.ts`, un archivo nuevo, tarea 12 del PR-B: ver la primera nota de abajo), de la clase
+«depende del llamador»; las otras seis filas no se movían. **La anterior a ésa**, del 2026-10-14 y de la parte B de la tarea 11 del PR-B: **652 operaciones** en **178 archivos**, **dos más**
 que las 650 en 177 de la anterior, y eran las dos de convertir la Libre en receta (`lib/recetas/convertir.ts`, un archivo nuevo: ver la segunda nota de abajo), las dos «guardia directo». **La anterior a ésa**, del mismo día y de la parte A de la tarea 11:
 **650 operaciones** en **177 archivos**, **cuatro más** que las 646 en 176 de la anterior, y eran las cuatro de las lecturas de cierre (`lib/recetas/lecturasDeCierre.ts`, un archivo nuevo: ver la
 tercera nota de abajo): una «guardia directo», dos «depende del llamador» y una «guardia transitivo». **La anterior a ésa**, del 2026-10-14 y de la tarea 10 del PR-B:
@@ -58,7 +66,7 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 | **406** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **68** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
-| **108** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
+| **109** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |
 | **10** | público por diseño | `lib/discover/service.ts` y su `PUBLIC_WHERE` (ADR-024 §3) |
 | **4** | previo a la sesión | El flujo de autenticación, incluido `lib/auth/config.ts` |
 | **23** | recibía principal sin guardia visible | Las dieciocho que ya estaban explicadas en el allowlist, más cinco que entraron después, menos `listScopeChoices`, que el AST movió a «depende del llamador» —su cuerpo no menciona `userAccountId`: el troceo por texto lo leía de la función de al lado—, 23 en total (la última, de la tarea 10 de la Parte 2a): `cerrarCorridaEnTransaccion` y `crearInspeccionEnTransaccion`, ayudantes transaccionales cuyo llamador autoriza antes de abrir la transacción; `fichaDeUnidad`, que autoriza por dentro con `colaDeSecado`; y `abrirProcesoEnTx`, `dividirProcesoEnTx` y `crearRecetaLibreEnTx` (que firma la receta Libre y su evento), que reciben el principal sólo para firmar |

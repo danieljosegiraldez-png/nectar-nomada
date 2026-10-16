@@ -1592,6 +1592,12 @@
       "verificado": "2026-10-08"
     },
     {
+      "archivo": "lib/sync/deviceTokens.ts",
+      "operacion": "negativaDelAparato",
+      "razon": "No autoriza ni devuelve datos: lee sólo `revokedAt` del aparato cuyo access YA autenticó la firma, y dice si puede escribir. Recibe el `deviceId` del token, no un principal. Sus dos llamadores son las rutas de escritura por Bearer, `app/api/v1/sync/field-media` (los dos pasos) y `app/api/v1/devices`, y las dos la llaman justo después de `resolverPrincipal` y antes de tocar nada. Lo que escriben después lo decide su servicio, y no igual: `finalizeFieldMedia` y `requestFieldMediaUpload` autorizan con `requireLocationAttributeAccess` sobre la ubicación de la jornada; `registerDevice` sólo autentica, a propósito (ver su propia fila en este archivo: a un aparato lo acota quién lo registró). Es la misma comprobación que `pushFieldEvents` hace con el aparato del lote. Decisión de Daniel del 2026-10-10: la revocación muerde en cada escritura, no en cada lectura.",
+      "verificado": "2026-10-10"
+    },
+    {
       "archivo": "lib/recetas/avance.ts",
       "operacion": "avanceDelProceso",
       "razon": "No recibe principal. Para el lote que recibe, lee por el resolvedor el proceso que lo cubre y, sobre su hilo (él y los procesos de los que deriva por división o devolución, con su misma versión), los pasos de la receta y los registros que los cumplen; devuelve ids de pasos y de registros, sus fechas de inicio y el siguiente paso, no filas de lote. Al escribirse no la llama ninguna pantalla: la llamarán las de empezar corridas y registrar manejos (tarea 13 de la Parte 2a), después de que ellas autoricen ese mismo lote. Quien la llame debe haber autorizado el lote antes: ella no recibe quién pregunta.",

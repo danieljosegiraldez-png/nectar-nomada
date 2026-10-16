@@ -12837,6 +12837,63 @@ creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía s
 dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
 verificación, así que esta es la enmienda.
 
+## ADR-197 — La integración del paquete farm-to-green: referencia, no norma, y tres carriles
+
+**Fecha:** 2026-10-08 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta, del
+2026-10-04 al 08) · **Spec:** `docs/superpowers/specs/2026-10-08-farm-to-green-integracion-design.md` ·
+**Auditoría:** `docs/reference/farm-management/AUDIT_2026-10-04.md`, cuya §8 lleva cada respuesta citada
+aquí entre paréntesis
+
+**Contexto.** El paquete `docs/reference/farm-management/` (v2.1, entró con el #638) propone un módulo de
+café de punta a punta y un cockpit del beneficio. La Fase 1 lo midió contra el código: de 48 capacidades,
+1 completa, 32 parciales y 15 ausentes, y 18 conflictos con los normativos de `docs/beneficio/` y con los
+ADR. El prompt del paquete pedía, como Fase 2, un ADR y una lista de tickets; éste es el ADR.
+
+**Decisiones.**
+
+1. **El paquete es referencia, no norma.** Manda la precedencia de `docs/beneficio/README.md`. Sus 208
+   referencias **sólo se muestran** —valor · fuente · confianza, con «baja» y «NN» a la vista—, **todas las
+   fuentes lado a lado y ninguna por defecto**, y **nunca deciden** (C1, C17, P1). Sin perfiles de autoridad.
+2. **Los umbrales salen de la receta**, en el orden de la 2b: lote → receta → ninguno. **Si falta un
+   parámetro, ese motor no opina y lo dice**: sin perfil de respaldo, ni por grado ni por ejes (PE-77/78).
+   Esto cambia la V6 de la 2b («perfil si falta»).
+3. **Qué se bloquea:** las reglas de la casa (2a D6: la regla 8 del paquete vale para umbrales de
+   referencia), **más la sobrepresión de un recipiente sellado como bloqueo de seguridad**; cada
+   recipiente sellable guarda su presión máxima (C2; dato para la 2c, que hoy la excluye).
+4. **Datos del campo.** Mucílago **por tramo** 0/10/25/50/75/100, lo que queda (C3). **aw opcional** y fin
+   de secado por humedad (ADR-181 #18); si hay aw, se pide la temperatura de la muestra y sin ella la
+   lectura se guarda marcada (C7). **Reposo por receta**, con las sugerencias de ADR-181 #20 y la venta
+   bloqueada hasta cumplirlo (C8). **«De primera» con las cinco condiciones de ADR-181 #8**; el 18–24 °Bx
+   deja de ser regla global y los veredictos guardados quedan como historia (C9).
+5. **Nombres de proceso.** Los métodos se nombran libremente; afirmar un resultado ante un comprador («es
+   láctico») pide un dato medido o va como «perfil buscado» (P4a). Los de la casa: Lavado, Natural,
+   Honey, Semi Wash NN %, Multiproceso, fiebre, CryoBloom, Doble Mosto y fermentación láctica (P4). **La
+   plataforma no evalúa elegibilidad de concurso** —depende de cada caficultor—, y la inoculación, la
+   bioprotección, las enzimas y el mosto propio **no son infusión ni coinfusión** (P3).
+6. **Pantallas.** Portada **por rol**: `/beneficio` es el cockpit del jefe de beneficio (ADR-193 sigue); el
+   operario de secado entra a `/beneficio/secado` (C15). Los avisos dicen **qué, cuándo y quién en tono de
+   sugerencia que alguien confirma** —«Toca lavar antes de 14:30 · Juan»—, coherente con `00_reglas` §3
+   (C16).
+7. **El registro central en el WhatsApp de Néctar Nómada es regla de Daniel**: todo aviso y toda acción se
+   registran también ahí. **Se construye después del cockpit**; hasta entonces sigue el aplazamiento de
+   ADR-039/044 (C14).
+8. **El trabajo va en tres carriles** —finca, arreglos, beneficio—, con trece tickets en la spec. La 2a, la
+   2b y la 2c de la sesión de recetas son **dependencias con nombre**, no trabajo de este plan, y ningún
+   ticket se construye en paralelo con ellas sobre los mismos archivos.
+9. **Fuera:** nómina, aguas residuales y exportación no se eligieron (P5; sigue la mano de obra sin nómina
+   del 2026-09-18); vivero, en una fase futura (P5); elegibilidad de concurso (P3).
+
+**Lo que este ADR NO decide.** Ningún nombre nuevo: los aprueba Daniel en el diseño de cada ticket (C4).
+Ni el diseño interno de los tickets, ni las horas de CryoBloom B —«entre 24 y 48 h», provisional (C12)—.
+Y corrige un dato de la casa sin reescribirlo: el «choque térmico de 26–31 °C» de
+`docs/implementation/36_RO1.2_METODOS_FERMENTACION.md:109` **no existe como método**; fue una temperatura
+observada por las condiciones del lugar (C12b).
+
+**Consecuencias.** Pueden empezar ya, en paralelo, los tickets que no tocan archivos de la 2a: F1
+(floración con pantalla), R1 (pantallas de carga y error), R2 (`/beneficio` legible sin conexión), R3
+(contraste y tacto) y R4 (el 6,5 de dilución y la aw del motor). El cockpit (B2) espera al PR-B de la 2a,
+a la ocupación de la 2c y al alta real de Las Nubes (B0), que depende de la lista de equipos de Daniel.
+
 ## ADR-198 — Un beneficio puede existir sin finca propia
 
 **Fecha:** 2026-10-08 · **Spec:** `docs/superpowers/specs/2026-10-06-beneficio-sin-finca-design.md`
@@ -12874,3 +12931,78 @@ padre sólo se alcanza con una asignación sobre él mismo**, y con ella las lis
 pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
 del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
 recepción → entrega → jornada → finca.
+
+## ADR-199 — Cada borrador offline tiene dueño y no se envía a nombre de otra cuenta
+
+**Fecha:** 2026-10-11 · **Spec:** `docs/superpowers/specs/2026-10-09-borradores-con-dueno-design.md` ·
+**Plan:** `docs/superpowers/plans/2026-10-11-borradores-con-dueno.md`
+
+**Contexto.** Las tres colas de IndexedDB (apiario, campo y fotos de trampa) guardaban borradores sin
+cuenta, y el envío autentica con la sesión del momento. En un teléfono donde A deja trabajo sin enviar y
+entra B, salía a nombre de B: actor falso en `core.audit_event` y, en una revisión de trampa, observador
+falso con `direct_observation` (§3, §35). ADR-109 hace los aparatos personales, pero dentro de él cabe el
+peor caso: un administrador que entra en el teléfono de un trabajador para ayudarle. Con acceso a todo,
+nada se rechaza.
+
+**Decisión de Daniel, 2026-10-09 y 2026-10-11.**
+1. Los borradores de otra cuenta **se retienen** en el teléfono hasta que vuelva su dueño: ni se envían, ni
+   se descartan, ni se exportan. La purga de 21 días sigue igual.
+2. Un borrador sin cuenta es **de quien registró el aparato** (`Device.createdBy`).
+3. Lo comprueban el navegador y el servidor, y la cuenta sale de la página más reciente que generó el
+   servidor.
+4. Un solo componente en el layout, compartido con #703.
+
+**Cómo.** El dueño es la huella de la cuenta (`lib/auth/huellaDeCuenta.ts`), nunca el id. El servidor
+contesta `rejected` con `borrador_de_otra_cuenta` y no escribe nada. Se eligió «rechazado» y no un estado
+nuevo porque el JavaScript viejo en caché descarta cualquier estado que no conoce. Las decisiones viven en
+funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador en
+`lib/offline/cuentaDelNavegador.ts`, ordenada por la hora del servidor.
+
+**También la ruta de fotos `field-media` (decisión de Daniel, 2026-10-13).** Ninguna cola la usa —es API—,
+pero recibe borradores (`clientDraftId`) y la prueba de #708 (`tests/sync/aparatoDelCuerpoPorCookie.test.ts`)
+exige que diga lo mismo que `field-events`. Al fusionar, esa comparación cayó: `field-events` retenía un
+borrador sin cuenta en el aparato vivo de otra cuenta y `field-media` lo escribía. Ahora `finalizeFieldMedia`
+decide el dueño con la misma función y antes que el acceso; una foto ajena no escribe nada y la ruta responde
+403 `borrador_de_otra_cuenta`, con el dueño cuando se deduce del aparato. Sin aparato y sin cuenta la foto es
+de quien la envía: por cookie el aparato es opcional (#708). Con la cuenta de quien envía, un aparato vivo de
+otra cuenta sigue pasando en las dos rutas, como se decidió el 2026-10-11.
+
+**Lo que no cubre.**
+- Quien manipule su navegador puede reetiquetar como suyo un borrador ajeno. No suplanta a nadie, porque
+  escribe con su propia sesión, pero se apropia de trabajo ajeno. Esto protege del error, no del abuso de
+  quien tiene el teléfono en la mano.
+- La purga de 21 días borra también lo retenido de A si A no vuelve, y el aviso lo ve B.
+- Las fotos de trampa no tienen purga, así que una foto retenida espera indefinidamente.
+- Cuando una página guardada de A se abre con B vigente, `alinearConLaCuenta` (#703) recibe A y borra todas las páginas guardadas, también las de B. Es a propósito: borrar de más es el lado seguro, y comparar con la cuenta vigente dejaría la página de A en la caché. Llegar ahí exige que haya fallado el borrado que #703 hace al entrar B (acordado con la sesión de #703, 2026-10-12).
+- Una pestaña con el JavaScript de ANTES del despliegue marca como error lo que el servidor retiene, y su botón viejo de «descartar fallidas» borra todo lo que esté en error, también lo ajeno. Dura hasta que esa pestaña se recarga; el servidor no puede evitarlo sin tumbar el lote entero de quien envía. Para que esa pestaña al menos no envíe sin cuenta, la cuenta viaja también dentro del payload que se guarda (`payloadConCuenta`).
+- Si una página guardada de A se sirve con B dentro (sólo si falló el borrado de #703), el borrador sale con la cuenta de B —correcto—, pero su `operatorPersonId` es la Persona de A, porque ese campo sale del HTML de la página. Medido en el navegador el 2026-10-12.
+- Un borrador sin cuenta que el servidor rechaza por otro motivo (p. ej. en el parseo) se queda sin cuenta: sólo el servidor nombra dueños, y lo hace únicamente al retener. No se puede descartar a mano; lo purga la regla de 21 días.
+
+**Cómo se comprueba.** `tests/sync/borradoresConDueno.test.ts` (con base): un borrador ajeno se rechaza con
+cero filas y cero `AuditEvent`, tanto si trae otra cuenta como si es un borrador sin cuenta en un aparato
+ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los casos «ajeno» por su nombre.
+`tests/arquitectura/colas-por-cuenta.test.ts` (hermético) vigila que ningún lector de las colas en `app/` se
+salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `descartablesPorEstaCuenta(`—, y
+`tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
+viaje dentro del payload.
+
+## ADR-201 — La abamectina de la bodega: están las dos
+
+**Fecha:** 2026-10-12 · **Cierra:** P-J de `scripts/open-decisions.sh`
+
+**Contexto.** Daniel entregó el 2026-09-30 dos etiquetas de abamectina que **no son el mismo producto**:
+ABAMECTAN® 1.8 EC («no reingresar al campo sin equipo de protección durante las primeras 48 horas») y
+Abamectin 18 EC («tiempo de reingreso al área tratada: 24 horas»), con las citas literales en
+`docs/dominio/fitosanitarios-etiquetas.md`. El 2026-10-06 decidió darlas de alta a las dos en el catálogo
+(`npm run data:abamectinas`, que les pone 48 h y 24 h). Quedaba abierto cuál está en la bodega, porque de
+eso dependía qué reingreso hace valer una aplicación.
+
+**Decisión.** Daniel, 2026-10-12: **en la bodega de Finca Rosina están las dos.** No se elige una para
+siempre: cada aplicación nombra el producto que se usó, y su reingreso es el de ese producto.
+
+**Consecuencias.** No hace falta código nuevo para esto: cada línea de una intervención nombra un material,
+y el reingreso que se muestra sale del `defaultReentryHours` de ese material (`lib/traceability/intervenciones.ts`,
+`carenciaDeIntervencion.ts`). Lo que esta decisión **no** cierra: la dosis en café, que no está en ninguna de
+las dos etiquetas (ninguna registra café), sigue sin fuente y sigue bloqueando registrar una aplicación con
+dosis; y si `data:abamectinas` ya se corrió en producción no está medido aquí. Confundir los dos productos al
+registrar es el riesgo que queda: 24 h contra 48 h es dejar entrar a alguien al lote o no.
