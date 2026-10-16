@@ -290,6 +290,14 @@ const LO_QUE_EL_TEXTO_TIENE_QUE_DECIR: Record<string, Exigencia> = {
     es: { debe: [/Libre/, /no se elige de una lista/i], noDebe: [/sirve s[oó]lo/i, /s[oó]lo a [ée]se/i] },
     en: { debe: [/free-form/i, /not chosen from a list/i], noDebe: [/serves only/i, /only that one/i] },
   },
+  lectura_de_cierre_ajena: {
+    por:
+      "Lo lanza `marcarLecturasDeCierre` por las cuatro puertas. Las lecturas que un MANEJO del proceso puede marcar son las del lote del proceso " +
+      "O las de un descendiente suyo (`lecturasCandidatasDeCierre`, R5): el texto decía sólo «lecturas del lote del proceso» y callaba que la de un " +
+      "descendiente también vale, así que quien tenía una a la vista no sabía por qué le sirve o no (ronda de arreglo del 2026-10-14, hallazgo 9).",
+    es: { debe: [/lote del proceso/i, /descendiente/i] },
+    en: { debe: [/process's lot/i, /descendant/i] },
+  },
 };
 
 describe("los textos corregidos por falsedad dicen lo que la revisión pidió", () => {

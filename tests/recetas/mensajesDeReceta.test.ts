@@ -151,6 +151,21 @@ describe("los códigos de la receta tienen su texto en es y en", () => {
     }
   });
 
+  it("el texto de «no es Libre» no dice que el proceso ya sigue una receta: sale también con un proceso que no sigue ninguna", () => {
+    // `convertirLibre` lanza `no_es_libre` cuando el proceso no tiene una receta Libre, y eso incluye al proceso SIN receta (uno anterior a la
+    // receta obligatoria): «Éste ya sigue una receta» era falso ahí (docs/beneficio/21_rubrica_veracidad.md; ronda de arreglo del 2026-10-14,
+    // hallazgo 9). El texto dice sólo lo que es cierto en los dos caminos: se convierte un proceso que se definió como Libre.
+    for (const [idioma, textos, debe, noDebe] of [
+      ["es", es, [/Libre/], [/ya sigue/i, /sigue una receta/i]],
+      ["en", en, [/free-form/i], [/already follows/i, /follows a recipe/i]],
+    ] as const) {
+      const texto = textos.error_receta_no_es_libre ?? "";
+      expect(texto, `${idioma}: error_receta_no_es_libre existe`).not.toBe("");
+      for (const r of debe) expect(texto, `${idioma}: debe casar ${r}`).toMatch(r);
+      for (const r of noDebe) expect(texto, `${idioma}: no debe casar ${r}`).not.toMatch(r);
+    }
+  });
+
   it("ningún texto deja el código crudo a la vista", () => {
     for (const c of CODIGOS_DE_RECETA_TRADUCIDOS) {
       for (const [idioma, textos] of [
