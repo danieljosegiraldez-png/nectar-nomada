@@ -18,6 +18,7 @@ import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEm
 import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
 import { reentradaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
 import { textoDeTipoDeManejo as textoDeTipoDeManejoDe } from "../../components/traceability/etiquetasDeManejo";
+import { cajaDelRegistro, queSeHizo } from "../../../lib/apiary/queSeHizo";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
   if (!user) redirect("/login");
 
   const t = await getTranslations("Traceability");
+  const ta = await getTranslations("Apiary");
 
   let timeline;
   try {
@@ -163,6 +165,10 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
             {events.map((e) => (
               <li key={e.id}>
                 <strong>{e.eventKindValue.value}</strong> · {cuando(e.occurredAt, session.location.timezone)}
+                {/* V-6: de qué caja habla y qué se le hizo. Los registros que no son del apiario
+                    —mediciones, cosecha de café— no tienen ni lo uno ni lo otro y siguen igual. */}
+                {cajaDelRegistro(e) ? ` · ${cajaDelRegistro(e)}` : ""}
+                {queSeHizo(e, ta) ? ` · ${queSeHizo(e, ta)}` : ""}
                 {/* El operador del evento sólo se nombra cuando difiere del de
                     la jornada; repetirlo en cada línea sería ruido. */}
                 {e.operator && e.operator.id !== session.operatorPersonId ? ` · ${e.operator.displayName}` : ""}

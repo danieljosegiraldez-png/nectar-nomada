@@ -1,4 +1,4 @@
-import { fechaDelReporte, detalleDelReporte } from "../../../lib/traceability/presentacionDelReporte";
+import { fechaDelReporte, detalleDelReporte, sujetoDelReporte } from "../../../lib/traceability/presentacionDelReporte";
 import { DetallesDelReporte } from "../../components/traceability/DetallesDelReporte";
 import { seManejaEnCuadros } from "../../../lib/apiary/sitioDeAbejas";
 import { notFound } from "next/navigation";
@@ -95,7 +95,7 @@ export default async function InformePorEnlacePage({ params }: { params: Promise
                 ) : null}
                 <strong>{r.clase}</strong> · {fechaDelReporte(r.cuando, snapshot.sitio.zona)}
                 {r.detalle ? ` · ${detalleDelReporte(r, ta)}` : ""}
-                {r.sujeto ? ` · ${r.sujeto}` : ""}
+                {r.sujeto ? ` · ${sujetoDelReporte(r, ta)}` : ""}
                 {r.operador ? ` · ${r.operador}` : ""}
                 {r.notas ? ` — ${r.notas}` : ""}
                 <DetallesDelReporte registro={r} enCuadros={seManejaEnCuadros(snapshot.sitio.tipo)} />

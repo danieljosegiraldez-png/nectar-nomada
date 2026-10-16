@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import type { SnapshotDeVisita } from "../../../lib/traceability/reporteDeVisita";
+import { infestacionPorCiento } from "../../../lib/apiary/infestacion";
 
 /**
  * **`enCuadros` decide si el informe pregunta por cuadros, y lo calcula quien llama** desde
@@ -31,6 +32,9 @@ export async function DetallesDelReporte({ registro, enCuadros }: { registro: Sn
   ] : [];
   const a = registro.alimentacion;
   if (a) filas.push([t("feedingMaterialLabel"), [a.tipo ? t(`feedingMaterial_${a.tipo}`) : null, a.material].filter(Boolean).join(" · ") || null], [t("feedingQuantityLabel"), a.cantidad], [t("unitLabel"), a.unidad]);
+  // V-7: el conteo de varroa congelado. La infestación se deriva aquí, no se guarda.
+  const v = registro.varroa;
+  if (v) filas.push([t("varroaMethodLabel"), t(`varroaMethod_${v.metodo}`)], [t("varroaMitesLabel"), v.acaros], [t("varroaSampleBeesLabel"), v.abejas], [t("reportVarroaInfestacion"), v.abejas > 0 ? t("reportPorCiento", { valor: infestacionPorCiento(v.abejas, v.acaros) }) : null]);
   if (!filas.length) return null;
   return <dl>{filas.map(([etiqueta, valor]) => <div key={etiqueta}><dt>{etiqueta}</dt><dd>{valor ?? t("reportNotRecorded")}</dd></div>)}</dl>;
 }
