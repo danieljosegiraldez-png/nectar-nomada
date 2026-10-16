@@ -12,6 +12,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { createColony, createHive } from "../../lib/apiary/hives";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
+import { recordApiaryHarvest } from "../../lib/apiary/harvest";
+import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { jornadaAbiertaDe, HORAS_DE_JORNADA_VIEJA } from "../../lib/traceability/fieldSessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import {
@@ -422,5 +424,133 @@ describe("A9.8 — la lectura contra Postgres", () => {
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: [deHoy.id, suya.id] } }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: otraCuenta.id }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: otraPersona.id }) });
+  });
+});
+
+
+/**
+ * **Cada hecho cuenta en el sitio donde estaba la caja ESE día** — V-8 de la revisión del Apiario,
+ * con la regla de Daniel del 2026-10-08 (V-H2): el día del traslado la caja sigue en el origen.
+ *
+ * Hasta el 2026-10-10 el tablero atribuía la alimentación y la cosecha al sitio donde está la caja
+ * HOY, y comparaba el recuento declarado en una visita con las cajas de HOY. Una caja alimentada en
+ * A y trasladada después a B se llevaba la cobertura a B, y una visita que contó tres cajas daba
+ * «no cuadran» en cuanto se trasladaban dos.
+ *
+ * El traslado se hace con `trasladarColmenas`, el servicio de verdad, y no escribiendo colocaciones
+ * a mano: lo que se prueba es que el tablero lee lo que el servicio deja.
+ */
+describe("V-8 — cada hecho cuenta en el sitio de su fecha", () => {
+  const R = `v8-${Date.now()}`;
+  const ANTES = new Date("2026-01-01T00:00:00Z");
+  const COMIDA = new Date("2026-08-10T15:00:00Z");
+  const COBERTURA = new Date("2026-12-01T00:00:00Z");
+  const COSECHA = new Date("2026-08-12T15:00:00Z");
+  const DIA_DEL_TRASLADO = new Date("2026-08-20T00:00:00Z");
+  const AHORA_V8 = new Date("2026-09-01T12:00:00Z");
+  let organizationId: string;
+  let projectId: string;
+  let sitioA: string;
+  let sitioB: string;
+  let userAccountId: string;
+  let personId: string;
+  const cajas: string[] = [];
+
+  const visitaQueCuenta = (startedAt: Date, hivesPresentCount: number) =>
+    prisma.fieldSession.create({
+      data: { locationId: sitioA, operatorPersonId: personId, startedAt, status: "completed", hivesPresentCount, provenanceClass: "original_record" },
+    });
+  const vitales = async () => vitalesDeSitios([sitioA, sitioB], AHORA_V8);
+
+  beforeAll(async () => {
+    organizationId = (
+      await prisma.organization.create({
+        data: { organizationType: "farm", name: `TEST Farm (${R})`, status: "approved", classification: "internal" },
+      })
+    ).id;
+    const person = await prisma.person.create({
+      data: { givenName: "TEST", familyName: "V8", displayName: `TEST V8 (${R})`, locale: "es" },
+    });
+    personId = person.id;
+    userAccountId = (await prisma.userAccount.create({ data: { personId, authProvider: "credentials", status: "active" } })).id;
+    projectId = (await prisma.project.create({ data: { name: `TEST Proyecto (${R})`, status: "approved", classification: "internal" } })).id;
+    const sitio = async (n: string) =>
+      (
+        await prisma.location.create({
+          data: { locationType: "apiary_site", name: `TEST ${n} (${R})`, organizationId, status: "approved", classification: "internal" },
+        })
+      ).id;
+    sitioA = await sitio("A");
+    sitioB = await sitio("B");
+    const farmOperator = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
+    const scope = await prisma.scope.create({ data: { scopeType: "project", scopeRefId: projectId } });
+    await prisma.assignment.create({ data: { userAccountId, roleProfileId: farmOperator.id, scopeId: scope.id } });
+
+    // Tres cajas en A desde enero. La primera tiene colonia, y en A se alimenta y se cosecha.
+    for (let i = 0; i < 3; i++) {
+      cajas.push((await createHive(userAccountId, { projectId, locationId: sitioA, identifier: `V8${i}-${R.slice(-6)}`, installedAt: ANTES })).id);
+    }
+    const colonyId = (
+      await createColony(userAccountId, { hiveId: cajas[0]!, originType: "captured", startedAt: ANTES, provenanceClass: "direct_observation" })
+    ).id;
+    await recordColonyEvent(userAccountId, { colonyId, eventType: "feeding", occurredAt: COMIDA, feedingMaterial: "jarabe 1:1", coverageUntil: COBERTURA });
+    await recordApiaryHarvest(userAccountId, { lotCode: `${R}-L1`, colonyId, occurredAt: COSECHA, extractedWeightKg: 12, provenanceClass: "direct_observation" });
+    // La visita del 15 de agosto contó las tres.
+    await visitaQueCuenta(new Date("2026-08-15T15:00:00Z"), 3);
+    // El 20 se llevan dos a B, la alimentada entre ellas.
+    await trasladarColmenas(userAccountId, { hiveIds: [cajas[0]!, cajas[1]!], destinationLocationId: sitioB, occurredAt: DIA_DEL_TRASLADO, reason: "consolidacion" });
+    // Fila patrón: el traslado ocurrió de verdad. Sin esto, «A conserva» podría significar «no se movió nada».
+    expect((await prisma.hive.findUniqueOrThrow({ where: { id: cajas[0]! } })).locationId).toBe(sitioB);
+  });
+
+  afterAll(async () => {
+    const cids = (await prisma.colony.findMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }), select: { id: true } })).map((c) => c.id);
+    const cosechas = await prisma.apiaryHarvestEvent.findMany({ where: assertDefinedWhere({ colonyId: { in: cids } }), select: { id: true, resultingLotId: true } });
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: userAccountId }) });
+    await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: cosechas.map((c) => c.resultingLotId) } }) });
+    await prisma.apiaryHarvestEvent.deleteMany({ where: assertDefinedWhere({ id: { in: cosechas.map((c) => c.id) } }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: cosechas.map((c) => c.resultingLotId) } }) });
+    await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId: { in: cids } }) });
+    await prisma.colony.deleteMany({ where: assertDefinedWhere({ id: { in: cids } }) });
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId: { in: [sitioA, sitioB] } }) });
+    await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hiveId: { in: cajas } }) });
+    await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: cajas } }) });
+    await prisma.location.deleteMany({ where: assertDefinedWhere({ id: { in: [sitioA, sitioB] } }) });
+    await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
+    await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
+    await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
+    await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
+    await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
+    await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
+  });
+
+  it("la alimentación y la cosecha se quedan en el sitio donde se hicieron", async () => {
+    const v = await vitales();
+    expect(v.get(sitioA)!.alimentoHasta?.toISOString()).toBe(COBERTURA.toISOString());
+    expect(v.get(sitioA)!.ultimaCosecha?.toISOString()).toBe(COSECHA.toISOString());
+    // Y B no las gana por tener hoy la caja.
+    expect(v.get(sitioB)!.alimentoHasta).toBeNull();
+    expect(v.get(sitioB)!.ultimaCosecha).toBeNull();
+  });
+
+  it("el recuento de una visita se compara con las cajas que había ESE día", async () => {
+    const a = (await vitales()).get(sitioA)!;
+    // Control: hoy en A queda una sola. Sin esto, «coinciden» podría ser que el traslado no se leyó.
+    expect(a.cajas).toBe(1);
+    expect(a.cajasComparadas).toMatchObject({ declaradas: 3, enSistema: 3, estado: "coinciden" });
+    expect(a.alertas.map((x) => x.motivo)).not.toContain("cajas_no_cuadran");
+  });
+
+  it("el día del traslado, una visita al origen todavía cuenta las tres", async () => {
+    await visitaQueCuenta(new Date("2026-08-20T15:00:00Z"), 3);
+    expect((await vitales()).get(sitioA)!.cajasComparadas).toMatchObject({ declaradas: 3, enSistema: 3, estado: "coinciden" });
+  });
+
+  it("y una diferencia de verdad sigue avisando", async () => {
+    // Control de las dos de arriba: una lectura que dijera siempre «coinciden» las pasaría.
+    await visitaQueCuenta(new Date("2026-08-25T15:00:00Z"), 3);
+    const a = (await vitales()).get(sitioA)!;
+    expect(a.cajasComparadas).toMatchObject({ declaradas: 3, enSistema: 1, estado: "divergen" });
+    expect(a.alertas.map((x) => x.motivo)).toContain("cajas_no_cuadran");
   });
 });
