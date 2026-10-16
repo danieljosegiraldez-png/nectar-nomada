@@ -19,6 +19,11 @@
  * Cada aviso lleva al lado su control: el caso válido, o el mismo caso con la respuesta contraria, que pasa. Un «ninguno» sin él se
  * lee igual que «no miré».
  *
+ * **El orden por `seq` de los pasos `reception` se prueba con las filas dadas de alta AL REVÉS** (decisión 6 de `recepcion.ts`; ronda de arreglo
+ * de la tarea 12, hallazgo 1 de la revisión): con las filas en el orden de `seq`, que es el que la base devuelve sin `orderBy`, quitar el
+ * `orderBy` dejaba el archivo entero en verde. Su control comprueba, en la propia prueba, que el orden físico de las filas (`ctid`) y el de la
+ * misma lectura sin `orderBy` NO son los de `seq`.
+ *
  * Usuario con ámbito acotado (Farm Manager de su finca), no Platform Admin: nada de aquí cuenta filas de toda la base. El
  * administrador sólo escribe por el editor en la prueba del contrato, que no cuenta nada global (CLAUDE.md del repositorio, «Un
  * admin de plataforma ve la base compartida entera»). Escribe porque la autoría de recetas (`exigeAutoriaDeReceta`, tarea 3) es el
@@ -160,15 +165,23 @@ const laBanda = (stepId: string, seq = 1): BandaDeBrix => ({ stepId, seq, min: 1
 /**
  * Una versión PUBLICADA de una receta de la organización, con un paso por elemento de `pasos`, en ese orden (`seq` desde 1) y con
  * sus metas (por omisión, de `brix` en `Bx`). Se crea en BORRADOR, se le ponen los pasos y las metas, y después se publica, para
- * no depender de si la base deja añadir pasos a una versión publicada. Devuelve el id de la versión y los ids de sus pasos.
+ * no depender de si la base deja añadir pasos a una versión publicada. Devuelve el id de la versión y los ids de sus pasos, SIEMPRE
+ * por `seq`.
+ *
+ * `altaEn` es el orden en que se dan de alta las filas, por `seq` (por omisión 1, 2, 3…): con otro, el orden físico de la tabla deja
+ * de ser el de `seq`, como queda cuando el editor de la tarea 3 renumera o mueve pasos con UPDATE (mismo parámetro que el de `avance.test.ts`).
  */
-async function version(nombre: string, pasos: readonly PasoDePrueba[]) {
+async function version(nombre: string, pasos: readonly PasoDePrueba[], altaEn?: readonly number[]) {
   const receta = await prisma.processRecipe.create({ data: { name: `TEST ${nombre} ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
   const v = await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "draft", createdBy: gestor } });
-  const ids: string[] = [];
-  for (const [i, p] of pasos.entries()) {
-    const paso = await prisma.processRecipeStep.create({ data: { recipeVersionId: v.id, seq: i + 1, stepTypeValueId: idDelTipo(p.tipo) } });
-    ids.push(paso.id);
+  const seqs = pasos.map((_, i) => i + 1);
+  // Una `altaEn` que no sea una permutación de 1..n dejaría `undefined` en la lista de ids sin que nada fallara.
+  if (altaEn !== undefined && [...altaEn].sort((a, b) => a - b).join() !== seqs.join()) throw new Error(`altaEn tiene que ser una permutación de ${seqs.join()}`);
+  const idDelSeq = new Map<number, string>();
+  for (const seq of altaEn ?? seqs) {
+    const p = pasos[seq - 1]!;
+    const paso = await prisma.processRecipeStep.create({ data: { recipeVersionId: v.id, seq, stepTypeValueId: idDelTipo(p.tipo) } });
+    idDelSeq.set(seq, paso.id);
     for (const m of p.metas ?? []) {
       await prisma.processTarget.create({ data: {
         recipeVersionId: v.id, recipeStepId: paso.id, phase: null, variable: m.variable ?? "brix", moment: m.moment, unit: m.unit ?? "Bx",
@@ -177,7 +190,7 @@ async function version(nombre: string, pasos: readonly PasoDePrueba[]) {
     }
   }
   await prisma.processRecipeVersion.update({ where: { id: v.id }, data: { status: "approved" } });
-  return { id: v.id, pasos: ids };
+  return { id: v.id, pasos: seqs.map((seq) => idDelSeq.get(seq)!) };
 }
 /** Abre el proceso de `lotId` con la versión `v`. */
 const abrir = (lotId: string, v: { id: string }) => abrirProcesoDePrueba(gestor, lotId, { processRecipeVersionId: v.id });
@@ -567,6 +580,48 @@ describe("Parte 2a, §4.5 — los avisos de recepción se calculan al leer", () 
       { tipo: "paso_de_recepcion_sin_banda", stepId: v.pasos[2]!, seq: 3 },
       { tipo: "brix_fuera_de_la_banda", recepcionId: diecinueve.id, recibidaAt: dia(1), brix: 19, lado: "bajo", banda: b2 },
       { tipo: "brix_fuera_de_la_banda", recepcionId: veintiocho.id, recibidaAt: dia(2), brix: 28, lado: "alto", banda: b1 },
+    ]);
+  }, 60000);
+
+  it("los pasos de recepción salen por seq aunque la base los guarde en otro orden: `bandas` y el orden de los avisos son los de seq, no los del orden físico", async () => {
+    // El orden de los avisos es conducta declarada (decisión 6 de `recepcion.ts`) y la prueba de arriba la afirma, pero allí las filas se dan de
+    // alta en el orden de `seq`, que es también el que la base devolvería sin `orderBy`: quitarlo no la tumbaba. El editor de la tarea 3 renumera y
+    // mueve pasos con UPDATE, y entonces el orden físico deja de ser el de `seq`. Aquí se llega al mismo estado dando de alta los pasos en el orden
+    // 4, 3, 2, 1: dos con banda (seq 1 y 3) y dos sin ella (seq 2 y 4), para que cada una de las tres salidas que dependen del orden —`bandas`, los
+    // avisos de los pasos sin banda y, dentro de una recepción, el de cada banda— tenga dos elementos que la base devolvería al revés.
+    const v = await version("FUERA-DE-ORDEN", [
+      { tipo: "reception", metas: [{ moment: "initial", min: 18, max: 24 }] }, // seq 1
+      { tipo: "reception" }, // seq 2: sin banda
+      { tipo: "reception", metas: [{ moment: "initial", min: 20, max: 30 }] }, // seq 3
+      { tipo: "reception" }, // seq 4: sin banda
+    ], [4, 3, 2, 1]);
+    // Control 1: el orden físico de las filas (`ctid` es su posición en la tabla) NO es el de seq. Sin esto, el orden de abajo se leería igual con una
+    // base que ya las guardara ordenadas.
+    const fisico = await prisma.$queryRaw<{ seq: number }[]>`select seq from traceability.process_recipe_step where recipe_version_id = ${v.id}::uuid order by ctid`;
+    expect(fisico.map((f) => f.seq)).toEqual([4, 3, 2, 1]);
+    // Control 2: la MISMA lectura que hace el módulo, sin su `orderBy`, devuelve los pasos en ese orden contrario. Es lo que el módulo leería sin
+    // él; si el planificador de la base un día los diera por `seq` (por el índice (recipe_version_id, seq)), esta línea lo diría en vez de dejar que
+    // la prueba pase sin discriminar nada.
+    const sinOrden = await prisma.processRecipeStep.findMany({
+      where: { recipeVersionId: v.id, stepTypeValue: { value: "reception", catalog: { key: "tipo_paso" } } },
+      select: { seq: true },
+    });
+    expect(sinOrden.map((p) => p.seq)).toEqual([4, 3, 2, 1]);
+
+    const alta = await recibir(20, 31, dia(1)); // fuera de las dos bandas, por arriba
+    const lote = await loteDe([{ recepcionId: alta.id, kg: 20 }]);
+    await abrir(lote, v);
+
+    const r = await avisosDeRecepcion(prisma, lote);
+    const [b1, b3] = [{ stepId: v.pasos[0]!, seq: 1, min: 18, max: 24 }, { stepId: v.pasos[2]!, seq: 3, min: 20, max: 30 }];
+    // Aserciones BLANDAS: cada una se evalúa aunque otra falle, así que con la mutación puesta se ve cuáles caen.
+    expect.soft(r?.bandas).toEqual([b1, b3]);
+    expect.soft(r?.avisos).toEqual([
+      // Primero lo de la receta, por seq (2 y luego 4); después la recepción, con cada banda por seq (1 y luego 3).
+      { tipo: "paso_de_recepcion_sin_banda", stepId: v.pasos[1]!, seq: 2 },
+      { tipo: "paso_de_recepcion_sin_banda", stepId: v.pasos[3]!, seq: 4 },
+      { tipo: "brix_fuera_de_la_banda", recepcionId: alta.id, recibidaAt: dia(1), brix: 31, lado: "alto", banda: b1 },
+      { tipo: "brix_fuera_de_la_banda", recepcionId: alta.id, recibidaAt: dia(1), brix: 31, lado: "alto", banda: b3 },
     ]);
   }, 60000);
 
