@@ -63,13 +63,17 @@ const DEL_PR_A = {
     "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple.",
 };
 
-/** Los tres textos, con su idioma, para las comprobaciones que valen igual para todos. */
+/**
+ * Los textos VIGENTES —los de `messages` y el catálogo, no las frases de arriba—, con su idioma, para las comprobaciones que valen igual para todos. Las frases
+ * exactas las fija la primera prueba; las demás miran lo que de verdad está escrito, de modo que un texto cambiado sin cambiar la frase de arriba no pueda
+ * esconder una promesa de más (el flip de la tarea 12 lo enseñó: con las frases en este arreglo, tres mutaciones del texto vigente no hacían caer estas pruebas).
+ */
 const TEXTOS: ReadonlyArray<readonly [string, string]> = [
-  ["ayuda es", FRASES.recetaEditor_metasDeRecepcionAyuda.es],
-  ["ayuda en", FRASES.recetaEditor_metasDeRecepcionAyuda.en],
-  ["error es", FRASES.error_receta_meta_de_recepcion_no_se_vigila.es],
-  ["error en", FRASES.error_receta_meta_de_recepcion_no_se_vigila.en],
-  ["definición es", DEFINICION],
+  ["ayuda es", es.recetaEditor_metasDeRecepcionAyuda ?? ""],
+  ["ayuda en", en.recetaEditor_metasDeRecepcionAyuda ?? ""],
+  ["error es", es.error_receta_meta_de_recepcion_no_se_vigila ?? ""],
+  ["error en", en.error_receta_meta_de_recepcion_no_se_vigila ?? ""],
+  ["definición es", definicion],
 ];
 
 describe("los tres textos de la recepción dicen lo que los avisos hacen", () => {
