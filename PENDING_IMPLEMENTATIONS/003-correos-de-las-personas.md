@@ -1,6 +1,18 @@
 # 003 · Correo y acceso para más personas
 
-**Estado:** aplazado. **Bloquea:** P-C.
+**Estado: CERRADA como decisión el 2026-09-04 (ADR-107, «Los correos de las personas se dan por
+función, no por jerarquía»), y retirada del índice el 2026-10-16.** Lo que la bloqueaba era P-C, y P-C
+está cerrada: `bash scripts/open-decisions.sh` la cuenta entre las cerradas porque exige justo ese
+encabezado de ADR. **Esta línea decía «aplazado · Bloquea: P-C»**: era cierta cuando nació la ficha,
+el 2026-08-28, y dejó de serlo con el ADR-107. El 2026-09-06 se le pusieron al día las cifras de abajo
+y no la cabecera, que siguió así seis semanas.
+
+**Lo que queda no es trabajo ni decisión, es un dato que falta:** los Huerbsch todavía no han dado
+sus correos —el ADR-107 lo dice así: «se preguntó, y falta el dato»—. Cuando lleguen, darlos de alta
+no reabre nada; la herramienta está abajo. Lo que sigue es la ficha tal como se escribió, y sus cifras
+son del 2026-09-06.
+
+**Estado original:** aplazado. **Bloquea:** P-C.
 
 **La mayoría de las personas en la base no tienen correo.** Medido contra
 producción el 2026-09-06 con `npm run people:set-email` (sin argumentos lista a
