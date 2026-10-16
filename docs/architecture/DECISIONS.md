@@ -12985,3 +12985,24 @@ ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los c
 salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `descartablesPorEstaCuenta(`—, y
 `tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
 viaje dentro del payload.
+
+## ADR-201 — La abamectina de la bodega: están las dos
+
+**Fecha:** 2026-10-12 · **Cierra:** P-J de `scripts/open-decisions.sh`
+
+**Contexto.** Daniel entregó el 2026-09-30 dos etiquetas de abamectina que **no son el mismo producto**:
+ABAMECTAN® 1.8 EC («no reingresar al campo sin equipo de protección durante las primeras 48 horas») y
+Abamectin 18 EC («tiempo de reingreso al área tratada: 24 horas»), con las citas literales en
+`docs/dominio/fitosanitarios-etiquetas.md`. El 2026-10-06 decidió darlas de alta a las dos en el catálogo
+(`npm run data:abamectinas`, que les pone 48 h y 24 h). Quedaba abierto cuál está en la bodega, porque de
+eso dependía qué reingreso hace valer una aplicación.
+
+**Decisión.** Daniel, 2026-10-12: **en la bodega de Finca Rosina están las dos.** No se elige una para
+siempre: cada aplicación nombra el producto que se usó, y su reingreso es el de ese producto.
+
+**Consecuencias.** No hace falta código nuevo para esto: cada línea de una intervención nombra un material,
+y el reingreso que se muestra sale del `defaultReentryHours` de ese material (`lib/traceability/intervenciones.ts`,
+`carenciaDeIntervencion.ts`). Lo que esta decisión **no** cierra: la dosis en café, que no está en ninguna de
+las dos etiquetas (ninguna registra café), sigue sin fuente y sigue bloqueando registrar una aplicación con
+dosis; y si `data:abamectinas` ya se corrió en producción no está medido aquí. Confundir los dos productos al
+registrar es el riesgo que queda: 24 h contra 48 h es dejar entrar a alguien al lote o no.
