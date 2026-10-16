@@ -22,8 +22,15 @@
  * build. Lo vigila `tests/arquitectura/cliente-sin-prisma.test.ts`.
  */
 import type { FeedingMaterial } from "../../generated/prisma/client";
+import { AlimentacionInvalida } from "./alimentacion";
 
-export class AlimentacionInvalida extends Error {}
+/**
+ * La clase es la de `alimentacion.ts`, no una propia. Hasta el 2026-10-14 este archivo definía
+ * otra con el mismo nombre, y `lib/sync/pushFieldEvents.ts` sólo reconoce aquélla como rechazo:
+ * un material mal enviado sin señal tumbaba el lote entero en vez de rechazarse solo. Se
+ * reexporta para que quien la importaba desde aquí siga funcionando.
+ */
+export { AlimentacionInvalida };
 
 /**
  * El orden es el que dijo el dueño, no alfabético ni por frecuencia: es el orden en el que él
