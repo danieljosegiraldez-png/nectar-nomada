@@ -18,6 +18,7 @@ import {
   ColonyPopulation,
   FeedingMaterial,
   InspectionOutcome,
+  QueenCellKind,
   QueenSighting,
   StoresLevel,
   Temperament,
@@ -72,8 +73,9 @@ const CASOS = [
  * Nada falló en rojo; se leyó mal en pantalla. Producción no tenía ninguna inspección todavía
  * (`apiary.inspection` vacía el 2026-10-08), así que nadie lo había visto.
  *
- * Cubre las ocho familias que construye `DetallesDelReporte` con una plantilla
- * (`population_${v}`...): una clave que falte ahí no la ve el compilador.
+ * Cubre las nueve familias que construye `DetallesDelReporte` con una plantilla
+ * (`population_${v}`...): una clave que falte ahí no la ve el compilador. La novena,
+ * `queenCell_*`, entró cuando el informe empezó a congelar las celdas reales (PR-2 del #674).
  */
 const esApiary = JSON.parse(leer("messages/es.json")).Apiary as Record<string, string>;
 const enApiary = JSON.parse(leer("messages/en.json")).Apiary as Record<string, string>;
@@ -87,6 +89,7 @@ const CASOS_APIARY = [
   { nombre: "Temperament", prefijo: "temperament", valores: Object.values(Temperament) },
   { nombre: "FeedingMaterial", prefijo: "feedingMaterial", valores: Object.values(FeedingMaterial) },
   { nombre: "InspectionOutcome", prefijo: "inspectionOutcome", valores: Object.values(InspectionOutcome) },
+  { nombre: "QueenCellKind", prefijo: "queenCell", valores: Object.values(QueenCellKind) },
 ] as const;
 
 describe("cada valor de colonia del reporte tiene etiqueta en los dos idiomas (Apiary)", () => {
