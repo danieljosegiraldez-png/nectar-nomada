@@ -578,7 +578,7 @@ describe("sólo se marca lo que es del registro, y todo o nada", () => {
     expect((await marcasDe({ dryingRunId: a.runId })).map((x) => x.measurementId)).toEqual([deA]);
   }, 40000);
 
-  it("una intervención rechaza la lectura de otro lote y la anterior al proceso, sin escribir la intervención; con una buena, entra", async () => {
+  it("una intervención rechaza la lectura de otro lote y la anterior al proceso, sin escribir la intervención; con una buena, entra —también la tomada justo cuando empezó el proceso—", async () => {
     const cereza = await lote("R4");
     const otro = await lote("R4-otro");
     const p = await abrirProcesoDePrueba(gestor, cereza); // empieza el 2020-01-01
@@ -598,9 +598,31 @@ describe("sólo se marca lo que es del registro, y todo o nada", () => {
       lecturasDeCierre: [buena],
     });
     expect((await marcasDe({ lotProcessInterventionId: i.id })).map((x) => x.measurementId)).toEqual([buena]);
+
+    // La frontera: «desde que el proceso empezó» incluye el instante exacto en que empezó (`gte`, no `gt`). Una lectura tomada AHÍ es
+    // suya; una un milisegundo antes, no. Sin la primera mitad, un `gt` rechazaría la lectura que se tomó al abrir el proceso.
+    const inicio = (await prisma.lotProcess.findUniqueOrThrow({ where: { id: p.id } })).startedAt;
+    const justoAlEmpezar = await lectura({ lotId: cereza, value: 20.5, occurredAt: inicio, variable: "temperature", unit: "C" });
+    const unMsAntes = await lectura({ lotId: cereza, value: 20.4, occurredAt: new Date(inicio.getTime() - 1), variable: "temperature", unit: "C" });
+    // Fila patrón: la primera está en el instante EXACTO del inicio del proceso, la otra un milisegundo antes (leído de la base, no de la
+    // constante del ayudante que abre el proceso).
+    const enLaBase = await prisma.measurement.findMany({ where: { id: { in: [justoAlEmpezar, unMsAntes] } }, select: { id: true, occurredAt: true } });
+    expect(enLaBase.find((m) => m.id === justoAlEmpezar)!.occurredAt.getTime(), "control: la lectura está en el instante exacto del inicio").toBe(inicio.getTime());
+    expect(enLaBase.find((m) => m.id === unMsAntes)!.occurredAt.getTime(), "control: la otra está un milisegundo antes").toBe(inicio.getTime() - 1);
+    await expect(
+      registrarIntervencion(gestor, { lotProcessId: p.id, catalogValueId: aguaLimpia, occurredAt: T("01T13:00:00"), lecturasDeCierre: [unMsAntes] }),
+      "un milisegundo antes del inicio entró",
+    ).rejects.toThrow(ajena);
+    const j = await registrarIntervencion(gestor, {
+      lotProcessId: p.id,
+      catalogValueId: aguaLimpia,
+      occurredAt: T("01T13:00:00"),
+      lecturasDeCierre: [justoAlEmpezar],
+    });
+    expect((await marcasDe({ lotProcessInterventionId: j.id })).map((x) => x.measurementId), "la lectura del instante exacto del inicio no se marcó").toEqual([justoAlEmpezar]);
   }, 40000);
 
-  it("un id que no existe o que no es un uuid se rechaza como ajeno; en mayúsculas y repetido, se marca una vez", async () => {
+  it("un id que no existe o que no es un uuid se rechaza como ajeno; en mayúsculas, con espacios y repetido, se marca una vez; una cadena vacía o en blanco es «no viene»", async () => {
     const a = await fermentacion("U1");
     const deA = await lectura({ lotId: a.lotId, value: 4.2, occurredAt: T("03T12:00:00"), variable: "ph", unit: "pH", fermentationRunId: a.runId });
     for (const lista of [[randomUUID()], ["esto-no-es-un-uuid"], [deA, randomUUID()]]) {
@@ -611,7 +633,39 @@ describe("sólo se marca lo que es del registro, y todo o nada", () => {
     await terminarFermentacion(a.runId, "U1-fin", [deA, deA.toUpperCase()]);
     expect(await fermentacionTerminada(a.runId)).not.toBeNull();
     expect((await marcasDe({ fermentationRunId: a.runId })).map((x) => x.measurementId)).toEqual([deA]);
-  }, 40000);
+
+    // La normalización de la lista, una a una: `marcarLecturasDeCierre` dice que una cadena vacía es «no viene» (un formulario que manda
+    // `""` cuando no se marcó nada —la tarea 13 puede mandarlo—) y que un id con espacios es el mismo id. Cada caso en SU corrida, porque
+    // una fermentación termina una vez, y cada uno aísla una de las tres operaciones de la normalización:
+    //  - `[""]` sólo lo resuelve el filtro de vacíos (quitarlo deja un id "" que no es de nadie: «ajena» y la corrida sin terminar);
+    //  - `[" " + id + " "]` sólo lo resuelve el `trim` (sin él el id con espacios no es de nadie);
+    //  - `[" "]` necesita las dos: el `trim` lo deja vacío y el filtro lo quita.
+    const vacia = await fermentacion("U1-vacia");
+    await expect(terminarFermentacion(vacia.runId, "U1-vacia-fin", [""]), "una cadena vacía se leyó como un id y rechazó el cierre").resolves.toBeDefined();
+    expect(await fermentacionTerminada(vacia.runId)).not.toBeNull();
+    expect(await marcasDe({ fermentationRunId: vacia.runId }), "una cadena vacía marcó algo").toEqual([]);
+
+    const conEspacios = await fermentacion("U1-espacios");
+    const deLaDeEspacios = await lectura({
+      lotId: conEspacios.lotId,
+      value: 4.1,
+      occurredAt: T("03T12:00:00"),
+      variable: "ph",
+      unit: "pH",
+      fermentationRunId: conEspacios.runId,
+    });
+    await expect(
+      terminarFermentacion(conEspacios.runId, "U1-espacios-fin", [` ${deLaDeEspacios} `]),
+      "un id con espacios alrededor no se leyó como el mismo id y rechazó el cierre",
+    ).resolves.toBeDefined();
+    expect(await fermentacionTerminada(conEspacios.runId)).not.toBeNull();
+    expect((await marcasDe({ fermentationRunId: conEspacios.runId })).map((x) => x.measurementId), "el id con espacios no se marcó como la lectura que es").toEqual([deLaDeEspacios]);
+
+    const enBlanco = await fermentacion("U1-blanco");
+    await expect(terminarFermentacion(enBlanco.runId, "U1-blanco-fin", [" ", "  "]), "una cadena en blanco se leyó como un id y rechazó el cierre").resolves.toBeDefined();
+    expect(await fermentacionTerminada(enBlanco.runId)).not.toBeNull();
+    expect(await marcasDe({ fermentationRunId: enBlanco.runId }), "una cadena en blanco marcó algo").toEqual([]);
+  }, 60000);
 
   it("la lectura de OTRA corrida no es de ésta aunque se tomara en el mismo lote: la fermentación y el secado la rechazan «ajena»; la de su corrida entra", async () => {
     const f = await fermentacion("U2-F");
