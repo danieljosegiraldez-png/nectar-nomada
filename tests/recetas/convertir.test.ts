@@ -556,11 +556,13 @@ describe("§5.3 convertir — la Libre pasa a receta de la organización, en bor
     expect([r.pasos, r.finesPropuestos, r.sinDireccion]).toEqual([4, 0, []]);
 
     const receta = await prisma.processRecipe.findUniqueOrThrow({ where: { id: r.recipeId } });
-    expect([receta.name, receta.organizationId, receta.esLibre, receta.status, receta.derivadaDeVersionId, receta.parecidaAVersionId, receta.motivoDeLibre]).toEqual([
-      nombre, orgId, false, "approved", null, null, null,
+    // `createdBy` de la receta y de su versión es QUIEN CONVIRTIÓ (la autoría se atribuye a una cuenta, no a nadie): una receta con el
+    // autor en blanco no dice quién la guardó, y la lista de recetas y la auditoría se apoyan en ese campo.
+    expect([receta.name, receta.organizationId, receta.esLibre, receta.status, receta.derivadaDeVersionId, receta.parecidaAVersionId, receta.motivoDeLibre, receta.createdBy]).toEqual([
+      nombre, orgId, false, "approved", null, null, null, encargado,
     ]);
     const version = await prisma.processRecipeVersion.findUniqueOrThrow({ where: { id: r.versionId } });
-    expect([version.recipeId, version.version, version.status, version.expectedHours]).toEqual([r.recipeId, 1, "draft", 300]);
+    expect([version.recipeId, version.version, version.status, version.expectedHours, version.createdBy]).toEqual([r.recipeId, 1, "draft", 300, encargado]);
 
     const despues = await contenido(r.versionId);
     const idsDeLaLibre = new Set(antes.pasos.map((x) => x.id));
@@ -605,6 +607,38 @@ describe("§5.3 convertir — la Libre pasa a receta de la organización, en bor
     expect(await ofrecidas()).toContain(r.versionId);
     expect(await ofrecidas()).not.toContain(l.versionId);
   }, 30000);
+
+  it("las fases de la Libre viajan sólo si no tiene pasos (§3.1): con pasos la copia no las trae —se derivan al publicar—, y una Libre sin pasos las conserva", async () => {
+    // `convertirLibre` copia con `fases: true`, y `copiarContenidoDeVersion` sólo copia las fases de un origen SIN pasos. Una Libre de
+    // verdad siempre tiene pasos (`libre_sin_pasos` impide abrirla sin ninguno), así que ese `true` solo se nota en una Libre sin pasos,
+    // que ni el servicio ni una apertura producen: la segunda mitad la arma CRUDA y lo dice. Quitar el `true` (Y04) deja la primera
+    // mitad en verde —con pasos da lo mismo con o sin él— y hace caer la segunda: es la que lo fija.
+    const fase = { phase: "drying" as const, expectedHours: 120, turnEveryHours: 2, targetMoistureMinPct: 10, targetMoistureMaxPct: 12 };
+    const deLaFase = (c: Contenido) => c.fases.map((f) => [f.phase, f.expectedHours, f.turnEveryHours, n(f.targetMoistureMinPct), n(f.targetMoistureMaxPct)]);
+
+    // Con pasos: la Libre trae la fase (como la que deriva `publicarVersion` de un paso de secado) y la copia, no.
+    const conPasos = await libre("A3", ["washing", "drying"]);
+    await prisma.processRecipePhase.create({ data: { recipeVersionId: conPasos.versionId, ...fase } });
+    const loteConPasos = await lote("A3");
+    const pConPasos = await procesoConReceta(loteConPasos, conPasos.versionId);
+    await cerrar(pConPasos.id, loteConPasos);
+    expect(deLaFase(await contenido(conPasos.versionId)), "control: la Libre con pasos tiene su fase").toEqual([["drying", 120, 2, "10", "12"]]);
+    const deConPasos = await convertirLibre(encargado, { lotProcessId: pConPasos.id, nombre: `TEST Convertida A3 ${RUN}` });
+    const copiaConPasos = await contenido(deConPasos.versionId);
+    expect(copiaConPasos.pasos, "control: la copia trae los pasos").toHaveLength(2);
+    expect(copiaConPasos.fases, "con pasos las fases no se copian: se derivan al publicar").toEqual([]);
+
+    // Sin pasos (sólo cruda): la fase viaja.
+    const sinPasos = await libre("A3b", []);
+    await prisma.processRecipePhase.create({ data: { recipeVersionId: sinPasos.versionId, ...fase } });
+    const loteSinPasos = await lote("A3b");
+    const pSinPasos = await procesoConReceta(loteSinPasos, sinPasos.versionId);
+    await cerrar(pSinPasos.id, loteSinPasos);
+    expect((await contenido(sinPasos.versionId)).pasos, "control: la Libre cruda no tiene pasos").toHaveLength(0);
+    const deSinPasos = await convertirLibre(encargado, { lotProcessId: pSinPasos.id, nombre: `TEST Convertida A3b ${RUN}` });
+    expect(deSinPasos.pasos).toBe(0);
+    expect(deLaFase(await contenido(deSinPasos.versionId)), "la fase de una Libre sin pasos no viajó a la copia").toEqual([["drying", 120, 2, "10", "12"]]);
+  }, 40000);
 });
 
 describe("los fines salen sólo de lecturas MARCADAS (§5.3: «nunca deduce un umbral de una lectura que nadie marcó»)", () => {
@@ -808,6 +842,48 @@ describe("los fines salen sólo de lecturas MARCADAS (§5.3: «nunca deduce un u
     expect([r.finesPropuestos, r.sinDireccion]).toEqual([1, []]);
     // Un solo fin, del pH marcado (4,8), con la dirección de la serie de pH: baja, `lte`. Ni la conductividad ni el pH 5,4 dan fin propio.
     expect(await finesDe(r.versionId)).toEqual({ fermentation: [["ph", "lte", "4.8", "pH", phFinal]] });
+  }, 90000);
+
+  it("la dirección se mide contra la PRIMERA lectura de la serie, no contra la anterior a la marcada: 10 → 30 → 20 marcada sube, `gte`", async () => {
+    // Una serie que NO es monótona: la temperatura sube de 10 a 30 °C y la lectura marcada es la que vino después, a 20. Contra la PRIMERA
+    // (10) la variable SUBIÓ y el paso termina al llegar a 20 o por encima (`gte`); contra la inmediatamente anterior (30) habría BAJADO y
+    // saldría `lte`. Con una serie monótona (45 → 30 → 11,2, las de las otras pruebas) la primera y la última anterior dan el mismo sentido y
+    // no se distinguen: por eso esta serie sube y baja a propósito. Lo que dice el diseño de la inferencia es «entre la primera lectura de
+    // esa corrida y la marcada» (cabecera de `convertir.ts`).
+    const l = await libre("B5", ["fermentation"]);
+    const cereza5 = await lote("B5");
+    const p = await procesoConReceta(cereza5, l.versionId);
+    const f = await startFermentationRun(gestor, {
+      lotId: cereza5,
+      startedAt: T("02T08:00:00"),
+      provenanceClass: "original_record",
+      recipeStepId: l.pasos.fermentation,
+      vesselNote: `TEST tanque (${RUN})`, // desde la 2c (#717) toda fermentación lleva un tanque o su nombre
+    });
+    const deLaFermentacion = (value: number, hora: string) =>
+      lectura({ lotId: cereza5, value, occurredAt: T(hora), variable: "temperature", unit: "C", fermentationRunId: f.run.id });
+    await deLaFermentacion(10, "02T09:00:00");
+    await deLaFermentacion(30, "03T09:00:00");
+    const temperaturaFinal = await deLaFermentacion(20, "03T20:00:00");
+    await endFermentationRun(gestor, {
+      fermentationRunId: f.run.id,
+      endedAt: T("04T08:00:00"),
+      outputLotCode: `B5-ferm-${RUN}`,
+      outputLotType: "drying",
+      provenanceClass: "original_record",
+      lecturasDeCierre: [temperaturaFinal],
+    });
+    await cerrar(p.id, cereza5);
+
+    // Fila patrón: la serie por fecha es 10, 30, 20 (la marcada no es ni la mayor ni la menor, y la última anterior a ella, 30, está del
+    // otro lado de la primera, 10) y sólo la última está marcada.
+    const serie = await prisma.measurement.findMany({ where: { fermentationRunId: f.run.id }, orderBy: { occurredAt: "asc" }, select: { id: true, value: true } });
+    expect(serie.map((m) => m.value.toString()), "control: la serie sube y luego baja").toEqual(["10", "30", "20"]);
+    expect((await prisma.processStepClosingReading.findMany({ where: { measurementId: { in: serie.map((m) => m.id) } } })).map((m) => m.measurementId)).toEqual([temperaturaFinal]);
+
+    const r = await convertirLibre(encargado, { lotProcessId: p.id, nombre: `TEST Convertida B5 ${RUN}` });
+    expect([r.finesPropuestos, r.sinDireccion]).toEqual([1, []]);
+    expect(await finesDe(r.versionId)).toEqual({ fermentation: [["temperature", "gte", "20", "C", temperaturaFinal]] });
   }, 90000);
 });
 
@@ -1163,6 +1239,56 @@ describe("R3 — el lote del proceso de un manejo del hilo también se ve", () =
     const lavadoNuevo = (await pasosDe(r.versionId)).washing;
     expect(lavadoNuevo, "control: la receta nueva trae el paso de lavado copiado").toBeDefined();
     expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, [{ stepId: lavadoNuevo, measurementId: lectura0 }]]);
+  }, 90000);
+
+  it("un manejo del hilo SIN marcas, en un lote que quien convierte NO ve, no impide convertir; el mismo manejo CON una marca, sí", async () => {
+    // El otro lado de la de arriba: el lote donde vive el proceso de un manejo sólo se pide ver cuando ese manejo APORTA algo (tiene una
+    // lectura marcada). Un manejo sin marcas no entra en la receta —no pone ningún fin ni deja nada en `sinDireccion`—, así que exigir
+    // ver su lote rechazaría de más: `lector` no convertiría un proceso cuyo hilo sólo tiene, en una parcela que no ve, un manejo que no
+    // dejó nada. Es la MISMA cuenta, el MISMO manejo y el MISMO hilo en las tres mitades; lo único que cambia es la marca.
+    const l = await libre("R3E", ["washing"]);
+    const loteA = await lote("R3E-A", "cherry", otraParcelaId);
+    const hijoVisible = await lote("R3E-H");
+    const loteB = await lote("R3E-B", "drying");
+    await enlazar([loteA], [hijoVisible]);
+    const p0 = await procesoConReceta(loteA, l.versionId);
+    // La lectura es de un descendiente que `lector` SÍ ve (como en la de arriba): así lo único que podría pedirle ver el lote oculto es el
+    // manejo, y no la lectura.
+    const lectura0 = await lectura({ lotId: hijoVisible, value: 21, occurredAt: T("01T13:00:00"), variable: "temperature", unit: "C" });
+    const manejo = await registrarIntervencion(encargadoDeAmbas, { lotProcessId: p0.id, recipeStepId: l.pasos.washing, occurredAt: T("01T14:00:00") });
+    await cerrarPorDivision(p0.id, loteA, [loteB]);
+    const p1 = await procesoConReceta(loteB, l.versionId, { derivedFrom: p0.id, startedAt: T("05T12:00:00") });
+    await cerrar(p1.id, loteB);
+    const nombre = `TEST Convertida R3E ${RUN}`;
+
+    // Controles: `lector` ve el lote del proceso (B) y el de la lectura, y no el lote del proceso del manejo (A); el manejo es del proceso
+    // del hilo y NO tiene marcas; quien ve los dos lotes sí ve A.
+    const filaDeA = await prisma.lot.findUniqueOrThrow({ where: { id: loteA } });
+    await expect(requireLotAccess(lector, "view", [await prisma.lot.findUniqueOrThrow({ where: { id: loteB } })]), "control: el lector ve el lote del proceso").resolves.toBeUndefined();
+    await expect(requireLotAccess(lector, "view", [await prisma.lot.findUniqueOrThrow({ where: { id: hijoVisible } })]), "control: el lector ve el lote de la lectura").resolves.toBeUndefined();
+    await expect(requireLotAccess(lector, "view", [filaDeA]), "control: el lector no ve el lote del proceso del manejo").rejects.toBeInstanceOf(TraceabilityAccessError);
+    await expect(requireLotAccess(encargadoDeAmbas, "view", [filaDeA]), "control: encargadoDeAmbas sí lo ve").resolves.toBeUndefined();
+    expect((await prisma.lotProcessIntervention.findUniqueOrThrow({ where: { id: manejo.id } })).lotProcessId, "control: el manejo es del proceso que se dividió").toBe(p0.id);
+    expect(await prisma.processStepClosingReading.count({ where: { lotProcessInterventionId: manejo.id } }), "control: el manejo no tiene marcas").toBe(0);
+
+    // Sin marcas: se ofrece y la conversión sigue (más abajo).
+    expect(await puedeConvertirLibre(lector, p1.id), "el manejo sin marcas, en un lote oculto, impidió ofrecer convertir").toBe(true);
+    expect(await puedeConvertirLibre(encargadoDeAmbas, p1.id)).toBe(true);
+
+    // Con una marca (cruda, sobre el MISMO manejo): ahora el manejo aporta la lectura y su lote se pide ver. Rechaza, y no queda nada.
+    const marca = await prisma.processStepClosingReading.create({
+      data: { measurementId: lectura0, lotProcessInterventionId: manejo.id, createdBy: encargadoDeAmbas },
+    });
+    expect(await puedeConvertirLibre(lector, p1.id), "con una marca en el manejo oculto, se le ofreció convertir").toBe(false);
+    await expect(convertirLibre(lector, { lotProcessId: p1.id, nombre })).rejects.toBeInstanceOf(TraceabilityAccessError);
+    expect(await prisma.processRecipe.count({ where: { name: nombre } }), "el rechazo dejó una receta").toBe(0);
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: p1.id } })).origenDeRecetaVersionId, "el rechazo dejó un origen").toBeNull();
+
+    // Se quita la marca: de nuevo un manejo que no aporta nada, y `lector` convierte de verdad (no sólo se le ofrece).
+    await prisma.processStepClosingReading.delete({ where: { id: marca.id } });
+    const r = await convertirLibre(lector, { lotProcessId: p1.id, nombre });
+    expect([r.finesPropuestos, r.sinDireccion]).toEqual([0, []]);
+    expect((await prisma.processRecipe.findUniqueOrThrow({ where: { id: r.recipeId } })).organizationId).toBe(orgId);
   }, 90000);
 });
 
