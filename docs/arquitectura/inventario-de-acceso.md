@@ -13,7 +13,7 @@ node scripts/inventario-de-acceso.mjs --json   # una fila por operación
 
 ## Lo medido el 2026-09-05, actualizado el 2026-09-26 con las lecturas de la clasificación de verde y el 2026-10-01 con la Parte 1 (el proceso cubre al lote)
 
-**641 operaciones** que tocan la base, en **173 archivos** — medido el 2026-10-13 al unir #708 con `origin/main` (`1c3b4b64`): es **una más**, `negativaDelAparato` en `lib/sync/deviceTokens.ts` (la revocación en las escrituras por token), **depende del llamador**, así que esa fila sube de 101 a 102 y las otras seis no se mueven. El 2026-10-11 eran **640**, medido con `node scripts/inventario-de-acceso.mjs`, al volver a unir
+**643 operaciones** que tocan la base, en **173 archivos** — medido el 2026-10-16 en la rama que da pantalla a la floración, sobre `origin/main` (`1efa8d9c`) y comparando clase por clase con el inventario de `main`: son **dos más**, `cerrarFloracion` y `floracionesDeLaFicha` en `lib/traceability/floracion.ts`, las dos **guardia directo** (`requireLotAccess`), así que esa fila sube de 402 a 404 y las otras seis no se mueven. El 2026-10-13 eran **641**, medido al unir #708 con `origin/main` (`1c3b4b64`): era **una más**, `negativaDelAparato` en `lib/sync/deviceTokens.ts` (la revocación en las escrituras por token), **depende del llamador**, así que esa fila sube de 101 a 102 y las otras seis no se mueven. El 2026-10-11 eran **640**, medido con `node scripts/inventario-de-acceso.mjs`, al volver a unir
 `origin/main` (`62a206da`) en la rama de la Parte 2a: son **tres más** que las 637 en 173 de la unión anterior, y las tres vienen de `main`
 (`lib/equipos/equipos.ts`, Parte 2c PR 1, #717: ver la primera nota de abajo), todas **guardia directo**, así que «guardia directo» sube de 399 a 402
 y las otras seis filas no se mueven (ninguna operación de la rama cambia de clase). **La unión anterior**, medida el 2026-10-10 al unir `a2f269b5`: **637 operaciones** en **173 archivos**, que eran **tres más** que las 634 en 173 de la rama antes de unir, y las tres
@@ -44,7 +44,7 @@ las seis que aparecen y las catorce que cambian de clase están explicadas en la
 
 | Operaciones | Patrón | Qué significa |
 |---:|---|---|
-| **402** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
+| **404** | guardia directo | Llama al servicio de autorización, directamente o por un guardia local del archivo |
 | **67** | guardia transitivo | **No** llama al servicio de autorización: llama a otra función —de su archivo o importada— que sí guarda. Hasta el 2026-10-04 esta fila **no existía**, y no porque no hubiera operaciones así: la clase era **inalcanzable por construcción** (`locales` y `transitivo` eran la misma expresión y `guardias` su unión), así que estas 59 se contaban en «guardia directo» |
 | **34** | acotado por construcción | La consulta filtra por el propio principal **dentro de un `where`** —o por un `resolve*Visibility` que sale de sus asignaciones—: **no puede** devolver lo ajeno. Firmar con él (`createdBy`, `actorUserAccountId`) no cuenta |
 | **102** | depende del llamador | No recibe principal. La autorización, si existe, está en quien la llama |

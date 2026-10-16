@@ -28,6 +28,7 @@ import { requireLotAccess, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
 import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import type { VentanaDeFloracion } from "./floracionVigente";
 import { ubicacionesEmparentadas } from "./ubicacionesEmparentadas";
+import { UUID } from "../validation/uuid";
 
 export class FloracionValidationError extends Error {}
 
@@ -35,15 +36,17 @@ export interface RegistrarFloracionInput {
   readonly locationId: string;
   /** El bloque, cuando se anota más fino que la parcela. Nulo = la parcela entera. */
   readonly plotBlockId?: string | null;
+  /** Campo de DÍA: medianoche UTC del día que nombra, con `fechaDeDia` (lo dice el esquema). */
   readonly startsAt: Date;
   /**
-   * Nulo = **todavía abierta**, que es el estado real mientras la floración dura.
+   * Nulo = **todavía abierta**, que es el estado real mientras la floración dura. Se cierra después
+   * con `cerrarFloracion`.
    *
-   * **Y cuando se da, es un INSTANTE: el fin del día, no la medianoche del día.** Medido el
-   * 2026-10-01: con `2026-03-20T00:00:00Z` —la forma en que esta casa guarda un campo de día— el
-   * aviso de polinizadores **calla el 20**, que es el último día de la ventana. La pantalla que
-   * registre esto manda el fin del día con `parseLocalDateTime`, no un `type="date"`. Está dicho
-   * también en el docstring de `hayFloracion`, que es quien lo compara.
+   * **Es un campo de DÍA, como `startsAt`, no un instante.** Hasta el 2026-10-16 esta línea decía lo
+   * contrario —«el fin del día, con `parseLocalDateTime`»—, que era lo que pedía la primera versión
+   * de `floracionVigente.ts`; esa versión se corrigió para comparar DÍAS de calendario y este
+   * docstring se quedó atrás. Siguiéndolo, la pantalla habría guardado las 04:59 UTC del día
+   * siguiente, y el aviso habría alargado la floración un día. Manda el esquema: `fechaDeDia`.
    */
   readonly endsAt?: Date | null;
   readonly observerPersonId?: string | null;
@@ -55,6 +58,10 @@ export async function registrarFloracion(userAccountId: string, input: Registrar
   if (input.endsAt && input.endsAt < input.startsAt) {
     throw new FloracionValidationError("la floración no puede terminar antes de empezar");
   }
+  // Un id sin forma de UUID haría que Prisma lanzara P2023 —un 500— en vez de contestar «no existe»
+  // (`PENDING_IMPLEMENTATIONS/026`). Ahora que hay un formulario que manda estos ids, se dice aquí.
+  if (!UUID.test(input.locationId)) throw new FloracionValidationError("no existe la parcela");
+  if (input.plotBlockId && !UUID.test(input.plotBlockId)) throw new FloracionValidationError("no existe el bloque");
 
   const parcela = await prisma.location.findUnique({
     where: { id: input.locationId },
@@ -113,6 +120,92 @@ export async function registrarFloracion(userAccountId: string, input: Registrar
     );
     return creada;
   });
+}
+
+export interface CerrarFloracionInput {
+  readonly floracionId: string;
+  /** Campo de DÍA, como `startsAt`: el último día con flores. Puede ser el mismo del inicio. */
+  readonly endsAt: Date;
+}
+
+/**
+ * Pone el fin a una floración **abierta** — decisión de Daniel, 2026-10-16: «anotar el inicio,
+ * cerrar después», como se cierra una corrida de secado. Sin esto, una floración anotada el día que
+ * se ven las flores se quedaba abierta para siempre, y su aviso con ella.
+ *
+ * **Sólo cierra, una vez.** No corrige un fin ya puesto ni reabre: el `updateMany` exige
+ * `endsAt: null` en la misma sentencia, así que dos cierres a la vez no se pisan —el segundo no
+ * encuentra fila y se rechaza—. Corregir una floración mal anotada no existe todavía, a propósito.
+ *
+ * Exige `lot:manage` sobre la parcela, igual que anotarla.
+ */
+export async function cerrarFloracion(userAccountId: string, input: CerrarFloracionInput): Promise<PlotBloom> {
+  if (!UUID.test(input.floracionId)) throw new FloracionValidationError("no existe la floración");
+  const floracion = await prisma.plotBloom.findUnique({ where: { id: input.floracionId } });
+  if (!floracion) throw new FloracionValidationError("no existe la floración");
+
+  await requireLotAccess(userAccountId, "manage", [
+    { locationId: floracion.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+  ]);
+  // El mismo día del inicio vale: el borde cuenta (`hayFloracion`).
+  if (input.endsAt < floracion.startsAt) {
+    throw new FloracionValidationError("la floración no puede terminar antes de empezar");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.plotBloom.updateMany({
+      where: { id: floracion.id, endsAt: null },
+      data: { endsAt: input.endsAt },
+    });
+    if (count === 0) throw new FloracionValidationError("ya_cerrada");
+    const cerrada = await tx.plotBloom.findUniqueOrThrow({ where: { id: floracion.id } });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "plot_bloom.close",
+        entityType: "plot_bloom",
+        entityId: cerrada.id,
+        before: floracion,
+        after: cerrada,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return cerrada;
+  });
+}
+
+export interface FloracionDeLaFicha {
+  readonly id: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date | null;
+  /** El nombre del bloque, o nulo cuando se anotó para la parcela entera. */
+  readonly bloque: string | null;
+}
+
+/**
+ * Las floraciones anotadas en ESTA parcela, para su ficha: las abiertas primero —son las que se
+ * pueden cerrar— y dentro de cada grupo la más reciente arriba.
+ *
+ * **Sólo las propias**, no las de la madre ni las de sus microparcelas: es la lista de lo que se
+ * anotó aquí y se puede cerrar aquí. El aviso sí mira las emparentadas (`floracionesDeLaParcela`).
+ * **Y sólo lo que la pantalla pinta:** ni las notas ni quién la vio viajan al navegador.
+ *
+ * Exige `lot:view`, como la página de manejo: un operario la ve aunque no pueda ajustar la parcela.
+ */
+export async function floracionesDeLaFicha(userAccountId: string, locationId: string): Promise<FloracionDeLaFicha[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  const filas = await prisma.plotBloom.findMany({
+    where: { locationId },
+    select: { id: true, startsAt: true, endsAt: true, plotBlock: { select: { name: true } } },
+    orderBy: { startsAt: "desc" },
+  });
+  return [...filas.filter((f) => f.endsAt === null), ...filas.filter((f) => f.endsAt !== null)].map((f) => ({
+    id: f.id,
+    startsAt: f.startsAt,
+    endsAt: f.endsAt,
+    bloque: f.plotBlock?.name ?? null,
+  }));
 }
 
 /**
