@@ -300,8 +300,8 @@ function validarPaso(tipo: TipoDePaso, paso: PasoCompleto): void {
     if (!Number.isFinite(f.valor) || f.valor < limites.min || f.valor > limites.max) throw new RecipeError("fin_invalido");
   }
 
-  // I9 (diseño §4.5): una recepción lleva una sola meta, la del Brix al recibir (`brix`, `initial`); con otra variable u otro momento se rechaza. Qué se hace con ella
-  // —compararla con las recepciones del lote— es del PR-B: aquí sólo se fija qué cabe en el paso.
+  // I9 (diseño §4.5): una recepción lleva una sola meta, la del Brix al recibir (`brix`, `initial`); con otra variable u otro momento se rechaza. Es lo único que lee
+  // `avisosDeRecepcion` (`lib/recetas/recepcion.ts`, tarea 12) para comparar con las recepciones del lote: aquí se fija qué cabe en el paso, allí qué se compara.
   if (tipo === "reception" && paso.metas.some((m) => !(m.variable === "brix" && m.moment === "initial"))) {
     throw new RecipeError("meta_de_recepcion_no_se_vigila");
   }

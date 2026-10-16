@@ -423,13 +423,14 @@ describe("FormularioDePaso — la recepción lleva una sola meta, la del Brix al
     expect(campos(html, "metas[0][moment]")[0]).toMatch(/value="initial"/);
     expect(campos(html, "metas[0][unit]")[0]).toMatch(/value="Bx"/);
     expect(tieneCampo(html, "metas[0][everyHours]")).toBe(false);
-    // F1-4: el texto dice lo que cabe (una sola meta, la del Brix al llegar) y no promete que algo la compare o la vigile: esa lectura es del PR-B.
+    // El texto dice lo que cabe (una sola meta, la del Brix al llegar) y, desde la tarea 12, lo único que se compara de ella: `avisosDeRecepcion` compara el
+    // Brix de cada recepción del lote con esa meta. La frase entera y su atadura a la fuente del módulo las fija `textosDeLaRecepcion.test.ts`.
     expect(aTexto(html)).toContain("En una recepción la meta es el Brix al llegar, y es una sola.");
-    expect(aTexto(html)).not.toMatch(/vigila|compara/);
+    expect(aTexto(html)).toContain("De la recepción sólo se compara el Brix");
     // En inglés, lo mismo.
     const ayudaEn = traductorDePrueba("Traceability", "en")("recetaEditor_metasDeRecepcionAyuda");
     expect(ayudaEn).toContain("Brix on arrival");
-    expect(ayudaEn).not.toMatch(/watch|compar/i);
+    expect(ayudaEn).toContain("Only the Brix of a reception is compared");
     expect(aTexto(html)).not.toContain("Añadir objetivo");
     // Control: sin ninguna meta sí se ofrece añadir la del Brix.
     expect(aTexto(conTipo("reception"))).toContain("Añadir objetivo");

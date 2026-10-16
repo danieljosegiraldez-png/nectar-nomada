@@ -18,7 +18,7 @@
  *
  * **Lo que NO se reescribe aquí** y queda para las tareas que lo hacen cierto: los tres textos de la recepción (`recetaEditor_metasDeRecepcionAyuda`,
  * `error_receta_meta_de_recepcion_no_se_vigila` y la definición sembrada de `tipo_paso.reception`), que dependen de los avisos de recepción
- * (tarea 12), y lo que diga la pantalla que deja ELEGIR el paso al empezar una corrida (tarea 13).
+ * (tarea 12: ya los reescribió, `tests/recetas/textosDeLaRecepcion.test.ts`), y lo que diga la pantalla que deja ELEGIR el paso al empezar una corrida (tarea 13).
  *
  * **Qué fija.** (1) La frase exacta de cada texto en los dos idiomas. (2) Que ninguno conserve la frase que ya no es cierta, con el control de que el
  * detector sí encuentra las frases viejas. (3) Que lo que el texto de la ayuda dice de los tipos de paso —«si el paso se cumple con una fermentación…,

@@ -797,7 +797,7 @@ export const VARIABLE_CATALOGS: readonly VariableCatalogDef[] = [
       {
         value: "reception",
         definition:
-          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple.",
+          "Recepción de la cereza: masa, °Brix, mezcla de madurez, flotadores y temperatura al llegar (paquete, R6 §7.2). Ningún registro del proceso la cumple. De todo eso la receta sólo compara el Brix: cada recepción de la que viene el lote contra el Mínimo y el Máximo de la meta de Brix inicial de este paso. La masa, la mezcla de madurez, los flotadores y la temperatura no se comparan con nada.",
       },
       {
         value: "sorting_flotation",

@@ -139,15 +139,24 @@ describe("los códigos de la receta tienen su texto en es y en", () => {
     expect(claveDeErrorDeReceta(new Error("version_no_es_borrador"))).toBeNull();
   });
 
-  it("el texto de una meta que no cabe en una recepción dice lo que cabe y no promete que se vigile o se compare (F1-4)", () => {
-    // La comparación de la recepción con las recepciones del lote es del PR-B: con sólo el PR-A la meta se guarda y nada la lee.
+  it("el texto de una meta que no cabe en una recepción dice lo que cabe y por qué: es lo único que se compara, y no promete bloquear (F1-4, tarea 12)", () => {
+    // Con el PR-A nada comparaba la meta de una recepción y el texto no decía el porqué (F1-4). Desde la tarea 12 `avisosDeRecepcion` compara el Brix inicial
+    // de cada recepción del lote con ella, y es lo único que compara: por eso es lo único que cabe. Ver también `textosDeLaRecepcion.test.ts`.
     const ESPERADO: [string, string, string][] = [
-      ["es", es.error_receta_meta_de_recepcion_no_se_vigila ?? "", "En un paso de recepción sólo cabe la meta de Brix inicial."],
-      ["en", en.error_receta_meta_de_recepcion_no_se_vigila ?? "", "A reception step only takes the initial Brix target."],
+      [
+        "es",
+        es.error_receta_meta_de_recepcion_no_se_vigila ?? "",
+        "En un paso de recepción sólo cabe la meta de Brix inicial, porque es lo único de la recepción que se compara.",
+      ],
+      [
+        "en",
+        en.error_receta_meta_de_recepcion_no_se_vigila ?? "",
+        "A reception step only takes the initial Brix target, because it is the only thing about a reception that is compared.",
+      ],
     ];
     for (const [idioma, texto, frase] of ESPERADO) {
       expect(texto, `${idioma}: error_receta_meta_de_recepcion_no_se_vigila`).toBe(frase);
-      expect(texto, `${idioma}: no promete`).not.toMatch(/vigila|compara|watched|compared|never/i);
+      expect(texto, `${idioma}: no promete`).not.toMatch(/bloque|rechaz|block|reject|never/i);
     }
   });
 

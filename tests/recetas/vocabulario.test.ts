@@ -62,11 +62,14 @@ describe("los tipos de paso", () => {
     expect(definicion("tipo_paso", "fermentation")).toMatch(/dato medido o se publica como perfil buscado/);
   });
 
-  it("la recepción no promete una comparación que todavía no existe: dice que ningún registro del proceso la cumple (diseño §4.5, F1-4)", () => {
-    // El aviso de la recepción (compararla, al leer la ficha, con las recepciones del lote) es del PR-B: la definición sembrada no lo cuenta como hecho.
+  it("la recepción dice que ningún registro del proceso la cumple y lo único que la receta compara de ella (diseño §4.5, tarea 12)", () => {
+    // Con el PR-A nada leía la meta de una recepción y la definición sólo decía que ningún registro la cumple (F1-4). Desde la tarea 12 `avisosDeRecepcion`
+    // compara cada recepción del lote con la banda de Brix del paso, y la definición lo dice y dice lo que NO compara. La frase entera y su atadura a la fuente
+    // del módulo las fija `textosDeLaRecepcion.test.ts`.
     const reception = definicion("tipo_paso", "reception");
     expect(reception).toMatch(/Ningún registro del proceso la cumple\./);
-    expect(reception, "la comparación con las recepciones del lote es del PR-B").not.toMatch(/se compara|recepciones del lote/);
+    expect(reception, "dice qué se compara de la recepción").toMatch(/la receta sólo compara el Brix/);
+    expect(reception, "y lo que no").toMatch(/no se comparan con nada\.$/);
     expect(reception, "la frase vieja («al abrir el proceso») no vuelve").not.toMatch(/al abrir el proceso/);
   });
 });
