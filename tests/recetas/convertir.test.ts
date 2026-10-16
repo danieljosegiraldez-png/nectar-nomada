@@ -762,6 +762,53 @@ describe("los fines salen sólo de lecturas MARCADAS (§5.3: «nunca deduce un u
     expect([r.finesPropuestos, r.sinDireccion]).toEqual([1, []]);
     expect(await finesDe(r.versionId)).toEqual({ drying: [["moisture", "lte", "11.2", "%", ultima]] });
   }, 60000);
+
+  it("la dirección se mide contra la serie de la MISMA variable: la primera lectura de la corrida, si es de otra variable, no cuenta", async () => {
+    // Una corrida con DOS variables cuyas magnitudes no se parecen: la primera lectura es una conductividad (2,0 mS/cm) y las dos
+    // siguientes son pH (5,4 y, la marcada, 4,8). El pH BAJÓ, así que el paso termina al llegar a 4,8 o por debajo (`lte`). Si la
+    // serie no se filtrara por variable, «la primera lectura» sería la conductividad y 4,8 contra 2,0 sería una SUBIDA (`gte`): un
+    // fin que no dice lo contrario de lo medido sino otra cosa. (B1 tiene temperatura y pH en la misma corrida, pero marca la
+    // temperatura y su primera lectura también es temperatura: no distingue.)
+    //
+    // **Qué entra en la serie y qué no**: el OPERADOR se mide con las lecturas vigentes de la corrida que NADIE marcó (el pH 5,4 de
+    // arriba no está marcado y es justo contra lo que se compara), pero el UMBRAL sale siempre de una MARCADA (4,8). Una lectura sin
+    // marcar nunca produce un fin ni da su valor (§5.3); sólo ayuda a saber hacia dónde iba la variable.
+    const l = await libre("B4", ["fermentation"]);
+    const cereza4 = await lote("B4");
+    const p = await procesoConReceta(cereza4, l.versionId);
+    const f = await startFermentationRun(gestor, {
+      lotId: cereza4,
+      startedAt: T("02T08:00:00"),
+      provenanceClass: "original_record",
+      recipeStepId: l.pasos.fermentation,
+      vesselNote: `TEST tanque (${RUN})`, // desde la 2c (#717) toda fermentación lleva un tanque o su nombre
+    });
+    const deLaFermentacion = (value: number, hora: string, variable: string, unit: string) =>
+      lectura({ lotId: cereza4, value, occurredAt: T(hora), variable, unit, fermentationRunId: f.run.id });
+    await deLaFermentacion(2, "02T09:00:00", "ec", "mS/cm");
+    await deLaFermentacion(5.4, "02T09:30:00", "ph", "pH");
+    const phFinal = await deLaFermentacion(4.8, "03T09:30:00", "ph", "pH");
+    await endFermentationRun(gestor, {
+      fermentationRunId: f.run.id,
+      endedAt: T("04T08:00:00"),
+      outputLotCode: `B4-ferm-${RUN}`,
+      outputLotType: "drying",
+      provenanceClass: "original_record",
+      lecturasDeCierre: [phFinal],
+    });
+    await cerrar(p.id, cereza4);
+
+    // Fila patrón: la PRIMERA lectura de la corrida por fecha es la conductividad (la que un filtro por variable ignora), hay tres
+    // lecturas y sólo la última está marcada. Sin esto, «la dirección es lte» pasaría en una corrida donde la primera ya fuera pH.
+    const serie = await prisma.measurement.findMany({ where: { fermentationRunId: f.run.id }, orderBy: { occurredAt: "asc" }, select: { id: true, variable: true } });
+    expect(serie.map((m) => m.variable), "control: la primera lectura de la corrida es de otra variable").toEqual(["ec", "ph", "ph"]);
+    expect((await prisma.processStepClosingReading.findMany({ where: { measurementId: { in: serie.map((m) => m.id) } } })).map((m) => m.measurementId)).toEqual([phFinal]);
+
+    const r = await convertirLibre(encargado, { lotProcessId: p.id, nombre: `TEST Convertida B4 ${RUN}` });
+    expect([r.finesPropuestos, r.sinDireccion]).toEqual([1, []]);
+    // Un solo fin, del pH marcado (4,8), con la dirección de la serie de pH: baja, `lte`. Ni la conductividad ni el pH 5,4 dan fin propio.
+    expect(await finesDe(r.versionId)).toEqual({ fermentation: [["ph", "lte", "4.8", "pH", phFinal]] });
+  }, 90000);
 });
 
 describe("quién y cuándo se convierte", () => {
