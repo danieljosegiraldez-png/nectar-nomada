@@ -858,6 +858,10 @@
     {
       "archivo": "lib/recetas/convertir.ts",
       "razon": "Parte 2a, tarea 11: los ayudantes privados de convertir.ts (`leerProceso`, `proponerFines`) reciben el cliente de la transacción de `convertirLibre` —o el cliente global, `leerProceso`, cuando sólo lee— para releer el proceso y proponer fines con el linaje ya bloqueado. `convertirLibre` ya autorizó (lot:view sobre el lote del proceso y la autoría de recetas de su organización, `exigeAutoriaDeReceta`); ninguno abre conexión ni transacción propia."
+    },
+    {
+      "archivo": "lib/recetas/recepcion.ts",
+      "razon": "Parte 2a, tarea 12 (§4.5): `avisosDeRecepcion` recibe el cliente de quien la llama —el de su transacción, o el global si sólo lee— y con él lee, por el resolvedor (`procesoQueCubre`), el proceso que cubre al lote y, por `idsDeAscendencia`, su ascendencia; y por su cuenta, los pasos `reception` de la versión de ese proceso con sus metas de Brix y los vínculos del lote y de sus ancestros con las recepciones de cereza. No escribe nada ni autoriza: quien la llama ya autorizó el lote."
     }
   ],
   "operaciones_sin_patron": [
@@ -1622,6 +1626,12 @@
       "operacion": "vigenteDe",
       "razon": "Sólo lee, con el cliente de quien la llama: lleva cada id de lectura a la vigente de su cadena de correcciones (R4) y devuelve su valor, unidad, fecha y lote. No recibe principal ni autoriza. La llaman `convertirLibre` y `puedeConvertirLibre`, que con el lote de cada vigente piden `view` sobre todos (`exigeVerLosLotes`) antes de usar un valor o de devolver nada. Quien la llame debe haber autorizado los lotes de lo que use.",
       "verificado": "2026-10-14"
+    },
+    {
+      "archivo": "lib/recetas/recepcion.ts",
+      "operacion": "avisosDeRecepcion",
+      "razon": "No recibe principal. Para el lote que recibe, lee por el resolvedor el proceso que lo cubre y, si la receta de ese proceso declara un paso `reception`, las recepciones de cereza de la ascendencia del lote (id, fecha de recibo y Brix) contra la banda de Brix del paso; devuelve esas cifras y los avisos —también el de que la receta no declara el paso o su banda, PE-77/78—, no filas de recepción ni de lote. Devuelve datos de las recepciones de TODA la ascendencia, incluidas las de lotes que quien mira quizá no ve (Ruling INV). Al escribirse no la llama nadie fuera de sus pruebas: la llamará avisosParaLaPagina (lib/recetas/paraLasPantallas.ts, tarea 13 de la Parte 2a), que autoriza el lote con requireLotAccess(view) y filtra lo que enseña de las recepciones de lotes que quien mira no ve, antes de pasarle el cliente global. Quien la llame debe haber autorizado el lote antes, y que nadie más que esa puerta la importe lo fija tests/arquitectura/avisos-de-recepcion-por-una-puerta.test.ts (R15).",
+      "verificado": "2026-10-16"
     }
   ]
 }
