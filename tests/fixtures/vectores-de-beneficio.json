@@ -271,7 +271,7 @@
     },
     {
       "id": "PH-013-suspect-dilution-band",
-      "why": "NUEVO en 3.1. El mucilago fresco no supera pH ~6.0. Un valor mayor apunta a agua de enjuague o electrodo fuera del liquido: es una alerta sobre el DATO. La banda 6.50-8.00 no pertenecia a ninguna banda en 3.0.",
+      "why": "NUEVO en 3.1. El mucilago fresco no supera pH ~6.0. Un valor mayor apunta a agua de enjuague o electrodo fuera del liquido: es una alerta sobre el DATO. La banda 6.50-8.00 no pertenecia a ninguna banda en 3.0. NOTA 2026-10-08 (ADR-181 #13, decision de Daniel del 2026-09-19): el aviso a 6.50 fijo SE RETIRA; el mosto se comparara contra el pH del agua de ese lote cuando exista esa medicion. Hasta entonces un pH alto al empezar es fase inicial, no un dato sospechoso, y este vector lo fija.",
       "profile": "WASHED_STANDARD",
       "now_hours": 1.0,
       "readings": [
@@ -281,8 +281,9 @@
         }
       ],
       "expect": {
-        "status": "SUSPECT_DILUTION",
-        "severity": "WARNING",
+        "status": "INITIAL_PHASE",
+        "status_not": "SUSPECT_DILUTION",
+        "severity": "INFO",
         "raises": false
       }
     }
@@ -972,7 +973,7 @@
     },
     {
       "id": "DR-005-target-requires-both-criteria",
-      "why": "La humedad porcentual sola no garantiza estabilidad microbiana; la actividad de agua es el parametro que la gobierna.",
+      "why": "La humedad porcentual sola no garantiza estabilidad microbiana; la actividad de agua es el parametro que la gobierna. NOTA 2026-10-08 (C7 del 2026-10-06 y ADR-181 #18): los dos criterios SOLO cuando hay aw medida. Sin aw el fin va por humedad y el veredicto declara SIN_ACTIVIDAD_DE_AGUA; con aw medida y alta, como aqui, sigue sin llegar.",
       "readings": [
         {
           "offset_days": 9.0,
