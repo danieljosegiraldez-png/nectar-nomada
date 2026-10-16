@@ -4483,6 +4483,31 @@ guardia que la despertaría es una prueba que afirme que **todo perfil con
 un camino que clasifique un lote más arriba— la fuga se vuelve alcanzable y esa
 prueba es la que tiene que caer.
 
+**Corregido el 2026-10-14: las listas ya filtran por clasificación (decisión de
+Daniel, `PENDING_IMPLEMENTATIONS/014`).** Seguía dormida —de las 17 escrituras de
+lotes y muestras que había ese día, ninguna clasifica por encima de `internal`—,
+pero el guardia de arriba **no habría caído** si alguien abría ese camino: vigila
+los perfiles, no las escrituras. Se cierra en el resolvedor, no en cada pantalla:
+`resolveLotVisibility` calcula por OBJETIVO qué niveles limpia la cuenta
+—sumando, como `can()`, las asignaciones de plataforma y las de ese objetivo
+exacto, no las de sus ancestros— y `lotWhereFromVisibility`,
+`sampleWhereFromVisibility` y `lotMatchesVisibility` filtran con eso. Las ocho
+superficies y la gemela de muestras lo heredan sin tocar una línea; el tueste,
+que con ámbito de plataforma se saltaba el filtro, ahora se fía del `where`. Un
+ámbito de plataforma sin `clear_confidential` ya no es «sin filtro».
+
+En el mismo cambio la lista lee los permisos **efectivos**
+(`getResolvedAssignments`, de `lib/rbac/service.ts`). Leía
+`roleProfile.permissions` y se saltaba los ajustes por asignación de #357:
+quitarle a alguien `lot:view` le impedía abrir un lote y la lista, el tablero y
+el CSV se lo seguían enseñando. Lo mismo en la lista de apiarios.
+
+La prueba es `tests/traceability/laListaVeLoQueVeCan.test.ts`: para once
+cuentas, primero que `can()` contesta lo que dice su tabla, y después que la
+lista trae exactamente eso. El guardia de arriba se queda, con otro porqué: un
+perfil que lista lotes sin limpiar `internal` ya no ve una fuga, ve una lista
+vacía de todo lo que se crea.
+
 **Decision 2 — Partner Field Collector is deliberately unchanged.** ADR-029
 decision 1 is not overturned. `partner.task` still holds one `internal` row and
 one `partner` row, and a partner seeing only the second is the property ADR-029
