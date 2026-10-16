@@ -28,7 +28,8 @@ import {
   SpecimenValidationError,
 } from "../../lib/traceability/specimens";
 import { listPlantingEventsForLocation, PlantingEventValidationError, recordPlantingEvent } from "../../lib/traceability/plantingEvents";
-import { LabourValidationError, recordLabourEntry, recordMaterialConsumptionEntry } from "../../lib/traceability/operations";
+import { consumosDeLaVisita, LabourValidationError, recordLabourEntry, recordMaterialConsumptionEntry } from "../../lib/traceability/operations";
+import { FieldSessionValidationError } from "../../lib/traceability/fieldSessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `f1-${Date.now()}`;
@@ -654,5 +655,41 @@ describe("recordMaterialConsumptionEntry — parent jornada de campo", () => {
         provenanceClass: "direct_observation",
       }),
     ).rejects.toThrow(TraceabilityAccessError);
+  });
+
+  it("una jornada con salida ya no recibe gasto, y la abierta sí (ADR-200 §1)", async () => {
+    // Hasta el 2026-10-14 el servicio sólo miraba el sitio: se podía colgar un gasto de una visita ya
+    // cerrada, o del informe ya emitido, sin que nada lo dijera.
+    const personId = (await prisma.userAccount.findUniqueOrThrow({
+      where: { id: authorizedUserAccountId }, select: { personId: true },
+    })).personId;
+    const cerrada = await prisma.fieldSession.create({
+      data: { locationId, operatorPersonId: personId, startedAt: new Date(Date.now() - 3600_000), endedAt: new Date(), provenanceClass: "direct_observation" },
+    });
+    await expect(
+      recordMaterialConsumptionEntry(authorizedUserAccountId, {
+        parent: { kind: "fieldSession", fieldSessionId: cerrada.id },
+        materialName: "Lija de ebanistería",
+        batchLabel: "sin lote",
+        provenanceClass: "direct_observation",
+      }),
+    ).rejects.toThrow(FieldSessionValidationError);
+    expect(await prisma.materialConsumptionEntry.count({ where: { fieldSessionId: cerrada.id } })).toBe(0);
+
+    // Control: lo mismo en una visita abierta entra, y la lectura de la visita lo devuelve — sólo lo suyo.
+    const abierta = await prisma.fieldSession.create({
+      data: { locationId, operatorPersonId: personId, startedAt: new Date(), provenanceClass: "direct_observation" },
+    });
+    await recordMaterialConsumptionEntry(authorizedUserAccountId, {
+      parent: { kind: "fieldSession", fieldSessionId: abierta.id },
+      materialName: "Lija de ebanistería",
+      batchLabel: "sin lote",
+      quantity: 1,
+      unit: "pieza",
+      provenanceClass: "direct_observation",
+    });
+    const gastos = await consumosDeLaVisita(abierta.id);
+    expect(gastos.map((g) => [g.materialName, g.quantity?.toString(), g.unit])).toEqual([["Lija de ebanistería", "1", "pieza"]]);
+    expect(await consumosDeLaVisita(cerrada.id)).toEqual([]);
   });
 });
