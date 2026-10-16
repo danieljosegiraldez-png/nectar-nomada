@@ -24,6 +24,11 @@
  * `orderBy` dejaba el archivo entero en verde. Su control comprueba, en la propia prueba, que el orden físico de las filas (`ctid`) y el de la
  * misma lectura sin `orderBy` NO son los de `seq`.
  *
+ * **Que lee con el `tx` que recibe, y no con el cliente global, lo fija una prueba con lo SIN CONFIRMAR** (ronda de arreglo de la tarea 12, hallazgo 2):
+ * «calcular no escribe nada» da lo mismo con los dos clientes, porque sus filas están confirmadas; sólo el guardia `acceso-a-datos` veía el
+ * `import { prisma }`, y deja de verlo en cuanto el módulo se inventaría. La escena se crea dentro de una transacción que SIEMPRE se deshace
+ * (lanza un error propio al final y lo atrapa), así que no deja filas ni limpieza; su control es que el cliente global no ve nada de ella.
+ *
  * Usuario con ámbito acotado (Farm Manager de su finca), no Platform Admin: nada de aquí cuenta filas de toda la base. El
  * administrador sólo escribe por el editor en la prueba del contrato, que no cuenta nada global (CLAUDE.md del repositorio, «Un
  * admin de plataforma ve la base compartida entera»). Escribe porque la autoría de recetas (`exigeAutoriaDeReceta`, tarea 3) es el
@@ -53,7 +58,9 @@
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/db";
+import { evaluarBrixDeRecepcion } from "../../lib/beneficio/brixDeRecepcion";
 import { recordTransformation } from "../../lib/traceability/lots";
 import { recibirCereza } from "../../lib/traceability/recepcionesDeCereza";
 import { armarLote, origenDelLote } from "../../lib/traceability/lotesDeBeneficio";
@@ -170,26 +177,29 @@ const laBanda = (stepId: string, seq = 1): BandaDeBrix => ({ stepId, seq, min: 1
  *
  * `altaEn` es el orden en que se dan de alta las filas, por `seq` (por omisión 1, 2, 3…): con otro, el orden físico de la tabla deja
  * de ser el de `seq`, como queda cuando el editor de la tarea 3 renumera o mueve pasos con UPDATE (mismo parámetro que el de `avance.test.ts`).
+ *
+ * `cliente` es con el que se escribe (por omisión, el global): la prueba de «lo sin confirmar» crea la receta DENTRO de una transacción que
+ * se deshace, y entonces sólo el cliente de esa transacción la ve.
  */
-async function version(nombre: string, pasos: readonly PasoDePrueba[], altaEn?: readonly number[]) {
-  const receta = await prisma.processRecipe.create({ data: { name: `TEST ${nombre} ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
-  const v = await prisma.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "draft", createdBy: gestor } });
+async function version(nombre: string, pasos: readonly PasoDePrueba[], altaEn?: readonly number[], cliente: Prisma.TransactionClient = prisma) {
+  const receta = await cliente.processRecipe.create({ data: { name: `TEST ${nombre} ${RUN}`, organizationId: orgId, status: "approved", createdBy: gestor } });
+  const v = await cliente.processRecipeVersion.create({ data: { recipeId: receta.id, version: 1, status: "draft", createdBy: gestor } });
   const seqs = pasos.map((_, i) => i + 1);
   // Una `altaEn` que no sea una permutación de 1..n dejaría `undefined` en la lista de ids sin que nada fallara.
   if (altaEn !== undefined && [...altaEn].sort((a, b) => a - b).join() !== seqs.join()) throw new Error(`altaEn tiene que ser una permutación de ${seqs.join()}`);
   const idDelSeq = new Map<number, string>();
   for (const seq of altaEn ?? seqs) {
     const p = pasos[seq - 1]!;
-    const paso = await prisma.processRecipeStep.create({ data: { recipeVersionId: v.id, seq, stepTypeValueId: idDelTipo(p.tipo) } });
+    const paso = await cliente.processRecipeStep.create({ data: { recipeVersionId: v.id, seq, stepTypeValueId: idDelTipo(p.tipo) } });
     idDelSeq.set(seq, paso.id);
     for (const m of p.metas ?? []) {
-      await prisma.processTarget.create({ data: {
+      await cliente.processTarget.create({ data: {
         recipeVersionId: v.id, recipeStepId: paso.id, phase: null, variable: m.variable ?? "brix", moment: m.moment, unit: m.unit ?? "Bx",
         minValue: m.min ?? null, maxValue: m.max ?? null, targetValue: m.objetivo ?? null,
       } });
     }
   }
-  await prisma.processRecipeVersion.update({ where: { id: v.id }, data: { status: "approved" } });
+  await cliente.processRecipeVersion.update({ where: { id: v.id }, data: { status: "approved" } });
   return { id: v.id, pasos: seqs.map((seq) => idDelSeq.get(seq)!) };
 }
 /** Abre el proceso de `lotId` con la versión `v`. */
@@ -731,6 +741,94 @@ describe("Parte 2a, §4.5 — los avisos de recepción se calculan al leer", () 
     });
     expect(tiposDe(soloLecturaSinPaso?.avisos)).toEqual(["receta_sin_paso_de_recepcion"]);
   }, 60000);
+
+  it("lee con el cliente que recibe, no con el global: lo que aún no se confirmó sólo lo ve el `tx`", async () => {
+    // **Qué fija.** `avisosDeRecepcion(tx, lote)` recibe el cliente de quien la llama —el de su transacción— y tiene que leerlo TODO con él: el proceso
+    // que cubre al lote, los pasos de la receta, la ascendencia y los vínculos con las recepciones. «Calcular no escribe nada» da lo mismo con el
+    // cliente global que con el `tx` (las filas están confirmadas y las dos conexiones las ven), así que si un día una de esas lecturas pasara al
+    // global —importando `prisma` en el módulo— nada de arriba lo notaría; sólo el guardia `acceso-a-datos` («nadie importa el cliente total sin estar
+    // inventariado»), y éste deja de verlo en cuanto el módulo se inventaría. Lo único que distingue los dos clientes es lo SIN CONFIRMAR: por eso
+    // el lote, su hijo, la recepción, el vínculo, la receta con su paso y el proceso se crean aquí DENTRO de una transacción que no se confirma
+    // nunca, y la función se llama dentro de ella.
+    //
+    // **Cada lectura tiene su lugar en la escena**, para que pasar CUALQUIERA al cliente global la tumbe y no sólo la última: el proceso está en el
+    // lote A y se pregunta por su hijo B (`procesoQueCubre` sube por la ascendencia y `idsDeAscendencia` la recorre), el vínculo con la recepción
+    // es de A (`loteDesdeRecepcion`), y la banda es de un paso de una receta que sólo existe dentro (`processRecipeStep`).
+    //
+    // **Control**, dentro y fuera de la transacción: con el cliente global, y ya con las filas creadas, la misma llamada da `null` (ese cliente no ve
+    // el lote ni su proceso) y los lotes no existen para él; y al deshacerse la transacción no queda nada —en ninguna de las siete tablas—, así que
+    // no hay limpieza que hacer: ninguna lista de ids que el `afterAll` tenga que descubrir.
+    class DeshacerLaTransaccion extends Error {}
+    interface Escena { versionId: string; stepId: string; recepcionId: string; padreId: string; hijoId: string; transformacionId: string; procesoId: string; recetaNombre: string }
+    let escena: Escena | undefined;
+    let dentro: Awaited<ReturnType<typeof avisosDeRecepcion>> | undefined;
+    let dentroConElGlobal: Awaited<ReturnType<typeof avisosDeRecepcion>> | undefined;
+    let lotesQueVeElGlobal = -1;
+
+    await prisma.$transaction(async (tx) => {
+      const v = await version("SIN-CONFIRMAR", [{ tipo: "reception", metas: [BANDA] }], undefined, tx);
+      const recepcion = await tx.recepcionDeCereza.create({ data: {
+        claveDeEnvio: randomUUID(), beneficioId, proveedorId, recibidaPor: gestor, recibidaAt: dia(1),
+        brutoKg: 21, recipientes: 2, taraPorRecipienteKg: 0.5, netoKg: 20,
+        brix: 26, puntoDeMuestreo: "CHERRY_PULP", veredictoBrix: evaluarBrixDeRecepcion(26),
+      } });
+      const lote = () => tx.lot.create({ data: {
+        lotCode: codigo(), lotType: "cherry", organizationId: orgId, locationId: beneficioId, status: "approved", classification: "internal", createdBy: gestor,
+      } });
+      const padre = await lote();
+      await tx.loteDesdeRecepcion.create({ data: { lotId: padre.id, recepcionId: recepcion.id, kg: 20, createdBy: gestor } });
+      const proceso = await tx.lotProcess.create({ data: {
+        lotId: padre.id, sequenceOrder: 1, intent: `TEST ${RUN}`, targetMoisturePct: 11.5, startedAt: dia(1),
+        provenanceClass: "original_record", processGradeValueId: gradoId, cherryStateValueId: cerezaId, processRecipeVersionId: v.id,
+      } });
+      const hijo = await lote();
+      const t = await tx.lotTransformation.create({ data: {
+        transformationType: "stage_change", occurredAt: dia(5), provenanceClass: "original_record", createdBy: gestor,
+        inputs: { create: [{ lotId: padre.id }] }, outputs: { create: [{ lotId: hijo.id }] },
+      } });
+      escena = {
+        versionId: v.id, stepId: v.pasos[0]!, recepcionId: recepcion.id, padreId: padre.id, hijoId: hijo.id,
+        transformacionId: t.id, procesoId: proceso.id, recetaNombre: `TEST SIN-CONFIRMAR ${RUN}`,
+      };
+
+      dentro = await avisosDeRecepcion(tx, hijo.id);
+      // Control, con las filas ya creadas: el cliente global no ve ni los lotes ni el proceso que los cubre.
+      dentroConElGlobal = await avisosDeRecepcion(prisma, hijo.id);
+      lotesQueVeElGlobal = await prisma.lot.count({ where: { id: { in: [padre.id, hijo.id] } } });
+      // Siempre se deshace: ni un fallo de arriba ni una aserción de abajo pueden dejar confirmada esta escena.
+      throw new DeshacerLaTransaccion();
+    }, { maxWait: 10000, timeout: 60000 }).then(
+      () => { throw new Error("la transacción de la prueba tiene que deshacerse siempre"); },
+      (error: unknown) => { if (!(error instanceof DeshacerLaTransaccion)) throw error; },
+    );
+
+    if (escena === undefined) throw new Error("la transacción no llegó a armar la escena");
+    const e: Escena = escena;
+    const banda = laBanda(e.stepId);
+    // Dentro de la transacción la función calculó de verdad: la recepción de la ascendencia del hijo, comparada con la banda de la receta de dentro.
+    expect(dentro).toEqual({
+      recipeVersionId: e.versionId,
+      declaraRecepcion: true,
+      bandas: [banda],
+      recepciones: [{ recepcionId: e.recepcionId, recibidaAt: dia(1), brix: 26 }],
+      avisos: [{ tipo: "brix_fuera_de_la_banda", recepcionId: e.recepcionId, recibidaAt: dia(1), brix: 26, lado: "alto", banda }],
+    });
+    // Control 1: con el cliente global, y la escena sin confirmar, no hay nada que ver (ningún proceso cubre a un lote que no existe para él).
+    expect(lotesQueVeElGlobal).toBe(0);
+    expect(dentroConElGlobal).toBeNull();
+    // Control 2: la transacción se deshizo y nada quedó, en ninguna tabla; con el cliente global la llamada sigue dando null.
+    const quedan = {
+      lot: await prisma.lot.count({ where: { id: { in: [e.padreId, e.hijoId] } } }),
+      recepcionDeCereza: await prisma.recepcionDeCereza.count({ where: { id: e.recepcionId } }),
+      loteDesdeRecepcion: await prisma.loteDesdeRecepcion.count({ where: { recepcionId: e.recepcionId } }),
+      lotProcess: await prisma.lotProcess.count({ where: { id: e.procesoId } }),
+      lotTransformation: await prisma.lotTransformation.count({ where: { id: e.transformacionId } }),
+      processRecipe: await prisma.processRecipe.count({ where: { name: e.recetaNombre } }),
+      processRecipeStep: await prisma.processRecipeStep.count({ where: { recipeVersionId: e.versionId } }),
+    };
+    expect(quedan).toEqual({ lot: 0, recepcionDeCereza: 0, loteDesdeRecepcion: 0, lotProcess: 0, lotTransformation: 0, processRecipe: 0, processRecipeStep: 0 });
+    expect(await avisosDeRecepcion(prisma, e.hijoId)).toBeNull();
+  }, 90000);
 
   it("cada tipo de aviso que la función devuelve está en TIPOS_DE_AVISO_DE_RECEPCION, y la lista no trae ninguno que no devuelva", async () => {
     // Adjudicación I1: la lista es lo que la tarea 13 recorre para exigir que cada tipo tenga texto. Un lote por tipo, cada uno con la entrada
