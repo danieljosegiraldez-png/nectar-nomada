@@ -249,6 +249,20 @@ describe("A9.8 — la lectura contra Postgres", () => {
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
     // Assignment.scopeId es RESTRICT: el Scope sólo se puede borrar después.
     await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
+    // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+    // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+    // medido el 2026-10-13, 4 por corrida. Las cuentas se DESCUBREN por el RUN_ID.
+    const personasDeLaCorrida = await prisma.person.findMany({
+      where: assertDefinedWhere({ displayName: { contains: RUN_ID } }),
+      select: { id: true },
+    });
+    const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+      where: assertDefinedWhere({ personId: { in: personasDeLaCorrida.map((p) => p.id) } }),
+      select: { id: true },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+    });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
@@ -420,6 +434,10 @@ describe("A9.8 — la lectura contra Postgres", () => {
     expect((await jornadaAbiertaDe(userAccountId, AHORA))?.fieldSessionId, "y no la de la otra").toBe(deHoy.id);
 
     await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: { in: [deHoy.id, suya.id] } }) });
+    // Lo que esta cuenta firme se va con ella (`ON DELETE SET NULL` lo dejaría con el actor a NULL).
+    // Hoy no firma nada —la jornada se crea directo con `prisma` y `jornadaAbiertaDe` es una
+    // lectura—, así que es para que ese cero no dependa de cómo evolucione la prueba.
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: otraCuenta.id }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: otraCuenta.id }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: otraPersona.id }) });
   });

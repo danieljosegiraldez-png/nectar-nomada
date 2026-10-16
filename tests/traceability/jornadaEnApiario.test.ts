@@ -170,6 +170,15 @@ afterAll(async () => {
   const cuentas = [registradorPorSitio, registradorPorProyecto, operarioDeFinca, apicultorConManejo];
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: cuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: { in: [...locationIds, projectId] } }) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 107 por corrida. Las cuentas se DESCUBREN por el RUN_ID
+  // (`cuentas`, arriba, es la lista de ids que crea el `beforeAll`, no lo descubierto).
+  const personasDeLaCorrida = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
+  const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+    where: { personId: { in: personasDeLaCorrida.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: cuentas } }) });
   await prisma.organizationMembership.deleteMany({ where: assertDefinedWhere({ personId: operatorPersonId }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });

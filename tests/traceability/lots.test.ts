@@ -108,6 +108,15 @@ afterAll(async () => {
     }),
   });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ OR: [{ scopeRefId: projectAId }, { scopeRefId: locationId }, { scopeRefId: projectBId }] }) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 10 por corrida. Las cuentas se DESCUBREN por el RUN_ID,
+  // no se heredan del `beforeAll`.
+  const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
+  const cuentas = await prisma.userAccount.findMany({
+    where: { personId: { in: personas.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentas.map((c) => c.id) } }) });
   await prisma.userAccount.deleteMany({
     where: assertDefinedWhere({
       id: {
@@ -668,6 +677,13 @@ describe("getManageableContext — location/organization scoping", () => {
     });
     await prisma.scope.deleteMany({
       where: assertDefinedWhere({ OR: [{ scopeRefId: projectReachableId }, { scopeRefId: directGrantLocationId }] }),
+    });
+    // Mismo defecto que el `afterAll` de arriba: la auditoría de estas tres cuentas se borra antes
+    // que ellas. Aquí NO se descubren por `SCOPE_RUN_ID`: `createTestUserAccount` etiqueta a sus
+    // personas con el `RUN_ID` del archivo, así que ese filtro no las encontraría. Se usa el mismo
+    // conjunto de ids que el borrado de las cuentas de justo debajo.
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: [projectScopedUserId, locationScopedUserId, noAssignmentUserId] } }),
     });
     await prisma.userAccount.deleteMany({
       where: assertDefinedWhere({ id: { in: [projectScopedUserId, locationScopedUserId, noAssignmentUserId] } }),

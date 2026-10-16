@@ -22,6 +22,24 @@ const nextEmail = () => `${RUN}-${++seq}@example.test`;
 const created = { personIds: [] as string[], accountIds: [] as string[] };
 
 afterAll(async () => {
+  // Lo que escribió el callback de acceso lo firmó la cuenta de la corrida. Sin
+  // esto, borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET
+  // NULL`): medido el 2026-10-13, 13 por corrida. Las cuentas se DESCUBREN por el
+  // RUN, no se heredan de `created`: por el correo de la persona, y por el
+  // `subject` de Google para las que crea el propio callback sin correo. Va ANTES
+  // del borrado de las cuentas, que se lleva `external_identity` en cascada.
+  const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+    where: {
+      OR: [
+        { person: { email: { contains: RUN } } },
+        { externalIdentities: { some: { subject: { contains: RUN } } } },
+      ],
+    },
+    select: { id: true },
+  });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+  });
   // external_identity cascades from user_account, so it needs no explicit
   // delete — the FK is ON DELETE CASCADE.
   if (created.accountIds.length) {
