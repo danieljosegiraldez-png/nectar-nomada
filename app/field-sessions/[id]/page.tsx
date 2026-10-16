@@ -286,7 +286,17 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
           {session.status === "draft" ? (
             <section className="nn-section">
               <h2>{t("visitCompleteHeading")}</h2>
-              <CompletarVisitaForm fieldSessionId={session.id} />
+              {/* Lo ya anotado viaja al formulario para que se vea al lado de su campo: dejar el
+                  campo vacío lo conserva (revisión de Apiario del 2026-10-08, V-1). */}
+              <CompletarVisitaForm
+                fieldSessionId={session.id}
+                anotado={{
+                  coloniesAliveCount: session.coloniesAliveCount,
+                  hivesPresentCount: session.hivesPresentCount,
+                  weatherObserved: session.weatherObserved,
+                  notes: session.notes,
+                }}
+              />
             </section>
           ) : (
             <section className="nn-section">
