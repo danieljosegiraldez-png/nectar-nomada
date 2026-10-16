@@ -521,6 +521,32 @@ describe("Parte 2a, §4.5 — los avisos de recepción se calculan al leer", () 
     expect(tiposDe((await avisosDeRecepcion(prisma, crudo))?.avisos)).toEqual(["paso_de_recepcion_sin_banda", "sin_recepcion"]);
   }, 60000);
 
+  it("una banda con un solo límite se juzga sólo de ese lado: el límite que la receta no puso no se inventa (PE-77/78)", async () => {
+    // Sólo mínimo 20: un Brix de 30 NO está «alto» —nadie dijo un máximo— y uno de 15 sí está «bajo». Sólo máximo 24: un Brix de 15 NO está «bajo» y uno de 30 sí
+    // está «alto». Cada lado se juzga por lo que la receta declaró (el control de que el «ninguno» del otro lado no es un «no miré»), y ni el 18 ni el 24 fijos
+    // de la recepción se prestan al lado que falta: con el 24 prestado el 30 saldría «alto» bajo la receta de sólo mínimo, y con el 18 el 15 saldría «bajo» bajo
+    // la de sólo máximo.
+    const soloMinimo = await version("SOLO-MINIMO", [{ tipo: "reception", metas: [{ moment: "initial", min: 20 }] }]);
+    const soloMaximo = await version("SOLO-MAXIMO", [{ tipo: "reception", metas: [{ moment: "initial", max: 24 }] }]);
+    const baja = await recibir(40, 15, dia(1));
+    const alta = await recibir(40, 30, dia(2));
+    const conMinimo = await loteDe([{ recepcionId: baja.id, kg: 20 }, { recepcionId: alta.id, kg: 20 }]);
+    const conMaximo = await loteDe([{ recepcionId: baja.id, kg: 20 }, { recepcionId: alta.id, kg: 20 }]);
+    await abrir(conMinimo, soloMinimo);
+    await abrir(conMaximo, soloMaximo);
+    const lado = (a: { tipo: string; recepcionId?: string; lado?: string }) => (a.tipo === "brix_fuera_de_la_banda" ? [a.recepcionId, a.lado] : a.tipo);
+
+    const rMinimo = await avisosDeRecepcion(prisma, conMinimo);
+    expect(rMinimo?.bandas).toEqual([{ stepId: soloMinimo.pasos[0]!, seq: 1, min: 20, max: null }]);
+    expect(rMinimo?.recepciones.map((x) => x.brix)).toEqual([15, 30]);
+    expect(rMinimo?.avisos.map(lado)).toEqual([[baja.id, "bajo"]]);
+
+    const rMaximo = await avisosDeRecepcion(prisma, conMaximo);
+    expect(rMaximo?.bandas).toEqual([{ stepId: soloMaximo.pasos[0]!, seq: 1, min: null, max: 24 }]);
+    expect(rMaximo?.recepciones.map((x) => x.brix)).toEqual([15, 30]);
+    expect(rMaximo?.avisos.map(lado)).toEqual([[alta.id, "alto"]]);
+  }, 60000);
+
   it("con varios pasos de recepción hay una banda por paso: cada aviso lleva la suya, y el paso sin banda lo dice", async () => {
     // Tres pasos `reception`: 18–24, 20–30 y uno sin banda. Raw: el editor no impide repetir el tipo, y el lector tiene que saber qué hacer.
     const v = await version("VARIOS-PASOS", [
