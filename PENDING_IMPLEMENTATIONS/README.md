@@ -16,6 +16,7 @@ idea se pierda cuando la respuesta es «ahora no».
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [023](023-el-audit-no-lleva-el-sujeto-de-negocio.md) | Una fila de `core.audit_event` no dice de qué **lote** habla | Decisión de Daniel · ver la ficha |
 | [024](024-la-cosecha-no-registra-quien-la-opero.md) | La cosecha no registra **quién la operó**, aunque el servicio lo guarde | Nada — trabajo pendiente |
+| [028](028-la-floracion-de-un-especimen.md) | La floración se anota por parcela, microparcela o bloque, **no por planta** | Un caso real · decisión de Daniel, 2026-10-16 |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en

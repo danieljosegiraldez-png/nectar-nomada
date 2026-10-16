@@ -175,6 +175,7 @@ tests/inventario/etiqueta.test.ts
 tests/apiary/tratamiento-descuenta.test.ts
 tests/inventario/avisos.test.ts
 tests/traceability/floracion.test.ts
+tests/traceability/registrarYCerrarFloracion.test.ts
 tests/inventario/recepcion.test.ts
 tests/traceability/e2e.test.ts
 tests/traceability/entradaEnProduccion.test.ts
