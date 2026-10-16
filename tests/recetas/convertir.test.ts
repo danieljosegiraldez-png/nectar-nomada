@@ -803,7 +803,7 @@ describe("quién y cuándo se convierte", () => {
     expect(await puedeConvertirLibre(encargado, p.id)).toBe(false);
   }, 40000);
 
-  it("un proceso abierto, uno que no es Libre, uno que no existe y uno ya convertido se rechazan, cada uno con su código", async () => {
+  it("un proceso abierto, uno cerrado por división, uno que no es Libre, uno que no existe y uno ya convertido se rechazan, cada uno con su código", async () => {
     const l = await libre("D2", ["washing"]);
     const nombre = (c: string) => `TEST Convertida D2-${c} ${RUN}`;
     // Abierto: el proceso de una Libre que todavía no termina.
@@ -811,6 +811,24 @@ describe("quién y cuándo se convierte", () => {
     const abierto = await procesoConReceta(loteAbierto, l.versionId);
     await expect(convertirLibre(encargado, { lotProcessId: abierto.id, nombre: nombre("a") })).rejects.toThrow(new RecipeError("proceso_sin_cerrar_por_humedad"));
     expect(await puedeConvertirLibre(encargado, abierto.id)).toBe(false);
+    // Cerrado por DIVISIÓN (no por humedad): §5.3 sólo ofrece convertir «al cerrar por humedad». Es el único proceso del archivo que tiene
+    // `endedAt` y NO tiene `closureKind = "moisture"`; con él, la mitad `closureKind` de la comprobación cae sola (un proceso abierto, o
+    // el de una receta común, no la ejercen: el abierto ya cae por `endedAt`). Si convirtiera, quedaría escrito el origen del proceso
+    // dividido y la conversión posterior de su hijo daría `ya_convertida`.
+    const loteDividido = await lote("D2-dividido");
+    const parteDelDividido = await lote("D2-parte", "drying");
+    const dividido = await procesoConReceta(loteDividido, l.versionId);
+    await cerrarPorDivision(dividido.id, loteDividido, [parteDelDividido]);
+    // Fila patrón: está TERMINADO (con fecha), es de la MISMA Libre y no tiene origen; lo único que lo distingue del que sí convierte (más
+    // abajo, `ok`) es cómo se cerró. Sin esto, el rechazo de abajo podría ser de un proceso abierto o de otra cosa.
+    const filaDelDividido = await prisma.lotProcess.findUniqueOrThrow({ where: { id: dividido.id } });
+    expect([filaDelDividido.endedAt !== null, filaDelDividido.closureKind, filaDelDividido.processRecipeVersionId, filaDelDividido.origenDeRecetaVersionId]).toEqual([
+      true, "divided", l.versionId, null,
+    ]);
+    await expect(convertirLibre(encargado, { lotProcessId: dividido.id, nombre: nombre("div") })).rejects.toThrow(new RecipeError("proceso_sin_cerrar_por_humedad"));
+    expect(await puedeConvertirLibre(encargado, dividido.id), "el predicado ofreció convertir un proceso cerrado por división").toBe(false);
+    expect(await prisma.processRecipe.count({ where: { name: nombre("div") } }), "el rechazo dejó una receta").toBe(0);
+    expect((await prisma.lotProcess.findUniqueOrThrow({ where: { id: dividido.id } })).origenDeRecetaVersionId, "el rechazo dejó un origen en el proceso dividido").toBeNull();
     // Terminado por humedad, pero con una receta común: no hay Libre que convertir.
     const loteComun = await lote("D2-comun");
     const delComun = await procesoConReceta(loteComun, await recetaComun("D2"));
