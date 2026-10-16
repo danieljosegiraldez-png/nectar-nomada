@@ -6,9 +6,12 @@
   --nn-bg: #faf7f0;
   --nn-surface: #ffffff;
   --nn-ink: #141210;
-  /* Was #6b5f4f (4.9:1). Muted text carries real data in the operator
-     routes — lot type, project, location — and 4.9:1 is legible at a desk
-     and marginal on a phone in direct sun. #574a3b is 6.6:1 on --nn-bg. */
+  /* Was #6b5f4f (5.82:1). Muted text carries real data in the operator
+     routes — lot type, project, location — and that is legible at a desk
+     and marginal on a phone in direct sun. #574a3b is 8.02:1 on --nn-bg.
+     (Corregido el 2026-10-09: decía 4.9 y 6.6; medido con la fórmula de
+     tests/arquitectura/contraste-de-tokens.test.ts, que da 3.44 para
+     --nn-border-strong, igual que su comentario.) */
   --nn-ink-muted: #574a3b;
   --nn-border: #e6ddcc;
   /* A field control's border must read as an edge outdoors, where the
@@ -29,6 +32,15 @@
   --nn-miel: #fcea3c;
   --nn-miel-ink: var(--nn-ink);
   --nn-error: #a3311a;
+  /* Estados del beneficio — R3 del plan farm-to-green (ADR-197), 2026-10-09. No existían en
+     ninguna parte y la cola de secado caía a sus respaldos: «Le toca volteo» (#a8741a) daba
+     3.79:1 sobre --nn-bg, por debajo incluso del 4.5 del texto normal. El paquete pide ≥ 7:1
+     para los valores críticos, que se leen a pleno sol (09 §12): aviso 7.73 y peligro 7.68 sobre
+     --nn-bg. --nn-warn es el tono que ya se usaba como tinta de aviso (--nn-warning-ink);
+     --nn-muted, el del texto secundario. La palabra del estado informa; el color acompaña. */
+  --nn-warn: #6a4800;
+  --nn-danger: #8c2f2a;
+  --nn-muted: #574a3b;
   --nn-radius: 10px;
   /* Archivo es la de la marca; la pila del sistema queda de respaldo por si la
      fuente no llega — en el campo, con señal mala, eso pasa. */
@@ -1597,6 +1609,19 @@ a.nn-card-link:active {
 .nn-mill-page {
   width: min(100%, 76rem);
   margin-inline: auto;
+}
+
+/* Tacto en el beneficio — R3 (ADR-197), 2026-10-09. El paquete pide ≥ 44 px para todo toque
+   y ≥ 56 px para las acciones principales de campo (09 §12): se pulsan con guantes y manos
+   mojadas. Las casillas van a --nn-tap: la del volteo medía 26 px por un estilo en línea, que
+   se quitó en el mismo cambio. tests/arquitectura/tacto-en-el-beneficio.test.ts lo vigila. */
+.nn-mill-page .nn-button {
+  min-height: 3.5rem;
+}
+
+.nn-mill-page input[type="checkbox"] {
+  width: var(--nn-tap);
+  height: var(--nn-tap);
 }
 
 .nn-mill-header {
