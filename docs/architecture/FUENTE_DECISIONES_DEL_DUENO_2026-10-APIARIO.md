@@ -964,3 +964,56 @@ a
 a
 ```
 
+
+---
+
+## Ampliación del 2026-10-16 — las dos decisiones que esperaba el paso 12
+
+Al construir los defectos que ADR-200 dejó sin decisión, la pantalla para crear un compromiso de polinización
+necesitaba dos respuestas más. Mismo método que el resto del archivo: por programa, desde la transcripción,
+con las mismas comprobaciones de ancla y de respuesta.
+
+| # | qué se preguntó | respuesta literal | dónde aterriza |
+|---|---|---|---|
+| 12a | el cliente del compromiso de Kiva | «a» | ADR-200 §6, actualización del 2026-10-16 |
+| 12b | la procedencia del compromiso | «c» | ADR-200 §6, actualización del 2026-10-16 |
+
+## 12a · el cliente del compromiso de Kiva
+
+*Polinización · se aplica en ADR-200 §6, actualización del 2026-10-16*
+
+**Pregunta** (Claude, literal) · 2026-10-16 10:36Z · transcripción, línea 12327
+
+```text
+**El 12, la pantalla para crear un compromiso de polinización, necesita dos decisiones tuyas.** Va la primera.
+
+La base exige que todo compromiso tenga un **cliente**, que es una organización. Decidiste que en Kiva no hay pacto, sino una meta de trabajo nuestra, y el repositorio no se aclara sobre quién es Kiva: `CLAUDE.md` dice que Kiva Estate es una finca tuya, y los documentos del Drive la tratan como un cliente con administración propia (Luis Sotillo). ¿Quién es el «cliente» de esa meta?
+- **A) (Recomendado si Kiva tiene su propia administración)** **La organización Kiva Estate.** Es la que recibe el servicio de polinización, aunque no haya contrato firmado. No necesita migración.
+- **B)** **Néctar Nómada**, porque es una meta interna nuestra y no hay cliente. Tampoco necesita migración, pero el informe diría que el cliente es Néctar.
+- **C)** **Que el cliente sea opcional.** Necesita una migración, y la ficha diría «sin cliente» hasta que haya un pacto.
+```
+
+**Respuesta** (Daniel, literal) · 2026-10-16 17:14Z · transcripción, línea 12394
+
+```text
+a
+```
+
+## 12b · la procedencia del compromiso
+
+*Polinización · se aplica en ADR-200 §6, actualización del 2026-10-16*
+
+**Pregunta** (Claude, literal) · 2026-10-16 17:15Z · transcripción, línea 12409
+
+```text
+**¿Con qué procedencia se guarda un compromiso?** Hoy el servicio fija `original_record` para todos, con el comentario «un compromiso es lo que alguien pactó y transcribió». Pero en Kiva decidiste que no hay pacto: es una meta de trabajo que propusimos por analogía, en el informe del 29 de junio.
+- **A)** **Siempre `recommendation`.** Es lo que es la meta de Kiva: una propuesta técnica nuestra. Pero un pacto de verdad, el día que exista, quedaría marcado como recomendación.
+- **B)** **Siempre `original_record`**, como hoy. Afirma un pacto donde no lo hay.
+- **C) (Recomendado)** **Según si hay contrato:** `recommendation` cuando el compromiso no trae referencia de contrato, como en Kiva hoy, y `original_record` cuando la trae. La fija el servicio a partir del dato, no quien llama, como ya exige la casa (ADR-038). Kiva queda como meta, y un pacto futuro como pacto, sin tocar nada.
+```
+
+**Respuesta** (Daniel, literal) · 2026-10-16 21:33Z · transcripción, línea 12413
+
+```text
+c
+```

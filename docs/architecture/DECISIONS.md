@@ -13140,6 +13140,14 @@ Entre paréntesis, la pregunta del registro de la que sale cada punto.
 - **En Toabré hay dos apiarios, cada uno con su lote** (26): Finca 1 con el Lote 1 (10 ha) y Finca 2 con el
   Lote 2 (7 ha). Son dos compromisos y no cambia el modelo.
 
+- **Actualización del 2026-10-16, decisiones de Daniel** (registro, entradas 12a y 12b), las dos que esperaba
+  la pantalla para crear un compromiso:
+  - **El cliente del compromiso de Kiva es la organización Kiva Estate.** Es quien recibe el servicio de
+    polinización, aunque no haya contrato firmado. Sin migración: `clientOrganizationId` sigue obligatorio.
+  - **La procedencia la fija el servicio a partir del dato** (ADR-038): `recommendation` cuando el
+    compromiso no trae referencia de contrato, como Kiva hoy, y `original_record` cuando la trae. Así Kiva
+    queda como la meta que es, y un pacto futuro quedará como pacto sin tocar nada.
+
 **§7 · Recomendaciones**
 
 - Cada recomendación es **una línea de seguimiento propia, ligada a la visita** (27). Lleva:
