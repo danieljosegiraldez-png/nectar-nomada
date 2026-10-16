@@ -2595,6 +2595,8 @@
     "feedingMaterial_miel_de_cana": "Cane syrup",
     "feedingMaterial_otro": "Other",
     "feedingMaterialWhichLabel": "Which one?",
+    "feedingUnit_otra": "Other (which)",
+    "feedingUnitWhichLabel": "Which unit?",
     "loteAltaHeading": "Add several hives",
     "loteAltaSubmit": "Add the batch",
     "lotePrefijoLabel": "Identifier prefix",
