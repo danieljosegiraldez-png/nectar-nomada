@@ -23,6 +23,7 @@ import { prisma } from "../db";
 import { carenciasVigentes, diasPendientes } from "./carencia";
 import { ApiaryAccessError, requireApiaryAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
+import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import type { ProvenanceClass } from "../../generated/prisma/client";
 
 export interface RecordApiaryHarvestInput {
@@ -161,6 +162,18 @@ export async function recordApiaryHarvest(userAccountId: string, input: RecordAp
       },
       tx,
     );
+
+    // A9.2 — la cosecha entra en la visita abierta, igual que la inspección (revisión de Apiario
+    // del 2026-10-08, V-2). El informe, la bitácora y el pendiente de la visita ya sabían leer un
+    // `FieldEvent` con `apiaryHarvestEventId`; nadie lo escribía, así que una visita de cosecha
+    // salía en el informe sin la cosecha. Dentro de la MISMA transacción, por lo mismo que allí.
+    await ligarAVisitaAbierta(tx, {
+      userAccountId,
+      locationId: hive.locationId,
+      occurredAt: input.occurredAt,
+      provenanceClass,
+      sujeto: { apiaryHarvestEventId: harvestEvent.id },
+    });
 
     return { harvestEvent, lot, carencias };
   });
