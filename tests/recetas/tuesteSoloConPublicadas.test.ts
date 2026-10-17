@@ -47,6 +47,9 @@ const tueste = (recipeVersionId: string) => ({
   startedAt: new Date("2026-09-01T10:00:00Z"),
   provenanceClass: "direct_observation" as const,
   purpose: "sample" as const,
+  // Desde el 2026-10-17 tostar desde el lote exige la carga (`charge_weight_required`); el lote de esta
+  // prueba no lleva libro de masa, así que la carga no descuenta nada y lo medido aquí no cambia.
+  chargeWeightKg: 0.2,
   recipeVersionId,
 });
 const tuestesDeLaCuenta = () => prisma.roastSession.count({ where: { createdBy: cuenta } });

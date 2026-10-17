@@ -57,7 +57,8 @@ function exigeVersionPublicada(version: { status: string; recipe: { esLibre: boo
  * `"use server"` y de ahí sólo se pueden exportar funciones `async` (ver CLAUDE.md). Y al lado de
  * los `throw` se ve: quien añada un código ve esta lista en la misma pantalla.
  *
- * Son los seis del camino de la muestra (2026-10-04). Los otros siete siguen con el envoltorio.
+ * Son los del camino de la muestra (2026-10-04) y, desde el 2026-10-17, el de la carga que falta al
+ * tostar desde el lote. Los demás siguen con el envoltorio.
  * `tests/traceability/frasesDeTueste.test.ts` exige que cada uno de éstos sea un código que de
  * verdad se lanza y que tenga su frase en los DOS idiomas.
  */
@@ -69,6 +70,8 @@ export const CODIGOS_DE_TUESTE_CON_FRASE = [
   "sample_source_lot_mismatch",
   "sample_source_requires_sample_purpose",
   "sample_roast_series_exhausted",
+  // 2026-10-17: tostar desde el lote sin decir cuánto se cargó (ver `recordRoastSession`).
+  "charge_weight_required",
 ] as const;
 
 export async function listGreenSamplesForRoast(userAccountId: string, lotId: string) {
@@ -142,6 +145,11 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
       throw new RoastSessionValidationError("sample_mass_in_kg_required");
     }
 
+  } else if (input.chargeWeightKg == null) {
+    // Desde el LOTE, sin carga no se sabe cuánto café salió de él — decisión de Daniel del
+    // 2026-10-17: se exige, como la trilla exige la masa que entra. Antes pasaba, y el libro de
+    // masa daba el lote verde entero por tostado.
+    throw new RoastSessionValidationError("charge_weight_required");
   }
   if (input.equipmentId) {
     const equipos = await listarEquipos(userAccountId);
@@ -311,7 +319,13 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
 
     // P0 — decrement the green lot by what was actually charged. A roast
     // always has an output, so this always settles.
+    //
+    // **`consumoParcial` es lo que hace cierta la frase de arriba** (2026-10-17). Sin él,
+    // `stage_change` es de consumo total y `settleMassBalance` ignoraba la carga: medido en el
+    // navegador, tostar 0,2 kg de un verde de 8 escribía un `transfer_out` de 8 kg y el verde
+    // quedaba en cero. Lo guarda `tests/traceability/tuesteDescuentaLaCarga.test.ts`.
     const reconciliation = sourceSample ? null : await settleMassBalance(tx, {
+      consumoParcial: true,
       transformationId: transformation.id,
       transformationType: "stage_change",
       organizationId: sourceLot.organizationId,

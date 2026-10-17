@@ -262,9 +262,11 @@ export async function applyInputDecrements(
     provenanceClass: ProvenanceClass;
     sourceReference?: string | null;
     createdBy: string;
+    /** Ver `settleMassBalance`: la entrada se lleva lo declarado, no el lote entero. */
+    consumoParcial?: boolean;
   },
 ): Promise<ApplyDecrementsResult> {
-  const fullConsumption = FULL_CONSUMPTION_TYPES.has(args.transformationType);
+  const fullConsumption = !args.consumoParcial && FULL_CONSUMPTION_TYPES.has(args.transformationType);
 
   let inputTotal = new Prisma.Decimal(0);
   let unit: string | null = null;
@@ -445,6 +447,15 @@ export async function settleMassBalance(
     declaredLossUnit?: string | null;
     declaredLossReason?: string | null;
     acceptUnexplained?: { reason: string } | null;
+    /**
+     * La entrada consume **lo declarado**, aunque el tipo sea de consumo total. Existe por el tueste
+     * (2026-10-17): es un `stage_change` —el verde se transforma, y su merma es el rendimiento, no
+     * una discrepancia—, pero se tuesta una carga, no el lote. Sin esto, tostar 0,2 kg de un verde
+     * de 8 dejaba el verde en cero. Con esto la entrada va por el camino parcial: exige la cantidad y
+     * no deja pasar más de lo que hay (`input_exceeds_available`). La conciliación no cambia: sigue
+     * siendo la de su tipo.
+     */
+    consumoParcial?: boolean;
   },
 ): Promise<SettleResult | null> {
   if (!movesMaterial({ transformationType: args.transformationType, outputCount: args.outputs.length })) {
@@ -459,6 +470,7 @@ export async function settleMassBalance(
     provenanceClass: args.provenanceClass,
     sourceReference: args.sourceReference ?? null,
     createdBy: args.createdBy,
+    consumoParcial: args.consumoParcial,
   });
 
   // Decrements are universal — that is the actual bug being fixed. Only the
