@@ -551,7 +551,13 @@ export default async function LotDetailPage({
 
   type TimelineEntry = { occurredAt: Date; label: string; key: string };
   const timeline: TimelineEntry[] = [
-    ...transformations.map((tr) => ({ occurredAt: tr.occurredAt, label: t(`transformationType_${tr.transformationType}` as "transformationType_split"), key: `tr-${tr.id}` })),
+    // Un tueste es un `stage_change`, y la cronología lo decía así: «Cambio de etapa». Lo que lo
+    // distingue es su `roastSessionId`, y con él se nombra por lo que es (2026-10-17).
+    ...transformations.map((tr) => ({
+      occurredAt: tr.occurredAt,
+      label: tr.roastSessionId ? t("cronologiaTueste") : t(`transformationType_${tr.transformationType}` as "transformationType_split"),
+      key: `tr-${tr.id}`,
+    })),
     ...quantityEvents.map((qe) => ({ occurredAt: qe.occurredAt, label: `${t(`quantityEventType_${qe.eventType}` as "quantityEventType_received")}: ${qe.quantity.toString()} ${qe.unit}`, key: `qe-${qe.id}` })),
     ...measurements.map((m) => ({ occurredAt: m.occurredAt, label: `${m.variable}: ${m.value.toString()} ${m.unit}`, key: `me-${m.id}` })),
   ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
@@ -598,6 +604,11 @@ export default async function LotDetailPage({
       {ok === "inspeccion" ? (
         <p className="nn-notice nn-notice-success" role="status">
           {t("inspeccionRegistrada")}
+        </p>
+      ) : null}
+      {ok === "tueste" ? (
+        <p className="nn-notice nn-notice-success" role="status">
+          {t("okTueste")}
         </p>
       ) : null}
       {/* Un aviso, no dieciséis: repetir el motivo junto a cada formulario sería

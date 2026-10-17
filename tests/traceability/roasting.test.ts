@@ -216,6 +216,7 @@ describe("recordRoastSession — validation and access", () => {
       // que ya existieran. Ninguna de estas pruebas afirma nada sobre él.
       purpose: "production",
 lotId: greenLotId,
+        chargeWeightKg: 0.2,
         outputLotCode: `${RUN_ID}-reject-access`,
         startedAt: new Date("2027-01-10T08:00:00Z"),
         provenanceClass: "direct_observation",
@@ -228,6 +229,7 @@ lotId: greenLotId,
       recordRoastSession(authorizedUserAccountId, {
       purpose: "production",
         lotId: greenLotId,
+        chargeWeightKg: 0.2,
         outputLotCode: `${RUN_ID}-reject-time`,
         startedAt: new Date("2027-01-10T08:15:00Z"),
         endedAt: new Date("2027-01-10T08:00:00Z"),
@@ -291,6 +293,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
     const { roastSession: gabrielSession, outputLot: gabrielLot } = await recordRoastSession(authorizedUserAccountId, {
       purpose: "production",
       lotId: greenLotId,
+        chargeWeightKg: 0.2,
       outputLotCode: `${RUN_ID}-gabriel`,
       roastLevel: "medio",
       equipmentNote: "TEST Probat 5kg",
@@ -303,6 +306,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
     const { roastSession: mariaSession, outputLot: mariaLot } = await recordRoastSession(authorizedUserAccountId, {
       purpose: "production",
       lotId: greenLotId,
+        chargeWeightKg: 0.2,
       outputLotCode: `${RUN_ID}-maria`,
       roastLevel: "medio",
       equipmentNote: "TEST Loring S15",
@@ -327,6 +331,7 @@ describe("§4.2 — same coffee, two roasters, two machines — roaster as a que
     const { roastSession } = await recordRoastSession(authorizedUserAccountId, {
       purpose: "production",
       lotId: greenLotId,
+        chargeWeightKg: 0.2,
       outputLotCode: `${RUN_ID}-detail-access`,
       startedAt: new Date("2027-01-12T08:00:00Z"),
       provenanceClass: "direct_observation",
@@ -344,6 +349,7 @@ describe("§4.3 — pre-roast green measurement distinguished from a storage-pha
     const { roastSession } = await recordRoastSession(authorizedUserAccountId, {
       purpose: "production",
       lotId: greenLotId,
+        chargeWeightKg: 0.2,
       outputLotCode: `${RUN_ID}-moisture`,
       startedAt: new Date("2027-01-13T08:00:00Z"),
       provenanceClass: "direct_observation",
@@ -417,6 +423,7 @@ describe("the row cap is spent on rows the caller can see — ADR-087", () => {
       const { outputLot } = await recordRoastSession(wrongProjectUserAccountId, {
       purpose: "production",
         lotId: wrongProjectLotId,
+        chargeWeightKg: 0.2,
         outputLotCode: `${RUN_ID}-other-roast-${i}`,
         startedAt: new Date(`2027-02-0${i + 1}T08:00:00Z`),
         provenanceClass: "direct_observation",
@@ -485,7 +492,7 @@ describe("serie automática por lote de origen", () => {
     }
   });
   it("conserva el consecutivo si cambia el código del lote de origen", async () => {
-    const input={purpose:"sample" as const,lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation" as const};
+    const input={purpose:"sample" as const,lotId:greenLotId,chargeWeightKg:0.2,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation" as const};
     const first=await recordRoastSession(authorizedUserAccountId,input);
     outputLotIds.push(first.outputLot.id);
     await prisma.lot.update({where:{id:greenLotId},data:{lotCode:`${RUN_ID}-renamed`}});
@@ -502,7 +509,7 @@ describe("serie automática por lote de origen", () => {
     const unrelated=await prisma.lot.create({data:{lotCode:`${RUN_ID}-green-TOTHER-T99`,lotType:"roast",organizationId,projectId}});
     outputLotIds.push(unrelated.id);
     const result=await recordRoastSession(authorizedUserAccountId,{
-      purpose:"sample",lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
+      purpose:"sample",lotId:greenLotId,chargeWeightKg:0.2,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
     });
     outputLotIds.push(result.outputLot.id);
     expect(result.outputLot.lotCode).toMatch(/-green-T[0-9]{2}$/);
@@ -513,7 +520,7 @@ describe("serie automática por lote de origen", () => {
     outputLotIds.push(reserved.id);
     const before=await prisma.roastSession.count({where:{createdBy:authorizedUserAccountId}});
     await expect(recordRoastSession(authorizedUserAccountId,{
-      purpose:"sample",lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
+      purpose:"sample",lotId:greenLotId,chargeWeightKg:0.2,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
     })).rejects.toThrow("sample_roast_series_exhausted");
     expect(await prisma.roastSession.count({where:{createdBy:authorizedUserAccountId}})).toBe(before);
   });

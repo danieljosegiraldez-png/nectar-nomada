@@ -44,7 +44,8 @@ describe("las frases del tueste desde muestra", () => {
    */
   it("FILA PATRÓN: los dos patrones encuentran algo, y la lista no está vacía", () => {
     expect(LANZADOS.length, "códigos lanzados encontrados en roasting.ts").toBeGreaterThanOrEqual(13);
-    expect(CON_FRASE.length, "códigos en CODIGOS_DE_TUESTE_CON_FRASE").toBe(7);
+    // 7 → 8 el 2026-10-17: `charge_weight_required`, tostar desde el lote sin decir la carga.
+    expect(CON_FRASE.length, "códigos en CODIGOS_DE_TUESTE_CON_FRASE").toBe(8);
     expect(Object.keys(es.Traceability ?? {}).length, "el espacio «Traceability» de es.json").toBeGreaterThan(0);
     expect(Object.keys(en.Traceability ?? {}).length, "el espacio «Traceability» de en.json").toBeGreaterThan(0);
   });
