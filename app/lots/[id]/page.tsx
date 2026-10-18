@@ -160,6 +160,7 @@ export default async function LotDetailPage({
     storageAssignments,
     tasks,
     auditEvents,
+    historialSinProceso,
     sensoryLinkage,
     harvestEvent,
     receivingEvent,
@@ -1593,12 +1594,20 @@ export default async function LotDetailPage({
               {auditEvents.length === 50 ? t("resumenTope", { count: 50 }) : t("resumenHistorial", { count: auditEvents.length })}
             </span>
           </summary>
+          {/* El proceso que cubre al lote entra con su cadena (Daniel, 2026-10-12). Si el linaje es demasiado hondo
+              para leerlo, se dice aquí: callarlo se leería como «no hubo proceso». */}
+          {historialSinProceso ? <p className="nn-muted">{t("historialSinProceso")}</p> : null}
           {auditEvents.length === 0 ? (
             <p className="nn-muted">{t("noHistory")}</p>
           ) : (
             <ul>
               {auditEvents.map((ev) => (
                 <li key={ev.id}>
+                  {/* Un ensayo se marca como tal (Daniel, 2026-10-12): es historia de investigación dentro de la del lote.
+                      Sólo llega aquí si quien mira puede ver investigación; ver `sujetosDeEnsayosYProceso`. */}
+                  {ev.entityType === "treatment_batch" || ev.entityType === "processing_stage" ? (
+                    <span className="nn-badge">{t("historialEnsayo")}</span>
+                  ) : null}{" "}
                   {ev.operation} — {cuando(ev.occurredAt)}
                 </li>
               ))}

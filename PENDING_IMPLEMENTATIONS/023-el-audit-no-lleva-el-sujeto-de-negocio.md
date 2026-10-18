@@ -1,6 +1,21 @@
 # 023 · Una fila de `core.audit_event` no dice de qué LOTE habla
 
-**Estado: decisión de Daniel, medida y sin construir.** Él eligió el 2026-10-05 arreglar
+**Estado: CERRADA el 2026-10-12.** Daniel contestó ese día las tres preguntas de esta ficha:
+
+| pregunta | respuesta | qué se hizo |
+|---|---|---|
+| ¿Una fila de auditoría debe decir a qué lote pertenece sin consultar su entidad? | **No**: se sigue resolviendo al leer | Nada que construir, y ninguna fila histórica tocada. El punto ciego de los hechos borrados se queda, dicho. |
+| ¿La historia de un ensayo pertenece al historial del lote? | **Sí**, marcada como «Ensayo», y **sólo para quien puede ver investigación** sobre ese ensayo | `sujetosDeEnsayosYProceso` en `lib/traceability/lots.ts`: `treatment_batch` y `processing_stage`, con `research:view` pedido ensayo a ensayo. El Farm Operator no lo tiene, y no los ve. |
+| ¿El historial incluye el del proceso que cubre al lote, aunque se abriera en un ancestro? | **Sí, toda la cadena**: el vigente y los de arriba, o todos los de una mezcla | `lot_process`, `lot_process_intervention` y `lot_process_return`, por `procesoQueCubre`. Si el linaje es demasiado hondo, la página lo dice. |
+
+Lo guarda `tests/traceability/historialEnsayosYProceso.test.ts`, que caía con el código anterior en sus
+dos filas de «ve». Flip: quitar el filtro de investigación tumba la fila del operario; dejar fuera el proceso,
+o sus intervenciones, tumba las dos de «ve». Lo que sigue fuera del historial —`asset`, `store_allocation` y
+`drying_tray_weighing`— no era una pregunta: está nombrado con su razón en el propio bloque de sujetos.
+
+Lo que sigue es la ficha como se escribió el 2026-10-05.
+
+**Estado entonces: decisión de Daniel, medida y sin construir.** Él eligió el 2026-10-05 arreglar
 la lectura ahora —hecho, ficha [009](009-el-unico-lector-de-auditevent-no-puede-acertar.md)—
 y dejar esta pregunta escrita como decisión de modelo aparte. **No se ha construido nada.**
 
