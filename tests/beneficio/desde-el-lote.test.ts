@@ -381,23 +381,34 @@ const HUMEDAD_EN_OBJETIVO = {
   materialState: "PARCHMENT", samplingRole: "ZONE", samplingEventId: "ev-aw",
 } as const;
 
-it("emite TARGET_REACHED sólo cuando hay humedad Y actividad de agua", () => {
-  const conAw = fase(veredictoDelLote({
-    ...COMUN,
-    mediciones: [
-      HUMEDAD_EN_OBJETIVO,
-      { variable: "water_activity", value: 0.58, occurredAt: new Date("2026-03-19T09:05:00Z"),
-        provenanceClass: "direct_observation", fueCorregida: false,
-        materialState: "PARCHMENT", samplingEventId: "ev-aw" },
-    ],
-  }));
-  expect(conAw.secado?.status).toBe("TARGET_REACHED");
+/**
+ * **El objetivo del secado va por humedad; la aw, si se midió, sigue pudiendo impedirlo** — C7
+ * (Daniel, 2026-10-06) y ADR-181 #18. Hasta el 2026-10-08 esta prueba exigía las dos y afirmaba que
+ * «la misma humedad sin aw no alcanza el objetivo»: con el medidor de la finca, que no mide aw,
+ * ningún lote podía terminar. Sin aw el veredicto llega y DECLARA al lado que no miró la aw
+ * (`SIN_ACTIVIDAD_DE_AGUA`), que es la marca «sin aw medida» de la decisión.
+ */
+it("el objetivo del secado se alcanza por humedad, y una aw medida y alta lo impide", () => {
+  const awDe = (value: number) => ({
+    variable: "water_activity", value, occurredAt: new Date("2026-03-19T09:05:00Z"),
+    provenanceClass: "direct_observation", fueCorregida: false,
+    materialState: "PARCHMENT", samplingEventId: "ev-aw",
+  } as const);
 
-  // Control positivo: LA MISMA humedad sin actividad de agua no alcanza el
-  // objetivo, y además lo dice en vez de callarlo.
+  const conAw = fase(veredictoDelLote({ ...COMUN, mediciones: [HUMEDAD_EN_OBJETIVO, awDe(0.58)] }));
+  expect(conAw.secado?.status).toBe("TARGET_REACHED");
+  expect(conAw.limitaciones).not.toContain("SIN_ACTIVIDAD_DE_AGUA");
+
+  // LA MISMA humedad sin aw: llega, y dice que no miró la aw en vez de callarlo.
   const sinAw = fase(veredictoDelLote({ ...COMUN, mediciones: [HUMEDAD_EN_OBJETIVO] }));
-  expect(sinAw.secado?.status).not.toBe("TARGET_REACHED");
+  expect(sinAw.secado?.status).toBe("TARGET_REACHED");
   expect(sinAw.limitaciones).toContain("SIN_ACTIVIDAD_DE_AGUA");
+
+  // Control: con una aw medida y por encima del máximo NO llega (un 11 % con aw 0,68 se enmohece
+  // igual, vector DR-005). Y la aw tiene que haber llegado al motor, o el control no mide nada.
+  const awAlta = fase(veredictoDelLote({ ...COMUN, mediciones: [HUMEDAD_EN_OBJETIVO, awDe(0.68)] }));
+  expect(awAlta.secado?.waterActivity).toBe(0.68);
+  expect(awAlta.secado?.status).not.toBe("TARGET_REACHED");
 });
 
 
@@ -426,7 +437,9 @@ it("declara sólo los datos que faltan y no mezcla inspecciones ni lecturas corr
   for (const extra of [{ samplingEventId: "otra" }, { samplingEventId: null }, { fueCorregida: true }]) {
     const separada = evaluar([HUMEDAD_EN_OBJETIVO, { ...aw, ...extra }]);
     expect(separada.secado?.waterActivity).toBeNull();
-    expect(separada.secado?.status).toBe("DRYING_NORMAL");
+    // Sin aw que cuente, el objetivo va por humedad (C7, 2026-10-06): llega, y declara que no
+    // miró la aw. Antes del 2026-10-08 esto esperaba DRYING_NORMAL.
+    expect(separada.secado?.status).toBe("TARGET_REACHED");
     expect(separada.limitaciones).toContain("SIN_ACTIVIDAD_DE_AGUA");
   }
   for (const extra of [{ samplingEventId: "otra" }, { samplingEventId: null }, { fueCorregida: true }, { samplingRole: "REPLICATE" as const }]) {
@@ -449,3 +462,4 @@ it("Brix distingue el estado material real y declara el punto ausente", () => {
   expect(verde.brix).toBeNull();
   expect(verde.limitaciones).toContain("SIN_PUNTO_DE_MUESTREO");
 });
+

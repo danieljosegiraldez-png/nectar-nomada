@@ -38,7 +38,6 @@
 import {
   PH_CONFIRM_MAX_H,
   PH_CONFIRM_MIN_H,
-  PH_DILUTION_SUSPECT,
   PH_INITIAL_PHASE_FLOOR,
   PH_PHYSICAL_MAX,
   PH_PHYSICAL_MIN,
@@ -237,11 +236,11 @@ export function evaluarPh(input: {
     return evaluacion("SENSOR_FAULT", "WARNING", "alert.ph.sensor_fault", ctx);
   }
 
-  // Aviso sobre el DATO y no sobre el lote: agua de enjuague, o electrodo fuera
-  // del líquido. Va antes que todo lo demás porque invalida la lectura.
-  if (ultima.ph >= PH_DILUTION_SUSPECT) {
-    return evaluacion("SUSPECT_DILUTION", "WARNING", "alert.ph.suspect_dilution", ctx);
-  }
+  // **Ya no hay aviso de dilución con un pH fijo** (ADR-181 #13, decisión de Daniel del
+  // 2026-09-19; retirado del motor el 2026-10-08). El 6,50 decía «el mucílago no pasa de ~6,0»,
+  // pero el agua de la finca mide 6,5–6,9 y hay aguas de 7–8: el mosto se comparará contra el pH
+  // del AGUA DE ESE LOTE cuando exista esa medición. Hasta entonces un pH alto al empezar es fase
+  // inicial. `SUSPECT_DILUTION` sigue declarado para entonces; hoy no lo emite nadie.
 
   if (ultima.ph < p.phImmediateLow) {
     return evaluacion("OVER_FERMENTED_CRITICAL", "CRITICAL", "alert.ph.over_fermented_immediate", ctx);
