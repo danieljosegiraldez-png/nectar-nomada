@@ -156,6 +156,8 @@ tests/traceability/classificationGate.test.ts
 tests/traceability/drying.test.ts
 tests/traceability/liberacion-del-lote.test.ts
 tests/traceability/historialDelLote.test.ts
+tests/traceability/medicionDeMuestraDelLote.test.ts
+tests/traceability/opcionesDeInspeccion.test.ts
 tests/traceability/idMalFormado.test.ts
 tests/traceability/idMalFormadoDeUbicacion.test.ts
 tests/apiary/idMalFormadoDeApiario.test.ts
