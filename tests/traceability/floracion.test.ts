@@ -9,7 +9,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../../lib/db";
-import { enFloracion, floracionesDeLaParcela, registrarFloracion, FloracionValidationError } from "../../lib/traceability/floracion";
+import {
+  cerrarFloracion,
+  enFloracion,
+  floracionesDeLaParcela,
+  floracionesDeLaPortada,
+  registrarFloracion,
+  FloracionValidationError,
+} from "../../lib/traceability/floracion";
+import { hayFloracion } from "../../lib/traceability/floracionVigente";
 import { TraceabilityAccessError } from "../../lib/traceability/lots";
 import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
@@ -215,4 +223,139 @@ describe("la floración alcanza por contención, no por igualdad de ubicación",
     expect(vs.length, "sin ventanas no mide nada").toBeGreaterThan(0);
     expect(Object.keys(vs[0]!).sort()).toEqual(["endsAt", "plotBlockId", "startsAt"]);
   });
+});
+
+/**
+ * **F1 — la floración se cierra después, cuando las flores caen** (decisión de Daniel, 2026-10-08:
+ * «dos momentos»). En el campo se ve cuándo empieza a florecer; el final se sabe días después.
+ *
+ * Cada prueba crea SU parcela, así que ninguna aserción depende de una fecha compartida con las de
+ * arriba. Las fechas de este bloque son de 2027 y tampoco se repiten entre sí.
+ */
+const parcelaPropia = async (etiqueta: string, padre: string = finca) =>
+  (await prisma.location.create({
+    data: { name: `TEST ${etiqueta} (${RUN_ID})`, locationType: "plot", classification: "internal", parentLocationId: padre },
+  })).id;
+
+describe("cerrar una floración", () => {
+  it("guarda el fin y deja la auditoría con el antes y el después", async () => {
+    const p = await parcelaPropia("P cierre");
+    const abierta = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-02-01") });
+
+    const cerrada = await cerrarFloracion(gestorId, { plotBloomId: abierta.id, endsAt: dia("2027-02-15") });
+    expect(cerrada.endsAt?.toISOString()).toBe(dia("2027-02-15").toISOString());
+
+    const evento = await prisma.auditEvent.findFirst({
+      where: { entityType: "plot_bloom", entityId: abierta.id, operation: "plot_bloom.close" },
+    });
+    expect(evento, "el cierre no dejó auditoría").not.toBeNull();
+    expect((evento!.before as { endsAt: unknown }).endsAt).toBeNull();
+    expect((evento!.after as { endsAt: string }).endsAt).toBe(dia("2027-02-15").toISOString());
+  }, 20000);
+
+  it("una floración ya cerrada no se vuelve a cerrar — y el fin que tenía se conserva", async () => {
+    const p = await parcelaPropia("P doble cierre");
+    const f = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-03-01"), endsAt: dia("2027-03-05") });
+    await expect(cerrarFloracion(gestorId, { plotBloomId: f.id, endsAt: dia("2027-03-09") })).rejects.toBeInstanceOf(
+      FloracionValidationError,
+    );
+    const igual = await prisma.plotBloom.findUniqueOrThrow({ where: { id: f.id } });
+    expect(igual.endsAt?.toISOString()).toBe(dia("2027-03-05").toISOString());
+  }, 20000);
+
+  it("un fin anterior al inicio se rechaza con una frase", async () => {
+    const p = await parcelaPropia("P fin al revés");
+    const f = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-04-10") });
+    await expect(cerrarFloracion(gestorId, { plotBloomId: f.id, endsAt: dia("2027-04-02") })).rejects.toBeInstanceOf(
+      FloracionValidationError,
+    );
+  }, 20000);
+
+  it("el mismo día del inicio sí vale: una floración de un día", async () => {
+    const p = await parcelaPropia("P un día");
+    const f = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-04-20") });
+    const cerrada = await cerrarFloracion(gestorId, { plotBloomId: f.id, endsAt: dia("2027-04-20") });
+    expect(cerrada.endsAt?.toISOString()).toBe(dia("2027-04-20").toISOString());
+  }, 20000);
+
+  it("quien no gestiona la finca no la cierra — y queda abierta", async () => {
+    const p = await parcelaPropia("P sin permiso");
+    const f = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-05-01") });
+    await expect(cerrarFloracion(sinPermisoId, { plotBloomId: f.id, endsAt: dia("2027-05-08") })).rejects.toBeInstanceOf(
+      TraceabilityAccessError,
+    );
+    expect((await prisma.plotBloom.findUniqueOrThrow({ where: { id: f.id } })).endsAt).toBeNull();
+  }, 20000);
+
+  it("una floración que no existe se rechaza con una frase, no con un error de Prisma", async () => {
+    await expect(
+      cerrarFloracion(gestorId, { plotBloomId: "00000000-0000-4000-8000-000000000000", endsAt: dia("2027-05-20") }),
+    ).rejects.toBeInstanceOf(FloracionValidationError);
+  }, 20000);
+});
+
+/**
+ * **La floración registrada llega al aviso de polinizadores, y deja de llegar cuando termina.**
+ *
+ * Es la propiedad por la que existe F1: el aviso estaba construido e inalcanzable porque nada
+ * permitía anotar una floración. Y fija cómo se guarda el fin: como **campo de día**, la medianoche
+ * UTC del día que nombra, que es lo que `hayFloracion` compara. Si el fin se guardara como «el
+ * instante en que acaba ese día» —lo que pedía el comentario viejo de `RegistrarFloracionInput`—,
+ * en Panamá caería ya en el día siguiente UTC y el aviso se alargaría un día: la última aserción
+ * de aquí caería.
+ *
+ * Los instantes van a las 17:00 UTC: en cualquier zona de UTC−12 a UTC+6 siguen siendo el mismo
+ * día de calendario, así que la prueba da lo mismo en este Mac (Panamá) y en el CI (UTC).
+ */
+describe("la floración llega al aviso de polinizadores", () => {
+  it("abierta, el aviso la ve; cerrada, la ve hasta su último día y no después", async () => {
+    const p = await parcelaPropia("P aviso");
+    const f = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-06-01") });
+
+    const abierta = await floracionesDeLaParcela(p);
+    expect(hayFloracion(abierta, new Date("2027-06-20T17:00:00Z"), []), "abierta, el aviso debe verla").toBe(true);
+    expect(hayFloracion(abierta, new Date("2027-05-31T17:00:00Z"), []), "antes de empezar, no").toBe(false);
+
+    await cerrarFloracion(gestorId, { plotBloomId: f.id, endsAt: dia("2027-06-25") });
+    const cerrada = await floracionesDeLaParcela(p);
+    expect(hayFloracion(cerrada, new Date("2027-06-25T17:00:00Z"), []), "el último día cuenta").toBe(true);
+    expect(hayFloracion(cerrada, new Date("2027-06-26T17:00:00Z"), []), "el día después, ya no").toBe(false);
+  }, 20000);
+});
+
+/**
+ * **La lista de la portada de la parcela: las suyas y las de sus microparcelas, marcadas.**
+ *
+ * ADR-196: lo de una selección se marca, no se mezcla. Una floración de una microparcela sale en la
+ * portada de su parcela madre con el nombre de la microparcela; la de una parcela hermana no sale.
+ * Y las abiertas arriba, que son las que piden «Terminó».
+ */
+describe("las floraciones de la portada de una parcela", () => {
+  it("trae las suyas y las de sus microparcelas, marcadas, con las abiertas arriba", async () => {
+    const p = await parcelaPropia("P portada");
+    const micro = await parcelaPropia("Micro portada", p);
+    const hermana = await parcelaPropia("P hermana portada");
+
+    const cerradaPropia = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-07-01"), endsAt: dia("2027-07-05") });
+    const abiertaPropia = await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-07-10") });
+    const abiertaMicro = await registrarFloracion(gestorId, { locationId: micro, startsAt: dia("2027-07-12") });
+    const deLaHermana = await registrarFloracion(gestorId, { locationId: hermana, startsAt: dia("2027-07-14") });
+
+    const lista = await floracionesDeLaPortada(gestorId, p);
+    const ids = lista.map((f) => f.id);
+    expect(ids, "las tres de la parcela y su microparcela, en orden").toEqual([abiertaMicro.id, abiertaPropia.id, cerradaPropia.id]);
+    expect(ids, "la de una parcela hermana no").not.toContain(deLaHermana.id);
+
+    const deMicro = lista.find((f) => f.id === abiertaMicro.id)!;
+    expect(deMicro.esDeEstaParcela).toBe(false);
+    expect(deMicro.location.name).toContain("Micro portada");
+    expect(lista.find((f) => f.id === abiertaPropia.id)!.esDeEstaParcela).toBe(true);
+  }, 20000);
+
+  it("quien no ve la parcela no lee su lista — y el control de que el gestor sí", async () => {
+    const p = await parcelaPropia("P portada sin permiso");
+    await registrarFloracion(gestorId, { locationId: p, startsAt: dia("2027-08-01") });
+    await expect(floracionesDeLaPortada(sinPermisoId, p)).rejects.toBeInstanceOf(TraceabilityAccessError);
+    expect(await floracionesDeLaPortada(gestorId, p)).toHaveLength(1);
+  }, 20000);
 });
