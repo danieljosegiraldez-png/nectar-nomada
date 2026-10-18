@@ -1,3 +1,4 @@
+import { cuentaParaElNavegador } from "../lib/auth/huellaDeCuenta";
 import type { Metadata } from "next";
 import { Bodoni_Moda, Archivo } from "next/font/google";
 import Link from "next/link";
@@ -8,10 +9,10 @@ import { getCurrentUser } from "../lib/auth/session";
 import { permissionKeysAnywhere } from "../lib/rbac/service";
 import { buildNavigation } from "../lib/navigation";
 import { JornadaAbiertaBanner } from "./components/JornadaAbiertaBanner";
-import { logoutAction } from "./actions/auth";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { ServiceWorkerRegistration } from "./components/ServiceWorkerRegistration";
-import { BotonDeEnvio } from "./components/BotonDeEnvio";
+import { AvisoDeVersionGuardada } from "./components/AvisoDeVersionGuardada";
+import { CerrarSesion } from "./components/CerrarSesion";
 
 /**
  * Las dos familias de la marca, las mismas que sirve el sitio público
@@ -49,10 +50,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // question than authorization does, and why it must never answer one.
   const navEntries = user ? buildNavigation(await permissionKeysAnywhere(user.userAccountId)) : [];
 
+  // La huella y no el id: se apunta en el `localStorage` y en los borradores de un teléfono que puede
+  // ser compartido. Sirve para saber si la cuenta cambió (páginas guardadas, #703) y de quién es cada
+  // borrador (ADR-199). La hora ordena las cargas, para que una página vieja no gane.
+  const paraElNavegador = cuentaParaElNavegador(user?.userAccountId ?? null);
+
   return (
     <html lang={locale} className={`${fuenteTexto.variable} ${fuenteDisplay.variable}`}>
       <body>
-        <ServiceWorkerRegistration />
+        <ServiceWorkerRegistration cuenta={paraElNavegador.cuenta} generadaEn={paraElNavegador.generadaEn} />
         <NextIntlClientProvider>
           <header className="nn-nav">
             <div className="nn-shell nn-nav-row">
@@ -97,13 +103,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <summary aria-label={t("accountMenuLabel")}>{t("accountMenuShort")}</summary>
                 <div className="nn-nav-cuenta-panel">
                   <LocaleSwitcher />
-                  {user ? (
-                    <form action={logoutAction}>
-                      <BotonDeEnvio className="nn-link-button">
-                        {t("signOut")}
-                      </BotonDeEnvio>
-                    </form>
-                  ) : null}
+                  {user ? <CerrarSesion /> : null}
                 </div>
               </details>
             </div>
@@ -112,7 +112,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               que se cierra.» Va aquí y no en cada página porque «todas» incluye las que
               nadie ha escrito todavía. */}
           {user ? <JornadaAbiertaBanner userAccountId={user.userAccountId} /> : null}
-          <main className="nn-shell nn-main">{children}</main>
+          <main className="nn-shell nn-main">
+            <AvisoDeVersionGuardada />
+            {children}
+          </main>
         </NextIntlClientProvider>
       </body>
     </html>

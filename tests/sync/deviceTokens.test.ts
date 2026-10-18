@@ -131,11 +131,13 @@ describe("carril de tokens del aparato", () => {
   });
 
   /**
-   * **La afirmación que hace honesto el comentario del módulo.** Un access ya
-   * emitido sigue siendo criptográficamente válido hasta que expira —eso es
-   * inherente a un token sin estado— pero NO sirve para escribir: el push
-   * comprueba `revokedAt` en cada lote. La ventana es de lectura, no de
-   * escritura.
+   * Un access ya emitido sigue siendo criptográficamente válido hasta que
+   * expira —eso es inherente a un token sin estado— pero NO sirve para empujar
+   * eventos: el push comprueba `revokedAt` en cada lote. Esto prueba el
+   * SERVICIO; que la ruta le pase el aparato del token y no el del cuerpo lo
+   * prueba `aparatoDelToken.test.ts`. Las otras escrituras por token
+   * (`field-media` y `POST /api/v1/devices`) la comprueban en su ruta con
+   * `negativaDelAparato`, y también lo prueba ese archivo.
    */
   it("un aparato revocado NO escribe, aunque su access siga vivo", async () => {
     const { accessToken, device } = await alta();

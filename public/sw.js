@@ -18,10 +18,30 @@
  * opens to *something* instead of the browser's own offline error page.
  */
 const SHELL_CACHE = "nn-shell-v1";
-const PAGE_CACHE = "nn-pages-v1";
+// v2 desde el 2026-10-09: las páginas guardadas llevan su hora y no
+// sobreviven a la sesión (ver más abajo y `lib/offline/paginasGuardadas.ts`,
+// que borra esta misma caché al cerrar sesión). Cambiar el nombre hace que el
+// `activate` borre la v1 en cada teléfono al actualizarse, que es como
+// desaparecen las páginas que ya se habían guardado sin hora y sin dueño.
+const PAGE_CACHE = "nn-pages-v2";
 const OFFLINE_URL = "/offline.html";
 
+// Sin red, una página guardada no se sirve pasado lo que dura una sesión
+// (`DURACION_DE_SESION_S`, en `lib/auth/duracionDeSesion.ts`): quien la
+// guardó ya no tendría sesión. Va escrito a mano porque este archivo no puede
+// importar; `tests/offline/service-worker.test.ts` comprueba que coincidan.
+const MAX_EDAD_DE_PAGINA_MS = 7 * 24 * 60 * 60 * 1000;
+const CABECERA_GUARDADA = "x-nn-guardada";
+
 const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+
+// Un cambio en offline.html NO llega solo a los teléfonos que ya tienen este
+// service worker: el navegador sólo lo reinstala —y sólo entonces `install`
+// vuelve a precargar PRECACHE_URLS— cuando ESTE archivo cambia. Por eso cambia
+// este comentario cuando cambia offline.html. Y no se renombra SHELL_CACHE para
+// forzarlo: `activate` borraría los chunks de los que dependen las páginas ya
+// guardadas en PAGE_CACHE, y dejarían de abrir sin señal.
+// 2026-10-12: offline.html deja de crear vacía la base del apiario.
 
 // Operator routes this ticket covers (§1) — apiary (A5) and the coffee
 // equivalent (T10/T13). Deliberately excludes admin/report routes (§1's
@@ -34,7 +54,11 @@ const PRECACHE_URLS = [OFFLINE_URL, "/manifest.webmanifest", "/icons/icon-192.pn
 // agrupa el trabajo del día no abre sin señal, que es justo cuando se usa.
 // `/plots` llevaba fuera desde antes y es del café: esa página tiene OCHO
 // formularios de captura, y `/lots` —que sí estaba— es otra cosa.
-const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/field-sessions", "/lots", "/plots"];
+//
+// `/beneficio` entró con R2 del plan farm-to-green (ADR-197, 2026-10-09) y no por capturar: el
+// jefe de beneficio la LEE en el patio, sin red. Va declarada aparte en la misma prueba. Sus
+// formularios siguen necesitando red: esto sólo hace la página alcanzable.
+const OPERATOR_ROUTE_PREFIXES = ["/apiaries", "/beneficio", "/field-sessions", "/lots", "/plots"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -103,13 +127,68 @@ async function networkFirstNavigation(request) {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(PAGE_CACHE);
-      cache.put(request, response.clone());
+      cache.put(request, conHora(response.clone()));
     }
     return response;
   } catch {
-    const cached = await caches.match(request, { cacheName: PAGE_CACHE });
-    if (cached) return cached;
+    const cached = await paginaVigente(request);
+    if (cached) return servirComoGuardada(cached);
     const offline = await caches.match(OFFLINE_URL, { cacheName: SHELL_CACHE });
     return offline || Response.error();
   }
+}
+
+/** La misma respuesta, con la hora a la que se guardó. El cuerpo pasa como flujo: no se espera a leerlo. */
+function conHora(response) {
+  const headers = new Headers(response.headers);
+  headers.set(CABECERA_GUARDADA, String(Date.now()));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/**
+ * La página guardada, si se guardó hace menos de lo que dura una sesión. Una
+ * sin hora —de antes de la v2— o más vieja no se sirve, y se borra.
+ */
+async function paginaVigente(request) {
+  const cache = await caches.open(PAGE_CACHE);
+  const cached = await cache.match(request);
+  if (!cached) return undefined;
+  // `Number(null)` es 0 y `Number("x")` es NaN: los dos dan una edad que no
+  // pasa la comparación, así que una hora ausente o rota no se sirve.
+  const edad = Date.now() - Number(cached.headers.get(CABECERA_GUARDADA));
+  if (edad <= MAX_EDAD_DE_PAGINA_MS) return cached;
+  await cache.delete(request);
+  return undefined;
+}
+
+/**
+ * Una página guardada se sirve MARCADA — R2 del plan farm-to-green (ADR-197), 2026-10-09. Hasta
+ * entonces se enseñaba sin red como si fuera la actual. La hora sale de la cabecera `date` que el
+ * servidor puso al responder, que es cuándo se generó lo que se ve; sin ella, la marca va vacía y
+ * el aviso dice «una versión guardada» sin inventar cuándo.
+ *
+ * `content-length` y `content-encoding` se quitan: el cuerpo cambia de largo y ya viene
+ * descomprimido.
+ */
+async function servirComoGuardada(cached) {
+  const fecha = new Date(cached.headers.get("date") || "");
+  const guardadaEl = Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+  const html = marcarComoGuardada(await cached.text(), guardadaEl);
+  const headers = new Headers(cached.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  return new Response(html, { status: cached.status, statusText: cached.statusText, headers });
+}
+
+/**
+ * Pone `<meta name="nn-guardada-el" content="<ISO>">` justo después del primer `<head>`. Sólo una
+ * fecha ISO llega al HTML; cualquier otra cosa se escribe vacía. Lo prueba
+ * `tests/sync/versionGuardada.test.ts`. El reemplazo es una FUNCIÓN y no una cadena: si algún día el
+ * valor admitiera un `$`, en una cadena se leería como `$&` o `$1`. Hoy la validación ya lo impide, así
+ * que es una segunda red y ninguna prueba la distingue (medido: cambiarla por una cadena no tumba nada).
+ */
+function marcarComoGuardada(html, guardadaEl) {
+  const valor =
+    typeof guardadaEl === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(guardadaEl) ? guardadaEl : "";
+  return html.replace(/<head(\s[^>]*)?>/i, (cabecera) => `${cabecera}<meta name="nn-guardada-el" content="${valor}">`);
 }

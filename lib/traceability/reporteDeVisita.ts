@@ -1,9 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../db";
+import { ZONA_POR_DEFECTO } from "../time/mostrarInstante";
 import { recordAuditEvent } from "../audit";
 import { requireFieldSessionAccess } from "./jornadaDeCampo";
 import { FieldSessionValidationError } from "./fieldSessions";
+import { UUID } from "../validation/uuid";
 
 /**
  * A9.6 (D7) — emitir el reporte de una visita, congelado.
@@ -35,7 +37,24 @@ export interface EmitirReporteInput {
 
 /** Lo que se congela. Deliberadamente plano y sin ids internos donde se puede. */
 export interface SnapshotDeVisita {
-  sitio: { nombre: string; tipo: string };
+  sitio: {
+    nombre: string;
+    tipo: string;
+    /**
+     * **La zona en que se leen las horas, congelada al emitir** (PR-1 de la revisión del #674,
+     * Daniel, 2026-10-10): la del sitio o, si no la declara, `ZONA_POR_DEFECTO`. Hasta entonces se
+     * congelaba la del sitio tal cual, y un apiario dado de alta desde la aplicación —que no tiene
+     * zona— imprimía su informe en UTC: una visita a las 19:30 salía «día siguiente 00:30».
+     *
+     * Opcional porque lo ya emitido puede no traerla, y esos se siguen leyendo en UTC rotulado
+     * (`fechaDelReporte`): no se sabe en qué zona se emitieron, y un documento entregado no se
+     * reinterpreta.
+     */
+    zona?: string | null;
+    /** Si la zona la declaró el sitio (`true`) o es el respaldo de la casa (`false`). Falta en lo
+     *  emitido antes de que existiera. */
+    zonaDeclarada?: boolean;
+  };
   visita: {
     inicio: string;
     fin: string | null;
@@ -60,6 +79,50 @@ export interface SnapshotDeVisita {
     colmena?: string | null;
     /** Que se hizo o que se vio, en una linea: el producto, el alimento, el resultado. */
     detalle?: string | null;
+    /** Opcional para conservar lectura de versiones anteriores. */
+    inspeccion?: {
+      poblacion: string | null;
+      cuadrosCubiertos: number | null;
+      reina: string | null;
+      patronCria: string | null;
+      etapasCria: string[];
+      reservasMiel: string | null;
+      reservasPolen: string | null;
+      temperamento: string | null;
+      nota: string | null;
+      valoracion: string | null;
+      /**
+       * **La sanidad, congelada** (PR-2 de la revisión del #674, Daniel, 2026-10-10). Hasta entonces
+       * el informe no guardaba nada de esto, y si después se corregía la inspección, el documento
+       * entregado no tenía cómo decir lo que se vio aquel día.
+       *
+       * Las irregularidades van **por su nombre**, no por su id: el informe es plano y se lee sin
+       * consultar el catálogo, que puede cambiar. `otraSenal` es el texto libre del «Otro» con que
+       * termina esa lista (`pestDiseaseFlags`).
+       *
+       * **Opcionales, y ausente no es vacío.** Lo emitido antes no los trae y la pantalla no pinta
+       * esas filas; lo emitido después los trae siempre, con `null` o `[]` cuando no se registraron,
+       * y la pantalla dice «Sin registrar».
+       */
+      irregularidades?: string[];
+      otraSenal?: string | null;
+      celdasReales?: { tipo: string | null; cuantas: number | null };
+      criaDeZangano?: boolean | null;
+      marcosNegros?: number | null;
+      mielJuntoACria?: boolean | null;
+      polenJuntoACria?: boolean | null;
+    };
+    alimentacion?: { tipo: string | null; material: string | null; cantidad: string | null; unidad: string | null };
+    /**
+     * **El tipo de manejo y el conteo de varroa, congelados** (V-7 de la revisión del Apiario,
+     * 2026-10-10). Hasta entonces el informe guardaba del manejo sólo el producto o el alimento
+     * —`sujeto: "evento_de_colonia"`, sin decir cuál—, y un conteo de varroa entraba como una
+     * fila sin caja ni resultado. Opcionales: lo emitido antes no los trae.
+     *
+     * De la varroa se congela LO CONTADO; la infestación se deriva al pintar, como en la ficha.
+     */
+    manejo?: string | null;
+    varroa?: { metodo: string; abejas: number; acaros: number };
   }>;
   /**
    * La lectura del tecnico y lo que le recomienda al cliente. Opcionales por lo mismo que
@@ -109,7 +172,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
   const visita = await prisma.fieldSession.findUnique({
     where: { id: input.fieldSessionId },
     include: {
-      location: { select: { name: true, locationType: true } },
+      location: { select: { name: true, locationType: true, timezone: true } },
       operator: { select: { displayName: true } },
     },
   });
@@ -132,24 +195,37 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
       // listado de tipos de fila. El identificador NO es un id interno: es justo el dato con
       // el que el cliente sigue su servicio.
       inspection: {
-        select: { outcome: true, colony: { select: { hive: { select: { identifier: true } } } } },
+        select: { outcome: true, population: true, beeCoveredFrames: true, queenSighted: true, broodPattern: true, broodStages: true, honeyStoresLevel: true, pollenStoresLevel: true, temperament: true, note: true, assessment: true, colony: { select: { hive: { select: { identifier: true } } } },
+          irregularities: { select: { value: { select: { value: true, displayOrder: true } } } },
+          pestDiseaseFlags: true, queenCellKind: true, queenCellCount: true, droneBroodPresent: true, darkFrames: true, honeyNextToBrood: true, pollenNextToBrood: true },
       },
       colonyEvent: {
         select: {
           eventType: true,
           treatmentProduct: true,
           feedingMaterial: true,
+          feedingMaterialKind: true,
+          feedingQuantity: true,
+          feedingUnit: true,
           colony: { select: { hive: { select: { identifier: true } } } },
         },
       },
       apiaryHarvestEvent: {
         select: { extractedWeightKg: true, colony: { select: { hive: { select: { identifier: true } } } } },
       },
+      varroaCount: {
+        select: { method: true, sampleBees: true, mitesCounted: true, colony: { select: { hive: { select: { identifier: true } } } } },
+      },
     },
   });
 
   const snapshot: SnapshotDeVisita = {
-    sitio: { nombre: visita.location.name, tipo: visita.location.locationType },
+    sitio: {
+      nombre: visita.location.name,
+      tipo: visita.location.locationType,
+      zona: visita.location.timezone ?? ZONA_POR_DEFECTO,
+      zonaDeclarada: visita.location.timezone != null,
+    },
     visita: {
       inicio: visita.startedAt.toISOString(),
       fin: visita.endedAt?.toISOString() ?? null,
@@ -166,11 +242,42 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         e.inspection?.colony.hive.identifier ??
         e.colonyEvent?.colony.hive.identifier ??
         e.apiaryHarvestEvent?.colony.hive.identifier ??
+        e.varroaCount?.colony.hive.identifier ??
         null,
       // Una linea de lo que paso, con lo que la fila declara y nada mas. Un tratamiento sin
       // producto anotado dice `null`, no una cadena vacia ni un "se aplico algo": el vacio se
       // ve, que es la regla del Anexo C y de ADR-125.
       detalle: detalleDe(e),
+      ...(e.inspection ? { inspeccion: {
+        poblacion: e.inspection.population,
+        cuadrosCubiertos: e.inspection.beeCoveredFrames,
+        reina: e.inspection.queenSighted,
+        patronCria: e.inspection.broodPattern,
+        etapasCria: e.inspection.broodStages,
+        reservasMiel: e.inspection.honeyStoresLevel,
+        reservasPolen: e.inspection.pollenStoresLevel,
+        temperamento: e.inspection.temperament,
+        nota: e.inspection.note,
+        valoracion: e.inspection.assessment,
+        // En el orden del formulario, que es el del catálogo.
+        irregularidades: [...e.inspection.irregularities]
+          .sort((a, b) => a.value.displayOrder - b.value.displayOrder || a.value.value.localeCompare(b.value.value))
+          .map((i) => i.value.value),
+        otraSenal: e.inspection.pestDiseaseFlags,
+        celdasReales: { tipo: e.inspection.queenCellKind, cuantas: e.inspection.queenCellCount },
+        criaDeZangano: e.inspection.droneBroodPresent,
+        marcosNegros: e.inspection.darkFrames,
+        mielJuntoACria: e.inspection.honeyNextToBrood,
+        polenJuntoACria: e.inspection.pollenNextToBrood,
+      } } : {}),
+      ...(e.colonyEvent?.eventType === "feeding" ? { alimentacion: {
+        tipo: e.colonyEvent.feedingMaterialKind,
+        material: e.colonyEvent.feedingMaterial,
+        cantidad: e.colonyEvent.feedingQuantity?.toString() ?? null,
+        unidad: e.colonyEvent.feedingUnit,
+      } } : {}),
+      ...(e.colonyEvent ? { manejo: e.colonyEvent.eventType } : {}),
+      ...(e.varroaCount ? { varroa: { metodo: e.varroaCount.method, abejas: e.varroaCount.sampleBees, acaros: e.varroaCount.mitesCounted } } : {}),
       // Qué hecho concreto cuelga de este registro, sin exponer el id interno.
       sujeto:
         e.inspectionId ? "inspeccion"
@@ -178,6 +285,7 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
         : e.apiaryHarvestEventId ? "cosecha"
         : e.measurementId ? "medicion"
         : e.harvestEventId ? "cosecha"
+        : e.varroaCountId ? "conteo_de_varroa"
         : null,
     })),
     causaProbable: visita.probableCause,
@@ -258,6 +366,9 @@ export async function emitirReporteDeVisita(userAccountId: string, input: Emitir
  * blanco que parecería un reporte real.
  */
 export async function leerReporteDeVisita(userAccountId: string, fieldSessionId: string) {
+  // El id llega de la URL de `field-sessions/[id]/report`. Sin forma de UUID, Prisma lanzaba `P2007`
+  // y la página daba 500 (PENDING_IMPLEMENTATIONS/026); es una jornada que no existe.
+  if (!UUID.test(fieldSessionId)) throw new FieldSessionValidationError("session_not_found");
   const visita = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
     select: { locationId: true },

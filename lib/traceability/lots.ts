@@ -1,3 +1,4 @@
+import { tuesteVisible } from "./tuesteVisible";
 import type { ClassificationLevel } from "../rbac/types";
 /**
  * Phase 1, ticket T1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
@@ -31,8 +32,20 @@ import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
 import { exigirPersonaPermitida, personasPermitidas, type Ancla } from "../people/quienLoHizo";
+import { UUID } from "../validation/uuid";
 
 export class TraceabilityAccessError extends Error {}
+
+/**
+ * Las dos lecturas que reciben el id de la URL (`/lots/[id]` y sus subrutas) lo
+ * comprueban aquí antes de ir a la base. Sin esto, `/lots/no-es-un-id` llegaba a
+ * Postgres, Prisma lanzaba `P2007` y la página —que sólo atrapa esta clase— daba
+ * un 500 en vez de «no existe» (2026-10-09). No se atrapa el error de Prisma: así
+ * cualquier otro sigue subiendo como lo que es.
+ */
+function exigirFormaDeId(lotId: string) {
+  if (!UUID.test(lotId)) throw new TraceabilityAccessError("lot_not_found");
+}
 
 /**
  * P0 §6 — `lot:override_balance`, held by Platform Admin and deliberately not
@@ -946,6 +959,7 @@ export async function getActiveOperations(userAccountId: string) {
  * cuenta lo que devuelve para un lote real.
  */
 export async function getLotDetail(userAccountId: string, lotId: string) {
+  exigirFormaDeId(lotId);
   const lot = await prisma.lot.findUnique({
     where: { id: lotId },
     // P3 §3 — the batch header marks a rejection stream; without the category
@@ -1158,6 +1172,7 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
 }
 
 export interface SensoryLinkageEntry {
+  roastSessionId: string | null;
   sessionId: string;
   sessionName: string;
   sessionStatus: string;
@@ -1179,10 +1194,18 @@ export interface SensoryLinkageEntry {
  * must stay hidden from the operator of the lot that produced them
  * forever. This function only ever returns an aggregate `PanelResult`
  * (mean/min/max/responseCount) and the session's own name/status; it never
- * returns `blindCode`, the mapping row itself, or any individual
+ * returns `blindCode`, the mapping row, or any individual
  * Assessment/evaluator identity — Farm Operator (the actual caller here)
  * holds neither `blind_mapping:view` nor any `sensory:*` permission, and
  * none is needed for this specific, narrow exposure.
+ *
+ * **La única excepción, y se nombra porque esta promesa ya fue falsa una vez:**
+ * `roastSessionId` sí sale del mapping. Es una FK a una sesión de tueste —dato
+ * del lado del lote, no del lado ciego— y existe porque una muestra puede ir dos
+ * veces en la misma sesión con tuestes distintos: sin ella el informe no puede
+ * decir qué resultado salió de qué tueste. El DETALLE del tueste no viaja aquí;
+ * pasa por `getReportRoastPreparations`, que sí recibe usuario. La lista blanca
+ * del guardia en `tests/traceability/lots.test.ts` la declara con su razón.
  *
  * Also deliberately does not apply a `classification:clear_*` check
  * against SensorySession (which defaults to `internal`) — the ticket's own
@@ -1202,6 +1225,7 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
       blindMappings: {
         select: {
           revealedAt: true,
+          roastSessionId: true,
           blindSample: {
             select: {
               flight: { select: { session: { select: { id: true, name: true, status: true } } } },
@@ -1222,6 +1246,8 @@ export async function getSensoryLinkageForSamples(sampleIds: string[]): Promise<
     result[sample.id] = sample.blindMappings.map((mapping) => {
       const overall = mapping.blindSample.panelResults[0] ?? null;
       return {
+        // ADR-043: el id del tueste de una cata abierta no sale (ver `tuesteVisible`).
+        roastSessionId: tuesteVisible(mapping.revealedAt != null, mapping.blindSample.flight.session.status) ? mapping.roastSessionId : null,
         sessionId: mapping.blindSample.flight.session.id,
         sessionName: mapping.blindSample.flight.session.name,
         sessionStatus: mapping.blindSample.flight.session.status,
@@ -1365,6 +1391,7 @@ export async function getObserverCandidates(userAccountId: string, anclas: reado
 
 /** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */
 export async function getLotSummary(userAccountId: string, lotId: string) {
+  exigirFormaDeId(lotId);
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);

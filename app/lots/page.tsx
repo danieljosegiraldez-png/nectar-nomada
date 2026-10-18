@@ -77,7 +77,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             la misma razón que las recetas (ADR-100): S2 dejó esa barra en ocho
             entradas para que quepa en un teléfono, y un test lo vigila. Es de
             lectura, así que no se esconde a quien no puede gestionar. */}
-        <Link href="/reports/proceso" className="nn-button nn-button-secondary" style={{ display: "inline-block", textDecoration: "none" }}>
+        <Link href="/reports/proceso" className="nn-button nn-button-secondary">
           {t("viewProcessReportButton")}
         </Link>
         {/* ADR-100. Recipes live here rather than in the top navigation: they
@@ -86,7 +86,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
             phone. A test asserts it stays at eight or fewer, and it was right
             to refuse a ninth. */}
         {canManageLots ? (
-          <Link href="/recipes" className="nn-button-quiet" style={{ display: "inline-block", textDecoration: "none" }}>
+          <Link href="/recipes" className="nn-button-quiet">
             {t("recipesTitle")}
           </Link>
         ) : null}
@@ -106,7 +106,7 @@ export default async function LotsPage({ searchParams }: { searchParams: Promise
           // A plain anchor, not next/link: this is a file download, and
           // client-side navigation to a route handler would fetch the zip and
           // then have nowhere to put it.
-          <a href="/api/export" className="nn-button-quiet" style={{ textDecoration: "none" }}>
+          <a href="/api/export" className="nn-button-quiet">
             {t("exportButton")}
           </a>
         ) : null}

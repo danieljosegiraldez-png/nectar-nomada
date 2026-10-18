@@ -5,8 +5,8 @@ const textos = {
   sinPerfil: "sin perfil",
   sinEquipo: "sin equipo",
   linajeDemasiadoHondo: "linaje demasiado hondo",
-  describirTueste: ({ date, profile, equipment }: { date: string; profile: string; equipment: string }) =>
-    `${date} · ${profile} · ${equipment}`,
+  describirTueste: ({ date, profile, equipment, reference }: { date: string; profile: string; equipment: string; reference: string }) =>
+    `${date} · ${profile} · ${equipment} · Referencia ${reference}`,
 };
 
 const muestra = {
@@ -39,6 +39,19 @@ describe("opciones de preparación para cata", () => {
     ]);
     expect(opciones[0]?.label).toContain("Ikawa");
     expect(opciones[1]?.label).toContain("Claro v2");
+  });
+
+  it("distingue tuestes con los mismos datos y conserva su referencia completa", () => {
+    const ids = ["747251f0-6dd0-4906-bf4b-3b65e61a5dac", "747251f0-6dd0-4906-bf4b-3b65e61a5dad"];
+    const opciones = opcionesDePreparacion({
+      ...muestra,
+      roastSessions: ids.map((id) => ({ id, startedAt: new Date("2026-10-07T12:00:00Z"), equipment: { name: "Ikawa" }, recipeVersion: null })),
+    }, textos);
+    expect(opciones[0]?.label).not.toBe(opciones[1]?.label);
+    ids.forEach((id, index) => {
+      expect(opciones[index]?.label).toContain(id);
+      expect(opciones[index]?.roastSessionId).toBe(id);
+    });
   });
 
   /**

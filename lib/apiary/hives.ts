@@ -19,6 +19,7 @@ import { classificationForTarget, loadScopeClassifications } from "../rbac/scope
 import { recordAuditEvent } from "../audit";
 import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
 import type { ScopeTarget } from "../rbac/types";
+import { UUID } from "../validation/uuid";
 import type { ClassificationLevel, ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { CATALOGO_DE_CAUSA_DE_PERDIDA, esClaseDeCausa, type ClaseDeCausa } from "./causaDePerdida";
 
@@ -487,9 +488,18 @@ export async function registrarFinDeColonia(userAccountId: string, input: Regist
 }
 
 export async function getHive(userAccountId: string, hiveId: string) {
+  // El id llega de la URL. Sin forma de UUID, Postgres rechazaba la conversión y Prisma lanzaba
+  // `P2007`, un 500 (PENDING_IMPLEMENTATIONS/026). Es una colmena que no existe.
+  if (!UUID.test(hiveId)) throw new ApiaryAccessError("hive_not_found");
   const hive = await prisma.hive.findUnique({
     where: { id: hiveId },
-    include: { colonies: { include: { assets: true, originSource: { select: { value: true } } } }, assets: true },
+    include: {
+      colonies: { include: { assets: true, originSource: { select: { value: true } } } },
+      assets: true,
+      // El tipo de sitio decide si se pregunta por cuadros (`seManejaEnCuadros`): la especie
+      // no esta en la colmena ni en la colonia, vive aqui.
+      location: { select: { locationType: true } },
+    },
   });
   if (!hive) throw new ApiaryAccessError("hive_not_found");
   await requireApiaryAccess(userAccountId, "view", [{ projectId: hive.projectId, locationId: hive.locationId }]);
@@ -610,6 +620,8 @@ export async function getApiaryList(userAccountId: string) {
 }
 
 export async function getApiaryDetail(userAccountId: string, locationId: string) {
+  // Lo mismo que `getHive`: un id sin forma de UUID es un apiario que no existe, no un `P2007`.
+  if (!UUID.test(locationId)) throw new ApiaryAccessError("apiary_not_found");
   const location = await prisma.location.findUnique({
     where: { id: locationId },
     include: { hives: { include: { colonies: true }, orderBy: { identifier: "asc" } } },

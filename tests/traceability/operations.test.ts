@@ -99,6 +99,7 @@ beforeAll(async () => {
   await abrirProcesoDePrueba(authorizedUserAccountId, harvestLotId);
   const { run: fermentationRun } = await startFermentationRun(authorizedUserAccountId, {
     lotId: harvestLotId,
+    vesselNote: "Tanque de prueba",
     startedAt: new Date("2027-01-15T10:00:00Z"),
     provenanceClass: "original_record",
   });

@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
 import { getLotSummary, TraceabilityAccessError } from "../../../../../lib/traceability/lots";
 import { coberturaDelLote, puedeAbrirProceso, puedeEmpezarCorrida, LotProcessError } from "../../../../../lib/traceability/lotProcess";
+import { recipientesParaFermentar } from "../../../../../lib/equipos/equipos";
 import { FermentationForm } from "../../../../components/traceability/FermentationForm";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,10 @@ export default async function NewFermentationPage({ params }: { params: Promise<
     aviso = error.message === "lineage_too_deep" ? t("processLineageTooDeep") : t("processLoadFailed", { detail: error.message });
   }
 
+  // Parte 2c, arreglos previos §4.1 (2026-10-04): los tanques que quien mira puede elegir, cargados AQUÍ y pasados por props (un
+  // componente cliente no importa prisma). Sólo se piden si el formulario se va a ofrecer: sin proceso abierto no hay nada que elegir.
+  const recipientes = aviso === null ? await recipientesParaFermentar(user.userAccountId, lot.id) : [];
+
   return (
     <div>
       <Link href={`/lots/${id}`} className="nn-back-link">
@@ -64,7 +69,7 @@ export default async function NewFermentationPage({ params }: { params: Promise<
           <Link href={`/lots/${id}/process`}>{aviso}</Link>
         </p>
       ) : (
-        <FermentationForm lotId={lot.id} recetaDelProceso={recetaDelProceso} />
+        <FermentationForm lotId={lot.id} recetaDelProceso={recetaDelProceso} recipientes={recipientes} />
       )}
     </div>
   );

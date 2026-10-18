@@ -76,8 +76,14 @@ export async function vistaDeBandejas(userAccountId: string) {
   // A5 (revisión final del plan 2a): sólo organizaciones con al menos un
   // `site` — sin esto un Platform Admin ve una sección por cada
   // roaster/cliente, que nunca va a tener bandejas.
+  //
+  // **O un `beneficio` (ADR-198, PR 2).** Con «sólo `site`» una organización cuyo beneficio nació sin
+  // finca quedaba fuera, y la pantalla decía «no ves ninguna organización con bandejas todavía»: leía
+  // «no hay» donde la verdad era «no te dejo». Un beneficio ES donde se pone una bandeja, así que
+  // basta para entrar; el propósito de A5 —no listar roasters ni clientes— se conserva, porque ésos no
+  // tienen ni sitio ni beneficio.
   const organizaciones = await prisma.organization.findMany({
-    where: { locations: { some: { locationType: "site" } } },
+    where: { locations: { some: { locationType: { in: ["site", "beneficio"] } } } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

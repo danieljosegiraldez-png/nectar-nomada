@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from "vitest";
  * `finalizeTrampaPhotoPorBorradorAction`, que `syncTrapPhotos` sí usa), y esa
  * cadena llega a `lib/auth/session` → next-auth → `next/server`, que Vitest
  * (fuera del bundler de Next) no resuelve — mismo obstáculo que ya resuelven
- * `tests/traceability/recordRoundTrapCheckFormAction.test.ts` y hermanos, con
- * el mismo mecanismo: mockear `lib/auth/session` (y lo que la acción
+ * `tests/traceability/recordTrapCheckFormAction.test.ts` y hermanos, con el
+ * mismo mecanismo: mockear `lib/auth/session` (y lo que la acción
  * necesita del contexto de request) ANTES de importar. Aquí no se usa nada de
  * lo mockeado — es sólo para que el módulo cargue — y no hace falta base:
  * `clasificarResultadoDeFoto` es pura.
@@ -41,5 +41,10 @@ describe("clasificarResultadoDeFoto", () => {
 
   it("error se marca error", () => {
     expect(clasificarResultadoDeFoto({ error: "algo" })).toBe("rechazar");
+  });
+
+  it("una foto de otra cuenta se retiene: ni se aplica ni se marca error (ADR-199)", () => {
+    expect(clasificarResultadoDeFoto({ retenida: true })).toBe("retener");
+    expect(clasificarResultadoDeFoto({ retenida: true, cuentaDelBorrador: "11e594f481958c10" })).toBe("retener");
   });
 });

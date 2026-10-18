@@ -55,6 +55,7 @@ import {
   type EstadoDelProtocolo,
 } from "./consultaAVecinos";
 import { TrasladoInvalido, exigeMotivoDeTraslado } from "./motivoDeTraslado";
+import { sitioEnElDia, tocaElDia } from "./sitioDeLaCaja";
 
 // El vocabulario vive en `motivoDeTraslado.ts`, **sin `prisma` detrás**, porque
 // `TrasladoForm.tsx` es `"use client"` y necesita los cuatro motivos: importar un valor de
@@ -419,24 +420,24 @@ export async function destinosCandidatos(
 /**
  * En qué apiario estaba una colmena en una fecha. **Es la razón de la tabla.**
  *
- * Devuelve `null` cuando no hay colocación que cubra esa fecha —por ejemplo una fecha
+ * Devuelve `null` cuando no hay colocación que toque esa fecha —por ejemplo una fecha
  * anterior a la primera— y eso es una respuesta, no un hueco: significa «no consta», que
  * es distinto de «en el apiario en que está hoy».
  *
- * El intervalo es **semiabierto**: `startedAt <= fecha < endedAt`. Con el día del traslado,
- * la colmena cuenta en el destino, no en los dos.
+ * **El día del traslado sigue en el ORIGEN**, y cuenta en el destino desde el siguiente: regla de
+ * Daniel del 2026-10-08 (V-H2), en `sitioDeLaCaja.ts`. Hasta entonces esto decía lo contrario
+ * —«con el día del traslado, la colmena cuenta en el destino», por el intervalo semiabierto—, y no
+ * salía de ningún ADR. Nunca está en los dos.
+ *
+ * `fecha` es un campo de día, como las de traslado e instalación (ADR-112): se toma su día en UTC.
  */
 export async function apiarioDeColmenaEn(hiveId: string, fecha: Date): Promise<string | null> {
-  const p = await prisma.hivePlacement.findFirst({
-    where: {
-      hiveId,
-      startedAt: { lte: fecha },
-      OR: [{ endedAt: null }, { endedAt: { gt: fecha } }],
-    },
-    orderBy: { startedAt: "desc" },
-    select: { locationId: true },
+  const dia = new Date(`${fecha.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const colocaciones = await prisma.hivePlacement.findMany({
+    where: { hiveId, ...tocaElDia(dia) },
+    select: { locationId: true, startedAt: true, endedAt: true },
   });
-  return p?.locationId ?? null;
+  return sitioEnElDia(colocaciones, dia);
 }
 
 /** El historial completo de una colmena, de la colocación más reciente a la más vieja. */

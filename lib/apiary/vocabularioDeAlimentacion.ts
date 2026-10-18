@@ -22,8 +22,15 @@
  * build. Lo vigila `tests/arquitectura/cliente-sin-prisma.test.ts`.
  */
 import type { FeedingMaterial } from "../../generated/prisma/client";
+import { AlimentacionInvalida } from "./alimentacion";
 
-export class AlimentacionInvalida extends Error {}
+/**
+ * La clase es la de `alimentacion.ts`, no una propia. Hasta el 2026-10-14 este archivo definía
+ * otra con el mismo nombre, y `lib/sync/pushFieldEvents.ts` sólo reconoce aquélla como rechazo:
+ * un material mal enviado sin señal tumbaba el lote entero en vez de rechazarse solo. Se
+ * reexporta para que quien la importaba desde aquí siga funcionando.
+ */
+export { AlimentacionInvalida };
 
 /**
  * El orden es el que dijo el dueño, no alfabético ni por frecuencia: es el orden en el que él
@@ -111,4 +118,31 @@ export function comoSeLeeElMaterial(
   if (!kind) return texto;
   if (kind === MATERIAL_QUE_EXIGE_CUAL) return texto ?? etiqueta(kind);
   return texto ? `${etiqueta(kind)} (${texto})` : etiqueta(kind);
+}
+
+/**
+ * **La unidad de lo que se dio**, en lista cerrada. ADR-200 §5, pregunta 17 (Daniel, 2026-10-12): la
+ * lista base de su protocolo (`protocolos/apiario-campo-v2.json`, L, kg, g y ml) más la libra, que es
+ * como se anotó la alimentación real de Toabré. Hasta el 2026-10-14 era texto libre y la entrada rápida
+ * arrancaba en «kg», así que unas libras que nadie corregía quedaban guardadas como kilos.
+ *
+ * No hay enum en la base, a propósito: «se guarda lo tecleado», y lo que entra por «Otra» es texto. El
+ * protocolo v2 sigue sin la libra; añadirla allí es una versión nueva (ADR-165) y no bloquea esto.
+ */
+export const UNIDADES_DE_ALIMENTACION = ["L", "kg", "g", "ml", "lb"] as const;
+export type UnidadDeAlimentacion = (typeof UNIDADES_DE_ALIMENTACION)[number];
+
+/** El valor del desplegable que abre el «¿cuál?». No se guarda nunca: se guarda lo que se teclea. */
+export const UNIDAD_OTRA = "otra";
+
+/**
+ * Lo tecleado, sin convertir. Si coincide con una de la lista salvo mayúsculas o espacios, sale en la
+ * forma de la lista —«KG» es «kg»—, para que se pueda sumar con las demás. Si no, sale tal cual: no se
+ * adivina que «libras» sea «lb». Vacío no es una unidad.
+ */
+export function canonizaUnidad(texto: unknown): string | null {
+  if (typeof texto !== "string") return null;
+  const limpio = texto.trim();
+  if (limpio === "") return null;
+  return UNIDADES_DE_ALIMENTACION.find((u) => u.toLowerCase() === limpio.toLowerCase()) ?? limpio;
 }

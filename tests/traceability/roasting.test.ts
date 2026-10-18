@@ -186,6 +186,28 @@ describe("recordRoastSession — validation and access", () => {
     })).rejects.toThrow(/sample_mass_exceeded/);
   });
 
+  it("no consume más muestra disponible con dos tuestes simultáneos", async () => {
+    const concurrentSample = await prisma.sample.create({ data: {
+      sampleCode: `${RUN_ID}-concurrent`, sampleType: "green_coffee", materialState: "GREEN",
+      massAtExtraction: 0.3, massUnitAtExtraction: "kg", sourceLotId: greenLotId,
+      organizationId, projectId,
+    } });
+    try {
+      const results = await Promise.allSettled(["a", "b"].map((suffix) => recordRoastSession(authorizedUserAccountId, {
+        purpose: "sample", sourceSampleId: concurrentSample.id, lotId: greenLotId,
+        outputLotCode: `${RUN_ID}-concurrent-${suffix}`, chargeWeightKg: 0.2, dischargeWeightKg: 0.17,
+        startedAt: new Date("2027-01-10T08:00:00Z"), provenanceClass: "direct_observation",
+      })));
+      for (const result of results) if (result.status === "fulfilled") outputLotIds.push(result.value.outputLot.id);
+      const usage = await prisma.roastSession.aggregate({where:{sourceSampleId:concurrentSample.id},_sum:{chargeWeightKg:true}});
+      expect(Number(usage._sum.chargeWeightKg)).toBeLessThanOrEqual(0.3);
+      expect(results.filter((result)=>result.status === "fulfilled")).toHaveLength(1);
+    } finally {
+      // The normal fixture cleanup owns all roast records and output lots.
+      await prisma.sample.delete({where:{id:concurrentSample.id}});
+    }
+  });
+
   it("rejects a user with no access to the source lot's project", async () => {
     await expect(
       recordRoastSession(wrongProjectUserAccountId, {
@@ -435,5 +457,64 @@ describe("the row cap is spent on rows the caller can see — ADR-087", () => {
     // And says nothing was cut when nothing was.
     const roomy = await listRoastSessions(authorizedUserAccountId, {}, 500);
     expect(roomy.truncated).toBe(false);
+  });
+});
+
+describe("serie automática por lote de origen", () => {
+  it("asigna códigos diferentes a dos muestras del mismo lote registradas simultáneamente", async () => {
+    const samples = [];
+    for (const suffix of ["a", "b"]) samples.push(await prisma.sample.create({data:{
+      sampleCode:`${RUN_ID}-series-${suffix}`,sampleType:"green_coffee",materialState:"GREEN",
+      massAtExtraction:0.3,massUnitAtExtraction:"kg",sourceLotId:greenLotId,organizationId,projectId,
+    }}));
+    try {
+      const results=await Promise.allSettled(samples.map((sample)=>recordRoastSession(authorizedUserAccountId,{
+        purpose:"sample",sourceSampleId:sample.id,lotId:greenLotId,chargeWeightKg:0.2,dischargeWeightKg:0.17,
+        startedAt:new Date("2027-01-10T09:00:00Z"),provenanceClass:"direct_observation",
+      })));
+      const successful=results.filter((result)=>result.status === "fulfilled");
+      for(const result of successful) outputLotIds.push(result.value.outputLot.id);
+      expect(successful).toHaveLength(2);
+      const codes=successful.map((result)=>result.value.outputLot.lotCode);
+      expect(new Set(codes).size).toBe(2);
+      for(const code of codes) expect(code).toMatch(/-green-T[0-9]{2}$/);
+      const numbers=codes.map((code)=>Number(code.slice(-2))).sort((a,b)=>a-b);
+      expect(numbers[1]! - numbers[0]!).toBe(1);
+    } finally {
+      await prisma.sample.deleteMany({where:{id:{in:samples.map((sample)=>sample.id)}}});
+    }
+  });
+  it("conserva el consecutivo si cambia el código del lote de origen", async () => {
+    const input={purpose:"sample" as const,lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation" as const};
+    const first=await recordRoastSession(authorizedUserAccountId,input);
+    outputLotIds.push(first.outputLot.id);
+    await prisma.lot.update({where:{id:greenLotId},data:{lotCode:`${RUN_ID}-renamed`}});
+    try {
+      const second=await recordRoastSession(authorizedUserAccountId,input);
+      outputLotIds.push(second.outputLot.id);
+      expect(second.outputLot.lotCode).toBe(`${RUN_ID}-renamed-T${String(Number(first.outputLot.lotCode.slice(-2))+1).padStart(2,"0")}`);
+      expect((await prisma.lot.findUniqueOrThrow({where:{id:first.outputLot.id}})).lotCode).toBe(first.outputLot.lotCode);
+    } finally {
+      await prisma.lot.update({where:{id:greenLotId},data:{lotCode:`${RUN_ID}-green`}});
+    }
+  });
+  it("no agota la serie por un lote ajeno con un prefijo extendido", async () => {
+    const unrelated=await prisma.lot.create({data:{lotCode:`${RUN_ID}-green-TOTHER-T99`,lotType:"roast",organizationId,projectId}});
+    outputLotIds.push(unrelated.id);
+    const result=await recordRoastSession(authorizedUserAccountId,{
+      purpose:"sample",lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
+    });
+    outputLotIds.push(result.outputLot.id);
+    expect(result.outputLot.lotCode).toMatch(/-green-T[0-9]{2}$/);
+    expect(result.outputLot.lotCode).not.toContain("TOTHER");
+  });
+  it("no reinicia ni llena huecos al llegar a T99", async () => {
+    const reserved=await prisma.lot.create({data:{lotCode:`${RUN_ID}-green-T99`,lotType:"roast",organizationId,projectId}});
+    outputLotIds.push(reserved.id);
+    const before=await prisma.roastSession.count({where:{createdBy:authorizedUserAccountId}});
+    await expect(recordRoastSession(authorizedUserAccountId,{
+      purpose:"sample",lotId:greenLotId,startedAt:new Date("2027-01-10T10:00:00Z"),provenanceClass:"direct_observation",
+    })).rejects.toThrow("sample_roast_series_exhausted");
+    expect(await prisma.roastSession.count({where:{createdBy:authorizedUserAccountId}})).toBe(before);
   });
 });

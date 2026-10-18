@@ -106,9 +106,13 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                     </span>
                     {preparacion ? (
                       <>
+                        <span>{t("servedRoastCode", { value: preparacion.transformations.flatMap((transformation) => transformation.outputs.filter((output) => output.lot.lotType === "roast").map((output) => output.lot.lotCode)).join(", ") || t("roastDataUnavailable") })}</span>
+                        <span>{t("servedSourceLot", { value: preparacion.transformations.flatMap((transformation) => transformation.inputs.map((input) => input.lot.lotCode)).join(", ") || t("roastDataUnavailable") })}</span>
+                        <span>{t("servedRoaster", { value: preparacion.roaster?.displayName ?? t("roastDataNotRecorded") })}</span>
                         <span>{t("servedRoastDate", { date: preparacion.startedAt.toISOString().slice(0, 10) })}</span>
                         <span>{preparacion.recipeVersion ? `${preparacion.recipeVersion.recipe.name} · v${preparacion.recipeVersion.version}` : t("sampleRoastNoProfile")}</span>
-                        <span>{preparacion.equipment?.name ?? t("sampleRoastNoEquipment")}</span>
+                        <span>{preparacion.equipment?.name ?? preparacion.equipmentNote ?? t("roastDataNotRecorded")}</span>
+                        <span style={{ overflowWrap: "anywhere" }}>{t("sampleRoastReference", { reference: preparacion.id })}</span>
                         {edadDelTueste ? (
                           <span className={edadDelTueste.fuera ? "nn-roast-age-warning" : undefined}>
                             {t("roastAgeAtCupping", { days: edadDelTueste.dias, hours: edadDelTueste.horas })}
@@ -140,10 +144,11 @@ export default async function SensorySessionPage({ params }: { params: Promise<{
                     <p className="nn-muted">
                       {t("assessmentCount", { count: headJudgeSample.assessments.length })}
                     </p>
+                    {session.purpose === null ? <p className="nn-muted" role="status">{t("panelPurposeRequired")}</p> : null}
                     <form action={computePanelResultFormAction}>
                       <input type="hidden" name="sessionId" value={sessionId} />
                       <input type="hidden" name="blindSampleId" value={blindSample.id} />
-                      <BotonDeEnvio className="nn-button" disabled={headJudgeSample.assessments.length === 0}>
+                      <BotonDeEnvio className="nn-button" disabled={headJudgeSample.assessments.length === 0 || session.purpose === null}>
                         {t("computePanelResultButton")}
                       </BotonDeEnvio>
                     </form>

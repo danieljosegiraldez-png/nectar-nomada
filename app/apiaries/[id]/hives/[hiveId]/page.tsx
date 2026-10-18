@@ -1,9 +1,10 @@
 import { CampoNumerico } from "../../../../components/CampoNumerico";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUser } from "../../../../../lib/auth/session";
-import { getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
+import { ApiaryAccessError, getApiaryDetail, getHive } from "../../../../../lib/apiary/hives";
+import { seManejaEnCuadros } from "../../../../../lib/apiary/sitioDeAbejas";
 import { lineaDeColonia } from "../../../../../lib/apiary/genealogia";
 import { dividirColoniaFormAction, unirColoniasFormAction } from "../../../../actions/apiary";
 import { cambiarReinaFormAction, cerrarTenenciaFormAction, introducirReinaFormAction } from "../../../../actions/apiary";
@@ -80,15 +81,25 @@ export default async function HiveDetailPage({
    * rechazaría — el fallo menos malo de los dos, y el que ya se corre en el
    * resto de la aplicación.
    */
-  const [hive, origenes, causas, irregularidades, granted] = await Promise.all([
-    getHive(user.userAccountId, hiveId),
-    // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
-    // lista escrita a mano en el formulario.
-    origenesDeColonia(),
-    causasDePerdida(),
-    irregularidadesOfrecidas(),
-    permissionKeysAnywhere(user.userAccountId),
-  ]);
+  // `getHive` es la única de las cinco que recibe el id de la URL, y esta página no atrapaba nada:
+  // una colmena que no existía —o un id mal formado— daba 500. «No existe» y «sin permiso» dan
+  // 404, como en `etiquetas` y en `plots/[id]` (ficha 026).
+  let lecturas;
+  try {
+    lecturas = await Promise.all([
+      getHive(user.userAccountId, hiveId),
+      // Lecturas sin sujeto: los dos vocabularios salen del catálogo, no de una
+      // lista escrita a mano en el formulario.
+      origenesDeColonia(),
+      causasDePerdida(),
+      irregularidadesOfrecidas(),
+      permissionKeysAnywhere(user.userAccountId),
+    ]);
+  } catch (error) {
+    if (error instanceof ApiaryAccessError) notFound();
+    throw error;
+  }
+  const [hive, origenes, causas, irregularidades, granted] = lecturas;
   // Las limpiezas de la CAJA (ADR-159). DESPUÉS del `Promise.all`, no dentro: `limpiezasDeCaja`
   // no autoriza, y `getHive` —que sí— lanza si no hay permiso de ver. Se usa `hive.id`, el de la
   // caja ya autorizada, no el parámetro crudo de la URL.
@@ -546,7 +557,12 @@ export default async function HiveDetailPage({
                 desaparece sin explicación se lee como una pantalla rota. Misma
                 doctrina que las limitaciones del veredicto: la falta se declara. */}
             {puedeGestionar ? (
-              <InspectionForm colonyId={colony.id} selfPersonId={selfPersonId} irregularidades={irregularidades} />
+              <InspectionForm
+                colonyId={colony.id}
+                selfPersonId={selfPersonId}
+                irregularidades={irregularidades}
+                enCuadros={seManejaEnCuadros(hive.location.locationType)}
+              />
             ) : (
               <p className="nn-muted">{t("sinPermisoInspeccion")}</p>
             )}

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../lib/db";
 import { PERMISSIONS, ROLE_PROFILES } from "../../lib/rbac/catalog";
 import * as audit from "../../lib/audit";
-import { BeneficioError, actualizarBeneficio, crearBeneficio, listarBeneficios, sitiosParaBeneficio } from "../../lib/traceability/beneficios";
+import { BeneficioError, actualizarBeneficio, crearBeneficio, listarBeneficios, organizacionesParaBeneficio, puedeCrearBeneficioEnOrganizacion, sitiosParaBeneficio } from "../../lib/traceability/beneficios";
 import { LocationAccessError, puedeGestionarAtributosDeUbicacion } from "../../lib/traceability/locations";
 
 describe("el tipo de ubicación beneficio", () => {
@@ -43,10 +43,20 @@ const names: string[] = [];
 const accountIds: string[] = [];
 const personIds: string[] = [];
 const scopeIds: string[] = [];
+const orgIds: string[] = [];
 function nombre() { const n = `TEST-BEN-${randomUUID()}`; names.push(n); return n; }
 
-async function sitio() {
-  return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal" } });
+// **El sitio lleva organización por defecto, y es lo que hace que las pruebas de abajo midan algo.**
+// Hasta el PR 1 de ADR-198 este fixture lo creaba sin ella, así que `expect(ben.organizationId)
+// .toBe(finca.organizationId)` comparaba `null` con `null` y pasaba con la copia quitada.
+async function sitio(opts: { sinOrganizacion?: boolean } = {}) {
+  let organizationId: string | null = null;
+  if (!opts.sinOrganizacion) {
+    const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+    orgIds.push(org.id);
+    organizationId = org.id;
+  }
+  return prisma.location.create({ data: { name: nombre(), locationType: "site", classification: "internal", organizationId } });
 }
 async function parcela(parentLocationId: string) {
   return prisma.location.create({ data: { name: nombre(), locationType: "plot", classification: "internal", parentLocationId } });
@@ -91,10 +101,121 @@ afterEach(async () => {
   await prisma.scope.deleteMany({ where: { id: { in: scopeIds } } });
   await prisma.userAccount.deleteMany({ where: { id: { in: accountIds } } });
   await prisma.person.deleteMany({ where: { id: { in: personIds } } });
+  await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
   names.length = 0;
+  orgIds.length = 0;
   accountIds.length = 0;
   personIds.length = 0;
   scopeIds.length = 0;
+});
+
+async function adminDePlataforma() {
+  const id = await cuenta(null, "Farm Manager");
+  const perfil = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Platform Admin" } });
+  const existente = await prisma.scope.findFirst({ where: { scopeType: "platform" } });
+  const scope = existente ?? await prisma.scope.create({ data: { id: randomUUID(), scopeType: "platform" } });
+  if (!existente) scopeIds.push(scope.id); // sólo se borra el que esta corrida creó
+  await prisma.assignment.create({ data: { userAccountId: id, scopeId: scope.id, roleProfileId: perfil.id } });
+  return id;
+}
+async function organizacion() {
+  const org = await prisma.organization.create({ data: { name: nombre(), organizationType: "farm" } });
+  orgIds.push(org.id);
+  return org;
+}
+
+describe("un beneficio sin finca (ADR-198, PR 2)", () => {
+  it("quien gestiona una finca de la organización lo crea: sin padre, con SU organización", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: null, organizationId: finca.organizationId });
+    expect(ben.locationType).toBe("beneficio");
+    expect(ben.parentLocationId).toBeNull();
+    expect(ben.organizationId).toBe(finca.organizationId);
+    expect(ben.organizationId).not.toBeNull();
+    // Y deja su rastro, igual que el que cuelga de una finca.
+    expect(await prisma.auditEvent.count({ where: { operation: "location.create_beneficio", entityId: ben.id } })).toBe(1);
+  });
+
+  it("el gestor de OTRA organización NO puede crearlo aquí, y el de la suya sí", async () => {
+    const mia = await sitio();
+    const ajena = await sitio();
+    const jefeAjeno = await cuenta(ajena.id, "Farm Manager");
+    const n = nombre();
+    await expect(crearBeneficio(jefeAjeno, { name: n, parentLocationId: null, organizationId: mia.organizationId }))
+      .rejects.toThrow(LocationAccessError);
+    expect(await prisma.location.count({ where: { name: n } })).toBe(0);
+    // Control positivo: el mismo actor, con el mismo permiso, SÍ crea para SU organización.
+    const suyo = await crearBeneficio(jefeAjeno, { name: nombre(), parentLocationId: null, organizationId: ajena.organizationId });
+    expect(suyo.organizationId).toBe(ajena.organizationId);
+  });
+
+  it("un capataz NO puede, aunque gestione una finca de la organización", async () => {
+    const finca = await sitio();
+    const capataz = await cuenta(finca.id, "Farm Operator");
+    // Control: el capataz SÍ gestiona los atributos de la finca; lo que le falta es crear_site.
+    expect(await puedeGestionarAtributosDeUbicacion(capataz, finca.id)).toBe(true);
+    await expect(crearBeneficio(capataz, { name: nombre(), parentLocationId: null, organizationId: finca.organizationId }))
+      .rejects.toThrow(LocationAccessError);
+    expect(await puedeCrearBeneficioEnOrganizacion(capataz, finca.organizationId!)).toBe(false);
+  });
+
+  it("sin organización, o con una que no existe, se rechaza con su código", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    await expect(crearBeneficio(jefe, { name: nombre(), parentLocationId: null }))
+      .rejects.toThrow(new BeneficioError("organizacion_requerida"));
+    await expect(crearBeneficio(jefe, { name: nombre(), parentLocationId: "", organizationId: "" }))
+      .rejects.toThrow(new BeneficioError("organizacion_requerida"));
+    await expect(crearBeneficio(jefe, { name: nombre(), parentLocationId: null, organizationId: randomUUID() }))
+      .rejects.toThrow(new BeneficioError("organizacion_invalida"));
+  });
+
+  it("un administrador de plataforma lo crea incluso para una organización sin ninguna ubicación", async () => {
+    const vacia = await organizacion();
+    const admin = await adminDePlataforma();
+    // Control: el gestor de una finca de OTRA organización no puede para ésta.
+    const otra = await sitio();
+    const jefe = await cuenta(otra.id, "Farm Manager");
+    expect(await puedeCrearBeneficioEnOrganizacion(jefe, vacia.id)).toBe(false);
+    const ben = await crearBeneficio(admin, { name: nombre(), parentLocationId: null, organizationId: vacia.id });
+    expect(ben.organizationId).toBe(vacia.id);
+  });
+
+  it("cuando hay padre, el padre manda y la organización pasada se ignora", async () => {
+    const finca = await sitio();
+    const otra = await organizacion();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id, organizationId: otra.id });
+    expect(ben.parentLocationId).toBe(finca.id);
+    expect(ben.organizationId).toBe(finca.organizationId);
+    expect(ben.organizationId).not.toBe(otra.id);
+  });
+
+  it("organizacionesParaBeneficio lista la mía y no la ajena", async () => {
+    const mia = await sitio();
+    const ajena = await sitio();
+    const jefe = await cuenta(mia.id, "Farm Manager");
+    const ids = (await organizacionesParaBeneficio(jefe)).map((o) => o.id);
+    expect(ids).toContain(mia.organizationId);
+    expect(ids).not.toContain(ajena.organizationId);
+  });
+
+  it("listarBeneficios lo distingue de «el padre no está a tu alcance»", async () => {
+    const finca = await sitio();
+    const jefe = await cuenta(finca.id, "Farm Manager");
+    const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: null, organizationId: finca.organizationId });
+    // Consecuencia conocida y dicha en pantalla (PR 3): sin padre no hay ancestros por los que subir,
+    // así que quien lo creó NO lo ve hasta que tenga una asignación sobre el propio beneficio.
+    expect((await listarBeneficios(jefe)).some((b) => b.id === ben.id)).toBe(false);
+    const gestor = await cuenta(ben.id, "Farm Manager");
+    const fila = (await listarBeneficios(gestor)).find((b) => b.id === ben.id);
+    expect(fila).toMatchObject({ sinFinca: true, sitio: null });
+    expect(fila?.organizacion).not.toBeNull();
+    // Control: uno colgado de una finca NO es sinFinca.
+    const colgado = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id });
+    expect((await listarBeneficios(jefe)).find((b) => b.id === colgado.id)?.sinFinca).toBe(false);
+  });
 });
 
 describe("crearBeneficio", () => {
@@ -104,8 +225,25 @@ describe("crearBeneficio", () => {
     const ben = await crearBeneficio(jefe, { name: nombre(), parentLocationId: finca.id });
     expect(ben.locationType).toBe("beneficio");
     expect(ben.parentLocationId).toBe(finca.id);
+    // Control de que la comparación mide: el sitio SÍ tiene organización. Sin esta línea,
+    // `null === null` también pasa (el fixture viejo), y quitar la copia no haría caer nada.
+    expect(finca.organizationId).not.toBeNull();
     expect(ben.organizationId).toBe(finca.organizationId);
     expect(ben.classification).toBe(finca.classification);
+  });
+
+  it("un sitio SIN organización no da un beneficio sin dueño: se rechaza y no se crea nada", async () => {
+    const huerfano = await sitio({ sinOrganizacion: true });
+    const jefe = await cuenta(huerfano.id, "Farm Manager");
+    const n = nombre();
+    await expect(crearBeneficio(jefe, { name: n, parentLocationId: huerfano.id }))
+      .rejects.toThrow(new BeneficioError("organizacion_requerida"));
+    expect(await prisma.location.count({ where: { name: n } })).toBe(0);
+    // Control positivo: el mismo jefe, con el mismo permiso, SÍ crea bajo un sitio con organización.
+    const conOrg = await sitio();
+    const jefe2 = await cuenta(conOrg.id, "Farm Manager");
+    const ok = await crearBeneficio(jefe2, { name: nombre(), parentLocationId: conOrg.id });
+    expect(ok.organizationId).toBe(conOrg.organizationId);
   });
 
   it("un capataz NO puede, aunque gestione el sitio", async () => {

@@ -36,6 +36,15 @@
  * propia limpieza — la limpieza vive en el archivo de la prueba, en un
  * `afterEach`/`afterAll`, nunca aquí, porque un helper que borra por su
  * cuenta no sabe si otra prueba del mismo archivo todavía necesita la fila.
+ *
+ * `crearUsuarioConAcceso` y `crearUsuarioSinAcceso` aceptan una `etiqueta`
+ * opcional con la que nombran sus filas, en lugar de su marca única de cada
+ * llamada. Sirve a un archivo que limpia por el RUN propio: si el ayudante
+ * muere ENTRE sus `create`, antes de devolver, los ids no llegan a nadie, y
+ * lo único que le queda a la limpieza es encontrar las filas por el nombre.
+ * Sin etiqueta nada cambia. Con ella, dos llamadas del mismo archivo repiten
+ * el nombre de la organización: no hay unicidad que lo impida, pero tampoco
+ * hay forma de distinguirlas por nombre.
  */
 import { prisma } from "../../lib/db";
 import { ambitoDePlataforma } from "./ambitoDePlataforma";
@@ -47,8 +56,8 @@ function marca(etiqueta: string): string {
   return `${etiqueta}-${Date.now()}-${contador}`;
 }
 
-export async function crearUsuarioConAcceso() {
-  const run = marca("acceso");
+export async function crearUsuarioConAcceso(etiqueta?: string) {
+  const run = etiqueta ?? marca("acceso");
   const persona = await prisma.person.create({
     data: { givenName: "TEST", familyName: "Acceso", displayName: `TEST Acceso (${run})`, locale: "es" },
   });
@@ -94,8 +103,8 @@ export async function crearParcela(finca?: Awaited<ReturnType<typeof crearFinca>
   });
 }
 
-export async function crearUsuarioSinAcceso() {
-  const run = marca("sin-acceso");
+export async function crearUsuarioSinAcceso(etiqueta?: string) {
+  const run = etiqueta ?? marca("sin-acceso");
   const persona = await prisma.person.create({
     data: { givenName: "TEST", familyName: "SinAcceso", displayName: `TEST SinAcceso (${run})`, locale: "es" },
   });

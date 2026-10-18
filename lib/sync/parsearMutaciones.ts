@@ -24,6 +24,7 @@
 import type { PushMutation, MutacionDeEvento, MutacionDePerfilDeSuelo, MutacionDeRevisionDeTrampa } from "./pushFieldEvents";
 import type { HorizonteDelFormulario } from "../traceability/horizontesDelFormulario";
 import { fechaDeDia } from "../time/localDateTime";
+import { cuentaDelBorradorDe, RAZON_CUENTA_INVALIDA } from "./cuentaDelBorrador";
 
 /** Las fechas viajan como texto ISO por JSON y vuelven a ser fechas aquí. */
 export function toDate(v: unknown): Date | null {
@@ -73,16 +74,29 @@ export const KINDS_DE_PARCELA = ["soil_sample", "foliar_sample", "soil_profile",
  * nunca un instante con hora. `toDate` —usado por el resto del parseo— acepta
  * cualquier cadena que `new Date()` sepa interpretar, incluida una con offset
  * de zona (`"2026-09-18T23:30:00-05:00"` se convierte en 19 de septiembre en
- * UTC), que desplazaría el día que la ronda cree estar registrando. El
- * cliente real (`diaRequerido` en `parcelaPayload.ts`) siempre manda un día
- * limpio; esto es la frontera para un cliente ajeno o futuro que no lo haga.
+ * UTC), que desplazaría el día que la ronda cree estar registrando.
+ *
+ * **Esta cabecera decía que el cliente real «siempre manda un día limpio», y
+ * era falso** (corregido el 2026-10-11): desde #445 `diaRequerido` mandaba
+ * `"2026-10-11T00:00:00.000Z"`, así que ninguna revisión de la ronda llegó a
+ * guardarse. Hoy el cliente manda `YYYY-MM-DD`
+ * (`diaRequeridoComoTexto` en `parcelaPayload.ts`).
+ *
+ * **Y por eso se acepta además la medianoche UTC EXACTA**, decisión de Daniel
+ * del 2026-10-11: es lo que llevan los borradores que quedaron rechazados en
+ * los teléfonos. Desde el #719 un rechazo ya no se reenvía, salvo éste: un
+ * `error` con `observed_at_not_a_day` viaja UNA vez más
+ * (`viajaEnLaProximaSincronizacion` en `offlineQueue.ts`, decisión de Daniel del
+ * 2026-10-12), y es ese viaje el que llega aquí. Esa forma nombra un solo día sin ambigüedad —
+ * así guarda `fechaDeDia` los campos de día—, de modo que el propósito del A10
+ * sigue en pie: otra hora o un desfase (`-05:00`) se rechazan igual.
  *
  * Devuelve `"invalido"` (nunca lanza) para que quien llama decida el motivo
  * exacto del rechazo — ausente vs. malformado son mensajes distintos.
  */
 function diaEstrictoOpcional(v: unknown): Date | null | "invalido" {
   if (v == null) return null;
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return "invalido";
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}(T00:00:00\.000Z)?$/.test(v)) return "invalido";
   try {
     return fechaDeDia(v, "observedAt");
   } catch {
@@ -187,7 +201,18 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
   const rechazos: { clientDraftId: string; reason: string }[] = [];
 
   for (const raw of mutations) {
-    const m = (raw ?? {}) as Record<string, unknown>;
+    const crudo = (raw ?? {}) as Record<string, unknown>;
+    // ADR-199 — la cuenta del borrador se valida aquí, una vez, para todos los tipos. Una que no se
+    // puede comparar con nada rechaza SÓLO su mutación; sin `clientDraftId` no hay a quién
+    // atribuírselo, y es 400 de lote, como en el resto de este parseo.
+    const cuenta = cuentaDelBorradorDe(crudo.cuentaDelBorrador);
+    if (!cuenta.ok) {
+      if (typeof crudo.clientDraftId !== "string") return { ok: false, error: "mutation_malformed" };
+      rechazos.push({ clientDraftId: crudo.clientDraftId, reason: RAZON_CUENTA_INVALIDA });
+      continue;
+    }
+    // Normalizada en el objeto, así que las ramas que copian `m` entero ya la llevan limpia.
+    const m: Record<string, unknown> = { ...crudo, cuentaDelBorrador: cuenta.cuenta };
     const occurredAt = toDate(m.occurredAt);
 
     if (m.kind === KIND_DE_FIN_DE_COLONIA) {
@@ -247,9 +272,10 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       // Sin `clientDraftId` no hay a quién atribuir el rechazo, así que es 400
       // de lote — la misma frontera que el `kind` desconocido de abajo, y la que
       // el spec fija. CON él, un dato malo se rechaza SOLO y las demás
-      // mutaciones del lote se aplican: tumbar el lote entero marcaba `error`
-      // todos los borradores, los buenos incluidos, y `syncFieldEvents` los
-      // vuelve a recoger en la tanda siguiente — el mismo 400 para siempre.
+      // mutaciones del lote se aplican: tumbar el lote entero marca `error`
+      // todos los borradores, los buenos incluidos, y desde el 2026-10-11 un
+      // `error` ya no se reenvía nunca — sólo se descarta. Trabajo bueno perdido
+      // por un vecino malo.
       if (typeof m.clientDraftId !== "string") return { ok: false, error: "mutation_missing_ids" };
       const clientDraftId = m.clientDraftId;
       const rechazar = (reason: string) => {
@@ -292,8 +318,9 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       // payload de la cola.
       if (m.kind === "trap_check") {
         // A10 — un instante con hora (o cualquier cosa que no sea
-        // exactamente `YYYY-MM-DD`) se rechaza en vez de truncarse en
-        // silencio al día que `toDate` habría inventado.
+        // `YYYY-MM-DD`, salvo la medianoche UTC exacta: ver
+        // `diaEstrictoOpcional`) se rechaza en vez de truncarse en silencio
+        // al día que `toDate` habría inventado.
         const observedAt = diaEstrictoOpcional(m.observedAt);
         if (observedAt === "invalido") {
           rechazar("observed_at_not_a_day");
@@ -359,9 +386,10 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
     // Un `kind` que esta versión no conoce no puede tumbar el lote de los demás.
     // Medido en el cliente: un 400 hace que `clasificarRespuesta` devuelva
     // `rechazar`, y eso marca **todos** los borradores del lote como `error`,
-    // los buenos incluidos; y como `syncFieldEvents` vuelve a recoger los
-    // `error` en la tanda siguiente, el mismo lote regresa, recibe otro 400, y
-    // la cola no se vacía nunca mientras el borrador raro siga dentro.
+    // los buenos incluidos. Hasta el 2026-10-11 `syncFieldEvents` volvía a
+    // recoger los `error` y el mismo 400 regresaba para siempre; desde ese día
+    // un `error` no se reenvía y sólo se descarta, así que un 400 de lote tira
+    // el trabajo bueno junto al raro.
     // Con `clientDraftId` se puede atribuir el rechazo a su mutación; sin él no,
     // y entonces sí es 400 de lote.
     if (typeof m.kind === "string" && m.kind !== "field_event") {
@@ -385,6 +413,7 @@ export function parsearMutaciones(mutations: readonly unknown[]): ParseoDeLote {
       position: (m.position ?? undefined) as MutacionDeEvento["position"],
       operatorPersonId: typeof m.operatorPersonId === "string" ? m.operatorPersonId : null,
       notes: typeof m.notes === "string" ? m.notes : null,
+      cuentaDelBorrador: cuenta.cuenta,
     });
   }
 

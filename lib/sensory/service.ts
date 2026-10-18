@@ -12,7 +12,9 @@
  * which the "Sensory Judge" Role Profile does not hold — see
  * lib/rbac/catalog.ts.
  */
+import { requireLotAccess, TraceabilityAccessError } from "../traceability/lots";
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 import { Prisma } from "../../generated/prisma/client";
 import { resolvedPermissionKeys } from "../rbac/service";
 import { clearsClassification } from "../rbac/scopeClassification";
@@ -57,6 +59,9 @@ export class SensoryPurposeNotDeclaredError extends Error {
  * is itself information about the session.
  */
 async function grantedKeysForSession(userAccountId: string, sessionId: string): Promise<Set<string>> {
+  // El id llega de la URL de `sensory/[sessionId]`. Sin forma de UUID, Prisma lanzaba `P2007` y la
+  // página daba 500 (PENDING_IMPLEMENTATIONS/026); recibe lo mismo que una sesión que no existe.
+  if (!UUID.test(sessionId)) throw new SensoryAccessError("no_session_access");
   const target: ScopeTarget = { scopeType: "session", scopeRefId: sessionId };
   const [grantedKeys, session] = await Promise.all([
     resolvedPermissionKeys(userAccountId, target),
@@ -468,6 +473,11 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
                   roastSession: {
                     include: {
                       equipment: { select: { name: true } },
+                      roaster: { select: { displayName: true } },
+                      transformations: { select: {
+                        inputs: { select: { lot: { select: { lotCode: true, projectId: true, locationId: true, classification: true } } } },
+                        outputs: { select: { lot: { select: { lotCode: true, lotType: true, projectId: true, locationId: true, classification: true } } } },
+                      } },
                       recipeVersion: { include: { recipe: { select: { name: true } } } },
                     },
                   },
@@ -485,6 +495,24 @@ export async function getSessionForHeadJudge(userAccountId: string, sessionId: s
     },
   });
 
+  for (const flight of session.flights) {
+    for (const blindSample of flight.blindSamples) {
+      for (const transformation of blindSample.blindMapping?.roastSession?.transformations ?? []) {
+        const visibleInputs = [];
+        for (const input of transformation.inputs) {
+          try { await requireLotAccess(userAccountId, "view", [input.lot]); visibleInputs.push(input); }
+          catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
+        }
+        const visibleOutputs = [];
+        for (const output of transformation.outputs) {
+          try { await requireLotAccess(userAccountId, "view", [output.lot]); visibleOutputs.push(output); }
+          catch (error) { if (!(error instanceof TraceabilityAccessError)) throw error; }
+        }
+        transformation.inputs = visibleInputs;
+        transformation.outputs = visibleOutputs;
+      }
+    }
+  }
   return session;
 }
 

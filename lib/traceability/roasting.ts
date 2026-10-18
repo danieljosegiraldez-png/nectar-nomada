@@ -32,9 +32,21 @@ import { requireLotAccess, resolveLotVisibility, lotWhereFromVisibility, Traceab
 import { settleMassBalance } from "./balance";
 import { recordAuditEvent } from "../audit";
 import { listarEquipos } from "../equipos/equipos";
-import type { Prisma, ProvenanceClass, RoastPurpose } from "../../generated/prisma/client";
+import { Prisma, type ProvenanceClass, type RoastPurpose } from "../../generated/prisma/client";
 
 export class RoastSessionValidationError extends Error {}
+
+/**
+ * Un tueste sólo sigue —y un lote sólo elige como óptimo— una versión PUBLICADA de una receta que no sea Libre (Parte 2a,
+ * §3.3 y §5.2; tarea 5, decisión del controlador del 2026-10-04). Hasta la 2a toda versión nacía publicada y bastaba con que
+ * existiera y fuera de la organización del lote; desde la tarea 3 nace en borrador y desde la 10 hay recetas Libres (una por
+ * proceso, escritas al abrirlo). Los selectores ya no las ofrecen (`listRecipeVersionsForLot`): esto es la puerta, para un
+ * formulario fabricado. Se llama DESPUÉS de la comprobación de organización, para que una versión ajena se rechace por ser
+ * ajena y no cuente su estado a quien no es de su organización.
+ */
+function exigeVersionPublicada(version: { status: string; recipe: { esLibre: boolean } }): void {
+  if (version.status !== "approved" || version.recipe.esLibre) throw new RoastSessionValidationError("version_no_publicada");
+}
 
 /**
  * Los códigos de tueste que tienen frase propia en `messages/*.json`, como
@@ -56,6 +68,7 @@ export const CODIGOS_DE_TUESTE_CON_FRASE = [
   "sample_mass_exceeded",
   "sample_source_lot_mismatch",
   "sample_source_requires_sample_purpose",
+  "sample_roast_series_exhausted",
 ] as const;
 
 export async function listGreenSamplesForRoast(userAccountId: string, lotId: string) {
@@ -91,7 +104,7 @@ export interface RecordRoastSessionInput {
   // El perfil seguido, si se siguió alguno. Anulable a propósito: los primeros
   // tuestes de muestra se hacen SIN perfil, que es como se encuentra uno.
   recipeVersionId?: string | null;
-  outputLotCode: string;
+  outputLotCode?: string;
   roastLevel?: string | null;
   equipmentNote?: string | null;
   equipmentId?: string | null;
@@ -128,13 +141,7 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     if (sourceSample.massUnitAtExtraction !== "kg" || sourceSample.massAtExtraction == null) {
       throw new RoastSessionValidationError("sample_mass_in_kg_required");
     }
-    const usado = await prisma.roastSession.aggregate({
-      where: { sourceSampleId: sourceSample.id },
-      _sum: { chargeWeightKg: true },
-    });
-    if (Number(usado._sum.chargeWeightKg ?? 0) + input.chargeWeightKg > Number(sourceSample.massAtExtraction)) {
-      throw new RoastSessionValidationError("sample_mass_exceeded");
-    }
+
   }
   if (input.equipmentId) {
     const equipos = await listarEquipos(userAccountId);
@@ -170,12 +177,55 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
     if (version.recipe.organizationId != null && version.recipe.organizationId !== sourceLot.organizationId) {
       throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
     }
+    exigeVersionPublicada(version);
   }
 
   const provenanceClass = input.provenanceClass;
   const occurredAt = input.endedAt ?? input.startedAt;
 
   const result = await prisma.$transaction(async (tx) => {
+    let outputLotCode = input.outputLotCode;
+    if (input.purpose === "sample") {
+      // One series per origin lot, shared by all its extracted samples.
+      // Hold the parent before the sample lock to keep lock ordering stable.
+      const [lockedLot] = await tx.$queryRaw<{ lotCode: string }[]>`
+        SELECT lot_code AS "lotCode" FROM traceability.lot WHERE id = ${sourceLot.id}::uuid FOR UPDATE`;
+      if (!lockedLot) throw new TraceabilityAccessError("lot_not_found");
+      const prefix = `${lockedLot.lotCode}-T`;
+      const occupied = await tx.lot.findMany({
+        where: { organizationId: sourceLot.organizationId, lotCode: { startsWith: prefix } },
+        select: { lotCode: true },
+      });
+      const historical = await tx.lot.findMany({
+        where: { transformationOutputs: { some: { transformation: {
+          roastSession: { purpose: "sample" }, inputs: { some: { lotId: sourceLot.id } },
+        } } } },
+        select: { lotCode: true },
+      });
+      const exactNumbers = occupied.map((lot) => lot.lotCode.slice(prefix.length))
+        .filter((suffix) => /^[0-9]{2}$/.test(suffix)).map(Number);
+      const historicalNumbers = historical.map((lot) => /-T([0-9]{2})$/.exec(lot.lotCode)?.[1])
+        .filter((suffix): suffix is string => suffix != null).map(Number);
+      const numbers = [...exactNumbers, ...historicalNumbers];
+      const next = Math.max(0, ...numbers) + 1;
+      if (next > 99) throw new RoastSessionValidationError("sample_roast_series_exhausted");
+      outputLotCode = `${prefix}${String(next).padStart(2, "0")}`;
+    }
+    if (!outputLotCode?.trim()) throw new RoastSessionValidationError("output_lot_code_required");
+    if (sourceSample) {
+      // Serialize charges against this physical sample. A transaction alone
+      // does not prevent concurrent readers from observing the same balance.
+      await tx.$queryRaw`SELECT id FROM core.sample WHERE id = ${sourceSample.id}::uuid FOR UPDATE`;
+      const usado = await tx.roastSession.aggregate({
+        where: { sourceSampleId: sourceSample.id },
+        _sum: { chargeWeightKg: true },
+      });
+      if (new Prisma.Decimal(usado._sum.chargeWeightKg ?? 0)
+        .plus(input.chargeWeightKg!)
+        .greaterThan(sourceSample.massAtExtraction!)) {
+        throw new RoastSessionValidationError("sample_mass_exceeded");
+      }
+    }
     const roastSession = await tx.roastSession.create({
       data: {
         roastLevel: input.roastLevel ?? null,
@@ -222,7 +272,7 @@ export async function recordRoastSession(userAccountId: string, input: RecordRoa
 
     const outputLot = await tx.lot.create({
       data: {
-        lotCode: input.outputLotCode,
+        lotCode: outputLotCode,
         lotType: "roast",
         organizationId: sourceLot.organizationId,
         projectId: sourceLot.projectId,
@@ -378,6 +428,7 @@ export async function getRoastSessionDetail(userAccountId: string, roastSessionI
     where: { id: roastSessionId },
     include: {
       roaster: true,
+      equipment: { select: { name: true } },
       measurements: { orderBy: { occurredAt: "asc" } },
       transformations: {
         include: {
@@ -429,6 +480,7 @@ export async function elegirPerfilDeTueste(
   if (version.recipe.organizationId != null && version.recipe.organizationId !== lot.organizationId) {
     throw new RoastSessionValidationError("recipe_belongs_to_another_organization");
   }
+  exigeVersionPublicada(version);
 
   const anterior = await prisma.lotRoastProfile.findUnique({ where: { lotId: input.lotId } });
 
@@ -480,6 +532,13 @@ export async function getPerfilDeTuesteElegido(userAccountId: string, lotId: str
 
   return prisma.lotRoastProfile.findUnique({
     where: { lotId },
-    include: { recipeVersion: { include: { recipe: true, targets: { orderBy: { displayOrder: "asc" } } } } },
+    // Parte 2a, tarea 9a (§3.2, adjudicación I5): las metas de la VERSIÓN son las que no cuelgan de ningún paso; las de cada paso son de su
+    // paso y no del perfil. Hoy ninguna pantalla lee estas metas (la ficha pinta el nombre, la versión y las notas): el filtro es el
+    // contrato de esta función, para que el día que alguien las pinte no enseñe como del perfil las de un paso.
+    include: {
+      recipeVersion: {
+        include: { recipe: true, targets: { where: { recipeStepId: null }, orderBy: { displayOrder: "asc" } } },
+      },
+    },
   });
 }
