@@ -2283,6 +2283,7 @@
     "colonyStatus_absconded": "Absconded",
     "colonyStatus_combined": "Combined into another",
     "reportAssessment": "Technician assessment",
+    "reportAssessmentForClient": "Technician's interpretation",
     "reportNotRecorded": "Not recorded",
     "inspectionHeading": "Inspection",
     "inspectionNothingUnusualButton": "Nothing unusual",
