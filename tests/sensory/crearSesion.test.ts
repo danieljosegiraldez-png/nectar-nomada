@@ -295,7 +295,9 @@ describe("crear una sesión de cata", () => {
    *   ejerce la comprobación:** «y la cata rechaza esa muestra aunque llegue en
    *   el formulario» cae con `sample_not_accessible`, y su control positivo es
    *   «nunca devuelve una muestra que la cuenta no ve», donde la misma
-   *   `puedeVerMuestra` sí le da la de su parcela.
+   *   `puedeVerMuestra` sí le da la de su parcela. Y la misma combinación monta
+   *   una cata entera: es la cuenta `acotado` de este archivo, que en «y aun así
+   *   la cata la acepta» pasa esa comprobación con una muestra de su parcela.
    *
    * **Corregido el 2026-10-10.** Este bloque decía desde el 2026-09-06 que sólo un
    * Platform Admin podía montar una cata y que esta comprobación no se podía
