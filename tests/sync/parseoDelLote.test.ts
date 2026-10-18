@@ -321,4 +321,50 @@ describe("el parseo del lote de campo", () => {
     // de un 400 de lote.
     expect(results[1]!.status).toBe("applied");
   });
+
+  it("una alimentación con el material mal enviado se rechaza SOLA, sin tumbar el lote", async () => {
+    // La misma propiedad, para el material de la alimentación (ADR-148). Hasta el 2026-10-14 el
+    // vocabulario lanzaba una clase que la cola no reconocía: `pushFieldEvents` la relanzaba y el
+    // lote entero fallaba, con lo que el borrador bueno de detrás tampoco subía.
+    const parseo = parsearMutaciones([
+      {
+        kind: "colony_event",
+        clientDraftId: `${RUN_ID}-otro-sin-cual`,
+        colonyId: coloniaId,
+        occurredAt: "2026-06-04T09:00:00.000Z",
+        eventType: "feeding",
+        feedingMaterialKind: "otro",
+      },
+      {
+        kind: "colony_event",
+        clientDraftId: `${RUN_ID}-material-inventado`,
+        colonyId: coloniaId,
+        occurredAt: "2026-06-04T10:00:00.000Z",
+        eventType: "feeding",
+        feedingMaterialKind: "azucar_rubia",
+      },
+      {
+        kind: "colony_event",
+        clientDraftId: `${RUN_ID}-alimento-bueno-detras`,
+        colonyId: coloniaId,
+        occurredAt: "2026-06-04T11:00:00.000Z",
+        eventType: "feeding",
+        feedingMaterialKind: "azucar_blanca",
+      },
+    ]);
+    expect(parseo.ok).toBe(true);
+    if (!parseo.ok) return;
+    const results = await pushFieldEvents(userAccountId, deviceId, parseo.mutations);
+    expect(results[0]).toMatchObject({ status: "rejected", reason: "otro_sin_decir_cual" });
+    expect(results[1]).toMatchObject({
+      status: "rejected",
+      reason: expect.stringContaining("material_de_alimentacion_desconocido"),
+    });
+    expect(results[2]!.status).toBe("applied");
+    // Control positivo: el `applied` escribió su fila, con su material.
+    const bueno = await prisma.colonyEvent.findUniqueOrThrow({
+      where: { clientDraftId: `${RUN_ID}-alimento-bueno-detras` },
+    });
+    expect(bueno.feedingMaterialKind).toBe("azucar_blanca");
+  });
 });
