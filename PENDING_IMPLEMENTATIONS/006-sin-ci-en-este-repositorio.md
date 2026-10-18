@@ -1,6 +1,33 @@
 # 006 · CI: qué cubre hoy, y qué sigue sin cubrirse
 
-**Estado: parcialmente hecho el 2026-08-28.** Existe `.github/workflows/ci.yml`,
+**Estado: CERRADA el 2026-10-12.** Lo que puede correr en CI corre, y lo que queda fuera está fuera
+a propósito y con su razón escrita. Medido ese día:
+
+- **La base efímera existe** desde los #178/#179: un Postgres de servicio con `migrate deploy` y la
+  semilla con `SEED_DEMO_*`. El índice seguía diciendo que esta ficha estaba «bloqueada por» eso.
+- **La protección de `main` existe** y exige las tres compuertas: «tipos, estado, rutas, lint y tests
+  herméticos», «ligera · sólo documentación» y «pruebas que necesitan base de datos»
+  (`gh api …/branches/main/protection`). Abajo se dice que «no está disponible en el plan actual»; ya no
+  es así.
+- **Las tres pruebas que «podían salir construyéndose sus fixtures», salieron:**
+  - `ro1-2` creaba dos ámbitos de plataforma, y desde la migración de ámbito único eso revienta. Ahora
+    usa `ambitoDePlataforma`.
+  - `batchPageData` buscaba lotes con y sin eventos de cantidad entre los que hubiera. Su segunda prueba
+    hacía `if (!lot) return;` y pasaba en verde sin comprobar nada. Ahora crea los suyos.
+  - `plantingCohorts` afirmaba que existe «la fila real» de siembra sin cohorte. Ahora prueba la
+    propiedad del esquema creando un evento.
+
+  Lo que de verdad afirmaba hechos de producción —que existe «Lost Origin», que aquella fila sigue en
+  NULL— se separó a `ro1-2-datosReales.test.ts` y `plantingCohorts-datosReales.test.ts`, en el grupo
+  `datos-reales`, junto a `roasting` y `s1`.
+
+**Lo que se queda fuera de CI, a propósito:** el grupo `datos-reales`, cuyo valor es comprobar los
+datos reales de la finca y que necesita el backup restaurado, y `open-decisions.test.ts`, que lee
+`~/.zshrc`. Las dos razones están en `scripts/pruebas-por-compuerta.txt`.
+
+Lo que sigue es la historia de la ficha, desde el 2026-08-28.
+
+**Estado entonces: parcialmente hecho el 2026-08-28.** Existe `.github/workflows/ci.yml`,
 que en un solo paso invoca `scripts/ci.sh`.
 
 ## Qué cubre ahora
