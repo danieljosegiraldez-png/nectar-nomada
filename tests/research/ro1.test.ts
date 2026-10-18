@@ -170,6 +170,16 @@ afterAll(async () => {
 
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadScopeId, labOperatorScopeId] }, scopeType: { not: "platform" as const } }) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 52 por corrida (con la del juez, que se borra en su `it`
+  // más abajo). Las cuentas se DESCUBREN por el RUN_ID, que lleva el `displayName`
+  // de cada persona, no se heredan del `beforeAll`.
+  const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN_ID } }, select: { id: true } });
+  const cuentas = await prisma.userAccount.findMany({
+    where: { personId: { in: personas.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentas.map((c) => c.id) } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
@@ -857,6 +867,10 @@ describe("§9.13 — a treatment carried to sample and real sensory score, zero 
     await prisma.sensoryAttribute.deleteMany({ where: assertDefinedWhere({ id: attribute.id }) });
     await prisma.sensoryProtocolVersion.deleteMany({ where: assertDefinedWhere({ id: protocolVersion.id }) });
     await prisma.sensoryProtocol.deleteMany({ where: assertDefinedWhere({ id: protocolRow.id }) });
+    // El juez firmó su valoración (`submitAssessment`): sin borrar antes esa
+    // auditoría, la cuenta se va y la fila queda con el actor a NULL. Es el mismo
+    // id que borra la línea de abajo; el `afterAll` de arriba cubre al resto.
+    await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: judgeUserAccountId }) });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: judgeUserAccountId }) });
   });
 });
