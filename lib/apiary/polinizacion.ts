@@ -53,6 +53,15 @@ export interface CrearCompromisoInput {
   endsAt?: Date | null;
   notes?: string | null;
   dataQuality?: DataQuality | null;
+  /**
+   * Qué se poliniza y dónde, y cuándo florece. Las columnas existen desde ADR-130 y la alerta de
+   * floración (`avisoDeFloracion`) las lee; hasta el 2026-10-14 esta entrada no las aceptaba, así que
+   * un compromiso nacía sin floración y la alerta no podía avisar nunca (ADR-200 §6).
+   */
+  crop?: string | null;
+  parcelReference?: string | null;
+  bloomStartsAt?: Date | null;
+  bloomEndsAt?: Date | null;
 }
 
 /**
@@ -86,6 +95,11 @@ export async function crearCompromisoDePolinizacion(userAccountId: string, input
   }
   if (input.targetHivesPerHectareMin <= 0) throw new PolinizacionValidationError("densidad_no_positiva");
   if (input.endsAt && input.endsAt < input.startsAt) throw new PolinizacionValidationError("ventana_invertida");
+  // La misma regla que el CHECK de la base, dicha antes y con su código: el CHECK la rechazaría con
+  // un error de Postgres que nadie traduce.
+  if (input.bloomStartsAt && input.bloomEndsAt && input.bloomEndsAt < input.bloomStartsAt) {
+    throw new PolinizacionValidationError("floracion_invertida");
+  }
 
   return prisma.$transaction(async (tx) => {
     const compromiso = await tx.pollinationCommitment.create({
@@ -99,6 +113,10 @@ export async function crearCompromisoDePolinizacion(userAccountId: string, input
         startsAt: input.startsAt,
         endsAt: input.endsAt ?? null,
         notes: input.notes ?? null,
+        crop: input.crop?.trim() || null,
+        parcelReference: input.parcelReference?.trim() || null,
+        bloomStartsAt: input.bloomStartsAt ?? null,
+        bloomEndsAt: input.bloomEndsAt ?? null,
         provenanceClass: PROCEDENCIA_DEL_COMPROMISO,
         dataQuality: input.dataQuality ?? null,
         createdBy: userAccountId,
