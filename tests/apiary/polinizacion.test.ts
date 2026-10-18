@@ -261,6 +261,48 @@ describe("A9.9 — el compromiso y el cociente", () => {
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: ok.id }) });
   });
 
+  it("guarda el cultivo, la parcela y la ventana de floración, que es lo que la alerta necesita", async () => {
+    // ADR-130 añadió las columnas y la alerta de floración (`avisoDeFloracion`) las lee, pero el
+    // servicio no las aceptaba: hasta el 2026-10-14 un compromiso creado por aquí nacía sin floración,
+    // y la alerta no podía avisar nunca. ADR-200 §6.
+    const base = {
+      locationId,
+      clientOrganizationId: clienteId,
+      committedHectares: 10,
+      targetHivesPerHectareMin: 4,
+      targetHivesPerHectareMax: 6,
+      startsAt: new Date("2026-08-01"),
+    };
+    const c = await crearCompromisoDePolinizacion(userAccountId, {
+      ...base,
+      crop: "  Café robusta ",
+      parcelReference: "Lote 1",
+      bloomStartsAt: new Date("2026-11-10T00:00:00Z"),
+      bloomEndsAt: new Date("2026-11-30T00:00:00Z"),
+    });
+    const fila = await prisma.pollinationCommitment.findUniqueOrThrow({ where: { id: c.id } });
+    expect(fila.crop).toBe("Café robusta");
+    expect(fila.parcelReference).toBe("Lote 1");
+    expect(fila.bloomStartsAt?.toISOString()).toBe("2026-11-10T00:00:00.000Z");
+    expect(fila.bloomEndsAt?.toISOString()).toBe("2026-11-30T00:00:00.000Z");
+    await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: c.id }) });
+
+    // Una floración al revés se rechaza con su propio código, antes de que la rechace el CHECK de la
+    // base con un error que nadie traduce.
+    await expect(
+      crearCompromisoDePolinizacion(userAccountId, {
+        ...base,
+        bloomStartsAt: new Date("2026-11-30T00:00:00Z"),
+        bloomEndsAt: new Date("2026-11-10T00:00:00Z"),
+      }),
+    ).rejects.toThrow(/floracion_invertida/);
+    // Control: sin floración sigue siendo válido, y los tres campos quedan vacíos, no inventados.
+    const sin = await crearCompromisoDePolinizacion(userAccountId, base);
+    const filaSin = await prisma.pollinationCommitment.findUniqueOrThrow({ where: { id: sin.id } });
+    expect([filaSin.crop, filaSin.parcelReference, filaSin.bloomStartsAt, filaSin.bloomEndsAt]).toEqual([null, null, null, null]);
+    await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: sin.id }) });
+  });
+
   it("quien no tiene acceso al sitio no puede comprometer sus colonias", async () => {
     await expect(
       crearCompromisoDePolinizacion(sinAccesoUserAccountId, {

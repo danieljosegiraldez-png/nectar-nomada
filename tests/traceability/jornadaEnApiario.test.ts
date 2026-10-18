@@ -18,7 +18,9 @@ import {
   FieldSessionValidationError,
 } from "../../lib/traceability/fieldSessions";
 import { recordInspection } from "../../lib/apiary/inspections";
+import { fechaDelReporte } from "../../lib/traceability/presentacionDelReporte";
 import { recordColonyEvent } from "../../lib/apiary/colonyEvents";
+import { registrarConteoDeVarroa } from "../../lib/apiary/varroa";
 import { pushFieldEvents } from "../../lib/sync/pushFieldEvents";
 import { huellaDeCuenta } from "../../lib/auth/huellaDeCuenta";
 import { RAZON_BORRADOR_AJENO } from "../../lib/sync/cuentaDelBorrador";
@@ -144,6 +146,8 @@ afterAll(async () => {
   // sin esta linea el borrado de la colonia falla y el archivo entero sale en rojo con
   // las 37 pruebas en verde.
   await prisma.colonyEvent.deleteMany({ where: assertDefinedWhere({ colonyId }) });
+  // El conteo de varroa del informe (V-7): su FK a la colonia también es RESTRICT.
+  await prisma.varroaCount.deleteMany({ where: assertDefinedWhere({ colonyId }) });
   await prisma.colony.deleteMany({ where: assertDefinedWhere({ hiveId }) });
   // La colocación es hija de la colmena y su FK es RESTRICT: sin esta línea el borrado
   // de abajo falla. `createHive` abre una desde el 2026-09-15 (ADR-135).
@@ -456,12 +460,78 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
     expect(congelado.visita.notas, "el snapshot siguió a los datos vivos: no está congelado").toBe("notas originales");
   });
 
+  it("UN SITIO SIN ZONA emite el informe en la hora de Panamá, anotada como zona por defecto", async () => {
+    // PR-1 de la revisión del #674 (Daniel, 2026-10-10). Un apiario dado de alta desde la
+    // aplicación no tiene zona, y su informe imprimía las horas en UTC: una visita a las 19:30 de
+    // Panamá salía «día siguiente 00:30». Este fixture tampoco la tiene, que es justo el caso.
+    const sitio = await prisma.location.findUniqueOrThrow({ where: { id: apiarioId }, select: { timezone: true } });
+    expect(sitio.timezone, "el caso exige un sitio SIN zona").toBeNull();
+    // Hora propia, única en el archivo: 00:30 UTC del 7 es el 6 a las 19:30 en Panamá.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-07T00:30:00Z") });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se lee lo CONGELADO, no lo que devolvió la emisión.
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    expect(leido?.snapshot.sitio.zona).toBe("America/Panama");
+    expect(leido?.snapshot.sitio.zonaDeclarada, "la zona no la declaró el sitio: es el respaldo").toBe(false);
+    expect(fechaDelReporte(leido!.snapshot.visita.inicio, leido!.snapshot.sitio.zona)).toBe("2026-09-06 19:30 (America/Panama)");
+  });
+
+  it("y un sitio CON zona usa la suya, anotada como declarada", async () => {
+    // Control de la de arriba: sin él, congelar siempre «America/Panama» la pasaría. La zona de
+    // prueba tiene OTRO desfase que Panamá (UTC−6 contra UTC−5), para que la hora también lo diga.
+    await prisma.location.update({ where: { id: apiarioId }, data: { timezone: "America/Costa_Rica" } });
+    try {
+      const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-08T00:30:00Z") });
+      await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+      await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+      const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+      expect(leido?.snapshot.sitio.zona).toBe("America/Costa_Rica");
+      expect(leido?.snapshot.sitio.zonaDeclarada).toBe(true);
+      expect(fechaDelReporte(leido!.snapshot.visita.inicio, leido!.snapshot.sitio.zona)).toBe("2026-09-07 18:30 (America/Costa_Rica)");
+    } finally {
+      // El sitio es de todo el archivo: se devuelve sin zona aunque la prueba falle.
+      await prisma.location.update({ where: { id: apiarioId }, data: { timezone: null } });
+    }
+  });
+
   it("congela masa de alimento y unidad sin inventar volumen de jarabe", async () => {
     const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-03T14:00:00Z") });
     await recordColonyEvent(apicultorConManejo, { colonyId, eventType: "feeding", feedingMaterialKind: "azucar_blanca", feedingQuantity: 3, feedingUnit: "lb", coverageUntil: new Date("2026-09-10T00:00:00Z") });
     await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
     const { snapshot } = await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
     expect(snapshot.registros.find(r => r.alimentacion)?.alimentacion).toEqual({ tipo: "azucar_blanca", material: null, cantidad: "3", unidad: "lb" });
+  });
+
+  it("EL MANEJO Y LA VARROA SE CONGELAN: el tipo de manejo, y el conteo con su caja", async () => {
+    // V-7 de la revisión del Apiario. Hasta el 2026-10-10 el informe congelaba del manejo sólo el
+    // producto o el alimento —`sujeto: "evento_de_colonia"`, sin decir cuál—, y un conteo de
+    // varroa entraba como una fila sin caja, sin resultado y sin sujeto.
+    const visita = await startFieldSession(apicultorConManejo, {
+      ...visita_(apiarioId),
+      startedAt: new Date("2026-09-13T10:00:00Z"),
+    });
+    await recordColonyEvent(apicultorConManejo, {
+      colonyId,
+      eventType: "treatment",
+      treatmentProduct: "Apivar",
+      treatmentBatchLabel: `L-${RUN_ID.slice(-4)}`,
+      treatmentWithdrawalDays: 14,
+      treatmentTarget: "varroa",
+    });
+    await registrarConteoDeVarroa(apicultorConManejo, { colonyId, method: "alcohol", sampleBees: 300, mitesCounted: 3 });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se lee lo CONGELADO, no lo que devolvió la emisión.
+    const registros = (await leerReporteDeVisita(apicultorConManejo, visita.id))!.snapshot.registros;
+    const manejo = registros.find((r) => r.sujeto === "evento_de_colonia");
+    const conteo = registros.find((r) => r.sujeto === "conteo_de_varroa");
+    expect(manejo?.manejo).toBe("treatment");
+    expect(conteo, "el conteo de varroa no llegó al informe como tal").toBeTruthy();
+    expect(conteo).toMatchObject({ colmena: `${RUN_ID}-H1`, varroa: { metodo: "alcohol", abejas: 300, acaros: 3 } });
   });
 
   it("EL INFORME NOMBRA LA COLMENA Y QUÉ SE HIZO, no sólo la clase del registro", async () => {
@@ -521,6 +591,80 @@ describe("A9.6 — el reporte se congela, no se re-consulta", () => {
       expect(r.colmena).toBeUndefined();
       expect(r.detalle).toBeUndefined();
     }
+  });
+
+  it("LA SANIDAD SE CONGELA: irregularidades por su nombre, celdas reales y lo demás, y no cambia al corregir", async () => {
+    // PR-2 de la revisión del #674 (Daniel, 2026-10-10). Hasta entonces el informe congelado no
+    // guardaba las irregularidades, la señal de plaga escrita a mano, las celdas reales, la cría de
+    // zángano, los marcos negros ni si la miel o el polen estaban junto a la cría: si después se
+    // corregía la inspección, el documento entregado no tenía cómo decir lo que se vio aquel día.
+    const [irr] = await prisma.variableCatalogValue.findMany({
+      where: { catalog: { key: "irregularidad_de_inspeccion" }, aliasOfId: null },
+      select: { id: true, value: true },
+      orderBy: [{ displayOrder: "asc" }, { value: "asc" }],
+      take: 1,
+    });
+    expect(irr, "la semilla no trae el catálogo de irregularidades: la prueba no mediría nada").toBeTruthy();
+    // Hora propia, única en el archivo: la inspección se engancha a la visita abierta más reciente.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-12T15:00:00Z") });
+    const otra = `TEST otra señal (${RUN_ID})`;
+    const inspeccion = await recordInspection(apicultorConManejo, {
+      colonyId,
+      outcome: "issue_observed",
+      irregularidades: [irr!.id],
+      pestDiseaseFlags: otra,
+      queenCellKind: "enjambrazon",
+      queenCellCount: 2,
+      droneBroodPresent: true,
+      darkFrames: 3,
+      honeyNextToBrood: true,
+      pollenNextToBrood: false,
+    });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    // Se corrige la inspección DESPUÉS de emitir: el informe no tiene que enterarse.
+    await prisma.inspectionIrregularity.deleteMany({ where: { inspectionId: inspeccion.id } });
+    await prisma.inspection.update({
+      where: { id: inspeccion.id },
+      data: { pestDiseaseFlags: null, queenCellCount: 5, droneBroodPresent: false, darkFrames: 0, honeyNextToBrood: false, pollenNextToBrood: true },
+    });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    const congelada = leido?.snapshot.registros.find((x) => x.inspeccion)?.inspeccion;
+    expect(congelada, "la inspección no quedó dentro de la visita reportada").toBeTruthy();
+    expect(congelada).toMatchObject({
+      irregularidades: [irr!.value],
+      otraSenal: otra,
+      celdasReales: { tipo: "enjambrazon", cuantas: 2 },
+      criaDeZangano: true,
+      marcosNegros: 3,
+      mielJuntoACria: true,
+      polenJuntoACria: false,
+    });
+  });
+
+  it("y una inspección sin nada de eso congela VACÍOS explícitos, no campos ausentes", async () => {
+    // Ausente quiere decir «informe emitido antes de que esto se congelara»; vacío quiere decir
+    // «se congeló y no se registró». La pantalla los trata distinto, así que el congelado tiene
+    // que distinguirlos.
+    const visita = await startFieldSession(apicultorConManejo, { ...visita_(apiarioId), startedAt: new Date("2026-09-12T17:00:00Z") });
+    await recordInspection(apicultorConManejo, { colonyId, outcome: "nothing_unusual" });
+    await completarVisita(apicultorConManejo, { fieldSessionId: visita.id });
+    await emitirReporteDeVisita(apicultorConManejo, { fieldSessionId: visita.id });
+
+    const leido = await leerReporteDeVisita(apicultorConManejo, visita.id);
+    const congelada = leido?.snapshot.registros.find((x) => x.inspeccion)?.inspeccion;
+    expect(congelada, "la inspección no quedó dentro de la visita reportada").toBeTruthy();
+    expect(congelada).toEqual(expect.objectContaining({
+      irregularidades: [],
+      otraSenal: null,
+      celdasReales: { tipo: null, cuantas: null },
+      criaDeZangano: null,
+      marcosNegros: null,
+      mielJuntoACria: null,
+      polenJuntoACria: null,
+    }));
   });
 
   it("LA VISITA GUARDA A QUÉ SE FUE, y lo valida en la frontera", async () => {

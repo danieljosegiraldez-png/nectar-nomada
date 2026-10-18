@@ -1,11 +1,13 @@
 import { getTranslations } from "next-intl/server";
 import type { SnapshotDeVisita } from "../../../lib/traceability/reporteDeVisita";
+import { infestacionPorCiento } from "../../../lib/apiary/infestacion";
 
 /**
- * **`enCuadros` decide si el informe pregunta por cuadros, y lo calcula quien llama** desde
- * `snapshot.sitio.tipo` con `seManejaEnCuadros`. Los meliponinos no se manejan en cuadros: una
- * fila «Cuadros cubiertos: Sin registrar» en el informe de un meliponario afirma que alguien
- * miró y no contó, cuando la pregunta no existe ahí.
+ * **`enCuadros` decide si el informe pregunta por cuadros y marcos negros, y lo calcula quien
+ * llama** desde `snapshot.sitio.tipo` con `seManejaEnCuadros`. Los meliponinos no se manejan en
+ * cuadros: una fila «Cuadros cubiertos: Sin registrar» o «Marcos negros: Sin registrar» en el
+ * informe de un meliponario afirma que alguien miró y no contó, cuando la pregunta no existe ahí.
+ * Los dos van juntos, como en el formulario (ADR-200).
  *
  * **El tipo sale del SNAPSHOT y no de la ubicacion de hoy**, que es lo correcto para un
  * documento congelado: si el sitio se reclasificara después, un informe ya emitido no debe
@@ -13,24 +15,47 @@ import type { SnapshotDeVisita } from "../../../lib/traceability/reporteDeVisita
  *
  * Es la otra mitad del #690, que sólo pudo arreglar el FORMULARIO porque este componente no
  * existía en `main` cuando se escribió.
+ *
+ * **`paraCliente` lo decide cada página, y es obligatorio a propósito** (PR-4 de la revisión del
+ * #674, Daniel, 2026-10-10). En el enlace del cliente no sale la nota de campo de la inspección
+ * —lo que el técnico apunta para sí, a veces una sospecha sin comprobar— y la valoración sale
+ * rotulada «Interpretación del técnico», que es lo que es. El informe interno lo enseña todo. Las
+ * notas de la visita y de cada registro las pinta la página, no esto, y siguen en los dos.
  */
-export async function DetallesDelReporte({ registro, enCuadros }: { registro: SnapshotDeVisita["registros"][number]; enCuadros: boolean }) {
+export async function DetallesDelReporte({ registro, enCuadros, paraCliente }: { registro: SnapshotDeVisita["registros"][number]; enCuadros: boolean; paraCliente: boolean }) {
   const t = await getTranslations("Apiary");
   const r = registro.inspeccion;
+  // La sanidad (PR-2 del #674) sólo si el snapshot la congeló. Un informe emitido antes no la trae,
+  // y pintarle «Sin registrar» afirmaría que nadie la contestó, cuando lo que pasa es que el
+  // documento no la guardó.
+  const siCongelado = (valor: unknown, fila: [string, string | number | null]) => (valor === undefined ? [] : [fila]);
+  const siNo = (v: boolean | null | undefined) => (v == null ? null : t(v ? "triSi" : "triNo"));
   const filas: Array<[string, string | number | null]> = r ? [
     [t("populationLabel"), r.poblacion == null ? null : t(`population_${r.poblacion}`)],
     ...(enCuadros ? ([[t("beeCoveredFramesLabel"), r.cuadrosCubiertos]] as Array<[string, string | number | null]>) : []),
+    // Detrás de `enCuadros`, como los cuadros: en un meliponario no se pregunta (ADR-200).
+    ...(enCuadros ? siCongelado(r.marcosNegros, [t("darkFramesLabel"), r.marcosNegros ?? null]) : []),
     [t("queenSightedLabel"), r.reina == null ? null : t(`queenSighting_${r.reina}`)],
     [t("broodPatternLabel"), r.patronCria == null ? null : t(`broodPattern_${r.patronCria}`)],
     [t("broodStagesLegend"), r.etapasCria.length ? r.etapasCria.map(v => t(`broodStage_${v}`)).join(", ") : null],
+    ...siCongelado(r.celdasReales, [t("queenCellsLabel"), r.celdasReales?.tipo == null ? null : [t(`queenCell_${r.celdasReales.tipo}`), r.celdasReales.cuantas].filter((x) => x != null).join(" · ")]),
+    ...siCongelado(r.criaDeZangano, [t("droneBroodLabel"), siNo(r.criaDeZangano)]),
     [t("honeyStoresLabel"), r.reservasMiel == null ? null : t(`storesLevel_${r.reservasMiel}`)],
+    ...siCongelado(r.mielJuntoACria, [t("reportHoneyNextToBrood"), siNo(r.mielJuntoACria)]),
     [t("pollenStoresLabel"), r.reservasPolen == null ? null : t(`storesLevel_${r.reservasPolen}`)],
+    ...siCongelado(r.polenJuntoACria, [t("reportPollenNextToBrood"), siNo(r.polenJuntoACria)]),
+    // Casillas: una lista vacía no distingue «no se vio» de «no se miró», así que dice lo que hay.
+    ...siCongelado(r.irregularidades, [t("irregularidadesLegend"), r.irregularidades?.length ? r.irregularidades.join(", ") : t("reportNoneMarked")]),
+    ...siCongelado(r.otraSenal, [t("pestDiseaseFlagsLabel"), r.otraSenal ?? null]),
     [t("temperamentLabel"), r.temperamento == null ? null : t(`temperament_${r.temperamento}`)],
-    [t("noteLabel"), r.nota],
-    [t("reportAssessment"), r.valoracion],
+    ...(paraCliente ? [] : ([[t("noteLabel"), r.nota]] as Array<[string, string | number | null]>)),
+    [t(paraCliente ? "reportAssessmentForClient" : "reportAssessment"), r.valoracion],
   ] : [];
   const a = registro.alimentacion;
   if (a) filas.push([t("feedingMaterialLabel"), [a.tipo ? t(`feedingMaterial_${a.tipo}`) : null, a.material].filter(Boolean).join(" · ") || null], [t("feedingQuantityLabel"), a.cantidad], [t("unitLabel"), a.unidad]);
+  // V-7: el conteo de varroa congelado. La infestación se deriva aquí, no se guarda.
+  const v = registro.varroa;
+  if (v) filas.push([t("varroaMethodLabel"), t(`varroaMethod_${v.metodo}`)], [t("varroaMitesLabel"), v.acaros], [t("varroaSampleBeesLabel"), v.abejas], [t("reportVarroaInfestacion"), v.abejas > 0 ? t("reportPorCiento", { valor: infestacionPorCiento(v.abejas, v.acaros) }) : null]);
   if (!filas.length) return null;
   return <dl>{filas.map(([etiqueta, valor]) => <div key={etiqueta}><dt>{etiqueta}</dt><dd>{valor ?? t("reportNotRecorded")}</dd></div>)}</dl>;
 }

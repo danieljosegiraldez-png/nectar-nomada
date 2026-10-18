@@ -45,6 +45,14 @@ async function arrancar(): Promise<Arnes> {
   const fetchFalso = async (peticion: string | { url: string }) => {
     if (!red.encendida) throw new TypeError("Failed to fetch");
     const url = new URL(typeof peticion === "string" ? peticion : peticion.url, ORIGEN);
+    // `/beneficio` responde un documento con `<head>` y su `date`, que es lo que necesita el marcado de
+    // R2 para verse; las demás rutas, texto plano, que es lo que leen las pruebas de caducidad.
+    if (url.pathname === "/beneficio") {
+      return new Response(`<html><head></head><body>página ${url.pathname}</body></html>`, {
+        status: 200,
+        headers: { "content-type": "text/html", date: "Fri, 09 Oct 2026 12:00:00 GMT" },
+      });
+    }
     return new Response(`página ${url.pathname}`, { status: 200, headers: { "content-type": "text/html" } });
   };
   const caches = new CacheStorageFalsa(ORIGEN, fetchFalso);
@@ -136,6 +144,21 @@ describe("public/sw.js — páginas de operario guardadas", () => {
 
     sw.red.encendida = false;
     expect(await sw.navegar("/lots")).toBe("página /offline.html");
+  });
+
+  /**
+   * R2 del plan farm-to-green (ADR-197): sin red, lo guardado se sirve MARCADO, para que el aviso diga
+   * que es una versión guardada y de cuándo. Las demás pruebas de este archivo no lo ven, porque su
+   * página no tiene `<head>`: el 2026-10-13, al unir `main` con R2, quitar la llamada a
+   * `servirComoGuardada` dejaba las 17 en verde. Ésta es la que cae.
+   */
+  it("sin red, la página guardada se sirve marcada con la hora a la que el servidor la generó", async () => {
+    const sw = await arrancar();
+    // Control: con red llega la del servidor, sin marca.
+    expect(await sw.navegar("/beneficio")).not.toContain("nn-guardada-el");
+
+    sw.red.encendida = false;
+    expect(await sw.navegar("/beneficio")).toContain('<head><meta name="nn-guardada-el" content="2026-10-09T12:00:00.000Z">');
   });
 
   it("al activarse, borra la caché de páginas de la versión anterior y conserva el armazón", async () => {
