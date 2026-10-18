@@ -7,7 +7,12 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { queueDraft } from "../../../lib/apiary/offlineQueue";
 import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
-import { MATERIALES_DE_ALIMENTACION, MATERIAL_QUE_EXIGE_CUAL } from "../../../lib/apiary/vocabularioDeAlimentacion";
+import {
+  MATERIALES_DE_ALIMENTACION,
+  MATERIAL_QUE_EXIGE_CUAL,
+  UNIDAD_OTRA,
+  UNIDADES_DE_ALIMENTACION,
+} from "../../../lib/apiary/vocabularioDeAlimentacion";
 import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/vocabularioDeTratamiento";
 import { fechaDeDia } from "../../../lib/time/localDateTime";
 import { APIARY_DRAFTS_CHANGED_EVENT } from "./OfflineSyncIndicator";
@@ -42,7 +47,14 @@ export function ColonyEventQuickEntry({
   const [feedingMaterialKind, setFeedingMaterialKind] = useState("");
   const [feedingMaterial, setFeedingMaterial] = useState("");
   const [feedingQuantity, setFeedingQuantity] = useState("");
-  const [feedingUnit, setFeedingUnit] = useState("kg");
+  /**
+   * La unidad, de la lista cerrada (ADR-200 §5, pregunta 17). **Arranca vacía**: hasta el 2026-10-14
+   * arrancaba en «kg», y unas libras que nadie corregía se guardaban como kilos. Tras guardar se
+   * queda la elegida, que es el `prefillLastUsed` del protocolo.
+   */
+  const [feedingUnitChoice, setFeedingUnitChoice] = useState("");
+  const [feedingUnitOther, setFeedingUnitOther] = useState("");
+  const unidadElegida = feedingUnitChoice === UNIDAD_OTRA ? feedingUnitOther.trim() : feedingUnitChoice;
   /**
    * A9 · Anexo B §3 — «Alcanza hasta», **el campo que faltó en Toabré**. La
    * columna existía desde el 2026-09-07 y los vitales del sitio ya la leían, pero
@@ -113,7 +125,8 @@ export function ColonyEventQuickEntry({
         operatorPersonId: selfPersonId,
         feedingMaterial: feedingMaterial.trim() || null,
         feedingQuantity: feedingQuantity.trim() ? Number(feedingQuantity) : null,
-        feedingUnit: feedingUnit.trim() || null,
+        // Sin cantidad, una unidad no dice nada: no se manda.
+        feedingUnit: feedingQuantity.trim() ? unidadElegida || null : null,
         // Campo de DÍA: se fija a medianoche UTC con el MISMO parser que usa el
         // servidor. Mandarlo como reloj de pared lo movería un día según la zona,
         // que es el fallo que tumbó la creación de colmenas el 2026-09-11.
@@ -241,9 +254,33 @@ export function ColonyEventQuickEntry({
             </div>
             <div className="nn-field" style={{ flex: 1 }}>
               <label htmlFor={`feed-unit-${colonyId}`}>{t("unitLabel")}</label>
-              <input id={`feed-unit-${colonyId}`} value={feedingUnit} onChange={(e) => setFeedingUnit(e.target.value)} />
+              <select
+                id={`feed-unit-${colonyId}`}
+                value={feedingUnitChoice}
+                onChange={(e) => setFeedingUnitChoice(e.target.value)}
+                required={feedingQuantity.trim() !== ""}
+              >
+                <option value="" />
+                {UNIDADES_DE_ALIMENTACION.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+                <option value={UNIDAD_OTRA}>{t("feedingUnit_otra")}</option>
+              </select>
             </div>
           </div>
+          {feedingUnitChoice === UNIDAD_OTRA ? (
+            <div className="nn-field">
+              <label htmlFor={`feed-unit-other-${colonyId}`}>{t("feedingUnitWhichLabel")}</label>
+              <input
+                id={`feed-unit-other-${colonyId}`}
+                value={feedingUnitOther}
+                onChange={(e) => setFeedingUnitOther(e.target.value)}
+                required
+              />
+            </div>
+          ) : null}
           {/* «Alcanza hasta»: `type="date"` porque es un día estimado, no un
               instante. Es lo que dispara el aviso ANTES de que las reservas lo
               digan — sin él el sistema sólo puede reaccionar a lo ya observado, que
@@ -277,7 +314,8 @@ export function ColonyEventQuickEntry({
             type="button"
             className="nn-button"
             onClick={() => void logFeeding()}
-            disabled={coverageUntil === ""}
+            // Con cantidad hace falta su unidad: «3» sin unidad no se puede sumar con nada.
+            disabled={coverageUntil === "" || (feedingQuantity.trim() !== "" && unidadElegida === "")}
           >
             {t("logFeedingButton")}
           </button>

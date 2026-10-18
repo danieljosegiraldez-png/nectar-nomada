@@ -2637,6 +2637,8 @@
     "feedingMaterial_miel_de_cana": "Miel de caña",
     "feedingMaterial_otro": "Otro",
     "feedingMaterialWhichLabel": "¿Cuál?",
+    "feedingUnit_otra": "Otra (cuál)",
+    "feedingUnitWhichLabel": "¿Cuál?",
     "loteAltaHeading": "Dar de alta varias colmenas",
     "loteAltaSubmit": "Dar de alta el lote",
     "lotePrefijoLabel": "Prefijo del identificador",
