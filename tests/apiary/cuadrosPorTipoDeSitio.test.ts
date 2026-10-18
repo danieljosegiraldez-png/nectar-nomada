@@ -47,6 +47,28 @@ describe("se maneja en cuadros, por tipo de sitio", () => {
   });
 });
 
+/**
+ * Dónde cierra el paréntesis que abre en `inicio`: cuenta `(` y `)`, y salta lo que va dentro de
+ * comillas o de una plantilla, que es donde un paréntesis no es código. No es un analizador de
+ * TSX: quien lo usa comprueba que lo que encontró es lo que esperaba.
+ */
+function cierreDelParentesis(fuente: string, inicio: number): number {
+  let nivel = 0;
+  let comilla: string | null = null;
+  for (let i = inicio; i < fuente.length; i++) {
+    const c = fuente[i]!;
+    if (comilla) {
+      if (c === "\\") i++;
+      else if (c === comilla) comilla = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") comilla = c;
+    else if (c === "(") nivel++;
+    else if (c === ")" && --nivel === 0) return i;
+  }
+  return -1;
+}
+
 describe("el formulario de inspección deja de preguntar donde no aplica", () => {
   /**
    * **Se lee la FUENTE y no se renderiza, y el motivo lo encontró un control que falló.**
@@ -83,6 +105,28 @@ describe("el formulario de inspección deja de preguntar donde no aplica", () =>
     expect(puerta, "no se encontró la puerta `{enCuadros ? (`").toBeGreaterThan(0);
     expect(etiqueta).toBeGreaterThan(puerta);
     expect(etiqueta - puerta).toBeLessThan(200);
+  });
+
+  it("y TODAS las preguntas de cuadros están dentro de esa puerta, también los marcos negros", () => {
+    // ADR-200 (§2 y Consecuencias): «Marcos negros» sólo donde se preguntan los cuadros. Hasta el
+    // 2026-10-14 el campo iba justo DEBAJO de la puerta, fuera de ella, y el caso de arriba no podía
+    // verlo: sólo busca `beeCoveredFramesLabel`. Aquí se descubren las etiquetas `…Frames…Label`, no
+    // se enumeran, y el cierre se halla contando paréntesis, no por la indentación.
+    const apertura = fuente.indexOf("{enCuadros ? (");
+    expect(apertura, "no se encontró la puerta `{enCuadros ? (`").toBeGreaterThan(0);
+    const inicio = apertura + "{enCuadros ? ".length;
+    const cierre = cierreDelParentesis(fuente, inicio);
+    // Control del contador: si un paréntesis dentro de una cadena lo desviara, lo que «cierra» no
+    // sería la puerta, y esto lo dice en vez de medir sobre el tramo equivocado.
+    expect(fuente.slice(cierre, cierre + ") : null}".length)).toBe(") : null}");
+
+    const etiquetas = [...fuente.matchAll(/t\("(\w*Frames\w*Label)"\)/g)].map((m) => ({ clave: m[1]!, en: m.index! }));
+    expect(etiquetas.map((e) => e.clave)).toEqual(expect.arrayContaining(["beeCoveredFramesLabel", "darkFramesLabel"]));
+    for (const e of etiquetas) {
+      expect(e.en > inicio && e.en < cierre, `${e.clave} queda fuera de la puerta \`{enCuadros ? (\``).toBe(true);
+    }
+    // Control que tiene que salir distinto: lo que se pregunta después de la puerta queda fuera.
+    expect(fuente.indexOf("broodStagesLegend")).toBeGreaterThan(cierre);
   });
 
   it("y el control que discrimina: la población NO está condicionada", () => {

@@ -7,7 +7,12 @@ import { aplicarManejoEnLoteFormAction } from "../../actions/apiary";
 // De los módulos PUROS: importar `colonyEvents.ts` arrastraría `prisma` —y `pg`— al paquete
 // del navegador. Lo vigila `cliente-sin-prisma`.
 import { METODOS_DE_ALIMENTACION } from "../../../lib/apiary/alimentacion";
-import { MATERIALES_DE_ALIMENTACION, MATERIAL_QUE_EXIGE_CUAL } from "../../../lib/apiary/vocabularioDeAlimentacion";
+import {
+  MATERIALES_DE_ALIMENTACION,
+  MATERIAL_QUE_EXIGE_CUAL,
+  UNIDAD_OTRA,
+  UNIDADES_DE_ALIMENTACION,
+} from "../../../lib/apiary/vocabularioDeAlimentacion";
 import { OBJETIVOS_DE_TRATAMIENTO, VIAS_DE_TRATAMIENTO } from "../../../lib/apiary/vocabularioDeTratamiento";
 import { Ayuda } from "./Ayuda";
 import { BotonDeEnvio } from "../BotonDeEnvio";
@@ -46,6 +51,12 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [materialKind, setMaterialKind] = useState("");
   const [tipo, setTipo] = useState<"feeding" | "treatment">("feeding");
+  // La unidad, de la lista cerrada y sin ninguna puesta (ADR-200 §5, pregunta 17). El desplegable no
+  // tiene `name`: lo que viaja es `feedingUnit`, ya resuelto, para que la acción no cambie.
+  const [cantidad, setCantidad] = useState("");
+  const [unidadElegida, setUnidadElegida] = useState("");
+  const [unidadOtra, setUnidadOtra] = useState("");
+  const unidad = unidadElegida === UNIDAD_OTRA ? unidadOtra.trim() : unidadElegida;
 
   function alternar(id: string) {
     setSeleccion((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -139,12 +150,41 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
           ) : null}
           <div className="nn-field">
             <label htmlFor="lote-cantidad">{t("feedingQuantityLabel")}</label>
-            <CampoNumerico id="lote-cantidad" name="feedingQuantity" step="0.001" min="0" inputMode="decimal" />
+            <CampoNumerico
+              id="lote-cantidad"
+              name="feedingQuantity"
+              step="0.001"
+              min="0"
+              inputMode="decimal"
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+            />
           </div>
           <div className="nn-field">
             <label htmlFor="lote-unidad">{t("unitLabel")}</label>
-            <input id="lote-unidad" name="feedingUnit" type="text" />
+            <select
+              id="lote-unidad"
+              value={unidadElegida}
+              onChange={(e) => setUnidadElegida(e.target.value)}
+              required={cantidad.trim() !== ""}
+            >
+              <option value="" />
+              {UNIDADES_DE_ALIMENTACION.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+              <option value={UNIDAD_OTRA}>{t("feedingUnit_otra")}</option>
+            </select>
           </div>
+          {unidadElegida === UNIDAD_OTRA ? (
+            <div className="nn-field">
+              <label htmlFor="lote-unidad-otra">{t("feedingUnitWhichLabel")}</label>
+              <input id="lote-unidad-otra" type="text" value={unidadOtra} onChange={(e) => setUnidadOtra(e.target.value)} required />
+            </div>
+          ) : null}
+          {/* Sin cantidad, una unidad no dice nada: no se manda. */}
+          <input type="hidden" name="feedingUnit" value={cantidad.trim() ? unidad : ""} />
           <div className="nn-field">
             <label htmlFor="lote-metodo">{t("feedingMethodLabel")}</label>
             <select id="lote-metodo" name="feedingMethod" defaultValue="">
