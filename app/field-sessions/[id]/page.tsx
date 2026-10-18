@@ -12,6 +12,7 @@ import { EmitirReporteForm, CompletarVisitaForm, VitalesEnSitioForm } from "../.
 import { leerReporteDeVisita } from "../../../lib/traceability/reporteDeVisita";
 import { resumenDeVisita } from "../../../lib/apiary/bitacora";
 import { pendientesDeLaVisita } from "../../../lib/apiary/pendienteDeLaVisita";
+import { ACTIVIDADES } from "../../../lib/apiary/actividadDeVisita";
 import { FieldSyncControls } from "../../components/traceability/FieldSyncControls";
 import { mostrarInstante, mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEmparentadas";
@@ -82,6 +83,14 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
     resumenDeVisita(id),
     pendientesDeLaVisita(id),
   ]);
+
+  // V-3: con propósitos declarados, el pendiente es el de cada propósito; sin ellos —las visitas
+  // anteriores a la pregunta—, el de siempre. Las tiras sin retirar se enseñan aunque no falte nada
+  // más: hasta entonces se escondían si se habían tocado todas las cajas.
+  const propositosConFaltas = pendiente?.porProposito?.filter((p) => p.faltan.length > 0) ?? [];
+  const hayPendiente =
+    pendiente != null &&
+    ((pendiente.porProposito ? propositosConFaltas.length > 0 : pendiente.sinTocar.length > 0) || pendiente.retiros.length > 0);
 
   const enCurso = session.endedAt == null;
 
@@ -180,24 +189,58 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
           cerrarla», y aquí aparece también antes por una razón: una lista de lo que te falta
           que sólo sale cuando ya no puedes añadir eventos es una lista que no se puede
           atender. Al cerrar se sigue enseñando, como registro de lo que se dejó. */}
-      {pendiente && pendiente.sinTocar.length > 0 ? (
+      {pendiente && hayPendiente ? (
         <section className="nn-section">
           <h2>{t("pendienteHeading")}</h2>
+          {/* Qué se hizo, caja por caja, sin contar dos veces una caja en el total (V-3). */}
           <p className="nn-detail-meta">
-            {t("pendienteResumen", {
-              tocadas: pendiente.tocadas,
-              total: pendiente.tocadas + pendiente.sinTocar.length,
-              pobladas: pendiente.sinTocarPobladas,
-            })}
+            {t("pendienteCajasDelDia", { total: pendiente.total })}{" "}
+            {[
+              ...ACTIVIDADES.filter((a) => pendiente.porActividad[a] > 0).map((a) =>
+                t(`pendienteActividad_${a}`, { count: pendiente.porActividad[a] }),
+              ),
+              ...(pendiente.sinActividad > 0 ? [t("pendienteSinActividad", { count: pendiente.sinActividad })] : []),
+            ].join(" · ")}
           </p>
-          <ul className="nn-detail-meta">
-            {pendiente.sinTocar.map((c) => (
-              <li key={c.hiveId}>
-                {c.identifier}
-                {c.poblada ? "" : ` · ${t("pendienteSinColonia")}`}
-              </li>
-            ))}
-          </ul>
+          {pendiente.porProposito ? (
+            propositosConFaltas.map((p) => (
+              <div key={p.proposito}>
+                <h3>
+                  {t("pendienteFaltaProposito", {
+                    proposito: t(`visitPurpose_${p.proposito}`),
+                    count: p.faltan.length,
+                    pobladas: p.faltanPobladas,
+                  })}
+                </h3>
+                <ul className="nn-detail-meta">
+                  {p.faltan.map((c) => (
+                    <li key={c.hiveId}>
+                      {c.identifier}
+                      {c.poblada ? "" : ` · ${t("pendienteSinColonia")}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          ) : pendiente.sinTocar.length > 0 ? (
+            <>
+              <p className="nn-detail-meta">
+                {t("pendienteResumen", {
+                  tocadas: pendiente.tocadas,
+                  total: pendiente.tocadas + pendiente.sinTocar.length,
+                  pobladas: pendiente.sinTocarPobladas,
+                })}
+              </p>
+              <ul className="nn-detail-meta">
+                {pendiente.sinTocar.map((c) => (
+                  <li key={c.hiveId}>
+                    {c.identifier}
+                    {c.poblada ? "" : ` · ${t("pendienteSinColonia")}`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           {/* Las tiras sin retirar: material que sigue dentro de una caja de este sitio. Es
               lo otro que todavía se puede resolver sin subir al carro. */}
           {pendiente.retiros.length > 0 ? (
