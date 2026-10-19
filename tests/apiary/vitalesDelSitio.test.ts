@@ -120,6 +120,21 @@ describe("A9.8 — las reglas de alerta", () => {
     expect(alertasDe(cuadran, SIN_NADA, AHORA)).toEqual([]);
   });
 
+  it("FLORACIÓN CON LA META INCOMPLETA: avisa, como aviso y al final de la lista (paso 10, ADR-200)", () => {
+    // Sola: un aviso, y nada más.
+    expect(alertasDe(sitioSano(), { ...SIN_NADA, floracionConMetaIncompleta: true }, AHORA)).toEqual([
+      { nivel: "aviso", motivo: "floracion_con_meta_incompleta" },
+    ]);
+    // Con otra alerta delante: va detrás, así que no pinta el borde de la tarjeta.
+    const v = { ...sitioSano(), proximaVisita: new Date(AHORA.getTime() - 20 * MS_POR_DIA) };
+    expect(alertasDe(v, { ...SIN_NADA, floracionConMetaIncompleta: true }, AHORA)).toEqual([
+      { nivel: "critico", motivo: "visita_vencida" },
+      { nivel: "aviso", motivo: "floracion_con_meta_incompleta" },
+    ]);
+    // Control: sin la señal, el mismo sitio no la levanta.
+    expect(alertasDe(v, SIN_NADA, AHORA)).toEqual([{ nivel: "critico", motivo: "visita_vencida" }]);
+  });
+
   it("un borrador viejo avisa; uno reciente no", () => {
     const viejo = sitioSano();
     viejo.borradorAbiertoDesde = new Date(AHORA.getTime() - (HORAS_DE_BORRADOR_VIEJO + 1) * 3_600_000);

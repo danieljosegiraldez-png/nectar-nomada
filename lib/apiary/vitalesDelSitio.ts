@@ -1,6 +1,8 @@
 import { prisma } from "../db";
 import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeConsulta";
 import { pesoDeNivel, type Alerta, type MotivoDeAlerta } from "./motivoDeAlerta";
+import { avisoDeFloracion } from "./emplazamiento";
+import { coloniasDelCociente } from "./coloniasDelCociente";
 import { HORAS_DE_JORNADA_VIEJA } from "../traceability/fieldSessions";
 import { compararCajasPresentes, type ComparacionDeCajas } from "./cajasPresentes";
 import { diaDelSitio, sitioEnElDia } from "./sitioDeLaCaja";
@@ -137,7 +139,16 @@ export interface VitalesDeSitio {
  * El orden importa: el borde toma su color de `alertas[0]`, y el Anexo lo fija
  * como «la primera regla que se cumpla, en este orden».
  */
-export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdidaSinReposicion: boolean; alimentoRepuesto: boolean }, ahora: Date): Alerta[] {
+export function alertasDe(
+  v: Omit<VitalesDeSitio, "alertas">,
+  hubieron: {
+    perdidaSinReposicion: boolean;
+    alimentoRepuesto: boolean;
+    /** Opcional para no romper a quien ya lo construye: sin él, no hay compromiso que avise. */
+    floracionConMetaIncompleta?: boolean;
+  },
+  ahora: Date,
+): Alerta[] {
   const alertas: Alerta[] = [];
 
   // **PRIMERA de todas, por decisión del dueño (2026-09-14).** ADR-127 la dejó planteada y
@@ -197,6 +208,12 @@ export function alertasDe(v: Omit<VitalesDeSitio, "alertas">, hubieron: { perdid
     alertas.push({ nivel: "aviso", motivo: "consulta_a_vecinos_por_vencer" });
   }
 
+  // Anexo E §9: «que se acerque la floración con la meta incompleta» (paso 10 del plan del
+  // Apiario, ADR-200). **Siempre `aviso`, y al final:** la meta es de trabajo y no está pactada
+  // (ADR-200 §6), así que no se incumple nada que alguien prometiera. Lo decide `avisoDeFloracion`,
+  // que no avisa sin ventana de floración ni con la floración ya abierta.
+  if (hubieron.floracionConMetaIncompleta) alertas.push({ nivel: "aviso", motivo: "floracion_con_meta_incompleta" });
+
   return alertas;
 }
 
@@ -209,7 +226,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
   const salida = new Map<string, VitalesDeSitio>();
   if (locationIds.length === 0) return salida;
 
-  const [sesiones, colmenas, consultas, sitios] = await Promise.all([
+  const [sesiones, colmenas, consultas, sitios, compromisos] = await Promise.all([
     prisma.fieldSession.findMany({
       where: { locationId: { in: locationIds } },
       select: {
@@ -242,6 +259,13 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       orderBy: { occurredAt: "desc" },
     }),
     prisma.location.findMany({ where: { id: { in: locationIds } }, select: { id: true, timezone: true } }),
+    // Los compromisos de polinización que no han terminado, para el aviso de floración. **Sin
+    // exigir que ya hayan empezado**, al revés que la ficha: la floración se prepara antes de que
+    // empiece el servicio, y es entonces cuando avisar sirve.
+    prisma.pollinationCommitment.findMany({
+      where: { locationId: { in: locationIds }, OR: [{ endsAt: null }, { endsAt: { gte: ahora } }] },
+      select: { locationId: true, bloomStartsAt: true, committedHives: true, committedHectares: true, targetHivesPerHectareMin: true },
+    }),
   ]);
 
   const idsDeCajas = colmenas.map((h) => h.id);
@@ -329,6 +353,26 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       : misColmenas.length;
     const cajasComparadas = compararCajasPresentes(conRecuento?.hivesPresentCount ?? null, cajasEseDia);
 
+    const coloniasActivas = misColmenas.reduce((n, h) => n + h.colonies.filter((c) => c.status === "active").length, 0);
+    // El numerador es el MISMO que el de la ficha (`coloniasDelCociente`): lo contado al salir, si
+    // lo hay, y si no las colonias activas. Basta un compromiso que avise para que el sitio avise.
+    const colonias = coloniasDelCociente(coloniasVivasDeclaradas, coloniasActivas);
+    const floracionConMetaIncompleta = compromisos
+      .filter((c) => c.locationId === locationId)
+      .some(
+        (c) =>
+          avisoDeFloracion(
+            {
+              bloomStartsAt: c.bloomStartsAt,
+              committedHives: c.committedHives,
+              committedHectares: Number(c.committedHectares),
+              targetHivesPerHectareMin: Number(c.targetHivesPerHectareMin),
+            },
+            colonias,
+            ahora,
+          ).avisa,
+      );
+
     const base: Omit<VitalesDeSitio, "alertas"> = {
       ultimaConsultaAVecinos,
       diasHastaConsulta: ultimaConsultaAVecinos
@@ -341,7 +385,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       proximaVisita,
       coloniasVivasDeclaradas,
       fechaDelConteoDeclarado: conConteo[0]?.startedAt ?? null,
-      coloniasActivas: misColmenas.reduce((n, h) => n + h.colonies.filter((c) => c.status === "active").length, 0),
+      coloniasActivas,
       cajas: misColmenas.length,
       cajasComparadas,
       alimentoHasta,
@@ -352,7 +396,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
 
     salida.set(locationId, {
       ...base,
-      alertas: alertasDe(base, { perdidaSinReposicion: bajoElConteo && !huboReposicion, alimentoRepuesto }, ahora),
+      alertas: alertasDe(base, { perdidaSinReposicion: bajoElConteo && !huboReposicion, alimentoRepuesto, floracionConMetaIncompleta }, ahora),
     });
   }
 
