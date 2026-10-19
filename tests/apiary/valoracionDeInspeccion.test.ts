@@ -100,8 +100,12 @@ describe("la valoración de una inspección", () => {
   });
 
   afterAll(async () => {
-    await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: sesionId }) });
-    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: sesionId }) });
+    // **Por SITIO, no por la visita del fixture.** «DOS VISITAS» crea otra visita y la borra al final
+    // de su propio cuerpo, así que si falla a mitad la dejaba viva y el borrado del sitio moría en su
+    // clave ajena, abandonando el resto de esta limpieza. Medido el 2026-10-19 en el flip-test del
+    // paso 8: dos sitios TEST huérfanos, cada uno con su visita «locked» de las 14:00.
+    await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSession: { locationId: apiarioId } }) });
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
     const insp = [inspeccionSuelta, inspeccionEnVisita].filter(Boolean);
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "inspection", entityId: { in: insp } }) });
     await prisma.inspection.deleteMany({ where: assertDefinedWhere({ id: { in: insp } }) });
