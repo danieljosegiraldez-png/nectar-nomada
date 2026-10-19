@@ -15,6 +15,7 @@ import {
   densidadDePolinizacion,
 } from "../../lib/apiary/polinizacion";
 import { colmenasDeLaVentana } from "../../lib/apiary/emplazamiento";
+import { vitalesDeSitios } from "../../lib/apiary/vitalesDelSitio";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `a99-pol-${Date.now()}`;
@@ -383,5 +384,99 @@ describe("A9.9 — el compromiso y el cociente", () => {
 
     await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ locationId }) });
     await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: compromiso.id }) });
+  });
+
+  /**
+   * **El aviso de floración llega al tablero** — paso 10 del plan del Apiario (ADR-200). La regla
+   * pura (`avisoDeFloracion`) ya estaba probada en `emplazamiento.test.ts`; lo que sólo se puede
+   * afirmar con la base es que `vitalesDeSitios` la llama con los compromisos de verdad y con el
+   * MISMO numerador que la ficha.
+   *
+   * **Con su propio reloj, en 2030**, porque las pruebas de arriba dejan compromisos en el sitio:
+   * en 2030 sus floraciones ya pasaron o no tienen, así que sólo avisa el de cada caso. Y cada caso
+   * borra el suyo en un `finally`, para que uno que falle no haga avisar al siguiente.
+   */
+  describe("el aviso de floración en el tablero", () => {
+    const CUANDO = new Date("2030-03-01T12:00:00Z");
+    const enDias = (n: number) => new Date(CUANDO.getTime() + n * MS_POR_DIA);
+    const avisa = async () =>
+      ((await vitalesDeSitios([locationId], CUANDO)).get(locationId)?.alertas ?? []).filter(
+        (a) => a.motivo === "floracion_con_meta_incompleta",
+      );
+    // 17 ha a 4 colmenas/ha: la meta es 68 y hay 3 colonias.
+    const META_SIN_CUBRIR = { committedHectares: 17, targetHivesPerHectareMin: 4, targetHivesPerHectareMax: 6 };
+
+    async function conCompromiso(datos: Record<string, unknown>, mirar: () => Promise<void>) {
+      const c = await crearCompromisoDePolinizacion(userAccountId, {
+        locationId,
+        clientOrganizationId: clienteId,
+        ...META_SIN_CUBRIR,
+        startsAt: enDias(-1),
+        ...datos,
+      } as Parameters<typeof crearCompromisoDePolinizacion>[1]);
+      try {
+        await mirar();
+      } finally {
+        await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: c.id }) });
+      }
+    }
+
+    it("CONTROL: antes de nada, el sitio no avisa en 2030", async () => {
+      expect(await avisa()).toEqual([]);
+    });
+
+    it("con la floración a 10 días y la meta sin cubrir, avisa como aviso", async () => {
+      await conCompromiso({ bloomStartsAt: enDias(10) }, async () => {
+        expect(await avisa()).toEqual([{ nivel: "aviso", motivo: "floracion_con_meta_incompleta" }]);
+      });
+    });
+
+    it("a 30 días todavía no", async () => {
+      await conCompromiso({ bloomStartsAt: enDias(30) }, async () => {
+        expect(await avisa()).toEqual([]);
+      });
+    });
+
+    it("con la meta cubierta, no", async () => {
+      // 0,5 ha × 4 = 2, y hay 3 colonias.
+      await conCompromiso({ bloomStartsAt: enDias(10), committedHectares: 0.5 }, async () => {
+        expect(await avisa()).toEqual([]);
+      });
+    });
+
+    it("un compromiso que ya terminó no avisa, aunque la floración se acerque", async () => {
+      await conCompromiso({ bloomStartsAt: enDias(10), startsAt: enDias(-60), endsAt: enDias(-1) }, async () => {
+        expect(await avisa()).toEqual([]);
+      });
+    });
+
+    it("uno que todavía no empieza SÍ avisa: la floración se prepara antes del servicio", async () => {
+      await conCompromiso({ bloomStartsAt: enDias(10), startsAt: enDias(5) }, async () => {
+        expect(await avisa()).toEqual([{ nivel: "aviso", motivo: "floracion_con_meta_incompleta" }]);
+      });
+    });
+
+    it("cuenta con el MISMO numerador que la ficha: lo contado al salir manda sobre el sistema", async () => {
+      // Alguien contó 70 colonias en la última visita y el sistema sólo tiene 3. Con la regla de la
+      // ficha (`coloniasDelCociente`) la meta de 68 está cubierta y no avisa; con las 3 del
+      // sistema avisaría. El `afterEach` de arriba retira la visita.
+      await prisma.fieldSession.create({
+        data: {
+          locationId,
+          operatorPersonId: personId,
+          startedAt: enDias(-2),
+          status: "completed",
+          completedAt: enDias(-2),
+          coloniesAliveCount: 70,
+          provenanceClass: "original_record",
+        },
+      });
+      await conCompromiso({ bloomStartsAt: enDias(10) }, async () => {
+        expect(await avisa()).toEqual([]);
+        // Control: la ficha dice lo mismo del mismo compromiso, con la misma cifra.
+        const ficha = (await densidadDePolinizacion(locationId, CUANDO)).find((x) => x.hectareasComprometidas === 17 && x.colonias === 70);
+        expect(ficha?.deficitParaMin).toBe(0);
+      });
+    });
   });
 });

@@ -2662,6 +2662,7 @@
     "loteError_cuantas_invalido": "“How many” must be a whole number of 1 or more.",
     "loteError_cuantas_sobre_el_techo": "That is too many at once.",
     "alerta_cajas_no_cuadran": "The hives counted do not match the ones on record",
+    "alerta_floracion_con_meta_incompleta": "A bloom is approaching and hives are short of the working target (not agreed)",
     "hivesHint": "Open a hive to inspect it, feed or treat it, count varroa and record its harvest. What is above applies to the whole apiary.",
     "hiveEntrar": "open to inspect and record",
     "sinPermisoInspeccion": "Your profile does not record formal inspections. You can note what you see as a colony event below, and ask whoever manages the apiary to record the inspection.",
