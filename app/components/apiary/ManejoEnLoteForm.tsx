@@ -149,7 +149,9 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
             </div>
           ) : null}
           <div className="nn-field">
-            <label htmlFor="lote-cantidad">{t("feedingQuantityLabel")}</label>
+            {/* «Por colonia» porque el servicio copia la cifra a cada una (`colonyEvents.ts`): diez
+                litros tecleados para diez colmenas se guardan como cien. ADR-200, Consecuencias. */}
+            <label htmlFor="lote-cantidad">{t("loteCantidadPorColoniaLabel")}</label>
             <CampoNumerico
               id="lote-cantidad"
               name="feedingQuantity"
@@ -159,6 +161,7 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
             />
+            <Ayuda resumen={t("loteCantidadPorColoniaLabel")}>{t("loteCifraPorColoniaAyuda")}</Ayuda>
           </div>
           <div className="nn-field">
             <label htmlFor="lote-unidad">{t("unitLabel")}</label>
@@ -242,8 +245,9 @@ export function ManejoEnLoteForm({ apiaryId, colmenas, hoy }: { apiaryId: string
             <CampoNumerico id="lote-carencia" name="treatmentWithdrawalDays" step="1" min="0" required />
           </div>
           <div className="nn-field">
-            <label htmlFor="lote-dosis">{t("treatmentDoseLabel")}</label>
+            <label htmlFor="lote-dosis">{t("loteDosisPorColoniaLabel")}</label>
             <CampoNumerico id="lote-dosis" name="treatmentDose" step="0.001" min="0" inputMode="decimal" />
+            <Ayuda resumen={t("loteDosisPorColoniaLabel")}>{t("loteCifraPorColoniaAyuda")}</Ayuda>
           </div>
           <div className="nn-field">
             <label htmlFor="lote-dosis-unidad">{t("unitLabel")}</label>
