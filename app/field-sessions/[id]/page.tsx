@@ -24,6 +24,9 @@ import { GastoDeVisitaForm } from "../../components/traceability/GastoDeVisitaFo
 import { consumosDeLaVisita } from "../../../lib/traceability/operations";
 import { DEFAULT_NEW_RECORD_CLASSIFICATION, puedeGestionarLote } from "../../../lib/traceability/lots";
 import { cajaDelRegistro, queSeHizo } from "../../../lib/apiary/queSeHizo";
+import { ValoracionDeInspeccionForm } from "../../components/apiary/ValoracionDeInspeccionForm";
+import { ventanaDeValoracion } from "../../../lib/apiary/valoracionDeInspeccion";
+import { ApiaryAccessError, requireApiaryAccess } from "../../../lib/apiary/hives";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +113,24 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
       locationId: session.locationId,
       classification: DEFAULT_NEW_RECORD_CLASSIFICATION,
     }));
+  // La valoración del técnico, una por inspección de la visita (Anexo E: el campo de cierre;
+  // ADR-154). Se escribe con la visita ya cerrada. La sección sólo la ve quien tiene `apiary:manage`
+  // en el sitio de la visita —el guardia del servicio—, y el formulario sólo se ofrece mientras el
+  // servicio lo va a aceptar: la regla de plazo es la misma función, `ventanaDeValoracion`. La
+  // autorización de verdad sigue en el servicio, por la colmena de cada colonia.
+  const inspecciones = events.flatMap((e) => (e.inspection ? [e.inspection] : []));
+  const puedeValorar =
+    !enCurso &&
+    inspecciones.length > 0 &&
+    (await requireApiaryAccess(user.userAccountId, "manage", [{ locationId: session.locationId }]).then(
+      () => true,
+      (error: unknown) => {
+        if (error instanceof ApiaryAccessError) return false;
+        throw error;
+      },
+    ));
+  const valoracionAbierta = ventanaDeValoracion([session], new Date()) === null;
+
   const listaDeGastos =
     gastos.length === 0 ? (
       <p className="nn-muted">{t("gastoNada")}</p>
@@ -360,6 +381,35 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
                   cosechas: resumen.resumen.cosechas,
                 })}
               </p>
+            </section>
+          ) : null}
+          {puedeValorar ? (
+            <section className="nn-section">
+              <h2>{ta("valoracionHeading")}</h2>
+              <p className="nn-detail-meta">{ta("valoracionAyuda")}</p>
+              {reporteEmitido ? <p className="nn-detail-meta">{ta("valoracionTrasEmitir")}</p> : null}
+              {valoracionAbierta ? (
+                inspecciones.map((i) => (
+                  <ValoracionDeInspeccionForm
+                    key={i.id}
+                    fieldSessionId={session.id}
+                    inspectionId={i.id}
+                    guardada={i.assessment}
+                    caja={i.colony.hive.identifier}
+                  />
+                ))
+              ) : (
+                <>
+                  <p className="nn-muted">{ta("valoracionCerrada")}</p>
+                  <ul>
+                    {inspecciones.map((i) => (
+                      <li key={i.id}>
+                        <strong>{i.colony.hive.identifier}</strong>: {i.assessment ?? ta("reportNotRecorded")}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </section>
           ) : null}
           {/* **El paso que faltaba, y el orden que importa.** `endedAt` dice

@@ -46,6 +46,20 @@ export interface RegistrarValoracionInput {
   assessment: string | null;
 }
 
+/**
+ * **La regla de plazo, sola y sin base**, para que la pantalla de la visita ofrezca el formulario
+ * exactamente cuando el servicio lo va a aceptar: si las dos escribieran las condiciones por su
+ * cuenta, acabarían separándose. `null` = la ventana está abierta.
+ */
+export function ventanaDeValoracion(
+  sesiones: ReadonlyArray<{ status: string; editWindowExpiresAt: Date | null }>,
+  ahora: Date,
+): "visita_cerrada" | "ventana_de_edicion_vencida" | null {
+  if (sesiones.some((s) => s.status === "locked")) return "visita_cerrada";
+  if (sesiones.some((s) => s.editWindowExpiresAt !== null && s.editWindowExpiresAt < ahora)) return "ventana_de_edicion_vencida";
+  return null;
+}
+
 export async function registrarValoracionDeInspeccion(
   userAccountId: string,
   input: RegistrarValoracionInput,
@@ -91,10 +105,8 @@ export async function registrarValoracionDeInspeccion(
     // Las reglas son las de la VISITA, no unas nuevas, y se distinguen entre si como alli:
     // `locked` se comprueba ANTES de la ventana porque una esta cerrada por decision y la otra
     // por plazo, y decirlas igual perderia cual fue.
-    if (sesiones.some((s) => s.status === "locked")) throw new ValoracionInvalida("visita_cerrada");
-    if (sesiones.some((s) => s.editWindowExpiresAt !== null && s.editWindowExpiresAt < ahora)) {
-      throw new ValoracionInvalida("ventana_de_edicion_vencida");
-    }
+    const cierre = ventanaDeValoracion(sesiones, ahora);
+    if (cierre) throw new ValoracionInvalida(cierre);
   }
 
   const texto = input.assessment === null ? null : input.assessment.trim() === "" ? null : input.assessment.trim();

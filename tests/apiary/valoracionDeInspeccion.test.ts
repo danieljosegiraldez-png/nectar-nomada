@@ -20,6 +20,7 @@ import {
   registrarValoracionDeInspeccion,
   ValoracionInvalida,
 } from "../../lib/apiary/valoracionDeInspeccion";
+import { getFieldSessionTimeline } from "../../lib/traceability/fieldSessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `val-${Date.now()}`;
@@ -327,5 +328,25 @@ describe("la valoración de una inspección", () => {
         assessment: "x",
       }),
     ).rejects.toThrow(ValoracionInvalida);
+  });
+
+  it("LA PANTALLA LA LEE: la lectura de la visita trae cada inspección con su valoración", async () => {
+    // Paso 8 del plan del Apiario (ADR-200): la pantalla de la visita ofrece escribir la valoración
+    // por inspección, y para eso la lectura que ya autoriza la visita tiene que traer el `id` y el
+    // texto guardado. Hasta el 2026-10-19 traía la caja y el resultado, y nada más.
+    // El estado de la visita lo fija esta prueba: las de arriba lo cambian.
+    await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "completed", editWindowExpiresAt: null } });
+    await registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionEnVisita, assessment: "Leída por la pantalla" });
+
+    const { events } = await getFieldSessionTimeline(userAccountId, sesionId);
+    const conInspeccion = events.filter((e) => e.inspection !== null);
+    // Control: la visita tiene exactamente la inspección que esta prueba colgó de ella.
+    expect(conInspeccion.map((e) => e.inspection!.id)).toEqual([inspeccionEnVisita]);
+    expect(conInspeccion[0]!.inspection!.assessment).toBe("Leída por la pantalla");
+
+    // Y lo nuevo se lee al volver a pedirla: no es una copia de cuando se abrió la pantalla.
+    await registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionEnVisita, assessment: "Cambiada" });
+    const otra = await getFieldSessionTimeline(userAccountId, sesionId);
+    expect(otra.events.find((e) => e.inspection?.id === inspeccionEnVisita)?.inspection?.assessment).toBe("Cambiada");
   });
 });
