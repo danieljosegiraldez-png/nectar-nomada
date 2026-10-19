@@ -18,6 +18,7 @@ import { exigirPersonaPermitida } from "../people/quienLoHizo";
 import { prisma } from "../db";
 import { unaVezPorEnvio } from "../envios/unaVezPorEnvio";
 import { requireLotAccess, TraceabilityAccessError, DEFAULT_NEW_RECORD_CLASSIFICATION } from "./lots";
+import { FieldSessionValidationError } from "./fieldSessions";
 import { recordAuditEvent } from "../audit";
 import type { DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
 
@@ -332,13 +333,17 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
     // apiario de otro con sólo saber el id de la jornada.
     const jornada = await prisma.fieldSession.findUnique({
       where: { id: input.parent.fieldSessionId },
-      select: { locationId: true },
+      select: { locationId: true, endedAt: true },
     });
     if (!jornada) throw new TraceabilityAccessError("field_session_not_found");
     await requireLotAccess(userAccountId, "manage", [
       { locationId: jornada.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
     ]);
     await exigirPersonaPermitida(userAccountId, input.operatorPersonId, [{ locationId: jornada.locationId }]);
+    // Una jornada con salida no recibe registros (ADR-200 §1, salvo lo anotado sin señal, que tiene
+    // su propia regla). DESPUÉS del guardia de acceso, a propósito: quien no alcanza el sitio tiene que
+    // oír «sin acceso», no enterarse de que la visita existe y está cerrada.
+    if (jornada.endedAt) throw new FieldSessionValidationError("session_already_ended");
   } else {
     if (!input.lotId) throw new MaterialConsumptionValidationError("lot_id_required");
     const lot = await prisma.lot.findUnique({ where: { id: input.lotId } });
@@ -358,4 +363,20 @@ export async function recordMaterialConsumptionEntry(userAccountId: string, inpu
   });
 
   return materialConsumptionEntry;
+}
+
+/**
+ * **Lo gastado en una visita**, en el orden en que se anotó. Lo pidió Daniel el 2026-09-17 contando una
+ * visita real —aserrín y hojas para el ahumador, un encendedor, una lija— y ADR-200 lo pone entre los
+ * defectos que se arreglan sin preguntar: el padre `fieldSession` existía y ninguna pantalla lo leía.
+ *
+ * **No autoriza**, igual que `resumenDeVisita` y `pendientesDeLaVisita`: la pantalla que la llama ya
+ * pasó por `getFieldSessionTimeline`, que es el guardia de la visita.
+ */
+export async function consumosDeLaVisita(fieldSessionId: string) {
+  return prisma.materialConsumptionEntry.findMany({
+    where: { fieldSessionId },
+    orderBy: { occurredAt: "asc" },
+    select: { id: true, materialName: true, batchLabel: true, quantity: true, unit: true, notes: true, occurredAt: true },
+  });
 }
