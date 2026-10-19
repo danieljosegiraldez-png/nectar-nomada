@@ -19,6 +19,10 @@ import { ubicacionesEmparentadas } from "../../../lib/traceability/ubicacionesEm
 import { intervencionesVigentes } from "../../../lib/traceability/intervenciones";
 import { reentradaDeIntervencion } from "../../../lib/traceability/carenciaDeIntervencion";
 import { textoDeTipoDeManejo as textoDeTipoDeManejoDe } from "../../components/traceability/etiquetasDeManejo";
+import { randomUUID } from "node:crypto";
+import { GastoDeVisitaForm } from "../../components/traceability/GastoDeVisitaForm";
+import { consumosDeLaVisita } from "../../../lib/traceability/operations";
+import { DEFAULT_NEW_RECORD_CLASSIFICATION, puedeGestionarLote } from "../../../lib/traceability/lots";
 import { cajaDelRegistro, queSeHizo } from "../../../lib/apiary/queSeHizo";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +99,31 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
     ((pendiente.porProposito ? propositosConFaltas.length > 0 : pendiente.sinTocar.length > 0) || pendiente.retiros.length > 0);
 
   const enCurso = session.endedAt == null;
+
+  // Lo gastado en la visita (ADR-200, defectos sin decisión). La lista se ve abierta y cerrada; el
+  // formulario, sólo con la visita abierta y sólo a quien el servicio va a dejar escribir: el mismo
+  // guardia, `lot:manage` en el sitio de la jornada.
+  const gastos = await consumosDeLaVisita(id);
+  const puedeAnotarGasto =
+    enCurso &&
+    (await puedeGestionarLote(user.userAccountId, {
+      locationId: session.locationId,
+      classification: DEFAULT_NEW_RECORD_CLASSIFICATION,
+    }));
+  const listaDeGastos =
+    gastos.length === 0 ? (
+      <p className="nn-muted">{t("gastoNada")}</p>
+    ) : (
+      <ul>
+        {gastos.map((g) => (
+          <li key={g.id}>
+            {[g.materialName, g.quantity != null ? `${g.quantity.toString()} ${g.unit ?? ""}`.trim() : null, g.batchLabel, g.notes]
+              .filter(Boolean)
+              .join(" · ")}
+          </li>
+        ))}
+      </ul>
+    );
 
   // Spec §3.5 — avisa, no impide: sólo mientras la jornada sigue abierta, y para
   // las intervenciones emparentadas con el sitio de la jornada (misma regla que
@@ -297,6 +326,12 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
           </section>
 
           <section className="nn-section">
+            <h2>{t("gastoHeading")}</h2>
+            {listaDeGastos}
+            {puedeAnotarGasto ? <GastoDeVisitaForm fieldSessionId={session.id} claveDeEnvio={randomUUID()} /> : null}
+          </section>
+
+          <section className="nn-section">
             <h2>{t("fieldSessionEndHeading")}</h2>
             <FieldSessionEndForm fieldSessionId={session.id} />
           </section>
@@ -348,6 +383,12 @@ export default async function FieldSessionPage({ params }: { params: Promise<{ i
               <EmitirReporteForm fieldSessionId={session.id} />
             </section>
           )}
+          {gastos.length > 0 ? (
+            <section className="nn-section">
+              <h2>{t("gastoHeading")}</h2>
+              {listaDeGastos}
+            </section>
+          ) : null}
         </>
       )}
     </div>
