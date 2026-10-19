@@ -52,7 +52,12 @@ export async function DetallesDelReporte({ registro, enCuadros, paraCliente }: {
     [t(paraCliente ? "reportAssessmentForClient" : "reportAssessment"), r.valoracion],
   ] : [];
   const a = registro.alimentacion;
-  if (a) filas.push([t("feedingMaterialLabel"), [a.tipo ? t(`feedingMaterial_${a.tipo}`) : null, a.material].filter(Boolean).join(" · ") || null], [t("feedingQuantityLabel"), a.cantidad], [t("unitLabel"), a.unidad]);
+  // La cantidad y su unidad van en UNA fila («3 lb»): en dos, «Cantidad: 3» se lee sola y la unidad
+  // queda a una línea de distancia. Una cantidad sin unidad se guarda (ADR-200 §5: avisa y registra
+  // igual), y aquí lo dice en vez de pintar un «3» que parece completo. Una unidad sin cantidad no
+  // dice nada, como en el formulario, y queda «Sin registrar».
+  const cantidad = a?.cantidad == null ? null : a.unidad ? `${a.cantidad} ${a.unidad}` : t("reportCantidadSinUnidad", { cantidad: a.cantidad });
+  if (a) filas.push([t("feedingMaterialLabel"), [a.tipo ? t(`feedingMaterial_${a.tipo}`) : null, a.material].filter(Boolean).join(" · ") || null], [t("feedingQuantityLabel"), cantidad]);
   // V-7: el conteo de varroa congelado. La infestación se deriva aquí, no se guarda.
   const v = registro.varroa;
   if (v) filas.push([t("varroaMethodLabel"), t(`varroaMethod_${v.metodo}`)], [t("varroaMitesLabel"), v.acaros], [t("varroaSampleBeesLabel"), v.abejas], [t("reportVarroaInfestacion"), v.abejas > 0 ? t("reportPorCiento", { valor: infestacionPorCiento(v.abejas, v.acaros) }) : null]);

@@ -2303,6 +2303,7 @@
     "reportAssessment": "Valoración del técnico",
     "reportAssessmentForClient": "Interpretación del técnico",
     "reportNotRecorded": "Sin registrar",
+    "reportCantidadSinUnidad": "{cantidad} (sin unidad)",
     "inspectionHeading": "Inspección",
     "inspectionNothingUnusualButton": "Nada fuera de lo normal",
     "inspectionRecordDetailsButton": "Registrar detalles",
