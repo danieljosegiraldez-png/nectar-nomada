@@ -4481,6 +4481,14 @@
     "deEstaFinca": "From this farm",
     "equipoNectarNomada": "Néctar Nómada team"
   },
+  "Estados": {
+    "cargando": "Loading…",
+    "errorTitulo": "Something went wrong while opening this screen.",
+    "errorCuerpo": "You can retry, or go back to the start.",
+    "reintentar": "Retry",
+    "volverAlInicio": "Back to start",
+    "codigo": "Error code: {digest}"
+  },
   "SinConexion": {
     "versionGuardada": "Offline. This is what was saved on {cuando}; it may have changed.",
     "versionGuardadaSinHora": "Offline. This is a saved version; it may have changed."
