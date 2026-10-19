@@ -11,7 +11,9 @@ import {
   declararPatron,
   editarDatosDeEquipo,
   informarCondicion,
+  reactivarEquipo,
   registrarEquipo,
+  retirarEquipo,
   sitiosParaRegistrar,
   verificarInstrumento,
   type ContrasteObservado,
@@ -185,6 +187,50 @@ export async function editarDatosDeEquipoFormAction(formData: FormData): Promise
     revalidatePath("/equipos");
     revalidatePath(`/equipos/${equipmentId}`);
     destino = `/equipos/${equipmentId}?ok=datos`;
+  } catch (error) {
+    if (!(error instanceof EquipoError)) throw error;
+    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+  }
+  redirect(destino);
+}
+
+/**
+ * Retirar un equipo (Parte 2c §4.5). El motivo viaja en el formulario y es obligatorio; la fecha la pone el servidor.
+ *
+ * **Un código del servicio no es un 500**: `EquipoError` vuelve a la ficha con `?error=<código>` (`equipo_en_uso`,
+ * `equipo_ya_retirado`, `motivo_obligatorio`, `forbidden`…), que la ficha traduce. Y `redirect()` se llama UNA vez, al
+ * final, fuera del `try`: Next lo implementa lanzando, y dentro del `try` lo atraparía el `catch`.
+ */
+export async function retirarEquipoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const equipmentId = String(formData.get("equipmentId") ?? "");
+
+  let destino: string;
+  try {
+    await retirarEquipo(user.userAccountId, equipmentId, String(formData.get("motivo") ?? ""));
+    revalidatePath("/equipos");
+    revalidatePath(`/equipos/${equipmentId}`);
+    destino = `/equipos/${equipmentId}?ok=equipo_retirado`;
+  } catch (error) {
+    if (!(error instanceof EquipoError)) throw error;
+    destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;
+  }
+  redirect(destino);
+}
+
+/** Deshacer un retiro (Parte 2c §4.5; D3: reversible, con motivo obligatorio). Mismo camino que retirar, con su propio `ok`. */
+export async function reactivarEquipoFormAction(formData: FormData): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const equipmentId = String(formData.get("equipmentId") ?? "");
+
+  let destino: string;
+  try {
+    await reactivarEquipo(user.userAccountId, equipmentId, String(formData.get("motivo") ?? ""));
+    revalidatePath("/equipos");
+    revalidatePath(`/equipos/${equipmentId}`);
+    destino = `/equipos/${equipmentId}?ok=equipo_reactivado`;
   } catch (error) {
     if (!(error instanceof EquipoError)) throw error;
     destino = `/equipos/${equipmentId}?error=${encodeURIComponent(error.message)}`;

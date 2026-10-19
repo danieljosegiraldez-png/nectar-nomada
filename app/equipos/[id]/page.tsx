@@ -8,6 +8,8 @@ import {
   declararPatronFormAction,
   editarDatosDeEquipoFormAction,
   informarCondicionFormAction,
+  reactivarEquipoFormAction,
+  retirarEquipoFormAction,
   verificarInstrumentoFormAction,
 } from "../../actions/equipos";
 import { crearRutinaFormAction } from "../../actions/rutinas";
@@ -27,6 +29,7 @@ import { documentosDeEquipo } from "../../../lib/equipos/documentos";
 import { modelosParaElegir } from "../../../lib/equipos/modelos";
 import { rutinasDeEquipo } from "../../../lib/rutinas/rutinas";
 import { diaDeHoy } from "../../../lib/time/diaDeHoy";
+import { mostrarFecha } from "../../../lib/time/mostrarInstante";
 import { getObserverCandidates } from "../../../lib/traceability/lots";
 
 export const dynamic = "force-dynamic";
@@ -146,6 +149,16 @@ export default async function EquipoPage({
           {t("okRutinaAnulada")}
         </p>
       ) : null}
+      {sp.ok === "equipo_retirado" ? (
+        <p className="nn-ok" role="status">
+          {t("okEquipoRetirado")}
+        </p>
+      ) : null}
+      {sp.ok === "equipo_reactivado" ? (
+        <p className="nn-ok" role="status">
+          {t("okEquipoReactivado")}
+        </p>
+      ) : null}
 
       {codigoError ? (
         <p className="nn-error" role="alert">
@@ -168,7 +181,24 @@ export default async function EquipoPage({
                         ? t("errorUnidadDistinta")
                         : codigoError === "insumo_ajeno"
                           ? t("errorInsumoAjeno")
-                          : t("errorModeloGenerico", { codigo: codigoError })}
+                          : codigoError === "equipo_en_uso"
+                            ? t("errorEquipoEnUso")
+                            : codigoError === "equipo_ya_retirado"
+                              ? t("errorEquipoYaRetirado")
+                              : codigoError === "equipo_no_retirado"
+                                ? t("errorEquipoNoRetirado")
+                                : t("errorModeloGenerico", { codigo: codigoError })}
+        </p>
+      ) : null}
+
+      {equipo.lifecycleStatus === "retired" ? (
+        <p className="nn-muted" role="status">
+          <strong>
+            {equipo.retiredAt
+              ? t("equipoRetiradoEl", { fecha: mostrarFecha(equipo.retiredAt, ubicacion?.timezone) })
+              : t("equipoRetiradoSinFecha")}
+          </strong>{" "}
+          {equipo.retiroMotivo ? t("equipoRetiradoMotivo", { motivo: equipo.retiroMotivo }) : null}
         </p>
       ) : null}
 
@@ -279,6 +309,40 @@ export default async function EquipoPage({
           </details>
         ) : null}
       </section>
+
+      {puedeGestionar && equipo.lifecycleStatus === "active" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <details>
+            <summary>{t("retirarEquipo")}</summary>
+            <p className="nn-muted">{t("retirarEquipoIntro")}</p>
+            <form action={retirarEquipoFormAction}>
+              <input type="hidden" name="equipmentId" value={equipo.id} />
+              <label>
+                {t("campoMotivoRetiro")}
+                <textarea name="motivo" rows={2} required maxLength={500} />
+              </label>
+              <BotonDeEnvio className="nn-button-quiet">{t("botonRetirarEquipo")}</BotonDeEnvio>
+            </form>
+          </details>
+        </section>
+      ) : null}
+
+      {puedeGestionar && equipo.lifecycleStatus === "retired" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <details>
+            <summary>{t("reactivarEquipo")}</summary>
+            <p className="nn-muted">{t("reactivarEquipoIntro")}</p>
+            <form action={reactivarEquipoFormAction}>
+              <input type="hidden" name="equipmentId" value={equipo.id} />
+              <label>
+                {t("campoMotivoReactivar")}
+                <textarea name="motivo" rows={2} required maxLength={500} />
+              </label>
+              <BotonDeEnvio className="nn-button-quiet">{t("botonReactivarEquipo")}</BotonDeEnvio>
+            </form>
+          </details>
+        </section>
+      ) : null}
 
       <section style={{ marginTop: "1.5rem" }}>
         <h2>{t("rutinas")}</h2>

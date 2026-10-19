@@ -110,6 +110,7 @@ beforeAll(async () => {
   const procesoE2e = await abrirProcesoDePrueba(operatorUserAccountId, cherryLotId);
   const { run: fermentationRun } = await startFermentationRun(operatorUserAccountId, {
     lotId: cherryLotId,
+    vesselNote: "Tanque de prueba",
     startedAt: new Date("2027-01-15T10:00:00Z"),
     quantity: 500,
     unit: "kg",

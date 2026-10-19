@@ -18,6 +18,7 @@ import {
   ColonyPopulation,
   FeedingMaterial,
   InspectionOutcome,
+  QueenCellKind,
   QueenSighting,
   StoresLevel,
   Temperament,
@@ -72,8 +73,9 @@ const CASOS = [
  * Nada falló en rojo; se leyó mal en pantalla. Producción no tenía ninguna inspección todavía
  * (`apiary.inspection` vacía el 2026-10-08), así que nadie lo había visto.
  *
- * Cubre las ocho familias que construye `DetallesDelReporte` con una plantilla
- * (`population_${v}`...): una clave que falte ahí no la ve el compilador.
+ * Cubre las nueve familias que construye `DetallesDelReporte` con una plantilla
+ * (`population_${v}`...): una clave que falte ahí no la ve el compilador. La novena,
+ * `queenCell_*`, entró cuando el informe empezó a congelar las celdas reales (PR-2 del #674).
  */
 const esApiary = JSON.parse(leer("messages/es.json")).Apiary as Record<string, string>;
 const enApiary = JSON.parse(leer("messages/en.json")).Apiary as Record<string, string>;
@@ -87,6 +89,7 @@ const CASOS_APIARY = [
   { nombre: "Temperament", prefijo: "temperament", valores: Object.values(Temperament) },
   { nombre: "FeedingMaterial", prefijo: "feedingMaterial", valores: Object.values(FeedingMaterial) },
   { nombre: "InspectionOutcome", prefijo: "inspectionOutcome", valores: Object.values(InspectionOutcome) },
+  { nombre: "QueenCellKind", prefijo: "queenCell", valores: Object.values(QueenCellKind) },
 ] as const;
 
 describe("cada valor de colonia del reporte tiene etiqueta en los dos idiomas (Apiary)", () => {
@@ -238,6 +241,8 @@ const CRUDO_CON_RAZON: Record<string, string> = {
     "No es un enum de Prisma: es la lista que el autor del protocolo congeló en esa versión —«río», «quebrada», «pozo», «red»—. Son datos, ya escritos en el idioma de quien los declaró, y un vocabulario abierto no tiene clave de traducción posible.",
   unidades:
     "Tampoco es un enum: son símbolos de unidad —C, F, pH, Bx, %, aw, mg/kg, ppm— que salen de `unidadesAceptadas` y son los MISMOS en los dos idiomas. Una clave `unidad_%` o `unidad_mg/kg` no traduciría nada y añadiría un sitio donde desincronizarse con el registro, que es la única fuente de qué unidades admite cada variable. Declarada el 2026-09-11, cuando el formulario de medición dejó de pedir la unidad escrita a mano.",
+  UNIDADES_DE_ALIMENTACION:
+    "La misma razón que `unidades`: L, kg, g, ml y lb son símbolos, iguales en los dos idiomas, y una clave `feedingUnit_kg` no traduciría nada. Lo que sí se traduce, «Otra (cuál)», va con su clave. Declarada el 2026-10-14, cuando la unidad de la alimentación dejó de ser texto libre (ADR-200 §5, pregunta 17).",
 };
 
 function opcionesDeDesplegable() {

@@ -17,6 +17,7 @@
  */
 import { prisma } from "../db";
 import { can, CLASSIFICATION_NOT_APPLICABLE } from "../rbac/service";
+import { UUID } from "../validation/uuid";
 
 export class CompetitionAccessError extends Error {}
 
@@ -37,7 +38,11 @@ export async function getCompetitionsWithEditions(userAccountId: string) {
 
 export async function getEditionDetail(userAccountId: string, editionId: string) {
   await requireManagePermission(userAccountId);
-  return prisma.competitionEdition.findUniqueOrThrow({
+  // El id llega de la URL. `findUniqueOrThrow` lanzaba `P2025` con un UUID que no existe y `P2007`
+  // con uno mal formado, y la página —que sólo atrapa esta clase— daba 500 en los dos casos
+  // (PENDING_IMPLEMENTATIONS/026). Las dos cosas son una edición que no existe.
+  if (!UUID.test(editionId)) throw new CompetitionAccessError("edition_not_found");
+  const edition = await prisma.competitionEdition.findUnique({
     where: { id: editionId },
     include: {
       competition: true,
@@ -57,6 +62,8 @@ export async function getEditionDetail(userAccountId: string, editionId: string)
       },
     },
   });
+  if (!edition) throw new CompetitionAccessError("edition_not_found");
+  return edition;
 }
 
 /**

@@ -11434,6 +11434,11 @@ arreglo de un dano medido.
 
 1. **Instalaciones y camas: todas**, cuelguen de donde cuelguen. Hoy `crearUbicacionDeSecado` sólo acepta una `drying_facility` bajo un `site` (el código de #377 nunca llegó a aceptar `beneficio` como padre, aunque la spec original lo previera) — así que la guardia nueva no distingue por tipo de padre: exige `edit_beneficio` sobre el padre exacto que se pase, sea cual sea.
 2. **Recetas: `edit_beneficio` en algún lugar de la organización de la receta.** Una receta compartida (`organizationId` nulo) sólo se configura con alcance de plataforma — no basta con gestionar el lote de una finca cualquiera. La comprobación de `lot:manage` que ya tenían crear/editar/publicar se queda intacta; ésta se suma.
+   **Corregido el 2026-10-10 (Parte 2a, V16: decisión de Daniel del 2026-10-04):** la autoría de recetas ya no es `edit_beneficio` sino el permiso del Coffee Process Manager
+   (`lot:approve_exception`, nombre provisional; `lib/recetas/autoria.ts`). **`edit_beneficio` ya no basta para escribir, versionar o publicar una receta**, tampoco a un Farm Manager que lo lleva de
+   serie: quien tenía `edit_beneficio` y no tiene el perfil nuevo pierde las recetas y conserva lo demás de este ADR (instalaciones, camas y equipos). Tampoco se pide ya `lot:manage` sobre un lote de la
+   organización: esa autoridad es otra persona. Una plantilla (`organizationId` nulo) sigue escribiéndose sólo con alcance de plataforma. Lo de arriba se conserva como se escribió, y las «Consecuencias» de
+   más abajo —que cuentan las recetas entre lo que exige `edit_beneficio`— quedan corregidas por esta nota.
 3. **Equipos: la misma concesión abre configurarlos.** Registrar, trasladar, declarar/retirar patrón y declarar modo aceptan `equipment:manage` **o** `edit_beneficio` en el lugar del equipo. Sin lugar (proyecto o plataforma), sólo `equipment:manage` — no hay beneficio sobre el que resolver la concesión.
 
 **Decisión técnica.** Dos guardias nuevas en `lib/traceability/locations.ts`: `exigeEditarBeneficioEn(userAccountId, locationId)` (el permiso sobre una ubicación, sea del tipo que sea; distinta de `exigeEditarBeneficioSiLoEs` de ADR-164, que sólo actúa si la ubicación **es** un beneficio) y `exigeEditarBeneficioEnOrganizacion(userAccountId, organizationId)` (en algún lugar de la organización, o en plataforma si `organizationId` es nulo o la organización no tiene ninguna `Location` propia — el caso de las organizaciones-sólo-con-lotes que ya usan `recipeAuthoring.test.ts` y `recipeVersions.test.ts`). `instalaciones.ts` llama a la primera desde crear (sobre el padre) y editar (sobre la propia ubicación); `processTargets.ts` llama a la segunda desde `createRecipeWithVersion`, `updateRecipeMetadata` y `createRecipeVersion`, después de la comprobación de `lot:manage` que ya tenían. En `lib/equipos/equipos.ts`, `puedeConfigurar` sustituye al `can(..., "manage", "equipment", ...)` suelto en `registrarEquipo`, `exigePermiso("manage")`, `puedeGestionarEquipo` y `sitiosParaRegistrar` (esta última alimenta el selector de sitios del formulario de alta; sin el cambio, la concesión abría `registrarEquipo` pero el capataz nunca veía su propia finca en la lista).
@@ -11996,6 +12001,12 @@ es una condición»): los lotes anaeróbicos inoculados reales de Daniel (PE-77/
     lado marcada «referencia, no norma». El motor nunca los usa directamente.
 12. **Semi Wash NN %** = porcentaje de mucílago **quitado** antes de la cama. No es el «semi-washed» del
     Codex/ISO (secar dentro del pergamino mucilaginoso). **Lavado** = a la cama sin nada de mucílago.
+    **Corregido el 2026-10-04 (decisión de Daniel del 2026-10-03, preguntado dos veces con este ADR delante):** la escala es
+    la contraria. **«Semi Wash NN %» = le QUEDA el NN % del mucílago**; 0 % = Lavado, 100 % = Honey. Lo de arriba se
+    conserva como se escribió. Con el 50 % las dos lecturas coinciden; con el 75 % no (antes quedaba el 25 %). Hoy la escala
+    vive en el `mucilagoObjetivo` de cada paso de receta (0, 10, 25, 50, 75, 100; Parte 2a) y en las definiciones de
+    `grado_proceso` de `lib/research/catalogs.ts`. **Cómo se leen los procesos ya registrados con `Semi Wash 50%` o
+    `Semi Wash 75%` lo decide Daniel antes del reimport**: la Parte 2a deja una consulta de sólo lectura que los cuenta.
 13. **Agua y sospecha de dilución**: fuera el 6,5 fijo. **El mosto se compara contra el pH del agua de
     ese lote**, y sólo contra eso: si mide casi lo mismo que el agua que se usó, avisa. Nunca se avisa
     sobre una lectura de agua. Para tenerlo, opción en el beneficio de **medir el pH del agua** cada día
@@ -12826,6 +12837,63 @@ creada con `createMicrolot`— y esa corrección nunca llegó a un ADR: vivía s
 dicha aquí. El encabezado de aquella migración no se puede editar sin romper su suma de
 verificación, así que esta es la enmienda.
 
+## ADR-197 — La integración del paquete farm-to-green: referencia, no norma, y tres carriles
+
+**Fecha:** 2026-10-08 · **Estado:** aceptado (decisiones de Daniel, en sesión, pregunta a pregunta, del
+2026-10-04 al 08) · **Spec:** `docs/superpowers/specs/2026-10-08-farm-to-green-integracion-design.md` ·
+**Auditoría:** `docs/reference/farm-management/AUDIT_2026-10-04.md`, cuya §8 lleva cada respuesta citada
+aquí entre paréntesis
+
+**Contexto.** El paquete `docs/reference/farm-management/` (v2.1, entró con el #638) propone un módulo de
+café de punta a punta y un cockpit del beneficio. La Fase 1 lo midió contra el código: de 48 capacidades,
+1 completa, 32 parciales y 15 ausentes, y 18 conflictos con los normativos de `docs/beneficio/` y con los
+ADR. El prompt del paquete pedía, como Fase 2, un ADR y una lista de tickets; éste es el ADR.
+
+**Decisiones.**
+
+1. **El paquete es referencia, no norma.** Manda la precedencia de `docs/beneficio/README.md`. Sus 208
+   referencias **sólo se muestran** —valor · fuente · confianza, con «baja» y «NN» a la vista—, **todas las
+   fuentes lado a lado y ninguna por defecto**, y **nunca deciden** (C1, C17, P1). Sin perfiles de autoridad.
+2. **Los umbrales salen de la receta**, en el orden de la 2b: lote → receta → ninguno. **Si falta un
+   parámetro, ese motor no opina y lo dice**: sin perfil de respaldo, ni por grado ni por ejes (PE-77/78).
+   Esto cambia la V6 de la 2b («perfil si falta»).
+3. **Qué se bloquea:** las reglas de la casa (2a D6: la regla 8 del paquete vale para umbrales de
+   referencia), **más la sobrepresión de un recipiente sellado como bloqueo de seguridad**; cada
+   recipiente sellable guarda su presión máxima (C2; dato para la 2c, que hoy la excluye).
+4. **Datos del campo.** Mucílago **por tramo** 0/10/25/50/75/100, lo que queda (C3). **aw opcional** y fin
+   de secado por humedad (ADR-181 #18); si hay aw, se pide la temperatura de la muestra y sin ella la
+   lectura se guarda marcada (C7). **Reposo por receta**, con las sugerencias de ADR-181 #20 y la venta
+   bloqueada hasta cumplirlo (C8). **«De primera» con las cinco condiciones de ADR-181 #8**; el 18–24 °Bx
+   deja de ser regla global y los veredictos guardados quedan como historia (C9).
+5. **Nombres de proceso.** Los métodos se nombran libremente; afirmar un resultado ante un comprador («es
+   láctico») pide un dato medido o va como «perfil buscado» (P4a). Los de la casa: Lavado, Natural,
+   Honey, Semi Wash NN %, Multiproceso, fiebre, CryoBloom, Doble Mosto y fermentación láctica (P4). **La
+   plataforma no evalúa elegibilidad de concurso** —depende de cada caficultor—, y la inoculación, la
+   bioprotección, las enzimas y el mosto propio **no son infusión ni coinfusión** (P3).
+6. **Pantallas.** Portada **por rol**: `/beneficio` es el cockpit del jefe de beneficio (ADR-193 sigue); el
+   operario de secado entra a `/beneficio/secado` (C15). Los avisos dicen **qué, cuándo y quién en tono de
+   sugerencia que alguien confirma** —«Toca lavar antes de 14:30 · Juan»—, coherente con `00_reglas` §3
+   (C16).
+7. **El registro central en el WhatsApp de Néctar Nómada es regla de Daniel**: todo aviso y toda acción se
+   registran también ahí. **Se construye después del cockpit**; hasta entonces sigue el aplazamiento de
+   ADR-039/044 (C14).
+8. **El trabajo va en tres carriles** —finca, arreglos, beneficio—, con trece tickets en la spec. La 2a, la
+   2b y la 2c de la sesión de recetas son **dependencias con nombre**, no trabajo de este plan, y ningún
+   ticket se construye en paralelo con ellas sobre los mismos archivos.
+9. **Fuera:** nómina, aguas residuales y exportación no se eligieron (P5; sigue la mano de obra sin nómina
+   del 2026-09-18); vivero, en una fase futura (P5); elegibilidad de concurso (P3).
+
+**Lo que este ADR NO decide.** Ningún nombre nuevo: los aprueba Daniel en el diseño de cada ticket (C4).
+Ni el diseño interno de los tickets, ni las horas de CryoBloom B —«entre 24 y 48 h», provisional (C12)—.
+Y corrige un dato de la casa sin reescribirlo: el «choque térmico de 26–31 °C» de
+`docs/implementation/36_RO1.2_METODOS_FERMENTACION.md:109` **no existe como método**; fue una temperatura
+observada por las condiciones del lugar (C12b).
+
+**Consecuencias.** Pueden empezar ya, en paralelo, los tickets que no tocan archivos de la 2a: F1
+(floración con pantalla), R1 (pantallas de carga y error), R2 (`/beneficio` legible sin conexión), R3
+(contraste y tacto) y R4 (el 6,5 de dilución y la aw del motor). El cockpit (B2) espera al PR-B de la 2a,
+a la ocupación de la 2c y al alta real de Las Nubes (B0), que depende de la lista de equipos de Daniel.
+
 ## ADR-198 — Un beneficio puede existir sin finca propia
 
 **Fecha:** 2026-10-08 · **Spec:** `docs/superpowers/specs/2026-10-06-beneficio-sin-finca-design.md`
@@ -12848,3 +12916,305 @@ Daniel; (2) se relaja la regla y se hacen alcanzables las pantallas, reescribien
 afirma lo contrario; (3) permisos y procedencia. Sin padre se pierde la jerarquía de permisos y la
 geografía: es el precio de la variante, y sólo lo pagan los beneficios que nacen así.
 `lib/rbac/resolve.ts` queda sin leer y el PR 3 empieza por ahí.
+
+**Actualización 2026-10-09 — qué entra en el PR 3 y qué no (decisión de Daniel).** Entra **sólo** que una
+finca pueda elegir como destino de su cosecha los beneficios **de su misma organización** aunque no cuelguen
+de ella (`beneficiosDeDestino` y `exigeBeneficioDeDestino` con `finca`), con la clasificación del beneficio
+mandando y sin conceder nunca ver sus lotes. Sobre `resolveOrganizationForLocation`/`resolve.ts`: el
+resolutor es puro y exacto para ubicaciones, y la subida por ancestros vive en `can()`; **un beneficio sin
+padre sólo se alcanza con una asignación sobre él mismo**, y con ella las listas de lotes ya lo incluyen
+(`resolveLotVisibility`), sin código nuevo.
+
+**Pendiente, anotado para el primer caso real de cereza ajena** (hoy no existe ninguno en los datos):
+(1) una **concesión estrecha** «esta finca puede mandarme cereza» a un beneficio de OTRA organización — dar
+`lot:view` sobre el beneficio ajeno sería una fuga (la finca vería todos sus lotes); pide tabla, servicio y
+pantalla; (2) la **procedencia**: la etiqueta de muestra en la cata (`etiquetaDeMuestra`) pone la organización
+del lote, que para cereza ajena sería la que procesa y no la finca de origen; derivarla pide seguir la cadena
+recepción → entrega → jornada → finca.
+
+## ADR-199 — Cada borrador offline tiene dueño y no se envía a nombre de otra cuenta
+
+**Fecha:** 2026-10-11 · **Spec:** `docs/superpowers/specs/2026-10-09-borradores-con-dueno-design.md` ·
+**Plan:** `docs/superpowers/plans/2026-10-11-borradores-con-dueno.md`
+
+**Contexto.** Las tres colas de IndexedDB (apiario, campo y fotos de trampa) guardaban borradores sin
+cuenta, y el envío autentica con la sesión del momento. En un teléfono donde A deja trabajo sin enviar y
+entra B, salía a nombre de B: actor falso en `core.audit_event` y, en una revisión de trampa, observador
+falso con `direct_observation` (§3, §35). ADR-109 hace los aparatos personales, pero dentro de él cabe el
+peor caso: un administrador que entra en el teléfono de un trabajador para ayudarle. Con acceso a todo,
+nada se rechaza.
+
+**Decisión de Daniel, 2026-10-09 y 2026-10-11.**
+1. Los borradores de otra cuenta **se retienen** en el teléfono hasta que vuelva su dueño: ni se envían, ni
+   se descartan, ni se exportan. La purga de 21 días sigue igual.
+2. Un borrador sin cuenta es **de quien registró el aparato** (`Device.createdBy`).
+3. Lo comprueban el navegador y el servidor, y la cuenta sale de la página más reciente que generó el
+   servidor.
+4. Un solo componente en el layout, compartido con #703.
+
+**Cómo.** El dueño es la huella de la cuenta (`lib/auth/huellaDeCuenta.ts`), nunca el id. El servidor
+contesta `rejected` con `borrador_de_otra_cuenta` y no escribe nada. Se eligió «rechazado» y no un estado
+nuevo porque el JavaScript viejo en caché descarta cualquier estado que no conoce. Las decisiones viven en
+funciones puras, en `lib/sync/cuentaDelBorrador.ts`, y la cuenta del navegador en
+`lib/offline/cuentaDelNavegador.ts`, ordenada por la hora del servidor.
+
+**También la ruta de fotos `field-media` (decisión de Daniel, 2026-10-13).** Ninguna cola la usa —es API—,
+pero recibe borradores (`clientDraftId`) y la prueba de #708 (`tests/sync/aparatoDelCuerpoPorCookie.test.ts`)
+exige que diga lo mismo que `field-events`. Al fusionar, esa comparación cayó: `field-events` retenía un
+borrador sin cuenta en el aparato vivo de otra cuenta y `field-media` lo escribía. Ahora `finalizeFieldMedia`
+decide el dueño con la misma función y antes que el acceso; una foto ajena no escribe nada y la ruta responde
+403 `borrador_de_otra_cuenta`, con el dueño cuando se deduce del aparato. Sin aparato y sin cuenta la foto es
+de quien la envía: por cookie el aparato es opcional (#708). Con la cuenta de quien envía, un aparato vivo de
+otra cuenta sigue pasando en las dos rutas, como se decidió el 2026-10-11.
+
+**Lo que no cubre.**
+- Quien manipule su navegador puede reetiquetar como suyo un borrador ajeno. No suplanta a nadie, porque
+  escribe con su propia sesión, pero se apropia de trabajo ajeno. Esto protege del error, no del abuso de
+  quien tiene el teléfono en la mano.
+- La purga de 21 días borra también lo retenido de A si A no vuelve, y el aviso lo ve B.
+- Las fotos de trampa no tienen purga, así que una foto retenida espera indefinidamente.
+- Cuando una página guardada de A se abre con B vigente, `alinearConLaCuenta` (#703) recibe A y borra todas las páginas guardadas, también las de B. Es a propósito: borrar de más es el lado seguro, y comparar con la cuenta vigente dejaría la página de A en la caché. Llegar ahí exige que haya fallado el borrado que #703 hace al entrar B (acordado con la sesión de #703, 2026-10-12).
+- Una pestaña con el JavaScript de ANTES del despliegue marca como error lo que el servidor retiene, y su botón viejo de «descartar fallidas» borra todo lo que esté en error, también lo ajeno. Dura hasta que esa pestaña se recarga; el servidor no puede evitarlo sin tumbar el lote entero de quien envía. Para que esa pestaña al menos no envíe sin cuenta, la cuenta viaja también dentro del payload que se guarda (`payloadConCuenta`).
+- Si una página guardada de A se sirve con B dentro (sólo si falló el borrado de #703), el borrador sale con la cuenta de B —correcto—, pero su `operatorPersonId` es la Persona de A, porque ese campo sale del HTML de la página. Medido en el navegador el 2026-10-12.
+- Un borrador sin cuenta que el servidor rechaza por otro motivo (p. ej. en el parseo) se queda sin cuenta: sólo el servidor nombra dueños, y lo hace únicamente al retener. No se puede descartar a mano; lo purga la regla de 21 días.
+
+**Cómo se comprueba.** `tests/sync/borradoresConDueno.test.ts` (con base): un borrador ajeno se rechaza con
+cero filas y cero `AuditEvent`, tanto si trae otra cuenta como si es un borrador sin cuenta en un aparato
+ajeno. Flip-test: anulando el bloque del dueño en `pushFieldEvents`, caen los casos «ajeno» por su nombre.
+`tests/arquitectura/colas-por-cuenta.test.ts` (hermético) vigila que ningún lector de las colas en `app/` se
+salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `descartablesPorEstaCuenta(`—, y
+`tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
+viaje dentro del payload.
+
+## ADR-200 — El módulo Apiario tras la revisión del 2026-10-08: lo que Daniel decidió
+
+**Fecha:** 2026-10-12 · **Decide:** Daniel, el 2026-10-11 y el 2026-10-12 · **Registro literal:**
+`docs/architecture/FUENTE_DECISIONES_DEL_DUENO_2026-10-APIARIO.md` · **Referencias:**
+`docs/dominio/meliponini-amenazas-2026-10-11.md`, `docs/dominio/meliponini-sistemas-de-caja-2026-10-11.md`
+
+**Contexto.** La revisión del Apiario del 2026-10-08, hecha por Claude y Codex sobre el PR #674, dejó dos
+cosas. Por un lado, defectos con arreglo claro, que van en #706, #707, #709, #710, #712 y #713. Por otro, un
+resto que era diseño y necesitaba a Daniel: V-9, E-1 a E-3, C-1 a C-4, P-1 a P-3, R-3, y las hipótesis
+V-H1, V-H3 y V-H4. Antes de preguntarle, un Workflow de diez agentes leyó, tema por tema y contra
+`origin/main`, qué estaba ya decidido y con qué cita, para no volver a preguntarlo. Dos investigaciones
+dieron las opciones de E-2c y E-1b. Después Daniel contestó de una en una. Este ADR recoge lo que decidió;
+las preguntas y sus letras, literales, están en el registro. Las líneas citadas aquí se midieron sobre
+`origin/main` c59319a0.
+
+**Lo que ya estaba decidido y no se preguntó**, porque bastaba citarlo:
+
+- El meliponario es un tipo de sitio, no un módulo ni una especie: ADR-145 (`DECISIONS.md:10323`).
+- Todo vocabulario de manejo va en lista cerrada con «otro» que dice cuál. Lo dijo Daniel el 2026-09-16
+  (`FUENTE_DECISIONES_DEL_DUENO_2026-09.md:139`) y lo aplican ADR-148 (`:10487`) y ADR-186 (`:12260`).
+- Los catálogos de referencia son tablas con campos con tipo: ADR-172 (`:11558`).
+- El taxón es configurable y el estado de manejo va aparte: Q30, en
+  `docs/architecture/fuentes/paquete-q1-q49/build-packet/02-DECISION-REGISTER-Q01-Q49.md:187`.
+- La lista base de unidades es L, kg, g y ml (`protocolos/apiario-campo-v2.json:516-519`).
+- Los materiales son «Mis cinco mas los jarabes» (ADR-153, `DECISIONS.md:10819`).
+- El viático es una cifra por visita, en USD (`apiario-campo-v2.json:100`).
+- El alcance de costos de la fase 1 es Q23 (`02-DECISION-REGISTER…:145`).
+- El compromiso enlaza las colmenas con el cultivo y la floración: Q29 (`:181`).
+- No se promete rendimiento por contar colmenas: Q31
+  (`03-RESEARCH-AND-PROTOCOL-LIBRARY.md:46`).
+- Los seguimientos de una visita son trabajo (Q27, `:169`), con los estados de Q46 (`:283`). A la
+  vez, ADR-107 no extiende `Task` (`DECISIONS.md:7749`).
+- Ante lo que no se puede deshacer, se avisa y se deja registrar: ADR-115 (`:8328`).
+- **P-F, para Varroa y Meliponini, la cerró Daniel el 2026-09-27** (commit e9b1475d, en `main`). La fila
+  `SESSION_STATE.md:29` que la da por abierta está vieja, y corregirla es del turno.
+
+### Decisión
+
+Entre paréntesis, la pregunta del registro de la que sale cada punto.
+
+**§1 · La visita y su informe**
+
+- El informe congela, además de lo que ya congela:
+  - los propósitos de la visita;
+  - las colonias contadas y su cambio desde la visita anterior;
+  - el clima y las cajas contadas;
+  - la próxima visita, con su fecha y sus propósitos.
+
+  Lo propone el Anexo C §3.1 (`docs/implementation/48_A9_ANEXO_C_TABLERO_Y_REPORTES.md:120-127`). Ese
+  anexo es entrada de Daniel, no una especificación aprobada (`:3-4`). Se le presentó como ya decidido y no
+  lo objetó (registro, V-9a). **El «alcance» de la próxima visita son sus propósitos**, de la misma lista y
+  opcionales al cerrar (V-9a).
+- El informe del cliente **dice qué cajas quedaron sin atender**, dentro del resumen (V-9b). Es la regla «un
+  dato que falta se nombra» del Anexo C (`:133`).
+- Un registro anotado sin señal **se une a su visita hasta que se emite el informe o vencen las 48 h de
+  corrección**, aunque la visita esté completada (31). Lo que llega más tarde queda suelto y avisado. Ningún
+  registro con hora anterior al inicio de una visita se pega a ella. Es la única excepción a «una jornada con
+  salida no recibe registros».
+- Al cerrar con registros sin enviar en el aparato, la pantalla **avisa cuántos hay, ofrece enviarlos y deja
+  cerrar** (32), la postura de ADR-115.
+- La alerta crítica de visita vencida **baja a aviso en cuanto una visita posterior tiene la salida marcada**
+  (33). El aviso sale desde la salida y no a las 24 h, y dice «sin completar».
+- Al completar, el formulario **pide la próxima visita, con la salida explícita «sin próxima visita
+  prevista»** (34). El servicio no la exige, como en ADR-118. Así se cumple el protocolo, que la marca
+  obligatoria (`apiario-campo-v2.json:109-113`).
+- Si un sitio no tiene próxima fecha, el tablero **lo dice en la tarjeta, sin alerta**: «sin próxima visita
+  declarada», o «prevista» si fue explícito (35).
+
+**§2 · Meliponario: sanidad**
+
+- El conteo de varroa y el tratamiento contra varroa **se rechazan en un meliponario**, en el servicio y en la
+  cola sin conexión, y la ficha no ofrece esa sección (1).
+- Los cuadros, en cambio, **basta con no preguntarlos**; el servicio y la cola los siguen aceptando (2).
+- Los objetivos al intervenir una colonia sin aguijón son **fóridos, hormigas, abeja ladrona
+  (*Lestrimelitta* sp.) y «otro (di cuál)»** (3). Son las tres amenazas con evidencia media y una intervención
+  práctica; el resto cabe en «otro».
+- En un meliponario el registro **se llama «Intervención»** (4). Sus vías son de manejo: barrera en el
+  soporte, sellado, trampa, retiro o limpieza, y traslado. El producto es opcional. Cambiar las preguntas del
+  protocolo pide versión nueva (ADR-165).
+- Si se instala o traslada una colonia de otra especie a un meliponario que ya tiene una, el sistema
+  **avisa y deja pasar** (9).
+
+**§3 · Especies**
+
+- La tabla de especies **se crea ya**, con «sin identificar» como valor válido que no bloquea una
+  inspección (5).
+- **Nace mínima, con dos filas: *Apis mellifera* y «sin identificar»** (6). Las especies sin aguijón entran
+  cuando Daniel diga cuáles tiene. Ningún nombre del paquete ni de la semilla pasa a datos.
+- «Africanizada» es **una etiqueta aparte y opcional**; la especie sigue siendo *Apis mellifera* (8).
+- La especie de una colonia se guarda como **identificaciones fechadas** (16). Cada una lleva:
+  - el taxón, al rango que permita la evidencia;
+  - el nombre tal como se escribió;
+  - la base (foto, ejemplar, nombre común o especialista);
+  - la confianza;
+  - quién la hizo.
+
+  La vigente es la última, y una corrección no borra la anterior.
+
+**§4 · Cajas y trampas**
+
+- Para *Apis*, el sistema es **Langstroth con marcos** (7).
+- Para sin aguijón, la lista queda en tres valores, más el modelo:
+  - **«Vertical de módulos»**, con el modelo (INPA, Portugal-Araújo/Embrapa, FO-INTA o a medida) en un campo
+    aparte y opcional (11);
+  - **«Nido trampa»** (12);
+  - **«otro (di cuál)»**.
+
+  Los demás candidatos del documento de referencia (AF, PNN, UTOB, horizontales, tronco, «tecnificada sin
+  modelo») **no se decidieron**: entran cuando haya colonias que los usen.
+- **Las trampas se registran ya** (14):
+  - cada una es una caja de sistema nido trampa, en su sitio y con la fecha en que se puso;
+  - cada vez que se mira es una revisión;
+  - al ocuparse nace la colonia con origen «capturada» (`ColonyOriginType`, `prisma/schema.prisma:8295`),
+    trazada a su trampa.
+- **La revisión de una trampa** anota la fecha y el estado (**vacía**, **exploradoras entrando**,
+  **ocupada** o **no se pudo revisar**), con nota y foto opcionales (15). El cuarto estado lo añadió Claude
+  después de la respuesta. Viene de la regla de la skill de apicultura, que pide un «no evaluado» en todo
+  formulario de campo, y de la regla del Anexo C. Daniel no lo objetó: está en el registro, entrada 16.
+- **El número de una caja que salió de un apiario queda reservado mientras la caja exista** (36). Hoy la
+  unicidad es `@@unique([locationId, identifier])` (`schema.prisma:8128`) y no lo protege. Al mismo tiempo
+  se construye **«retirar caja»**, que hoy no existe; sin eso, los números quedarían presos para siempre.
+
+**§5 · Alimentación y costos**
+
+- **La libra entra** (17). La lista queda en L, kg, g, ml, lb y «Otro (cuál)». Se guarda lo tecleado, y
+  libras y kilos se suman al leer (0,45359237 kg por libra, factor exacto).
+- La «Cantidad» es **lo medido del material elegido, en su unidad** (18): azúcar pesado con su peso, jarabe
+  hecho con su volumen. El azúcar que lleva un jarabe sólo se calcula el día que Daniel diga si el 1:1 es en
+  peso o en volumen.
+- **El azúcar baja solo** (19): el saldo del sitio es lo comprado menos lo dado de comer. Para eso:
+  - el azúcar se da de alta como material, enlazado a «azúcar blanca» y «azúcar morena»;
+  - se compra en kg o lb, porque el quintal no tiene definición oficial.
+- Si un viaje cubre dos sitios, **el viático se anota una vez** (20). La otra visita queda marcada
+  «compartido con aquella», con un enlace explícito. Repartirlo entre sitios espera a la fase 2 (Q23).
+- Los viáticos salen en el informe del cliente **sólo si se marca al emitir cada informe** (21). La casilla
+  viene apagada, queda congelada en el informe y auditada. Es el interruptor que la «Decisión 4» de ADR-142
+  (`DECISIONS.md:10230`) nombraba y nunca existió.
+- De los huecos de costos, **se diseña primero el costo de sostener un sitio** (22).
+
+**§6 · Polinización**
+
+- En Kiva, el 4–6 colmenas/ha **es la meta de trabajo que propuso Néctar, no algo pactado** (23). Sale del
+  informe del 2026-06-29 («Reporte Tecnico Apiario Toabre v2», en el Drive), calculado por analogía con
+  cultivos autoincompatibles y sin ensayo en Robusta. La ficha cambia tres cosas:
+  - dice «meta de trabajo propuesta, no pactada»;
+  - las hectáreas pasan a ser «área de los lotes»;
+  - «faltan N» deja de leerse como incumplimiento.
+- La alerta de floración **avisa con esa meta, rotulada «meta de trabajo, no pactada»**, como aviso y nunca
+  como crítico (24).
+- Entra al tablero **al final de la lista**, como décimo motivo, sin mover los nueve de hoy
+  (`lib/apiary/motivoDeAlerta.ts:24`) (25).
+- **En Toabré hay dos apiarios, cada uno con su lote** (26): Finca 1 con el Lote 1 (10 ha) y Finca 2 con el
+  Lote 2 (7 ha). Son dos compromisos y no cambia el modelo.
+
+- **Actualización del 2026-10-16, decisiones de Daniel** (registro, entradas 12a y 12b), las dos que esperaba
+  la pantalla para crear un compromiso:
+  - **El cliente del compromiso de Kiva es la organización Kiva Estate.** Es quien recibe el servicio de
+    polinización, aunque no haya contrato firmado. Sin migración: `clientOrganizationId` sigue obligatorio.
+  - **La procedencia la fija el servicio a partir del dato** (ADR-038): `recommendation` cuando el
+    compromiso no trae referencia de contrato, como Kiva hoy, y `original_record` cuando la trae. Así Kiva
+    queda como la meta que es, y un pacto futuro quedará como pacto sin tocar nada.
+
+**§7 · Recomendaciones**
+
+- Cada recomendación es **una línea de seguimiento propia, ligada a la visita** (27). Lleva:
+  - su sitio o colonia y el texto;
+  - el estado, con el vocabulario de Q46;
+  - una fecha o condición opcional;
+  - quién responde, que puede ser alguien del cliente sin cuenta.
+
+  No usa `Task`, así que no reabre ADR-107. El texto de cierre del protocolo
+  (`apiario-campo-v2.json:126`) sigue como está.
+- La decisión del cliente **la anota el técnico** (28); el enlace del cliente sigue siendo de sólo lectura.
+- Se cierra **en dos pasos** (29): «hecha», con una nota, y «verificada», con un registro de una visita
+  posterior. También se puede cerrar sin cumplir: «ya no aplica», «reemplazada» o «sin resolver». Así lo
+  distingue el paquete (`01-TECHNICAL-BUILD-PACKET.md:322`).
+- Al abrir una visita **se muestran las recomendaciones abiertas del sitio, sin exigir nada** para
+  completarla (30).
+
+**§8 · Aparcado, y lo que no es de una sesión**
+
+- **Daniel no tiene meliponas todavía; sólo ha puesto nidos trampa** (2026-10-12, registro, entrada 10). Las
+  «cinco especies… de Parita» de septiembre son un plan. Las decisiones de §2 a §4 sobre sin aguijón son
+  diseño para cuando lleguen. Tres cosas esperan a que haya colonias:
+  - **E-3**, qué pregunta la inspección de una melipona;
+  - **P-3**, contar la polinización por grupo de abejas;
+  - las **medidas de la caja** (13).
+- **Pasar Toabré a dos apiarios en producción lo hace Daniel**: hoy hay uno solo,
+  `NN-04-TOABRE-KIVAEST`.
+- **«*Melipona panamensis*»**, del paquete y de la semilla, no figura en el catálogo Moure, que registra
+  *Melipona panamica* Cockerell. Lo midieron dos barridos de la investigación del 2026-10-11; su
+  verificación no lo repasó. `docs/dominio/meliponini-especies.md:16-17` ya lo sospechaba. Ese archivo no se
+  toca: lo protege `fuentes-verbatim.test.ts`. La corrección entra cuando entren las especies.
+
+### Consecuencias
+
+Nada de §1 a §7 está construido. Cada tema va en su propio PR desde `origin/main`, en este orden:
+
+- **Primero, los defectos que no necesitaban decisión**, que se arreglan sin preguntar:
+  - la unidad de alimentación, cerrada y sin «kg» precargado (hoy es `String?`, `schema.prisma:9043`);
+  - el lote rotulado «por colonia» (`lib/apiary/colonyEvents.ts:475` copia la cifra a cada colonia);
+  - la pantalla del gasto de la visita;
+  - la del compromiso de polinización (`scripts/apiario-toabre.ts:28` no lo crea, y no hay puerta);
+  - la de la valoración del técnico;
+  - «Marcos negros» sólo en cajas con cuadros.
+- **V-9 espera a #707, #709, #710 y #712**, que tocan el mismo congelado.
+- **La 31 relaja una regla escrita.** Las reglas que todo escritor de `FieldEvent` cumple sobre su jornada
+  están en `lib/traceability/fieldSessions.ts:441`, y hoy rechazan lo que llega tras la salida (`:475`).
+  Su PR cambia eso sólo hasta el informe o las 48 h, con su prueba de los dos lados.
+- **Los cambios de §2 y §4 sobre sin aguijón pueden esperar**: no hay colonias que los ejerzan.
+- **Las trampas (14 y 15) sí tienen uso hoy**, porque Daniel ya las puso.
+
+## ADR-201 — La abamectina de la bodega: están las dos
+
+**Fecha:** 2026-10-12 · **Cierra:** P-J de `scripts/open-decisions.sh`
+
+**Contexto.** Daniel entregó el 2026-09-30 dos etiquetas de abamectina que **no son el mismo producto**:
+ABAMECTAN® 1.8 EC («no reingresar al campo sin equipo de protección durante las primeras 48 horas») y
+Abamectin 18 EC («tiempo de reingreso al área tratada: 24 horas»), con las citas literales en
+`docs/dominio/fitosanitarios-etiquetas.md`. El 2026-10-06 decidió darlas de alta a las dos en el catálogo
+(`npm run data:abamectinas`, que les pone 48 h y 24 h). Quedaba abierto cuál está en la bodega, porque de
+eso dependía qué reingreso hace valer una aplicación.
+
+**Decisión.** Daniel, 2026-10-12: **en la bodega de Finca Rosina están las dos.** No se elige una para
+siempre: cada aplicación nombra el producto que se usó, y su reingreso es el de ese producto.
+
+**Consecuencias.** No hace falta código nuevo para esto: cada línea de una intervención nombra un material,
+y el reingreso que se muestra sale del `defaultReentryHours` de ese material (`lib/traceability/intervenciones.ts`,
+`carenciaDeIntervencion.ts`). Lo que esta decisión **no** cierra: la dosis en café, que no está en ninguna de
+las dos etiquetas (ninguna registra café), sigue sin fuente y sigue bloqueando registrar una aplicación con
+dosis; y si `data:abamectinas` ya se corrió en producción no está medido aquí. Confundir los dos productos al
+registrar es el riesgo que queda: 24 h contra 48 h es dejar entrar a alguien al lote o no.

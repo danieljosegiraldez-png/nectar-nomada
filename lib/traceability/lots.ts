@@ -32,8 +32,20 @@ import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
 import { exigirPersonaPermitida, personasPermitidas, type Ancla } from "../people/quienLoHizo";
+import { UUID } from "../validation/uuid";
 
 export class TraceabilityAccessError extends Error {}
+
+/**
+ * Las dos lecturas que reciben el id de la URL (`/lots/[id]` y sus subrutas) lo
+ * comprueban aquí antes de ir a la base. Sin esto, `/lots/no-es-un-id` llegaba a
+ * Postgres, Prisma lanzaba `P2007` y la página —que sólo atrapa esta clase— daba
+ * un 500 en vez de «no existe» (2026-10-09). No se atrapa el error de Prisma: así
+ * cualquier otro sigue subiendo como lo que es.
+ */
+function exigirFormaDeId(lotId: string) {
+  if (!UUID.test(lotId)) throw new TraceabilityAccessError("lot_not_found");
+}
 
 /**
  * P0 §6 — `lot:override_balance`, held by Platform Admin and deliberately not
@@ -947,6 +959,7 @@ export async function getActiveOperations(userAccountId: string) {
  * cuenta lo que devuelve para un lote real.
  */
 export async function getLotDetail(userAccountId: string, lotId: string) {
+  exigirFormaDeId(lotId);
   const lot = await prisma.lot.findUnique({
     where: { id: lotId },
     // P3 §3 — the batch header marks a rejection stream; without the category
@@ -1378,6 +1391,7 @@ export async function getObserverCandidates(userAccountId: string, anclas: reado
 
 /** Lightweight lot fetch + view-access check for the simpler "record X" form pages, which don't need getLotDetail's full aggregation. */
 export async function getLotSummary(userAccountId: string, lotId: string) {
+  exigirFormaDeId(lotId);
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) throw new TraceabilityAccessError("lot_not_found");
   await requireLotAccess(userAccountId, "view", [{ projectId: lot.projectId, locationId: lot.locationId, classification: lot.classification }]);

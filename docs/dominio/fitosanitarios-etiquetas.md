@@ -77,8 +77,9 @@ registrados difieren y **el reingreso también**.
 | Volumen de agua | «un volumen de agua mínimo de 60 L/ha» |
 | Nota de uso | «Utilizar las dosis más altas en condiciones de alta infestación» |
 
-**Cuál de los dos está en la bodega de Finca Rosina está sin decidir**, y no es un detalle: 24 h
-contra 48 h de reingreso es la diferencia entre dejar entrar a alguien al lote o no.
+**En la bodega de Finca Rosina están los dos** (Daniel, 2026-10-12; ADR-201). Cada aplicación nombra
+el que se usó y hace valer su reingreso, y confundirlos no es un detalle: 24 h contra 48 h es la
+diferencia entre dejar entrar a alguien al lote o no.
 
 ## Regent® 4 SC
 
@@ -96,6 +97,7 @@ contra 48 h de reingreso es la diferencia entre dejar entrar a alguien al lote o
    de otra fuente —el técnico, Anacafé, la práctica propia— y hay que registrarla **con esa
    procedencia escrita**, no como si saliera de la etiqueta.
 2. **Las páginas 2-4 de BRALIC.**
-3. **Cuál de los dos productos de abamectina es el de la bodega.**
+3. ~~Cuál de los dos productos de abamectina es el de la bodega.~~ **Contestado el 2026-10-12: los
+   dos** (ADR-201).
 4. **Beauveria**: Daniel mandó imágenes de dos productos, y se perdieron al compactarse la
    conversación del 2026-09-30. No hay ficha suya aquí porque no se ha leído ninguna.
