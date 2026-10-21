@@ -17,6 +17,8 @@ import { actualizarConfiguracionDeCaja } from "../../lib/apiary/configuracionDeC
 import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { altaDeColmenasEnLote } from "../../lib/apiary/altaEnLote";
 import { registrarLimpiezaDeCaja, LimpiezaInvalida } from "../../lib/apiary/limpiezaDeCaja";
+import { registrarValoracionDeInspeccion, ValoracionInvalida } from "../../lib/apiary/valoracionDeInspeccion";
+import { Prisma } from "../../generated/prisma/client";
 import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { completarCierreDeCosecha, registrarLecturaDeRefractometro, CierreDeCosechaInvalido } from "../../lib/apiary/cierreDeCosecha";
 import { MeasurementValidationError } from "../../lib/traceability/measurements";
@@ -760,6 +762,45 @@ export async function registrarLimpiezaDeCajaAction(
   }
 
   revalidatePath(`/apiaries/${apiaryId}/hives/${hiveId}`);
+  return { ok: true };
+}
+
+/**
+ * **La valoración del técnico** sobre una colonia, escrita en la pantalla de la visita cerrada
+ * (Anexo E: el único campo de cierre de la inspección; ADR-154). Hasta el 2026-10-19 el servicio
+ * existía y nadie lo llamaba, así que cada informe decía «Valoración del técnico: Sin registrar».
+ *
+ * El texto vacío **borra** la que hubiera, como en el servicio. Devuelve el error en vez de
+ * lanzarlo: una visita cerrada o una ventana vencida son casos normales que hay que leer, y
+ * `Serializable` puede abortar una de dos escrituras a la vez (`P2034`), que se arregla guardando
+ * de nuevo. Sin `redirect`: tras guardar, la pantalla repinta con lo guardado.
+ */
+export async function registrarValoracionDeInspeccionAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    await registrarValoracionDeInspeccion(user.userAccountId, {
+      inspectionId: String(formData.get("inspectionId") ?? ""),
+      assessment: String(formData.get("assessment") ?? ""),
+    });
+  } catch (error) {
+    if (error instanceof ValoracionInvalida) {
+      return { error: t(`valoracionError_${error.message}` as "valoracionError_visita_cerrada") };
+    }
+    if (error instanceof ApiaryAccessError) return { error: t("valoracionError_sin_permiso") };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return { error: t("valoracionError_a_la_vez") };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
   return { ok: true };
 }
 

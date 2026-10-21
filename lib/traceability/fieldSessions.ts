@@ -637,7 +637,8 @@ export async function getFieldSessionTimeline(userAccountId: string, fieldSessio
       operator: { select: { id: true, displayName: true } },
       // V-6: la caja y lo hecho, para que la pantalla no pinte «observacion» diez veces. Lo
       // justo que `queSeHizo` (lib/apiary/queSeHizo.ts) dice, y nada más.
-      inspection: { select: { outcome: true, colony: { select: { hive: { select: { identifier: true } } } } } },
+      // El `id` y la valoración, para que la pantalla ofrezca escribirla (Anexo E, campo de cierre).
+      inspection: { select: { id: true, outcome: true, assessment: true, colony: { select: { hive: { select: { identifier: true } } } } } },
       colonyEvent: {
         select: { eventType: true, treatmentProduct: true, feedingMaterial: true, colony: { select: { hive: { select: { identifier: true } } } } },
       },
