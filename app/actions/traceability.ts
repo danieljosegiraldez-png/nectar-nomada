@@ -18,6 +18,7 @@ import { calcularFechaConPrecision } from "../../lib/time/fechaConPrecision";
 // comparten este camino y el de la cola offline. Ver su cabecera.
 import { horizontesDelFormulario, maxIndiceDeFilas } from "../../lib/traceability/horizontesDelFormulario";
 import { recordTransformation, TraceabilityAccessError } from "../../lib/traceability/lots";
+import { ResearchAccessError } from "../../lib/research/access";
 import { confirmarCoordenadasDelSitio, CoordenadasValidationError } from "../../lib/traceability/coordenadasDelSitio";
 import { SitioNoEncontradoError } from "../../lib/traceability/fincas";
 import { recordSelection, SelectionValidationError } from "../../lib/traceability/selection";
@@ -194,6 +195,11 @@ async function friendlyError(t: Awaited<ReturnType<typeof getTranslations>>, err
     return t(`error_${clave}` as "error_provenance_required", { value: resto.join(":") });
   }
   if (error instanceof TraceabilityAccessError) return t("error_access", { detail: error.message });
+  // `lots.ts` pregunta por investigación desde el 2026-10-12 (el historial del lote enseña sus ensayos sólo a
+  // quien puede verlos). Lo hace con `puedeVerInvestigacion`, que se traga la negativa, así que esta clase no
+  // debería llegar aquí; la rama está para que, si algún día llega, sea un mensaje y no un 500
+  // (`tests/arquitectura/acciones-traducen-sus-errores.test.ts`).
+  if (error instanceof ResearchAccessError) return t("error_access", { detail: error.message });
   // Parte 1 (tarea 12, 2026-10-03): un texto por código. El genérico de abajo sigue para los demás, con el código de detalle.
   const claveDeProceso = claveDeErrorDeProceso(error);
   if (claveDeProceso) return t(claveDeProceso as "error_proceso_sin_proceso_abierto");

@@ -15,6 +15,7 @@
 
 # @grupo: base-sembrada
 tests/territorio/rejillaEnLaBase.test.ts
+tests/traceability/historialEnsayosYProceso.test.ts
 tests/territorio/microparcelaConRango.test.ts
 tests/territorio/la-seleccion-no-resta.test.ts
 tests/territorio/lo-que-no-enrolla.test.ts
