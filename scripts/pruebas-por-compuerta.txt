@@ -36,6 +36,7 @@ tests/traceability/beneficios.test.ts
 tests/traceability/editarBeneficio.test.ts
 tests/traceability/concesiones.test.ts
 tests/apiary/ambitoVacioApiarios.test.ts
+tests/apiary/apiarioBajoLaFinca.test.ts
 tests/notificaciones/canales.test.ts
 tests/equipos/bandejas.test.ts
 tests/traceability/capacidadDeBandeja.test.ts

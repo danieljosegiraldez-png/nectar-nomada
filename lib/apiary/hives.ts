@@ -17,7 +17,7 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { can } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
-import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
+import { DEFAULT_NEW_RECORD_CLASSIFICATION, conDescendientes } from "../traceability/lots";
 import type { ScopeTarget } from "../rbac/types";
 import { UUID } from "../validation/uuid";
 import type { ClassificationLevel, ColonyOriginType, ColonyStatus, DataQuality, Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -549,7 +549,7 @@ async function resolveApiaryVisibility(userAccountId: string, action: "view" | "
         .filter((id): id is string => id != null),
     ),
   ];
-  const locationIds = [
+  const asignadas = [
     ...new Set(
       granting
         .filter((a) => a.scope.scopeType === "location")
@@ -557,6 +557,12 @@ async function resolveApiaryVisibility(userAccountId: string, action: "view" | "
         .filter((id): id is string => id != null),
     ),
   ];
+  // **Y todo lo que cuelga de ellas**, igual que `resolveLotVisibility`. `can()` sube por los
+  // ancestros del recurso desde ADR-144, así que `requireApiaryAccess` deja abrir un apiario cuyo
+  // padre es la finca del ámbito; esta LISTA miraba sólo el id exacto y `/apiaries` no lo enseñaba.
+  // Medido el 2026-10-14 (tests/apiary/apiarioBajoLaFinca.test.ts): con ámbito en la finca, la
+  // ficha autorizaba y la lista salía vacía. Un HERMANO sigue fuera.
+  const locationIds = await conDescendientes(asignadas);
 
   if (projectIds.length === 0 && locationIds.length === 0) {
     return { mode: "none", projectIds: [], locationIds: [] };

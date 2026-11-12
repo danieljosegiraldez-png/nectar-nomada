@@ -634,9 +634,12 @@ export interface LotVisibility {
  * para decidir si UN ámbito lo cubre; esto baja desde el ámbito para construir la LISTA de lo que
  * alcanza. El tope de profundidad no es adorno: un `parentLocationId` en ciclo —nada en el esquema
  * lo impide— colgaría el punto por el que pasa toda la visibilidad de lotes.
+ *
+ * Exportada para `resolveApiaryVisibility` (lib/apiary/hives.ts), que tenía el mismo desfase con
+ * los apiarios que cuelgan de una finca. Una sola bajada para las dos listas, no dos copias.
  */
 const PROFUNDIDAD_MAXIMA_DE_UBICACION = 12;
-async function conDescendientes(ids: readonly string[]): Promise<string[]> {
+export async function conDescendientes(ids: readonly string[]): Promise<string[]> {
   if (ids.length === 0) return [];
   const todos = new Set(ids);
   let frontera = [...ids];
