@@ -223,10 +223,31 @@ export async function registrarInspeccion(userAccountId: string, input: Registra
   });
 }
 
-/** Opciones del formulario con el MISMO permiso que registrarInspeccion. */
+/**
+ * Opciones del formulario con el MISMO permiso que registrarInspeccion.
+ *
+ * **Los lotes se filtran en la consulta, no después** (Daniel, 2026-10-12; ficha 005). Antes se
+ * leía la tabla entera y se descartaba lote a lote: el día que alguien le pusiera un `take`, el
+ * tope se comería filas ajenas antes de filtrar. `requireSamplingAccess` sólo mira proyecto,
+ * ubicación y clasificación, así que se pregunta una vez por combinación y se piden a la base
+ * sólo los lotes de las que pasan.
+ */
 export async function opcionesParaInspeccion(userAccountId: string) {
+  const combinaciones = await prisma.lot.findMany({
+    distinct: ["projectId", "locationId", "classification"],
+    select: { projectId: true, locationId: true, classification: true },
+  });
+  const permitidas = [];
+  for (const c of combinaciones) {
+    try {
+      await requireSamplingAccess(userAccountId, c);
+      permitidas.push(c);
+    } catch (error) {
+      if (!(error instanceof TraceabilityAccessError)) throw error;
+    }
+  }
   const [lots, beds] = await Promise.all([
-    prisma.lot.findMany({ orderBy: { lotCode: "asc" } }),
+    permitidas.length ? prisma.lot.findMany({ where: { OR: permitidas }, orderBy: { lotCode: "asc" } }) : [],
     // La inspección por bandeja es el paso 3 de este plan; hasta entonces,
     // ofrecer las posiciones de un estante (72, 300…) en un desplegable no
     // sirve para nada. Sólo las camas sueltas, que no cuelgan de un estante.
@@ -239,16 +260,11 @@ export async function opcionesParaInspeccion(userAccountId: string) {
   // del elegido (`exigirPersonaPermitida`).
   const anclas: Ancla[] = [];
   for (const lot of lots) {
-    try {
-      await requireSamplingAccess(userAccountId, lot);
-      // Parte 1, R6.6: un lote dividido SÍ se ofrece (revisión final, ronda de arreglo 1, 2026-10-03). El formulario deja
-      // elegir la hora de la inspección, y una anterior a la división se admite (decisión de Daniel, 2026-10-02): no se
-      // puede saber aquí, antes de que se elija, así que decide `registrarInspeccion` con la fecha.
-      lotes.push({ id: lot.id, name: lot.lotCode });
-      anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
-    } catch (error) {
-      if (!(error instanceof TraceabilityAccessError)) throw error;
-    }
+    // Parte 1, R6.6: un lote dividido SÍ se ofrece (revisión final, ronda de arreglo 1, 2026-10-03). El formulario deja
+    // elegir la hora de la inspección, y una anterior a la división se admite (decisión de Daniel, 2026-10-02): no se
+    // puede saber aquí, antes de que se elija, así que decide `registrarInspeccion` con la fecha.
+    lotes.push({ id: lot.id, name: lot.lotCode });
+    anclas.push({ projectId: lot.projectId, locationId: lot.locationId });
   }
   for (const bed of beds) {
     try {

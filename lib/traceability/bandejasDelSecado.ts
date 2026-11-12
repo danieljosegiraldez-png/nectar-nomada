@@ -203,11 +203,16 @@ async function resolverPosicion(
 
 /**
  * Dónde estaba una bandeja en un instante: su último traslado hasta entonces, si
- * fue a una cama. **No recibe principal para autorizar CARGAR o BAJAR** —la
- * llaman `bandejasDeCorrida`, que ya exigió `view`/`manage` del lote, y las
- * pruebas—, pero SÍ recibe `userAccountId` para el permiso de NOMBRAR la
- * posición (D1): son dos preguntas distintas y una cama ajena o clasificada no
- * dice su nombre aunque el lote sí se pueda ver.
+ * fue a una cama. **No autoriza la bandeja**, pero SÍ recibe `userAccountId` para
+ * el permiso de NOMBRAR la posición (D1): una cama ajena o clasificada no dice su
+ * nombre aunque el lote sí se pueda ver.
+ *
+ * **Hoy sólo la llaman las pruebas** (medido el 2026-10-11). Este comentario decía
+ * que la llamaba `bandejasDeCorrida`, y ya no es así: esa función hace su propia
+ * consulta de traslados después de `corridaConPermiso(…, "view")` y llama a
+ * `resolverPosicion` directamente. Quien la vuelva a usar tiene que llegar con la
+ * bandeja ya autorizada: es la excepción declarada en
+ * `docs/arquitectura/permiso-por-dominio.json`, dominio `equipment`.
  */
 export async function posicionDeBandeja(userAccountId: string, equipmentId: string, en: Date, organizationId: string): Promise<Posicion | null> {
   const t = await prisma.equipmentTransfer.findFirst({

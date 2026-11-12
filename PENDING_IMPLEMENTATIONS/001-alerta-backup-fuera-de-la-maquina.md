@@ -1,7 +1,10 @@
 # 001 · Aviso cuando un backup **no** corre
 
-**Estado: el código está, la URL no.** P-A sigue abierta, y con razón: hoy no
-hay alerta fuera de esta máquina.
+**Estado: CERRADA.** Comprobado el 2026-10-11: `bash scripts/open-decisions.sh` da P-A cerrada, y
+su prueba exige las dos mitades, el ping en `scripts/backup/run-scheduled.sh` y la URL configurada
+en `~/.config/nectar-nomada/backup.env`, fuera del repositorio. `CLAUDE.md` la daba por cerrada
+desde el 2026-09-04. Hasta hoy esta línea decía «el código está, la URL no. P-A sigue abierta»: lo
+que sigue es la historia de cuando era cierto.
 
 ## Lo que ya está hecho (2026-08-31)
 
