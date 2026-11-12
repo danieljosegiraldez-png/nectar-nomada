@@ -171,3 +171,22 @@ se deberia poder hacer durante la visita o al cierre, a veces en sitio y si solo
 
 **Qué produjo:** ADR-157 — `fieldVitalsOnSiteAt`: no se restringe, se registra cuál de las dos pasó.
 
+
+---
+
+## Nota del dueño, 2026-10-12 — sobre «tabla de especies» y «cinco especies, dos de cada una»
+
+*Registro de octubre, entrada 10: `FUENTE_DECISIONES_DEL_DUENO_2026-10-APIARIO.md`, transcripción de la
+sesión a904cdd0, líneas 9001 y 9020*
+
+```text
+no tengo meliponas todavia
+```
+
+```text
+puse trampas solamente
+```
+
+**Qué cambia en la lectura de arriba:** las cinco especies de Parita **son un plan, no colonias**. El
+«Diez colonias, origen Parita» de la segunda entrada describe lo que se pensaba poner, no lo que hay. Lo que
+existe son nidos trampa. Ver ADR-200 §8.

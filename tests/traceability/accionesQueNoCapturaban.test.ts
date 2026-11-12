@@ -43,10 +43,13 @@ vi.mock("next-intl/server", () => ({
     ),
 }));
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   recordLabourEntryFormAction,
   recordMaterialConsumptionEntryFormAction,
   confirmarCoordenadasAction,
+  anotarGastoDeVisitaFormAction,
 } from "../../app/actions/traceability";
 
 beforeEach(() => {
@@ -101,6 +104,37 @@ describe("recordMaterialConsumptionEntryFormAction", () => {
     await expect(recordMaterialConsumptionEntryFormAction({}, form("Levadura", "  "))).resolves.toEqual({
       error: "error_material_consumption|batch_label_required",
     });
+  });
+});
+
+describe("anotarGastoDeVisitaFormAction — el gasto de una visita (ADR-200)", () => {
+  const form = (campos: Record<string, string>) => {
+    const data = new FormData();
+    data.set("fieldSessionId", "visita-1");
+    for (const [k, v] of Object.entries(campos)) data.set(k, v);
+    return data;
+  };
+
+  it("sin nombre de material devuelve un error legible, no un 500", async () => {
+    await expect(anotarGastoDeVisitaFormAction({}, form({ materialName: "  ", batchLabel: "saco 3" }))).resolves.toEqual({
+      error: "error_material_consumption|material_name_required",
+    });
+  });
+
+  it("una cantidad sin unidad se rechaza: «3» sin unidad no se puede sumar con nada", async () => {
+    await expect(
+      anotarGastoDeVisitaFormAction({}, form({ materialName: "Aserrín", batchLabel: "saco 3", quantity: "3", unit: "  " })),
+    ).resolves.toEqual({ error: "error_material_consumption|unit_required_with_quantity" });
+  });
+
+  it("y la pantalla de la visita la ofrece, detrás de su permiso", () => {
+    // Cableado, no conducta: sin jsdom no se pinta la página entera. Lo que se afirma es que el
+    // formulario está montado y que lo está detrás de `puedeAnotarGasto`, que pregunta lo mismo que el
+    // servicio (`lot:manage` en el sitio de la jornada).
+    const pagina = readFileSync(join(process.cwd(), "app/field-sessions/[id]/page.tsx"), "utf8");
+    expect(pagina.length).toBeGreaterThan(5_000);
+    expect(pagina).toContain("puedeAnotarGasto ? <GastoDeVisitaForm");
+    expect(pagina).toContain("await puedeGestionarLote(user.userAccountId");
   });
 });
 

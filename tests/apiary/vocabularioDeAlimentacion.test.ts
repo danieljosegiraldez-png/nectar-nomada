@@ -24,6 +24,7 @@ import {
   exigeMaterialDeAlimentacion,
   comoSeLeeElMaterial,
 } from "../../lib/apiary/vocabularioDeAlimentacion";
+import { AlimentacionInvalida as LaQueReconoceLaCola } from "../../lib/apiary/alimentacion";
 
 describe("el vocabulario que el dueño dictó", () => {
   it("sus cinco PRIMERO, y después los que su protocolo ya ofrecía", () => {
@@ -84,6 +85,18 @@ describe("«otro» tiene que decir cuál", () => {
       kind: "otro",
       cual: "jarabe invertido",
     });
+  });
+
+  it("el rechazo es la MISMA clase que la cola sin conexión trata como rechazo", () => {
+    // `lib/sync/pushFieldEvents.ts` sólo convierte en `rejected` el `AlimentacionInvalida` de
+    // `lib/apiary/alimentacion.ts`. Hasta el 2026-10-14 este vocabulario lanzaba OTRA clase con el
+    // mismo nombre, así que un material mal enviado sin señal no se rechazaba solo: tumbaba el lote
+    // entero y dejaba la cola bloqueada (el defecto de ADR-116). `toThrow(Clase)` mira `instanceof`,
+    // que es justo lo que mira la cola.
+    expect(() => exigeMaterialDeAlimentacion(MATERIAL_QUE_EXIGE_CUAL, null)).toThrow(LaQueReconoceLaCola);
+    expect(() => exigeMaterialDeAlimentacion("azucar_rubia", null)).toThrow(LaQueReconoceLaCola);
+    // Control: lo válido no lanza, así que lo de arriba no pasa por lanzar siempre.
+    expect(exigeMaterialDeAlimentacion("azucar_blanca", null)).toEqual({ kind: "azucar_blanca", cual: null });
   });
 
   it("un «otro» en blanco NO es información, y se rechaza", () => {

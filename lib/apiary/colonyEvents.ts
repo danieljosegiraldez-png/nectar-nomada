@@ -13,7 +13,7 @@ import { prisma } from "../db";
 import { ApiaryAccessError, requireApiaryAccess, requireColonyEventWriteAccess } from "./hives";
 import { recordAuditEvent } from "../audit";
 import { exigeMetodoDeAlimentacion } from "./alimentacion";
-import { exigeMaterialDeAlimentacion } from "./vocabularioDeAlimentacion";
+import { canonizaUnidad, exigeMaterialDeAlimentacion } from "./vocabularioDeAlimentacion";
 import { exigeObjetivo, exigeVia } from "./objetivoDelTratamiento";
 import { ligarAVisitaAbierta } from "../traceability/visitaAbierta";
 import { estadoDeVencimiento } from "../inventario/vencimiento";
@@ -134,6 +134,7 @@ export function normalizarEventoDeColonia(
     | "feedingMethod"
     | "feedingMaterialKind"
     | "feedingMaterial"
+    | "feedingUnit"
   >,
 ) {
   if (input.eventType === "treatment" && !input.treatmentBatchLabel?.trim()) {
@@ -192,11 +193,16 @@ export function normalizarEventoDeColonia(
     throw new ColonyEventValidationError("feeding_material_solo_en_alimentacion");
   }
 
-  return { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial };
+  // La unidad, en la forma de la lista cuando lo es (ADR-200 §5, pregunta 17). Se guarda lo tecleado,
+  // sin convertir, y no se rechaza nada: una alimentación con una unidad rara sigue siendo un registro,
+  // y la acción del lote no captura errores.
+  const feedingUnit = canonizaUnidad(input.feedingUnit);
+
+  return { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial, feedingUnit };
 }
 
 export async function recordColonyEvent(userAccountId: string, input: RecordColonyEventInput) {
-  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial } = normalizarEventoDeColonia(input);
+  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial, feedingUnit } = normalizarEventoDeColonia(input);
 
   const scope = await resolveColonyScope(input.colonyId);
   await requireColonyEventWriteAccess(userAccountId, [scope]);
@@ -289,7 +295,7 @@ export async function recordColonyEvent(userAccountId: string, input: RecordColo
         feedingMaterialKind,
         feedingMaterial,
         feedingQuantity: input.feedingQuantity ?? null,
-        feedingUnit: input.feedingUnit ?? null,
+        feedingUnit,
         coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
         feedingMethod,
         treatmentTarget,
@@ -408,7 +414,7 @@ export async function registrarEventoEnLote(userAccountId: string, input: Evento
   const colonyIds = [...new Set(input.colonyIds)];
   if (colonyIds.length === 0) throw new EventoEnLoteInvalido("sin_colmenas");
 
-  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial } = normalizarEventoDeColonia(input);
+  const { treatmentTarget, treatmentRoute, feedingMethod, feedingMaterialKind, feedingMaterial, feedingUnit } = normalizarEventoDeColonia(input);
 
   const colonias = await prisma.colony.findMany({
     where: { id: { in: colonyIds } },
@@ -473,7 +479,7 @@ export async function registrarEventoEnLote(userAccountId: string, input: Evento
           feedingMaterialKind,
           feedingMaterial,
           feedingQuantity: input.feedingQuantity ?? null,
-          feedingUnit: input.feedingUnit ?? null,
+          feedingUnit,
           coverageUntil: input.eventType === "feeding" ? (input.coverageUntil ?? null) : null,
           feedingMethod,
           treatmentTarget,

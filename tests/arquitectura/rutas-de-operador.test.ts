@@ -83,4 +83,17 @@ describe("el service worker cubre lo que se captura en el campo", () => {
         "Añade su prefijo a `OPERATOR_ROUTE_PREFIXES` en `public/sw.js`.",
     ).toEqual([]);
   });
+
+  /**
+   * **Las que se LEEN sin señal, declaradas** — R2 del plan farm-to-green (ADR-197), 2026-10-09.
+   * `/beneficio` no captura con los formularios de campo que este archivo reconoce, así que no
+   * entra por la derivación de arriba; pero el jefe de beneficio la abre en el patio, sin red, para
+   * ver la cola y la ocupación. Se declara aquí, a mano y a propósito: es una decisión, no algo que
+   * se pueda deducir de los imports. Sus formularios siguen necesitando red hasta que la cola de
+   * envíos del beneficio exista (después del PR-B de la 2a).
+   */
+  it("las rutas que se leen sin conexión están en OPERATOR_ROUTE_PREFIXES", () => {
+    const LECTURA_SIN_CONEXION = ["/beneficio"];
+    expect(LECTURA_SIN_CONEXION.filter((r) => !cubierta(r))).toEqual([]);
+  });
 });
