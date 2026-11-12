@@ -28,6 +28,11 @@ Y **012 · pruebas que ven toda la base y afirman sobre una lista con
 tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de cata. Y **013 · las clases que `friendlyError` relanzaba**, hecho el 2026-09-21 en el PR #450.
 Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
 el mismo día en que se encontró recorriendo la pantalla en un navegador.
+Y **014 · las listas de lotes no miraban la clasificación**, hecha el 2026-10-14 de raíz, por
+decisión de Daniel: las listas filtran ya con la regla de `can()`, y en el mismo cambio cuentan los
+permisos quitados y añadidos a una persona, que se saltaban. Y **022 · una limpieza que se ponía roja
+por basura ajena**, hecha el 2026-10-06 en el PR #664; su cabecera siguió diciendo «abierto» hasta el
+2026-10-14. Ninguna de las dos estuvo nunca en la tabla.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
 Y **026 · páginas que daban 500 con un id mal formado en la URL**, cerrada el 2026-10-10 en el PR #696: medidas
 las 52 páginas con segmento dinámico, ninguna da 500 con un id basura ni con uno que no existe.

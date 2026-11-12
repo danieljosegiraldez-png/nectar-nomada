@@ -1,28 +1,21 @@
 /**
- * Todo perfil que puede LISTAR lotes tiene que poder ABRIR los que la lista le enseña.
+ * Todo perfil que puede LISTAR lotes tiene que poder ver los lotes que se crean.
  *
- * **El defecto que vigila, medido el 2026-09-25/26.** `requireLotAccess` —la ficha— pasa la
- * `classification` del lote a `can()`, que exige el permiso `classification:clear_<nivel>` exacto,
- * sin jerarquía (`lib/rbac/resolve.ts`). `lotWhereFromVisibility` —las listas— filtra **sólo** por
- * proyecto y ubicación: `scopeOrClauses` no menciona `classification` en ninguna línea. Las dos
- * mitades pueden discrepar, y se comprobó ejecutando: un lote `confidential` SALE en `getLotList`
- * y su ficha lo DENIEGA, con el lote `internal` de control saliendo y abriendo.
+ * **CORREGIDO EL 2026-10-14: lo que esto vigila ya no es una fuga.** Nació el 2026-09-25/26 para
+ * una divergencia medida: la ficha (`requireLotAccess`) pasa la `classification` a `can()` y las
+ * listas filtraban sólo por proyecto y ubicación, así que un lote `confidential` SALÍA en
+ * `getLotList` y su ficha lo DENEGABA. Estaba dormida porque todo lote nace en
+ * `DEFAULT_NEW_RECORD_CLASSIFICATION`, y esta prueba era la que caía si eso cambiaba.
  *
- * **Hoy no ocurre, y por eso esto es un guardia y no un arreglo.** Lo cierran los DATOS, no el
- * código: `CreateLotInput` no acepta `classification`, así que todo lote nace en
- * `DEFAULT_NEW_RECORD_CLASSIFICATION`; y los perfiles que pueden listar limpian ese nivel. Cambiar
- * cualquiera de las dos cosas despierta la fuga **sin que falle nada** — que es exactamente la
- * forma que esta casa persigue. Esta prueba es la que falla en su lugar.
+ * Daniel decidió cerrarla de raíz (`PENDING_IMPLEMENTATIONS/014`, ADR-063): desde ese día las listas
+ * filtran por los niveles que la cuenta limpia en cada objetivo, con la misma regla que `can()`. Lo
+ * prueba `tests/traceability/laListaVeLoQueVeCan.test.ts`. Así que un perfil que lista lotes sin
+ * limpiar el nivel por defecto ya no ve de más: **no ve nada** de lo que se crea, ni en la lista ni
+ * en la ficha. Eso es lo que esta prueba sigue impidiendo — un perfil de lectura que entrega una
+ * pantalla vacía, que es la forma en que Project Viewer pasó semanas sin clearance (ADR-063).
  *
- * **Qué hacer cuando caiga**, para que nadie la silencie: o se le da al perfil nuevo la limpieza
- * del nivel por defecto, o se decide que las listas filtren por `classification` como la ficha
- * —lo segundo toca `/lots`, el panel, la exportación y el reporte de proceso a la vez, así que es
- * decisión del dueño, no del que pasaba por aquí.
- *
- * **`lot:export` va en la lista a propósito.** `lib/traceability/export.ts` recorta con
- * `resolveLotVisibility(…, "export")` y **no re-comprueba por fila**: cero `requireLotAccess` en
- * todo el archivo. Es el camino por donde una fila de más no se queda en la pantalla, sale en un
- * CSV.
+ * **`lot:export` va en la lista a propósito**: exportar es listar a un archivo, con la misma
+ * visibilidad (`resolveLotVisibility(…, "export")`).
  */
 import { describe, expect, it } from "vitest";
 import { ROLE_PROFILES } from "../../lib/rbac/catalog";
@@ -57,8 +50,8 @@ describe("quien puede listar lotes limpia la clasificación con la que nacen", (
 
       expect(
         sinLimpieza,
-        `estos perfiles pueden LISTAR lotes pero no abrirlos: la lista se los enseñaría y la ficha ` +
-          `se los negaría. Lee la cabecera de este archivo antes de tocar nada.`,
+        `estos perfiles pueden LISTAR lotes pero no limpian el nivel con el que nacen: su lista y su ` +
+          `ficha saldrían vacías. Lee la cabecera de este archivo antes de tocar nada.`,
       ).toEqual([]);
     });
   }

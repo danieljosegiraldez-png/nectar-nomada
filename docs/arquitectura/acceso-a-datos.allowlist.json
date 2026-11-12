@@ -940,6 +940,18 @@
       "operacion": "dividirProcesoEnTx",
       "razon": "Núcleo con `tx` de la división bajo un proceso abierto (R6): comprueba que no quede remanente fuera de la tolerancia de masa ni saldo en otro lote cubierto, cierra el proceso como `divided` con su auditoría y abre una copia por parte con `abrirProcesoEnTx`, todo en la misma transacción. Recibe el principal sólo para firmar el cierre y las aperturas, no para decidir nada: no autoriza. Su único llamador es `recordTransformation`, que pide `requireLotAccess(\"manage\")` sobre las entradas antes de abrir su transacción y bloquea sus linajes en `antesDeTransformar`, lo primero de esa transacción. Quien lo llame debe haber hecho las dos cosas antes.",
       "verificado": "2026-10-01"
+    },
+    {
+      "archivo": "lib/rbac/service.ts",
+      "operacion": "can",
+      "razon": "ES el guardia: la autorización de toda la casa sale de aquí. Lee las asignaciones de la cuenta con `getResolvedAssignments`, que es acotada por construcción (su `where` filtra por `userAccountId`), y lo único que le queda propio es subir por los ancestros de una ubicación (`conAncestros`), que no depende de quién pregunta. Hasta el 2026-10-14 `getResolvedAssignments` era privada y el analizador la absorbía; se exportó para que las listas lean los mismos permisos efectivos (ficha 014), y el analizador sólo propaga lo acotado entre funciones privadas.",
+      "verificado": "2026-10-14"
+    },
+    {
+      "archivo": "lib/traceability/lots.ts",
+      "operacion": "resolveLotVisibility",
+      "razon": "Es el resolvedor del que sale el `where` de todas las listas de lotes (y la marca `resolve*Visibility` que hace acotados a sus llamadores). Lee las asignaciones de la cuenta con `getResolvedAssignments` (acotada por construcción) y lo único que le queda propio es bajar por los descendientes de las ubicaciones asignadas (`conDescendientes`), que no depende de quién pregunta. Antes del 2026-10-14 consultaba `assignment` con `where: { userAccountId }` en su propio cuerpo y salía acotada; ahora lee los permisos efectivos de `can()` (ficha 014), y el analizador no propaga lo acotado entre funciones exportadas. Que la lista coincida con `can()` lo prueba `tests/traceability/laListaVeLoQueVeCan.test.ts`.",
+      "verificado": "2026-10-14"
     }
   ],
   "dependen_del_llamador": [

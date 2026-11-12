@@ -1,5 +1,5 @@
 import { tuesteVisible } from "./tuesteVisible";
-import type { ClassificationLevel } from "../rbac/types";
+import { CLASSIFICATION_LEVELS, permissionKey, type ClassificationLevel } from "../rbac/types";
 /**
  * Phase 1, ticket T1 (docs/implementation/PHASE_1_TECHNICAL_EXECUTION_PLAN.md
  * §8, §34). Canonical Lot + LotTransformation — the mechanism underneath
@@ -22,7 +22,7 @@ import type { ClassificationLevel } from "../rbac/types";
 import { prisma } from "../db";
 import { LIST_LIMIT, truncate } from "../listLimit";
 import { sortByName } from "../naturalOrder";
-import { can } from "../rbac/service";
+import { can, getResolvedAssignments } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
 import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
@@ -625,6 +625,25 @@ export interface LotVisibility {
   mode: "all" | "none" | "scoped";
   projectIds: string[];
   locationIds: string[];
+  /**
+   * Las clasificaciones que la cuenta puede ver, por objetivo (`PENDING_IMPLEMENTATIONS/014`, decisión
+   * de Daniel del 2026-10-14). `can()` exige, además del permiso, `classification:clear_<nivel>` —salvo
+   * para `public`—, y lo cuenta sumando las asignaciones que cubren ESE objetivo. `todo` vale para
+   * cualquier lote cuando `mode` es "all"; los mapas, por id, con los descendientes de cada ubicación ya
+   * dentro. Un nivel que no aparece no se lista.
+   */
+  niveles: {
+    todo: readonly ClassificationLevel[];
+    porProyecto: ReadonlyMap<string, readonly ClassificationLevel[]>;
+    porUbicacion: ReadonlyMap<string, readonly ClassificationLevel[]>;
+  };
+}
+
+const SIN_NIVELES: LotVisibility["niveles"] = { todo: [], porProyecto: new Map(), porUbicacion: new Map() };
+
+/** Lo que `can()` deja pasar con este conjunto de permisos: `public` siempre, el resto con su autorización. */
+function nivelesQueLimpia(permisos: ReadonlySet<string>): ClassificationLevel[] {
+  return CLASSIFICATION_LEVELS.filter((n) => n === "public" || permisos.has(permissionKey("classification", `clear_${n}`)));
 }
 
 /**
@@ -658,42 +677,42 @@ export async function resolveLotVisibility(
   // as "which may they view", asked of a different permission.
   action: "view" | "manage" | "export" = "view",
 ): Promise<LotVisibility> {
-  const now = new Date();
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      userAccountId,
-      status: "active",
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
-    },
-    include: { scope: true, roleProfile: { include: { permissions: { include: { permission: true } } } } },
-  });
+  // **Los permisos EFECTIVOS, los mismos de `can()`.** Esto leía `roleProfile.permissions` por su
+  // cuenta y se saltaba los ajustes por asignación (#357): quitarle a alguien `lot:view` le impedía
+  // abrir un lote y la lista, el tablero y el CSV se lo seguían enseñando. Decisión de Daniel,
+  // 2026-10-14.
+  const asignaciones = await getResolvedAssignments(userAccountId);
+  const permiso = permissionKey("lot", action);
+  const sumar = (destino: Set<string>, permisos: ResolvedAssignmentPermissions) => {
+    for (const [recurso, accion] of permisos) destino.add(permissionKey(recurso, accion));
+  };
 
-  const viewGranting = assignments.filter((a) =>
-    a.roleProfile.permissions.some((rp) => rp.permission.resourceType === "lot" && rp.permission.action === action),
-  );
+  // **Por OBJETIVO, como `can()`.** Para un objetivo, `can()` suma las asignaciones de plataforma y las
+  // de ESE objetivo exacto —no las de sus ancestros—, y exige ahí el permiso y la autorización de la
+  // clasificación. Así que el permiso de una asignación y la autorización de otra se juntan sólo si
+  // cubren lo mismo.
+  const dePlataforma = new Set<string>();
+  const exactos = { project: new Map<string, Set<string>>(), location: new Map<string, Set<string>>() };
+  for (const a of asignaciones) {
+    if (a.scope.scopeType === "platform") sumar(dePlataforma, a.permissions);
+    else if ((a.scope.scopeType === "project" || a.scope.scopeType === "location") && a.scope.scopeRefId) {
+      const mapa = exactos[a.scope.scopeType];
+      const permisos = mapa.get(a.scope.scopeRefId) ?? new Set<string>();
+      sumar(permisos, a.permissions);
+      mapa.set(a.scope.scopeRefId, permisos);
+    }
+  }
+  const conPlataforma = (permisos: ReadonlySet<string>) => new Set([...dePlataforma, ...permisos]);
 
-  if (viewGranting.some((a) => a.scope.scopeType === "platform")) {
-    return { mode: "all", projectIds: [], locationIds: [] };
+  const todo = dePlataforma.has(permiso) ? nivelesQueLimpia(dePlataforma) : [];
+
+  const porProyecto = new Map<string, ClassificationLevel[]>();
+  for (const [id, propios] of exactos.project) {
+    const permisos = conPlataforma(propios);
+    if (permisos.has(permiso)) porProyecto.set(id, nivelesQueLimpia(permisos));
   }
 
-  const projectIds = [
-    ...new Set(
-      viewGranting
-        .filter((a) => a.scope.scopeType === "project")
-        .map((a) => a.scope.scopeRefId)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  const asignadas = [
-    ...new Set(
-      viewGranting
-        .filter((a) => a.scope.scopeType === "location")
-        .map((a) => a.scope.scopeRefId)
-        .filter((id): id is string => id != null),
-    ),
-  ];
-  // **Y todo lo que cuelga de ellas.** `can()` sube por los ancestros del recurso desde ADR-144
+  // **Y todo lo que cuelga de cada ubicación.** `can()` sube por los ancestros del recurso desde ADR-144
   // —quien manda en la finca manda en lo que hay dentro—, pero esta LISTA miraba sólo el id exacto.
   // Las dos mitades discrepaban: la ficha de una parcela autorizaba y la lista no la enseñaba.
   //
@@ -701,32 +720,90 @@ export async function resolveLotVisibility(
   // parcelas y `getManageableContext` devolvía CERO, así que /plots salía vacío y parecía que las
   // parcelas hubieran desaparecido. No es ensanchar permisos: es reconocer la misma contención que
   // la comprobación por recurso ya aplica. Un HERMANO sigue fuera.
-  const locationIds = await conDescendientes(asignadas);
-
-  if (projectIds.length === 0 && locationIds.length === 0) {
-    return { mode: "none", projectIds: [], locationIds: [] };
+  //
+  // Una ubicación que cuelga de dos raíces ve la UNIÓN de lo que limpia cada una: `can()` contesta que
+  // sí en cuanto un ancestro reúne permiso y autorización. Las raíces se agrupan por niveles para bajar
+  // una vez por grupo, no una por raíz.
+  const raicesPorNiveles = new Map<string, { niveles: ClassificationLevel[]; ids: string[] }>();
+  for (const [id, propios] of exactos.location) {
+    const permisos = conPlataforma(propios);
+    if (!permisos.has(permiso)) continue;
+    const niveles = nivelesQueLimpia(permisos);
+    const grupo = raicesPorNiveles.get(niveles.join()) ?? { niveles, ids: [] };
+    grupo.ids.push(id);
+    raicesPorNiveles.set(niveles.join(), grupo);
   }
-  return { mode: "scoped", projectIds, locationIds };
+  const porUbicacion = new Map<string, ClassificationLevel[]>();
+  for (const { niveles, ids } of raicesPorNiveles.values()) {
+    for (const id of await conDescendientes(ids)) {
+      const ya = porUbicacion.get(id) ?? [];
+      porUbicacion.set(id, CLASSIFICATION_LEVELS.filter((n) => ya.includes(n) || niveles.includes(n)));
+    }
+  }
+
+  const niveles = { todo, porProyecto, porUbicacion };
+  if (todo.length > 0) return { mode: "all", projectIds: [], locationIds: [], niveles };
+  if (porProyecto.size === 0 && porUbicacion.size === 0) {
+    return { mode: "none", projectIds: [], locationIds: [], niveles: SIN_NIVELES };
+  }
+  return { mode: "scoped", projectIds: [...porProyecto.keys()], locationIds: [...porUbicacion.keys()], niveles };
 }
 
-function scopeOrClauses(visibility: LotVisibility): Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> {
-  const clauses: Array<{ projectId: { in: string[] } } | { locationId: { in: string[] } }> = [];
-  if (visibility.projectIds.length) clauses.push({ projectId: { in: visibility.projectIds } });
-  if (visibility.locationIds.length) clauses.push({ locationId: { in: visibility.locationIds } });
-  return clauses;
+type ResolvedAssignmentPermissions = Awaited<ReturnType<typeof getResolvedAssignments>>[number]["permissions"];
+
+type ClausulaDeVisibilidad = {
+  projectId?: { in: string[] };
+  locationId?: { in: string[] };
+  classification?: { in: ClassificationLevel[] };
+};
+
+/** Sin condición de nivel cuando se limpian todos: no se le pide a la base un filtro que no filtra. */
+function filtroDeNiveles(niveles: readonly ClassificationLevel[]): Pick<ClausulaDeVisibilidad, "classification"> {
+  return niveles.length === CLASSIFICATION_LEVELS.length ? {} : { classification: { in: [...niveles] } };
 }
 
-/** Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything"). */
+/**
+ * Las cláusulas de la lista, una por grupo de ids con los mismos niveles —la consulta crece con los
+ * conjuntos distintos de niveles, no con los ids—. Sirven igual para lotes que para muestras: las dos
+ * tablas tienen `projectId`, `locationId` y `classification`.
+ */
+function clausulasDeVisibilidad(visibility: LotVisibility): ClausulaDeVisibilidad[] {
+  const { todo, porProyecto, porUbicacion } = visibility.niveles;
+  const clausulas: ClausulaDeVisibilidad[] = [];
+  if (visibility.mode === "all") clausulas.push(filtroDeNiveles(todo));
+  for (const [campo, mapa] of [["projectId", porProyecto], ["locationId", porUbicacion]] as const) {
+    const grupos = new Map<string, { niveles: readonly ClassificationLevel[]; ids: string[] }>();
+    for (const [id, niveles] of mapa) {
+      // Con ámbito de plataforma, un id sólo añade algo si limpia un nivel que `todo` no limpia.
+      if (visibility.mode === "all" && niveles.every((n) => todo.includes(n))) continue;
+      const grupo = grupos.get(niveles.join()) ?? { niveles, ids: [] };
+      grupo.ids.push(id);
+      grupos.set(niveles.join(), grupo);
+    }
+    for (const { niveles, ids } of grupos.values()) clausulas.push({ [campo]: { in: ids }, ...filtroDeNiveles(niveles) });
+  }
+  return clausulas;
+}
+
+/**
+ * Null return means "matches nothing" — the caller should short-circuit rather than query with an empty OR (which Prisma/Postgres would read as "matches everything").
+ * `{}` sólo cuando la cuenta lo ve todo a todos los niveles: un ámbito de plataforma sin la autorización
+ * de `confidential` ya no es «sin filtro» (ficha 014).
+ */
 export function lotWhereFromVisibility(visibility: LotVisibility): Prisma.LotWhereInput | null {
-  if (visibility.mode === "all") return {};
-  if (visibility.mode === "none") return null;
-  return { OR: scopeOrClauses(visibility) };
+  return whereDeVisibilidad(visibility);
 }
 
 export function sampleWhereFromVisibility(visibility: LotVisibility): Prisma.SampleWhereInput | null {
-  if (visibility.mode === "all") return {};
+  return whereDeVisibilidad(visibility);
+}
+
+function whereDeVisibilidad(visibility: LotVisibility): { OR: ClausulaDeVisibilidad[] } | ClausulaDeVisibilidad | null {
   if (visibility.mode === "none") return null;
-  return { OR: scopeOrClauses(visibility) };
+  const clausulas = clausulasDeVisibilidad(visibility);
+  // Una cláusula vacía casa con todo, así que las demás sobran.
+  if (clausulas.some((c) => Object.keys(c).length === 0)) return {};
+  return clausulas.length === 1 ? clausulas[0]! : { OR: clausulas };
 }
 
 /**
@@ -756,12 +833,18 @@ export async function puedeGestionarLote(
   }
 }
 
-export function lotMatchesVisibility(lot: { projectId: string | null; locationId: string | null }, visibility: LotVisibility): boolean {
-  if (visibility.mode === "all") return true;
+/** La misma regla que `lotWhereFromVisibility`, sobre un lote ya leído. Necesita su clasificación (ficha 014). */
+export function lotMatchesVisibility(
+  lot: { projectId: string | null; locationId: string | null; classification: ClassificationLevel },
+  visibility: LotVisibility,
+): boolean {
   if (visibility.mode === "none") return false;
+  const { todo, porProyecto, porUbicacion } = visibility.niveles;
+  const limpia = (niveles: readonly ClassificationLevel[] | undefined) => niveles?.includes(lot.classification) ?? false;
   return (
-    (lot.projectId != null && visibility.projectIds.includes(lot.projectId)) ||
-    (lot.locationId != null && visibility.locationIds.includes(lot.locationId))
+    (visibility.mode === "all" && limpia(todo)) ||
+    (lot.projectId != null && limpia(porProyecto.get(lot.projectId))) ||
+    (lot.locationId != null && limpia(porUbicacion.get(lot.locationId)))
   );
 }
 
@@ -869,8 +952,8 @@ export async function getActiveOperations(userAccountId: string) {
       .map((run) => ({ run, lot: run.transformations[0]?.inputs[0]?.lot ?? null }))
       .filter((entry): entry is { run: T; lot: NonNullable<(typeof entry)["lot"]> } => entry.lot != null);
 
-  const activeFermentationRuns = withSourceLot(fermentationRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
-  const activeDryingRuns = withSourceLot(dryingRunRows).filter((e) => lotMatchesVisibility(e.lot as { projectId: string | null; locationId: string | null }, visibility));
+  const activeFermentationRuns = withSourceLot(fermentationRunRows).filter((e) => lotMatchesVisibility(e.lot as Parameters<typeof lotMatchesVisibility>[0], visibility));
+  const activeDryingRuns = withSourceLot(dryingRunRows).filter((e) => lotMatchesVisibility(e.lot as Parameters<typeof lotMatchesVisibility>[0], visibility));
 
   const staleThreshold = new Date(Date.now() - ATTENTION_MEASUREMENT_STALENESS_HOURS * 60 * 60 * 1000);
   const activeLotIds = [

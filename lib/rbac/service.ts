@@ -40,7 +40,16 @@ export function esAsignacionActiva(
   return a.status === "active" && a.validFrom <= now && (a.validTo === null || a.validTo > now);
 }
 
-async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {
+/**
+ * Las asignaciones activas de una cuenta, con sus permisos EFECTIVOS ya resueltos.
+ *
+ * Exportada para las LISTAS (`resolveLotVisibility`, `resolveApiaryVisibility`), que antes leían
+ * `roleProfile.permissions` por su cuenta y se saltaban los ajustes de `permisosEfectivos`: quitarle a
+ * alguien `lot:view` le impedía abrir un lote y la lista se lo seguía enseñando (decisión de Daniel,
+ * 2026-10-14). Una lista que necesite la respuesta de `can()` para muchos recursos lee esto una vez, en
+ * vez de rehacer la resolución.
+ */
+export async function getResolvedAssignments(userAccountId: string): Promise<ResolvedAssignment[]> {
   const now = new Date();
 
   const rows = await prisma.assignment.findMany({

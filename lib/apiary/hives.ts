@@ -14,7 +14,7 @@
 import { prisma } from "../db";
 import { TIPOS_DE_SITIO_DE_ABEJAS, esSitioDeAbejas, exigeTipoDeSitioDeAbejas, type TipoDeSitioDeAbejas } from "./sitioDeAbejas";
 import { LIST_LIMIT, truncate } from "../listLimit";
-import { can } from "../rbac/service";
+import { can, getResolvedAssignments } from "../rbac/service";
 import { classificationForTarget, loadScopeClassifications } from "../rbac/scopeClassification";
 import { recordAuditEvent } from "../audit";
 import { DEFAULT_NEW_RECORD_CLASSIFICATION } from "../traceability/lots";
@@ -522,20 +522,13 @@ interface ApiaryVisibility {
 }
 
 async function resolveApiaryVisibility(userAccountId: string, action: "view" | "manage" = "view"): Promise<ApiaryVisibility> {
-  const now = new Date();
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      userAccountId,
-      status: "active",
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
-    },
-    include: { scope: true, roleProfile: { include: { permissions: { include: { permission: true } } } } },
-  });
+  // Los permisos EFECTIVOS, los de `can()`: esto leía `roleProfile.permissions` y se saltaba los ajustes
+  // por asignación (#357) — quitado `apiary:view`, el apiario seguía en la lista; añadido, no salía.
+  // Decisión de Daniel, 2026-10-14. Para UN permiso, mirarlo asignación por asignación da lo mismo que
+  // sumarlas por objetivo como hace `can()`: la suma lo tiene si alguna lo tiene.
+  const assignments = await getResolvedAssignments(userAccountId);
 
-  const granting = assignments.filter((a) =>
-    a.roleProfile.permissions.some((rp) => rp.permission.resourceType === "apiary" && rp.permission.action === action),
-  );
+  const granting = assignments.filter((a) => a.permissions.some(([recurso, accion]) => recurso === "apiary" && accion === action));
 
   if (granting.some((a) => a.scope.scopeType === "platform")) {
     return { mode: "all", projectIds: [], locationIds: [] };
