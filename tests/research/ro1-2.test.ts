@@ -23,15 +23,14 @@ import { createEvidence, createEvidenceClaim, createInterpretation } from "../..
 import { recordTransformation } from "../../lib/traceability/lots";
 import { recordMeasurement } from "../../lib/traceability/measurements";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { ambitoDePlataforma } from "../helpers/ambitoDePlataforma";
 
 const RUN_ID = `ro1-2-${Date.now()}`;
 
 let projectId: string;
 let organizationId: string;
 let researchLeadUserAccountId: string;
-let researchLeadScopeId: string;
 let labOperatorUserAccountId: string;
-let labOperatorScopeId: string;
 let sourceLotId: string;
 let researchProgramId: string;
 let experimentId: string;
@@ -68,15 +67,15 @@ beforeAll(async () => {
 
   researchLeadUserAccountId = await createTestUserAccount("RO12ResearchLead");
   const researchLeadProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Research Lead" } });
-  const scope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
-  researchLeadScopeId = scope.id;
-  await prisma.assignment.create({ data: { userAccountId: researchLeadUserAccountId, roleProfileId: researchLeadProfile.id, scopeId: scope.id } });
+  // **El ámbito de plataforma es UNO y compartido**, y no se borra: desde la migración
+  // `20260927120000_un_solo_ambito_sin_referente` crear otro revienta, y por eso esta prueba no podía
+  // correr sobre una base sembrada (ficha 006). `ambitoDePlataforma` lo reusa.
+  const plataforma = await ambitoDePlataforma();
+  await prisma.assignment.create({ data: { userAccountId: researchLeadUserAccountId, roleProfileId: researchLeadProfile.id, scopeId: plataforma } });
 
   labOperatorUserAccountId = await createTestUserAccount("RO12LabOperator");
   const farmOperatorProfile = await prisma.roleProfile.findUniqueOrThrow({ where: { name: "Farm Operator" } });
-  const labScope = await prisma.scope.create({ data: { scopeType: "platform", scopeRefId: null } });
-  labOperatorScopeId = labScope.id;
-  await prisma.assignment.create({ data: { userAccountId: labOperatorUserAccountId, roleProfileId: farmOperatorProfile.id, scopeId: labScope.id } });
+  await prisma.assignment.create({ data: { userAccountId: labOperatorUserAccountId, roleProfileId: farmOperatorProfile.id, scopeId: plataforma } });
 
   const sourceLot = await prisma.lot.create({
     data: { lotCode: `${RUN_ID}-cherry`, lotType: "cherry", organizationId, projectId },
@@ -153,7 +152,6 @@ afterAll(async () => {
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: [sourceLotId, ...outputLotIds] } }) });
 
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
-  await prisma.scope.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadScopeId, labOperatorScopeId] } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: [researchLeadUserAccountId, labOperatorUserAccountId] } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ displayName: { contains: RUN_ID } }) });
   await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
@@ -643,28 +641,6 @@ describe("§5.10 — an inference about microbial activity is recorded as a real
   });
 });
 
-describe("§5.11 — real A7/F1/S1/R1/RO1 data stays intact", () => {
-  // "Real batches missing a terrain lot" is deliberately NOT asserted here
-  // as a repeatable count (unlike ro1.test.ts's own suite-wide checks): run
-  // concurrently with every other RUN_ID-scoped test file, their own
-  // in-flight, not-yet-cleaned-up fixtures (e.g. S1's deliberately-
-  // locationless receiving-event lots) make a live "must equal 0" assertion
-  // flaky by construction, not a real regression. V1's own verification
-  // (docs/implementation/38_V1_VOCABULARIO_LOTE_BATCH.md, its report and
-  // README entry) already covers this count via a standalone script run in
-  // isolation — the correct way to answer a point-in-time "how many," per
-  // this ticket's own §6 instruction to report the number, not assert it
-  // as an invariant.
-  it("real (non-TEST) Locations, Organizations, and VariableCatalogs are unaffected by this run", async () => {
-    const lostOrigin = await prisma.organization.findFirst({ where: { name: "Lost Origin" } });
-    expect(lostOrigin).not.toBeNull();
-
-    // A `roastSession.count() > 0` assertion stood here and was removed for the
-    // reason given in tests/research/ro1.test.ts §9.15 (ADR-086): the rows it
-    // counted were leaked test fixtures, so it never measured real data.
-    // `Lost Origin` above and the catalog count below are anchored on records
-    // that genuinely exist in production.
-    const catalogCount = await prisma.variableCatalog.count();
-    expect(catalogCount).toBeGreaterThanOrEqual(20);
-  });
-});
+// §5.11 —los datos reales siguen intactos— vive en `ro1-2-datosReales.test.ts`, en el grupo
+// `datos-reales`: afirma hechos de producción, y era lo único de este archivo que le impedía correr
+// en CI sobre una base sembrada (ficha 006).
