@@ -448,6 +448,21 @@ describe("el pendiente sale del propósito de la visita", () => {
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
     await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
+    // Lo que escribieron los servicios lo firmó la cuenta del bloque. Sin esto, borrar la
+    // cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`): este bloque y el
+    // del traslado dejaban 10 por corrida entre los dos, medido el 2026-11-12 por el
+    // guardia de `scripts/ci-con-base.sh`. Las cuentas se DESCUBREN por la `R` del bloque.
+    const personasDeLaCorrida = await prisma.person.findMany({
+      where: assertDefinedWhere({ displayName: { contains: R } }),
+      select: { id: true },
+    });
+    const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+      where: assertDefinedWhere({ personId: { in: personasDeLaCorrida.map((p) => p.id) } }),
+      select: { id: true },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+    });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
@@ -564,6 +579,18 @@ describe("el día del traslado la caja sigue en el origen", () => {
     await prisma.hivePlacement.deleteMany({ where: assertDefinedWhere({ hiveId: { in: hids } }) });
     await prisma.hive.deleteMany({ where: assertDefinedWhere({ id: { in: hids } }) });
     await prisma.location.deleteMany({ where: assertDefinedWhere({ name: { contains: R } }) });
+    // La misma limpieza que el bloque anterior: la auditoría de la cuenta se va antes que ella.
+    const personasDeLaCorrida = await prisma.person.findMany({
+      where: assertDefinedWhere({ displayName: { contains: R } }),
+      select: { id: true },
+    });
+    const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+      where: assertDefinedWhere({ personId: { in: personasDeLaCorrida.map((p) => p.id) } }),
+      select: { id: true },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+    });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
     await prisma.organization.deleteMany({ where: assertDefinedWhere({ id: organizationId }) });
