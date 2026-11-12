@@ -20,6 +20,7 @@ import {
   registrarValoracionDeInspeccion,
   ValoracionInvalida,
 } from "../../lib/apiary/valoracionDeInspeccion";
+import { getFieldSessionTimeline } from "../../lib/traceability/fieldSessions";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 
 const RUN_ID = `val-${Date.now()}`;
@@ -99,8 +100,12 @@ describe("la valoración de una inspección", () => {
   });
 
   afterAll(async () => {
-    await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSessionId: sesionId }) });
-    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ id: sesionId }) });
+    // **Por SITIO, no por la visita del fixture.** «DOS VISITAS» crea otra visita y la borra al final
+    // de su propio cuerpo, así que si falla a mitad la dejaba viva y el borrado del sitio moría en su
+    // clave ajena, abandonando el resto de esta limpieza. Medido el 2026-10-19 en el flip-test del
+    // paso 8: dos sitios TEST huérfanos, cada uno con su visita «locked» de las 14:00.
+    await prisma.fieldEvent.deleteMany({ where: assertDefinedWhere({ fieldSession: { locationId: apiarioId } }) });
+    await prisma.fieldSession.deleteMany({ where: assertDefinedWhere({ locationId: apiarioId }) });
     const insp = [inspeccionSuelta, inspeccionEnVisita].filter(Boolean);
     await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ entityType: "inspection", entityId: { in: insp } }) });
     await prisma.inspection.deleteMany({ where: assertDefinedWhere({ id: { in: insp } }) });
@@ -327,5 +332,25 @@ describe("la valoración de una inspección", () => {
         assessment: "x",
       }),
     ).rejects.toThrow(ValoracionInvalida);
+  });
+
+  it("LA PANTALLA LA LEE: la lectura de la visita trae cada inspección con su valoración", async () => {
+    // Paso 8 del plan del Apiario (ADR-200): la pantalla de la visita ofrece escribir la valoración
+    // por inspección, y para eso la lectura que ya autoriza la visita tiene que traer el `id` y el
+    // texto guardado. Hasta el 2026-10-19 traía la caja y el resultado, y nada más.
+    // El estado de la visita lo fija esta prueba: las de arriba lo cambian.
+    await prisma.fieldSession.update({ where: { id: sesionId }, data: { status: "completed", editWindowExpiresAt: null } });
+    await registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionEnVisita, assessment: "Leída por la pantalla" });
+
+    const { events } = await getFieldSessionTimeline(userAccountId, sesionId);
+    const conInspeccion = events.filter((e) => e.inspection !== null);
+    // Control: la visita tiene exactamente la inspección que esta prueba colgó de ella.
+    expect(conInspeccion.map((e) => e.inspection!.id)).toEqual([inspeccionEnVisita]);
+    expect(conInspeccion[0]!.inspection!.assessment).toBe("Leída por la pantalla");
+
+    // Y lo nuevo se lee al volver a pedirla: no es una copia de cuando se abrió la pantalla.
+    await registrarValoracionDeInspeccion(userAccountId, { inspectionId: inspeccionEnVisita, assessment: "Cambiada" });
+    const otra = await getFieldSessionTimeline(userAccountId, sesionId);
+    expect(otra.events.find((e) => e.inspection?.id === inspeccionEnVisita)?.inspection?.assessment).toBe("Cambiada");
   });
 });
