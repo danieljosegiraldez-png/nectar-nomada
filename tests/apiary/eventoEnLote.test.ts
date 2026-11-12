@@ -158,6 +158,38 @@ describe("ADR-136 — el manejo en lote", () => {
     expect([...new Set(filas.map((f) => f.feedingUnit))]).toEqual(["lb"]);
   });
 
+  it("la cantidad y la dosis se copian ENTERAS a cada colonia, no se reparten", async () => {
+    // Es lo que obliga al formulario del lote a decir «por colonia» (ADR-200, Consecuencias): diez
+    // litros tecleados para tres colonias se guardan como diez en CADA una, treinta en total.
+    const comida = await registrarEventoEnLote(userAccountId, {
+      colonyIds: vivas,
+      eventType: "feeding",
+      occurredAt: AHORA,
+      feedingQuantity: 10,
+      feedingUnit: "L",
+      loteDeClienteId: `${RUN_ID}-cantidad`,
+    });
+    const tratamiento = await registrarEventoEnLote(userAccountId, {
+      colonyIds: vivas,
+      eventType: "treatment",
+      occurredAt: AHORA,
+      treatmentProduct: "Apivar",
+      treatmentBatchLabel: `L-${RUN_ID.slice(-4)}-d`,
+      treatmentWithdrawalDays: 14,
+      treatmentTarget: "varroa",
+      treatmentDose: 2,
+      treatmentDoseUnit: "tiras",
+      loteDeClienteId: `${RUN_ID}-dosis`,
+    });
+    const deComida = await prisma.colonyEvent.findMany({ where: { id: { in: comida.colonyEventIds } } });
+    const deTratamiento = await prisma.colonyEvent.findMany({ where: { id: { in: tratamiento.colonyEventIds } } });
+    // Control: son tantas filas como colonias, así que una cifra repartida se vería.
+    expect(deComida).toHaveLength(vivas.length);
+    expect(deTratamiento).toHaveLength(vivas.length);
+    expect(deComida.map((f) => f.feedingQuantity?.toString())).toEqual(vivas.map(() => "10"));
+    expect(deTratamiento.map((f) => f.treatmentDose?.toString())).toEqual(vivas.map(() => "2"));
+  });
+
   it("deja un AuditEvent por fila, no uno por lote", async () => {
     const r = await registrarEventoEnLote(userAccountId, {
       colonyIds: vivas,
