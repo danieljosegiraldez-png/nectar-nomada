@@ -158,6 +158,10 @@ afterAll(async () => {
   const idsCuentas = cuentas.map((c) => c.id);
   await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: { in: idsCuentas } }) });
   await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: finca } as { scopeRefId: string }) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 9 por corrida. Las cuentas ya se DESCUBRIERON por el RUN_ID, arriba.
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: { in: idsCuentas } }) });
   await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: { in: idsCuentas } }) });
   await prisma.person.deleteMany({ where: assertDefinedWhere({ id: { in: idsPersonas } }) });
 

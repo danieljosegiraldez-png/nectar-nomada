@@ -103,6 +103,14 @@ afterAll(async () => {
   if (created.assignmentIds.length) await prisma.assignment.deleteMany({ where: w(created.assignmentIds) });
   if (created.scopeIds.length) await prisma.scope.deleteMany({ where: w(created.scopeIds) });
   if (created.roleProfileIds.length) await prisma.roleProfile.deleteMany({ where: w(created.roleProfileIds) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 2 por corrida. Las cuentas se DESCUBREN por el RUN.
+  const personas = await prisma.person.findMany({ where: { displayName: { contains: RUN } }, select: { id: true } });
+  const cuentas = await prisma.userAccount.findMany({
+    where: { personId: { in: personas.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentas.map((c) => c.id) } }) });
   if (created.userAccountIds.length) await prisma.userAccount.deleteMany({ where: w(created.userAccountIds) });
   if (created.personIds.length) await prisma.person.deleteMany({ where: w(created.personIds) });
   if (created.locationIds.length) await prisma.location.deleteMany({ where: w(created.locationIds) });

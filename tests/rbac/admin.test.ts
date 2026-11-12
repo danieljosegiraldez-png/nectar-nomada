@@ -119,6 +119,16 @@ afterAll(async () => {
   });
   const ids = [...new Set([...created.assignmentIds, ...assignments.map((a) => a.id)])];
   if (ids.length) await prisma.assignment.deleteMany({ where: w(ids) });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 7 por corrida. Las cuentas se DESCUBREN por el RUN, que
+  // lleva el `displayName` de cada persona, no se heredan de `created`.
+  const personasDeLaCorrida = await prisma.person.findMany({
+    where: { displayName: { contains: RUN } }, select: { id: true } });
+  const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+    where: { personId: { in: personasDeLaCorrida.map((p) => p.id) } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }) });
   if (created.userAccountIds.length) await prisma.userAccount.deleteMany({ where: w(created.userAccountIds) });
   if (created.personIds.length) await prisma.person.deleteMany({ where: w(created.personIds) });
   // Scopes created by grantRole are shared by design, so they are deliberately
