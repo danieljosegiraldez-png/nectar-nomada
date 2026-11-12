@@ -10,7 +10,6 @@ idea se pierda cuando la respuesta es «ahora no».
 |---|------|---------------|
 | [001](001-alerta-backup-fuera-de-la-maquina.md) | Aviso cuando un backup **no** corre | P-A · servicio externo |
 | [002](002-reconciliacion-de-medios-r2.md) | Reconciliar `core.asset` con el bucket R2 | Todavía no hay fotos reales |
-| [003](003-correos-de-las-personas.md) | Correo y acceso para más personas | P-C · decisión del dueño |
 | [005](005-enumerar-rutas-privilegiadas.md) | Probar la frontera de RBAC, no sólo el router | Nada — trabajo pendiente |
 | [006](006-sin-ci-en-este-repositorio.md) | CI: qué cubre hoy y qué no | Parcialmente hecho · lo que falta necesita base efímera |
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
@@ -26,6 +25,9 @@ llevan semanas fuera. Es la misma forma que `scripts/check-archivo-de-estado.mjs
 vigila dentro del estado, y que no vigila aquí.
 Y **012 · pruebas que ven toda la base y afirman sobre una lista con
 tope**, cerrado el 2026-09-18 en el PR #402 y en el del buscador de muestras de cata. Y **013 · las clases que `friendlyError` relanzaba**, hecho el 2026-09-21 en el PR #450.
+Y **003 · correo y acceso para más personas**, retirada el 2026-10-16: su fila decía «P-C · decisión
+del dueño» y P-C se cerró el 2026-09-04 con el ADR-107; el 2026-09-06 se actualizaron sus cifras y
+no su cabecera. Lo que queda es un dato que falta, no un trabajo: los Huerbsch no han dado sus correos.
 Y **020 · corregir una lectura de ambiente no tiene pantalla**, hecho el 2026-10-01 en el PR #583,
 el mismo día en que se encontró recorriendo la pantalla en un navegador.
 Sus fichas siguen en la carpeta con el estado escrito arriba del todo.
