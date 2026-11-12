@@ -39,11 +39,13 @@ export interface RegistrarFloracionInput {
   /**
    * Nulo = **todavía abierta**, que es el estado real mientras la floración dura.
    *
-   * **Y cuando se da, es un INSTANTE: el fin del día, no la medianoche del día.** Medido el
-   * 2026-10-01: con `2026-03-20T00:00:00Z` —la forma en que esta casa guarda un campo de día— el
-   * aviso de polinizadores **calla el 20**, que es el último día de la ventana. La pantalla que
-   * registre esto manda el fin del día con `parseLocalDateTime`, no un `type="date"`. Está dicho
-   * también en el docstring de `hayFloracion`, que es quien lo compara.
+   * **Y cuando se da, es un campo de DÍA, igual que `startsAt`: la medianoche UTC del día que
+   * nombra**, que es lo que el esquema declara y lo que `hayFloracion` compara (días de
+   * calendario). **CORREGIDO EL 2026-10-08:** este comentario pedía a la pantalla mandar «el fin
+   * del día» como instante. Esa era la primera versión de `hayFloracion`, que su propio docstring
+   * da por descartada; seguirlo hoy alargaría el aviso un día, porque el final de un día en Panamá
+   * ya es el día siguiente en UTC. La pantalla de F1 lo parsea con `fechaDeDia`, y
+   * `tests/traceability/floracion.test.ts` («la floración llega al aviso…») lo fija.
    */
   readonly endsAt?: Date | null;
   readonly observerPersonId?: string | null;
@@ -112,6 +114,64 @@ export async function registrarFloracion(userAccountId: string, input: Registrar
       tx,
     );
     return creada;
+  });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface CerrarFloracionInput {
+  readonly plotBloomId: string;
+  /** Campo de DÍA, como `startsAt`: ver el comentario de `RegistrarFloracionInput.endsAt`. */
+  readonly endsAt: Date;
+}
+
+/**
+ * Cierra una floración abierta: «Terminó» — F1, decisión de Daniel del 2026-10-08 («dos
+ * momentos»). En el campo se ve cuándo empieza a florecer; el final se sabe días después.
+ *
+ * **Una sola vez.** Una floración ya cerrada no se vuelve a cerrar: cambiarle el fin sería
+ * reescribir un registro, y aquí los registros se corrigen con historia, no se pisan. El
+ * `updateMany` con `endsAt: null` lo hace cierto también entre dos toques simultáneos: el segundo
+ * no encuentra fila abierta y recibe la misma frase.
+ *
+ * Exige lo mismo que registrar, `lot:manage` sobre la parcela, y deja el antes y el después en la
+ * auditoría, en la misma transacción.
+ */
+export async function cerrarFloracion(userAccountId: string, input: CerrarFloracionInput): Promise<PlotBloom> {
+  // Un id que no es UUID haría que Prisma lanzara su propio error, que la pantalla no sabe traducir.
+  if (!UUID.test(input.plotBloomId)) throw new FloracionValidationError("no existe esa floración");
+  const antes = await prisma.plotBloom.findUnique({ where: { id: input.plotBloomId } });
+  if (!antes) throw new FloracionValidationError("no existe esa floración");
+
+  await requireLotAccess(userAccountId, "manage", [
+    { locationId: antes.locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION },
+  ]);
+
+  if (antes.endsAt) throw new FloracionValidationError("esa floración ya está cerrada");
+  if (input.endsAt < antes.startsAt) {
+    throw new FloracionValidationError("la floración no puede terminar antes de empezar");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.plotBloom.updateMany({
+      where: { id: antes.id, endsAt: null },
+      data: { endsAt: input.endsAt },
+    });
+    if (count !== 1) throw new FloracionValidationError("esa floración ya está cerrada");
+    const despues = await tx.plotBloom.findUniqueOrThrow({ where: { id: antes.id } });
+    await recordAuditEvent(
+      {
+        actorUserAccountId: userAccountId,
+        operation: "plot_bloom.close",
+        entityType: "plot_bloom",
+        entityId: antes.id,
+        before: antes,
+        after: despues,
+        sourceInterface: "traceability.service",
+      },
+      tx,
+    );
+    return despues;
   });
 }
 
@@ -186,4 +246,54 @@ export async function floracionesDeLaParcela(
     select: { startsAt: true, endsAt: true, plotBlockId: true },
     orderBy: { startsAt: "desc" },
   });
+}
+
+/** Una floración tal como la pinta la portada de la parcela. */
+export interface FloracionDeLaPortada {
+  readonly id: string;
+  readonly startsAt: Date;
+  readonly endsAt: Date | null;
+  readonly notes: string | null;
+  readonly plotBlock: { readonly name: string } | null;
+  readonly observer: { readonly displayName: string } | null;
+  readonly location: { readonly id: string; readonly name: string };
+  /** `false` = es de una microparcela de esta parcela, y se pinta con su nombre. */
+  readonly esDeEstaParcela: boolean;
+}
+
+/**
+ * Las floraciones que enseña la portada de una parcela — F1.
+ *
+ * **Las suyas y las de sus microparcelas, marcadas; nunca las de la madre ni las de una hermana.**
+ * ADR-196: lo de una selección se marca, no se mezcla. Por eso `soloDescendientes`, y por eso cada
+ * fila dice de qué ubicación es. (El aviso de polinizadores sí mira también hacia arriba —ver
+ * `floracionesDeLaParcela`—: allí la pregunta es física, «¿está en flor lo que voy a tratar?»; aquí
+ * es «¿qué se anotó en esta parcela?».)
+ *
+ * **Las abiertas arriba**, que son las que piden «Terminó»; dentro de cada grupo, la más reciente
+ * primero.
+ *
+ * Autoriza con `lot:view`, como la pantalla de manejo (`contextoDeManejo`).
+ */
+export async function floracionesDeLaPortada(
+  userAccountId: string,
+  locationId: string,
+): Promise<FloracionDeLaPortada[]> {
+  await requireLotAccess(userAccountId, "view", [{ locationId, classification: DEFAULT_NEW_RECORD_CLASSIFICATION }]);
+  const ubicaciones = await ubicacionesEmparentadas(locationId, prisma, { soloDescendientes: true });
+  const filas = await prisma.plotBloom.findMany({
+    where: { locationId: { in: ubicaciones } },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      notes: true,
+      plotBlock: { select: { name: true } },
+      observer: { select: { displayName: true } },
+      location: { select: { id: true, name: true } },
+    },
+    orderBy: [{ startsAt: "desc" }, { createdAt: "desc" }],
+  });
+  const conMarca = filas.map((f) => ({ ...f, esDeEstaParcela: f.location.id === locationId }));
+  return [...conMarca.filter((f) => f.endsAt === null), ...conMarca.filter((f) => f.endsAt !== null)];
 }

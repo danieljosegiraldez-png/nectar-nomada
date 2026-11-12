@@ -194,9 +194,12 @@ describe("el traslado de colmenas", () => {
 
     // Antes del traslado estaba en el ORIGEN, aunque su `locationId` diga destino hoy.
     expect(await apiarioDeColmenaEn(hiveId, ANTES_DEL_TRASLADO)).toBe(origenId);
-    // El día del traslado ya cuenta en el destino: el intervalo es semiabierto, así que
-    // nunca está en los dos.
-    expect(await apiarioDeColmenaEn(hiveId, DIA_DEL_TRASLADO)).toBe(destinoId);
+    // El día del traslado SIGUE EN EL ORIGEN, y cuenta en el destino desde el siguiente: regla
+    // de Daniel del 2026-10-08 (V-H2), en `lib/apiary/sitioDeLaCaja.ts`. Hasta entonces esta
+    // línea decía lo contrario —«el día del traslado ya cuenta en el destino», por el intervalo
+    // semiabierto—, que no salía de ningún ADR. Nunca está en los dos.
+    expect(await apiarioDeColmenaEn(hiveId, DIA_DEL_TRASLADO)).toBe(origenId);
+    expect(await apiarioDeColmenaEn(hiveId, new Date(DIA_DEL_TRASLADO.getTime() + 24 * 3600_000))).toBe(destinoId);
     // Control negativo del mecanismo: una fecha anterior a la primera colocación no consta,
     // y «no consta» no es «donde está hoy».
     expect(await apiarioDeColmenaEn(hiveId, new Date("2020-01-01T00:00:00Z"))).toBeNull();

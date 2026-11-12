@@ -117,6 +117,14 @@ describe("recordColonyEvent — feeding", () => {
     expect(event.feedingMaterial).toBe("sugar syrup 1:1");
     expect(event.treatmentBatchLabel).toBeNull();
   });
+
+  it("la unidad llega en la forma de la lista: «KG» se guarda «kg», y lo que no está, tal cual (ADR-200 §5)", async () => {
+    const kg = await recordColonyEvent(authorizedUserAccountId, { colonyId, eventType: "feeding", feedingQuantity: 3, feedingUnit: "KG" });
+    expect(kg.feedingUnit).toBe("kg");
+    // Control: lo que no es de la lista no se convierte, y esto pasa con y sin el arreglo.
+    const libras = await recordColonyEvent(authorizedUserAccountId, { colonyId, eventType: "feeding", feedingQuantity: 3, feedingUnit: "libras" });
+    expect(libras.feedingUnit).toBe("libras");
+  });
 });
 
 describe("recordColonyEvent — treatment", () => {

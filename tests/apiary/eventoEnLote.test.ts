@@ -143,6 +143,21 @@ describe("ADR-136 — el manejo en lote", () => {
     expect([...new Set(filas.map((f) => f.colonyId))].sort()).toEqual([...vivas].sort());
   });
 
+  it("la unidad del lote llega en la forma de la lista, la misma en cada colonia (ADR-200 §5)", async () => {
+    // El lote pasa por la misma regla que la colonia sola (`normalizarEventoDeColonia`): «LB» es «lb».
+    const r = await registrarEventoEnLote(userAccountId, {
+      colonyIds: vivas,
+      eventType: "feeding",
+      occurredAt: AHORA,
+      feedingQuantity: 3,
+      feedingUnit: "LB",
+      loteDeClienteId: `${RUN_ID}-unidad`,
+    });
+    const filas = await prisma.colonyEvent.findMany({ where: { id: { in: r.colonyEventIds } } });
+    expect(filas).toHaveLength(3);
+    expect([...new Set(filas.map((f) => f.feedingUnit))]).toEqual(["lb"]);
+  });
+
   it("deja un AuditEvent por fila, no uno por lote", async () => {
     const r = await registrarEventoEnLote(userAccountId, {
       colonyIds: vivas,

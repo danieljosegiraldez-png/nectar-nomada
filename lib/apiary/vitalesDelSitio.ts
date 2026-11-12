@@ -3,6 +3,7 @@ import { clasificarConsulta, diasHastaLaProximaConsulta } from "./vocabularioDeC
 import { pesoDeNivel, type Alerta, type MotivoDeAlerta } from "./motivoDeAlerta";
 import { HORAS_DE_JORNADA_VIEJA } from "../traceability/fieldSessions";
 import { compararCajasPresentes, type ComparacionDeCajas } from "./cajasPresentes";
+import { diaDelSitio, sitioEnElDia } from "./sitioDeLaCaja";
 
 /**
  * A9.8 — los vitales de cada sitio de apiario y el color de su borde.
@@ -106,7 +107,8 @@ export interface VitalesDeSitio {
   coloniasActivas: number;
   cajas: number;
   /**
-   * Lo que alguien CONTÓ frente a `cajas`, que es lo que el sistema tiene colocado (ADR-150).
+   * Lo que alguien CONTÓ frente a lo que el sistema tenía colocado **el día de esa visita** (ADR-150;
+   * V-8, 2026-10-10). Sin recuento, frente a `cajas`.
    *
    * **`cajas` no sobra ni se sustituye**: es uno de los dos lados de la comparación, y aquí
    * ninguno de los dos manda. Los llamadores que sólo quieren la cuenta del sistema siguen
@@ -207,7 +209,7 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
   const salida = new Map<string, VitalesDeSitio>();
   if (locationIds.length === 0) return salida;
 
-  const [sesiones, colmenas, alimentaciones, cosechas, consultas] = await Promise.all([
+  const [sesiones, colmenas, consultas, sitios] = await Promise.all([
     prisma.fieldSession.findMany({
       where: { locationId: { in: locationIds } },
       select: {
@@ -221,18 +223,16 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       },
       orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
     }),
+    // Las cajas que están aquí HOY y las que estuvieron alguna vez, con su historia: V-8 atribuye
+    // cada hecho al sitio donde estaba la caja ese día, no al de hoy.
     prisma.hive.findMany({
-      where: { locationId: { in: locationIds } },
-      select: { id: true, locationId: true, colonies: { select: { status: true, startedAt: true } } },
-    }),
-    prisma.colonyEvent.findMany({
-      where: { eventType: "feeding", coverageUntil: { not: null }, colony: { hive: { locationId: { in: locationIds } } } },
-      select: { occurredAt: true, coverageUntil: true, colony: { select: { hive: { select: { locationId: true } } } } },
-    }),
-    prisma.apiaryHarvestEvent.findMany({
-      where: { colony: { hive: { locationId: { in: locationIds } } } },
-      select: { occurredAt: true, extractedWeightKg: true, colony: { select: { hive: { select: { locationId: true } } } } },
-      orderBy: { occurredAt: "desc" },
+      where: { OR: [{ locationId: { in: locationIds } }, { placements: { some: { locationId: { in: locationIds } } } }] },
+      select: {
+        id: true,
+        locationId: true,
+        colonies: { select: { status: true, startedAt: true } },
+        placements: { select: { locationId: true, startedAt: true, endedAt: true } },
+      },
     }),
     // Anexo E §4 — una quinta consulta con `in`, no una por sitio: es el mismo reparto
     // que las cuatro de arriba, que se filtran en JS después.
@@ -241,13 +241,39 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
       select: { locationId: true, occurredAt: true, outcome: true, plannedApplicationAt: true },
       orderBy: { occurredAt: "desc" },
     }),
+    prisma.location.findMany({ where: { id: { in: locationIds } }, select: { id: true, timezone: true } }),
   ]);
+
+  const idsDeCajas = colmenas.map((h) => h.id);
+  const [alimentaciones, cosechas] = await Promise.all([
+    prisma.colonyEvent.findMany({
+      where: { eventType: "feeding", coverageUntil: { not: null }, colony: { hiveId: { in: idsDeCajas } } },
+      select: { occurredAt: true, coverageUntil: true, colony: { select: { hiveId: true } } },
+    }),
+    prisma.apiaryHarvestEvent.findMany({
+      where: { colony: { hiveId: { in: idsDeCajas } } },
+      select: { occurredAt: true, extractedWeightKg: true, colony: { select: { hiveId: true } } },
+      orderBy: { occurredAt: "desc" },
+    }),
+  ]);
+
+  // **V-8 (2026-10-10): cada hecho cuenta en el sitio donde estaba la caja ESE día**, con la regla
+  // de `sitioDeLaCaja.ts` (el día del traslado sigue en el origen) y el día medido en la zona del
+  // sitio. Hasta entonces se miraba `hive.locationId`, donde está HOY: una caja alimentada en A y
+  // trasladada después a B se llevaba la cobertura a B. Sin colocación ese día, donde apunta hoy,
+  // la misma regla que el pendiente de la visita (#685).
+  const cajaPorId = new Map(colmenas.map((h) => [h.id, h]));
+  const zonaDe = new Map(sitios.map((l) => [l.id, l.timezone]));
+  const estabaEn = (hiveId: string, instante: Date, locationId: string) => {
+    const h = cajaPorId.get(hiveId);
+    return h != null && (sitioEnElDia(h.placements, diaDelSitio(instante, zonaDe.get(locationId))) ?? h.locationId) === locationId;
+  };
 
   for (const locationId of locationIds) {
     const misSesiones = sesiones.filter((s) => s.locationId === locationId);
     const misColmenas = colmenas.filter((h) => h.locationId === locationId);
-    const misAlimentos = alimentaciones.filter((f) => f.colony.hive.locationId === locationId);
-    const miCosecha = cosechas.find((h) => h.colony.hive.locationId === locationId) ?? null;
+    const misAlimentos = alimentaciones.filter((f) => estabaEn(f.colony.hiveId, f.occurredAt, locationId));
+    const miCosecha = cosechas.find((h) => estabaEn(h.colony.hiveId, h.occurredAt, locationId)) ?? null;
 
     const ultimaVisita = misSesiones[0]?.startedAt ?? null;
 
@@ -294,10 +320,14 @@ export async function vitalesDeSitios(locationIds: string[], ahora = new Date())
     // El recuento declarado más reciente, con la MISMA regla que el de colonias: la sesión más
     // nueva que traiga uno. Una visita sin recuento no borra el de la anterior.
     const conCajas = misSesiones.filter((s) => s.hivesPresentCount != null);
-    // `misColmenas.length` es la cuenta del sistema, y es la buena: `trasladarColmenas`
-    // actualiza `Hive.locationId` y la colocación EN LA MISMA transacción, así que no pueden
-    // divergir. Medido el 2026-09-17: 29 colmenas, 0 sin colocación abierta, 0 divergentes.
-    const cajasComparadas = compararCajasPresentes(conCajas[0]?.hivesPresentCount ?? null, misColmenas.length);
+    // **Contra las cajas que había EL DÍA de esa visita** (V-8), no contra las de hoy: una visita
+    // que contó tres daba «no cuadran» en cuanto se trasladaban dos después. Sin recuento, la
+    // cuenta de hoy, que es la que se enseña al lado.
+    const conRecuento = conCajas[0] ?? null;
+    const cajasEseDia = conRecuento
+      ? colmenas.filter((h) => estabaEn(h.id, conRecuento.startedAt, locationId)).length
+      : misColmenas.length;
+    const cajasComparadas = compararCajasPresentes(conRecuento?.hivesPresentCount ?? null, cajasEseDia);
 
     const base: Omit<VitalesDeSitio, "alertas"> = {
       ultimaConsultaAVecinos,

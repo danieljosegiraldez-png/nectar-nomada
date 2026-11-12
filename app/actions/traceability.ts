@@ -1278,6 +1278,43 @@ export async function recordMaterialConsumptionEntryFormAction(
   return {};
 }
 
+/**
+ * **El gasto de una visita** —aserrín y hojas para el ahumador, un encendedor, una lija—, colgado de
+ * la jornada y no del sitio. El padre lo fija el servidor: no se lee del formulario, así que nadie
+ * puede colgar el gasto de otra cosa cambiando un campo oculto. Una cantidad sin unidad no se puede
+ * sumar con nada, así que se pide, igual que en la alimentación (ADR-200 §5).
+ */
+export async function anotarGastoDeVisitaFormAction(
+  _prevState: TraceabilityActionState,
+  formData: FormData,
+): Promise<TraceabilityActionState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Traceability");
+
+  const fieldSessionId = String(formData.get("fieldSessionId") ?? "");
+  try {
+    const quantity = emptyToNullNumber(formData.get("quantity"));
+    const unit = emptyToNull(formData.get("unit"));
+    if (quantity != null && !unit?.trim()) throw new MaterialConsumptionValidationError("unit_required_with_quantity");
+    await recordMaterialConsumptionEntry(user.userAccountId, {
+      claveDeEnvio: emptyToNull(formData.get("claveDeEnvio")),
+      parent: { kind: "fieldSession", fieldSessionId },
+      materialName: String(formData.get("materialName") ?? ""),
+      batchLabel: String(formData.get("batchLabel") ?? ""),
+      quantity,
+      unit,
+      notes: emptyToNull(formData.get("notes")),
+      provenanceClass: "direct_observation",
+    });
+  } catch (error) {
+    return { error: await friendlyError(t, error) };
+  }
+
+  revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return {};
+}
+
 /** Rename a recipe, or reword its description — ADR-102. Never its targets. */
 export async function updateRecipeAction(
   _prevState: TraceabilityActionState,

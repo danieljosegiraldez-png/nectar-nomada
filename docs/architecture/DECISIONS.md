@@ -12986,6 +12986,218 @@ salte el filtro —quien lista llama a `repartirPorCuenta(`, quien descarta a `d
 `tests/sync/cuentaDelBorrador.test.ts` fija las decisiones puras, los literales del protocolo y que la cuenta
 viaje dentro del payload.
 
+## ADR-200 — El módulo Apiario tras la revisión del 2026-10-08: lo que Daniel decidió
+
+**Fecha:** 2026-10-12 · **Decide:** Daniel, el 2026-10-11 y el 2026-10-12 · **Registro literal:**
+`docs/architecture/FUENTE_DECISIONES_DEL_DUENO_2026-10-APIARIO.md` · **Referencias:**
+`docs/dominio/meliponini-amenazas-2026-10-11.md`, `docs/dominio/meliponini-sistemas-de-caja-2026-10-11.md`
+
+**Contexto.** La revisión del Apiario del 2026-10-08, hecha por Claude y Codex sobre el PR #674, dejó dos
+cosas. Por un lado, defectos con arreglo claro, que van en #706, #707, #709, #710, #712 y #713. Por otro, un
+resto que era diseño y necesitaba a Daniel: V-9, E-1 a E-3, C-1 a C-4, P-1 a P-3, R-3, y las hipótesis
+V-H1, V-H3 y V-H4. Antes de preguntarle, un Workflow de diez agentes leyó, tema por tema y contra
+`origin/main`, qué estaba ya decidido y con qué cita, para no volver a preguntarlo. Dos investigaciones
+dieron las opciones de E-2c y E-1b. Después Daniel contestó de una en una. Este ADR recoge lo que decidió;
+las preguntas y sus letras, literales, están en el registro. Las líneas citadas aquí se midieron sobre
+`origin/main` c59319a0.
+
+**Lo que ya estaba decidido y no se preguntó**, porque bastaba citarlo:
+
+- El meliponario es un tipo de sitio, no un módulo ni una especie: ADR-145 (`DECISIONS.md:10323`).
+- Todo vocabulario de manejo va en lista cerrada con «otro» que dice cuál. Lo dijo Daniel el 2026-09-16
+  (`FUENTE_DECISIONES_DEL_DUENO_2026-09.md:139`) y lo aplican ADR-148 (`:10487`) y ADR-186 (`:12260`).
+- Los catálogos de referencia son tablas con campos con tipo: ADR-172 (`:11558`).
+- El taxón es configurable y el estado de manejo va aparte: Q30, en
+  `docs/architecture/fuentes/paquete-q1-q49/build-packet/02-DECISION-REGISTER-Q01-Q49.md:187`.
+- La lista base de unidades es L, kg, g y ml (`protocolos/apiario-campo-v2.json:516-519`).
+- Los materiales son «Mis cinco mas los jarabes» (ADR-153, `DECISIONS.md:10819`).
+- El viático es una cifra por visita, en USD (`apiario-campo-v2.json:100`).
+- El alcance de costos de la fase 1 es Q23 (`02-DECISION-REGISTER…:145`).
+- El compromiso enlaza las colmenas con el cultivo y la floración: Q29 (`:181`).
+- No se promete rendimiento por contar colmenas: Q31
+  (`03-RESEARCH-AND-PROTOCOL-LIBRARY.md:46`).
+- Los seguimientos de una visita son trabajo (Q27, `:169`), con los estados de Q46 (`:283`). A la
+  vez, ADR-107 no extiende `Task` (`DECISIONS.md:7749`).
+- Ante lo que no se puede deshacer, se avisa y se deja registrar: ADR-115 (`:8328`).
+- **P-F, para Varroa y Meliponini, la cerró Daniel el 2026-09-27** (commit e9b1475d, en `main`). La fila
+  `SESSION_STATE.md:29` que la da por abierta está vieja, y corregirla es del turno.
+
+### Decisión
+
+Entre paréntesis, la pregunta del registro de la que sale cada punto.
+
+**§1 · La visita y su informe**
+
+- El informe congela, además de lo que ya congela:
+  - los propósitos de la visita;
+  - las colonias contadas y su cambio desde la visita anterior;
+  - el clima y las cajas contadas;
+  - la próxima visita, con su fecha y sus propósitos.
+
+  Lo propone el Anexo C §3.1 (`docs/implementation/48_A9_ANEXO_C_TABLERO_Y_REPORTES.md:120-127`). Ese
+  anexo es entrada de Daniel, no una especificación aprobada (`:3-4`). Se le presentó como ya decidido y no
+  lo objetó (registro, V-9a). **El «alcance» de la próxima visita son sus propósitos**, de la misma lista y
+  opcionales al cerrar (V-9a).
+- El informe del cliente **dice qué cajas quedaron sin atender**, dentro del resumen (V-9b). Es la regla «un
+  dato que falta se nombra» del Anexo C (`:133`).
+- Un registro anotado sin señal **se une a su visita hasta que se emite el informe o vencen las 48 h de
+  corrección**, aunque la visita esté completada (31). Lo que llega más tarde queda suelto y avisado. Ningún
+  registro con hora anterior al inicio de una visita se pega a ella. Es la única excepción a «una jornada con
+  salida no recibe registros».
+- Al cerrar con registros sin enviar en el aparato, la pantalla **avisa cuántos hay, ofrece enviarlos y deja
+  cerrar** (32), la postura de ADR-115.
+- La alerta crítica de visita vencida **baja a aviso en cuanto una visita posterior tiene la salida marcada**
+  (33). El aviso sale desde la salida y no a las 24 h, y dice «sin completar».
+- Al completar, el formulario **pide la próxima visita, con la salida explícita «sin próxima visita
+  prevista»** (34). El servicio no la exige, como en ADR-118. Así se cumple el protocolo, que la marca
+  obligatoria (`apiario-campo-v2.json:109-113`).
+- Si un sitio no tiene próxima fecha, el tablero **lo dice en la tarjeta, sin alerta**: «sin próxima visita
+  declarada», o «prevista» si fue explícito (35).
+
+**§2 · Meliponario: sanidad**
+
+- El conteo de varroa y el tratamiento contra varroa **se rechazan en un meliponario**, en el servicio y en la
+  cola sin conexión, y la ficha no ofrece esa sección (1).
+- Los cuadros, en cambio, **basta con no preguntarlos**; el servicio y la cola los siguen aceptando (2).
+- Los objetivos al intervenir una colonia sin aguijón son **fóridos, hormigas, abeja ladrona
+  (*Lestrimelitta* sp.) y «otro (di cuál)»** (3). Son las tres amenazas con evidencia media y una intervención
+  práctica; el resto cabe en «otro».
+- En un meliponario el registro **se llama «Intervención»** (4). Sus vías son de manejo: barrera en el
+  soporte, sellado, trampa, retiro o limpieza, y traslado. El producto es opcional. Cambiar las preguntas del
+  protocolo pide versión nueva (ADR-165).
+- Si se instala o traslada una colonia de otra especie a un meliponario que ya tiene una, el sistema
+  **avisa y deja pasar** (9).
+
+**§3 · Especies**
+
+- La tabla de especies **se crea ya**, con «sin identificar» como valor válido que no bloquea una
+  inspección (5).
+- **Nace mínima, con dos filas: *Apis mellifera* y «sin identificar»** (6). Las especies sin aguijón entran
+  cuando Daniel diga cuáles tiene. Ningún nombre del paquete ni de la semilla pasa a datos.
+- «Africanizada» es **una etiqueta aparte y opcional**; la especie sigue siendo *Apis mellifera* (8).
+- La especie de una colonia se guarda como **identificaciones fechadas** (16). Cada una lleva:
+  - el taxón, al rango que permita la evidencia;
+  - el nombre tal como se escribió;
+  - la base (foto, ejemplar, nombre común o especialista);
+  - la confianza;
+  - quién la hizo.
+
+  La vigente es la última, y una corrección no borra la anterior.
+
+**§4 · Cajas y trampas**
+
+- Para *Apis*, el sistema es **Langstroth con marcos** (7).
+- Para sin aguijón, la lista queda en tres valores, más el modelo:
+  - **«Vertical de módulos»**, con el modelo (INPA, Portugal-Araújo/Embrapa, FO-INTA o a medida) en un campo
+    aparte y opcional (11);
+  - **«Nido trampa»** (12);
+  - **«otro (di cuál)»**.
+
+  Los demás candidatos del documento de referencia (AF, PNN, UTOB, horizontales, tronco, «tecnificada sin
+  modelo») **no se decidieron**: entran cuando haya colonias que los usen.
+- **Las trampas se registran ya** (14):
+  - cada una es una caja de sistema nido trampa, en su sitio y con la fecha en que se puso;
+  - cada vez que se mira es una revisión;
+  - al ocuparse nace la colonia con origen «capturada» (`ColonyOriginType`, `prisma/schema.prisma:8295`),
+    trazada a su trampa.
+- **La revisión de una trampa** anota la fecha y el estado (**vacía**, **exploradoras entrando**,
+  **ocupada** o **no se pudo revisar**), con nota y foto opcionales (15). El cuarto estado lo añadió Claude
+  después de la respuesta. Viene de la regla de la skill de apicultura, que pide un «no evaluado» en todo
+  formulario de campo, y de la regla del Anexo C. Daniel no lo objetó: está en el registro, entrada 16.
+- **El número de una caja que salió de un apiario queda reservado mientras la caja exista** (36). Hoy la
+  unicidad es `@@unique([locationId, identifier])` (`schema.prisma:8128`) y no lo protege. Al mismo tiempo
+  se construye **«retirar caja»**, que hoy no existe; sin eso, los números quedarían presos para siempre.
+
+**§5 · Alimentación y costos**
+
+- **La libra entra** (17). La lista queda en L, kg, g, ml, lb y «Otro (cuál)». Se guarda lo tecleado, y
+  libras y kilos se suman al leer (0,45359237 kg por libra, factor exacto).
+- La «Cantidad» es **lo medido del material elegido, en su unidad** (18): azúcar pesado con su peso, jarabe
+  hecho con su volumen. El azúcar que lleva un jarabe sólo se calcula el día que Daniel diga si el 1:1 es en
+  peso o en volumen.
+- **El azúcar baja solo** (19): el saldo del sitio es lo comprado menos lo dado de comer. Para eso:
+  - el azúcar se da de alta como material, enlazado a «azúcar blanca» y «azúcar morena»;
+  - se compra en kg o lb, porque el quintal no tiene definición oficial.
+- Si un viaje cubre dos sitios, **el viático se anota una vez** (20). La otra visita queda marcada
+  «compartido con aquella», con un enlace explícito. Repartirlo entre sitios espera a la fase 2 (Q23).
+- Los viáticos salen en el informe del cliente **sólo si se marca al emitir cada informe** (21). La casilla
+  viene apagada, queda congelada en el informe y auditada. Es el interruptor que la «Decisión 4» de ADR-142
+  (`DECISIONS.md:10230`) nombraba y nunca existió.
+- De los huecos de costos, **se diseña primero el costo de sostener un sitio** (22).
+
+**§6 · Polinización**
+
+- En Kiva, el 4–6 colmenas/ha **es la meta de trabajo que propuso Néctar, no algo pactado** (23). Sale del
+  informe del 2026-06-29 («Reporte Tecnico Apiario Toabre v2», en el Drive), calculado por analogía con
+  cultivos autoincompatibles y sin ensayo en Robusta. La ficha cambia tres cosas:
+  - dice «meta de trabajo propuesta, no pactada»;
+  - las hectáreas pasan a ser «área de los lotes»;
+  - «faltan N» deja de leerse como incumplimiento.
+- La alerta de floración **avisa con esa meta, rotulada «meta de trabajo, no pactada»**, como aviso y nunca
+  como crítico (24).
+- Entra al tablero **al final de la lista**, como décimo motivo, sin mover los nueve de hoy
+  (`lib/apiary/motivoDeAlerta.ts:24`) (25).
+- **En Toabré hay dos apiarios, cada uno con su lote** (26): Finca 1 con el Lote 1 (10 ha) y Finca 2 con el
+  Lote 2 (7 ha). Son dos compromisos y no cambia el modelo.
+
+- **Actualización del 2026-10-16, decisiones de Daniel** (registro, entradas 12a y 12b), las dos que esperaba
+  la pantalla para crear un compromiso:
+  - **El cliente del compromiso de Kiva es la organización Kiva Estate.** Es quien recibe el servicio de
+    polinización, aunque no haya contrato firmado. Sin migración: `clientOrganizationId` sigue obligatorio.
+  - **La procedencia la fija el servicio a partir del dato** (ADR-038): `recommendation` cuando el
+    compromiso no trae referencia de contrato, como Kiva hoy, y `original_record` cuando la trae. Así Kiva
+    queda como la meta que es, y un pacto futuro quedará como pacto sin tocar nada.
+
+**§7 · Recomendaciones**
+
+- Cada recomendación es **una línea de seguimiento propia, ligada a la visita** (27). Lleva:
+  - su sitio o colonia y el texto;
+  - el estado, con el vocabulario de Q46;
+  - una fecha o condición opcional;
+  - quién responde, que puede ser alguien del cliente sin cuenta.
+
+  No usa `Task`, así que no reabre ADR-107. El texto de cierre del protocolo
+  (`apiario-campo-v2.json:126`) sigue como está.
+- La decisión del cliente **la anota el técnico** (28); el enlace del cliente sigue siendo de sólo lectura.
+- Se cierra **en dos pasos** (29): «hecha», con una nota, y «verificada», con un registro de una visita
+  posterior. También se puede cerrar sin cumplir: «ya no aplica», «reemplazada» o «sin resolver». Así lo
+  distingue el paquete (`01-TECHNICAL-BUILD-PACKET.md:322`).
+- Al abrir una visita **se muestran las recomendaciones abiertas del sitio, sin exigir nada** para
+  completarla (30).
+
+**§8 · Aparcado, y lo que no es de una sesión**
+
+- **Daniel no tiene meliponas todavía; sólo ha puesto nidos trampa** (2026-10-12, registro, entrada 10). Las
+  «cinco especies… de Parita» de septiembre son un plan. Las decisiones de §2 a §4 sobre sin aguijón son
+  diseño para cuando lleguen. Tres cosas esperan a que haya colonias:
+  - **E-3**, qué pregunta la inspección de una melipona;
+  - **P-3**, contar la polinización por grupo de abejas;
+  - las **medidas de la caja** (13).
+- **Pasar Toabré a dos apiarios en producción lo hace Daniel**: hoy hay uno solo,
+  `NN-04-TOABRE-KIVAEST`.
+- **«*Melipona panamensis*»**, del paquete y de la semilla, no figura en el catálogo Moure, que registra
+  *Melipona panamica* Cockerell. Lo midieron dos barridos de la investigación del 2026-10-11; su
+  verificación no lo repasó. `docs/dominio/meliponini-especies.md:16-17` ya lo sospechaba. Ese archivo no se
+  toca: lo protege `fuentes-verbatim.test.ts`. La corrección entra cuando entren las especies.
+
+### Consecuencias
+
+Nada de §1 a §7 está construido. Cada tema va en su propio PR desde `origin/main`, en este orden:
+
+- **Primero, los defectos que no necesitaban decisión**, que se arreglan sin preguntar:
+  - la unidad de alimentación, cerrada y sin «kg» precargado (hoy es `String?`, `schema.prisma:9043`);
+  - el lote rotulado «por colonia» (`lib/apiary/colonyEvents.ts:475` copia la cifra a cada colonia);
+  - la pantalla del gasto de la visita;
+  - la del compromiso de polinización (`scripts/apiario-toabre.ts:28` no lo crea, y no hay puerta);
+  - la de la valoración del técnico;
+  - «Marcos negros» sólo en cajas con cuadros.
+- **V-9 espera a #707, #709, #710 y #712**, que tocan el mismo congelado.
+- **La 31 relaja una regla escrita.** Las reglas que todo escritor de `FieldEvent` cumple sobre su jornada
+  están en `lib/traceability/fieldSessions.ts:441`, y hoy rechazan lo que llega tras la salida (`:475`).
+  Su PR cambia eso sólo hasta el informe o las 48 h, con su prueba de los dos lados.
+- **Los cambios de §2 y §4 sobre sin aguijón pueden esperar**: no hay colonias que los ejerzan.
+- **Las trampas (14 y 15) sí tienen uso hoy**, porque Daniel ya las puso.
+
 ## ADR-201 — La abamectina de la bodega: están las dos
 
 **Fecha:** 2026-10-12 · **Cierra:** P-J de `scripts/open-decisions.sh`

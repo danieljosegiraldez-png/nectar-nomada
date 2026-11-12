@@ -9169,6 +9169,12 @@ model ColonyEvent {
 /// 68-102 colonias contra las 3 que hay. Sin esta tabla esa conversación con el
 /// cliente es una impresión; con ella es una resta.
 ///
+/// **Corregido el 2026-10-14 (ADR-200 §6, decisión de Daniel):** en Kiva esos 4-6/ha
+/// son la meta de trabajo que propuso Néctar en el informe del 2026-06-29, no algo
+/// pactado, y las 17 ha son el área de los dos lotes. La tabla sirve igual para un
+/// pacto real; lo que cambió es cómo lo rotula la ficha («meta de trabajo propuesta,
+/// no pactada»), y que «faltan N» no se lee como incumplimiento.
+///
 /// **Las hectáreas comprometidas NO son `Location.areaHectares`.** Esa es el
 /// área del predio; ésta es lo que se pactó polinizar, y confundirlas produce
 /// un déficit falso. Por eso es columna propia y no un derivado.
