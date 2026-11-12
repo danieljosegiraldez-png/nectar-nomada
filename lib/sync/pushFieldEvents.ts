@@ -2,6 +2,8 @@ import { prisma } from "../db";
 import { Prisma } from "../../generated/prisma/client";
 import { huellaDeCuenta } from "../auth/huellaDeCuenta";
 import { duenoDelBorrador, RAZON_BORRADOR_AJENO } from "./cuentaDelBorrador";
+import { UUID } from "../validation/uuid";
+import { PersonaNoPermitidaError } from "../people/quienLoHizo";
 import {
   recordFieldEvent,
   FieldSessionValidationError,
@@ -922,6 +924,9 @@ export async function pushFieldEvents(
   deviceId: string,
   mutations: PushMutation[],
 ): Promise<PushResult[]> {
+  // Un id que no es UUID es un aparato que no existe, no un `P2007` que la ruta
+  // devolvería como 500 (2026-10-14).
+  if (!UUID.test(deviceId)) throw new DeviceError("device_not_found");
   const device = await prisma.device.findUnique({
     where: { id: deviceId },
     select: { id: true, revokedAt: true, createdBy: true },
@@ -939,100 +944,110 @@ export async function pushFieldEvents(
   // Importa aunque hoy ningún evento dependa de otro: un rechazo se lee junto
   // a lo que el operador recuerda haber hecho, y reordenarlos lo haría ilegible.
   for (const m of mutations) {
-    // ADR-199 — antes que nada, de quién es. Un borrador de otra cuenta no se procesa con la sesión de
-    // quien envía: ni fila ni AuditEvent. Va el primero a propósito, antes de mirar el acceso, para que
-    // un borrador ajeno se RETENGA aunque quien envía no tenga permiso en su sitio: un rechazo por
-    // acceso lo marcaría como error en el teléfono, y la pantalla ofrecería descartarlo.
-    if (
-      duenoDelBorrador({
-        cuentaDelBorrador: m.cuentaDelBorrador,
-        huellaDeQuienEnvia,
-        quienEnvia: userAccountId,
-        creadorDelAparato: device.createdBy,
-      }) === "ajeno"
-    ) {
-      results.push({
-        clientDraftId: m.clientDraftId,
-        status: "rejected",
-        reason: RAZON_BORRADOR_AJENO,
-        // Sólo para uno sin cuenta: a quién se le atribuye por la regla del aparato, para que el
-        // teléfono lo apunte y deje de reenviarlo a nombre de quien no es.
-        ...(m.cuentaDelBorrador == null && device.createdBy ? { cuentaDelBorrador: huellaDeCuenta(device.createdBy) } : {}),
-      });
-      continue;
-    }
-    // A9.5 — una mutación de apiario se delega a su servicio, que ya trae la
-    // compuerta, la idempotencia y el audit. Lo único que se hace aquí es
-    // distinguir `applied` de `duplicate`, que es lo que el protocolo promete
-    // informar y el servicio no dice.
-    if (m.kind === "inspection" || m.kind === "colony_event") {
-      const resultado = await aplicarMutacionDeApiario(userAccountId, m);
-      results.push(resultado);
-      continue;
-    }
-
-    if (m.kind === "colony_end") {
-      results.push(await aplicarFinDeColonia(userAccountId, m));
-      continue;
-    }
-
-    if (m.kind === "varroa_count") {
-      results.push(await aplicarConteoDeVarroa(userAccountId, m));
-      continue;
-    }
-
-    if (m.kind === "soil_sample" || m.kind === "foliar_sample" || m.kind === "soil_profile" || m.kind === "planting_cohort") {
-      results.push(await aplicarCapturaDeParcela(userAccountId, m));
-      continue;
-    }
-
-    if (m.kind === "trap_check") {
-      results.push(await aplicarRevisionDeTrampa(userAccountId, m));
-      continue;
-    }
-
-    // La comprobación previa es lo que distingue `applied` de `duplicate`.
-    // `recordFieldEvent` también la hace —tiene que ser seguro por su cuenta,
-    // porque el formulario web lo llama directo— pero devuelve la fila sin
-    // decir si la acaba de crear, y esa diferencia es justo lo que el
-    // protocolo promete informar.
-    const existing = await prisma.fieldEvent.findUnique({
-      where: { clientDraftId: m.clientDraftId },
-      select: { id: true },
-    });
-    if (existing) {
-      results.push({ clientDraftId: m.clientDraftId, status: "duplicate", id: existing.id });
-      continue;
-    }
-
     try {
-      const event = await recordFieldEvent(userAccountId, {
-        fieldSessionId: m.fieldSessionId,
-        eventKindValueId: m.eventKindValueId,
-        occurredAt: m.occurredAt,
-        position: m.position,
-        operatorPersonId: m.operatorPersonId,
-        notes: m.notes,
-        measurementId: m.measurementId,
-        quantityEventId: m.quantityEventId,
-        specimenObservationId: m.specimenObservationId,
-        assetId: m.assetId,
-        harvestEventId: m.harvestEventId,
-        lotTransformationId: m.lotTransformationId,
-        // Fijo, nunca elegible por el operador — misma disciplina que
-        // `recordFieldEventFormAction` en la web y que toda la base de código
-        // para `provenanceClass` (T12.6): quien está en el bloque lo vio.
-        provenanceClass: "direct_observation",
-        capture: { recordedAt: m.recordedAt ?? null, captureDeviceId: deviceId },
-        clientDraftId: m.clientDraftId,
-      });
-      results.push({ clientDraftId: m.clientDraftId, status: "applied", id: event.id });
-    } catch (error) {
-      if (error instanceof FieldSessionValidationError || error instanceof LocationAccessError) {
-        results.push({ clientDraftId: m.clientDraftId, status: "rejected", reason: error.message });
+      // ADR-199 — antes que nada, de quién es. Un borrador de otra cuenta no se procesa con la sesión de
+      // quien envía: ni fila ni AuditEvent. Va el primero a propósito, antes de mirar el acceso, para que
+      // un borrador ajeno se RETENGA aunque quien envía no tenga permiso en su sitio: un rechazo por
+      // acceso lo marcaría como error en el teléfono, y la pantalla ofrecería descartarlo.
+      if (
+        duenoDelBorrador({
+          cuentaDelBorrador: m.cuentaDelBorrador,
+          huellaDeQuienEnvia,
+          quienEnvia: userAccountId,
+          creadorDelAparato: device.createdBy,
+        }) === "ajeno"
+      ) {
+        results.push({
+          clientDraftId: m.clientDraftId,
+          status: "rejected",
+          reason: RAZON_BORRADOR_AJENO,
+          // Sólo para uno sin cuenta: a quién se le atribuye por la regla del aparato, para que el
+          // teléfono lo apunte y deje de reenviarlo a nombre de quien no es.
+          ...(m.cuentaDelBorrador == null && device.createdBy ? { cuentaDelBorrador: huellaDeCuenta(device.createdBy) } : {}),
+        });
         continue;
       }
-      throw error;
+      // A9.5 — una mutación de apiario se delega a su servicio, que ya trae la
+      // compuerta, la idempotencia y el audit. Lo único que se hace aquí es
+      // distinguir `applied` de `duplicate`, que es lo que el protocolo promete
+      // informar y el servicio no dice.
+      if (m.kind === "inspection" || m.kind === "colony_event") {
+        const resultado = await aplicarMutacionDeApiario(userAccountId, m);
+        results.push(resultado);
+        continue;
+      }
+
+      if (m.kind === "colony_end") {
+        results.push(await aplicarFinDeColonia(userAccountId, m));
+        continue;
+      }
+
+      if (m.kind === "varroa_count") {
+        results.push(await aplicarConteoDeVarroa(userAccountId, m));
+        continue;
+      }
+
+      if (m.kind === "soil_sample" || m.kind === "foliar_sample" || m.kind === "soil_profile" || m.kind === "planting_cohort") {
+        results.push(await aplicarCapturaDeParcela(userAccountId, m));
+        continue;
+      }
+
+      if (m.kind === "trap_check") {
+        results.push(await aplicarRevisionDeTrampa(userAccountId, m));
+        continue;
+      }
+
+      // La comprobación previa es lo que distingue `applied` de `duplicate`.
+      // `recordFieldEvent` también la hace —tiene que ser seguro por su cuenta,
+      // porque el formulario web lo llama directo— pero devuelve la fila sin
+      // decir si la acaba de crear, y esa diferencia es justo lo que el
+      // protocolo promete informar.
+      const existing = await prisma.fieldEvent.findUnique({
+        where: { clientDraftId: m.clientDraftId },
+        select: { id: true },
+      });
+      if (existing) {
+        results.push({ clientDraftId: m.clientDraftId, status: "duplicate", id: existing.id });
+        continue;
+      }
+
+      try {
+        const event = await recordFieldEvent(userAccountId, {
+          fieldSessionId: m.fieldSessionId,
+          eventKindValueId: m.eventKindValueId,
+          occurredAt: m.occurredAt,
+          position: m.position,
+          operatorPersonId: m.operatorPersonId,
+          notes: m.notes,
+          measurementId: m.measurementId,
+          quantityEventId: m.quantityEventId,
+          specimenObservationId: m.specimenObservationId,
+          assetId: m.assetId,
+          harvestEventId: m.harvestEventId,
+          lotTransformationId: m.lotTransformationId,
+          // Fijo, nunca elegible por el operador — misma disciplina que
+          // `recordFieldEventFormAction` en la web y que toda la base de código
+          // para `provenanceClass` (T12.6): quien está en el bloque lo vio.
+          provenanceClass: "direct_observation",
+          capture: { recordedAt: m.recordedAt ?? null, captureDeviceId: deviceId },
+          clientDraftId: m.clientDraftId,
+        });
+        results.push({ clientDraftId: m.clientDraftId, status: "applied", id: event.id });
+      } catch (error) {
+        if (error instanceof FieldSessionValidationError || error instanceof LocationAccessError) {
+          results.push({ clientDraftId: m.clientDraftId, status: "rejected", reason: error.message });
+          continue;
+        }
+        throw error;
+      }
+    } catch (error) {
+      // Un operador que no es de la finca ni del equipo lo rechaza el servicio de
+      // cada clase —evento, inspección, evento de colonia, varroa, muestra— con
+      // `PersonaNoPermitidaError`, y ninguno de sus `catch` la conocía: se escapaba
+      // y el lote entero salía con 500, que la cola lee como «no llegué» y reenvía
+      // sin fin. Es un no de ESA mutación (2026-10-14).
+      if (!(error instanceof PersonaNoPermitidaError)) throw error;
+      results.push({ clientDraftId: m.clientDraftId, status: "rejected", reason: "persona_no_permitida" });
     }
   }
 

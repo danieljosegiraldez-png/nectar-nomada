@@ -7,6 +7,7 @@ import { FieldSessionValidationError } from "../traceability/fieldSessions";
 import { recordAuditEvent } from "../audit";
 import { huellaDeCuenta } from "../auth/huellaDeCuenta";
 import { BorradorAjenoError, duenoDelBorrador } from "./cuentaDelBorrador";
+import { UUID } from "../validation/uuid";
 
 /**
  * P4 §7 — la cola de medios, y la decisión de modelo que la hace posible.
@@ -51,6 +52,9 @@ function tipoDeEvento(mimeType: string): "foto" | "video" | "nota_de_voz" {
 }
 
 async function sesionAccesible(userAccountId: string, fieldSessionId: string) {
+  // Los ids del cuerpo se comprueban antes de consultar: uno que no es UUID es
+  // algo que no existe, no un `P2007` que la ruta devolvería como 500 (2026-10-14).
+  if (!UUID.test(fieldSessionId)) throw new FieldSessionValidationError("session_not_found");
   const s = await prisma.fieldSession.findUnique({
     where: { id: fieldSessionId },
     select: { id: true, locationId: true, operatorPersonId: true },
@@ -130,6 +134,7 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
   // en vez de reventar contra la clave foránea como un 500.
   let creadorDelAparato: string | null = null;
   if (input.deviceId != null) {
+    if (!UUID.test(input.deviceId)) throw new FieldMediaError("device_not_found");
     const aparato = await prisma.device.findUnique({
       where: { id: input.deviceId }, select: { revokedAt: true, createdBy: true },
     });
@@ -185,6 +190,7 @@ export async function finalizeFieldMedia(userAccountId: string, input: FinalizeF
   // NO es un control de permisos: `operatorPersonId` es atribución, no
   // autoridad, y el operador suele ser una Persona sin cuenta.
   if (input.operatorPersonId) {
+    if (!UUID.test(input.operatorPersonId)) throw new FieldMediaError("operator_not_found");
     const persona = await prisma.person.findUnique({
       where: { id: input.operatorPersonId }, select: { id: true },
     });
