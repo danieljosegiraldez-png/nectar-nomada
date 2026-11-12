@@ -113,7 +113,11 @@ describe("Anexo E §2 — el orden de la lista de apiarios", () => {
     // puso AL FINAL a proposito: es la unica posicion que no reordena ninguno de los ocho que
     // el dueno fijo el 2026-09-14. **Donde debe ir de verdad es decision suya**, y hasta que la
     // tome esta linea deja dicho que se anadio sin reordenar nada.
-    expect(MOTIVOS_DE_ALERTA.length).toBe(9);
-    expect(MOTIVOS_DE_ALERTA[MOTIVOS_DE_ALERTA.length - 1]).toBe("cajas_no_cuadran");
+    //
+    // DIEZ desde el 2026-10-19 (paso 10 del plan del Apiario, ADR-200): el aviso de floración, al
+    // final por la misma razón. Los nueve de antes siguen en su sitio, y esta línea lo dice.
+    expect(MOTIVOS_DE_ALERTA.length).toBe(10);
+    expect(MOTIVOS_DE_ALERTA[8]).toBe("cajas_no_cuadran");
+    expect(MOTIVOS_DE_ALERTA[MOTIVOS_DE_ALERTA.length - 1]).toBe("floracion_con_meta_incompleta");
   });
 });

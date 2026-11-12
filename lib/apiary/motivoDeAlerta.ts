@@ -35,6 +35,10 @@ export const MOTIVOS_DE_ALERTA = [
   // decision suya --este archivo dice que el orden «se cambia con el dueno delante y no al
   // pasar»-- y queda señalado en el ADR como pendiente suyo.
   "cajas_no_cuadran",
+  // AÑADIDO EL 2026-10-19 (paso 10 del plan del Apiario, ADR-200), y AL FINAL por la misma razón
+  // que el anterior: no reordena nada de lo que fijó el dueño. Es el aviso propio del Anexo E §9
+  // —«que se acerque la floración con la meta incompleta»— y la meta es de trabajo, no pactada.
+  "floracion_con_meta_incompleta",
 ] as const;
 
 export type MotivoDeAlerta = (typeof MOTIVOS_DE_ALERTA)[number];

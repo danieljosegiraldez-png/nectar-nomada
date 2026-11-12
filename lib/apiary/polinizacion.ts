@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { recordAuditEvent } from "../audit";
 import { requireApiaryAccess } from "./hives";
 import { vitalesDeSitios } from "./vitalesDelSitio";
+import { coloniasDelCociente } from "./coloniasDelCociente";
 import type { DataQuality, ProvenanceClass } from "../../generated/prisma/client";
 
 /**
@@ -203,7 +204,7 @@ export async function densidadDePolinizacion(locationId: string, ahora = new Dat
   // El declarado manda cuando existe: D6 dice que el del sistema «es el conteo
   // del sistema, no el de la visita». Pero el otro no se tira — se devuelve al
   // lado, para que la divergencia se vea en vez de desaparecer.
-  const colonias = coloniasDeclaradas ?? coloniasDelSistema;
+  const colonias = coloniasDelCociente(coloniasDeclaradas, coloniasDelSistema);
 
   return compromisos.map((c) => {
     const hectareas = Number(c.committedHectares);
