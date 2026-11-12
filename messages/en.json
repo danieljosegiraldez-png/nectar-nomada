@@ -2303,6 +2303,7 @@
     "reportAssessment": "Technician assessment",
     "reportAssessmentForClient": "Technician's interpretation",
     "reportNotRecorded": "Not recorded",
+    "reportCantidadSinUnidad": "{cantidad} (no unit)",
     "inspectionHeading": "Inspection",
     "inspectionNothingUnusualButton": "Nothing unusual",
     "inspectionRecordDetailsButton": "Record details",

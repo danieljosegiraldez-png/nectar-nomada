@@ -40,6 +40,6 @@ describe("la varroa en el informe", () => {
   it("y la alimentación sigue pintándose como antes", async () => {
     // Control: sin esto, un componente que devolviera vacío pasaría la de arriba.
     const h = await html({ cuando: "2026-05-10T14:00:00Z", clase: "observacion", sujeto: "evento_de_colonia", alimentacion: { tipo: null, material: "jarabe 1:1", cantidad: "2", unidad: "L" } });
-    expect(h).toContain(fila("feedingQuantityLabel", "2"));
+    expect(h).toContain(fila("feedingQuantityLabel", "2 L"));
   });
 });
