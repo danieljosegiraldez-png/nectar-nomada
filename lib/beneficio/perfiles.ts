@@ -173,8 +173,6 @@ export const PERFILES: Readonly<Record<ClaveDePerfil, ProtocolProfile>> = {
  */
 export const PH_PHYSICAL_MIN = 2.5;
 export const PH_PHYSICAL_MAX = 8.0;
-/** El mucílago fresco no supera pH ~6,0: por encima se sospecha del DATO, no del lote. */
-export const PH_DILUTION_SUSPECT = 6.5;
 export const PH_INITIAL_PHASE_FLOOR = 5.2;
 /** pH/h. Por debajo de esto la curva se considera plana. */
 export const PLATEAU_EPSILON = 0.01;
