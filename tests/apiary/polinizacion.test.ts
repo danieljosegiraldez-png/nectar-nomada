@@ -479,4 +479,57 @@ describe("A9.9 — el compromiso y el cociente", () => {
       });
     });
   });
+
+  it("LA PROCEDENCIA SALE DEL DATO: sin contrato es una recomendación, con contrato un registro original (decisión 12b)", async () => {
+    // ADR-200 §6: la meta de Kiva no está pactada, y hasta esta decisión el servicio la guardaba como
+    // `original_record`, que afirma un pacto. Se lee de la FILA, no de lo que devuelve el servicio.
+    // Empiezan en 2031 para no entrar en ninguna lectura de las pruebas de arriba.
+    const base = {
+      locationId,
+      clientOrganizationId: clienteId,
+      committedHectares: 1,
+      targetHivesPerHectareMin: 4,
+      targetHivesPerHectareMax: 6,
+      startsAt: new Date("2031-01-01T00:00:00Z"),
+    };
+    const meta = await crearCompromisoDePolinizacion(userAccountId, base);
+    const pacto = await crearCompromisoDePolinizacion(userAccountId, { ...base, contractReference: "  Contrato 7  " });
+    const enBlanco = await crearCompromisoDePolinizacion(userAccountId, { ...base, contractReference: "   " });
+    try {
+      const fila = async (id: string) =>
+        prisma.pollinationCommitment.findUniqueOrThrow({ where: { id }, select: { provenanceClass: true, contractReference: true } });
+      expect(await fila(meta.id)).toEqual({ provenanceClass: "recommendation", contractReference: null });
+      expect(await fila(pacto.id)).toEqual({ provenanceClass: "original_record", contractReference: "Contrato 7" });
+      // Una referencia de espacios no es una referencia: ni pacto, ni texto guardado.
+      expect(await fila(enBlanco.id)).toEqual({ provenanceClass: "recommendation", contractReference: null });
+    } finally {
+      await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: { in: [meta.id, pacto.id, enBlanco.id] } }) });
+    }
+  });
+
+  it("valida lo que GUARDA la base: un área que redondea a 0 no es positiva, y una cifra que no cabe se dice", async () => {
+    // El área es numeric(10,4) y la meta por hectárea numeric(6,2). Antes, 0,00004 ha pasaba el «> 0»
+    // y se guardaba como 0, y 10 000 colmenas/ha desbordaba la columna con un 500.
+    const base = {
+      locationId,
+      clientOrganizationId: clienteId,
+      committedHectares: 1,
+      targetHivesPerHectareMin: 4,
+      targetHivesPerHectareMax: 6,
+      startsAt: new Date("2031-01-01T00:00:00Z"),
+    };
+    await expect(crearCompromisoDePolinizacion(userAccountId, { ...base, committedHectares: 0.00004 })).rejects.toThrow(/hectareas_no_positivas/);
+    await expect(crearCompromisoDePolinizacion(userAccountId, { ...base, targetHivesPerHectareMin: 0.004 })).rejects.toThrow(/densidad_no_positiva/);
+    await expect(crearCompromisoDePolinizacion(userAccountId, { ...base, targetHivesPerHectareMax: 10_000 })).rejects.toThrow(/cifra_demasiado_grande/);
+    await expect(crearCompromisoDePolinizacion(userAccountId, { ...base, committedHectares: 1_000_000 })).rejects.toThrow(/cifra_demasiado_grande/);
+    // Control: lo más grande que cabe SÍ se guarda, y con su valor.
+    const limite = await crearCompromisoDePolinizacion(userAccountId, { ...base, committedHectares: 999_999.9999, targetHivesPerHectareMax: 9_999.99 });
+    try {
+      const fila = await prisma.pollinationCommitment.findUniqueOrThrow({ where: { id: limite.id } });
+      expect(fila.committedHectares.toString()).toBe("999999.9999");
+      expect(fila.targetHivesPerHectareMax.toString()).toBe("9999.99");
+    } finally {
+      await prisma.pollinationCommitment.deleteMany({ where: assertDefinedWhere({ id: limite.id }) });
+    }
+  });
 });
