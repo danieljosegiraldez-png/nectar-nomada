@@ -36,6 +36,7 @@ import { Ayuda } from "../../components/apiary/Ayuda";
 import { TrasladoForm } from "../../components/apiary/TrasladoForm";
 import { ManejoEnLoteForm } from "../../components/apiary/ManejoEnLoteForm";
 import { ConsultaAVecinosForm } from "../../components/apiary/ConsultaAVecinosForm";
+import { CompromisoDePolinizacionForm } from "../../components/apiary/CompromisoDePolinizacionForm";
 import {
   consultasDeSitio,
   estadoDelProtocolo,
@@ -341,8 +342,9 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
 
       {/* A9.9 (D6) — el compromiso de polinización, que es el único número que
           convierte la conversación con el cliente en algo que no sea una
-          impresión. Sólo aparece si hay compromiso vigente: un sitio de
-          producción no tiene por qué enseñar una fila vacía.
+          impresión. Sin compromiso vigente aparece SÓLO para quien puede abrir
+          uno (paso 12 del plan del Apiario, ADR-200 §6): un sitio de
+          producción no tiene por qué enseñar una fila vacía a quien sólo mira.
 
           Usa `nn-detail-meta`, que ya existe, en vez de estrenar clases: la
           banda de vitales de A9.8 sigue en revisión y dos hojas compitiendo por
@@ -351,9 +353,10 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
           El déficit sale como RANGO porque el objetivo lo es —«4-6 colmenas/ha»
           es lo que declaró el dueño—, y colapsarlo inventaría una precisión que
           nadie dio. */}
-      {polinizacion.length > 0 ? (
+      {polinizacion.length > 0 || vecinos.length > 0 ? (
         <section className="nn-section">
           <h2>{t("pollinationHeading")}</h2>
+          {polinizacion.length === 0 ? <p className="nn-muted">{t("pollinationNinguno")}</p> : null}
           {polinizacion.map((p) => (
             <div key={p.compromisoId}>
               <p className="nn-detail-meta">
@@ -382,6 +385,15 @@ export default async function ApiaryDetailPage({ params }: { params: Promise<{ i
               {p.contractReference ? <p className="nn-muted">{p.contractReference}</p> : null}
             </div>
           ))}
+          {/* Abrir una meta. Los clientes son las organizaciones aprobadas que `vecinosOfrecidos`
+              ya autoriza sobre este sitio —la misma lista y el mismo permiso que la consulta a
+              vecinos—, así que la lista sólo llega llena a quien el servicio va a dejar escribir. */}
+          {vecinos.length > 0 ? (
+            <details>
+              <summary>{t("pollinationNuevoSummary")}</summary>
+              <CompromisoDePolinizacionForm locationId={apiary.id} organizaciones={vecinos} />
+            </details>
+          ) : null}
         </section>
       ) : null}
 
