@@ -719,7 +719,9 @@ export async function recordRoastSessionAction(
   }
 
   revalidatePath(`/lots/${lotId}`);
-  redirect(`/lots/${lotId}`);
+  // Con su confirmación: hasta el 2026-10-17 volvía al lote en silencio, y recorriendo la pantalla
+  // por primera vez no había forma de saber si se había guardado sin mirar la base.
+  redirect(`/lots/${lotId}?ok=tueste`);
 }
 
 export async function startDryingAction(

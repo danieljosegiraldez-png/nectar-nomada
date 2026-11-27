@@ -213,6 +213,7 @@ tests/traceability/media.test.ts
 tests/traceability/operations.test.ts
 tests/traceability/organizacionAcotada.test.ts
 tests/traceability/perfilDeTueste.test.ts
+tests/traceability/tuesteDescuentaLaCarga.test.ts
 tests/traceability/processTargets.test.ts
 tests/traceability/quantity.test.ts
 tests/recetas/versiones.test.ts

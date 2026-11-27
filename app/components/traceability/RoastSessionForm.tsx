@@ -72,7 +72,8 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos, personas,
 
       <div className="nn-field">
         <label htmlFor="r-roasterPersonId">{t("roastPersonLabel")}</label>
-        <select id="r-roasterPersonId" name="roasterPersonId" defaultValue="">
+        {/* Quien registra suele ser quien tostó, como en el manejo y la cosecha (2026-10-17). */}
+        <select id="r-roasterPersonId" name="roasterPersonId" defaultValue={selfPersonId ?? ""}>
           <option value="">{t("roastPersonUnknown")}</option>
           <OpcionesDePersona personas={personas} selfPersonId={selfPersonId} />
         </select>
@@ -130,7 +131,9 @@ export function RoastSessionForm({ lotId, perfiles, muestras, equipos, personas,
       </div>
       <div className="nn-field">
         <label htmlFor="r-chargeWeightKg">{t("roastChargeWeightLabel")}</label>
-        <CampoNumerico id="r-chargeWeightKg" name="chargeWeightKg" inputMode="decimal" step="0.001" />
+        {/* Obligatoria en los dos caminos: desde una muestra ya lo era, y desde el lote lo es desde
+            el 2026-10-17 —sin la carga no se sabe cuánto sale del verde—. El servidor lo exige igual. */}
+        <CampoNumerico id="r-chargeWeightKg" name="chargeWeightKg" inputMode="decimal" step="0.001" min="0.001" required />
       </div>
       <div className="nn-field">
         <label htmlFor="r-dischargeWeightKg">{t("roastDischargeWeightLabel")}</label>
