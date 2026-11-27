@@ -21,6 +21,7 @@ import {
 } from "../../../../../lib/sync/fieldMedia";
 import { FieldSessionValidationError } from "../../../../../lib/traceability/fieldSessions";
 import { LocationAccessError } from "../../../../../lib/traceability/locations";
+import { PersonaNoPermitidaError } from "../../../../../lib/people/quienLoHizo";
 import {
   BorradorAjenoError,
   cuentaDelBorradorDe,
@@ -128,6 +129,10 @@ export async function POST(request: Request) {
       error instanceof LocationAccessError
     ) {
       return Response.json({ error: error.message }, { status: 403 });
+    }
+    // Su mensaje es prosa; el código es el que ya usan las acciones de servidor.
+    if (error instanceof PersonaNoPermitidaError) {
+      return Response.json({ error: "persona_no_permitida" }, { status: 403 });
     }
     throw error;
   }

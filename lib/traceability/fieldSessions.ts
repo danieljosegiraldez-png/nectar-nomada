@@ -465,6 +465,9 @@ const SUBJECT_KEYS = [
  * propio de cada llamador y no de esta regla compartida.
  */
 export async function requireOpenFieldSessionForEvent(userAccountId: string, fieldSessionId: string, occurredAt: Date) {
+  // Un id que no es UUID es una jornada que no existe, no un `P2007` que el lote
+  // de sincronización convierte en un 500 para todas sus mutaciones (2026-10-14).
+  if (!UUID.test(fieldSessionId)) throw new FieldSessionValidationError("session_not_found");
   const session = await prisma.fieldSession.findUnique({ where: { id: fieldSessionId } });
   if (!session) throw new FieldSessionValidationError("session_not_found");
   // Una jornada cerrada rechaza el evento, pero DICE cuál de los dos casos es.
@@ -504,6 +507,7 @@ export async function recordFieldEvent(userAccountId: string, input: RecordField
   const subjects = SUBJECT_KEYS.filter((key) => input[key] != null);
   if (subjects.length > 1) throw new FieldSessionValidationError("multiple_subjects");
 
+  if (!UUID.test(input.eventKindValueId)) throw new FieldSessionValidationError("event_kind_not_found");
   const kind = await prisma.variableCatalogValue.findUnique({
     where: { id: input.eventKindValueId },
     include: { catalog: { select: { key: true } } },

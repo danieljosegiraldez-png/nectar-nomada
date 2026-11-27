@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { UUID } from "../validation/uuid";
 
 /**
  * P4 §1 — alta de un aparato que va a sincronizar.
@@ -39,6 +40,8 @@ export async function registerDevice(userAccountId: string, input: RegisterDevic
   // Y como allí, esto NO es un control de permisos: el operador de un teléfono
   // compartido es normalmente una Persona sin cuenta.
   if (input.operatorPersonId) {
+    // Uno que no es UUID tampoco existe, y así lo dice en vez de un `P2007` (500).
+    if (!UUID.test(input.operatorPersonId)) throw new DeviceValidationError("operator_not_found");
     const persona = await prisma.person.findUnique({
       where: { id: input.operatorPersonId },
       select: { id: true },
