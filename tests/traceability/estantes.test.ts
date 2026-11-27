@@ -67,6 +67,12 @@ afterEach(async () => {
   await prisma.auditEvent.deleteMany({ where: auditWhere });
   await prisma.assignment.deleteMany({ where: { userAccountId: { in: accountIds } } });
   await prisma.scope.deleteMany({ where: { id: { in: scopeIds } } });
+  // Lo que escribieron los servicios lo firmó la cuenta de la prueba. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 1 por corrida. Aquí las personas y cuentas no llevan
+  // identificador de corrida (su id es un `randomUUID()`), así que va por el
+  // MISMO conjunto `accountIds` que usa el borrado de la cuenta, justo debajo.
+  await prisma.auditEvent.deleteMany({ where: { actorUserAccountId: { in: accountIds } } });
   await prisma.userAccount.deleteMany({ where: { id: { in: accountIds } } });
   await prisma.person.deleteMany({ where: { id: { in: personIds } } });
   // Primero las POSICIONES de los estantes rastreados por id (sus nombres no

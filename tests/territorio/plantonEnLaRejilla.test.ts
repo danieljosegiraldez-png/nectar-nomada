@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../../lib/db";
 import { updateLocationAttributes } from "../../lib/traceability/locations";
 import { createSpecimen, SpecimenValidationError } from "../../lib/traceability/specimens";
+import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
 import { crearFinca, crearParcela, crearUsuarioConAcceso } from "../helpers/traceability";
 
 let actor: string;
@@ -66,6 +67,13 @@ afterAll(async () => {
   // El `Assignment` sí; el `Scope` de plataforma NO — es compartido y lo reusan
   // siete archivos. Borrarlo dejaría a los demás sin ámbito.
   await prisma.assignment.deleteMany({ where: { userAccountId: actor } });
+  // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+  // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+  // medido el 2026-10-13, 2 por corrida. Aquí las personas no llevan identificador
+  // de corrida (el ayudante las nombra con su propia marca), así que se usa el
+  // mismo id que el borrado de la cuenta; `assertDefinedWhere` porque `actor` es
+  // un `let` del `beforeAll` y un `undefined` borraría TODA la auditoría.
+  await prisma.auditEvent.deleteMany({ where: assertDefinedWhere({ actorUserAccountId: actor }) });
   await prisma.userAccount.deleteMany({ where: { id: actor } });
   await prisma.person.deleteMany({ where: { id: personaId } });
 });

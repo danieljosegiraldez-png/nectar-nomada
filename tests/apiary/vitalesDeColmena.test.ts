@@ -148,6 +148,20 @@ describe("Anexo E §3 — los vitales de cada caja, contra Postgres", () => {
     await prisma.location.deleteMany({ where: assertDefinedWhere({ id: locationId }) });
     await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId }) });
     await prisma.scope.deleteMany({ where: assertDefinedWhere({ scopeRefId: projectId }) });
+    // Lo que escribieron los servicios lo firmó la cuenta de la corrida. Sin esto,
+    // borrar la cuenta deja esas filas con el actor a NULL (`ON DELETE SET NULL`):
+    // medido el 2026-10-13, 9 por corrida. Las cuentas se DESCUBREN por el RUN_ID.
+    const personasDeLaCorrida = await prisma.person.findMany({
+      where: assertDefinedWhere({ displayName: { contains: RUN_ID } }),
+      select: { id: true },
+    });
+    const cuentasDeLaCorrida = await prisma.userAccount.findMany({
+      where: assertDefinedWhere({ personId: { in: personasDeLaCorrida.map((p) => p.id) } }),
+      select: { id: true },
+    });
+    await prisma.auditEvent.deleteMany({
+      where: assertDefinedWhere({ actorUserAccountId: { in: cuentasDeLaCorrida.map((c) => c.id) } }),
+    });
     await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: userAccountId }) });
     await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personId }) });
     await prisma.project.deleteMany({ where: assertDefinedWhere({ id: projectId }) });
