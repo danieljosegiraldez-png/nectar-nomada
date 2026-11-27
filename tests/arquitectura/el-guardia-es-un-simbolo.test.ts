@@ -160,8 +160,26 @@ describe("el guardia se resuelve hasta su símbolo", () => {
  * compuerta 2, «el coste no vale la garantía»—. Esto es la otra vía que ella misma
  * sugiere: por dominio, empezando por el de más consecuencia, que es el lote.
  */
-describe("el permiso que exige una operación corresponde al dato que toca", () => {
-  const dominio = declaracion.dominios[0]!;
+/**
+ * **Se recorren TODOS los dominios.** Hasta el 2026-10-11 esto leía sólo
+ * `declaracion.dominios[0]`, y el JSON decía que añadir un dominio «no toca la
+ * compuerta»: el segundo habría quedado sin vigilar y en verde. Medido al declarar
+ * `location`: con la versión vieja, quitar una de sus excepciones dejaba las 12
+ * pruebas de este archivo en verde.
+ */
+it("ningún modelo lo gobiernan dos dominios", () => {
+  const vistos = new Map<string, string>();
+  const repetidos: string[] = [];
+  for (const d of declaracion.dominios) {
+    for (const m of d.gobierna) {
+      if (vistos.has(m)) repetidos.push(`${m}: «${vistos.get(m)}» y «${d.permiso}»`);
+      vistos.set(m, d.permiso);
+    }
+  }
+  expect(repetidos, "un modelo con dos dueños exige dos permisos a la vez").toEqual([]);
+});
+
+describe.each(declaracion.dominios)("el permiso que exige una operación corresponde al dato que toca, dominio $permiso", (dominio) => {
   const gobernados = new Set(dominio.gobierna);
   const permiso = dominio.permiso;
   const declaradas = new Map(
@@ -173,8 +191,14 @@ describe("el permiso que exige una operación corresponde al dato que toca", () 
   );
 
   it("la declaración nombra un dominio con modelos y el inventario lo alcanza", () => {
-    expect(gobernados.size, "un dominio sin modelos no verifica nada").toBeGreaterThan(5);
-    expect(delDominio.length, "si ninguna operación toca el dominio, el verde no mide").toBeGreaterThan(20);
+    /**
+     * **«No vacío», no un tamaño.** Hasta el 2026-10-11 decía «más de 5 modelos» y «más de
+     * 20 operaciones»: eran las cifras del dominio del lote, y la propiedad que protegían es
+     * que el dominio no esté vacío. Los de especímenes y muestras tienen 2 y 3 modelos, con
+     * 16 operaciones cada uno (decisión de Daniel de ese día).
+     */
+    expect(gobernados.size, "un dominio sin modelos no verifica nada").toBeGreaterThan(0);
+    expect(delDominio.length, "si ninguna operación toca el dominio, el verde no mide").toBeGreaterThan(0);
     /**
      * **Cada modelo declarado tiene que EXISTIR en el esquema.** No es ceremonia:
      * la primera versión de esta declaración traía `lotClassification`,

@@ -1,7 +1,8 @@
 # 024 · La cosecha no registra quién la operó, aunque el servicio lo guarde
 
-**Estado: medido el 2026-10-05, sin construir.** Es un defecto, no una decisión: no hace falta
-preguntar nada para arreglarlo.
+**Estado: CERRADA el 2026-10-06** (cabecera corregida el 2026-10-11, que seguía diciendo «sin
+construir»). La acción ya manda el campo, con su prueba de conducta; la otra mitad no se hará porque
+el formulario de cosecha ya no existe. Las dos cosas están en «CORREGIDO EL 2026-10-06», más abajo.
 
 ## El defecto, con su control
 

@@ -94,6 +94,39 @@ function declaracionReal(checker, id) {
 }
 
 /**
+ * El `resourceType` de una **constante objeto** de permiso, o `null`.
+ *
+ * `lib/equipos/modelos.ts` autoriza con `const GESTIONAR = { resourceType:
+ * "equipment", action: "manage" } as const`, pasado a `requireCatalogoAccess`, que
+ * hace `can(…, permiso.resourceType, …)`. Hasta el 2026-10-11 sólo se leía un
+ * literal en el tercer argumento de `can`, así que esas operaciones salían «sin
+ * permiso resuelto» aunque exigen `equipment:manage` (ficha 005, al declarar el
+ * dominio de equipos). Sólo `const`: un `let` puede cambiar antes de la llamada.
+ * Un **parámetro** —el `permiso` de `propiedad.ts`— no se resuelve aquí: lo
+ * decide quien llama, y es en la llamada donde se lee.
+ */
+function recursoDeObjeto(checker, expr) {
+  let e = expr;
+  if (ts.isIdentifier(e)) {
+    let s = checker.getSymbolAtLocation(e);
+    if (s && s.flags & ts.SymbolFlags.Alias) {
+      try { s = checker.getAliasedSymbol(s); } catch { return null; }
+    }
+    const d = s?.valueDeclaration;
+    if (!d || !ts.isVariableDeclaration(d) || !d.initializer) return null;
+    if (!(ts.getCombinedNodeFlags(d) & ts.NodeFlags.Const)) return null;
+    e = d.initializer;
+  }
+  while (ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isParenthesizedExpression(e)) e = e.expression;
+  if (!ts.isObjectLiteralExpression(e)) return null;
+  for (const p of e.properties) {
+    if (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "resourceType" &&
+        ts.isStringLiteral(p.initializer)) return p.initializer.text;
+  }
+  return null;
+}
+
+/**
  * Construye el grafo de llamadas por símbolo y devuelve qué alcanza el servicio
  * de autorización.
  *
@@ -126,6 +159,8 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
    * dato que se toca.
    */
   const recursoPropio = new Map();
+  /** Una constante de permiso pasada a otra función: cuenta sólo si esa función autoriza. */
+  const pasaPermiso = [];
   let llamadas = 0;
   let resueltas = 0;
   for (const f of propios) {
@@ -150,9 +185,18 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
               aristas.get(de).add(hacia);
               if (hacia === clave(servicio, "can") && ts.isCallExpression(n)) {
                 const arg = n.arguments[2];
-                if (arg && ts.isStringLiteral(arg)) {
+                const r = !arg ? null
+                        : ts.isStringLiteral(arg) ? arg.text
+                        : ts.isPropertyAccessExpression(arg) && arg.name.text === "resourceType"
+                          ? recursoDeObjeto(checker, arg.expression) : null;
+                if (r) {
                   if (!recursoPropio.has(de)) recursoPropio.set(de, new Set());
-                  recursoPropio.get(de).add(arg.text);
+                  recursoPropio.get(de).add(r);
+                }
+              } else if (ts.isCallExpression(n)) {
+                for (const a of n.arguments) {
+                  const r = recursoDeObjeto(checker, a);
+                  if (r) pasaPermiso.push([de, hacia, r]);
                 }
               }
             }
@@ -174,6 +218,11 @@ export function autorizacionPorSimbolo({ raiz = process.cwd(), servicio = SERVIC
         if (autorizan.has(h)) { autorizan.add(de); cambio = true; break; }
       }
     }
+  }
+  for (const [de, hacia, r] of pasaPermiso) {
+    if (!autorizan.has(hacia)) continue;
+    if (!recursoPropio.has(de)) recursoPropio.set(de, new Set());
+    recursoPropio.get(de).add(r);
   }
   /**
    * **El permiso se hereda del envoltorio.** Sólo 83 unidades llaman a `can`
