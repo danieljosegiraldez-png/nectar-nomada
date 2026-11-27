@@ -34,6 +34,9 @@ las 52 páginas con segmento dinámico, ninguna da 500 con un id basura ni con u
 Y **027 · la lista de recetas daba 500 sin acceso y decidía con un lote cualquiera**, hecha el
 2026-10-12 en el mismo PR. El 500 ahora vuelve a `/lots`. El «lote cualquiera» lo arregló la Parte 2a
 (#715), y Daniel eligió su regla de quién ve la lista sobre la que la 027 había construido: lo cuenta la ficha.
+Y **022 · una limpieza ajena ponía rojo el carril**, hecha el 2026-10-06 en el PR #664 — su cabecera
+siguió diciendo «abierto» hasta el 2026-10-14, cuando se re-midió por conducta: la suite culpable ya
+no deja ámbitos colgados de filas sembradas (0), y con la línea vieja deja uno sobre Panamá.
 Y **025 · el verificador de backup decía «no restauró» cuando lo que no pudo fue contar**, hecha
 el 2026-10-06 — y su diagnóstico original era más flojo que la realidad: el fallo estaba **dentro
 de la rama PASS**, después de que el `diff` ya hubiera probado la copia idéntica. Lo peor que

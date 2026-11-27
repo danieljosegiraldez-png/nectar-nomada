@@ -1,8 +1,18 @@
 # 022 · Una limpieza se pone roja por basura de otra suite, y el carril entero con ella
 
-**Estado: abierto.** Es un defecto **medido**, no supuesto, encontrado el 2026-10-03 corriendo el
-carril con base de `PENDING_IMPLEMENTATIONS/010` Parte A. **El número es provisional**: se asigna de
-verdad al fusionar, porque dos sesiones que numeran a la vez chocan.
+**Estado: hecho el 2026-10-06 en el PR #664** — por el camino 2: `tests/rbac/admin.test.ts` crea y
+borra su propio sitio y su propio proyecto, y ya no cuelga ámbitos de filas sembradas.
+
+**Esta cabecera siguió diciendo «abierto» seis días después**, y `SESSION_STATE.md` §3 la contaba
+como «sin empezar». Re-medido el 2026-10-14 sobre `main` (`4b6e1148`), por conducta, en una base
+desechable migrada y sembrada: tras correr `admin.test.ts` quedan **0** ámbitos de ubicación (0
+antes); devolviendo a su forma vieja la línea que concede sobre `sitioPropio`
+(`findFirstOrThrow` sin filtro) queda **1**, colgado de **Panamá** —la misma ubicación que midió
+el #664—. La suite pasa **13/13 en los dos casos**: el daño sigue sin verse en su propio veredicto,
+sólo contando filas.
+
+Lo que sigue es la ficha tal como se escribió. Era un defecto **medido**, no supuesto, encontrado
+el 2026-10-03 corriendo el carril con base de `PENDING_IMPLEMENTATIONS/010` Parte A.
 
 ## Lo que pasó, y por qué es peligroso
 
