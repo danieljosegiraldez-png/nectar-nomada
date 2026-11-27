@@ -66,11 +66,16 @@ export interface CrearCompromisoInput {
 }
 
 /**
- * Un compromiso es lo que alguien pactó y transcribió: `original_record`, no
- * `measured_fact`. Fijado aquí y no elegible por quien llama, misma disciplina
- * que el resto de escrituras con procedencia (ADR-038).
+ * **La procedencia la fija el servicio a partir del dato, y no la elige quien llama** (ADR-038;
+ * ADR-200 §6, decisión 12b de Daniel, 2026-10-16). Sin referencia de contrato, el compromiso es la
+ * meta de trabajo que propuso Néctar —`recommendation`—, como el de Kiva hoy. Con referencia, es lo
+ * que alguien pactó y transcribió —`original_record`—. Hasta esa decisión era siempre
+ * `original_record`, que afirmaba un pacto que no existía. Así un pacto futuro queda como pacto sin
+ * tocar nada.
  */
-const PROCEDENCIA_DEL_COMPROMISO: ProvenanceClass = "original_record";
+export function procedenciaDelCompromiso(contractReference: string | null | undefined): ProvenanceClass {
+  return contractReference?.trim() ? "original_record" : "recommendation";
+}
 
 export async function crearCompromisoDePolinizacion(userAccountId: string, input: CrearCompromisoInput) {
   // Cada candidato concreto, no sólo el sitio. Un compromiso se puede alcanzar
@@ -88,13 +93,22 @@ export async function crearCompromisoDePolinizacion(userAccountId: string, input
   });
   await requireApiaryAccess(userAccountId, "manage", [{ locationId: input.locationId }, ...colmenas]);
 
-  if (input.committedHectares <= 0) throw new PolinizacionValidationError("hectareas_no_positivas");
+  // **Se compara lo que va a guardar la base, no el número de JS**: el área es numeric(10,4) y la meta
+  // por hectárea numeric(6,2). Hasta el 2026-11-14 un área de 0,00004 pasaba el «> 0» y se guardaba
+  // como 0 —la ficha dividía por cero—, y una meta de 10 000 desbordaba la columna con un error de
+  // Postgres que nadie traduce. `!(x > 0)` rechaza también un NaN.
+  const comoEnLaColumna = (x: number, decimales: number) => Math.round(x * 10 ** decimales) / 10 ** decimales;
+  if (!(comoEnLaColumna(input.committedHectares, 4) > 0)) throw new PolinizacionValidationError("hectareas_no_positivas");
   // Un rango invertido produciría un déficit mínimo mayor que el máximo, que se
   // lee como un error de cálculo en vez de como lo que es: un dato mal escrito.
   if (input.targetHivesPerHectareMin > input.targetHivesPerHectareMax) {
     throw new PolinizacionValidationError("rango_invertido");
   }
-  if (input.targetHivesPerHectareMin <= 0) throw new PolinizacionValidationError("densidad_no_positiva");
+  if (!(comoEnLaColumna(input.targetHivesPerHectareMin, 2) > 0)) throw new PolinizacionValidationError("densidad_no_positiva");
+  // El máximo basta: el mínimo no puede pasarlo (rango_invertido, arriba).
+  if (input.committedHectares >= 1_000_000 || input.targetHivesPerHectareMax >= 10_000) {
+    throw new PolinizacionValidationError("cifra_demasiado_grande");
+  }
   if (input.endsAt && input.endsAt < input.startsAt) throw new PolinizacionValidationError("ventana_invertida");
   // La misma regla que el CHECK de la base, dicha antes y con su código: el CHECK la rechazaría con
   // un error de Postgres que nadie traduce.
@@ -110,7 +124,7 @@ export async function crearCompromisoDePolinizacion(userAccountId: string, input
         committedHectares: input.committedHectares,
         targetHivesPerHectareMin: input.targetHivesPerHectareMin,
         targetHivesPerHectareMax: input.targetHivesPerHectareMax,
-        contractReference: input.contractReference ?? null,
+        contractReference: input.contractReference?.trim() || null,
         startsAt: input.startsAt,
         endsAt: input.endsAt ?? null,
         notes: input.notes ?? null,
@@ -118,14 +132,14 @@ export async function crearCompromisoDePolinizacion(userAccountId: string, input
         parcelReference: input.parcelReference?.trim() || null,
         bloomStartsAt: input.bloomStartsAt ?? null,
         bloomEndsAt: input.bloomEndsAt ?? null,
-        provenanceClass: PROCEDENCIA_DEL_COMPROMISO,
+        provenanceClass: procedenciaDelCompromiso(input.contractReference),
         dataQuality: input.dataQuality ?? null,
         createdBy: userAccountId,
       },
     });
 
-    // Escritura con valor probatorio: lo que se le prometió a un cliente y
-    // cuándo. Se confirma en la misma transacción que el compromiso.
+    // Escritura con valor probatorio: qué meta se abrió para qué cliente, y cuándo. Si es un pacto
+    // o una propuesta lo dice su procedencia, no este evento. Se confirma en la misma transacción.
     await recordAuditEvent(
       {
         actorUserAccountId: userAccountId,

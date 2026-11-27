@@ -9291,7 +9291,8 @@ model PollinationCommitment {
   locationId String   @map("location_id") @db.Uuid
   location   Location @relation(fields: [locationId], references: [id])
 
-  /// A quién se le prometió. `Organization` canónica, no un nombre repetido.
+  /// Quién recibe el servicio. `Organization` canónica, no un nombre repetido. Que haya un pacto
+  /// no lo dice esta columna sino la procedencia (ADR-200 §6, decisión 12b).
   clientOrganizationId String       @map("client_organization_id") @db.Uuid
   clientOrganization   Organization @relation("PollinationCommitmentClient", fields: [clientOrganizationId], references: [id])
 

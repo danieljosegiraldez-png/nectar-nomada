@@ -13147,6 +13147,16 @@ Entre paréntesis, la pregunta del registro de la que sale cada punto.
   - **La procedencia la fija el servicio a partir del dato** (ADR-038): `recommendation` cuando el
     compromiso no trae referencia de contrato, como Kiva hoy, y `original_record` cuando la trae. Así Kiva
     queda como la meta que es, y un pacto futuro quedará como pacto sin tocar nada.
+- **Nota del 2026-11-14 (paso 12, la pantalla para abrir la meta).** La pantalla pide lo que el Anexo E §9
+  pide al abrir **menos «colmenas comprometidas» y «referencia al contrato»**, así que hoy sólo puede guardar
+  `recommendation`. Las dos están fuera por dos motivos:
+  - la ficha rotula toda meta «meta de trabajo propuesta, no pactada», y con contrato diría algo falso;
+  - un número comprometido pasa por delante del cociente en el aviso de floración
+    (`lib/apiary/emplazamiento.ts`) y haría pasar un pacto por meta de trabajo.
+
+  El servicio ya aplica 12b, así que el día que haya un pacto sólo falta la pantalla. **Lo que falta decidir,
+  y es de Daniel:** qué rótulo y qué texto de alerta lleva una meta con contrato. Es la opción C de la
+  pregunta 23, que no se eligió.
 
 **§7 · Recomendaciones**
 

@@ -18,6 +18,7 @@ import { trasladarColmenas } from "../../lib/apiary/traslado";
 import { altaDeColmenasEnLote } from "../../lib/apiary/altaEnLote";
 import { registrarLimpiezaDeCaja, LimpiezaInvalida } from "../../lib/apiary/limpiezaDeCaja";
 import { registrarValoracionDeInspeccion, ValoracionInvalida } from "../../lib/apiary/valoracionDeInspeccion";
+import { crearCompromisoDePolinizacion, PolinizacionValidationError } from "../../lib/apiary/polinizacion";
 import { Prisma } from "../../generated/prisma/client";
 import { registrarConsultaAVecinos } from "../../lib/apiary/consultaAVecinos";
 import { completarCierreDeCosecha, registrarLecturaDeRefractometro, CierreDeCosechaInvalido } from "../../lib/apiary/cierreDeCosecha";
@@ -37,7 +38,7 @@ import { requestApiaryAssetUpload, finalizeApiaryAssetUpload } from "../../lib/a
 import type { RecordInspectionInput } from "../../lib/apiary/inspections";
 import type { RecordColonyEventInput } from "../../lib/apiary/colonyEvents";
 import type { ApiaryAssetParent } from "../../lib/apiary/media";
-import { fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
+import { FechaDeDiaInvalida, LocalDateTimeError, fechaDeDia, parseLocalDateTime, parseOptionalLocalDateTime, TZ_OFFSET_FIELD } from "../../lib/time/localDateTime";
 import { exigeTipoDeArtefacto, instalarArtefacto, retirarArtefacto } from "../../lib/apiary/artefactos";
 import { darDeBajaAlza, ponerAlza, registrarAlza } from "../../lib/apiary/alzas";
 import { anotarRecipiente, quitarRecipiente } from "../../lib/apiary/recipientes";
@@ -801,6 +802,99 @@ export async function registrarValoracionDeInspeccionAction(
   }
 
   revalidatePath(`/field-sessions/${fieldSessionId}`);
+  return { ok: true };
+}
+
+/**
+ * **Abrir una meta de polinización en un apiario** — paso 12 del plan del Apiario (ADR-200 §6;
+ * Anexo E §9). Hasta el 2026-11-14 `crearCompromisoDePolinizacion` sólo lo llamaban las pruebas.
+ *
+ * El formulario no ofrece «colmenas comprometidas» ni «referencia al contrato»: no hay nada pactado
+ * (ADR-200 §6), y la ficha rotula toda meta «no pactada». La procedencia la fija el servicio a
+ * partir del dato (decisión 12b), así que la meta que entra por aquí queda como `recommendation`.
+ *
+ * Devuelve el error en vez de lanzarlo, como la limpieza y la valoración.
+ *
+ * **Las fechas del servicio se teclean como días, pero se guardan como INSTANTES**, porque así las
+ * leen la ficha y el tablero (`endsAt >= ahora`). «Empieza» es el 00:00 de ese día y «Termina» el
+ * último milisegundo del suyo, en la zona del dispositivo (`TZ_OFFSET_FIELD`, el mismo mecanismo que
+ * cualquier hora tecleada). Con medianoche UTC —lo que da `fechaDeDia` sola— una meta de un día no
+ * salía nunca y las demás se iban de la ficha la víspera a las 19:00 de Panamá (revisión del paso
+ * 12). La floración sí es un campo de DÍA en el esquema y se queda con `fechaDeDia`.
+ */
+export async function crearCompromisoDePolinizacionAction(
+  _prev: { error?: string; ok?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const t = await getTranslations("Apiary");
+
+  const locationId = String(formData.get("locationId") ?? "");
+  const texto = (clave: string) => {
+    const v = String(formData.get(clave) ?? "").trim();
+    return v === "" ? null : v;
+  };
+  // Vacío es `null` (falta) y lo que no es número es `NaN` (no válido): son dos frases distintas.
+  const numero = (clave: string) => {
+    const v = texto(clave);
+    return v === null ? null : Number(v);
+  };
+
+  const clientOrganizationId = texto("clientOrganizationId");
+  if (!clientOrganizationId) return { error: t("pollinationError_falta_el_cliente") };
+  const committedHectares = numero("committedHectares");
+  const targetHivesPerHectareMin = numero("targetHivesPerHectareMin");
+  const targetHivesPerHectareMax = numero("targetHivesPerHectareMax");
+  if (committedHectares === null || targetHivesPerHectareMin === null || targetHivesPerHectareMax === null) {
+    return { error: t("pollinationError_faltan_cifras") };
+  }
+  if (![committedHectares, targetHivesPerHectareMin, targetHivesPerHectareMax].every(Number.isFinite)) {
+    return { error: t("pollinationError_cifra_no_valida") };
+  }
+
+  const desfase = texto(TZ_OFFSET_FIELD);
+  const DIA = 86_400_000;
+  // `fechaDeDia` primero: es la que rechaza un día que no existe en vez de normalizarlo a otro.
+  const inicioDe = (clave: string) => {
+    const dia = fechaDeDia(texto(clave), clave);
+    return dia ? parseLocalDateTime(`${dia.toISOString().slice(0, 10)}T00:00`, desfase) : null;
+  };
+  const finDe = (clave: string) => {
+    const dia = fechaDeDia(texto(clave), clave);
+    if (!dia) return null;
+    const siguiente = new Date(dia.getTime() + DIA).toISOString().slice(0, 10);
+    return new Date(parseLocalDateTime(`${siguiente}T00:00`, desfase).getTime() - 1);
+  };
+
+  try {
+    const startsAt = inicioDe("startsAt");
+    if (!startsAt) return { error: t("pollinationError_falta_el_inicio") };
+    await crearCompromisoDePolinizacion(user.userAccountId, {
+      locationId,
+      clientOrganizationId,
+      committedHectares,
+      targetHivesPerHectareMin,
+      targetHivesPerHectareMax,
+      startsAt,
+      endsAt: finDe("endsAt"),
+      crop: texto("crop"),
+      parcelReference: texto("parcelReference"),
+      bloomStartsAt: fechaDeDia(texto("bloomStartsAt"), "bloomStartsAt"),
+      bloomEndsAt: fechaDeDia(texto("bloomEndsAt"), "bloomEndsAt"),
+      notes: texto("notes"),
+    });
+  } catch (error) {
+    if (error instanceof PolinizacionValidationError) {
+      return { error: t(`pollinationError_${error.message}` as "pollinationError_rango_invertido") };
+    }
+    if (error instanceof FechaDeDiaInvalida) return { error: t("pollinationError_fecha_invalida") };
+    if (error instanceof LocalDateTimeError) return { error: t("pollinationError_sin_desfase") };
+    if (error instanceof ApiaryAccessError) return { error: t("pollinationError_sin_permiso") };
+    throw error;
+  }
+
+  revalidatePath(`/apiaries/${locationId}`);
   return { ok: true };
 }
 
