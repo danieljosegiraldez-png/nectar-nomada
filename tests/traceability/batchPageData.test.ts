@@ -5,11 +5,13 @@
  * services hand the page rather than in the page itself.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { prisma } from "../../lib/db";
 import { getObserverCandidates } from "../../lib/traceability/lots";
 import { computeCurrentQuantity } from "../../lib/traceability/quantity";
 import { assertDefinedWhere } from "../helpers/assertDefinedWhere";
+import { crearUsuarioConAcceso } from "../helpers/traceability";
+import { createTestOrganization, deleteTestOrganizations } from "../helpers/testOrganization";
 
 const RUN = `bpd-${Date.now()}`;
 const created = { personIds: [] as string[], accountIds: [] as string[] };
@@ -88,20 +90,47 @@ describe("who took this reading — the observer list", () => {
   });
 });
 
+/**
+ * **Con sus propios lotes**, no con los de la base (ficha 006, 2026-10-12). Antes buscaban «un lote sin
+ * eventos de cantidad» y «uno con eventos» entre los que hubiera, así que el archivo sólo corría sobre el
+ * backup restaurado; y la segunda hacía `if (!lot) return;`: sin un lote así, pasaba en verde sin
+ * comprobar nada. Ahora cada una crea el lote que necesita, y el administrador lo crea `crearUsuarioConAcceso`.
+ */
 describe("current quantity", () => {
+  const RUN_LOTES = `${RUN}-cantidad`;
+  let admin: string;
+  let personaAdmin: string;
+  let sinPesar: string;
+  let pesado: string;
+
+  beforeAll(async () => {
+    const acceso = await crearUsuarioConAcceso();
+    admin = acceso.userAccountId;
+    personaAdmin = acceso.personId;
+    const organizationId = await createTestOrganization(RUN_LOTES);
+    sinPesar = (await prisma.lot.create({ data: { lotCode: `${RUN_LOTES}-sin`, lotType: "cherry", organizationId } })).id;
+    pesado = (await prisma.lot.create({ data: { lotCode: `${RUN_LOTES}-con`, lotType: "cherry", organizationId } })).id;
+    await prisma.quantityEvent.create({
+      data: { lotId: pesado, eventType: "process_output", quantity: 12.5, unit: "kg", occurredAt: new Date("2026-03-02T12:00:00Z"), provenanceClass: "measured_fact" },
+    });
+  }, 30000);
+
+  /** Lo que crea el `beforeAll` se descubre por su marca, así que se limpia aunque muera a mitad. El ámbito de plataforma es compartido: no se borra. */
+  afterAll(async () => {
+    await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lot: { lotCode: { startsWith: RUN_LOTES } } }) });
+    await prisma.lot.deleteMany({ where: assertDefinedWhere({ lotCode: { startsWith: RUN_LOTES } }) });
+    await deleteTestOrganizations(RUN_LOTES);
+    if (admin) {
+      await prisma.assignment.deleteMany({ where: assertDefinedWhere({ userAccountId: admin }) });
+      await prisma.userAccount.deleteMany({ where: assertDefinedWhere({ id: admin }) });
+    }
+    if (personaAdmin) await prisma.person.deleteMany({ where: assertDefinedWhere({ id: personaAdmin }) });
+  }, 30000);
+
   it("reports `recorded: false` when no quantity event exists", async () => {
     // Before this, the page rendered "Cantidad: 0" for a batch nobody had ever
     // weighed — an inferred fact, which CLAUDE.md §3 forbids.
-    const lot = await prisma.lot.findFirstOrThrow({
-      where: { quantityEvents: { none: {} } },
-      select: { id: true },
-    });
-    const admin = await prisma.assignment.findFirstOrThrow({
-      where: { status: "active", roleProfile: { name: "Platform Admin" }, scope: { scopeType: "platform" } },
-      select: { userAccountId: true },
-    });
-
-    const result = await computeCurrentQuantity(admin.userAccountId, lot.id);
+    const result = await computeCurrentQuantity(admin, sinPesar);
     expect(result.recorded).toBe(false);
     expect(result.unit).toBeNull();
   });
@@ -109,18 +138,7 @@ describe("current quantity", () => {
   it("reports `recorded: true` where events exist, so a real zero stays sayable", async () => {
     // A lot fully consumed genuinely is zero. That is a different claim from
     // "never weighed", and the page must be able to make it.
-    const lot = await prisma.lot.findFirst({
-      where: { quantityEvents: { some: {} } },
-      select: { id: true },
-    });
-    if (!lot) return; // No lot carries quantity events in this dataset.
-
-    const admin = await prisma.assignment.findFirstOrThrow({
-      where: { status: "active", roleProfile: { name: "Platform Admin" }, scope: { scopeType: "platform" } },
-      select: { userAccountId: true },
-    });
-
-    const result = await computeCurrentQuantity(admin.userAccountId, lot.id);
+    const result = await computeCurrentQuantity(admin, pesado);
     expect(result.recorded).toBe(true);
     expect(result.unit).not.toBeNull();
   });

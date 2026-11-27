@@ -120,6 +120,8 @@ afterAll(async () => {
   await prisma.harvestEvent.deleteMany({ where: assertDefinedWhere({ id: { in: harvestEventIds } }) });
   await prisma.quantityEvent.deleteMany({ where: assertDefinedWhere({ lotId: { in: lotIds } }) });
   await prisma.lot.deleteMany({ where: assertDefinedWhere({ id: { in: lotIds } }) });
+  // Antes que las cohortes y la ubicación: `planting_event` las referencia sin `onDelete`, o sea RESTRICT.
+  await prisma.plantingEvent.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
   await prisma.plantingCohort.deleteMany({ where: assertDefinedWhere({ locationId: { in: locationIds } }) });
 
   const userIds = [authorizedUserAccountId, wrongLocationUserAccountId, soloPlotAUserAccountId];
@@ -812,9 +814,16 @@ describe("corregir una cohorte sin decir que el bloque cambió", () => {
 });
 
 describe("pre-existing land records stay valid", () => {
-  it("leaves PlantingEvent.plantingCohortId nullable — the one real row predates cohorts", async () => {
-    const orphans = await prisma.plantingEvent.count({ where: { plantingCohortId: null } });
-    // Never backfilled with a guess; a NULL here is correct history.
-    expect(orphans).toBeGreaterThanOrEqual(1);
+  /**
+   * El esquema admite un evento de siembra SIN cohorte. Se prueba creando uno, no buscando «la fila real»
+   * de antes de las cohortes, que es lo que hacía y lo que ataba este archivo a un backup restaurado
+   * (ficha 006, 2026-10-12). Que aquella fila siga en NULL —nunca rellenada con una suposición— es un hecho
+   * de producción, y vive en `plantingCohorts-datosReales.test.ts`, en el grupo `datos-reales`.
+   */
+  it("leaves PlantingEvent.plantingCohortId nullable", async () => {
+    const evento = await prisma.plantingEvent.create({
+      data: { locationId: plotAId, eventType: "received", provenanceClass: "original_record" },
+    });
+    expect(evento.plantingCohortId).toBeNull();
   });
 });
