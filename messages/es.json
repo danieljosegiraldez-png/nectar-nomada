@@ -555,6 +555,8 @@
     "resumenHistorial": "{count, plural, =0 {sin cambios registrados} one {# cambio} other {# cambios}}",
     "resumenTope": "{count} o más",
     "noHistory": "Aún no hay historial de auditoría registrado.",
+    "historialEnsayo": "Ensayo",
+    "historialSinProceso": "Este historial no incluye el proceso que cubre al lote: su linaje es demasiado hondo para leerlo.",
     "currentStageLabel": "Etapa: {stage}",
     "currentQuantityLabel": "Cantidad: {quantity} {unit}",
     "unitUnknown": "unidad desconocida",

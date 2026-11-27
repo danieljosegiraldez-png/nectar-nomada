@@ -24,13 +24,15 @@ import { LIST_LIMIT, truncate } from "../listLimit";
 import { sortByName } from "../naturalOrder";
 import { can } from "../rbac/service";
 import { recordAuditEvent } from "../audit";
-import type { ScopeTarget } from "../rbac/types";
 import type { Prisma, ProvenanceClass } from "../../generated/prisma/client";
 import { settleMassBalance } from "./balance";
-import { antesDeTransformar, dividirProcesoEnTx, TRANSACCION_DEL_LINAJE, type TipoConReglaDeProceso } from "./procesoDelLinaje";
+import { antesDeTransformar, dividirProcesoEnTx, procesoQueCubre, TRANSACCION_DEL_LINAJE, type TipoConReglaDeProceso } from "./procesoDelLinaje";
+import { LotProcessError } from "./errorDeProceso";
+import { puedeVerInvestigacion } from "../research/access";
 import { validarMasaDeSubproducto } from "./subproductos";
 import type { ByproductDestination, ByproductType, HoneyProcessAct } from "../../generated/prisma/client";
 import { leerEnmiendas } from "./enmiendas";
+import { scopeTargetsFor } from "./objetivosDeAmbito";
 import { exigirPersonaPermitida, personasPermitidas, type Ancla } from "../people/quienLoHizo";
 import { UUID } from "../validation/uuid";
 
@@ -66,18 +68,10 @@ export async function requireBalanceOverride(
   throw new TraceabilityAccessError("no_balance_override");
 }
 
-/** Every concrete scope target a Lot (or a to-be-created Lot's parent context) resolves against — never just one. */
-export function scopeTargetsFor(input: { projectId?: string | null; locationId?: string | null }): ScopeTarget[] {
-  const targets: ScopeTarget[] = [];
-  if (input.projectId) targets.push({ scopeType: "project", scopeRefId: input.projectId });
-  if (input.locationId) targets.push({ scopeType: "location", scopeRefId: input.locationId });
-  // A Lot with neither is only manageable platform-wide — `can()` already
-  // resolves a Platform Admin's assignment against any concrete target, but
-  // with no project/location to point at, the only target left to check is
-  // platform scope itself.
-  if (targets.length === 0) targets.push({ scopeType: "platform", scopeRefId: null });
-  return targets;
-}
+// `scopeTargetsFor` vive en `./objetivosDeAmbito` y se reexporta aquí, para que nadie cambie su import.
+// Se movió el 2026-10-12 para que `lib/research/access.ts` no importe este archivo: así `getLotDetail`
+// puede preguntar por investigación sin cerrar un ciclo `lots.ts` ↔ `research/access.ts`.
+export { scopeTargetsFor } from "./objetivosDeAmbito";
 
 /**
  * ADR-062/063 — `classification` is required on every candidate, deliberately.
@@ -906,6 +900,72 @@ export async function getActiveOperations(userAccountId: string) {
 }
 
 /**
+ * Los sujetos del historial que NO salen de lo que `getLotDetail` ya consultó: los ENSAYOS del lote y el
+ * PROCESO que lo cubre. Decisiones de Daniel del 2026-10-12 (`PENDING_IMPLEMENTATIONS/023`):
+ *
+ * - **Los ensayos** (`treatment_batch` y sus etapas, `processing_stage`) entran **sólo si quien mira puede ver
+ *   investigación sobre ese ensayo**. El Farm Operator no tiene `research:view`, y la ficha del lote no puede
+ *   ser una puerta trasera a esos datos. El permiso se pide sobre el MISMO ámbito con que se crea un ensayo
+ *   (`createTreatmentBatch`): su proyecto o el del lote, y la ubicación del lote. Uno a uno: `puedeVerInvestigacion`
+ *   aprueba en cuanto UN candidato pasa, así que pasarle todos juntos autorizaría el conjunto.
+ * - **El proceso** entra con **toda su cadena**: el vigente y los de más arriba, o todos los de una mezcla. Se
+ *   pregunta a `procesoQueCubre`, no por `lotId`: el proceso se abre sobre la cereza y CUBRE a los lotes que salen
+ *   de ella, y preguntarlo por el lote perdería la primera generación. Ver el proceso que cubre a un lote ya se
+ *   permite con `lot:view` sobre ese lote (`opcionesParaProceso`), así que aquí no se pide más.
+ *
+ * **Si el linaje es demasiado hondo para leerlo**, `procesoQueCubre` lanza `lineage_too_deep`. El historial no
+ * calla el proceso: lo dice (`historialSinProceso`), porque una omisión callada se lee como «no hubo proceso».
+ */
+async function sujetosDeEnsayosYProceso(
+  userAccountId: string,
+  lot: { id: string; projectId: string | null; locationId: string | null },
+): Promise<{ sujetos: { entityType: string; entityId: string }[]; procesoIlegible: boolean }> {
+  const ensayos = await prisma.treatmentBatch.findMany({
+    where: { lotId: lot.id },
+    select: { id: true, projectId: true, locationId: true },
+  });
+  const ensayosVisibles: string[] = [];
+  for (const e of ensayos) {
+    if (await puedeVerInvestigacion(userAccountId, [{ projectId: e.projectId ?? lot.projectId, locationId: e.locationId ?? lot.locationId }])) {
+      ensayosVisibles.push(e.id);
+    }
+  }
+  const etapas = ensayosVisibles.length
+    ? await prisma.processingStage.findMany({ where: { treatmentBatchId: { in: ensayosVisibles } }, select: { id: true } })
+    : [];
+
+  let procesos: string[] = [];
+  let procesoIlegible = false;
+  try {
+    const cobertura = await procesoQueCubre(prisma, lot.id);
+    procesos = (cobertura.estado === "mezcla" ? cobertura.composicion.procesos : cobertura.cadena).map((p) => p.id);
+  } catch (error) {
+    if (!(error instanceof LotProcessError && error.message === "lineage_too_deep")) throw error;
+    procesoIlegible = true;
+  }
+  const [intervenciones, devoluciones] = procesos.length
+    ? await Promise.all([
+        prisma.lotProcessIntervention.findMany({ where: { lotProcessId: { in: procesos } }, select: { id: true } }),
+        prisma.lotProcessReturn.findMany({
+          where: { OR: [{ closedLotProcessId: { in: procesos } }, { continuationLotProcessId: { in: procesos } }] },
+          select: { id: true },
+        }),
+      ])
+    : [[], []];
+
+  return {
+    sujetos: [
+      ...ensayosVisibles.map((id) => ({ entityType: "treatment_batch", entityId: id })),
+      ...etapas.map((e) => ({ entityType: "processing_stage", entityId: e.id })),
+      ...procesos.map((id) => ({ entityType: "lot_process", entityId: id })),
+      ...intervenciones.map((i) => ({ entityType: "lot_process_intervention", entityId: i.id })),
+      ...devoluciones.map((d) => ({ entityType: "lot_process_return", entityId: d.id })),
+    ],
+    procesoIlegible,
+  };
+}
+
+/**
  * Full Lot Detail aggregation (§23) — everything the page needs in one
  * call except current quantity (lib/traceability/quantity.ts's
  * computeCurrentQuantity, called separately by the page to avoid a
@@ -1032,6 +1092,9 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
   const fermentationRunIds = [...new Set(transformations.map((t) => t.fermentationRunId).filter((id): id is string => id != null))];
   const dryingRunIds = [...new Set(transformations.map((t) => t.dryingRunId).filter((id): id is string => id != null))];
 
+  // Los ensayos y el proceso que cubre al lote: sus propias consultas, antes del lote que lee el historial.
+  const historialExtra = await sujetosDeEnsayosYProceso(userAccountId, lot);
+
   const [fermentationRuns, dryingRuns, sensoryLinkage, assets, labourEntries, materialConsumptionEntries, auditEvents] = await Promise.all([
     fermentationRunIds.length
       ? prisma.fermentationRun.findMany({ where: { id: { in: fermentationRunIds } }, include: { interventions: { orderBy: { occurredAt: "asc" } } } })
@@ -1100,29 +1163,24 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
       ...(receivingEvent ? [{ entityType: "receiving_event", entityId: receivingEvent.id }] : []),
       ...(apiaryHarvestEvent ? [{ entityType: "apiary_harvest_event", entityId: apiaryHarvestEvent.id }] : []),
       ...(perfilDeTueste ? [{ entityType: "lot_roast_profile", entityId: perfilDeTueste.id }] : []),
+      // Los ensayos (sólo los que quien mira puede ver) y el proceso que cubre al lote, con su cadena:
+      // `sujetosDeEnsayosYProceso`, decisiones de Daniel del 2026-10-12.
+      ...historialExtra.sujetos,
       // **Lo que NO entra, con su cifra, medido el 2026-10-05 sobre una copia
       // desechable de la base compartida (filas de auditoría que apuntan a una
       // entidad VIVA ligada a un lote). Lo encontró la revisión de Codex, no
       // una lectura nuestra — y su objeción era justa: presentar esto como «el
       // historial del lote» sin nombrar lo que falta es la omisión de siempre.**
       //
-      // - `lot_process` (0 vivas aquí, 62 filas de audit). **No es un añadido
-      //   libre y por eso no se hace de pasada:** leer el proceso por `lotId`
-      //   lo rechaza `tests/arquitectura/proceso-por-el-resolvedor.test.ts`, y
-      //   con razón — el proceso se abre sobre la cereza y cubre a sus
-      //   descendientes, así que preguntarlo por el lote pierde la primera
-      //   generación. Entrar aquí obliga a pasar por `procesoQueCubre`, y
-      //   entonces la pregunta es otra: ¿el historial de un lote incluye el de
-      //   sus ancestros? Eso es diseño, no una línea.
-      // - `treatment_batch` (**44 vivas**, la mayor de todas): es el módulo de
-      //   investigación y exige protocolo. Mezclar la historia de un ensayo con
-      //   la del lote es una decisión de producto.
+      // - `lot_process` y `treatment_batch` estaban aquí hasta el 2026-10-12, con
+      //   sus preguntas abiertas. Daniel las contestó ese día y entran arriba, por
+      //   `sujetosDeEnsayosYProceso`.
       // - `asset` (0 vivas, 108 de audit): adjuntar evidencia no es un hecho
       //   del proceso. La ficha ya tiene su sección de medios.
       // - `store_allocation` y `drying_tray_weighing`: **0 filas de auditoría**
       //   de cualquier clase hoy, así que no hay nada que mostrar todavía.
       //
-      // Las cuatro, con su medición, en `PENDING_IMPLEMENTATIONS/023`.
+      // Las que quedan, con su medición, en `PENDING_IMPLEMENTATIONS/023`.
     ]),
   ]);
 
@@ -1161,6 +1219,8 @@ export async function getLotDetail(userAccountId: string, lotId: string) {
     storageAssignments,
     tasks,
     auditEvents,
+    /** El historial no pudo leer el proceso que cubre al lote: linaje demasiado hondo. La página lo dice. */
+    historialSinProceso: historialExtra.procesoIlegible,
     sensoryLinkage,
     harvestEvent,
     receivingEvent,
