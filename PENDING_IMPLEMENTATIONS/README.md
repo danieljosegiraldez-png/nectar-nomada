@@ -15,7 +15,6 @@ idea se pierda cuando la respuesta es «ahora no».
 | [006](006-sin-ci-en-este-repositorio.md) | CI: qué cubre hoy y qué no | Parcialmente hecho · lo que falta necesita base efímera |
 | [007](007-el-inventario-lee-texto-no-programa.md) | El inventario de acceso lee texto, no programa | Nada — trabajo pendiente |
 | [023](023-el-audit-no-lleva-el-sujeto-de-negocio.md) | Una fila de `core.audit_event` no dice de qué **lote** habla | Decisión de Daniel · ver la ficha |
-| [024](024-la-cosecha-no-registra-quien-la-opero.md) | La cosecha no registra **quién la operó**, aunque el servicio lo guarde | Nada — trabajo pendiente |
 
 Hecho y retirado de esta lista: **004 · apuntar `nectarnomada.com` al sitio
 público**, resuelto el 2026-08-28, y **008 · un test hermético nuevo no corre en
@@ -43,3 +42,7 @@ cierre anterior, del 2026-10-03, era falso con las tres comprobaciones en verde*
 miraban artefactos (existe el lector, no existe el comentario, existe el guardia) y ninguna
 llamaba a la función para contar filas. El panel seguía vacío en los 108 lotes. Está en su
 ficha, y es la razón de que la **023** nazca como decisión y no como tarea.
+Y **024 · la cosecha no registra quién la operó**, hecha el 2026-10-06 en lo que existía (la
+acción) — pero esta tabla y su cabecera siguieron diciendo «trabajo pendiente» hasta el
+2026-10-12, cuando se re-midió por conducta: su prueba pasa 3/3 y cae 2/3 al quitar el campo. El
+formulario que le faltaba ya no existe.
