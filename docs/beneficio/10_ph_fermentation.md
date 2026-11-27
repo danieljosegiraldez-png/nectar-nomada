@@ -13,6 +13,10 @@
 > temporada), con una rutina del beneficio que mide el agua. Nunca se avisa sobre una lectura de agua. La «primera lectura» que califica un café es
 > la de **recepción, sobre mucílago exprimido sin agua**. Referencias: la revisión de literatura del
 > 2026-09-19 (p. ej. espontánea con pH final <3,5 sin pérdida significativa de calidad, Cenicafé 2023).
+>
+> **Retirado del motor el 2026-10-08** (R4 del plan farm-to-green, ADR-197): `PH_DILUTION_SUSPECT` ya
+> no existe en `lib/beneficio/perfiles.ts` y un pH alto al empezar es `INITIAL_PHASE`. El estado
+> `SUSPECT_DILUTION` y la banda de abajo quedan declarados para cuando exista el pH del agua del lote.
 
 
 Los intervalos son **semiabiertos `[inferior, superior)`**. Ningún valor pertenece a dos bandas. Esta disciplina de frontera corrige la ambigüedad de la v2.5, donde pH = 4.50 satisfacía simultáneamente «ventana óptima» y «estancado».

@@ -115,5 +115,7 @@ MUESTREO
 
 ALMACENAMIENTO
 - water_activity, no solo humedad porcentual, gobierna la aptitud para bodega.
-  TARGET_REACHED exige ambos criterios.
+  TARGET_REACHED exige ambos criterios CUANDO hay aw medida; sin aw va por
+  humedad y queda marcado sin actividad de agua medida (nota del principio;
+  C7, 2026-10-06; en el motor desde el 2026-10-08).
 ```
