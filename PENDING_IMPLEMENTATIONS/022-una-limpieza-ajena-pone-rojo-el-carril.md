@@ -1,8 +1,14 @@
 # 022 · Una limpieza se pone roja por basura de otra suite, y el carril entero con ella
 
-**Estado: abierto.** Es un defecto **medido**, no supuesto, encontrado el 2026-10-03 corriendo el
-carril con base de `PENDING_IMPLEMENTATIONS/010` Parte A. **El número es provisional**: se asigna de
-verdad al fusionar, porque dos sesiones que numeran a la vez chocan.
+**Estado: HECHA el 2026-10-06, en el PR #664** (`0fb8edea`, «El carril deja de ponerse rojo por basura
+ajena»): la culpable era `tests/rbac/admin.test.ts`, y ahora crea su propio sitio y su propio proyecto
+—`sitioPropio` y su gemelo, con el porqué encima—. Lo cuentan «La culpable» y «El arreglo», más abajo.
+**Esta línea decía «abierto» hasta el 2026-10-14**, ocho días después del arreglo, y la sección
+«Qué haría falta para arreglarlo» sigue escrita como si faltara medir la culpable: es de antes. Se
+deja como registro; manda lo de arriba.
+
+Era un defecto **medido**, no supuesto, encontrado el 2026-10-03 corriendo el carril con base de
+`PENDING_IMPLEMENTATIONS/010` Parte A.
 
 ## Lo que pasó, y por qué es peligroso
 

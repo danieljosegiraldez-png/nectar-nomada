@@ -455,8 +455,8 @@ export const ROLE_PROFILES: readonly RoleProfileDef[] = [
   },
   {
     // Parte 2a (2026-10-04), decisión de Daniel V16 (diseño 2b §12). Es PERFIL, no un permiso suelto añadido a alguien:
-    // `resolveLotVisibility` no cuenta los permisos que se le añaden a una persona (2b §12), y esta casa prefiere que quien
-    // aprueba lo sea por un perfil que se ve en la lista de asignaciones.
+    // esta casa prefiere que quien aprueba lo sea por un perfil que se ve en la lista de asignaciones. (El 2b §12 daba
+    // además que `resolveLotVisibility` no contaba los permisos añadidos; desde el 2026-10-14 los cuenta.)
     name: "Coffee Process Manager",
     description:
       "Escribe, versiona y publica las recetas del beneficio (V16, 2026-10-04) y, desde la Parte 2b, aprueba las " +
