@@ -13154,9 +13154,18 @@ Entre paréntesis, la pregunta del registro de la que sale cada punto.
   - un número comprometido pasa por delante del cociente en el aviso de floración
     (`lib/apiary/emplazamiento.ts`) y haría pasar un pacto por meta de trabajo.
 
-  El servicio ya aplica 12b, así que el día que haya un pacto sólo falta la pantalla. **Lo que falta decidir,
+  El servicio ya aplica 12b, así que el día que haya un pacto sólo falta la pantalla. **Lo que faltaba decidir,
   y es de Daniel:** qué rótulo y qué texto de alerta lleva una meta con contrato. Es la opción C de la
   pregunta 23, que no se eligió.
+- **Decidido el 2026-11-28 por Daniel: se deja para cuando exista un contrato real.** Le llegaron tres
+  opciones:
+  - A, dejarlo hasta que exista un contrato real;
+  - B, «Meta pactada: N colmenas/ha», con el aviso de floración diciendo «faltan colmenas para lo pactado»;
+  - C, el rótulo de hoy más la referencia del contrato al lado.
+
+  Contestó «a». Hoy nadie tiene contrato, y Kiva tampoco. Así que la pantalla sigue sin ofrecer «colmenas
+  comprometidas» ni «referencia al contrato», y **esta pregunta no se vuelve a hacer** mientras no llegue un
+  contrato. Cuando llegue, se le pregunta el rótulo con el contrato delante.
 
 **§7 · Recomendaciones**
 
